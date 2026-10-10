@@ -69,6 +69,9 @@ export function HireEmploymentDrawer({
   const [effectiveFrom, setEffectiveFrom] = useState(today)
   const [reason, setReason] = useState('')
   const [error, setError] = useState<string | null>(null)
+  // One inline message per required field, shown beside the field itself so
+  // a failed submit is never a silent no-op at the bottom of the form.
+  const [fieldErrors, setFieldErrors] = useState<{ person?: string; employer?: string; reason?: string; assignmentKey?: string }>({})
   const [busy, setBusy] = useState(false)
   const personRequestId = useRef(0)
   const employerRequestId = useRef(0)
@@ -283,43 +286,48 @@ export function HireEmploymentDrawer({
   const statusLabel = (value: string): string =>
     t.has(`employment.status.${value}`) ? t(`employment.status.${value}`) : value
 
-  function requirePerson(): boolean {
-    if (!personId) {
-      setError(t('employment.hire.personRequired'))
-      return false
-    }
-    return true
+  function clearFieldError(field: keyof typeof fieldErrors) {
+    setFieldErrors((current) => {
+      if (current[field] === undefined) return current
+      const next = { ...current }
+      delete next[field]
+      return next
+    })
   }
 
-  function requireEmployer(): boolean {
-    if (!employerId) {
-      setError(t('employment.hire.employerRequired'))
-      return false
+  /**
+   * Every required field is judged on submit — not just the first — so one
+   * pass surfaces everything missing. The first invalid field in DOM order
+   * takes focus, and its message also pins as the summary alert. Returns the
+   * trimmed reason, or null when anything is missing.
+   */
+  function validateHire(): string | null {
+    const next: typeof fieldErrors = {}
+    if (!personId) next.person = t('employment.hire.personRequired')
+    if (!employerId) next.employer = t('employment.hire.employerRequired')
+    if (!reason.trim()) next.reason = t('employment.changeRequests.reasonRequired')
+    if (withAssignment && !assignmentKey.trim()) next.assignmentKey = t('employment.changeRequests.assignmentKeyRequired')
+    setFieldErrors(next)
+    const ordered: { field: 'person' | 'employer' | 'reason' | 'assignmentKey'; elementId: string }[] = [
+      { field: 'person', elementId: 'hire-person' },
+      { field: 'employer', elementId: 'hire-employer' },
+      { field: 'reason', elementId: 'hire-reason' },
+      { field: 'assignmentKey', elementId: 'hire-assignment-key' },
+    ]
+    const first = ordered.find((entry) => next[entry.field] !== undefined)
+    if (!first) {
+      setError(null)
+      return reason.trim()
     }
-    return true
-  }
-
-  function requireReason(): string | null {
-    if (!reason.trim()) {
-      setError(t('employment.changeRequests.reasonRequired'))
-      return null
-    }
-    return reason.trim()
-  }
-
-  function requireAssignmentKey(): boolean {
-    if (withAssignment && !assignmentKey.trim()) {
-      setError(t('employment.changeRequests.assignmentKeyRequired'))
-      return false
-    }
-    return true
+    setError(next[first.field] ?? null)
+    // The inputs already exist — only their messages are new — so the focus
+    // target is in the DOM synchronously.
+    document.getElementById(first.elementId)?.focus()
+    return null
   }
 
   async function submitHire() {
-    if (!requirePerson()) return
-    if (!requireEmployer()) return
-    if (!requireAssignmentKey()) return
-    const hireReason = requireReason()
+    const hireReason = validateHire()
     if (hireReason === null) return
     setBusy(true)
     setError(null)
@@ -413,9 +421,11 @@ export function HireEmploymentDrawer({
             <SearchSelect
               id="hire-person"
               value={personId}
+              invalid={fieldErrors.person !== undefined}
               onChange={(next) => {
                 setPersonId(next)
                 setError(null)
+                clearFieldError('person')
               }}
               options={personOptions}
               ariaLabel={t('employment.hire.personLabel')}
@@ -432,6 +442,9 @@ export function HireEmploymentDrawer({
               }}
               disabled={busy}
             />
+            {fieldErrors.person ? (
+              <p className="text-sm text-red-600 dark:text-red-400">{fieldErrors.person}</p>
+            ) : null}
           </div>
         )}
         <div className="space-y-1.5">
@@ -439,9 +452,11 @@ export function HireEmploymentDrawer({
           <SearchSelect
             id="hire-employer"
             value={employerId}
+            invalid={fieldErrors.employer !== undefined}
             onChange={(next) => {
               setEmployerId(next)
               setError(null)
+              clearFieldError('employer')
             }}
             options={employerOptions}
             ariaLabel={t('employment.hire.employerLabel')}
@@ -458,6 +473,9 @@ export function HireEmploymentDrawer({
             }}
             disabled={busy}
           />
+          {fieldErrors.employer ? (
+            <p className="text-sm text-red-600 dark:text-red-400">{fieldErrors.employer}</p>
+          ) : null}
           <p className="text-xs text-slate-500 dark:text-slate-400">{t('employment.hire.employerHint')}</p>
         </div>
         <div className="space-y-1.5">
@@ -489,8 +507,15 @@ export function HireEmploymentDrawer({
             value={reason}
             disabled={busy}
             required
-            onChange={(event) => setReason(event.target.value)}
+            aria-invalid={fieldErrors.reason !== undefined || undefined}
+            onChange={(event) => {
+              setReason(event.target.value)
+              clearFieldError('reason')
+            }}
           />
+          {fieldErrors.reason ? (
+            <p className="text-sm text-red-600 dark:text-red-400">{fieldErrors.reason}</p>
+          ) : null}
         </div>
         <div className="space-y-3 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
           <label className="flex cursor-pointer items-center gap-2.5">
@@ -515,9 +540,16 @@ export function HireEmploymentDrawer({
                   value={assignmentKey}
                   disabled={busy}
                   required
-                  onChange={(event) => setAssignmentKey(event.target.value)}
+                  aria-invalid={fieldErrors.assignmentKey !== undefined || undefined}
+                  onChange={(event) => {
+                    setAssignmentKey(event.target.value)
+                    clearFieldError('assignmentKey')
+                  }}
                   placeholder={t('employment.changeRequests.assignmentKeyPlaceholder')}
                 />
+                {fieldErrors.assignmentKey ? (
+                  <p className="text-sm text-red-600 dark:text-red-400">{fieldErrors.assignmentKey}</p>
+                ) : null}
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="hire-job-title">{t('employment.changeRequests.jobTitleLabel')}</Label>
