@@ -35,6 +35,7 @@ import {
   scheduledRemittanceFrequency,
 } from "./remittance.ts";
 import { payrollBankProfiles } from "./bank-file.ts";
+import { findDocumentNumberSeriesCollisions } from "../records/numbering.ts";
 import { undeclaredJurisdictionHolidayConflict } from "./holidays.ts";
 import { effectiveFilingAccountSql } from "./filing.ts";
 import type { PayrollFilingAccount } from "./filing.ts";
@@ -101,7 +102,7 @@ export interface PayRunReadiness {
 /** The columns the statutory-rate scope check reads off a payroll population. */
 type RateScopeRow = Pick<
   ScopeRow,
-  "employee_party_id" | "name" | "country" | "province" | "filing_account_id"
+  "employee_party_id" | "name" | "country" | "province" | "residence_region" | "filing_account_id"
 >;
 
 type ScopeRow = {
@@ -110,6 +111,8 @@ type ScopeRow = {
   pay_basis: string;
   country: string;
   province: string | null;
+  /** Employee's state of residence when it differs from the work state; null = work state. */
+  residence_region: string | null;
   /** The employment attribute that overrides the region derivation; null =
    *  derive the labour jurisdiction from the work region. */
   labour_jurisdiction: string | null;
@@ -136,14 +139,22 @@ type ScopeRow = {
  * side of the account slots' appliesWhen. Callers pass it to packSlotState so
  * a run scoped to Ontario never demands Québec accounts. A country with no
  * rows, or rows with a null region, demands everything: today's behaviour.
+ *
+ * Both the work region and the residence region occupy the set: a second
+ * state has its own claim on the same wages (reciprocity), so a Washington
+ * worker residing in California can owe California tax with no California
+ * work region on the run. An unrecorded residence IS the work region (the
+ * resolution assumes it, recorded) — never null, because null demands
+ * every slot.
  */
 function regionsByCountry(
-  rows: readonly { country: string; province: string | null }[],
+  rows: readonly { country: string; province: string | null; residence_region?: string | null }[],
 ): Map<string, Set<string | null>> {
   const map = new Map<string, Set<string | null>>();
   for (const row of rows) {
     const set = map.get(row.country) ?? new Set<string | null>();
     set.add(row.province ?? null);
+    set.add(row.residence_region ?? row.province ?? null);
     map.set(row.country, set);
   }
   return map;
@@ -216,7 +227,7 @@ async function scope(
   };
   const rows = (await db.execute<ScopeRow>(sql`
     select p.id as employee_party_id, p.display_name as name, prof.pay_basis, prof.country,
-           prof.province, prof.labour_jurisdiction,
+           prof.province, prof.residence_region, prof.labour_jurisdiction,
            ${effectiveFilingAccountSql("prof")} as filing_account_id,
            coalesce(te.hours, 0)::text as approved_hours,
            (${payrollEpisodeDate(rosterColumns, sql`er.hired_on`)})::text as hired_on,
@@ -454,6 +465,26 @@ export async function payrollSetupState(
         detail: `${country} · ${key}`, href: `${setupHref}?tab=accounts`,
       });
     }
+  }
+
+  // Two document kinds on one numbering series (a vendor payment and a pay
+  // run both issuing PAY-00001 from independent counters): posted history
+  // keeps its numbers — nothing is renumbered — so an existing collision
+  // warns here, naming both kinds, with the future-documents remedy (change
+  // one kind's prefix in Setup → Number sequences). New collisions are
+  // refused at configuration time. Payroll setup owns the pay_run end, so it
+  // reports the pairs a pay run is in; other pairs belong to their own
+  // module's setup. Advisory: numbering stays unique in storage (per kind),
+  // but one string naming two documents misleads every search for either.
+  for (const collision of await findDocumentNumberSeriesCollisions(db, orgId)) {
+    if (!collision.kinds.includes("pay_run")) continue;
+    const other = collision.kinds.find((kind) => kind !== "pay_run")!;
+    checks.push({
+      severity: "warning", code: "setup.documentNumberSeries", ok: false,
+      detail: `"pay_run" and "${other}" both issue ${collision.prefix || "(no prefix)"}${"0".repeat(Math.min(collision.padding, 12))}… — `
+        + "change one kind's prefix in Setup → Number sequences for future documents; posted history keeps its numbers",
+      href: "/admin/setup/number-sequences",
+    });
   }
 
   // Are this year's statutory tables loaded for every installed pack? Asked
@@ -996,6 +1027,7 @@ async function activePayrollPopulation(
 ): Promise<RateScopeRow[]> {
   const rows = (await db.execute<RateScopeRow>(sql`
     select p.id as employee_party_id, p.display_name as name, prof.country, prof.province,
+           prof.residence_region,
            ${effectiveFilingAccountSql("prof")} as filing_account_id
      from employee_payroll_profiles prof
       join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id

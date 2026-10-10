@@ -35,6 +35,7 @@ import { requireUsFederalAlienStatus } from "./employee-facts.ts";
 import { paUcEmployeeWithholding } from "./states/pa.ts";
 import { caEttWithholding, caSdiWithholding } from "./states/ca.ts";
 import { coFamliWithholding } from "./states/co.ts";
+import { waCaresWithholding, waPfmlWithholding, type WaPfmlEmployerSize } from "./states/wa.ts";
 import { dcOpflWithholding } from "./states/dc.ts";
 import { ctPaidLeaveWithholding } from "./states/ct.ts";
 
@@ -702,6 +703,41 @@ export async function computeUsStatutory(
       ...factors,
       CO_FAMLI_EMPLOYEE: famli.employee,
       CO_FAMLI_EMPLOYER: famli.employer,
+    };
+  }
+  // Washington PFML (2026: 1.13% of gross wages to the Social Security base)
+  // and WA Cares (0.58%, uncapped) price beside income tax, never inside it —
+  // Washington levies no income tax, so without these legs a Washington stub
+  // would be complete-looking and wrong. Same covered-wage leg the CO and DC
+  // levies price (periodic plus supplemental); the PFML cap reads the Social
+  // Security wage history, as Connecticut Paid Leave does. The employer share
+  // is the employer's RECORDED size: 50+ employees owe 28.57% of the total,
+  // smaller employers owe none but still withhold the employee share — a
+  // missing record refuses here (Payroll Setup → Employer facts), never a
+  // defaulted share.
+  if (region === "WA") {
+    const recordedSize = await resolveStoredEmployerFact({
+      tx, orgId, subsidiaryId: ctx.subsidiaryId ?? null,
+      country: "US", factKey: "wa_pfml_employer_size", asOf: run.pay_date!,
+    });
+    const employerSize = recordedSize as WaPfmlEmployerSize;
+    if (employerSize !== "fifty_or_more" && employerSize !== "fewer_than_fifty") {
+      throw new PayrollError(
+        `${employeeName}: Washington PFML cannot be calculated without the employer's recorded size `
+        + "(50 or more employees, or fewer) — record it in Payroll Setup → Employer facts",
+      );
+    }
+    const pfml = waPfmlWithholding(run.pay_date!, sum([income, nonPeriodic]), ytd.fica, employerSize);
+    pushStatutory("wa_pfml_employee", "deduction", "Washington PFML (employee)", pfml.employee, 144);
+    pushStatutory("wa_pfml_employer", "employer_contribution", "Washington PFML (employer)", pfml.employer, 253);
+    const cares = waCaresWithholding(run.pay_date!, sum([income, nonPeriodic]));
+    pushStatutory("wa_cares_employee", "deduction", "Washington WA Cares (employee)", cares, 146);
+    factors = {
+      ...factors,
+      WA_PFML_TOTAL: pfml.total,
+      WA_PFML_EMPLOYEE: pfml.employee,
+      WA_PFML_EMPLOYER: pfml.employer,
+      WA_CARES_EMPLOYEE: cares,
     };
   }
   // Employer-pocket levies post below the deduction loop's sequence range:

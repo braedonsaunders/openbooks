@@ -143,7 +143,8 @@
           "remittanceVendor": "法定納付先ベンダーが未設定です：{detail}",
           "paymentRail": "設定済みのEFTオリジネータープロファイルがなく、小切手フォールバックもオフのため、支払手段がありません。",
           "taxYear": "{detail}",
-          "statutoryRate": "{detail}"
+          "statutoryRate": "{detail}",
+          "documentNumberSeries": "{detail}"
         },
         "period": {
           "missing": "支給日{detail}を含む会計期間がありません。",
@@ -793,7 +794,9 @@
           "ca_sdi_employee": "カリフォルニア州SDI（従業員分）未払金",
           "ct_pl_employee": "コネチカット州有給休暇（従業員分）未払金",
           "vt_child_care_contribution": "バーモント州保育拠出金未払金",
-          "mn_paid_leave": "ミネソタ州有給休暇未払金"
+          "mn_paid_leave": "ミネソタ州有給休暇未払金",
+          "wa_pfml": "ワシントン州PFML未払金",
+          "wa_cares": "ワシントン州WA Cares未払金"
         }
       },
       "NL": {

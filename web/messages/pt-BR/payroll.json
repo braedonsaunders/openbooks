@@ -143,7 +143,8 @@
           "remittanceVendor": "Fornecedor de recolhimento obrigatório não definido: {detail}",
           "paymentRail": "Sem perfil de origem EFT configurado e com o pagamento em cheque desativado — não há como pagar ninguém.",
           "taxYear": "{detail}",
-          "statutoryRate": "{detail}"
+          "statutoryRate": "{detail}",
+          "documentNumberSeries": "{detail}"
         },
         "period": {
           "missing": "Nenhum período contábil cobre a data de pagamento {detail}.",
@@ -793,7 +794,9 @@
           "ca_sdi_employee": "SDI da Califórnia (empregado) a recolher",
           "ct_pl_employee": "Licença remunerada de Connecticut (empregado) a recolher",
           "vt_child_care_contribution": "Contribuição de Vermont para creches a recolher",
-          "mn_paid_leave": "Licença remunerada de Minnesota a recolher"
+          "mn_paid_leave": "Licença remunerada de Minnesota a recolher",
+          "wa_pfml": "PFML de Washington a recolher",
+          "wa_cares": "WA Cares de Washington a recolher"
         }
       },
       "NL": {

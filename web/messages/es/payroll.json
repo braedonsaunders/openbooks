@@ -143,7 +143,8 @@
           "remittanceVendor": "Proveedor de remesas legal no definido: {detail}",
           "paymentRail": "Sin perfil de emisor EFT configurado, y la alternativa de cheque está desactivada — no hay forma de pagar a nadie.",
           "taxYear": "{detail}",
-          "statutoryRate": "{detail}"
+          "statutoryRate": "{detail}",
+          "documentNumberSeries": "{detail}"
         },
         "period": {
           "missing": "Ningún período contable cubre la fecha de pago {detail}.",
@@ -793,7 +794,9 @@
           "ca_sdi_employee": "SDI de California (empleado) por pagar",
           "ct_pl_employee": "Licencia pagada de Connecticut (empleado) por pagar",
           "vt_child_care_contribution": "Contribución de Vermont para el cuidado infantil por pagar",
-          "mn_paid_leave": "Licencia pagada de Minnesota por pagar"
+          "mn_paid_leave": "Licencia pagada de Minnesota por pagar",
+          "wa_pfml": "PFML de Washington por pagar",
+          "wa_cares": "WA Cares de Washington por pagar"
         }
       },
       "NL": {
