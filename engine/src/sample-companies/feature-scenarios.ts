@@ -26,7 +26,7 @@ export function extendedFeatureRecords(c: DemoContext, add: AddDemoRecord): void
       if (f.geographicTerritories) add("crm_sales_territories", { key: `demo-territory-${index}`, name, sales_team_id: team, subsidiary_id: c.subsidiaryId, effective_from: c.date, is_active: false, description: "Draft coverage area; define supported geography before activation." }, `commercial-${index}`);
     }
   }
-  if (f.promotions) for (const [index, name] of ["New customer introduction", "Seasonal replenishment", "Volume commitment"].entries()) add("promotions", { code: `DEMO-OFFER-${index + 1}`, name, kind: "percent", percent_value: ["5.00", "7.50", "10.00"][index]!, currency: c.currency, description: "Draft commercial offer for review before activation." }, `offer-${index}`);
+  if (f.promotions) for (const [index, name] of ["New customer introduction", "Seasonal replenishment", "Volume commitment"].entries()) add("promotions", { code: `DEMO-OFFER-${index + 1}`, name, kind: "percent", percent_value: ["5.00", "7.50", "10.00"][index]!, currency: null, description: "Draft commercial offer for review before activation." }, `offer-${index}`);
   if (f.storedValue) {
     const liability = add("accounts", { number: "2397", name: "Customer stored value liability", type: "liability_current_other", is_active: true }, "stored-value");
     for (const kind of ["gift_card", "store_credit"]) add("stored_value_programs", { name: kind === "gift_card" ? "Customer gift credit" : "Customer return credit", kind, liability_account_id: liability, currency: c.currency, breakage_policy: "none", is_active: false }, kind);

@@ -28,7 +28,7 @@ export async function installOperatingDocuments(c: DemoContext, insertedDraftIds
       const body = { partyId: ["transfer", "card_charge", "card_refund", "deposit"].includes(spec.kind) ? null : spec.partyId, documentDate: spec.documentDate,
         custom: ["cash_sale", "cash_refund"].includes(spec.kind) ? { tenders: [{ kind: "cash", accountId: scenarioRecordId(c, "accounts", "operations-bank"), amount: spec.amount, methodLabel: "Counter cash" }] } : ["check", "deposit", "card_charge", "card_refund"].includes(spec.kind) ? { controlAccountId: scenarioRecordId(c, "accounts", spec.kind.startsWith("card_") ? "operations-card" : "operations-bank") } : undefined,
         paymentCardId: spec.kind.startsWith("card_") ? scenarioRecordId(c, "payment_cards", "main") : undefined,
-        memo: spec.description, externalSource: "industry_demo", externalRef: spec.key, lines: spec.kind === "transfer" ? [{ accountId: scenarioRecordId(c, "accounts", "operations-bank"), amount: spec.amount }, { accountId: scenarioRecordId(c, "accounts", "reserve-bank"), amount: spec.amount }] : [{ accountId: spec.accountId, description: spec.description,
+        memo: spec.description, externalSource: "industry_demo", externalRef: spec.key, lines: spec.kind === "transfer" ? [{ accountId: scenarioRecordId(c, "accounts", "operations-bank"), amount: spec.amount }, { accountId: scenarioRecordId(c, "accounts", "reserve-bank"), amount: "0.0000" }] : [{ accountId: spec.accountId, description: spec.description,
           quantity: spec.quantity, unitPrice: spec.unitPrice, amount: spec.amount }] };
       if (isDocumentCreateKind(spec.kind)) {
         const created = await createDocument({ orgId: c.orgId, userId: c.actorId, kind: spec.kind,

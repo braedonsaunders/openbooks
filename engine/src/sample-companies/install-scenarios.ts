@@ -1,3 +1,4 @@
+import { createPromotion } from "../sales/promotions.ts";
 import { installOperatingReturns } from "./install-returns.ts";
 import { snapshotSampleRecords, assertSampleRecordsPreserved, assertSampleSettingsPreserved } from "./preservation.ts";
 import { verifyNativeOperatingEvidence } from "./readiness.ts";
@@ -176,6 +177,20 @@ async function insertRecord(tx: SqlExecutor, record: DemoRecord, columns: Map<st
     if (!columns.has(key)) throw new SampleCompanyError(`The demo schema has no writable ${record.table}.${key}; use a compatible demo definition and database schema before installing demo data.`);
     return true;
   });
+  // The promotion command owns UUID allocation. Its tenant-local code is the
+  // stable native identity; retries and member refreshes preserve that record.
+  if (record.table === "promotions") {
+    const orgId = String(record.values.org_id);
+    const code = String(record.values.code);
+    const prior = (await tx.execute(sql`select id from promotions where org_id=${orgId} and upper(code)=upper(${code})`)).rows;
+    if (prior.length > 1) throw new SampleCompanyError("The demonstration promotion code is ambiguous; review its native records before refreshing.");
+    if (prior.length === 1) return "unchanged";
+    if (record.values.kind !== "percent") throw new SampleCompanyError("The authored promotion needs a supported native creation contract.");
+    const created = await createPromotion(tx, orgId, actorId, { code, name: String(record.values.name), kind: "percent",
+      percentValue: String(record.values.percent_value), description: String(record.values.description) });
+    if (created.code !== code || created.status !== "draft") throw new SampleCompanyError("Native promotion creation did not return the authored draft identity.");
+    return "inserted";
+  }
   const existing = await tx.execute(sql`
     select * from ${identifier(record.table)}
      where org_id=${String(record.values.org_id)} and ${identifier(primaryKey)}=${String(record.values[primaryKey])}
@@ -230,7 +245,7 @@ export async function installDemoScenarios(orgId: string, industryKey: string): 
     const insertedDraftIds = new Set<string>();
     let inserted = 0;
     let updated = 0;
-    for (const record of rows) {
+    for (const record of rows.filter(record => record.table !== "promotions")) {
       const names = columns.get(record.table);
       if (!names?.has("org_id")) throw new SampleCompanyError(`Demo table ${record.table} is unavailable; upgrade the database before installing demo data.`);
       const action = await insertRecord(db, record, names, c.actorId, c.preserveExisting);
@@ -272,6 +287,14 @@ export async function installDemoScenarios(orgId: string, industryKey: string): 
     };
     const changed = await db.execute(sql`update orgs set env_kind='preview', settings=${JSON.stringify(after)}::jsonb, updated_by=${c.actorId}, updated_at=now() where id=${orgId} returning id`);
     if (changed.rows.length !== 1) throw new SampleCompanyError("Demo company disappeared before registration.");
+    // Feature-gated native configuration commands run after the audited gate
+    // registration and inside this same atomic installation transaction.
+    for (const record of rows.filter(record => record.table === "promotions")) {
+      const names = columns.get(record.table);
+      if (!names?.has("org_id")) throw new SampleCompanyError("The native promotions schema is unavailable; apply the supported schema before installing scenarios.");
+      const action = await insertRecord(db, record, names, c.actorId, c.preserveExisting);
+      if (action === "inserted") inserted += 1;
+    }
     const features = sampleCompanyFeatures(industryKey);
     const equity = scenarioRecordId(c, "accounts", "capital");
     if (!c.preserveExisting) for (const [key, amount, offset, memo] of [
@@ -387,10 +410,10 @@ export async function verifyDemoScenarios(orgId: string, industryKey: string): P
     const missing: string[] = await verifyOperatingDocuments({ ...c, employeeId: scenarioRecordId(c, "parties", "employee") });
     for (const table of new Set(expected.map((row) => row.table))) {
       const records = expected.filter((row) => row.table === table);
-      const primaryKey = records[0]!.primaryKey ?? "id";
+      const primaryKey = table === "promotions" ? "code" : records[0]!.primaryKey ?? "id";
       const result = await db.execute<{ id: string; record: Record<string, unknown> }>(sql`
         select ${identifier(primaryKey)}::text as id,to_jsonb(stored) as record from ${identifier(table)} stored where org_id=${orgId}
-        and ${identifier(primaryKey)} in (${sql.join(records.map((row) => sql`${String(row.values[primaryKey])}::uuid`), sql`, `)})
+        and ${identifier(primaryKey)} in (${sql.join(records.map((row) => primaryKey === "code" ? sql`${String(row.values[primaryKey])}` : sql`${String(row.values[primaryKey])}::uuid`), sql`, `)})
       `);
       const stored = new Set(result.rows.map((row) => row.id));
       for (const record of records) {
