@@ -7127,7 +7127,15 @@
       "subjectPlaceholder": "Choose a record type…",
       "create": "Create flow",
       "failed": "Could not create the flow",
-      "scheduleWeekdayPreset": "Weekdays at 06:00 and 14:30 (optional draft preset; review before enabling)"
+      "scheduleWeekdayPreset": "Weekdays at 06:00 and 14:30 (optional draft preset; review before enabling)",
+      "groups": {
+        "documents": "Documents",
+        "payroll": "Payroll",
+        "people": "People",
+        "operations": "Operations",
+        "finance": "Finance",
+        "other": "Other"
+      }
     },
     "actions": {
       "enable": "Enable",

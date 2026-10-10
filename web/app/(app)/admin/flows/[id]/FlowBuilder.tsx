@@ -31,6 +31,7 @@ import {
   type NodeChange,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
+import './_flow-canvas.css'
 import { Alert, AlertDescription, AlertTitle, Button, EmptyState, Label, Select, cn } from '@openbooks/ui'
 import {
   lintAutomationGraph,
@@ -53,6 +54,7 @@ import {
   type OrgUser,
 } from '../_builder/graph'
 import { nodeAccessibleName } from '../_builder/nodes'
+import { nameFlowWarnings } from '../_builder/warnings'
 import { NODE_TYPES } from '../_builder/nodes'
 import { Inspector } from '../_builder/Inspector'
 import { RunsPanel, type FlowRunRow } from '../_builder/RunsPanel'
@@ -230,23 +232,26 @@ export default function FlowBuilder({
     }
   }
 
+  /**
+   * The designer's Enabled switch writes exactly the enabled flag through
+   * the same audited PATCH the list's Enable switch uses — never the canvas
+   * alongside it. Bundling unsaved graph edits into the enable request made
+   * the toggle fail whenever the canvas carried author-time warnings (the
+   * saved revision the list enables stayed clean), and a lint-clean canvas
+   * would have silently saved unreviewed edits as the enabled flow. Canvas
+   * edits keep their dirty badge and persist through Save alone; only the
+   * revision advances so the next save cannot conflict with this write.
+   */
   async function toggleEnabled() {
     if (saving.current) return
     saving.current = true
-    const submittedVersion = editVersion.current
     const next = !enabled
     setBusy(true)
     try {
       const res = await fetch(`/api/admin/flows/${flow.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          expectedUpdatedAt: revision,
-          enabled: next,
-          ...(next && dirty
-            ? { name: name.trim() || flow.name, graph: fromFlow(nodes, edges, ungatedOutcome) }
-            : {}),
-        }),
+        body: JSON.stringify({ expectedUpdatedAt: revision, enabled: next }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
@@ -257,7 +262,6 @@ export default function FlowBuilder({
       setEnabled(next)
       setSaveErrors([])
       setRevision(data.updatedAt)
-      if (next && dirty && editVersion.current === submittedVersion) setDirty(false)
       router.refresh()
     } catch {
       toast.error(t('actions.updateFailed'))
@@ -276,6 +280,16 @@ export default function FlowBuilder({
     () => nodes.map((n) => ({ ...n, ariaLabel: nodeAccessibleName(t, n.data) })),
     [nodes, t],
   )
+
+  // Lint warnings name storage ids; authors read canvas names. The same
+  // enrichment covers author-time warnings and server-side enable/save
+  // errors, which share the linter's vocabulary.
+  const nodeNames = useMemo(
+    () => new Map(nodes.map((n) => [n.id, nodeAccessibleName(t, n.data)] as const)),
+    [nodes, t],
+  )
+  const namedWarnings = useMemo(() => nameFlowWarnings(warnings, nodeNames), [warnings, nodeNames])
+  const namedSaveErrors = useMemo(() => nameFlowWarnings(saveErrors, nodeNames), [saveErrors, nodeNames])
 
   return (
     <div className="flex h-[calc(100vh-6.5rem)] min-h-[560px] flex-col gap-3">
@@ -336,30 +350,30 @@ export default function FlowBuilder({
       </div>
 
       {/* Blocking save errors / non-blocking lint warnings */}
-      {saveErrors.length > 0 ? (
+      {namedSaveErrors.length > 0 ? (
         <Alert variant="destructive">
           <AlertTitle>{t('builder.errorsTitle')}</AlertTitle>
           <AlertDescription>
             <ul className="list-disc space-y-0.5 pl-4">
-              {saveErrors.map((e, i) => (
+              {namedSaveErrors.map((e, i) => (
                 <li key={i}>{e}</li>
               ))}
             </ul>
           </AlertDescription>
         </Alert>
-      ) : warnings.length > 0 ? (
+      ) : namedWarnings.length > 0 ? (
         <details className="rounded-lg border border-amber-200 bg-amber-50/70 px-3 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300">
           <summary className="flex cursor-pointer select-none items-center gap-2">
             <TriangleAlert size={14} className="shrink-0" />
             <span className="font-medium">
-              {t('builder.warningsBadge', { count: warnings.length })}
+              {t('builder.warningsBadge', { count: namedWarnings.length })}
             </span>
             <span className="hidden text-xs font-normal text-amber-700/80 sm:inline dark:text-amber-400/80">
               {t('builder.warningsTitle')}
             </span>
           </summary>
           <ul className="mt-1.5 list-disc space-y-0.5 pl-6 text-xs">
-            {warnings.map((w, i) => (
+            {namedWarnings.map((w, i) => (
               <li key={i}>{w}</li>
             ))}
           </ul>

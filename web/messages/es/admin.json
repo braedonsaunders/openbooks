@@ -7127,7 +7127,15 @@
       "subjectPlaceholder": "Elegir un tipo de registro…",
       "create": "Crear flujo",
       "failed": "No se pudo crear el flujo",
-      "scheduleWeekdayPreset": "Días laborables a las 06:00 y 14:30 (opción de borrador; revisar antes de activar)"
+      "scheduleWeekdayPreset": "Días laborables a las 06:00 y 14:30 (opción de borrador; revisar antes de activar)",
+      "groups": {
+        "documents": "Documentos",
+        "payroll": "Nómina",
+        "people": "Personal",
+        "operations": "Operaciones",
+        "finance": "Finanzas",
+        "other": "Otros"
+      }
     },
     "actions": {
       "enable": "Activar",

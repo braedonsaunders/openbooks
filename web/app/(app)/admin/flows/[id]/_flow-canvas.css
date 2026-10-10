@@ -1,0 +1,19 @@
+/* Flow canvas connect handles. The visible dot stays small, but drag and tap
+   targeting uses an invisible halo around it: 9px dots on a card edge
+   cannot be hit reliably, which is why wiring only worked through the
+   side-panel Connect. Handles also pin their own pointer events and stacking
+   so node cards and edges never swallow the drag start. */
+.react-flow .flow-connect-handle {
+  pointer-events: all;
+  z-index: 10;
+}
+.react-flow .flow-connect-handle::after {
+  content: "";
+  position: absolute;
+  inset: -12px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .react-flow .flow-connect-handle {
+    transition: none;
+  }
+}

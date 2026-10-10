@@ -176,13 +176,21 @@ export function handlerReleasedSubjectKinds(): string[] {
     .filter((kind) => getFlowAdapter(kind)?.releaseViaHandler === true);
 }
 
-/** Every subject kind flows can be authored over, with its profile (builder UI). */
+/**
+ * Every subject kind flows can be authored over, with its profile (builder
+ * UI). One entry per subject kind: kinds with a dedicated profile (pay runs
+ * carry payroll's own vocabulary) are excluded from the generic document
+ * profiles, so the record-type picker offers each kind once and the builder
+ * resolves the dedicated vocabulary instead of the generic shadow.
+ */
 export function listFlowSubjectProfiles(): FlowSubjectProfile[] {
   return [
     scheduleDistributionSubjectProfile,
     scheduleBoardSubjectProfile,
     checklistStepSubjectProfile,
-    ...DOCUMENT_FLOW_KINDS.map((kind) => documentSubjectProfile(kind)),
+    ...DOCUMENT_FLOW_KINDS.filter((kind) => kind !== PAY_RUN_SUBJECT_KIND).map((kind) =>
+      documentSubjectProfile(kind),
+    ),
     compensationVersionSubjectProfile,
     compensationAssignmentSubjectProfile,
     benefitAwardSubjectProfile,

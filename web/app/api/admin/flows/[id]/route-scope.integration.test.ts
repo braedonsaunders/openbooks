@@ -254,3 +254,48 @@ test('direct employee policy creation is explicit, disabled until enabled, and r
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }
 })
+
+test('an enabled-only toggle writes the native flag with a before/after audit', async () => {
+  const org = await withBypassContext(() => createScratchOrg())
+  try {
+    await enableFlows(org.orgId)
+    await seedUser(org.orgId, 'flow_toggler', ['flows.manage'], null)
+    // A lint-clean saved revision: submit trigger wired to its notify step,
+    // so the enable-time lint passes on the stored graph alone.
+    const graph = {
+      schemaVersion: 1,
+      nodes: [
+        { id: 'trigger_1', position: { x: 0, y: 0 }, data: { kind: 'trigger', trigger: { trigger: 'on_submit' } } },
+        { id: 'action_1', position: { x: 260, y: 0 }, data: { kind: 'action', action: { action: 'notify', to: [{ type: 'submitter' }], title: 'Update' } } },
+      ],
+      edges: [{ id: 'e_1', source: 'trigger_1', target: 'action_1', sourceHandle: 'next' }],
+    }
+    const flowId = randomUUID()
+    await withBypassContext(() => db.execute(sql`
+      insert into flows (id, org_id, name, subject_kind, enabled, graph)
+      values (${flowId}, ${org.orgId}, 'Toggled flow', 'vendor_bill', false, ${JSON.stringify(graph)}::jsonb)`))
+    const params = { params: Promise.resolve({ id: flowId }) }
+    const before = await withOrgContext(org.orgId, () =>
+      detail(new Request(`http://admin.test/api/admin/flows/${flowId}`), params))
+    const token = ((await before.json()) as { flow: { updated_at: string } }).flow.updated_at
+    // The designer toggle and the list switch both send exactly this body:
+    // the flag alone, never the canvas alongside it.
+    const toggled = await withOrgContext(org.orgId, () => edit(new Request(`http://admin.test/api/admin/flows/${flowId}`, {
+      method: 'PATCH', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ expectedUpdatedAt: token, enabled: true }),
+    }), params))
+    assert.equal(toggled.status, 200)
+    const row = (await withBypassContext(() => db.execute<{ enabled: boolean; name: string }>(sql`
+      select enabled, name from flows where org_id = ${org.orgId} and id = ${flowId}`))).rows[0]!
+    assert.equal(row.enabled, true)
+    assert.equal(row.name, 'Toggled flow', 'an enabled-only write renames nothing')
+    const audit = (await withBypassContext(() => db.execute<{ changes: { before: { enabled: boolean }; after: { enabled: boolean } } }>(sql`
+      select changes from audit_log where org_id = ${org.orgId} and table_name = 'flows' and row_id = ${flowId}
+       order by id desc limit 1`))).rows[0]!
+    assert.equal(audit.changes.before.enabled, false)
+    assert.equal(audit.changes.after.enabled, true)
+  } finally {
+    state.user = null
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})

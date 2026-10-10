@@ -7127,7 +7127,15 @@
       "subjectPlaceholder": "Choisir un type d'enregistrement…",
       "create": "Créer le flux",
       "failed": "Impossible de créer le flux",
-      "scheduleWeekdayPreset": "Jours ouvrés à 06:00 et 14:30 (préréglage facultatif à vérifier avant activation)"
+      "scheduleWeekdayPreset": "Jours ouvrés à 06:00 et 14:30 (préréglage facultatif à vérifier avant activation)",
+      "groups": {
+        "documents": "Documents",
+        "payroll": "Paie",
+        "people": "Personnel",
+        "operations": "Opérations",
+        "finance": "Finance",
+        "other": "Autres"
+      }
     },
     "actions": {
       "enable": "Activer",

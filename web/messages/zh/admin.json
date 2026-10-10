@@ -7127,7 +7127,15 @@
       "subjectPlaceholder": "选择一种记录类型……",
       "create": "创建流程",
       "failed": "无法创建流程",
-      "scheduleWeekdayPreset": "工作日06:00和14:30（可选草稿预设，启用前请确认）"
+      "scheduleWeekdayPreset": "工作日06:00和14:30（可选草稿预设，启用前请确认）",
+      "groups": {
+        "documents": "单据",
+        "payroll": "工资",
+        "people": "人员",
+        "operations": "运营",
+        "finance": "财务",
+        "other": "其他"
+      }
     },
     "actions": {
       "enable": "启用",

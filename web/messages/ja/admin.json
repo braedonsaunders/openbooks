@@ -7127,7 +7127,15 @@
       "subjectPlaceholder": "レコードタイプを選択…",
       "create": "フローを作成",
       "failed": "フローを作成できませんでした",
-      "scheduleWeekdayPreset": "平日06:00と14:30（任意の下書き設定。有効化前に確認）"
+      "scheduleWeekdayPreset": "平日06:00と14:30（任意の下書き設定。有効化前に確認）",
+      "groups": {
+        "documents": "ドキュメント",
+        "payroll": "給与",
+        "people": "人事",
+        "operations": "業務",
+        "finance": "財務",
+        "other": "その他"
+      }
     },
     "actions": {
       "enable": "有効化",

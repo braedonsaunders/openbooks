@@ -7127,7 +7127,15 @@
       "subjectPlaceholder": "Escolha um tipo de registro…",
       "create": "Criar flow",
       "failed": "Não foi possível criar o flow",
-      "scheduleWeekdayPreset": "Dias úteis às 06:00 e 14:30 (modelo opcional; revisar antes de ativar)"
+      "scheduleWeekdayPreset": "Dias úteis às 06:00 e 14:30 (modelo opcional; revisar antes de ativar)",
+      "groups": {
+        "documents": "Documentos",
+        "payroll": "Folha de pagamento",
+        "people": "Pessoal",
+        "operations": "Operações",
+        "finance": "Finanças",
+        "other": "Outros"
+      }
     },
     "actions": {
       "enable": "Ativar",
