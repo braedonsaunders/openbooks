@@ -50,7 +50,9 @@ function TabLink({ navigation, ...props }: ComponentProps<typeof Link> & { navig
         if (url.origin === window.location.origin && url.pathname === window.location.pathname) {
           event.preventDefault();
           if (url.href !== window.location.href) {
-            window.history.pushState(window.history.state, '', url.pathname + url.search + url.hash);
+            // Next's history patch copies its own markers and updates URL observers.
+            // Passing those markers ourselves identifies an internal router write.
+            window.history.pushState(null, '', url.pathname + url.search + url.hash);
           }
           return;
         }
