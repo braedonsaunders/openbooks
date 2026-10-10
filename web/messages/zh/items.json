@@ -145,7 +145,9 @@
     "scopes": { "base": "基础价格", "level": "价格级别", "customer": "指定客户" },
     "priceLevel": "价格级别", "customer": "客户", "selectCustomer": "选择客户…", "currency": "币种", "quantityBasis": "数量基准",
     "quantityBases": { "line": "行数量", "overallItem": "此物料总数量" },
-    "effectiveFrom": "生效日期", "effectiveTo": "结束日期", "breaksTitle": "数量阶梯", "breaksDescription": "达到的最高最低数量决定所有单位的单价。", "addBreak": "添加数量阶梯", "saveFailed": "无法保存定价计划。", "loadFailed": "无法加载定价计划。", "saved": "定价计划已保存", "changeReason": "更改原因", "changeReasonPlaceholder": "此价格为何更改？", "changeReasonHint": "当新价格覆盖已生效日期时必填。先前版本将保留，原因记录在审计中。", "endDateTitle": "结束定价计划", "endDateReasonLabel": "结束原因", "ended": "定价计划已结束", "confirmDelete": "删除此定价计划？", "deleteFailed": "无法删除定价计划。", "deleted": "定价计划已删除", "customerTarget": "客户 · {customer}", "baseTarget": "基础价格", "empty": "此物料尚未配置矩阵价格。", "target": "目标", "effective": "生效区间", "breaks": "数量价格", "familyDescription": "此处设置的价格表适用于该范围内没有自定价格表的所有变体。", "inheritedTitle": "继承自系列", "inheritedDescription": "适用于本变体的系列价格表；如需单独定价，请覆盖其中一条。", "override": "为本变体覆盖", "inheritedBadge": "继承自 {family}", "overriddenBadge": "已覆盖", "source": "来源"
+    "effectiveFrom": "生效日期", "effectiveTo": "结束日期", "breaksTitle": "数量阶梯", "breaksDescription": "达到的最高最低数量决定所有单位的单价。", "addBreak": "添加数量阶梯", "saveFailed": "无法保存定价计划。", "loadFailed": "无法加载定价计划。", "saved": "定价计划已保存", "changeReason": "更改原因", "changeReasonPlaceholder": "此价格为何更改？", "changeReasonHint": "当新价格覆盖已生效日期时必填。先前版本将保留，原因记录在审计中。", "endDateTitle": "结束定价计划", "endDateReasonLabel": "结束原因", "ended": "定价计划已结束", "confirmDelete": "删除此定价计划？", "deleteFailed": "无法删除定价计划。", "deleted": "定价计划已删除", "customerTarget": "客户 · {customer}", "baseTarget": "基础价格", "empty": "此物料尚未配置矩阵价格。", "target": "目标", "effective": "生效区间", "breaks": "数量价格", "familyDescription": "此处设置的价格表适用于该范围内没有自定价格表的所有变体。", "inheritedTitle": "继承自系列", "inheritedDescription": "适用于本变体的系列价格表；如需单独定价，请覆盖其中一条。", "override": "为本变体覆盖", "inheritedBadge": "继承自 {family}", "overriddenBadge": "已覆盖", "source": "来源",
+    "search": "搜索价格方案…",
+    "editSchedule": "编辑价格方案"
   },
   "rates": {
     "title": "高级费率定价",
@@ -200,7 +202,8 @@
     "rates": "费率",
     "tierOverrides": "人工加价费率",
     "tierOverridesHide": "隐藏人工加价费率",
-    "tierAuto": "自动"
+    "tierAuto": "自动",
+    "search": "搜索费率版本…"
   },
   "rateBookDrawer": {
     "laborPolicy": "人工定价策略",
@@ -289,7 +292,6 @@
     "layerInquiry": "查看库存成本层",
     "title": "存货计价",
     "description": "该物料存货的计价与跟踪方式——方法、科目与再订货点。",
-    "configure": "配置计价",
     "empty": "尚无成本档案——请在收货前先配置。",
     "method": "计价方法",
     "methods": {
@@ -347,7 +349,9 @@
     "effectiveFrom": "生效自",
     "effectiveTo": "有效至",
     "empty": "尚无公允价值单价——将使用上方的单一SSP。",
-    "confirmDelete": "删除该公允价值单价？"
+    "confirmDelete": "删除该公允价值单价？",
+    "selectCurrency": "选择币种…",
+    "edit": "编辑公允价值价格"
   },
   "families": {
     "title": "产品系列",

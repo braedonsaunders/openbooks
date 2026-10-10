@@ -48,7 +48,7 @@ let recordSave: Registry | null = null;
 
 /** The record drawer's side of the contract: one registry, one Save. */
 function RecordHost({ children }: { children: React.ReactNode }) {
-  const registry = useRecordSaveRegistry();
+  const registry = useRecordSaveRegistry(true);
   recordSave = registry;
   return <RecordSaveContext.Provider value={registry.context}>{children}</RecordSaveContext.Provider>;
 }

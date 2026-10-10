@@ -45,6 +45,7 @@ import { ItemCostingEditor } from './ItemCostingEditor'
 import { FairValuePricesEditor } from './FairValuePricesEditor'
 import { ReadOnlyValue } from '../../../components/read-only-value'
 import { useDirtyClose } from '../../../lib/use-dirty-close'
+import { RecordSaveContext, useRecordSaveRegistry } from '@/components/record-save-participants'
 import { DrawerTabStrip } from '../../../components/drawer-tab-strip'
 import { RecordKindCards } from '../../../components/record-kind-cards'
 import { useAppAction } from '../../../lib/use-app-action'
@@ -187,6 +188,7 @@ export function ItemDrawer({
   configuredPricingViews = [],
   createMode = false,
   recordTabs = [],
+  recordSectionEditors = false,
   family = null,
   variantsEnabled = false,
 }: {
@@ -225,6 +227,9 @@ export function ItemDrawer({
   createMode?: boolean
   /** Server-rendered configuration collections scoped to this persisted item. */
   recordTabs?: { key: string; label: string; content: ReactNode }[]
+  /** The viewer may edit an operational record tab (item planning) without
+   *  managing the item itself; Edit then opens only those sections. */
+  recordSectionEditors?: boolean
   /** Variant membership resolved server-side; null when standalone or gated off. */
   family?: { id: string; code: string } | null
   /** Item variants gate: without it no family surface is offered. */
@@ -393,8 +398,11 @@ export function ItemDrawer({
     setPrevSavePayload(savePayload)
     if (editable) setDirty(true)
   }
+  // Sections that persist through their own endpoints (the costing profile)
+  // edit with the item and save through this drawer's single Save.
+  const saveRegistry = useRecordSaveRegistry(mode === 'edit')
   const closeGuard = useDirtyClose({
-    dirty, busy, onClose: () => {},
+    dirty: dirty || saveRegistry.dirty, busy, onClose: () => {},
     message: tCommon('feedback.unsavedChanges'), confirmLabel: tCommon('confirm.discardChanges'),
   })
 
@@ -432,8 +440,23 @@ export function ItemDrawer({
   }
 
   async function save() {
+    if (!canManage && !createMode) {
+      // Only operational sections are editable for this viewer.
+      setSaveState('saving')
+      const sections = await saveRegistry.saveAll()
+      if (!sections.ok) {
+        setSaveState('error')
+        selectTab(sections.key)
+        return
+      }
+      setSaveState('saved')
+      setMode('view')
+      router.refresh()
+      return
+    }
     if (!nameValid) return
     setSaveState('saving')
+    let savedExisting = false
     if (createMode && !requestIdRef.current) requestIdRef.current = crypto.randomUUID()
     const saved = await action.execute(
       async () => {
@@ -459,15 +482,30 @@ export function ItemDrawer({
             const savedId = data?.item?.id
             const separator = basePath.includes('?') ? '&' : '?'
             router.replace(`${basePath}${separator}item=${savedId}` as never)
+            router.refresh()
           } else {
-            setMode('view')
+            savedExisting = true
           }
-          router.refresh()
         },
         onRefused: () => setSaveState('error'),
       },
     )
-    if (!saved) setSaveState('error')
+    if (!saved) {
+      setSaveState('error')
+      return
+    }
+    if (!savedExisting) return
+    // The item saved; now its sections. A refused section keeps the drawer in
+    // edit mode on that section's tab, where its fields show the reason.
+    const sections = await saveRegistry.saveAll()
+    if (!sections.ok) {
+      setSaveState('error')
+      selectTab(sections.key)
+      router.refresh()
+      return
+    }
+    setMode('view')
+    router.refresh()
   }
 
   function cancel() {
@@ -476,6 +514,7 @@ export function ItemDrawer({
       return
     }
     resetForm()
+    saveRegistry.resetAll()
     setDirty(false)
     setSaveState('saved')
     setMode('view')
@@ -719,6 +758,7 @@ export function ItemDrawer({
   }
 
   return (
+    <RecordSaveContext.Provider value={saveRegistry.context}>
     <UrlDrawer
       open
       closeHref={basePath}
@@ -762,16 +802,16 @@ export function ItemDrawer({
               <Button variant="outline" disabled={busy} onClick={cancel}>
                 {tCommon('actions.cancel')}
               </Button>
-              <Button disabled={busy || !nameValid} onClick={save}>
+              <Button disabled={busy || (canManage && !nameValid)} onClick={save}>
                 {busy ? tCommon('actions.saving') : createMode ? tCommon('actions.create') : tCommon('actions.save')}
               </Button>
             </>
-          ) : canManage ? (
+          ) : canManage || recordSectionEditors ? (
             <div className="flex items-center gap-1.5">
-              <Button variant="outline" onClick={() => { setTab('overview'); setMode('edit') }}>
+              <Button variant="outline" onClick={() => { if (canManage) setTab('overview'); setMode('edit') }}>
                 {tCommon('actions.edit')}
               </Button>
-              <Popover open={actionsOpen} onOpenChange={setActionsOpen} align="end" className="w-52 p-1.5" trigger={<Button variant="outline" onClick={() => setActionsOpen((open) => !open)}>{tCommon('labels.actions')}<ChevronDown className="ml-1 h-3.5 w-3.5" /></Button>}>
+              {canManage ? <Popover open={actionsOpen} onOpenChange={setActionsOpen} align="end" className="w-52 p-1.5" trigger={<Button variant="outline" onClick={() => setActionsOpen((open) => !open)}>{tCommon('labels.actions')}<ChevronDown className="ml-1 h-3.5 w-3.5" /></Button>}>
                 <div className="space-y-0.5 [&_button]:w-full [&_button]:justify-start">
                   {isActive ? <Button variant="ghost" disabled={busy} onClick={() => { setActionsOpen(false); void setActiveState(false) }}>{t('drawer.deactivate')}</Button> : <Button variant="ghost" disabled={busy || !nameValid} onClick={() => { setActionsOpen(false); void setActiveState(true) }}>{t('drawer.activate')}</Button>}
                   {!isActive && !nameValid ? <p className="px-2 py-1 text-xs text-slate-500 dark:text-slate-400">{t('drawer.nameToActivate')}</p> : null}
@@ -784,7 +824,7 @@ export function ItemDrawer({
                     <Button variant="ghost" disabled={busy} onClick={() => { setActionsOpen(false); void convertToFamily() }}>{t('families.convert.action')}</Button>
                   ) : null}
                 </div>
-              </Popover>
+              </Popover> : null}
             </div>
           ) : null}
         </>
@@ -802,7 +842,7 @@ export function ItemDrawer({
                 ? tCommon('actions.saving')
                 : saveState === 'error'
                   ? t('drawer.saveFailedRetry')
-                  : dirty
+                  : dirty || saveRegistry.dirty
                     ? t('drawer.unsavedChanges')
                     : null
               : null}
@@ -968,5 +1008,6 @@ export function ItemDrawer({
         ) : null}
       </div>
     </UrlDrawer>
+    </RecordSaveContext.Provider>
   )
 }

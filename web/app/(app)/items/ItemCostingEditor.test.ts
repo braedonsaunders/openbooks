@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
+import type { ReactNode } from 'react'
 import { bootJsdomEnvironment } from '../../../testing/jsdom-env'
 import { stubModules } from '../../../testing/stub-modules'
 
@@ -26,6 +27,22 @@ const { createRoot } = await import('react-dom/client')
 // account equal to the inventory asset account). A transient toast after a
 // failed save is not a substitute for inline validation.
 const { ItemCostingEditor, costingOffsetConflicts, validateConversionRows } = await import('./ItemCostingEditor.tsx')
+const { RecordSaveContext, useRecordSaveRegistry } = await import('../../../components/record-save-participants')
+
+let recordSave: ReturnType<typeof useRecordSaveRegistry> | null = null
+/** The item drawer's side of the contract: one registry, one Save. */
+function RecordHost({ children }: { children?: ReactNode }) {
+  const registry = useRecordSaveRegistry(true)
+  recordSave = registry
+  return React.createElement(RecordSaveContext.Provider, { value: registry.context }, children)
+}
+
+/** The item drawer's Save: every dirty section saves through the registry. */
+async function saveRecord() {
+  let result: Awaited<ReturnType<NonNullable<typeof recordSave>['saveAll']>> | null = null
+  await act(async () => { result = await recordSave!.saveAll() })
+  return result
+}
 
 const ASSET = '11111111-1111-4111-8111-111111111111'
 const COGS = '22222222-2222-4222-8222-222222222222'
@@ -130,12 +147,15 @@ async function mountEditor(t: TestContext, accounts: { id: string; number: strin
     for (const node of [...document.body.children]) node.remove()
   })
   await act(async () => {
-    root.render(React.createElement(ItemCostingEditor, { itemId: 'item-1', kind: 'inventory', accounts, canManage: true }))
+    root.render(React.createElement(RecordHost, null, React.createElement(ItemCostingEditor, { itemId: 'item-1', kind: 'inventory', accounts, canManage: true })))
     await new Promise((resolve) => setTimeout(resolve, 20))
   })
-  const configure = [...document.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'configure')
-  assert.ok(configure, 'a manager can configure the loaded costing profile')
-  await act(async () => configure.click())
+  assert.ok(document.querySelector('button[aria-haspopup="listbox"]'), 'item edit mode opens the costing fields directly')
+  assert.equal(
+    [...document.querySelectorAll('button')].some((button) => ['actions.save', 'actions.edit', 'configure'].includes(button.textContent?.trim() ?? '')),
+    false,
+    'the costing section carries no Edit or Save of its own',
+  )
   return requests
 }
 
@@ -152,9 +172,8 @@ test('an offset equal to the asset account shows an inline refusal without submi
   const requests = await mountEditor(t, [{ id: ASSET, number: '100', name: 'Stock asset' }])
   await chooseAccount('assetAccount')
   await chooseAccount('cogsAccount')
-  const save = [...document.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'actions.save')
-  assert.ok(save, 'the costing form can be submitted')
-  await act(async () => save.click())
+  assert.equal(recordSave?.dirty, true, 'the edited profile marks the item dirty')
+  assert.deepEqual(await saveRecord(), { ok: false, key: 'costing' }, 'the item Save stops on the refused section')
   assert.deepEqual(requests.map((request) => request.method), ['GET'], 'the invalid account pair never reaches the PUT route')
   assert.match(document.querySelector('[role="alert"]')?.textContent ?? '', /separationConflict/)
 })
@@ -175,9 +194,24 @@ test('a malformed conversion row is refused inline before the costing PUT', asyn
     setter.call(factor, '0')
     factor.dispatchEvent(new window.Event('input', { bubbles: true }))
   })
-  const save = [...document.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'actions.save')
-  assert.ok(save)
-  await act(async () => save.click())
+  assert.deepEqual(await saveRecord(), { ok: false, key: 'costing' })
   assert.deepEqual(requests.map((request) => request.method), ['GET'], 'an invalid factor never reaches the PUT route')
   assert.match(document.querySelector('[role="alert"]')?.textContent ?? '', /conversionFactorInvalid|conversionsBlocked/)
+})
+
+test('outside item edit mode the costing profile reads as values with no controls', async (t) => {
+  const priorFetch = globalThis.fetch
+  globalThis.fetch = (async () => Response.json({ profile: null })) as typeof fetch
+  t.after(() => { globalThis.fetch = priorFetch })
+  const root = createRoot(document.body)
+  t.after(async () => {
+    await act(async () => root.unmount())
+    for (const node of [...document.body.children]) node.remove()
+  })
+  await act(async () => {
+    root.render(React.createElement(RecordHost, null, React.createElement(ItemCostingEditor, { itemId: 'item-1', kind: 'inventory', accounts: [], canManage: false })))
+    await new Promise((resolve) => setTimeout(resolve, 20))
+  })
+  assert.equal(document.querySelectorAll('input, select, button[aria-haspopup="listbox"]').length, 0, 'view mode renders no editable controls')
+  assert.equal(recordSave?.dirty, false)
 })

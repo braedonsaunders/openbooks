@@ -145,7 +145,9 @@
     "scopes": { "base": "Prix de base", "level": "Niveau de prix", "customer": "Client précis" },
     "priceLevel": "Niveau de prix", "customer": "Client", "selectCustomer": "Sélectionner un client…", "currency": "Devise", "quantityBasis": "Base de quantité",
     "quantityBases": { "line": "Quantité de ligne", "overallItem": "Quantité totale de l’article" },
-    "effectiveFrom": "En vigueur dès", "effectiveTo": "En vigueur jusqu’au", "breaksTitle": "Paliers de quantité", "breaksDescription": "La plus grande quantité minimale atteinte fixe le prix de toutes les unités.", "addBreak": "Ajouter un palier", "saveFailed": "Impossible d’enregistrer la grille.", "loadFailed": "Impossible de charger les grilles tarifaires.", "saved": "Grille enregistrée", "changeReason": "Motif de la modification", "changeReasonPlaceholder": "Pourquoi ce prix change-t-il ?", "changeReasonHint": "Obligatoire lorsque les nouveaux prix couvrent des dates déjà en vigueur. La version précédente est conservée et le motif est enregistré dans l’audit.", "endDateTitle": "Terminer la grille", "endDateReasonLabel": "Motif de la fin", "ended": "Grille terminée", "confirmDelete": "Supprimer cette grille ?", "deleteFailed": "Impossible de supprimer la grille.", "deleted": "Grille supprimée", "customerTarget": "Client · {customer}", "baseTarget": "Prix de base", "empty": "Aucune tarification matricielle pour cet article.", "target": "Cible", "effective": "Dates d’effet", "breaks": "Prix par quantité", "familyDescription": "Les tarifs saisis ici s'appliquent à chaque variante sans tarif propre pour le périmètre.", "inheritedTitle": "Hérité de la famille", "inheritedDescription": "Tarifs de la famille appliqués à cette variante ; remplacez-en un pour tarifer cette variante seule.", "override": "Remplacer pour cette variante", "inheritedBadge": "Hérité de {family}", "overriddenBadge": "Remplacé", "source": "Source"
+    "effectiveFrom": "En vigueur dès", "effectiveTo": "En vigueur jusqu’au", "breaksTitle": "Paliers de quantité", "breaksDescription": "La plus grande quantité minimale atteinte fixe le prix de toutes les unités.", "addBreak": "Ajouter un palier", "saveFailed": "Impossible d’enregistrer la grille.", "loadFailed": "Impossible de charger les grilles tarifaires.", "saved": "Grille enregistrée", "changeReason": "Motif de la modification", "changeReasonPlaceholder": "Pourquoi ce prix change-t-il ?", "changeReasonHint": "Obligatoire lorsque les nouveaux prix couvrent des dates déjà en vigueur. La version précédente est conservée et le motif est enregistré dans l’audit.", "endDateTitle": "Terminer la grille", "endDateReasonLabel": "Motif de la fin", "ended": "Grille terminée", "confirmDelete": "Supprimer cette grille ?", "deleteFailed": "Impossible de supprimer la grille.", "deleted": "Grille supprimée", "customerTarget": "Client · {customer}", "baseTarget": "Prix de base", "empty": "Aucune tarification matricielle pour cet article.", "target": "Cible", "effective": "Dates d’effet", "breaks": "Prix par quantité", "familyDescription": "Les tarifs saisis ici s'appliquent à chaque variante sans tarif propre pour le périmètre.", "inheritedTitle": "Hérité de la famille", "inheritedDescription": "Tarifs de la famille appliqués à cette variante ; remplacez-en un pour tarifer cette variante seule.", "override": "Remplacer pour cette variante", "inheritedBadge": "Hérité de {family}", "overriddenBadge": "Remplacé", "source": "Source",
+    "search": "Rechercher des grilles de prix…",
+    "editSchedule": "Modifier la grille de prix"
   },
   "rates": {
     "title": "Tarification avancée",
@@ -210,7 +212,8 @@
     "rates": "Tarifs",
     "tierOverrides": "Majoration de main-d’œuvre",
     "tierOverridesHide": "Masquer les majorations de main-d’œuvre",
-    "tierAuto": "auto"
+    "tierAuto": "auto",
+    "search": "Rechercher des versions de tarifs…"
   },
   "rateBookDrawer": {
     "laborPolicy": "Politique tarifaire de main-d’œuvre",
@@ -299,7 +302,6 @@
     "layerInquiry": "Voir les couches de coût du stock",
     "title": "Valorisation des stocks",
     "description": "Valorisation et suivi du stock de cet article — méthode, comptes et seuils de réapprovisionnement.",
-    "configure": "Configurer la valorisation",
     "empty": "Aucun profil de coût pour l’instant — configurez-en un avant de réceptionner du stock.",
     "method": "Méthode de valorisation",
     "methods": {
@@ -357,7 +359,9 @@
     "effectiveFrom": "En vigueur depuis",
     "effectiveTo": "En vigueur jusqu’au",
     "empty": "Aucune juste valeur pour l’instant — le prix SSP unique ci-dessus est utilisé.",
-    "confirmDelete": "Supprimer ce prix en juste valeur ?"
+    "confirmDelete": "Supprimer ce prix en juste valeur ?",
+    "selectCurrency": "Sélectionner une devise…",
+    "edit": "Modifier le prix de juste valeur"
   },
   "families": {
     "title": "Familles de produits",

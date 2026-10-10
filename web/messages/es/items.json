@@ -145,7 +145,9 @@
     "scopes": { "base": "Precio base", "level": "Nivel de precio", "customer": "Cliente específico" },
     "priceLevel": "Nivel de precio", "customer": "Cliente", "selectCustomer": "Seleccionar cliente…", "currency": "Moneda", "quantityBasis": "Base de cantidad",
     "quantityBases": { "line": "Cantidad de línea", "overallItem": "Cantidad total del artículo" },
-    "effectiveFrom": "Vigente desde", "effectiveTo": "Vigente hasta", "breaksTitle": "Tramos de cantidad", "breaksDescription": "La mayor cantidad mínima alcanzada fija el precio de todas las unidades.", "addBreak": "Añadir tramo", "saveFailed": "No se pudo guardar el esquema.", "loadFailed": "No se pudieron cargar los esquemas de precios.", "saved": "Esquema guardado", "changeReason": "Motivo del cambio", "changeReasonPlaceholder": "¿Por qué cambia este precio?", "changeReasonHint": "Obligatorio cuando los nuevos precios cubren fechas que ya están vigentes. La versión anterior se conserva y el motivo queda registrado en la auditoría.", "endDateTitle": "Finalizar esquema", "endDateReasonLabel": "Motivo de la finalización", "ended": "Esquema finalizado", "confirmDelete": "¿Eliminar este esquema?", "deleteFailed": "No se pudo eliminar el esquema.", "deleted": "Esquema eliminado", "customerTarget": "Cliente · {customer}", "baseTarget": "Precio base", "empty": "No hay precios matriciales para este artículo.", "target": "Destino", "effective": "Vigencia", "breaks": "Precios por cantidad", "familyDescription": "Las tarifas aquí se aplican a cada variante sin tarifa propia para el ámbito.", "inheritedTitle": "Heredado de la familia", "inheritedDescription": "Tarifas de la familia aplicadas a esta variante; sustituya una para tarifar solo esta variante.", "override": "Sustituir para esta variante", "inheritedBadge": "Heredado de {family}", "overriddenBadge": "Sustituido", "source": "Origen"
+    "effectiveFrom": "Vigente desde", "effectiveTo": "Vigente hasta", "breaksTitle": "Tramos de cantidad", "breaksDescription": "La mayor cantidad mínima alcanzada fija el precio de todas las unidades.", "addBreak": "Añadir tramo", "saveFailed": "No se pudo guardar el esquema.", "loadFailed": "No se pudieron cargar los esquemas de precios.", "saved": "Esquema guardado", "changeReason": "Motivo del cambio", "changeReasonPlaceholder": "¿Por qué cambia este precio?", "changeReasonHint": "Obligatorio cuando los nuevos precios cubren fechas que ya están vigentes. La versión anterior se conserva y el motivo queda registrado en la auditoría.", "endDateTitle": "Finalizar esquema", "endDateReasonLabel": "Motivo de la finalización", "ended": "Esquema finalizado", "confirmDelete": "¿Eliminar este esquema?", "deleteFailed": "No se pudo eliminar el esquema.", "deleted": "Esquema eliminado", "customerTarget": "Cliente · {customer}", "baseTarget": "Precio base", "empty": "No hay precios matriciales para este artículo.", "target": "Destino", "effective": "Vigencia", "breaks": "Precios por cantidad", "familyDescription": "Las tarifas aquí se aplican a cada variante sin tarifa propia para el ámbito.", "inheritedTitle": "Heredado de la familia", "inheritedDescription": "Tarifas de la familia aplicadas a esta variante; sustituya una para tarifar solo esta variante.", "override": "Sustituir para esta variante", "inheritedBadge": "Heredado de {family}", "overriddenBadge": "Sustituido", "source": "Origen",
+    "search": "Buscar programas de precios…",
+    "editSchedule": "Editar programa de precios"
   },
   "rates": {
     "title": "Precios avanzados por tarifa",
@@ -210,7 +212,8 @@
     "rates": "Tarifas",
     "tierOverrides": "Recargos de mano de obra",
     "tierOverridesHide": "Ocultar recargos de mano de obra",
-    "tierAuto": "Automático"
+    "tierAuto": "Automático",
+    "search": "Buscar versiones de tarifas…"
   },
   "rateBookDrawer": {
     "laborPolicy": "Política de precios de mano de obra",
@@ -299,7 +302,6 @@
     "layerInquiry": "Ver capas de costo del inventario",
     "title": "Costeo de inventario",
     "description": "Cómo se valúa y controla el stock de este artículo: método, cuentas y puntos de reorden.",
-    "configure": "Configurar costeo",
     "empty": "Aún no hay perfil de costeo; configúralo antes de recibir stock.",
     "method": "Método de costeo",
     "methods": {
@@ -357,7 +359,9 @@
     "effectiveFrom": "Vigente desde",
     "effectiveTo": "Vigente hasta",
     "empty": "Aún no hay precios de valor razonable; se usa el SSP único de arriba.",
-    "confirmDelete": "¿Eliminar este precio de valor razonable?"
+    "confirmDelete": "¿Eliminar este precio de valor razonable?",
+    "selectCurrency": "Seleccione una moneda…",
+    "edit": "Editar precio de valor razonable"
   },
   "families": {
     "title": "Familias de productos",

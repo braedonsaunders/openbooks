@@ -476,7 +476,7 @@ export function PartyDrawer({
     createMode ? 'edit' : initialDrawerMode(initialMode, canEditRecord),
   )
   const editable = mode === 'edit' && canManage
-  const saveRegistry = useRecordSaveRegistry()
+  const saveRegistry = useRecordSaveRegistry(mode === 'edit')
   const [savingSections, setSavingSections] = useState(false)
 
   const nameValid = displayName.trim().length > 0

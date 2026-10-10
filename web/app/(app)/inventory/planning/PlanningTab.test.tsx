@@ -69,3 +69,36 @@ test('a supplied unreadable day count refuses by field instead of saving null', 
   assert.deepEqual(writes, [], 'nonblank unreadable count cannot clear an existing policy')
   assert.ok(errors.some((error) => error.includes('policy.leadTime')), 'refusal names the affected field')
 })
+
+test('inside the item drawer the policy is read-only until Edit and saves through the item Save', async (t) => {
+  const { RecordSaveContext, useRecordSaveRegistry } = await import('../../../../components/record-save-participants')
+  const record: { registry: ReturnType<typeof useRecordSaveRegistry> | null } = { registry: null }
+  function ItemRecord({ editing }: { editing: boolean }) {
+    const value = useRecordSaveRegistry(editing)
+    record.registry = value
+    return React.createElement(RecordSaveContext.Provider, { value: value.context },
+      React.createElement(PlanningTab, { itemId: 'item-a', subsidiaryId: 'entity-a', canManage: true, vendors: [] }))
+  }
+  const writes: unknown[] = []
+  const oldFetch = globalThis.fetch
+  globalThis.fetch = async (input, init) => {
+    if (init?.method === 'POST') { writes.push(JSON.parse(String(init.body))); return Response.json(policy) }
+    return Response.json(String(input).includes('policies') ? [policy] : [])
+  }
+  const root = createRoot(document.body)
+  t.after(async () => { await act(async () => root.unmount()); globalThis.fetch = oldFetch })
+  await act(async () => { root.render(React.createElement(ItemRecord, { editing: false })) })
+  assert.equal(document.querySelectorAll('input').length, 0, 'view mode renders the policy as values')
+  assert.ok(document.querySelector('[data-planning-read-only]'))
+  assert.equal([...document.querySelectorAll('button')].some((b) => b.textContent === 'policy.save'), false, 'no Save of its own')
+
+  await act(async () => { root.render(React.createElement(ItemRecord, { editing: true })) })
+  const input = document.querySelector('input') as HTMLInputElement
+  assert.ok(input && !input.disabled, 'edit mode opens the fields')
+  assert.equal([...document.querySelectorAll('button')].some((b) => b.textContent === 'policy.save'), false, 'still no Save of its own')
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
+  await act(async () => { setter.call(input, '15'); input.dispatchEvent(new window.Event('input', { bubbles: true })) })
+  assert.equal(record.registry?.dirty, true, 'the edit marks the item dirty')
+  await act(async () => { await record.registry!.saveAll() })
+  assert.equal((writes.at(0) as { leadTimeDays?: unknown } | undefined)?.leadTimeDays, 15, 'the item Save persists the policy')
+})

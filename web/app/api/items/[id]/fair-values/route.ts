@@ -11,6 +11,7 @@ import { moneyRefusal } from '../../../../../lib/payroll-decimal-refusal'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { auditSetupChange } from '../../../../../lib/setup/audit'
 import { notFound } from "@/lib/api/responses";
+import { organizationCurrencyOptions } from '@openbooks/engine/organization/currencies'
 
 
 const itemParams = z.object({ id: uuidId })
@@ -66,7 +67,12 @@ export const GET = defineRoute({ permission: 'items.read', feature: 'revenueReco
       from fair_value_prices
      where org_id = ${gate.user.orgId} and item_id = ${id}
      order by currency, effective_from desc nulls last`)))
-  return NextResponse.json({ prices: rows.rows })
+  // The picker offers the organization's enabled currencies, once each.
+  const seen = new Set<string>()
+  const currencies = (await organizationCurrencyOptions(db, gate.user.orgId, gate.allowedSubsidiaryIds))
+    .filter((option) => (seen.has(option.value) ? false : (seen.add(option.value), true)))
+    .map(({ value, label }) => ({ value, label }))
+  return NextResponse.json({ prices: rows.rows, currencies })
 } })
 
 /** Shared field extraction/validation for POST and PATCH. */

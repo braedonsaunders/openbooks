@@ -145,7 +145,9 @@
     "scopes": { "base": "基本価格", "level": "価格レベル", "customer": "特定顧客" },
     "priceLevel": "価格レベル", "customer": "顧客", "selectCustomer": "顧客を選択…", "currency": "通貨", "quantityBasis": "数量基準",
     "quantityBases": { "line": "行数量", "overallItem": "この品目の合計数量" },
-    "effectiveFrom": "発効日", "effectiveTo": "終了日", "breaksTitle": "数量区分", "breaksDescription": "到達した最大の最低数量が全数量の単価になります。", "addBreak": "数量区分を追加", "saveFailed": "価格スケジュールを保存できませんでした。", "loadFailed": "価格スケジュールを読み込めませんでした。", "saved": "価格スケジュールを保存しました", "changeReason": "変更理由", "changeReasonPlaceholder": "この価格を変更する理由は？", "changeReasonHint": "新しい価格がすでに有効な日付をカバーする場合は必須です。以前のバージョンは保持され、理由は監査に記録されます。", "endDateTitle": "価格スケジュールを終了", "endDateReasonLabel": "終了理由", "ended": "価格スケジュールを終了しました", "confirmDelete": "この価格スケジュールを削除しますか？", "deleteFailed": "価格スケジュールを削除できませんでした。", "deleted": "価格スケジュールを削除しました", "customerTarget": "顧客 · {customer}", "baseTarget": "基本価格", "empty": "この品目にマトリクス価格はありません。", "target": "対象", "effective": "有効期間", "breaks": "数量価格", "familyDescription": "ここで設定した価格表は、対象範囲に独自の価格表を持たないすべてのバリアントに適用されます。", "inheritedTitle": "ファミリーから継承", "inheritedDescription": "このバリアントに適用されるファミリー価格表。このバリアントだけ別価格にするには上書きします。", "override": "このバリアント用に上書き", "inheritedBadge": "{family}から継承", "overriddenBadge": "上書き済み", "source": "取得元"
+    "effectiveFrom": "発効日", "effectiveTo": "終了日", "breaksTitle": "数量区分", "breaksDescription": "到達した最大の最低数量が全数量の単価になります。", "addBreak": "数量区分を追加", "saveFailed": "価格スケジュールを保存できませんでした。", "loadFailed": "価格スケジュールを読み込めませんでした。", "saved": "価格スケジュールを保存しました", "changeReason": "変更理由", "changeReasonPlaceholder": "この価格を変更する理由は？", "changeReasonHint": "新しい価格がすでに有効な日付をカバーする場合は必須です。以前のバージョンは保持され、理由は監査に記録されます。", "endDateTitle": "価格スケジュールを終了", "endDateReasonLabel": "終了理由", "ended": "価格スケジュールを終了しました", "confirmDelete": "この価格スケジュールを削除しますか？", "deleteFailed": "価格スケジュールを削除できませんでした。", "deleted": "価格スケジュールを削除しました", "customerTarget": "顧客 · {customer}", "baseTarget": "基本価格", "empty": "この品目にマトリクス価格はありません。", "target": "対象", "effective": "有効期間", "breaks": "数量価格", "familyDescription": "ここで設定した価格表は、対象範囲に独自の価格表を持たないすべてのバリアントに適用されます。", "inheritedTitle": "ファミリーから継承", "inheritedDescription": "このバリアントに適用されるファミリー価格表。このバリアントだけ別価格にするには上書きします。", "override": "このバリアント用に上書き", "inheritedBadge": "{family}から継承", "overriddenBadge": "上書き済み", "source": "取得元",
+    "search": "価格スケジュールを検索…",
+    "editSchedule": "価格スケジュールを編集"
   },
   "rates": {
     "title": "高度なレート価格設定",
@@ -200,7 +202,8 @@
     "rates": "レート",
     "tierOverrides": "労務割増レート",
     "tierOverridesHide": "労務割増レートを非表示",
-    "tierAuto": "自動"
+    "tierAuto": "自動",
+    "search": "料金バージョンを検索…"
   },
   "rateBookDrawer": {
     "laborPolicy": "作業料金ポリシー",
@@ -289,7 +292,6 @@
     "layerInquiry": "在庫原価レイヤーを表示",
     "title": "在庫評価",
     "description": "この品目の在庫の評価・管理方法 — 評価方法、勘定科目、発注点を指定します。",
-    "configure": "評価を設定する",
     "empty": "原価プロファイルがまだありません — 在庫を受け入れる前に設定してください。",
     "method": "評価方法",
     "methods": {
@@ -347,7 +349,9 @@
     "effectiveFrom": "適用開始日",
     "effectiveTo": "適用終了日",
     "empty": "公正価値単価はまだありません — 上の単一SSPを使用します。",
-    "confirmDelete": "この公正価値単価を削除しますか？"
+    "confirmDelete": "この公正価値単価を削除しますか？",
+    "selectCurrency": "通貨を選択…",
+    "edit": "公正価値価格を編集"
   },
   "families": {
     "title": "商品ファミリー",

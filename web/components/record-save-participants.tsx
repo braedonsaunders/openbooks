@@ -24,13 +24,15 @@ export interface RecordSaveParticipant {
 }
 
 interface RegistryContext {
+  /** Whether the record drawer is in edit mode. */
+  editing: boolean
   register: (key: string, participant: RecordSaveParticipant) => () => void
   setDirty: (key: string, dirty: boolean) => void
 }
 
 export const RecordSaveContext = createContext<RegistryContext | null>(null)
 
-export function useRecordSaveRegistry() {
+export function useRecordSaveRegistry(editing: boolean) {
   const participants = useRef(new Map<string, RecordSaveParticipant>())
   const [dirtyKeys, setDirtyKeys] = useState<ReadonlySet<string>>(() => new Set())
 
@@ -65,7 +67,7 @@ export function useRecordSaveRegistry() {
     for (const participant of participants.current.values()) participant.reset()
   }, [])
 
-  const context = useMemo<RegistryContext>(() => ({ register, setDirty }), [register, setDirty])
+  const context = useMemo<RegistryContext>(() => ({ editing, register, setDirty }), [editing, register, setDirty])
 
   return { context, dirty: dirtyKeys.size > 0, saveAll, resetAll }
 }
@@ -95,4 +97,13 @@ export function useRecordSaveParticipant(key: string, participant: RecordSavePar
     registry?.setDirty(key, participant.dirty)
   }, [registry, key, participant.dirty])
   return registry !== null
+}
+
+/**
+ * The enclosing record drawer's edit mode, or null outside a record drawer.
+ * Sections rendered into a record (including server-rendered record tabs)
+ * read it to stay read-only until the record is being edited.
+ */
+export function useRecordEditing(): boolean | null {
+  return useContext(RecordSaveContext)?.editing ?? null
 }
