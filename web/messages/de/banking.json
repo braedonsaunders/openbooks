@@ -382,6 +382,7 @@
     "actionFailed": "Aktion fehlgeschlagen",
     "submitted": "Zur Genehmigung eingereicht",
     "posted": "In das Hauptbuch gebucht",
+    "saved": "Beleg gespeichert: {documentNumber}",
     "createDraftFailed": "Es konnte kein Entwurf erstellt werden",
     "deleted": "Dokument gelöscht",
     "deleteFailed": "Löschen fehlgeschlagen"

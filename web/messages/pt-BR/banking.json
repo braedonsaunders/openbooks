@@ -382,6 +382,7 @@
     "actionFailed": "A ação falhou",
     "submitted": "Enviado para aprovação",
     "posted": "Lançado no razão",
+    "saved": "Documento salvo: {documentNumber}",
     "createDraftFailed": "Não foi possível criar um rascunho",
     "deleted": "Documento excluído",
     "deleteFailed": "A exclusão falhou"

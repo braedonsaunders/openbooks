@@ -79,6 +79,10 @@
     "accountPlaceholder": "Compte…",
     "currencyMismatch": "{account} n'accepte que les écritures en {allowed}, pas en {actual}",
     "lineMissingAccount": "Ligne {line} : sélectionnez un compte.",
+    "duplicateTitle": "Doublon possible",
+    "duplicateBody": "Un document existant correspond à ce tiers, cette date et ce total : {numbers}. Vérifiez-le avant d’enregistrer à nouveau, ou enregistrez quand même pour en créer un autre.",
+    "duplicateOpen": "Ouvrir {number}",
+    "duplicateConfirm": "Enregistrer quand même",
     "noTax": "Sans taxe",
     "taxAmountColumn": "Mt taxe",
     "selectCustomerPlaceholder": "Sélectionner un client…",
@@ -115,6 +119,7 @@
     "actionFailed": "Échec de l’action",
     "submitted": "Soumis pour approbation",
     "posted": "Comptabilisé au grand livre",
+    "saved": "Document enregistré : {documentNumber}",
     "createDraftFailed": "Impossible de créer un brouillon",
     "deleted": "Document supprimé",
     "deleteFailed": "Échec de la suppression"

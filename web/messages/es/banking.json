@@ -382,6 +382,7 @@
     "actionFailed": "La acción falló",
     "submitted": "Enviado para aprobación",
     "posted": "Contabilizado en el libro mayor",
+    "saved": "Documento guardado: {documentNumber}",
     "createDraftFailed": "No se pudo crear un borrador",
     "deleted": "Documento eliminado",
     "deleteFailed": "Error al eliminar"

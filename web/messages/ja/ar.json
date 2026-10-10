@@ -79,6 +79,10 @@
     "accountPlaceholder": "勘定…",
     "currencyMismatch": "{account}は{allowed}建ての仕訳のみ受け付けます（{actual}不可）",
     "lineMissingAccount": "明細 {line}: 勘定科目を選択してください。",
+    "duplicateTitle": "重複の可能性",
+    "duplicateBody": "この取引先・日付・合計に一致する既存の伝票があります：{numbers}。再度保存する前に確認するか、そのまま保存して別伝票を作成してください。",
+    "duplicateOpen": "{number}を開く",
+    "duplicateConfirm": "そのまま保存",
     "noTax": "税なし",
     "taxAmountColumn": "税額",
     "selectCustomerPlaceholder": "得意先を選択…",
@@ -115,6 +119,7 @@
     "actionFailed": "アクションに失敗しました",
     "submitted": "承認のために提出しました",
     "posted": "元帳に記帳しました",
+    "saved": "{documentNumber}を保存しました",
     "createDraftFailed": "下書きを作成できませんでした",
     "deleted": "書類を削除しました",
     "deleteFailed": "削除に失敗しました"

@@ -382,6 +382,7 @@
     "actionFailed": "アクションに失敗しました",
     "submitted": "承認申請しました",
     "posted": "総勘定元帳に記帳しました",
+    "saved": "{documentNumber}を保存しました",
     "createDraftFailed": "下書きを作成できませんでした",
     "deleted": "ドキュメントを削除しました",
     "deleteFailed": "削除に失敗しました"

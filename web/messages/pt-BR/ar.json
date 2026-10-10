@@ -79,6 +79,10 @@
     "accountPlaceholder": "Conta…",
     "currencyMismatch": "{account} só aceita lançamentos em {allowed}, não em {actual}",
     "lineMissingAccount": "Linha {line}: selecione uma conta.",
+    "duplicateTitle": "Possível duplicata",
+    "duplicateBody": "Já existe um documento com esta contraparte, data e total: {numbers}. Revise-o antes de salvar novamente ou salve mesmo assim para criar outro.",
+    "duplicateOpen": "Abrir {number}",
+    "duplicateConfirm": "Salvar mesmo assim",
     "noTax": "Sem imposto",
     "taxAmountColumn": "Val. imposto",
     "selectCustomerPlaceholder": "Selecionar cliente…",
@@ -115,6 +119,7 @@
     "actionFailed": "Falha na ação",
     "submitted": "Enviado para aprovação",
     "posted": "Lançado no razão",
+    "saved": "Documento salvo: {documentNumber}",
     "createDraftFailed": "Não foi possível criar um rascunho",
     "deleted": "Documento excluído",
     "deleteFailed": "Falha ao excluir"

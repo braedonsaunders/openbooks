@@ -36,6 +36,10 @@
     "accountPlaceholder": "Konto…",
     "currencyMismatch": "{account} akzeptiert nur {allowed}-Buchungen, nicht {actual}",
     "lineMissingAccount": "Zeile {line}: Wählen Sie ein Konto aus.",
+    "duplicateTitle": "Mögliches Duplikat",
+    "duplicateBody": "Ein vorhandener Beleg stimmt mit Partner, Datum und Betrag überein: {numbers}. Prüfen Sie ihn vor dem erneuten Speichern oder speichern Sie trotzdem, um einen weiteren anzulegen.",
+    "duplicateOpen": "{number} öffnen",
+    "duplicateConfirm": "Trotzdem speichern",
     "noTax": "Keine Steuer",
     "taxAmountColumn": "Steuerbetrag",
     "selectVendorPlaceholder": "Lieferant auswählen…",
@@ -191,6 +195,7 @@
     "actionFailed": "Aktion fehlgeschlagen",
     "submitted": "Zur Genehmigung eingereicht",
     "posted": "Ins Hauptbuch gebucht",
+    "saved": "Beleg gespeichert: {documentNumber}",
     "createDraftFailed": "Entwurf konnte nicht erstellt werden",
     "deleted": "Dokument gelöscht",
     "deleteFailed": "Löschen fehlgeschlagen"

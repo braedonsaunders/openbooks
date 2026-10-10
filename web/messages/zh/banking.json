@@ -382,6 +382,7 @@
     "actionFailed": "操作失败",
     "submitted": "已提交审批",
     "posted": "已过账至总账",
+    "saved": "已保存单据 {documentNumber}",
     "createDraftFailed": "无法创建草稿",
     "deleted": "文档已删除",
     "deleteFailed": "删除失败"
