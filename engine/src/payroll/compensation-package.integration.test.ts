@@ -5,9 +5,13 @@ import { sql } from "drizzle-orm";
 import pg from "pg";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { DB, setupHarness, withHarness, seedEmployment, setFeatures, grant } from "../testing/hrm-harness.ts";
-import { seedPayrollSchedule, seedPayrollProfile, seedEnabledPayrollConfiguration, seedPostingAccount, seedPayrollWage, seedPayrollTime } from "../testing/fixtures.ts";
+import { seedPayrollSchedule, seedPayrollProfile, seedEnabledPayrollConfiguration, seedPostingAccount, seedPayrollWage, seedPayrollTime, seedApprovalFlow } from "../testing/fixtures.ts";
+import { COMPENSATION_VERSION_SUBJECT_KIND, COMPENSATION_ASSIGNMENT_SUBJECT_KIND } from "@openbooks/schema/src/payroll-compensation.ts";
+import { installEngineSeams } from "../composition/install.ts";
+import { decideGate } from "../flows/gates.ts";
 import { createCompensationPackage, getCompensationPackage, saveCompensationPackageVersion, transitionCompensationPackageVersion,
-  saveCompensationPackageAssignment, transitionCompensationPackageAssignment, updateCompensationPackage } from "./compensation-package-store.ts";
+  saveCompensationPackageAssignment, transitionCompensationPackageAssignment, updateCompensationPackage,
+  type CompensationPackageAssignment } from "./compensation-package-store.ts";
 import type { CompensationPackageDefinition } from "./compensation-package.ts";
 import { compensationPackageDefinitionHash } from "./compensation-package.ts";
 import { createSandbox, deleteSandbox } from "../sandbox/lifecycle.ts";
@@ -25,15 +29,31 @@ import { compensationPackageNativeSettlement, validateCompensationPackagePayroll
 import { evaluateCompensationPackage } from './compensation-package.ts';
 import { exportedPayrollEvidence } from '../testing/dsar-fixture.ts';
 
+// Compensation gate decisions release through the handler registered on the
+// engine seams; without it a decided gate refuses instead of releasing.
+installEngineSeams();
+
 const spec = { features: ["payroll", "hrm", "compensationPackages"], country: "CA", users: [
   { key: "authorId", name: "Package author", handle: "package_author", permissions: ["payroll.manage", "payroll.read", "hrm.compensation.approve"], link: true, partyKey: "authorPartyId" },
   { key: "approverId", name: "Independent approver", handle: "package_approver", permissions: ["hrm.compensation.approve", "payroll.read"], link: true, partyKey: "approverPartyId" },
   { key: "aliasId", name: "Author alternate login", handle: "package_alias", permissions: ["hrm.compensation.approve"], link: true },
   { key: "unlinkedId", name: "Unidentified approver", handle: "package_unlinked", permissions: ["hrm.compensation.approve"] },
 ] } as const;
-async function setup() {
-  return setupHarness(spec, async ({ org, authorId, authorPartyId, aliasId }) => {
+/**
+ * The default fixture routes both compensation subjects through a tenant
+ * approval Flow whose gate names every approval-capable user; the submitter
+ * is dropped from their own gate by the Flow engine. `approvalFlow: false`
+ * leaves the organization without a compensation Flow.
+ */
+async function setup(options: { approvalFlow?: boolean } = {}) {
+  return setupHarness(spec, async ({ org, authorId, authorPartyId, aliasId, approverId, unlinkedId }) => {
     await db.execute(sql`update users set party_id=${authorPartyId} where org_id=${org.orgId} and id=${aliasId}`);
+    if (options.approvalFlow !== false) {
+      const assignees = [authorId, approverId, aliasId, unlinkedId].map(userId => ({ type: "user" as const, userId }));
+      for (const subjectKind of [COMPENSATION_VERSION_SUBJECT_KIND, COMPENSATION_ASSIGNMENT_SUBJECT_KIND]) {
+        await seedApprovalFlow(org.orgId, { subjectKind, assignees, mode: "any", gateTitle: "Compensation review" });
+      }
+    }
     const worker = await seedEmployment(org.orgId, org.subsidiaryId, { from: "2026-01-01" });
     const scheduleId = randomUUID();
     await seedPayrollSchedule(org.orgId, scheduleId, authorId, { name: "Monthly", frequency: "monthly", periodsPerYear: 12, anchorPeriodEnd: "2026-01-31", payDateOffsetDays: 1 });
@@ -50,10 +70,43 @@ async function setup() {
   });
 }
 type Fixture = Awaited<ReturnType<typeof setup>>;
+async function pendingGates(f: Fixture, subjectId: string, userId: string): Promise<string[]> {
+  return (await db.execute<{ id: string }>(sql`select id from flow_gates where org_id=${f.org.orgId}
+    and subject_id=${subjectId} and assignee_user_id=${userId} and status='pending'`)).rows.map(row => row.id);
+}
+/** Decide the user's own pending gate on the submitted proposal through the native Flow decision path. */
+async function decide(f: Fixture, subjectId: string, userId: string, comment = "Independent compensation review") {
+  const gates = await pendingGates(f, subjectId, userId);
+  assert.equal(gates.length, 1, "the submitted Flow routes one pending approval to this assignee");
+  return decideGate({ gateId: gates[0]!, decision: "approved", userId, comment });
+}
+async function versionOf(f: Fixture, versionId: string) {
+  const version = (await getCompensationPackage({ orgId: f.org.orgId, actorId: f.authorId, packageId: f.pack.id })).versions.find(row => row.id === versionId);
+  assert.ok(version);
+  return version;
+}
+async function assignmentOf(f: Fixture, assignmentId: string): Promise<CompensationPackageAssignment> {
+  const row = (await getCompensationPackage({ orgId: f.org.orgId, actorId: f.authorId, packageId: f.pack.id })).assignments.find(item => item.id === assignmentId);
+  assert.ok(row);
+  return row;
+}
 async function approveVersion(f: Fixture) {
-  const query = { orgId: f.org.orgId, packageId: f.pack.id, versionId: f.version.id, reason: "Independent policy review" };
-  const submitted = await transitionCompensationPackageVersion({ ...query, actorId: f.authorId, expectedRevision: f.version.revision, action: "submit" });
-  return transitionCompensationPackageVersion({ ...query, actorId: f.approverId, expectedRevision: submitted.revision, action: "approve" });
+  const submitted = await transitionCompensationPackageVersion({ orgId: f.org.orgId, packageId: f.pack.id, versionId: f.version.id,
+    reason: "Independent policy review", actorId: f.authorId, expectedRevision: f.version.revision, action: "submit" });
+  assert.equal(submitted.status, "submitted", "a gated proposal waits for its Flow decision");
+  await decide(f, submitted.id, f.approverId);
+  const approved = await versionOf(f, submitted.id);
+  assert.equal(approved.status, "approved");
+  return approved;
+}
+async function activateAssignment(f: Fixture, saved: CompensationPackageAssignment, reason = "Employee terms submitted for review") {
+  const submitted = await transitionCompensationPackageAssignment({ orgId: f.org.orgId, actorId: f.authorId, packageId: f.pack.id,
+    assignmentId: saved.id, expectedRevision: saved.revision, action: "submit", reason });
+  assert.equal(submitted.status, "submitted", "a gated assignment waits for its Flow decision");
+  await decide(f, saved.id, f.approverId);
+  const active = await assignmentOf(f, saved.id);
+  assert.equal(active.status, "active");
+  return active;
 }
 async function assignment(f: Fixture, effectiveFrom = "2026-01-01") {
   return saveCompensationPackageAssignment({ orgId: f.org.orgId, actorId: f.authorId, packageId: f.pack.id, versionId: f.version.id,
@@ -68,8 +121,9 @@ test('payroll package sources require an effective approved employment assignmen
     assert.deepEqual(await compensationPackageEmploymentSource(db, query), [], 'a draft assignment must not create payroll defaults');
     const base = { orgId: f.org.orgId, actorId: f.authorId, packageId: f.pack.id, assignmentId: saved.id, reason: 'Independent employee terms' };
     const submitted = await transitionCompensationPackageAssignment({ ...base, expectedRevision: saved.revision, action: 'submit' });
+    assert.equal(submitted.status, 'submitted');
     assert.deepEqual(await compensationPackageEmploymentSource(db, query), [], 'submission is not authority to pay');
-    await transitionCompensationPackageAssignment({ ...base, actorId: f.approverId, expectedRevision: submitted.revision, action: 'approve' });
+    await decide(f, saved.id, f.approverId);
     const updated = await db.execute(sql`update pay_components set basis_cap_hours_per_period='40.25',
       basis_cap_amount_per_period='1234.5678',basis_cap_amount_per_year='249999.1234'
       where org_id=${f.org.orgId} and id=${f.componentId} returning id`);
@@ -120,8 +174,7 @@ test('future package proposals and retirement preserve pinned terms while native
     await approveVersion(f);
     const saved = await assignment(f);
     const base = { orgId: f.org.orgId, actorId: f.authorId, packageId: f.pack.id, assignmentId: saved.id, reason: 'Approved employee coverage' };
-    const submitted = await transitionCompensationPackageAssignment({ ...base, expectedRevision: saved.revision, action: 'submit' });
-    const active = await transitionCompensationPackageAssignment({ ...base, actorId: f.approverId, expectedRevision: submitted.revision, action: 'approve' });
+    const active = await activateAssignment(f, saved, base.reason);
     const query = { orgId: f.org.orgId, employmentId: f.employmentId, periodStart: '2026-01-01', periodEnd: '2026-01-31' };
     const before = await compensationPackageEmploymentSource(db, query);
     const deductionId = randomUUID();
@@ -151,10 +204,7 @@ test('future package proposals and retirement preserve pinned terms while native
 test('native package component and classification edits cannot cross the held payroll evidence fence', { skip: !DB }, async () => {
   await withHarness(setup, async f => {
     await approveVersion(f);
-    const saved = await assignment(f);
-    const base = { orgId: f.org.orgId, actorId: f.authorId, packageId: f.pack.id, assignmentId: saved.id, reason: 'Independent employee terms' };
-    const submitted = await transitionCompensationPackageAssignment({ ...base, expectedRevision: saved.revision, action: 'submit' });
-    await transitionCompensationPackageAssignment({ ...base, actorId: f.approverId, expectedRevision: submitted.revision, action: 'approve' });
+    await activateAssignment(f, await assignment(f), 'Independent employee terms');
     assert.ok(process.env.OPENBOOKS_TEST_ADMIN_DB_URL, 'the component fence proof requires the named isolated database');
     const client = new pg.Client({ connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL });
     await client.connect();
@@ -177,14 +227,30 @@ test('native package component and classification edits cannot cross the held pa
   });
 });
 
-test("package approval requires independent user and person identities, freezes terms and preserves complete audit", { skip: !DB }, async () => {
+test("gated package approval requires independent user and person identities, freezes terms and preserves complete audit", { skip: !DB }, async () => {
   await withHarness(setup, async (f) => {
     const base = { orgId: f.org.orgId, packageId: f.pack.id, versionId: f.version.id, reason: "Policy review" };
     const submitted = await transitionCompensationPackageVersion({ ...base, actorId: f.authorId, expectedRevision: 1, action: "submit" });
-    for (const actorId of [f.authorId, f.aliasId]) await assert.rejects(transitionCompensationPackageVersion({ ...base, actorId, expectedRevision: submitted.revision, action: "approve" }), /author.*submitter.*independent approver/);
-    await assert.rejects(transitionCompensationPackageVersion({ ...base, actorId: f.unlinkedId, expectedRevision: submitted.revision, action: "approve" }), /resolved person identity.*link/);
-    const approved = await transitionCompensationPackageVersion({ ...base, actorId: f.approverId, expectedRevision: submitted.revision, action: "approve" });
+    assert.equal(submitted.status, "submitted");
+    assert.equal(submitted.flowApprovalRequired, true);
+    assert.equal(submitted.submissionPolicy?.kind, "flow");
+    for (const actorId of [f.authorId, f.approverId]) {
+      await assert.rejects(transitionCompensationPackageVersion({ ...base, actorId, expectedRevision: submitted.revision, action: "approve" }),
+        /through its submitted Flow approval controls/, "a direct decision cannot bypass the tenant approval Flow");
+    }
+    assert.deepEqual(await pendingGates(f, submitted.id, f.authorId), [], "the submitter is never routed their own approval");
+    const [approverGate] = await pendingGates(f, submitted.id, f.approverId);
+    assert.ok(approverGate);
+    await assert.rejects(decideGate({ gateId: approverGate, decision: "approved", userId: f.authorId }), /not an approver for this gate/);
+    await assert.rejects(decide(f, submitted.id, f.aliasId, "Attempted author alternate login"), /requires an independent approver/,
+      "a different login resolving to the author's person cannot approve");
+    await assert.rejects(decide(f, submitted.id, f.unlinkedId, "Attempted unidentified approval"), /resolved person identity.*link/);
+    const pending = await versionOf(f, submitted.id);
+    assert.equal(pending.status, "submitted"); assert.equal(pending.revision, submitted.revision, "refused decisions change nothing");
+    await decide(f, submitted.id, f.approverId);
+    const approved = await versionOf(f, submitted.id);
     assert.equal(approved.status, "approved");
+    assert.equal(approved.decidedBy, f.approverId);
     assert.equal(approved.definitionHash, f.version.definitionHash);
     await assert.rejects(saveCompensationPackageVersion({ ...base, actorId: f.authorId, expectedRevision: approved.revision, definition: f.definition, effectiveFrom: "2026-01-01", effectiveTo: null }), /frozen.*new draft/);
     await assert.rejects(db.execute(sql`update payroll_compensation_versions set definition='{}'::jsonb,revision=revision+1 where org_id=${f.org.orgId} and id=${approved.id}`), (error: unknown) => error instanceof Error && error.cause instanceof Error && /Approved compensation history is immutable.*successor/.test(error.cause.message));
@@ -209,15 +275,23 @@ test("assignment refusals preserve the register and approval excludes the affect
     const saved = await assignment(f);
     const transition = { orgId: input.orgId, actorId: input.actorId, packageId: input.packageId, reason: input.reason };
     const submitted = await transitionCompensationPackageAssignment({ ...transition, assignmentId: saved.id, expectedRevision: saved.revision, action: "submit" });
+    assert.equal(submitted.status, "submitted");
+    await assert.rejects(transitionCompensationPackageAssignment({ ...transition, actorId: f.approverId, assignmentId: saved.id, expectedRevision: submitted.revision, action: "approve" }),
+      /through its submitted Flow approval controls/);
+    // The approver's only identity overlap is the affected employee's person record.
     await db.execute(sql`update users set party_id=${f.workerPartyId} where org_id=${f.org.orgId} and id=${f.approverId}`);
-    await assert.rejects(transitionCompensationPackageAssignment({ ...transition, actorId: f.approverId, assignmentId: saved.id, expectedRevision: submitted.revision, action: "approve" }), /affected employee.*independent/);
+    await assert.rejects(decide(f, saved.id, f.approverId), /requires an independent approver/, "the affected employee cannot approve their own terms");
+    assert.equal((await assignmentOf(f, saved.id)).status, "submitted");
     await db.execute(sql`update users set party_id=${f.approverPartyId} where org_id=${f.org.orgId} and id=${f.approverId}`);
-    const active = await transitionCompensationPackageAssignment({ ...transition, actorId: f.approverId, assignmentId: saved.id, expectedRevision: submitted.revision, action: "approve" });
-    assert.equal(active.status, "active"); assert.deepEqual(active.inputs, { allowance: "310" });
+    await decide(f, saved.id, f.approverId);
+    const active = await assignmentOf(f, saved.id);
+    assert.equal(active.status, "active"); assert.equal(active.decidedBy, f.approverId); assert.deepEqual(active.inputs, { allowance: "310" });
     await assert.rejects(saveCompensationPackageAssignment({ ...input, assignmentId: saved.id, expectedRevision: active.revision, inputs: { allowance: "400" } }), /frozen.*successor/);
     const overlapping = await assignment(f);
     const proposal = await transitionCompensationPackageAssignment({ ...transition, assignmentId: overlapping.id, expectedRevision: overlapping.revision, action: "submit" });
-    await assert.rejects(transitionCompensationPackageAssignment({ ...transition, actorId: f.approverId, assignmentId: proposal.id, expectedRevision: proposal.revision, action: "approve" }), /already has approved compensation.*end.*non-overlapping/);
+    assert.equal(proposal.status, "submitted");
+    await assert.rejects(decide(f, proposal.id, f.approverId), /already has approved compensation.*end.*non-overlapping/);
+    assert.equal((await assignmentOf(f, proposal.id)).status, "submitted", "a refused overlapping approval leaves the proposal pending");
     const ended = await transitionCompensationPackageAssignment({ ...transition, assignmentId: active.id, expectedRevision: active.revision, action: "end", effectiveTo: "2026-01-31" });
     assert.equal(ended.status, "ended"); assert.equal(ended.effectiveTo, "2026-01-31");
   });
@@ -271,8 +345,9 @@ test("an earlier editor cannot approve through a relinked login and authorship c
       expectedRevision: edited.revision, action: "submit", reason: "Prepared for independent review" });
     await db.execute(sql`update users set party_id=${f.workerPartyId} where org_id=${f.org.orgId} and id=${f.approverId}`);
     await db.execute(sql`update users set party_id=${f.approverPartyId} where org_id=${f.org.orgId} and id=${f.aliasId}`);
-    await assert.rejects(transitionCompensationPackageVersion({ orgId: f.org.orgId, actorId: f.aliasId, packageId: f.pack.id, versionId: f.version.id,
-      expectedRevision: submitted.revision, action: "approve", reason: "Attempted alternate login" }), /author.*independent approver/);
+    await assert.rejects(decide(f, submitted.id, f.aliasId, "Attempted alternate login"), /requires an independent approver/,
+      "a login relinked to an earlier editor's person cannot approve");
+    assert.equal((await versionOf(f, submitted.id)).status, "submitted");
     await assert.rejects(db.execute(sql`update payroll_compensation_versions set authorship='[]',revision=revision+1 where org_id=${f.org.orgId} and id=${f.version.id}`),
       (error: unknown) => error instanceof Error && error.cause instanceof Error && /Submitted compensation terms are frozen/.test(error.cause.message));
     const next = await saveCompensationPackageVersion({ orgId: f.org.orgId, actorId: f.authorId, packageId: f.pack.id,
@@ -282,18 +357,16 @@ test("an earlier editor cannot approve through a relinked login and authorship c
     assert.ok(separateSubmitter.authorship.some((row) => row.actorId === f.approverId && row.partyId === f.workerPartyId));
     await db.execute(sql`update users set party_id=${f.authorPartyId} where org_id=${f.org.orgId} and id=${f.approverId}`);
     await db.execute(sql`update users set party_id=${f.workerPartyId} where org_id=${f.org.orgId} and id=${f.aliasId}`);
-    await assert.rejects(transitionCompensationPackageVersion({ orgId: f.org.orgId, actorId: f.aliasId, packageId: f.pack.id,
-      versionId: next.id, expectedRevision: separateSubmitter.revision, action: "approve", reason: "Attempted submitter identity reuse" }), /submitter.*independent approver/);
+    await assert.rejects(decide(f, next.id, f.aliasId, "Attempted submitter identity reuse"), /requires an independent approver/,
+      "a login relinked to the submitter's recorded person cannot approve");
+    assert.equal((await versionOf(f, next.id)).status, "submitted");
   });
 });
 
 test("controlled full sandbox cloning preserves approved terms and rebinds only proven policy and authorship identities", { skip: !DB }, async () => {
   await withHarness(setup, async (f) => {
     await approveVersion(f);
-    const saved = await assignment(f);
-    const base = { orgId: f.org.orgId, packageId: f.pack.id, assignmentId: saved.id, reason: "Employee terms approval" };
-    const submitted = await transitionCompensationPackageAssignment({ ...base, actorId: f.authorId, expectedRevision: saved.revision, action: "submit" });
-    await transitionCompensationPackageAssignment({ ...base, actorId: f.approverId, expectedRevision: submitted.revision, action: "approve" });
+    await activateAssignment(f, await assignment(f), "Employee terms approval");
     await db.execute(sql`update pay_component_earning_classifications set supplemental_wage_category='other' where org_id=${f.org.orgId} and pay_component_id=${f.componentId}`);
     const name = `Compensation copy ${randomUUID()}`;
     try {
@@ -350,12 +423,31 @@ test("create retries match immutable evidence after edits and decisions and chan
   });
 });
 
+test("without a tenant compensation Flow, submission releases versions and assignments directly with no reviewer", { skip: !DB }, async () => {
+  await withHarness(() => setup({ approvalFlow: false }), async (f) => {
+    const version = await transitionCompensationPackageVersion({ orgId: f.org.orgId, actorId: f.authorId, packageId: f.pack.id, versionId: f.version.id,
+      expectedRevision: f.version.revision, action: "submit", reason: "Owner-approved package terms" });
+    assert.equal(version.status, "approved");
+    assert.equal(version.submissionPolicy?.kind, "ungated");
+    assert.equal(version.flowApprovalRequired, false);
+    assert.equal(version.submittedBy, f.authorId); assert.equal(version.decidedBy, f.authorId, "the submitter's authority releases an ungated proposal");
+    assert.equal(version.definitionHash, f.version.definitionHash);
+    const saved = await assignment(f);
+    const active = await transitionCompensationPackageAssignment({ orgId: f.org.orgId, actorId: f.authorId, packageId: f.pack.id, assignmentId: saved.id,
+      expectedRevision: saved.revision, action: "submit", reason: "Owner-approved employee terms" });
+    assert.equal(active.status, "active");
+    assert.equal(active.submissionPolicy?.kind, "ungated");
+    assert.equal(active.flowApprovalRequired, false);
+    assert.equal(active.decidedBy, f.authorId);
+    assert.equal((await db.execute(sql`select id from flow_gates where org_id=${f.org.orgId}`)).rows.length, 0, "no approval is routed without a tenant Flow");
+    const [source] = await compensationPackageEmploymentSource(db, { orgId: f.org.orgId, employmentId: f.employmentId, periodStart: "2026-01-01", periodEnd: "2026-01-31" });
+    assert.equal(source?.assignmentId, saved.id, "directly released terms are payable");
+  });
+});
+
 async function runtimeContext(f: Fixture, effectiveFrom = "2026-01-01"): Promise<CompensationPackagePayrollContext> {
   await approveVersion(f);
-  const saved = await assignment(f, effectiveFrom);
-  const query = { orgId: f.org.orgId, actorId: f.authorId, packageId: f.pack.id, assignmentId: saved.id, reason: 'Independent payroll terms' };
-  const submitted = await transitionCompensationPackageAssignment({ ...query, expectedRevision: saved.revision, action: 'submit' });
-  await transitionCompensationPackageAssignment({ ...query, actorId: f.approverId, expectedRevision: submitted.revision, action: 'approve' });
+  await activateAssignment(f, await assignment(f, effectiveFrom), 'Independent payroll terms');
   const documentId = randomUUID();
   await db.execute(sql`insert into documents(org_id,id,kind,document_number,subsidiary_id,document_date,currency,status,created_by,updated_by)
     values(${f.org.orgId},${documentId},'pay_run',${`PAY-${documentId}`},${f.org.subsidiaryId},'2026-01-31','CAD','draft',${f.authorId},${f.authorId})`);
