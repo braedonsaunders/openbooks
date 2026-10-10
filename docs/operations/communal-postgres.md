@@ -91,6 +91,44 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
 GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO tenant_books_bypass;
 ```
 
+Retirement recovery receipts live in the separately owned `tenant_retirement`
+schema. A complete release snapshot must include that schema. The configured
+bypass login needs **SELECT only** on all of its tables and sequences; sequence
+SELECT preserves the event identity counter without allowing `nextval` or
+`setval`. Bootstrap provisions matching default SELECT privileges for the actual
+private object owners. It grants no owner membership, schema CREATE, table writes,
+sequence mutation or function privileges. Existing unsafe grants refuse with a
+reconciliation message rather than being silently changed.
+
+For an existing installation missing these grants, the private owner or a
+controlled database administrator must provision them **before** the mandatory
+pre-migration snapshot. A constrained business-schema owner cannot grant access
+to another owner's private tables. Create a mode-600 environment file containing
+`OPENBOOKS_DB_URL` for that privileged provisioning connection, plus the unchanged
+`OPENBOOKS_RUNTIME_DB_URL` and `OPENBOOKS_BYPASS_DB_URL`. Use the exact release image:
+
+```sh
+docker run --rm -e NODE_ENV=production -e OPENBOOKS_BOOTSTRAP=1 \
+  --env-file /private/retirement-backup-provision.env \
+  IMAGE@sha256:REVIEWED_DIGEST node scripts/bootstrap.mjs --retirement-backup-access-only
+```
+
+Remove that private credential file after provisioning. This mode takes the
+native deployment lock and grants only retirement backup access; it runs no
+migrations, seeds or role creation. Regular bootstrap also converges these grants
+when its connection is authorized, or verifies an already-provisioned installation.
+The Swarm release runs `--retirement-backup-access-only --verify` using its ordinary
+migration connection before `pg_dump`. Verification uses a read-only transaction,
+refuses absent grants without changing them, and allows installations where the
+retirement schema has not yet been installed. It never excludes retirement data
+or substitutes a partial archive.
+
+A provider-level `pg_dump`/`pg_restore` recovery includes private retirement
+receipts, sequence state, ownership and ACLs. `engine/src/backup/restore.ts` restores
+organization archives and intentionally retains its public tenant-data scope;
+it is not a replacement for that complete installation backup. Qualify the full
+archive with the normal restore and ownership proof before retirement or release.
+
 The bypass login must own no application objects and must never be granted
 to, or inherit, any other login. Rotate its password with the provider's
 normal secret rotation, then update the deployment secret holding
