@@ -26,6 +26,14 @@ function baseData(): Record<string, unknown> {
     noEmergency: "No emergency contact on file",
     dialog: null,
     dialogCloseHref: "/me/profile",
+    bankTitle: "Direct deposit",
+    bankFacts: [],
+    noBank: "No bank details on file",
+    bankEditButton: "Update bank details",
+    bankEditHref: "/me/profile?bank=1",
+    bankDialogOpen: false,
+    bankDialogCloseHref: "/me/profile",
+    bankDialog: null,
   } as unknown as Record<string, unknown>;
 }
 
@@ -49,4 +57,14 @@ test("facts render verbatim with the dialog gated on its data", () => {
   withDialog.dialog = { title: "Edit contact" };
   const dialogJson = specJson(withDialog);
   assert.ok(dialogJson.includes("Edit contact"), "the dialog carries its data");
+});
+
+test("the bank panel and dialog wire through masked data only", () => {
+  const data = baseData();
+  data.bankFacts = [{ label: "First Bank •••• 6789", value: "Active" }];
+  data.bankDialog = { title: "Direct deposit" };
+  const json = specJson(data);
+  assert.ok(json.includes("Direct deposit"), "the bank panel title renders");
+  assert.ok(json.includes("•••• 6789"), "the masked echo renders, never the number");
+  assert.ok(json.includes("/me/profile?bank=1"), "the bank edit entry opens the bank dialog");
 });

@@ -203,6 +203,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'hrm-award-builder': { props: ['closeHref', 'employmentOptions', 'initialProgramId', 'programOptions'] },
   'hrm-award-drawer': { props: ['canManage', 'canQueue', 'closeHref', 'drawer'] },
   'hrm-award-table': { props: ['rows', 'text', 'total', 'truncated'] },
+  'hrm-bank-dialog': { props: ['closeHref', 'dialog'] },
   'hrm-benefit-change-dialog': { props: ['closeHref', 'dialog'] },
   'hrm-benefit-delivery-table': { props: ['rows', 'text'] },
   'hrm-benefit-dialog': { props: ['closeHref', 'dialog', 'mode'] },

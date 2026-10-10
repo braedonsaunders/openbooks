@@ -311,6 +311,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'hrm-award-builder',
   'hrm-program-drawer',
   'hrm-award-drawer',
+  'hrm-bank-dialog',
   'hrm-benefit-change-dialog',
   'hrm-benefit-dialog',
   'hrm-goal-dialog',

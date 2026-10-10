@@ -342,7 +342,9 @@ function kindLabelOf(t: Catalog, kind: string): string {
           ? 'kindAssignmentChange'
           : kind === 'termination'
             ? 'kindTermination'
-            : null
+            : kind === 'bank_change'
+              ? 'kindBankChange'
+              : null
   return key !== null ? t(`employment.changeRequests.${key}`) : kind
 }
 

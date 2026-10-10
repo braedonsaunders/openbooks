@@ -232,6 +232,7 @@ export const WIDGET_FAMILY: Readonly<Record<string, WidgetFamily>> = {
   'hrm-award-builder': 'hrm',
   'hrm-award-drawer': 'hrm',
   'hrm-award-table': 'hrm',
+  'hrm-bank-dialog': 'hrm',
   'hrm-benefit-change-dialog': 'hrm',
   'hrm-benefit-delivery-table': 'hrm',
   'hrm-benefit-dialog': 'hrm',

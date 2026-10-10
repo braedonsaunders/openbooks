@@ -60,6 +60,7 @@ const SELF_SERVICE_SPEC = {
     { key: "hrId", name: "Self HR", handle: "self_hr", permissions: ["hrm.employment.read", "hrm.employment.manage", "hrm.employment.approve"], link: "HR Decider", partyKey: "partyHR" },
     { key: "hr2Id", name: "Self HR Two", handle: "self_hr2", permissions: ["hrm.employment.read", "hrm.employment.manage", "hrm.employment.approve"], link: "HR Decider Two" },
     { key: "noLinkId", name: "Self No Link", handle: "self_nolink", permissions: ["hrm.self.read", "hrm.self.request"] },
+    { key: "noEmploymentId", name: "Self No Employment", handle: "self_noemp", permissions: ["hrm.self.read", "hrm.self.request"], link: "Person N", partyKey: "partyN" },
   ],
 } as const;
 
@@ -165,6 +166,28 @@ test("no linked person is a named refusal, never an empty page", { skip: !DB }, 
         return true;
       });
     }
+  });
+});
+
+test("filing with no employment names the hire remedy, never a generic failure", { skip: !DB }, async () => {
+  await withHarness(() => setupSelfServiceHarness(), async (h) => {
+    await assert.rejects(
+      () =>
+        fileProfileChangeRequest({
+          orgId: h.org.orgId,
+          actorId: h.noEmploymentId,
+          employmentId: h.employmentA,
+          changes: { kind: "profile_change", phone: "x" },
+          reason: "test",
+        }),
+      (error: unknown) => {
+        assert.ok(error instanceof SelfServiceError, `expected SelfServiceError, got ${String(error)}`);
+        assert.equal(error.code, "FORBIDDEN");
+        assert.match(error.message, /no employment record/);
+        assert.match(error.message, /HRM Hire action/);
+        return true;
+      },
+    );
   });
 });
 

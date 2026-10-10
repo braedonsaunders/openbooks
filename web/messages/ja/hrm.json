@@ -314,6 +314,7 @@
       "kindStatusChange": "ステータス変更",
       "kindAssignmentChange": "配属変更",
       "kindTermination": "退職",
+      "kindBankChange": "口座変更",
       "statusLabel": "ステータス",
       "effectiveFromLabel": "有効開始日",
       "effectiveToLabel": "有効終了日",
@@ -1611,6 +1612,7 @@
       "submit": "承認申請する",
       "cancel": "キャンセル",
       "submitFailed": "プロフィール申請を提出できませんでした。",
+      "noEmployment": "あなたの人物にはまだ雇用記録がないため、この変更を紐付ける先がありません。人事管理者にHRMの「採用」アクションで採用を記録してもらい、この変更を再度提出してください。",
       "dialogTitle": "プロフィールを編集",
       "dialogDescription": "変更は申請として提出され、承認後に記録が更新されます。",
       "pendingTitle": "処理中のプロフィール申請",
@@ -1898,6 +1900,24 @@
       "description": "招待に回答し、結果を確認して、研修へのフィードバックを送信できます。",
       "emptyTitle": "研修の招待はありません",
       "emptyDescription": "予定されている研修の招待がここに表示されます。"
+    },
+    "bank": {
+      "title": "給与振込口座",
+      "description": "給与が振り込まれる銀行口座。変更は要求として提出されます — 人事部の承認後に更新され、登録済みメールにすべての変更が通知されます。",
+      "noBank": "銀行口座の登録なし",
+      "edit": "銀行口座を更新",
+      "failed": "銀行口座を読み込めませんでした。",
+      "statusActive": "有効",
+      "statusPending": "承認待ち",
+      "bankNameLabel": "銀行名",
+      "accountLabel": "口座番号",
+      "accountHint": "一度だけ送信され、二度と表示されません — 下4桁のみが返されます。",
+      "countryLabel": "国",
+      "currencyLabel": "通貨",
+      "routingLabel": "ルーティング番号",
+      "routingHint": "任意。お住まいの国で使用しない場合は空白のままにしてください。",
+      "submit": "銀行口座の変更を提出",
+      "submitFailed": "銀行口座の変更を提出できませんでした。"
     }
   },
   "options": {

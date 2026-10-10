@@ -306,6 +306,7 @@
       "kindStatusChange": "Status change",
       "kindAssignmentChange": "Assignment change",
       "kindTermination": "Termination",
+      "kindBankChange": "Bank change",
       "statusLabel": "Status",
       "effectiveFromLabel": "Effective from",
       "effectiveToLabel": "Effective to",
@@ -1611,6 +1612,7 @@
       "submit": "Submit for approval",
       "cancel": "Cancel",
       "submitFailed": "The profile request could not be filed.",
+      "noEmployment": "Your person has no employment record yet, so this change has nothing to file against. Ask your administrator to record your hire with the HRM Hire action, then file this change again.",
       "dialogTitle": "Edit profile",
       "dialogDescription": "Changes file as a request — HR approves before anything updates.",
       "pendingTitle": "Pending profile request",
@@ -1898,6 +1900,24 @@
       "description": "Respond to invitations, review your results, and share course feedback.",
       "emptyTitle": "No training invitations",
       "emptyDescription": "Your scheduled training invitations will appear here."
+    },
+    "bank": {
+      "title": "Direct deposit",
+      "description": "The bank account your pay goes to. Changes file as a request — HR approves before anything updates, and your existing email is notified of every change.",
+      "noBank": "No bank details on file",
+      "edit": "Update bank details",
+      "failed": "Bank details could not be loaded.",
+      "statusActive": "Active",
+      "statusPending": "Pending approval",
+      "bankNameLabel": "Bank name",
+      "accountLabel": "Account number",
+      "accountHint": "Sent once and never shown again — only the last four return.",
+      "countryLabel": "Country",
+      "currencyLabel": "Currency",
+      "routingLabel": "Routing number",
+      "routingHint": "Optional. Leave blank when your country does not use one.",
+      "submit": "Submit bank change",
+      "submitFailed": "The bank change could not be filed."
     }
   },
   "options": {

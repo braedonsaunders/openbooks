@@ -16,6 +16,7 @@ import {
   selfWorkspaceCapabilities,
 } from '@openbooks/engine/src/hrm/self-service/my-work.ts'
 import { getTeamView, type TeamView } from '@openbooks/engine/src/hrm/self-service/team-read.ts'
+import { listOwnBankAccounts } from '@openbooks/engine/src/hrm/self-service/bank-changes.ts'
 import { HrmAuthorizationError } from '@openbooks/engine/src/hrm/authorization.ts'
 import { SelfServiceError } from '@openbooks/engine/src/hrm/self-service/actor.ts'
 import { can, type Authz } from '../authz'
@@ -579,6 +580,32 @@ export interface MeProfileData {
     cancelLabel: string
     submitFailed: string
   } | null
+  bankTitle: string
+  bankFacts: MeFact[]
+  noBank: string
+  bankEditButton: string
+  bankEditHref: string
+  bankDialogOpen: boolean
+  bankDialogCloseHref: string
+  bankDialog: {
+    title: string
+    description: string
+    employments: { value: string; label: string }[]
+    employmentLabel: string
+    bankNameLabel: string
+    accountLabel: string
+    accountHint: string
+    countryLabel: string
+    currencyLabel: string
+    routingLabel: string
+    routingHint: string
+    reasonLabel: string
+    reasonPlaceholder: string
+    submitLabel: string
+    cancelLabel: string
+    submitFailed: string
+    noEmployment: string
+  } | null
   pendingTitle: string | null
   pendingMessage: string | null
   hasPending: boolean
@@ -610,14 +637,24 @@ export async function loadMeProfile(
     editButton: t('me.profile.edit'),
     editHref: '/me/profile?edit=1',
     dialogCloseHref: '/me/profile',
+    bankTitle: t('me.bank.title'),
+    noBank: t('me.bank.noBank'),
+    bankEditButton: t('me.bank.edit'),
+    bankEditHref: '/me/profile?bank=1',
+    bankDialogOpen: false,
+    bankDialogCloseHref: '/me/profile',
+    bankDialog: null,
     pendingTitle: null as string | null,
     pendingMessage: null as string | null,
     hasPending: false,
   }
   try {
-    const [profile, requests] = await Promise.all([
+    const [profile, requests, bankAccounts] = await Promise.all([
       getMyProfile({ orgId, actorId: authz.user.id }),
       getMyRequests({ orgId, actorId: authz.user.id }),
+      // A failed bank read degrades to an honest error fact, never a
+      // silent empty list pretending no details exist.
+      listOwnBankAccounts({ orgId, actorId: authz.user.id }).catch((): null => null),
     ])
     const pending = requests.find((row) => row.kind === 'profile_change' && (row.status === 'draft' || row.status === 'pending_approval'))
     const address = profile.address
@@ -651,6 +688,39 @@ export async function loadMeProfile(
             { label: t('me.profile.emergencyPhone'), value: profile.emergencyContact.phone ?? t('me.overview.notAvailable') },
           ]
         : [],
+      // Masked only: the bank name plus the last four is the whole
+      // account evidence this surface may carry.
+      bankFacts: bankAccounts === null
+        ? [{ label: t('me.bank.title'), value: t('me.bank.failed') }]
+        : bankAccounts.map((account) => ({
+            label: `${account.bankName ?? t('me.overview.notAvailable')} •••• ${account.lastFour ?? '····'}`,
+            value: account.isActive ? t('me.bank.statusActive') : t('me.bank.statusPending'),
+          })),
+      bankDialogOpen: sp.bank !== undefined,
+      bankDialog: sp.bank !== undefined
+        ? {
+            title: t('me.bank.title'),
+            description: t('me.bank.description'),
+            employments: profile.employments.map((summary) => ({
+              value: summary.employmentId,
+              label: `${summary.employerName} — ${statusLabel(t, 'me.employmentStatus', summary.status)}`,
+            })),
+            employmentLabel: t('me.profile.employment'),
+            bankNameLabel: t('me.bank.bankNameLabel'),
+            accountLabel: t('me.bank.accountLabel'),
+            accountHint: t('me.bank.accountHint'),
+            countryLabel: t('me.bank.countryLabel'),
+            currencyLabel: t('me.bank.currencyLabel'),
+            routingLabel: t('me.bank.routingLabel'),
+            routingHint: t('me.bank.routingHint'),
+            reasonLabel: t('me.profile.reason'),
+            reasonPlaceholder: t('me.profile.reasonPlaceholder'),
+            submitLabel: t('me.bank.submit'),
+            cancelLabel: t('me.profile.cancel'),
+            submitFailed: t('me.bank.submitFailed'),
+            noEmployment: t('me.profile.noEmployment'),
+          }
+        : null,
       dialogOpen: sp.edit !== undefined,
       dialog: sp.edit !== undefined
         ? {
@@ -680,6 +750,7 @@ export async function loadMeProfile(
             submitLabel: t('me.profile.submit'),
             cancelLabel: t('me.profile.cancel'),
             submitFailed: t('me.profile.submitFailed'),
+            noEmployment: t('me.profile.noEmployment'),
           }
         : null,
       pendingTitle: pending ? t('me.profile.pendingTitle') : null,
@@ -700,6 +771,9 @@ export async function loadMeProfile(
       emergencyFacts: [],
       dialogOpen: false,
       dialog: null,
+      bankFacts: [],
+      bankDialogOpen: false,
+      bankDialog: null,
     }
   }
 }

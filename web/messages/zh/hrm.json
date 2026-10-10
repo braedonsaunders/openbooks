@@ -314,6 +314,7 @@
       "kindStatusChange": "状态变更",
       "kindAssignmentChange": "岗位分配变更",
       "kindTermination": "离职",
+      "kindBankChange": "银行变更",
       "statusLabel": "状态",
       "effectiveFromLabel": "生效起始日",
       "effectiveToLabel": "生效截止日",
@@ -1611,6 +1612,7 @@
       "submit": "提交审批",
       "cancel": "取消",
       "submitFailed": "档案申请提交失败。",
+      "noEmployment": "您的人员尚无雇用记录，因此此变更没有可依附的对象。请让人事管理员使用人力资源「聘用」操作记录您的聘用，然后重新提交此变更。",
       "dialogTitle": "编辑档案",
       "dialogDescription": "修改将作为申请提交 — 审批通过后更新记录。",
       "pendingTitle": "待处理的档案申请",
@@ -1898,6 +1900,24 @@
       "description": "回复邀请、查看培训结果并提交课程反馈。",
       "emptyTitle": "暂无培训邀请",
       "emptyDescription": "已安排的培训邀请将显示在此处。"
+    },
+    "bank": {
+      "title": "工资直存账户",
+      "description": "接收您工资的银行账户。变更将作为申请提交 — 人事部批准后才会更新，您的预留邮箱会收到每次变更的通知。",
+      "noBank": "未登记银行账户",
+      "edit": "更新银行账户",
+      "failed": "无法加载银行账户。",
+      "statusActive": "有效",
+      "statusPending": "待审批",
+      "bankNameLabel": "银行名称",
+      "accountLabel": "账号",
+      "accountHint": "仅发送一次，不再显示 — 只返回后四位。",
+      "countryLabel": "国家",
+      "currencyLabel": "币种",
+      "routingLabel": "路由号码",
+      "routingHint": "选填。如您所在国家不使用可留空。",
+      "submit": "提交银行变更",
+      "submitFailed": "无法提交银行变更。"
     }
   },
   "options": {

@@ -314,6 +314,7 @@
       "kindStatusChange": "Cambio de estado",
       "kindAssignmentChange": "Cambio de asignación",
       "kindTermination": "Finalización",
+      "kindBankChange": "Cambio bancario",
       "statusLabel": "Estado",
       "effectiveFromLabel": "Vigente desde",
       "effectiveToLabel": "Vigente hasta",
@@ -1611,6 +1612,7 @@
       "submit": "Enviar para aprobación",
       "cancel": "Cancelar",
       "submitFailed": "No se pudo presentar la solicitud de perfil.",
+      "noEmployment": "Su persona aún no tiene registro de empleo, así que este cambio no tiene contra qué presentarse. Pida a su administrador que registre su contratación con la acción Contratar de RR. HH. y vuelva a presentar este cambio.",
       "dialogTitle": "Editar perfil",
       "dialogDescription": "Los cambios se presentan como solicitud — la aprobación actualiza el registro.",
       "pendingTitle": "Solicitud de perfil pendiente",
@@ -1898,6 +1900,24 @@
       "description": "Responde a invitaciones, consulta tus resultados y comparte tus comentarios sobre los cursos.",
       "emptyTitle": "No hay invitaciones de formación",
       "emptyDescription": "Aquí aparecerán tus invitaciones a las sesiones programadas."
+    },
+    "bank": {
+      "title": "Depósito directo",
+      "description": "La cuenta bancaria a la que va su salario. Los cambios se presentan como solicitud — RR. HH. aprueba antes de actualizar, y su correo registrado recibe aviso de cada cambio.",
+      "noBank": "Sin datos bancarios registrados",
+      "edit": "Actualizar datos bancarios",
+      "failed": "No se pudieron cargar los datos bancarios.",
+      "statusActive": "Activa",
+      "statusPending": "Aprobación pendiente",
+      "bankNameLabel": "Banco",
+      "accountLabel": "Número de cuenta",
+      "accountHint": "Se envía una vez y no vuelve a mostrarse — solo regresan los últimos cuatro.",
+      "countryLabel": "País",
+      "currencyLabel": "Moneda",
+      "routingLabel": "Número de ruta",
+      "routingHint": "Opcional. Déjelo en blanco si su país no usa uno.",
+      "submit": "Presentar cambio bancario",
+      "submitFailed": "No se pudo presentar el cambio bancario."
     }
   },
   "options": {

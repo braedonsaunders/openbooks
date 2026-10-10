@@ -35,6 +35,10 @@ import {
   profileChangePayloadSchema,
   type ProfileChangePayload,
 } from "./self-service/profile-schema.ts";
+import {
+  bankChangePayloadSchema,
+  type BankChangePayload,
+} from "./self-service/bank-schema.ts";
 import { loadMyAddress } from "./self-service/self-read.ts";
 import { inputGuards } from "./input-guards.ts";
 import { businessTodayInTx } from "../platform/business-date.ts";
@@ -325,6 +329,7 @@ const CHANGE_KINDS = [
   "termination",
   "position_assignment",
   "profile_change",
+  "bank_change",
 ] as const;
 
 export type HirePayload = z.infer<typeof hirePayloadSchema>;
@@ -333,13 +338,15 @@ export type StatusChangePayload = z.infer<typeof statusChangePayloadSchema>;
 export type AssignmentChangePayload = z.infer<typeof assignmentChangePayloadSchema>;
 export type TerminationPayload = z.infer<typeof terminationPayloadSchema>;
 export type PositionAssignmentPayload = z.infer<typeof positionAssignmentPayloadSchema>;
+export type BankDetailsChangePayload = BankChangePayload;
 export type ChangeRequestPayload =
   | HirePayload
   | StatusChangePayload
   | AssignmentChangePayload
   | TerminationPayload
   | PositionAssignmentPayload
-  | ProfileChangePayload;
+  | ProfileChangePayload
+  | BankChangePayload;
 
 function formatIssues(issues: ReadonlyArray<{ path: ReadonlyArray<PropertyKey>; message: string }>): string {
   return issues
@@ -358,14 +365,14 @@ export function validateChangePayload(raw: unknown): ChangeRequestPayload {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
     throw new HrmChangeRequestError(
       "INVALID_PAYLOAD",
-      "change payload must be a JSON object with a kind — file one of hire, status_change, assignment_change, termination, position_assignment, or profile_change",
+      "change payload must be a JSON object with a kind — file one of hire, status_change, assignment_change, termination, position_assignment, profile_change, or bank_change",
     );
   }
   const kind = (raw as { kind?: unknown }).kind;
   if (kind === undefined || typeof kind !== "string" || !(CHANGE_KINDS as readonly string[]).includes(kind)) {
     throw new HrmChangeRequestError(
       "UNKNOWN_KIND",
-      `unknown change kind ${JSON.stringify(kind)} — file one of hire, status_change, assignment_change, termination, position_assignment, or profile_change`,
+      `unknown change kind ${JSON.stringify(kind)} — file one of hire, status_change, assignment_change, termination, position_assignment, profile_change, or bank_change`,
     );
   }
   if (kind === "profile_change") {
@@ -377,6 +384,20 @@ export function validateChangePayload(raw: unknown): ChangeRequestPayload {
       throw new HrmChangeRequestError(
         "INVALID_PAYLOAD",
         `change payload invalid: ${formatIssues(parsed.error.issues)} — fix the profile fields and file again`,
+      );
+    }
+    return parsed.data;
+  }
+  if (kind === "bank_change") {
+    // The self-service bank kind validates through its own sealed
+    // contract (shared leaf schema, no parallel validator): its failures
+    // name bank fields, never employment ones. The account number travels
+    // sealed — validation here never sees plaintext.
+    const parsed = bankChangePayloadSchema.safeParse(raw);
+    if (!parsed.success) {
+      throw new HrmChangeRequestError(
+        "INVALID_PAYLOAD",
+        `change payload invalid: ${formatIssues(parsed.error.issues)} — fix the bank fields and file again`,
       );
     }
     return parsed.data;
@@ -602,11 +623,11 @@ async function employmentVersionCount(
 
 /**
  * Kind-aware authoring gate. Employment kinds ride hrm.employment.manage;
- * the self-service profile_change kind rides hrm.self.request plus proof
- * the bound employment is the actor's own (the own-employment subject
- * gate) — an HR manage grant never files a profile change, and a self
- * grant never authors an employment change. Returns the trusted subject
- * for revision binding either way.
+ * the self-service profile_change and bank_change kinds ride
+ * hrm.self.request plus proof the bound employment is the actor's own
+ * (the own-employment subject gate) — an HR manage grant never files a
+ * self-service change, and a self grant never authors an employment
+ * change. Returns the trusted subject for revision binding either way.
  */
 async function requireAuthoringAccess(
   exec: SqlExecutor,
@@ -615,7 +636,7 @@ async function requireAuthoringAccess(
   employmentId: string,
   payload: ChangeRequestPayload,
 ) {
-  if (payload.kind === "profile_change") {
+  if (payload.kind === "profile_change" || payload.kind === "bank_change") {
     return requireOwnEmploymentSubject(exec, orgId, actorId, employmentId, "hrm.self.request");
   }
   return requireHrmEmploymentManage(exec, orgId, actorId, employmentId);
@@ -624,10 +645,11 @@ async function requireAuthoringAccess(
 /**
  * Kind-aware read gate for one stored request row. The employment read
  * gate is tried first, so HR keeps full queue visibility over every kind
- * including profile_change; only when it denies AND the row is a
- * profile_change does the own-employment self.read gate get its turn —
- * the person watches their own proposal travel the approval. A stranger
- * keeps the employment-gate refusal, never the self-service one.
+ * including the self-service ones; only when it denies AND the row is a
+ * profile_change or bank_change does the own-employment self.read gate
+ * get its turn — the person watches their own proposal travel the
+ * approval. A stranger keeps the employment-gate refusal, never the
+ * self-service one.
  */
 async function requireRequestReadAccess(
   exec: SqlExecutor,
@@ -643,7 +665,7 @@ async function requireRequestReadAccess(
     const kind = typeof payload === "object" && payload !== null
       ? (payload as { kind?: unknown }).kind
       : undefined;
-    if (!(error instanceof HrmAuthorizationError) || kind !== "profile_change") {
+    if (!(error instanceof HrmAuthorizationError) || (kind !== "profile_change" && kind !== "bank_change")) {
       throw error;
     }
     await requireOwnEmploymentSubject(exec, orgId, actorId, employmentId, "hrm.self.read");
@@ -1207,7 +1229,7 @@ async function resolveRequestScope(orgId: string, actorId: string) {
     subsidiaryFilter: canReadEmployment ? employerFilter : sql`false`,
     ownProfileFilter: partyId === null
       ? sql`false`
-      : sql`(r.payload ->> 'kind' = 'profile_change'
+      : sql`(r.payload ->> 'kind' in ('profile_change', 'bank_change')
              and e.worker_party_id = ${partyId}::uuid and ${employerFilter})`,
   };
 }
@@ -1587,6 +1609,8 @@ async function applyApprovedRequest(
     await applyPositionAssignment(exec, { orgId, actorId, request, payload, newRevision, recordedAt, recordedAtIso });
   } else if (payload.kind === "profile_change") {
     await applyProfileChange(exec, { orgId, actorId, request, payload, newRevision });
+  } else if (payload.kind === "bank_change") {
+    await applyBankChange(exec, { orgId, actorId, request, payload, newRevision, recordedAt, recordedAtIso });
   } else {
     await applyAssignmentChange(exec, { orgId, actorId, request, payload, newRevision, recordedAt });
   }
@@ -1761,6 +1785,156 @@ async function applyProfileChange(
     reasonCode: request.reason_code ?? null,
     actorId,
   });
+  await linkAppliedEvidence(exec, { orgId, actorId, request, newRevision, changeId });
+  await bumpAggregateRevision(exec, { orgId, actorId, request, expected: newRevision - 1, next: newRevision });
+}
+
+/**
+ * (g) Bank change: the worker's own direct-deposit proposal lands as a
+ * new approved party_bank_accounts row — never an edit of an approved
+ * row (a material edit re-enters approval natively, and this decision IS
+ * the approval). The edited party is the bound employment's worker party
+ * re-resolved under the aggregate lock, never a caller-supplied id; the
+ * account number travels sealed and only the last four ever render, in
+ * storage, audit, and notifications alike. Live prior rows retire onto
+ * this event with the request reason; rows backing in-flight payment
+ * instructions refuse first, naming the remedy. Evidenced as a
+ * 'bank_details_changed' employment_changes event plus the bank row's
+ * own audit entry, then the applied link and the revision bump — all in
+ * the one approval transaction.
+ */
+async function applyBankChange(
+  exec: SqlExecutor,
+  args: {
+    orgId: string;
+    actorId: string;
+    request: RequestRow;
+    payload: BankChangePayload;
+    newRevision: number;
+    recordedAt: DbInstant;
+    recordedAtIso: string;
+  },
+): Promise<void> {
+  const { orgId, actorId, request, payload, newRevision, recordedAtIso } = args;
+  const aggregate = (await exec.execute<{ revision: number; worker_party_id: string }>(sql`
+    select revision, worker_party_id from worker_employments
+     where org_id = ${orgId} and id = ${request.employment_id} for update
+  `)).rows[0];
+  if (!aggregate) {
+    throw new HrmChangeRequestError(
+      "REFUSED",
+      "the employment is gone — withdraw this request; a proposal about a deleted aggregate never applies",
+    );
+  }
+  const partyId = aggregate.worker_party_id;
+  // Live prior rows retire onto this event; rows behind in-flight payment
+  // instructions refuse first — approved money keeps paying exactly what
+  // its file generation locked.
+  const priors = (await exec.execute<{ id: string; bank_name: string | null; lastFour: string | null }>(sql`
+    select id, bank_name, account_last_four as "lastFour"
+      from party_bank_accounts
+     where org_id = ${orgId} and party_id = ${partyId}
+       and is_active and retired_at is null
+     order by created_at, id
+  `)).rows;
+  if (priors.length > 0) {
+    const inFlight = (await exec.execute<{ n: number }>(sql`
+      select count(*)::int as n from payment_instructions instruction
+       where instruction.org_id = ${orgId}
+         and instruction.payee_bank_account_id in (${sql.join(priors.map((row) => sql`${row.id}::uuid`), sql`, `)})
+         and instruction.status in ('pending', 'approved', 'generated', 'sent')
+    `)).rows[0]?.n ?? 0;
+    if (inFlight > 0) {
+      throw new HrmChangeRequestError(
+        "REFUSED",
+        "cancel in-flight payment instructions referencing these bank details before changing them — approved money keeps paying exactly what it was approved against",
+      );
+    }
+  }
+  const inserted = (await exec.execute<{ id: string }>(sql`
+    insert into party_bank_accounts
+      (org_id, party_id, bank_name, country, currency, routing,
+       account_number_encrypted, account_last_four,
+       approval_status, is_active, approved_at, approved_by,
+       submitted_by, submitted_at, created_by, updated_by)
+    values (${orgId}, ${partyId}, ${payload.bankName}, ${payload.country ?? null},
+            ${payload.currency ?? null}, ${JSON.stringify(payload.routing ?? {})}::jsonb,
+            ${payload.sealedAccount}, ${payload.accountLastFour},
+            'approved', true, ${recordedAtIso.slice(0, 10)}::date, ${actorId},
+            ${request.submitted_by}, ${request.submitted_at},
+            ${actorId}, ${actorId})
+    returning id
+  `)).rows[0];
+  if (!inserted) {
+    throw new HrmChangeRequestError(
+      "REFUSED",
+      "the bank details were not stored — no row was written; retry the decision",
+    );
+  }
+  const retired: Array<{ rowId: string; bankName: string | null; lastFour: string | null }> = [];
+  for (const prior of priors) {
+    const done = (await exec.execute(sql`
+      update party_bank_accounts
+         set is_active = false, retired_at = now(), retired_by = ${actorId},
+             retirement_reason = ${request.reason ?? ""},
+             updated_by = ${actorId}, updated_at = now()
+       where org_id = ${orgId} and id = ${prior.id} and party_id = ${partyId}
+         and is_active and retired_at is null
+      returning id
+    `)).rows;
+    if (done.length !== 1) {
+      throw new HrmChangeRequestError(
+        "REFUSED",
+        "the prior bank details changed while the approval was applying — retry the decision",
+      );
+    }
+    retired.push({ rowId: prior.id, bankName: prior.bank_name, lastFour: prior.lastFour });
+  }
+  const changeId = await insertEmploymentChange(exec, {
+    orgId,
+    employmentId: request.employment_id,
+    assignmentId: null,
+    revision: newRevision,
+    changeKind: "bank_details_changed",
+    priorSnapshot: {
+      bank: {
+        bankName: payload.bankName,
+        country: payload.country ?? null,
+        currency: payload.currency ?? null,
+        lastFour: payload.accountLastFour,
+      },
+      retired,
+    },
+    closedVersions: [],
+    reason: request.reason ?? "",
+    action: request.action ?? null,
+    reasonCode: request.reason_code ?? null,
+    actorId,
+  });
+  const audited = (await exec.execute(sql`
+    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+    values (${orgId}, 'party_bank_accounts', ${inserted.id}, 'insert',
+            ${JSON.stringify({
+              before: null,
+              after: {
+                bankName: payload.bankName,
+                country: payload.country ?? null,
+                currency: payload.currency ?? null,
+                lastFour: payload.accountLastFour,
+                approvalStatus: "approved",
+              },
+              reason: request.reason ?? "",
+              employmentChangeId: changeId,
+              requestId: request.id,
+            })}::jsonb, ${actorId})
+    returning id
+  `)).rows;
+  if (audited.length !== 1) {
+    throw new HrmChangeRequestError(
+      "REFUSED",
+      "the bank change could not be audited — nothing was stored; retry the decision",
+    );
+  }
   await linkAppliedEvidence(exec, { orgId, actorId, request, newRevision, changeId });
   await bumpAggregateRevision(exec, { orgId, actorId, request, expected: newRevision - 1, next: newRevision });
 }

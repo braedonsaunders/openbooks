@@ -79,6 +79,19 @@ export function meProfileSpec(data: MeProfileData): PageSpec {
             bodyClassName: 'min-h-0 overflow-y-auto p-0',
             blocks: [widgetBlock('hrm-facts', { facts: data.emergencyFacts, empty: data.noEmergency })],
           }),
+          panel({
+            title: f('bankTitle'),
+            iconKey: 'landmark',
+            bodyClassName: 'min-h-0 overflow-y-auto p-0',
+            header: [
+              widget('link-button', {
+                href: f('bankEditHref'),
+                label: f('bankEditButton'),
+                iconKey: 'plus',
+              }),
+            ],
+            blocks: [widgetBlock('hrm-facts', { facts: data.bankFacts, empty: data.noBank })],
+          }),
           widgetBlock(
             'hrm-profile-dialog',
             {
@@ -86,6 +99,14 @@ export function meProfileSpec(data: MeProfileData): PageSpec {
               closeHref: data.dialogCloseHref,
             },
             f('dialogOpen'),
+          ),
+          widgetBlock(
+            'hrm-bank-dialog',
+            {
+              dialog: data.bankDialog,
+              closeHref: data.bankDialogCloseHref,
+            },
+            f('bankDialogOpen'),
           ),
         ]),
         when: f('hasContent'),

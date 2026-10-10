@@ -28,6 +28,7 @@ import {
   AiDraftDrawer,
   BenefitChangeDialog,
   BenefitElectDialog,
+  BankDetailsDialog,
   GoalProgressDialog,
   ProfileDialog,
   ReviewAcknowledgeButton,
@@ -341,6 +342,14 @@ export const HRM_WIDGETS = {
   'hrm-profile-dialog': (props) => (
     <ProfileDialog
       dialog={(props.dialog as ComponentProps<typeof ProfileDialog>['dialog']) ?? null}
+      closeHref={str(props, 'closeHref') ?? '/me/profile'}
+    />
+  ),
+  /** Self-service direct-deposit dialog: files the bank_change request
+   *  for the worker's own employment, masked echo only on the way back. */
+  'hrm-bank-dialog': (props) => (
+    <BankDetailsDialog
+      dialog={(props.dialog as ComponentProps<typeof BankDetailsDialog>['dialog']) ?? null}
       closeHref={str(props, 'closeHref') ?? '/me/profile'}
     />
   ),

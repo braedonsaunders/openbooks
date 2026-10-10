@@ -220,6 +220,7 @@ export const PreBillingWorkspace = dynamic(() => import("../../app/(app)/project
 export const ProcessCreateDrawer = dynamic(() => import("../../app/(app)/hrm/processes/ProcessCreateDrawer").then(module => module.ProcessCreateDrawer))
 export const ProcessNewMenu = dynamic(() => import("../../app/(app)/hrm/processes/ProcessNewMenu").then(module => module.ProcessNewMenu))
 export const ProfileDialog = dynamic(() => import("../../app/(app)/me/islands").then(module => module.ProfileDialog))
+export const BankDetailsDialog = dynamic(() => import("../../app/(app)/me/islands").then(module => module.BankDetailsDialog))
 export const ProgramBuilderDrawer = dynamic(() => import("../../app/(app)/hrm/benefits/ProgramBuilderDrawer").then(module => module.ProgramBuilderDrawer))
 export const ProgramDrawer = dynamic(() => import("../../app/(app)/hrm/benefits/ProgramDrawer").then(module => module.ProgramDrawer))
 export const ProjectDrawer = dynamic(() => import("../../app/(app)/projects/ProjectDrawer").then(module => module.ProjectDrawer))

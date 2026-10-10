@@ -17,6 +17,26 @@ export const fileProfileChangeBody = z.object({
   changes: z.looseObject({ kind: z.string().trim().min(1) }),
   reason: z.string().trim().min(1, "reason required").max(500),
 });
+/**
+ * Self-service direct-deposit change. The engine owns the full contract
+ * (validation, sealing, filing); the boundary pins the shape it can pin —
+ * the employment binds the actor's own record and the reason is 5–500
+ * characters because a replacement retires the prior details with it.
+ * Plaintext travels here over TLS and never persists past the file call.
+ */
+export const fileBankChangeBody = z.object({
+  employmentId: uuid,
+  bank: z
+    .object({
+      bankName: z.string().trim().min(1, "bank name required").max(240),
+      accountNumber: z.string().trim().min(4, "account number required").max(64),
+      country: z.string().trim().max(64).nullable().optional(),
+      currency: z.string().trim().max(3).nullable().optional(),
+      routing: z.record(z.string(), z.string()).optional(),
+    })
+    .strict(),
+  reason: z.string().trim().min(5, "a reason between 5 and 500 characters is required").max(500),
+});
 
 const civilDate = civilDateInput();
 
