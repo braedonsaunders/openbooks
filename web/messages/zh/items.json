@@ -289,6 +289,10 @@
     "effectiveEnded": "已于{to}之前结束",
     "noCurrentRecipe": "今天没有生效的组件 — 以下行为历史记录。"
   },
+  "costingPresave": {
+    "title": "先保存物料以设置库存",
+    "hint": "保存物料后，即可设置库存成本核算的方法、科目和再订货点。"
+  },
   "costing": {
     "abcClass": "循环盘点ABC分类",
     "layerInquiry": "查看库存成本层",

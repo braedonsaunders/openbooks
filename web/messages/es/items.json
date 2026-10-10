@@ -299,6 +299,10 @@
     "effectiveEnded": "Finalizado antes de {to}",
     "noCurrentRecipe": "Ningún componente está vigente hoy — las líneas siguientes son historial."
   },
+  "costingPresave": {
+    "title": "Guarde el artículo para configurar el inventario",
+    "hint": "El costeo del inventario — método, cuentas y puntos de reposición — estará disponible cuando se guarde el artículo."
+  },
   "costing": {
     "abcClass": "Clase ABC de conteo cíclico",
     "layerInquiry": "Ver capas de costo del inventario",

@@ -289,6 +289,10 @@
     "effectiveEnded": "{to}の直前に終了",
     "noCurrentRecipe": "今日有効な構成品がありません — 下の行は履歴です。"
   },
+  "costingPresave": {
+    "title": "品目を保存して在庫を設定",
+    "hint": "品目を保存すると、在庫原価計算の方法、勘定、発注点を設定できます。"
+  },
   "costing": {
     "abcClass": "循環棚卸ABC分類",
     "layerInquiry": "在庫原価レイヤーを表示",

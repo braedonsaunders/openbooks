@@ -27,7 +27,7 @@ import {
 } from 'lucide-react'
 import { ActionError, fetchAction } from '@braedonsaunders/appkit-errors'
 import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
-import { Badge, Button, Input, Label, Popover, SearchSelect, Select, UrlDrawer } from '@openbooks/ui'
+import { Badge, Button, EmptyState, Input, Label, Popover, SearchSelect, Select, UrlDrawer } from '@openbooks/ui'
 import {
   defaultFormLayout,
   isCustomTabKey,
@@ -1011,6 +1011,9 @@ export function ItemDrawer({
 
         {!choosingKind && !structuring && activeTabKey === 'costing' && inventoryCosting && !createMode ? (
           <ItemCostingEditor key={String(it.id)} itemId={String(it.id)} kind={kind} accounts={accounts} canManage={editable} />
+        ) : null}
+        {!choosingKind && !structuring && activeTabKey === 'costing' && inventoryCosting && createMode ? (
+          <EmptyState title={t('costingPresave.title')} description={t('costingPresave.hint')} />
         ) : null}
 
         {!choosingKind && !structuring && activeTabKey === 'accounting' ? <HeaderFields layout={accountingLayout} editable={editable} renderField={renderItemField} /> : null}

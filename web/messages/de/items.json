@@ -302,6 +302,10 @@
     "effectiveEnded": "Beendet vor {to}",
     "noCurrentRecipe": "Heute ist keine Komponente gültig — die Zeilen unten sind Verlauf."
   },
+  "costingPresave": {
+    "title": "Speichern Sie den Artikel, um den Lagerbestand einzurichten",
+    "hint": "Die Lagerbewertung — Methode, Konten und Meldebestände — ist nach dem Speichern des Artikels verfügbar."
+  },
   "costing": {
     "abcClass": "ABC-Inventurklasse",
     "layerInquiry": "Bestandskostenschichten anzeigen",

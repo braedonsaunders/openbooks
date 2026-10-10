@@ -287,6 +287,10 @@
     "inactive": "Inactive",
     "unchangedHelp": "The item schedule is unchanged, so saving will update only the rate-book details."
   },
+  "costingPresave": {
+    "title": "Save the item first to set up inventory",
+    "hint": "Inventory costing — method, accounts, and reorder points — becomes available once the item is saved."
+  },
   "costing": {
     "abcClass": "ABC cycle-count class",
     "layerInquiry": "View inventory cost layers",
