@@ -19,7 +19,8 @@ import { snapshotTimeBillRates } from './item-rates'
 import { isFeatureEnabled } from './features'
 import { TimeApprovalRefusal } from './time-approval-refusal'
 
-export { TimeApprovalRefusal, type TimeApprovalRefusalCode, type UncoveredTimeEntry }
+export { TimeApprovalRefusal }
+export type { TimeApprovalRefusalCode, UncoveredTimeEntry } from './time-approval-refusal'
 
 /** Where the labor-costing policy lives for the wage-rate remedy. */
 export const LABOR_COSTING_SETUP_HREF = '/admin/setup/labor-costing'
