@@ -7,15 +7,15 @@ import { businessToday, isIsoCalendarDate } from '@openbooks/engine/platform/bus
 import { db, withOrgTransaction } from '@openbooks/engine/platform/database'
 import { guardSubsidiaryScope } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
-import { canonicalDecimal, compareDecimal } from '../../../../lib/exact-decimal'
+import { canonicalDecimal } from '../../../../lib/exact-decimal'
 import { decimalNullRefusal } from '../../../../lib/payroll-decimal-refusal'
-import { normalizeMoney } from '@openbooks/engine/money'
 import {
-  employeePayComponentScopeLock,
-  takeEmployeeConfigurationFence,
+  saveEmployeePayComponentAssignment,
+  endEmployeePayComponentAssignment,
+  deleteUnusedEmployeePayComponentAssignment,
+  ScopeNotFoundError,
   ASSIGNMENT_RUN_APPLICABILITIES,
   PayrollError,
-  validateEmployeePayComponentAssignment,
 } from '@openbooks/engine/payroll/assigned-components'
 import { notFound } from "@/lib/api/responses";
 
@@ -40,9 +40,6 @@ export const dynamic = 'force-dynamic'
  */
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
-
-/** numeric(19,4) ceiling — overrides above this must 422, not overflow mid-write. */
-const NUMERIC_19_4_MAX = '999999999999999.9999'
 
 const decimalText = (field: string, noun: string) => z.unknown().transform((value, ctx) => {
   if (typeof value !== "string" || canonicalDecimal(value, 4) === null) {
@@ -77,26 +74,6 @@ const postBodySchema = z.discriminatedUnion("action", [
   }),
 ]);
 
-type AssignmentRow = {
-  id: string
-  employeePartyId: string
-  employmentId: string | null
-  componentId: string
-  value: string | null
-  runApplicability: "standard_runs" | "regular_only"
-  effectiveFrom: string
-  effectiveTo: string | null
-  isActive: boolean
-}
-
-const ASSIGNMENT_ROW_COLUMNS = sql`id, employee_party_id as "employeePartyId", employment_id as "employmentId",
-  component_id as "componentId", value::text as value, run_applicability as "runApplicability",
-  effective_from::text as "effectiveFrom", effective_to::text as "effectiveTo", is_active as "isActive"`
-
-function bodyReason(raw: unknown, fallback: string): string {
-  return typeof raw === 'string' && raw.trim() ? raw.trim().slice(0, 500) : fallback
-}
-
 /** Client calendar dates that PostgreSQL would refuse with driver text. */
 function invalidDate(value: unknown): boolean {
   return typeof value !== 'string' || !DATE_RE.test(value) || !isIsoCalendarDate(value)
@@ -123,15 +100,9 @@ function storageRefusal(error: unknown): { error: string; errorCode: string } {
 }
 
 function refusalResponse(error: unknown): NextResponse {
+  if (error instanceof ScopeNotFoundError) return notFound('record')
   if (error instanceof PayrollError) return NextResponse.json({ error: error.message }, { status: 422 })
   return NextResponse.json(storageRefusal(error), { status: 422 })
-}
-
-async function locateAssignment(orgId: string, id: string): Promise<AssignmentRow | null> {
-  const found = (await db.execute<AssignmentRow>(sql`
-    select ${ASSIGNMENT_ROW_COLUMNS} from employee_pay_components
-     where org_id = ${orgId} and id = ${id}`)).rows[0]
-  return found ?? null
 }
 
 async function employeeSubsidiary(orgId: string, employeePartyId: string): Promise<string | null | undefined> {
@@ -193,130 +164,25 @@ export const POST = defineRoute({
   feature: 'payroll',
   body: postBodySchema,
   handler: async ({ body, authz: gate }) => {
-    const orgId = gate.user.orgId
-    const userId = gate.user.id
-
-    if (body.action === 'save-assignment') {
-      const employeePartyId = body.employeePartyId
-      const employmentId = body.employmentId ?? null
-      if (invalidDate(body.effectiveFrom)) return NextResponse.json({ error: 'effectiveFrom (YYYY-MM-DD) required' }, { status: 422 })
-      if (body.effectiveTo != null && invalidDate(body.effectiveTo)) return NextResponse.json({ error: 'invalid effectiveTo' }, { status: 422 })
-      let value: string | null = null
-      if (body.value != null) {
-        const raw = canonicalDecimal(body.value, 4)
-        if (raw === null) return NextResponse.json({ error: decimalNullRefusal('value', 'an exact decimal amount', body.value, 4) }, { status: 422 })
-        if (compareDecimal(raw, NUMERIC_19_4_MAX) > 0) return NextResponse.json({ error: 'invalid value' }, { status: 422 })
-        try {
-          value = normalizeMoney(raw)
-        } catch {
-          return NextResponse.json({ error: 'invalid value' }, { status: 422 })
-        }
-      }
-      const reason = bodyReason(body.reason, 'pay-component assignment saved')
-      try {
-        const outcome = await withOrgTransaction(orgId, async () => {
-          const subsidiary = await employeeSubsidiary(orgId, employeePartyId)
-          if (subsidiary === undefined) return notFound("record")
-          const scopeDenied = guardSubsidiaryScope(gate, subsidiary)
-          if (scopeDenied) return scopeDenied
-          await takeEmployeeConfigurationFence(db, orgId, employeePartyId)
-          await db.execute(employeePayComponentScopeLock(orgId, employeePartyId))
-          const validated = await validateEmployeePayComponentAssignment(db, orgId, {
-            employeePartyId, employmentId, componentId: body.componentId, value, runApplicability: body.runApplicability,
-            effectiveFrom: body.effectiveFrom, effectiveTo: body.effectiveTo ?? null,
-          })
-          const inserted = (await db.execute<{ id: string }>(sql`
-            insert into employee_pay_components (org_id, employee_party_id, employment_id, component_id, value, run_applicability,
-              effective_from, effective_to, is_active, created_by, updated_by)
-            values (${orgId}, ${employeePartyId}, ${employmentId}, ${body.componentId}, ${value}, ${body.runApplicability},
-              ${body.effectiveFrom}::date, ${body.effectiveTo ?? null}::date, true, ${userId}, ${userId})
-            returning id`)).rows[0]
-          if (!inserted) throw new Error('assignment insert returned no row')
-          const after = (await db.execute<AssignmentRow>(sql`
-            select ${ASSIGNMENT_ROW_COLUMNS} from employee_pay_components
-             where org_id = ${orgId} and id = ${inserted.id}`)).rows[0]
-          await db.execute(sql`
-            insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-            values (${orgId}, 'employee_pay_components', ${inserted.id}, 'insert',
-              ${JSON.stringify({ after, component: validated.componentCode, reason })}, ${userId})`)
-          return NextResponse.json({ ok: true, id: inserted.id })
-        })
-        return outcome
-      } catch (e) {
-        return refusalResponse(e)
-      }
-    }
-
-    if (body.action === 'end-assignment') {
-      if (body.effectiveTo != null && invalidDate(body.effectiveTo)) return NextResponse.json({ error: 'invalid effectiveTo' }, { status: 422 })
-      const reason = bodyReason(body.reason, body.effectiveTo ? 'pay-component assignment ended' : 'pay-component assignment end date cleared')
-      try {
-        const outcome = await withOrgTransaction(orgId, async () => {
-          const row = await locateAssignment(orgId, body.id)
-          if (!row) return notFound("record")
-          const subsidiary = await employeeSubsidiary(orgId, row.employeePartyId)
-          if (subsidiary === undefined) return notFound("record")
-          const scopeDenied = guardSubsidiaryScope(gate, subsidiary)
-          if (scopeDenied) return scopeDenied
-          await takeEmployeeConfigurationFence(db, orgId, row.employeePartyId)
-          await db.execute(employeePayComponentScopeLock(orgId, row.employeePartyId))
-          // Re-validate the surviving window: a Benefits election or a rival
-          // assignment may have arrived since the row was written.
-          await validateEmployeePayComponentAssignment(db, orgId, {
-            employeePartyId: row.employeePartyId, employmentId: row.employmentId, componentId: row.componentId,
-            value: row.value, runApplicability: row.runApplicability, effectiveFrom: row.effectiveFrom, effectiveTo: body.effectiveTo ?? null,
-            excludeId: row.id,
-          })
-          const updated = (await db.execute<{ id: string }>(sql`
-            update employee_pay_components
-               set effective_to = ${body.effectiveTo ?? null}::date, updated_at = now(), updated_by = ${userId}
-             where org_id = ${orgId} and id = ${row.id} returning id`)).rows
-          if (updated.length !== 1) throw new PayrollError('The assignment changed under this save — reload the assignments and try again')
-          const after = await locateAssignment(orgId, row.id)
-          await db.execute(sql`
-            insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-            values (${orgId}, 'employee_pay_components', ${row.id}, 'update',
-              ${JSON.stringify({ before: row, after, reason })}, ${userId})`)
-          return NextResponse.json({ ok: true })
-        })
-        return outcome
-      } catch (e) {
-        return refusalResponse(e)
-      }
-    }
-
-    const reason = bodyReason(body.reason, 'pay-component assignment deleted')
+    const actor = { orgId: gate.user.orgId, actorId: gate.user.id, reason: body.reason }
     try {
-      const outcome = await withOrgTransaction(orgId, async () => {
-        const row = await locateAssignment(orgId, body.id)
-        if (!row) return notFound("record")
-        const subsidiary = await employeeSubsidiary(orgId, row.employeePartyId)
-        if (subsidiary === undefined) return notFound("record")
-        const scopeDenied = guardSubsidiaryScope(gate, subsidiary)
-        if (scopeDenied) return scopeDenied
-        await takeEmployeeConfigurationFence(db, orgId, row.employeePartyId)
-        await db.execute(employeePayComponentScopeLock(orgId, row.employeePartyId))
-        // Posted history is immutable: a row that already priced a stub can
-        // be ended, never deleted.
-        const consumed = (await db.execute(sql`select l.id from pay_stub_lines l
-          join pay_stubs s on s.org_id = l.org_id and s.id = l.stub_id
-         where l.org_id = ${orgId} and l.component_id = ${row.componentId}
-           and s.employee_party_id = ${row.employeePartyId} limit 1`)).rows
-        if (consumed.length > 0) {
-          return NextResponse.json({ error: 'this assignment already priced a pay stub — end the assignment instead of deleting it' }, { status: 422 })
-        }
-        const deleted = (await db.execute<{ id: string }>(sql`
-          delete from employee_pay_components where org_id = ${orgId} and id = ${row.id} returning id`)).rows
-        if (deleted.length !== 1) throw new PayrollError('The assignment changed under this save — reload the assignments and try again')
-        await db.execute(sql`
-          insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-          values (${orgId}, 'employee_pay_components', ${row.id}, 'delete',
-            ${JSON.stringify({ before: row, reason })}, ${userId})`)
-        return NextResponse.json({ ok: true })
-      })
-      return outcome
-    } catch (e) {
-      return refusalResponse(e)
+      if (body.action === 'save-assignment') {
+        if (invalidDate(body.effectiveFrom)) return NextResponse.json({ error: 'effectiveFrom (YYYY-MM-DD) required' }, { status: 422 })
+        if (body.effectiveTo != null && invalidDate(body.effectiveTo)) return NextResponse.json({ error: 'invalid effectiveTo' }, { status: 422 })
+        const after = await saveEmployeePayComponentAssignment({ ...actor, employeePartyId: body.employeePartyId,
+          employmentId: body.employmentId ?? null, componentId: body.componentId, value: body.value ?? null,
+          runApplicability: body.runApplicability, effectiveFrom: body.effectiveFrom, effectiveTo: body.effectiveTo ?? null })
+        return NextResponse.json({ ok: true, id: after.id })
+      }
+      if (body.action === 'end-assignment') {
+        if (body.effectiveTo != null && invalidDate(body.effectiveTo)) return NextResponse.json({ error: 'invalid effectiveTo' }, { status: 422 })
+        await endEmployeePayComponentAssignment({ ...actor, id: body.id, effectiveTo: body.effectiveTo ?? null })
+      } else {
+        await deleteUnusedEmployeePayComponentAssignment({ ...actor, id: body.id })
+      }
+      return NextResponse.json({ ok: true })
+    } catch (error) {
+      return refusalResponse(error)
     }
   },
 });
