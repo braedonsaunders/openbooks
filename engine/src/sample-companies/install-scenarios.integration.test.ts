@@ -64,6 +64,21 @@ for (const profile of SAMPLE_COMPANY_PROFILES) test(`${profile.companyName}: nat
     await withOrgContext(world.orgId, async () => {
       const unbalanced = await db.execute(sql`select entry_id from journal_lines where org_id=${world.orgId} group by entry_id having sum(amount) <> 0`);
       assert.equal(unbalanced.rows.length, 0, "every posted example must remain balanced");
+      const refunds = (await db.execute<{ id: string; detail: string; expense: string; liability: string }>(sql`
+        select d.id,
+          (select sum(amount)::text from document_lines where org_id=d.org_id and document_id=d.id) as detail,
+          (select sum(l.amount)::text from journal_lines l join accounts a on a.org_id=l.org_id and a.id=l.account_id
+            where l.org_id=d.org_id and l.entry_id=d.posted_entry_id and a.type in ('expense','cogs')) as expense,
+          (select sum(l.amount)::text from journal_lines l join payment_cards c on c.org_id=l.org_id and c.liability_account_id=l.account_id
+            where l.org_id=d.org_id and l.entry_id=d.posted_entry_id and c.id=d.payment_card_id) as liability
+        from documents d where d.org_id=${world.orgId} and d.kind='card_refund' and d.status='posted' and d.external_source='industry_demo'
+      `)).rows;
+      assert.equal(refunds.length, 2, "two native card refunds must be posted");
+      for (const refund of refunds) {
+        assert.equal(cmp(refund.detail, "0"), -1, "refund detail is stored negative");
+        assert.equal(cmp(refund.expense, "0"), -1, "refund reverses expense");
+        assert.equal(cmp(refund.liability, "0"), 1, "refund reduces the card payable");
+      }
       const cash = (await db.execute<{ amount: string }>(sql`select coalesce(sum(amount),0)::text as amount from journal_lines where org_id=${world.orgId} and account_id=${demoRecordId(world.orgId,"accounts","bank")}`)).rows[0]!;
       assert.equal(cmp(cash.amount, "99500.00"), 0, "bank statement balances must agree with the demonstration ledger");
       await db.execute(sql`delete from hrm_goals where org_id=${world.orgId}`);

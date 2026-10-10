@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { createScriptJournal } from "../ledger/journal-writes.ts";
 import { importStatement } from "../banking/statement-import.ts";
+import { parseCsv } from "../banking/statement-parsers/csv.ts";
 import { createMatch } from "../banking/matching.ts";
 import { startReconciliation, markReconciled } from "../banking/reconciliation.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
@@ -43,10 +44,13 @@ export async function installOperatingBanking(c: DemoContext): Promise<void> {
         closing += toUnits(payment.amount);
       }
     }
-    const csv = ["date,amount,description,reference", ...entries.map(entry => `${entry.date},${entry.amount},${entry.description},${entry.bankTransactionId}`)].join("\n");
+    const csvCell = (value: string) => `"${value.replaceAll('"', '""')}"`;
+    const csv = ["date,amount,description,reference", ...entries.map(entry => [entry.date, entry.amount, entry.description, entry.bankTransactionId].map(csvCell).join(","))].join("\n");
+    const csvMapping = { date: 0, amount: 1, description: 2, bankTransactionId: 3 };
+    const parsed = parseCsv(csv, csvMapping);
     await importStatement({ accountId, source: "csv", statementDate: date, openingBalance: "0.00", closingBalance: fromUnits(closing), currency: c.currency,
-      lines: entries.map(entry => ({ postedOn: entry.date, amount: entry.amount, description: entry.description, bankTransactionId: entry.bankTransactionId })),
-      sourceEvidence: { content: csv, filename: `${key}-synthetic.csv`, contentType: "text/csv" } }, ctx);
+      lines: parsed.lines, skippedLines: parsed.skipped,
+      sourceEvidence: { content: csv, filename: `${key}-synthetic.csv`, contentType: "text/csv", csvMapping } }, ctx);
     const reconciliation = await startReconciliation({ accountId, throughDate: date, statementBalance: fromUnits(closing) }, ctx);
     for (const entry of entries) {
       const statement = (await db.execute<{ id: string }>(sql`select id from bank_statement_lines where org_id=${c.orgId} and account_id=${accountId} and bank_transaction_id=${entry.bankTransactionId}`)).rows[0];

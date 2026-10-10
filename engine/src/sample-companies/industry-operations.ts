@@ -1,5 +1,5 @@
 import { sampleOperatingPolicy } from "./policy.ts";
-import { mul } from "../money/money.ts";
+import { mul, neg } from "../money/money.ts";
 import { sampleCompanyFeatures } from "./features.ts";
 import { scenarioRecordId, type DemoContext, type DemoRecord } from "./scenarios.ts";
 
@@ -87,7 +87,8 @@ export function operatingDocuments(c: DemoContext): OperatingDocument[] {
     const expense = vendor || role === "employee";
     const names = vendor ? profile.vendors : profile.customers;
     const basePrice = expense ? ["125.00", "480.00", "1250.00", "3600.00", "875.00", "225.00"][index % 6]! : ["450.00", "1250.00", "275.00", "850.00"][index % 4]!;
-    const unitPrice = kind.endsWith("_credit") ? mul(basePrice, "0.10") : basePrice;
+    // Card refunds store signed detail; credit memos and cash refunds reverse positive detail in their native posting rules.
+    const unitPrice = kind === "card_refund" ? neg(basePrice) : kind.endsWith("_credit") ? mul(basePrice, "0.10") : basePrice;
     const quantity = `${index % 3 + 1}.00`;
     result.push({ key: `operations-${kind}-${index + 1}`, kind, documentDate: c.operationDates?.[index % c.operationDates.length] ?? c.operationDate ?? c.date,
       partyId: role === "employee" ? c.employeeId : scenarioRecordId(c, "parties", `operations-${role}-${index % names.length + 1}`),

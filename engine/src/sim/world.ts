@@ -4,6 +4,7 @@ import { db, withBypass, withBypassContext, withOrgContext } from "../platform/d
 import { civilDateFromParts, endOfMonth } from "../platform/business-date.ts";
 import { dropSimOrg } from "../testing/fixtures.ts";
 import { provisionOrganizationDefaults } from "../provisioning/organization-provisioning.ts";
+import { seedRolesForOrg } from "../provisioning/seed-roles.ts";
 import { ensureReportDefinitions } from "../reports/ensure-report-definitions.ts";
 import { createScriptJournal } from "../ledger/journal-writes.ts";
 import { mul, neg, roundMoney, sum } from "../money/money.ts";
@@ -347,16 +348,16 @@ export async function provisionOrg(
       customers.push({ id, ...c });
     }
 
+    // Fresh organizations receive the native role catalogue before actors are assigned.
+    await seedRolesForOrg(orgId);
     // Role-scoped actors (provenance for who did what).
     const mkUser = async (name: string, role: string): Promise<string> => {
       const id = randomUUID();
       await db.transaction(async (tx) => {
         const assignedRole = (await tx.execute<{ id: string }>(sql`
-          insert into app_roles (org_id, key, name, is_built_in, permissions)
-          values (${orgId}, ${role}, ${role.replaceAll('_', ' ')}, false, '[]'::jsonb)
-          on conflict (org_id, key) do update set updated_at = now()
-          returning id
+          select id from app_roles where org_id=${orgId} and key=${role} and is_built_in for share
         `));
+        if (assignedRole.rows.length !== 1) throw new Error(`Native simulation role ${role} is unavailable`);
         await tx.execute(sql`
           insert into users (id, org_id, email, name, password_hash, is_active)
           values (${id}, ${orgId}, ${`${role}-${id.slice(0, 8)}@sim.test`}, ${name}, 'x', true)

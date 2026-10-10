@@ -1,3 +1,4 @@
+import { cmp } from "../money/money.ts";
 import { createHash } from "node:crypto";
 import { operatingDocuments } from "./industry-operations.ts";
 import { sampleOperatingPolicy } from "./policy.ts";
@@ -108,5 +109,16 @@ test("posted ordinary operations span native dates, parties and editable follow-
     assert.equal(DEMO_FEATURE_EVIDENCE.autopay?.stage, "configured");
     assert.equal(DEMO_FEATURE_EVIDENCE.projectProgress?.stage, "executed");
     assert.equal(DEMO_FEATURE_EVIDENCE.revenueContracts?.stage, "draft");
+  }
+});
+
+
+test("authored refunds and credits retain each native posting rule's sign convention", () => {
+  for (const profile of SAMPLE_COMPANY_PROFILES) {
+    for (const document of operatingDocuments(demoContext(profile.industryKey))) {
+      const direction = document.kind === "card_refund" ? -1 : 1;
+      assert.equal(cmp(document.unitPrice, "0"), direction, `${profile.industryKey}: ${document.kind} unit price`);
+      assert.equal(cmp(document.amount, "0"), direction, `${profile.industryKey}: ${document.kind} amount`);
+    }
   }
 });
