@@ -1,4 +1,5 @@
 import { ModuleView } from '../../../../components/viewspec/module-view'
+import { requireStatementAccess } from '../../../../lib/report-authz'
 import { loadPartners, partnersSpec } from './view'
 
 export const dynamic = 'force-dynamic'
@@ -19,6 +20,8 @@ export default async function Partners({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const sp = await searchParams
+  // The statement's own read grant (ledger, receivables or payables), beyond reports.read.
+  await requireStatementAccess('partners', sp)
   const data = await loadPartners(sp)
   return <ModuleView spec={partnersSpec(data)} data={data} searchParams={sp} trusted />
 }

@@ -66,7 +66,7 @@ import { can } from './authz'
 import { requireReportAuthz, canAccessReportDefinition, type ReportAuthorization } from './report-execution-context'
 import { resolveSubsidiaryView } from './consolidation'
 import { resolvePeriod } from './periods'
-import { reportEntityPermission, STATEMENT_KIND_FEATURE } from './report-authz'
+import { reportEntityPermission, statementKindPermission, STATEMENT_KIND_FEATURE } from './report-authz'
 import { reportBookSelection } from './report-books'
 import { AvailabilityRefusal } from '@openbooks/engine/src/inventory/availability.ts'
 import { availabilityExportData, availabilityRefusalText, replenishmentExportData } from './availability-report'
@@ -235,6 +235,13 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
   // Subsidiary context: exports and scheduled runs honor the same picker value
   // as the on-screen report (consolidated subtree + translation included).
   const authz = await requireReportAuthz(orgId)
+  // The statement's own domain grant (ledger, receivables, payables or the
+  // module it reports on), the same rule the hub and the statement pages
+  // apply, so an export, schedule or send never reaches data its page refuses.
+  const statementPermission = statementKindPermission(kind, p)
+  if (statementPermission && !can(authz, statementPermission)) {
+    throw new ReportResolutionError('you do not have access to the data in this report — ask an administrator to add the matching read access to your role')
+  }
   if (kind === 'payroll-support') {
     if (!can(authz, 'payroll.read')) throw new ReportResolutionError('This report requires payroll.read — ask an administrator for payroll read access.');
     try { return { render: 'data', data: await payrollSupportReportData(period, p), requiredPermissions: ['payroll.read'] }; }

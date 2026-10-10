@@ -31,8 +31,10 @@ export const GET = defineRoute({
     if (journalDrawer && !can(authz, 'gl.read')) {
       return NextResponse.json({ error: 'missing permission: gl.read' }, { status: 403 })
     }
-    if (!can(authz, 'gl.read') && !can(authz, 'reports.read')) {
-        return NextResponse.json({ error: 'missing permission: gl.read or reports.read' }, { status: 403 })
+    // A journal entry's lines are ledger data: reports.read alone never
+    // opens them, the same rule as the ledger statements the flyout serves.
+    if (!can(authz, 'gl.read')) {
+        return NextResponse.json({ error: 'you do not have access to this data' }, { status: 403 })
       }
     const { id } = await params
     if (!isReportUuidParam(id)) return notFound("record")

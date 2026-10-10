@@ -50,7 +50,7 @@ const hooks = registerHooks({
             export async function requirePermission() {
               return {
                 user: { orgId: 'org', id: 'user' },
-                permissions: new Set(['ar.read', 'reports.read', 'admin.audit.read', 'admin.setup.manage']),
+                permissions: new Set(['ar.read', 'ap.read', 'gl.read', 'banking.read', 'projects.read', 'time.read', 'reports.read', 'admin.audit.read', 'admin.setup.manage']),
                 allowedSubsidiaryIds: null,
               };
             }
