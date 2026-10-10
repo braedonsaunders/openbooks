@@ -49,6 +49,14 @@ export type FlowSubjectProfile = {
   supportsUngatedSubmission?: boolean
   /** Retain the authored approval policy for the lifetime of a submission. */
   pinsSubmissionPolicy?: boolean
+  /**
+   * Order-cycle records (quotes, sales and purchase orders) are created and
+   * edited through the order pipeline, which emits no create/update flow
+   * events — only submission on Issue (plus void/manual/scheduled/status
+   * lifecycle). The lint names create/update triggers on such subjects as
+   * never firing.
+   */
+  orderRecord?: boolean
   /** Subject discriminator, e.g. a document kind: 'invoice', 'bill', 'journal'. */
   subjectKind: string
   /** Human label used in lint messages + canvas chrome. */

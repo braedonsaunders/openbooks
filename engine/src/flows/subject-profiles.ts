@@ -152,10 +152,15 @@ function titleize(kind: string): string {
 /** The FlowSubjectProfile for one document kind. */
 export function documentSubjectProfile(kind: string): FlowSubjectProfile {
   const canPost = (POSTING_DOC_KINDS as readonly string[]).includes(kind);
+  // Order-cycle records are created and edited through the order pipeline
+  // (twin: ORDER_KINDS in web/lib/order-kinds.ts), which emits no
+  // create/update flow events — the lint names such triggers never firing.
+  const orderRecord = kind === "quote" || kind === "sales_order" || kind === "purchase_order";
   return {
     subjectKind: kind,
     label: titleize(kind),
     labelKey: kind,
+    ...(orderRecord ? { orderRecord: true as const } : {}),
     triggers: [
       "on_create",
       "on_update",

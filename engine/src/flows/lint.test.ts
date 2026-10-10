@@ -144,6 +144,32 @@ test("rejects an approval gate reachable from before_post", () => {
   assert.ok(res.errors.some((error) => /before_post.*on_submit/i.test(error)));
 });
 
+test("names posting and create triggers that can never fire for quotes", () => {
+  // Quotes never post and live outside the document writers: both triggers
+  // would save a silently dead flow, so enabling names the node and the cause.
+  const g = graph(
+    [
+      { id: "t-post", position: { x: 0, y: 0 }, data: { kind: "trigger", trigger: { trigger: "before_post" } } },
+      { id: "t-create", position: { x: 0, y: 1 }, data: { kind: "trigger", trigger: { trigger: "on_create" } } },
+      { id: "g", position: { x: 1, y: 0 }, data: gate },
+    ],
+    [
+      { id: "e1", source: "t-post", target: "g", sourceHandle: "next" },
+      { id: "e2", source: "t-create", target: "g", sourceHandle: "next" },
+    ],
+  );
+  const res = lintFlowGraphForSubject("quote", g);
+  assert.equal(res.ok, false);
+  assert.ok(
+    res.errors.some((error) => /Trigger t-post: "before_post" never fires for Quote/i.test(error)),
+    `expected a named posting refusal, got: ${res.errors.join("; ")}`,
+  );
+  assert.ok(
+    res.errors.some((error) => /Trigger t-create: "on_create" never fires for Quote/i.test(error)),
+    `expected a named create refusal, got: ${res.errors.join("; ")}`,
+  );
+});
+
 
 test("board delivery drafts keep generic timing neutral; explicit multi-time clocks preserve paired times and require timezone/selection", async () => {
   const { scheduleBoardTimerGraph } = await import('./schedule-board-adapter.ts');
