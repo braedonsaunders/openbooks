@@ -41,6 +41,10 @@ async function setup(): Promise<Fixture> {
   });
   // Releasing a work order snapshots its work centers' department rates.
   const departmentId = String((await withBypassContext(() => db.execute(sql`insert into departments (org_id, name) values (${org.orgId}, 'Assembly') returning id`))).rows[0]!.id);
+  const rate = await withBypassContext(() => db.execute(sql`insert into labor_cost_rates
+    (org_id, department_id, currency, rate, basis, annual_hours, effective_from, is_active, created_by, updated_by)
+    values (${org.orgId}, ${departmentId}, 'CAD', '0', 'hour', '2080', '2026-01-01', true, ${actorId}, ${actorId}) returning id`));
+  assert.equal(rate.rows.length, 1, "material/lifecycle cases require an explicit standard labor rate covering release");
   return { org, actorId, departmentId };
 }
 

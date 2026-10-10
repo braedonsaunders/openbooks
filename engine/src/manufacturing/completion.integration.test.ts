@@ -11,10 +11,12 @@ import { receiveInventory } from "../inventory/movements.ts";
 import { getOnHand } from "../inventory/position.ts";
 import { recordNormalScrap } from "./scrap.ts";
 import { executeManufacturingReceipt, executeManufacturingIssue } from "./execution.ts";
-import { readManufacturingRecord, listManufacturingRecords, searchManufacturingChoices } from "./workspace.ts";
+import { readManufacturingRecord, listManufacturingRecords, searchManufacturingChoices, manufacturingOptions, manufacturingTracking } from "./workspace.ts";
 import { ManufacturingError } from "./errors.ts";
-import { activateRouting, createRouting, createRoutingOperation } from "./routings.ts";
-import { addWorkCenterRate, createWorkCenter } from "./work-centers.ts";
+import { upsertItemPolicy, assertManufacturingItemExists } from "./item-policies.ts";
+import { runMrp } from "./mrp.ts";
+import { activateRouting, createRouting, createRoutingOperation, createNextRoutingVersion, updateRoutingOperation, getRouting } from "./routings.ts";
+import { addWorkCenterRate, createWorkCenter, updateWorkCenter } from "./work-centers.ts";
 import { createWorkOrder, holdWorkOrder, releaseWorkOrder, cancelWorkOrder, startWorkOrderOperation } from "./work-orders.ts";
 import { completeWorkOrderOperation, issueMaterials } from "./materials.ts";
 import { completeWorkOrder, markWorkOrderDone, reverseMaterialIssue, waiveMaterial } from "./completion.ts";
@@ -449,7 +451,7 @@ cases.push(
   assert.deepEqual(await scrapState(f,wo.id),{scrap:"2.0000",completed:"0.0000",events:1,audit:1});
   await assert.rejects(run(tx=>completeWorkOrderOperation(tx,f.org.orgId,f.actorId,wo.id,wo.operationId,{doneQty:"9"})),e=>e instanceof ManufacturingError&&e.code==='completion_tolerance_exceeded');
   assert.equal((await run(tx=>listManufacturingRecords(tx,f.org.orgId,new Set(),'work-orders'))).total,0);
-  assert.deepEqual(await run(tx=>searchManufacturingChoices(tx,f.org.orgId,new Set(),'items','',f.org.items.component)),[]);
+  assert.ok((await run(tx=>searchManufacturingChoices(tx,f.org.orgId,new Set(),'items','',f.org.items.component))).some(item=>item.value===f.org.items.component),'organization-owned item identities do not fabricate entity ownership');
   const selected=await run(tx=>searchManufacturingChoices(tx,f.org.orgId,null,'items','no-matching-item-name',f.org.items.component));
   assert.equal(selected[0]?.value,f.org.items.component,"a selected visible item remains resolvable when it is outside the search window");
 
@@ -526,6 +528,99 @@ cases.push(
   assert.deepEqual(await scrapState(f,wo.id),{scrap:"3.0000",completed:"0.0000",events:3,audit:3});
  }}
 );
+
+
+cases.push({ name: "native workspace uses organization item identity and current whole-resource entity visibility", run: async (f) => {
+  await route(f, f.org.items.component);
+  await run(tx => upsertItemPolicy(tx, f.org.orgId, f.actorId, f.org.items.component, {
+    supplyMethod: "make", leadTimeDays: 1, safetyStockQty: "0", minimumQty: "0", orderMultipleQty: "0", scrapPctPlanned: "0",
+  }));
+  await run(tx => tx.execute(sql`insert into bom_components (org_id,assembly_item_id,component_item_id,quantity_per,sort_order)
+    values (${f.org.orgId},${f.org.items.component},${f.org.items.standard},'1',0) returning id`));
+  const parent = await prepare(f);
+  const children = await run(async tx => (await tx.execute<{ id: string }>(sql`select id from mfg_work_orders
+    where org_id=${f.org.orgId} and parent_wo_id=${parent.id}`)).rows);
+  assert.equal(children.length, 1, "native release creates the subassembly child");
+  const childId = children[0]!.id;
+  const resourceRows = await run(async tx => (await tx.execute<{ work_order_id: string; work_center_id: string; routing_id: string }>(sql`
+    select operation.work_order_id,operation.work_center_id,orders.routing_id from mfg_wo_operations operation
+    join mfg_work_orders orders on orders.org_id=operation.org_id and orders.id=operation.work_order_id
+    where operation.org_id=${f.org.orgId} and operation.work_order_id in (${parent.id},${childId})`)).rows);
+  assert.equal(resourceRows.length, 2);
+  for (const row of resourceRows) await run(tx => updateWorkCenter(tx, f.org.orgId, f.actorId, row.work_center_id, { subsidiaryId: f.org.subsidiaryId }));
+  const parentResource = resourceRows.find(row => row.work_order_id === parent.id)!;
+  const childResource = resourceRows.find(row => row.work_order_id === childId)!;
+  const allowed = new Set([f.org.subsidiaryId]);
+  const read = (view: "work-orders" | "routings", id: string) => run(tx => readManufacturingRecord(tx, f.org.orgId, allowed, view, id));
+  const list = (view: "work-orders" | "routings" | "work-centers") => run(tx => listManufacturingRecords(tx, f.org.orgId, allowed, view));
+  const denied = (work: Promise<unknown>) => assert.rejects(work, error => error instanceof ManufacturingError && error.status === 404);
+  assert.deepEqual(new Set((await list("work-orders")).rows.map(row => row.id)), new Set([parent.id, childId]));
+  assert.equal((await read("work-orders", parent.id)).sections.children!.length, 1);
+  assert.equal((await read("routings", parentResource.routing_id)).sections.operations!.length, 1);
+  assert.equal((await list("routings")).total, 2);
+  assert.equal((await list("work-centers")).total, 2);
+  const options = await run(tx => manufacturingOptions(tx, f.org.orgId, allowed));
+  assert.ok(options.items.some(item => item.value === f.org.items.assembly));
+  assert.equal(options.routings.length, 2);
+  assert.ok((await run(tx => searchManufacturingChoices(tx, f.org.orgId, allowed, "items", "no-match", f.org.items.component))).some(item => item.value === f.org.items.component));
+  assert.deepEqual(await run(tx => manufacturingTracking(tx, f.org.orgId, allowed, f.org.items.component)), { lots: [], serials: [] });
+  await denied(run(tx => manufacturingTracking(tx, f.org.orgId, allowed, randomUUID())));
+
+  const otherEntity = randomUUID();
+  assert.equal((await run(tx => tx.execute(sql`insert into subsidiaries
+    (id,org_id,parent_id,name,base_currency,country,tax_ids,is_elimination,is_active,custom)
+    values (${otherEntity},${f.org.orgId},${f.org.subsidiaryId},'Other manufacturing entity','CAD','CA','{}'::jsonb,false,true,'{}'::jsonb) returning id`))).rows.length, 1);
+  const otherCenter = await run(tx => createWorkCenter(tx, f.org.orgId, f.actorId, {
+    code: "OTHER-" + randomUUID(), name: "Other entity resource", kind: "machine", subsidiaryId: otherEntity,
+    capacityHoursPerDay: "8", efficiencyPct: "100", departmentId: f.departmentId, absorbsOverhead: false,
+  }));
+  const next = await run(tx => createNextRoutingVersion(tx, f.org.orgId, f.actorId, parentResource.routing_id));
+  const copied = next.operations[0]!;
+  await run(tx => updateRoutingOperation(tx, f.org.orgId, f.actorId, String(next.id), String(copied.id), { workCenterId: String(otherCenter.id) }));
+  assert.deepEqual((await read("routings", parentResource.routing_id)).sections.versions!.map(row => row.id), [parentResource.routing_id], "related versions are filtered using their own current resources");
+  await denied(read("routings", String(next.id)));
+  assert.equal((await list("routings")).total, 2);
+  assert.equal((await run(tx => getRouting(tx, f.org.orgId, parentResource.routing_id)))?.operations.length, 1);
+
+  await run(tx => updateWorkCenter(tx, f.org.orgId, f.actorId, childResource.work_center_id, { subsidiaryId: otherEntity }));
+  assert.deepEqual((await read("work-orders", parent.id)).sections.children, [], "a child's resource change is visible on the next parent read");
+  await denied(read("work-orders", childId));
+  assert.deepEqual((await list("work-orders")).rows.map(row => row.id), [parent.id]);
+  assert.deepEqual((await run(tx => manufacturingOptions(tx, f.org.orgId, allowed))).routings.map(row => row.value), [parentResource.routing_id]);
+  await run(tx => updateWorkCenter(tx, f.org.orgId, f.actorId, parentResource.work_center_id, { subsidiaryId: otherEntity }));
+  await denied(read("work-orders", parent.id));
+  await denied(read("routings", parentResource.routing_id));
+  assert.equal((await list("work-orders")).total, 0);
+  assert.equal((await list("routings")).total, 0);
+  for (const row of resourceRows) await run(tx => updateWorkCenter(tx, f.org.orgId, f.actorId, row.work_center_id, { subsidiaryId: f.org.subsidiaryId }));
+  assert.equal((await list("work-orders")).total, 2);
+  assert.equal((await run(tx => tx.execute(sql`update locations set subsidiary_id=${otherEntity},subsidiary_include_children=false
+    where org_id=${f.org.orgId} and id=${f.org.locationId} returning id`))).rows.length, 1);
+  await denied(read("work-orders", parent.id));
+  await denied(read("routings", parentResource.routing_id));
+  assert.equal((await list("work-orders")).total, 0);
+  assert.equal((await list("routings")).total, 0);
+  assert.equal((await run(tx => manufacturingOptions(tx, f.org.orgId, allowed))).routings.length, 0);
+
+  await run(tx => tx.execute(sql`update orgs set settings=jsonb_set(settings,'{features,manufacturingMrp}','true'::jsonb,true) where id=${f.org.orgId} returning id`));
+  await run(tx => upsertItemPolicy(tx, f.org.orgId, f.actorId, f.org.items.standard, {
+    supplyMethod: "buy", leadTimeDays: 1, safetyStockQty: "0", minimumQty: "0", orderMultipleQty: "0", scrapPctPlanned: "0",
+  }));
+  const mrp = await run(tx => runMrp(tx, f.org.orgId, f.actorId, { subsidiaryId: f.org.subsidiaryId, horizonDays: 30, capacityCheck: true }));
+  assert.equal((await run(tx => listManufacturingRecords(tx, f.org.orgId, allowed, "mrp"))).rows[0]?.id, mrp.id);
+  assert.equal((await run(tx => readManufacturingRecord(tx, f.org.orgId, allowed, "mrp", mrp.id))).record.id, mrp.id);
+  await denied(run(tx => readManufacturingRecord(tx, f.org.orgId, new Set([otherEntity]), "mrp", mrp.id)));
+
+  const foreign = await withBypassContext(() => createScratchOrg());
+  try {
+    await denied(run(tx => assertManufacturingItemExists(tx, f.org.orgId, foreign.items.assembly)));
+    assert.equal((await run(tx => tx.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
+      coalesce(settings->'features','{}'::jsonb)||'{"manufacturing":true,"inventory":true}'::jsonb)
+      where id=${foreign.orgId} returning id`))).rows.length, 1);
+    await denied(run(tx => readManufacturingRecord(tx, foreign.orgId, null, "work-orders", parent.id)));
+    assert.deepEqual(await run(tx => searchManufacturingChoices(tx, f.org.orgId, allowed, "items", "no-match", foreign.items.assembly)), []);
+  } finally { await withBypassContext(() => dropScratchOrg(foreign.orgId)); }
+}});
 
 test("manufacturing completion and reversal case table", { skip: !DB }, async () => {
   for (const scenario of cases) {
