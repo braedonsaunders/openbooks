@@ -40,10 +40,8 @@ export function historicalEmploymentOverlapsPeriod(c: EmploymentRosterColumns): 
 }
 
 /** Validate the exact ended employment without establishing further coverage. */
-export function finalPayEmploymentIdentity(c: EmploymentRosterColumns): SQL {
-  if (!c.runType) return sql`false`;
-  return sql`(${c.runType} = 'termination'
-    and ${c.hiredOn} is not null and ${c.terminatedOn} is not null
+function endedEmploymentIdentity(c: EmploymentRosterColumns): SQL {
+  return sql`(${c.hiredOn} is not null and ${c.terminatedOn} is not null
     and ${c.hiredOn} <= ${c.terminatedOn}
     and ${c.terminatedOn} <= ${c.periodEnd}::date
     and exists (
@@ -52,6 +50,28 @@ export function finalPayEmploymentIdentity(c: EmploymentRosterColumns): SQL {
         and final_employment.id = ${c.employment}
         and final_employment.worker_party_id = ${c.employee}
         and final_employment.employer_subsidiary_id = ${c.employer}))`;
+}
+
+export function finalPayEmploymentIdentity(c: EmploymentRosterColumns): SQL {
+  if (!c.runType) return sql`false`;
+  return sql`(${c.runType} = 'termination' and ${endedEmploymentIdentity(c)})`;
+}
+
+/** An explicit earning can settle a former employee's bonus or supplemental pay.
+ * It does not reactivate employment or invoke final bank settlement. */
+export function supplementalEmploymentIdentity(c: EmploymentRosterColumns): SQL {
+  if (!c.runType) return sql`false`;
+  return sql`(${c.runType} in ('bonus','supplemental') and ${endedEmploymentIdentity(c)})`;
+}
+
+export function namedSupplementalEmployment(c: EmploymentRosterColumns): SQL {
+  if (!c.document) return sql`false`;
+  return sql`(${supplementalEmploymentIdentity(c)} and exists (
+    select 1 from pay_run_adjustments payment
+    join pay_components component on component.org_id=payment.org_id and component.id=payment.component_id
+    where payment.org_id=${c.org} and payment.pay_run_document_id=${c.document}
+      and payment.employee_party_id=${c.employee} and payment.adjustment_type='line'
+      and payment.amount>0 and component.kind='earning' and component.is_active))`;
 }
 
 /** Final-pay creation persists the named roster as exclusions of everyone else.
@@ -68,12 +88,13 @@ export function namedFinalPayEmployment(c: EmploymentRosterColumns): SQL {
 
 export function payrollEmploymentOverlapsPeriod(c: EmploymentRosterColumns): SQL {
   return sql`(${roleEmploymentOverlapsPeriod(c)} or ${historicalEmploymentOverlapsPeriod(c)}
-    or ${namedFinalPayEmployment(c)})`;
+    or ${namedFinalPayEmployment(c)} or ${namedSupplementalEmployment(c)})`;
 }
 
 /** A previous active window cannot establish that episode's hire or release date. */
 export function payrollEpisodeDate(c: EmploymentRosterColumns, date: SQL): SQL {
-  return sql`case when ${roleEmploymentOverlapsPeriod(c)} or ${namedFinalPayEmployment(c)} then ${date} else null end`;
+  return sql`case when ${roleEmploymentOverlapsPeriod(c)} or ${namedFinalPayEmployment(c)}
+    or ${namedSupplementalEmployment(c)} then ${date} else null end`;
 }
 
 export interface HistoricalEmploymentRosterSource {
