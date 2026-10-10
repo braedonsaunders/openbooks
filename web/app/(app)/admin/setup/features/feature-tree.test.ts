@@ -6,8 +6,7 @@ import {
   groupFeatureChildren,
   featureSearchMatcher,
   filterFeatureTree,
-  industryLenses,
-  OTHER_INDUSTRY_MODULES,
+  summarizeFeatures,
   resolveFeatureOn,
   type FeatureTreeRow,
 } from './feature-tree'
@@ -219,56 +218,30 @@ test('orphan children (unknown parent) stay visible as top-level rows', () => {
   assert.deepEqual(sections[0]!.groups[0]!.parent.missingRequirements, ['missing-parent'])
 })
 
-const lensKeys = (lens: { section: ReturnType<typeof buildFeatureTree>[number] }) =>
-  lens.section.groups.flatMap((g) => [g.parent, ...g.visibleChildren].map((n) => n.row.key))
-
-test('industry lenses lead with the org industry and gather unnamed industry modules last', () => {
-  const rows: FeatureTreeRow[] = [
-    ...ROWS,
-    { key: 'nonprofit', category: 'industries' },
-    { key: 'fundAccounting', category: 'industries', parentKey: 'nonprofit' },
-    { key: 'propertyManagement', category: 'industries' },
-  ]
-  const state = Object.fromEntries(rows.map((r) => [r.key, true]))
-  const lenses = industryLenses(
-    buildFeatureTree(rows, state, CATEGORIES),
-    [
-      { key: 'construction_contractor', features: ['projects', 'fieldTickets', 'subcontracts', 'inventory'] },
-      { key: 'nonprofit', features: ['nonprofit', 'allocations'] },
-      { key: 'unknown_vertical', features: ['notARegisteredFeature'] },
-    ],
-    'nonprofit',
-  )
-  assert.deepEqual(
-    lenses.map((lens) => [lens.key, lensKeys(lens)]),
-    [
-      // Tab order across tabs; a named parent brings its children.
-      ['nonprofit', ['allocations', 'allocationsAtEntry', 'allocationsAtPosting', 'nonprofit', 'fundAccounting']],
-      ['construction_contractor', ['projects', 'timeTracking', 'fieldTickets', 'projectScheduling', 'subcontracts', 'inventory']],
-      [OTHER_INDUSTRY_MODULES, ['propertyManagement']],
-    ],
-  )
-})
-
-test('the real Industries tab names only registered features and carries every industry module', () => {
-  const registered = new Set(FEATURES.map((f) => f.key))
-  const industries = INDUSTRIES.map((industry) => ({
-    key: industry.key,
-    features: Object.entries(industry.features).filter(([, on]) => on).map(([key]) => key),
-  }))
-  for (const industry of industries) {
-    for (const key of industry.features) {
-      assert.ok(registered.has(key), `${industry.key} presets ${key}, which is not a registered feature`)
+test('every company capability has one domain home without an Industries copy', () => {
+  assert.ok(!CATEGORIES.some((category) => String(category) === 'industries'))
+  assert.equal(FEATURES.find((row) => row.key === 'propertyManagement')!.category, 'property')
+  assert.equal(FEATURES.find((row) => row.key === 'nonprofit')!.category, 'nonprofit')
+  const state = Object.fromEntries(FEATURES.map((row) => [row.key, true]))
+  const shown = buildFeatureTree(FEATURES, state, CATEGORIES).flatMap((section) =>
+    section.groups.flatMap((group) => [group.parent.row.key, ...group.visibleChildren.map((child) => child.row.key)]))
+  assert.equal(shown.length, FEATURES.length)
+  assert.equal(new Set(shown).size, FEATURES.length)
+  for (const industry of INDUSTRIES) {
+    for (const [key, enabled] of Object.entries(industry.features)) {
+      if (enabled) assert.ok(FEATURES.some((feature) => feature.key === key), `${industry.key} presets a registered capability`)
     }
   }
-  const rows: FeatureTreeRow[] = FEATURES.map((f) => ({ key: f.key, category: f.category, parentKey: f.parentKey, requiresAll: f.requiresAll }))
-  const state = Object.fromEntries(FEATURES.map((f) => [f.key, true]))
-  const shown = new Set(industryLenses(buildFeatureTree(rows, state, CATEGORIES), industries, null).flatMap(lensKeys))
-  for (const f of FEATURES.filter((f) => f.category === 'industries')) {
-    assert.ok(shown.has(f.key), `${f.key} is an industry module the Industries tab must show`)
-  }
 })
 
+test('company count includes hidden options and resolves every dependency rather than counting the active area', () => {
+  const state = { ...ALL_ON, projects: false }
+  const summary = summarizeFeatures(ROWS, state)
+  assert.equal(summary.total, ROWS.length)
+  assert.equal(summary.n, ROWS.filter((row) => resolveFeatureOn(ROWS, state, row.key)).length)
+  assert.ok(summary.total > sectionFor('finance', ROWS, state)!.visibleTotal)
+  assert.equal(summarizeFeatures([...ROWS, ROWS[0]!], state).total, ROWS.length)
+})
 
 test('manufacturing has a discoverable home while retaining inventory authority', () => {
   const manufacturing = FEATURES.find((row) => row.key === 'manufacturing')!;

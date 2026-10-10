@@ -21,7 +21,7 @@ test("distribution features are opt-in and declare their dependencies", () => {
 });
 
 for (const [key, title, category, enabled, navModules] of [
-  ["nonprofit", "nonprofit is an opt-in industry feature owning one nav module", "industries", false, ["nonprofit"]],
+  ["nonprofit", "nonprofit is an opt-in feature with its own operating area", "nonprofit", false, ["nonprofit"]],
   ["allocations", "allocations is an opt-in finance feature with no nav modules", "finance", false, []],
   ["homeAnnouncements", "home announcements is a default-on platform feature with no parent", "platform", true, []],
 ] as const) {

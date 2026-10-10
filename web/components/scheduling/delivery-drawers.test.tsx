@@ -53,6 +53,11 @@ test('email recipients stay in one borderless native section before PDF/message;
   assert.equal(attachment.nextElementSibling, message)
   assert.ok(!section.className.includes('rounded'))
   assert.ok(!attachment.querySelector('fieldset')!.className.includes('rounded'))
+  const sharingTrigger = section.querySelector(`[aria-label="${labels.sharing}"]`)!
+  const sharingWrapper = sharingTrigger.closest('span.relative.block')!
+  assert.ok(sharingWrapper)
+  assert.ok(!sharingWrapper.classList.contains('border'), 'the native selector has one border on its trigger, without a surrounding card')
+  assert.ok(!sharingWrapper.classList.contains('p-2'), 'native trigger padding is not duplicated on its wrapper')
   assert.equal(section.querySelectorAll('input[type="checkbox"]').length, board.rows.length)
   const editor = message.querySelector('[role="textbox"]') as HTMLElement
   await act(async () => {editor.innerHTML = '<p><strong>Bring &lt;tools&gt;</strong></p>'; editor.dispatchEvent(new window.Event('input', {bubbles: true}))})

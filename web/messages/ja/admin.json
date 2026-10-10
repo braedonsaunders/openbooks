@@ -5529,7 +5529,9 @@
         "projects": "プロジェクト",
         "people": "人事",
         "industries": "業種",
-        "platform": "プラットフォーム"
+        "platform": "プラットフォーム",
+        "property": "不動産管理",
+        "nonprofit": "非営利組織の業務"
       },
       "childOptions": "{count, plural, one {有効化後に利用可能なオプション # 件} other {有効化後に利用可能なオプション # 件}}",
       "confirmDisable": "{name}をオフにしますか？\n\n{items}が非表示になります。データは保持され、再度有効化すると戻ります。",
@@ -5632,7 +5634,8 @@
       "searchPlaceholder": "機能を検索…",
       "noMatches": "「{query}」に一致する機能はありません。",
       "otherIndustryModules": "その他の業種モジュール",
-      "yourIndustry": "自社の業種"
+      "yourIndustry": "自社の業種",
+      "companyCountOn": "会社の機能：{total} 件中 {n} 件有効"
     },
     "taxSetup": {
       "navTitle": "税務設定",

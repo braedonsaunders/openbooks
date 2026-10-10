@@ -72,15 +72,13 @@ import { SearchInput } from '@/components/search-input'
 import { Switch } from '@/components/switch'
 import { confirmDialog } from '../../../../../lib/confirm'
 import {
-  OTHER_INDUSTRY_MODULES,
   buildFeatureTree,
+  summarizeFeatures,
   featureSearchMatcher,
   featureToggleRefusalMessage,
   filterFeatureTree,
   groupFeatureSections,
   groupFeatureChildren,
-  industryLenses,
-  type FeatureIndustry,
   type FeatureTreeNode,
   type FeatureTreeSection,
 } from './feature-tree'
@@ -152,7 +150,7 @@ const ICONS: Record<string, LucideIcon> = {
   hrm: IdCard,
   payroll: Wallet,
   expenses: Receipt,
-  // Industries
+  // Property and nonprofit
   propertyManagement: Building,
   nonprofit: HeartHandshake,
   // Platform
@@ -193,33 +191,23 @@ function activeCategory(value: string | null): FeatureCategory {
  * matches grouped under their tab names, with per-tab match counts on the
  * tab strip. Choosing a tab clears the search.
  *
- * The Industries tab is a per-vertical view: one section per supported
- * industry (the org's own first), listing the switches that industry's
- * wizard preset turns on — the same switches the home tabs carry, never a
- * second gate. Industry-only modules no preset names still render, under
- * "Other industry modules", so no switch can fall off the page.
- *
  * Hierarchy: features that declare a `parentKey` render NESTED under their
  * parent row — indented, smaller, behind a quiet rail — and are not rendered
  * at all while the parent is off. The parent row then carries a
  * "N options once enabled" hint instead. Hiding is presentation only: stored
  * values are untouched, so re-enabling the parent restores its children.
  * `requiresAll` entries are cross-module requirements, not children, and stay
- * top-level rows with their "Requires X" reason. Counts cover only visible
- * rows so the numbers stay honest.
+ * top-level rows with their "Requires X" reason. The company summary counts
+ * every registered capability, including children hidden behind an off parent.
  */
 export function FeaturesWorkspace({
   features,
   disableStatus = {},
   wizardHref,
-  industries = [],
-  orgIndustry = null,
 }: {
   features: Feature[]
   disableStatus?: Record<string, DisableStatus>
   wizardHref?: string
-  industries?: FeatureIndustry[]
-  orgIndustry?: string | null
 }) {
   const t = useTranslations('admin')
   const router = useRouter()
@@ -309,7 +297,7 @@ export function FeaturesWorkspace({
   }
 
   // Nested sections: children attach to their parent's group (in registry
-  // order) and vanish — from the page AND the counts — while the parent is off.
+  // order) and hide while the parent is off. The company summary retains them.
   const sections = buildFeatureTree(features, state, FEATURE_CATEGORIES)
   const categoryLabel = (category: string) => t(`setup.features.categories.${category}`)
   const groupLabel = (group: string) => t.has(`setup.features.groups.${group}`) ? t(`setup.features.groups.${group}`) : t('setup.features.groups.other')
@@ -325,23 +313,7 @@ export function FeaturesWorkspace({
   ])
   const results = matcher ? filterFeatureTree(sections, matcher) : null
   const home = sections.find((section) => section.category === tab)
-  const lenses = tab === 'industries' ? industryLenses(sections, industries, orgIndustry) : []
-  // The Industries tab repeats switches across verticals; its summary counts
-  // each feature once.
-  const lensNodes = new Map(
-    lenses.flatMap(({ section }) =>
-      section.groups.flatMap((group) => [group.parent, ...group.visibleChildren].map((node) => [node.row.key, node] as const)),
-    ),
-  )
-  const current: FeatureTreeSection | undefined =
-    tab === 'industries'
-      ? {
-          category: tab,
-          groups: [],
-          visibleTotal: lensNodes.size,
-          visibleOn: [...lensNodes.values()].filter((node) => node.on).length,
-        }
-      : home
+  const companySummary = summarizeFeatures(features, state)
   const resultCount = (category: string) =>
     results?.find((section) => section.category === category)?.visibleTotal ?? 0
   const countOn = (section: FeatureTreeSection | undefined) =>
@@ -437,9 +409,9 @@ export function FeaturesWorkspace({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <SearchInput placeholder={t('setup.features.searchPlaceholder')} value={query} onValueChange={setQuery} />
         <div className="flex items-center gap-3">
-          {results ? null : (
-            <span className="text-xs tabular-nums text-slate-500 dark:text-slate-400">{countOn(current)}</span>
-          )}
+          <span data-feature-summary className="text-xs tabular-nums text-slate-500 dark:text-slate-400">
+            {t('setup.features.companyCountOn', companySummary)}
+          </span>
           {wizardHref ? (
             <Button asChild variant="outline" size="sm">
               <Link href={wizardHref}>
@@ -468,32 +440,6 @@ export function FeaturesWorkspace({
             </section>
           ))
         )
-      ) : tab === 'industries' ? (
-        lenses.map(({ key, section }) => (
-          <section key={key} className="space-y-2.5">
-            <div className="flex items-end justify-between gap-4 px-1">
-              <div className="min-w-0">
-                <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
-                  {key === OTHER_INDUSTRY_MODULES
-                    ? t('setup.features.otherIndustryModules')
-                    : t(`setup.wizard.industries.${key}.title`)}
-                  {key === orgIndustry ? (
-                    <span className="rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-medium text-teal-700 dark:bg-teal-950/50 dark:text-teal-300">
-                      {t('setup.features.yourIndustry')}
-                    </span>
-                  ) : null}
-                </h3>
-                {key === OTHER_INDUSTRY_MODULES ? null : (
-                  <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                    {t(`setup.wizard.industries.${key}.description`)}
-                  </p>
-                )}
-              </div>
-              <span className="shrink-0 text-xs tabular-nums text-slate-400 dark:text-slate-500">{countOn(section)}</span>
-            </div>
-            {renderPanel(section)}
-          </section>
-        ))
       ) : home ? (
         groupFeatureSections(home, FEATURE_GROUPS[tab]).map(({ key, section }) => (
           <section key={key} className="space-y-2.5" aria-label={groupLabel(key)}>

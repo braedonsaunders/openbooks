@@ -46,6 +46,8 @@ const features = [
   { key: 'budgets', category: 'finance', group: 'planning', enabled: true },
   { key: 'inventory', category: 'inventory', group: 'items', enabled: true },
   { key: 'manufacturing', category: 'manufacturing', group: 'production', enabled: false, requiresAll: ['inventory'] },
+  { key: 'propertyManagement', category: 'property', group: 'property', enabled: false },
+  { key: 'nonprofit', category: 'nonprofit', group: 'nonprofit', enabled: false },
 ]
 
 /** Model the installed Next history boundary, including its internal-write bypass.
@@ -98,6 +100,11 @@ test('Features tabs use immediate presentation history and preserve drafts; a ge
     </NextIntlClientProvider>,
   )
   await act(async () => show())
+  const companySummary = host.querySelector('[data-feature-summary]')?.textContent
+  assert.match(companySummary ?? '', /Company features: 2 of 5 on/)
+  assert.equal(host.querySelector('a[href*="tab=industries"]'), null)
+  assert.equal(host.querySelectorAll('a[href*="tab=property"]').length, 1)
+  assert.equal(host.querySelectorAll('a[href*="tab=nonprofit"]').length, 1)
   const draft = host.querySelector('input[aria-label="Unsaved settings draft"]') as HTMLInputElement
   draft.value = 'Unsaved edit'
   const manufacturing = host.querySelector('a[href*="tab=manufacturing"]')!
@@ -113,6 +120,7 @@ test('Features tabs use immediate presentation history and preserve drafts; a ge
   assert.equal(new URLSearchParams(window.location.search).get('draft'), 'kept')
   assert.equal(window.location.hash, '#features')
   assert.match(host.textContent ?? '', /Production and material planning/)
+  assert.equal(host.querySelector('[data-feature-summary]')?.textContent, companySummary, 'changing feature areas does not reinterpret the company total')
   assert.equal(host.querySelector('a[href*="tab=manufacturing"]')?.getAttribute('aria-current'), 'page')
   assert.equal(host.querySelector('a[href*="tab=finance"]')?.getAttribute('aria-current'), null)
   assert.equal(navigationPendingSnapshot().navigation, null)
