@@ -198,8 +198,8 @@ async function runContext(
  *
  * The population predicates are the RUN's, not readiness's own: a
  * subsidiary-scoped pay schedule pays only that entity's employees, and an
- * employee terminated before the period started requires inclusion in a final-pay
- * run (calculatePayRun applies both). Describing a different population from the
+ * employee terminated before the period started requires scoped final pay or an
+ * explicit supplemental earning. Describing a different population from the
  * one that will be paid makes every per-employee count on this screen wrong.
  */
 async function scope(

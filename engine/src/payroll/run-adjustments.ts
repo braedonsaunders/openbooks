@@ -5,7 +5,7 @@ import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { normalizeMoney } from "../money/money.ts";
 import { PayrollError } from "./error.ts";
 import { invalidateCalculatedRun } from "./run-lifecycle.ts";
-import { finalPayEmploymentIdentity, namedFinalPayEmployment } from "./employment-roster.ts";
+import { finalPayEmploymentIdentity, namedFinalPayEmployment, namedSupplementalEmployment, supplementalEmploymentIdentity } from "./employment-roster.ts";
 import { assertBankDepositAdjustment } from "./run-bank-input.ts";
 import { lockAndCheckPayrollRunPopulation, payrollSubsidiaryInScope, type PayrollSubsidiaryScope } from "./scope.ts";
 
@@ -241,6 +241,15 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
         periodStart: sql`${run.period_start}`, periodEnd: sql`${run.period_end}`,
         runType: sql`${run.run_type}`, document: sql`${documentId}`,
       };
+      // The first earning must be authorable before it can admit the employee.
+      // Existing exclusions still govern whether calculation will pay them.
+      const pendingEarning = mutation.action === "add" ? persistAdjustmentMoney(mutation.amount) : null;
+      const supplementalAdmission = mutation.action === "add" && pendingEarning !== null
+        ? sql`(${supplementalEmploymentIdentity(rosterColumns)} and ${pendingEarning}::numeric>0
+            and exists(select 1 from pay_components pending_component
+              where pending_component.org_id=${orgId} and pending_component.id=${mutation.componentId}
+                and pending_component.is_active and pending_component.kind='earning'))`
+        : namedSupplementalEmployment(rosterColumns);
       // The party row rides along so a refusal can name the employee and the
       // exact failed predicate — on a roster of up to 2000 an unnamed refusal
       // is unactionable.
@@ -248,7 +257,8 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
         display_name: string | null; party_active: boolean; profile_active: boolean | null; terminated_on: string | null; final_pay_eligible: boolean;
       }>(sql`
         select p.display_name, p.is_active as party_active, prof.is_active as profile_active, er.terminated_on::text,
-               ${mutation.action === "include" ? finalPayEmploymentIdentity(rosterColumns) : namedFinalPayEmployment(rosterColumns)} as final_pay_eligible
+               (${mutation.action === "include" ? finalPayEmploymentIdentity(rosterColumns) : namedFinalPayEmployment(rosterColumns)}
+                or ${supplementalAdmission}) as final_pay_eligible
           from parties p
           left join employee_roles er on er.org_id=p.org_id and er.party_id=p.id
           left join employee_payroll_profiles prof
