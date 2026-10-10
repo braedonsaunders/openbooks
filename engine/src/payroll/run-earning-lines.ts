@@ -398,6 +398,8 @@ export async function appendStatutoryHolidayEarningLines(
         // Cross-struct boundary, re-parsed like the retro lines above.
         amount: parseMoney(line.amount),
         sequence: line.sequence,
+        // Current holiday wages do not withdraw previously banked alternate days.
+        fundedByEntitlementBank: false,
       });
     }
   }
@@ -594,6 +596,8 @@ export async function applyRunLineAdjustments(
     lines.push({
       componentId: adj.id as string, kind: adj.kind as Line["kind"],
       runAdjustmentId: String(adj.adjustment_id),
+      // Recorded holiday units are ordinary wages, not an alternate-day draw.
+      fundedByEntitlementBank: adj.system_key === "stat_holiday" ? false : undefined,
       description: (adj.note as string | null) || (adj.name as string),
       hours: quantityUnits || adj.adj_hours == null ? undefined : String(adj.adj_hours),
       amount, sequence: Number(adj.sequence),
