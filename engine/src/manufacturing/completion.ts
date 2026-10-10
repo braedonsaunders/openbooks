@@ -303,6 +303,9 @@ export async function completeWorkOrder(
   });
   const itemLabels = await loadItemLabels(tx, orgId, itemIds);
   const producedProfile = await resolveProfile(orgId, order.produced_item_id, tx as Runner, true);
+  if (order.standard_cost_snapshot !== null && producedProfile.costingMethod !== "standard") {
+    refuse("The finished item's costing method differs from this order's released standard snapshot.", "finished_good_costing_method_changed", "Restore standard costing for the item before receiving this order. Resolve its released work through a governed disposition before adopting another costing method.", 409);
+  }
   const materials = await loadMaterials(tx, orgId, order.id, true);
   const wipId = await manufacturingControlAccount(tx, orgId, order.subsidiary_id, "mfgWip");
   const usage = producedProfile.costingMethod === "standard"

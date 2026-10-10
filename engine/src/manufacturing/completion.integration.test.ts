@@ -32,6 +32,7 @@ import { addCalendarDays,businessToday } from "../platform/business-date.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg, seedApprovalFlow, seedPayrollPerson, seedActiveEmployment, type ScratchOrg } from "../testing/fixtures.ts";
 import { receiveInventory } from "../inventory/movements.ts";
 import { getOnHand, getOnHandWith } from "../inventory/position.ts";
+import { assertCostingPolicyChangeAllowed, lockItemInventoryProfile } from "../inventory/profile-policy.ts";
 import { recordNormalScrap } from "./scrap.ts";
 import { executeManufacturingReceipt, executeManufacturingIssue } from "./execution.ts";
 import { readManufacturingRecord, listManufacturingRecords, searchManufacturingChoices, manufacturingOptions, manufacturingTracking } from "./workspace.ts";
@@ -487,6 +488,35 @@ const cases: Case[] = [
     assert.equal(result.value, "107.0000");
     assert.equal(await wip(f, wo.number), "0.0000");
     assert.equal((await getOnHand(f.org.orgId, f.org.items.assembly, f.org.stockLocationId2)).value, "107.0000");
+  } },
+  { name: "released primary output refuses actual-cost policy changes and retains its frozen standard after restoration", run: async (f) => {
+    const itemId=f.org.items.standard;
+    const order=await conversionOrder(f,itemId);
+    await run(tx=>completeWorkOrderOperation(tx,f.org.orgId,f.actorId,order.id,order.operation,{doneQty:'10'}));
+    const frozen=(await run(tx=>getWorkOrder(tx,f.org.orgId,order.id)))!.standardCostSnapshot;
+    assert.equal(frozen,'2.0000');
+    await run(async tx=>{
+      const current=await lockItemInventoryProfile(tx,f.org.orgId,itemId);assert(current);
+      const assessment=await assertCostingPolicyChangeAllowed(tx,f.org.orgId,itemId,current,{costingMethod:'fifo',tracking:'none'},null);
+      assert.deepEqual(assessment,{changed:true,historyExisted:false},'released work alone is not posted stock history');
+      const changed=await tx.execute(sql`update item_inventory_profiles set costing_method='fifo',updated_at=now(),updated_by=${f.actorId} where org_id=${f.org.orgId} and item_id=${itemId} returning id`);
+      assert.equal(changed.rows.length,1);
+    });
+    const before=await counts(f),balance=await wip(f,order.number);
+    await refuse(run(tx=>completeWorkOrder(tx,f.org.orgId,f.actorId,order.id,{quantity:'10'})),'finished_good_costing_method_changed','released standard snapshot','Restore standard costing');
+    assert.deepEqual(await counts(f),before);assert.equal(await wip(f,order.number),balance);
+    assert.equal((await run(tx=>getWorkOrder(tx,f.org.orgId,order.id)))!.quantityCompleted,'0.0000');
+    await run(async tx=>{
+      const current=await lockItemInventoryProfile(tx,f.org.orgId,itemId);assert(current);
+      await assertCostingPolicyChangeAllowed(tx,f.org.orgId,itemId,current,{costingMethod:'standard',tracking:'none'},null);
+      const changed=await tx.execute(sql`update item_inventory_profiles set costing_method='standard',standard_cost='9',updated_at=now(),updated_by=${f.actorId} where org_id=${f.org.orgId} and item_id=${itemId} returning id`);
+      assert.equal(changed.rows.length,1);
+    });
+    const received=await run(tx=>completeWorkOrder(tx,f.org.orgId,f.actorId,order.id,{quantity:'10'}));
+    assert.equal(received.value,'20.0000','the later item standard does not replace the released two-per-unit snapshot');
+    assert.equal(received.relievedWip,balance);assert.equal(await wip(f,order.number),'0.0000');
+    assert.equal((await run(tx=>getWorkOrder(tx,f.org.orgId,order.id)))!.standardCostSnapshot,frozen);
+    assert.equal((await withBypassContext(()=>getOnHandWith(db,f.org.orgId,itemId,f.org.stockLocationId2,{subsidiaryId:f.org.subsidiaryId}))).value,'20.0000');
   } },
   { name: "standard output splits labor and overhead variances from production variance", run: async (f) => {
     await withBypassContext(() => db.execute(sql`update item_inventory_profiles set standard_cost='10.70'
