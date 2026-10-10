@@ -13,7 +13,7 @@ import {
 } from "@openbooks/engine/src/billing/subscription-billing.ts";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { defineRoute } from "@/lib/api/route";
-import { guardSubsidiaryScope } from "../../../lib/authz";
+import { guardSubsidiaryScope } from "@/lib/authz";
 import { notFound } from "@/lib/api/responses";
 
 export const runtime = "nodejs";
