@@ -1,6 +1,6 @@
 {
   "title": "Programação",
-  "description": "Plan people and resources by day or hour on configurable boards. Project schedules live on project records.",
+  "description": "Planeje pessoas e recursos por dia ou hora em quadros configuráveis. Os cronogramas de projeto ficam nos registros dos projetos.",
   "views": {
     "grid": "Grade",
     "targets": "Por destino",
@@ -44,12 +44,12 @@
     "date": "Ir para a data",
     "resourceBoards": "Recursos",
     "manageBoards": "Gerenciar quadros",
-    "display": "Display options",
-    "showHoursColumn": "Show booked hour column",
-    "email": "Email schedule",
-    "openBoard": "Open board",
-    "returnProject": "Return to project",
-    "retry": "Retry schedule load"
+    "display": "Opções de exibição",
+    "showHoursColumn": "Mostrar a coluna de horas alocadas",
+    "email": "Enviar escala por e-mail",
+    "openBoard": "Abrir quadro",
+    "returnProject": "Voltar ao projeto",
+    "retry": "Tentar carregar a escala novamente"
   },
   "empty": {
     "title": "Configure seu primeiro quadro",
@@ -162,7 +162,7 @@
     "notesPlaceholder": "O que a equipe precisa saber"
   },
   "targets": {
-    "where": "Target",
+    "where": "Destino",
     "count": "{count} linhas reservadas",
     "add": "Adicionar um destino",
     "empty": "Nada foi alocado nessas datas ainda.",
@@ -174,8 +174,8 @@
     "zoomOut": "Reduzir"
   },
   "calendar": {
-    "person": "Person or resource",
-    "everyone": "Everyone",
+    "person": "Pessoa ou recurso",
+    "everyone": "Todos",
     "onLeave": "{count} ausentes",
     "more": "Mais {count}"
   },
@@ -275,7 +275,7 @@
     "link": "Ver sua programação",
     "footer": "Você recebe esta mensagem porque {board} avisa as pessoas quando a programação delas muda.",
     "noTransport": "O e-mail não está configurado, então as pessoas foram avisadas somente no OpenBooks. Configure o e-mail em Administração → E-mail.",
-    "nativeDistribution": "Email schedules through a reviewed Schedule distribution Flow."
+    "nativeDistribution": "Envie escalas por e-mail por meio de um Fluxo revisado de distribuição de escala."
   },
   "mine": {
     "tab": "Programação",
@@ -300,27 +300,27 @@
     "return": "Voltar à agenda"
   },
   "distribution": {
-    "title": "Email schedule",
-    "close": "Close",
-    "preview": "Preview report",
-    "send": "Send reviewed schedule",
-    "working": "Preparing…",
-    "refused": "Schedule distribution could not be completed.",
-    "explanation": "Choose personal reports or a whole-board report for every selected recipient. Published bookings and literal source-date observations are shown separately. Sending uses your enabled Schedule distribution Flow and configured email provider.",
+    "title": "Enviar escala por e-mail",
+    "close": "Fechar",
+    "preview": "Pré-visualizar relatório",
+    "send": "Enviar escala revisada",
+    "working": "Preparando…",
+    "refused": "Não foi possível concluir a distribuição da escala.",
+    "explanation": "Escolha relatórios pessoais ou um relatório do quadro inteiro para cada destinatário selecionado. As reservas publicadas e as observações literais das datas de origem são exibidas separadamente. O envio usa o seu Fluxo ativado de distribuição de escala e o provedor de e-mail configurado.",
     "everyone": "Todos no público escolhido",
-    "reason": "Reason for sending",
-    "queued": "The reviewed schedule is queued for email delivery.",
-    "deliveryStatus": "Queued is not delivered. Follow the native Flow run, Email log and delivery audit for actual provider results.",
-    "version": "Reviewed version",
-    "recipients": "Exact recipients and associated schedules",
-    "missingEmail": "Email missing",
-    "report": "Recipient schedule report preview",
-    "flows": "Configure native Flows",
+    "reason": "Motivo do envio",
+    "queued": "A escala revisada está na fila para envio por e-mail.",
+    "deliveryStatus": "Na fila não significa entregue. Acompanhe a execução do Fluxo nativo, o log de e-mails e a auditoria de entrega para ver os resultados reais do provedor.",
+    "version": "Versão revisada",
+    "recipients": "Destinatários exatos e escalas associadas",
+    "missingEmail": "E-mail ausente",
+    "report": "Prévia do relatório de escala do destinatário",
+    "flows": "Configurar Fluxos nativos",
     "contacts": "Contatos de envio de recursos",
-    "sharing": "Report sharing",
-    "personal": "Each recipient’s own schedule/resources",
-    "wholeBoard": "The whole visible board schedule for each recipient",
-    "wholeBoardReview": "Every selected recipient will receive the whole reviewed board report, including other people/resources. Board Settings must explicitly allow this sharing within the board’s legal entity.",
+    "sharing": "Compartilhamento do relatório",
+    "personal": "Escala/recursos do próprio destinatário",
+    "wholeBoard": "A escala completa do quadro visível para cada destinatário",
+    "wholeBoardReview": "Todos os destinatários selecionados receberão o relatório completo e revisado do quadro, incluindo outras pessoas/recursos. As Configurações do quadro devem permitir explicitamente esse compartilhamento dentro da entidade legal do quadro.",
     "cohort": "Público de funcionários",
     "cohorts": {
       "scope": "Funcionários atuais do escopo e emprestados",
@@ -364,10 +364,10 @@
     },
     "pdfOptions": {
       "paperSize": {
-        "letter": "US Letter",
+        "letter": "Carta (EUA)",
         "a4": "A4",
-        "legal": "US Legal",
-        "tabloid": "Tabloid"
+        "legal": "Ofício (EUA)",
+        "tabloid": "Tabloide"
       },
       "orientation": {
         "portrait": "Retrato",

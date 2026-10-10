@@ -1,6 +1,6 @@
 {
   "title": "Planification",
-  "description": "Plan people and resources by day or hour on configurable boards. Project schedules live on project records.",
+  "description": "Planifiez des personnes et des ressources à la journée ou à l’heure sur des tableaux configurables. Les plannings de projet se trouvent dans les fiches projet.",
   "views": {
     "grid": "Grille",
     "targets": "Par destination",
@@ -44,12 +44,12 @@
     "date": "Aller à la date",
     "resourceBoards": "Ressources",
     "manageBoards": "Gérer les tableaux",
-    "display": "Display options",
-    "showHoursColumn": "Show booked hour column",
-    "email": "Email schedule",
-    "openBoard": "Open board",
-    "returnProject": "Return to project",
-    "retry": "Retry schedule load"
+    "display": "Options d’affichage",
+    "showHoursColumn": "Afficher la colonne des heures réservées",
+    "email": "Envoyer le planning par courriel",
+    "openBoard": "Ouvrir le tableau",
+    "returnProject": "Retour au projet",
+    "retry": "Réessayer le chargement du planning"
   },
   "empty": {
     "title": "Configurez votre premier tableau",
@@ -162,7 +162,7 @@
     "notesPlaceholder": "Ce que l’équipe doit savoir"
   },
   "targets": {
-    "where": "Target",
+    "where": "Destination",
     "count": "{count} lignes réservées",
     "add": "Ajouter une destination",
     "empty": "Rien n’est encore affecté sur ces dates.",
@@ -174,8 +174,8 @@
     "zoomOut": "Zoom arrière"
   },
   "calendar": {
-    "person": "Person or resource",
-    "everyone": "Everyone",
+    "person": "Personne ou ressource",
+    "everyone": "Tout le monde",
     "onLeave": "{count} absents",
     "more": "{count} de plus"
   },
@@ -275,7 +275,7 @@
     "link": "Voir votre planning",
     "footer": "Vous recevez ce message parce que {board} prévient les personnes lorsque leur planning change.",
     "noTransport": "L’e-mail n’est pas configuré : les personnes ont donc été prévenues uniquement dans OpenBooks. Configurez l’e-mail dans Administration → E-mail.",
-    "nativeDistribution": "Email schedules through a reviewed Schedule distribution Flow."
+    "nativeDistribution": "Envoyez les plannings par courriel via un Flow de distribution du planning vérifié."
   },
   "mine": {
     "tab": "Planning",
@@ -300,27 +300,27 @@
     "return": "Retour au planning"
   },
   "distribution": {
-    "title": "Email schedule",
-    "close": "Close",
-    "preview": "Preview report",
-    "send": "Send reviewed schedule",
-    "working": "Preparing…",
-    "refused": "Schedule distribution could not be completed.",
-    "explanation": "Choose personal reports or a whole-board report for every selected recipient. Published bookings and literal source-date observations are shown separately. Sending uses your enabled Schedule distribution Flow and configured email provider.",
+    "title": "Envoyer le planning par courriel",
+    "close": "Fermer",
+    "preview": "Aperçu du rapport",
+    "send": "Envoyer le planning vérifié",
+    "working": "Préparation…",
+    "refused": "La distribution du planning n’a pas pu être effectuée.",
+    "explanation": "Choisissez des rapports personnels ou un rapport de tableau complet pour chaque destinataire sélectionné. Les réservations publiées et les observations littérales des dates sources sont présentées séparément. L’envoi utilise votre Flow de distribution du planning activé et le fournisseur de courriel configuré.",
     "everyone": "Tous les membres du public choisi",
-    "reason": "Reason for sending",
-    "queued": "The reviewed schedule is queued for email delivery.",
-    "deliveryStatus": "Queued is not delivered. Follow the native Flow run, Email log and delivery audit for actual provider results.",
-    "version": "Reviewed version",
-    "recipients": "Exact recipients and associated schedules",
-    "missingEmail": "Email missing",
-    "report": "Recipient schedule report preview",
-    "flows": "Configure native Flows",
+    "reason": "Motif de l’envoi",
+    "queued": "Le planning vérifié est en file d’attente pour l’envoi par courriel.",
+    "deliveryStatus": "En file d’attente ne signifie pas livré. Consultez l’exécution du Flow natif, le journal des courriels et l’audit de livraison pour connaître les résultats réels du fournisseur.",
+    "version": "Version vérifiée",
+    "recipients": "Destinataires exacts et plannings associés",
+    "missingEmail": "Courriel manquant",
+    "report": "Aperçu du rapport de planning du destinataire",
+    "flows": "Configurer les Flows natifs",
     "contacts": "Contacts de livraison des ressources",
-    "sharing": "Report sharing",
-    "personal": "Each recipient’s own schedule/resources",
-    "wholeBoard": "The whole visible board schedule for each recipient",
-    "wholeBoardReview": "Every selected recipient will receive the whole reviewed board report, including other people/resources. Board Settings must explicitly allow this sharing within the board’s legal entity.",
+    "sharing": "Partage du rapport",
+    "personal": "Planning et ressources propres à chaque destinataire",
+    "wholeBoard": "Le planning complet du tableau visible pour chaque destinataire",
+    "wholeBoardReview": "Chaque destinataire sélectionné recevra le rapport complet du tableau vérifié, y compris les autres personnes et ressources. Les paramètres du tableau doivent autoriser expressément ce partage au sein de l’entité juridique du tableau.",
     "cohort": "Destinataires employés",
     "cohorts": {
       "scope": "Employés actifs du périmètre et empruntés",
@@ -364,10 +364,10 @@
     },
     "pdfOptions": {
       "paperSize": {
-        "letter": "US Letter",
+        "letter": "Lettre US",
         "a4": "A4",
-        "legal": "US Legal",
-        "tabloid": "Tabloid"
+        "legal": "Légal US",
+        "tabloid": "Tabloïd"
       },
       "orientation": {
         "portrait": "Portrait",

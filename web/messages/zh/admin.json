@@ -4233,15 +4233,15 @@
       "prefillTimesheets": "预填工时表",
       "prefillCrewTime": "预填班组工时",
       "prefillFieldTickets": "预填现场工单",
-      "notifyAssignees": "Notify people in the app",
+      "notifyAssignees": "在应用内通知相关人员",
       "resourceKind": "资源类型",
       "showTotals": "显示底部合计",
       "cellColorRules": "颜色规则",
       "field": "字段",
       "match": "匹配",
       "dayPolicyKnown": "已配置工作日时间",
-      "showHoursColumn": "Show booked hour column",
-      "distributionVisibility": "Schedule report sharing",
+      "showHoursColumn": "显示已预订小时列",
+      "distributionVisibility": "排程报告共享",
       "purpose": "用途",
       "autonomy": "声明的审核级别",
       "boardId": "排程看板",
@@ -4444,7 +4444,7 @@
       "scheduleBoardPrefillTimesheets": "此排程板上已发布的安排会作为计划时间显示在每个人的周工时表上，可一键添加，然后确认或更正。",
       "scheduleBoardPrefillCrewTime": "此排程板上已发布的项目安排会在工头该项目当天的班组工时表中提供已安排的班组和工时，可一键添加。",
       "scheduleBoardPrefillFieldTickets": "此排程板上已发布的项目安排会在该项目的现场工单中提供工单期间已安排的班组和工时，可一键添加。",
-      "scheduleBoardNotifyAssignees": "Send in-app notices for published changes. Configure schedule email separately using the native Schedule distribution Flow and its publish/update triggers.",
+      "scheduleBoardNotifyAssignees": "为已发布的变更发送应用内通知。排程邮件请使用原生“排程分发”流程及其发布/更新触发器单独配置。",
       "scheduleCode": "最多 16 个大写字母、数字或 / & + . _ -，如 TRAIN、SHOP 或 FORCED。",
       "scheduleCodeCategory": "工作代码计入计划时间。不可用代码标记人员不工作的日期，无需登记休假。",
       "scheduleCodeColor": "使用此代码的安排所显示的颜色，以十六进制值表示，如 #38bdf8。",
@@ -4452,8 +4452,8 @@
       "scheduleShowTotals": "显示预订行数和扣除配置休息后的实际预订小时。",
       "scheduleCellColorRules": "按顺序使用首个不区分大小写的匹配规则。请使用六位十六进制颜色，如 #38bdf8。",
       "scheduleBoardDayPolicyKnown": "仅知道原始日期时关闭。历史记录仍显示但没有工时；整日预约需要配置开始、结束和休息时间。",
-      "scheduleShowHoursColumn": "Show the right-side sum of booked hours. Source dates without hours remain unknown. Daily footer totals are configured separately.",
-      "scheduleDistributionVisibility": "Personal reports contain only the recipient’s own schedule or associated resources. Whole-board reports require an explicit sharing policy and a legal-entity-scoped board. Every send still requires a reviewed audience/version or an authored, enabled native Flow.",
+      "scheduleShowHoursColumn": "在右侧显示已预订小时的合计。没有小时数的源日期仍视为未知。每日页脚合计需单独配置。",
+      "scheduleDistributionVisibility": "个人报告仅包含收件人本人的排程或其关联资源。整个排程板的报告需要明确的共享策略，且排程板必须限定在某一法人实体内。每次发送仍须经过已审核的收件范围/版本，或由已编写并启用的原生流程发起。",
       "scheduleAutomaticDelivery": "可选报告策略：设置您自己的授权身份和看板时区。另行启用排班发送流程并明确指定星期和时间。清除此策略将停止后续发送，但保留发送历史。",
       "hrmJobDescriptionName": "在库中显示的名称，例如：项目经理（现场）。",
       "hrmJobDescriptionTitle": "求职者在职位发布中看到的职位名称。",
@@ -5234,10 +5234,10 @@
         "combined": "自动范围与选定收件人"
       },
       "schedulePdfPaper": {
-        "letter": "US Letter",
+        "letter": "美国信纸",
         "a4": "A4",
-        "legal": "US Legal",
-        "tabloid": "Tabloid"
+        "legal": "美国法律用纸",
+        "tabloid": "小报纸"
       },
       "schedulePdfOrientation": {
         "portrait": "纵向",
@@ -7387,7 +7387,7 @@
         "post_document": "过账文档",
         "lock_record": "锁定记录",
         "unlock_record": "解锁记录",
-        "distribute_schedule": "Email reviewed schedule",
+        "distribute_schedule": "通过邮件发送已审核的排程",
         "send_board_schedule": "发送当前看板排班"
       },
       "recipients": "收件人",
@@ -7418,7 +7418,7 @@
       "lockExemptRoles": "豁免角色",
       "lockExemptHint": "管理员始终豁免；所选角色仍可编辑。",
       "unlockHint": "移除流程锁定，使记录可再次编辑。",
-      "scheduleReportHelp": "Email the immutable reviewed schedule report to its exact recipient audience. It may be a personal report or an explicitly permitted whole-board report. Contact, legal entity, schedule version and provider changes refuse delivery.",
+      "scheduleReportHelp": "将不可变的已审核排程报告通过邮件发送给确切的收件范围。可以是个人报告，也可以是经明确许可的整个排程板报告。联系人、法人实体、排程版本或服务商发生变更时，将拒绝投递。",
       "automaticScheduleHelp": "使用看板保存的授权操作员、当前原生收件范围和报告策略。每次计划执行生成最新报告；编辑或预览流程不会发送邮件。"
     },
     "gate": {

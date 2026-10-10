@@ -3496,12 +3496,12 @@
       },
       "training-sessions": {
         "title": "Sessions",
-        "singular": "Sessions",
+        "singular": "Session",
         "description": "Approuvez les règles des formations, planifiez les sessions et consignez les résultats."
       },
       "training-participants": {
         "title": "Participants",
-        "singular": "Participants",
+        "singular": "Participant",
         "description": "Approuvez les règles des formations, planifiez les sessions et consignez les résultats."
       },
       "business-calendars": {
@@ -4158,15 +4158,15 @@
       "prefillTimesheets": "Préremplir les feuilles de temps",
       "prefillCrewTime": "Préremplir le temps d’équipe",
       "prefillFieldTickets": "Préremplir les bons de régie",
-      "notifyAssignees": "Notify people in the app",
+      "notifyAssignees": "Notifier les personnes dans l’application",
       "resourceKind": "Type de ressource",
       "showTotals": "Afficher les totaux en bas",
       "cellColorRules": "Règles de couleur",
       "field": "Champ",
       "match": "Correspondance",
       "dayPolicyKnown": "Les horaires de la journée sont configurés",
-      "showHoursColumn": "Show booked hour column",
-      "distributionVisibility": "Schedule report sharing",
+      "showHoursColumn": "Afficher la colonne des heures réservées",
+      "distributionVisibility": "Partage des rapports de planning",
       "purpose": "Objet",
       "autonomy": "Niveau de révision déclaré",
       "boardId": "Tableau de planification",
@@ -4369,7 +4369,7 @@
       "scheduleBoardPrefillTimesheets": "Les affectations publiées sur ce tableau apparaissent dans la feuille de temps hebdomadaire de chaque personne comme du temps planifié qu’elle peut ajouter en un clic, puis confirmer ou corriger.",
       "scheduleBoardPrefillCrewTime": "Les affectations de projet publiées sur ce tableau proposent, sur la feuille de temps d’équipe du contremaître pour ce projet et ce jour, l’équipe et les heures affectées, ajoutées en un clic.",
       "scheduleBoardPrefillFieldTickets": "Les affectations de projet publiées sur ce tableau proposent, sur le bon de régie de ce projet, l’équipe et les heures affectées pour la période du bon, ajoutées en un clic.",
-      "scheduleBoardNotifyAssignees": "Send in-app notices for published changes. Configure schedule email separately using the native Schedule distribution Flow and its publish/update triggers.",
+      "scheduleBoardNotifyAssignees": "Envoie des avis dans l’application pour les modifications publiées. Configurez séparément le courriel du planning avec le Flow natif de distribution du planning et ses déclencheurs de publication et de mise à jour.",
       "scheduleCode": "Jusqu’à 16 lettres majuscules, chiffres ou / & + . _ -, par exemple TRAIN, SHOP ou FORCED.",
       "scheduleCodeCategory": "Les codes de travail comptent comme du temps planifié. Les codes d’indisponibilité marquent un jour où la personne ne travaille pas, sans enregistrer d’absence.",
       "scheduleCodeColor": "La couleur d’affichage des affectations utilisant ce code, en valeur hexadécimale, par exemple #38bdf8.",
@@ -4377,8 +4377,8 @@
       "scheduleShowTotals": "Afficher les lignes et heures réservées après les pauses configurées.",
       "scheduleCellColorRules": "La première règle correspondante, sans distinction de casse, définit la couleur. Utilisez un code hexadécimal à six chiffres, comme #38bdf8.",
       "scheduleBoardDayPolicyKnown": "Désactivez si seules les dates sont connues. L’historique reste visible sans heures ; configurez les horaires avant de réserver une journée.",
-      "scheduleShowHoursColumn": "Show the right-side sum of booked hours. Source dates without hours remain unknown. Daily footer totals are configured separately.",
-      "scheduleDistributionVisibility": "Personal reports contain only the recipient’s own schedule or associated resources. Whole-board reports require an explicit sharing policy and a legal-entity-scoped board. Every send still requires a reviewed audience/version or an authored, enabled native Flow.",
+      "scheduleShowHoursColumn": "Affiche à droite la somme des heures réservées. Les dates sources sans heures restent inconnues. Les totaux quotidiens en pied de tableau se configurent séparément.",
+      "scheduleDistributionVisibility": "Les rapports personnels ne contiennent que le planning du destinataire ou celui de ses ressources associées. Les rapports de tableau complet exigent une politique de partage explicite et un tableau rattaché à une entité juridique. Chaque envoi nécessite toujours un public ou une version vérifiés, ou un Flow natif rédigé et activé.",
       "scheduleAutomaticDelivery": "Politique facultative : choisissez votre propre opérateur autorisé et le fuseau du tableau. Activez séparément un flux de livraison du planning avec jours et heures explicites. Effacer cette politique arrête les envois futurs sans effacer leur historique.",
       "hrmJobDescriptionName": "Nom affiché dans la bibliothèque, par exemple Chef de projet – Terrain.",
       "hrmJobDescriptionTitle": "L'intitulé de poste affiché aux candidats dans l'annonce.",
@@ -5159,10 +5159,10 @@
         "combined": "Public automatique et destinataires choisis"
       },
       "schedulePdfPaper": {
-        "letter": "US Letter",
+        "letter": "Lettre US",
         "a4": "A4",
-        "legal": "US Legal",
-        "tabloid": "Tabloid"
+        "legal": "Légal US",
+        "tabloid": "Tabloïd"
       },
       "schedulePdfOrientation": {
         "portrait": "Portrait",
@@ -6955,7 +6955,7 @@
         "effectiveFrom": "En vigueur à partir du",
         "effectiveTo": "En vigueur jusqu'au",
         "billableByDefault": "Facturable par défaut",
-        "isActive": "Active",
+        "isActive": "Actif",
         "reason": "Motif"
       },
       "help": {
@@ -7387,7 +7387,7 @@
         "post_document": "Comptabiliser le document",
         "lock_record": "Verrouiller l'enregistrement",
         "unlock_record": "Déverrouiller l'enregistrement",
-        "distribute_schedule": "Email reviewed schedule",
+        "distribute_schedule": "Envoyer le planning vérifié par courriel",
         "send_board_schedule": "Envoyer le planning actuel"
       },
       "recipients": "Destinataires",
@@ -7418,7 +7418,7 @@
       "lockExemptRoles": "Rôles exemptés",
       "lockExemptHint": "Les administrateurs sont toujours exemptés ; les rôles sélectionnés peuvent encore modifier.",
       "unlockHint": "Supprime le verrou du flux pour permettre à nouveau la modification.",
-      "scheduleReportHelp": "Email the immutable reviewed schedule report to its exact recipient audience. It may be a personal report or an explicitly permitted whole-board report. Contact, legal entity, schedule version and provider changes refuse delivery.",
+      "scheduleReportHelp": "Envoie par courriel le rapport de planning vérifié et immuable à son public exact de destinataires. Il peut s’agir d’un rapport personnel ou d’un rapport de tableau complet expressément autorisé. Un changement de contact, d’entité juridique, de version du planning ou de fournisseur fait refuser la livraison.",
       "automaticScheduleHelp": "Utilise l’opérateur autorisé enregistré, les destinataires actuels et la politique du tableau. Chaque occurrence prépare un nouveau rapport ; aucun courriel n’est envoyé pendant l’édition ou l’aperçu."
     },
     "gate": {
