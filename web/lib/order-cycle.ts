@@ -30,11 +30,13 @@ import { applyPurchaseReceiptInventory } from "@openbooks/engine/src/inventory/d
 import { applySalesFulfillmentInventoryIssues } from "@openbooks/engine/src/inventory/documents-sales.ts";
 import { assertStockLocationAdmitsSubsidiary } from "@openbooks/engine/src/inventory/profile-policy.ts";
 import { InventoryError, InventoryOwnershipError } from "@openbooks/engine/src/inventory/contracts.ts";
+import { WarehouseRefusal } from "@openbooks/engine/src/inventory/warehouses.ts";
 import { loadSubsidiaryContext } from '@openbooks/engine/src/organization/subsidiaries.ts'
 import { issueSalesOrder } from '@openbooks/engine/src/sales/sales-orders.ts'
 import { openQuantitySql, orderedNetOfCancelledSql } from '@openbooks/engine/src/records/order-line-remainders.ts'
 import { receivedNotBilledMissingMessage, resolveReceivedNotBilledAccount } from '@openbooks/engine/src/records/control-accounts.ts'
 import { activeStockLocations, resolveLineStockLocation } from './stock-locations'
+import { ensureDefaultWarehouse } from '@openbooks/engine/src/inventory/warehouses.ts'
 import { isUuid } from './list-params'
 import { WORK_PERIOD_DOCUMENT_KINDS } from '@openbooks/engine/records/work-period'
 
@@ -331,6 +333,40 @@ export function missingOrderLineWarehouses(
   return lines
     .filter((line) => line.hasInventoryProfile && !line.stockLocationId)
     .map((line) => ({ lineNumber: line.lineNumber, itemId: line.itemId }))
+}
+
+/**
+ * Stamp the entity's default warehouse onto blank stocked lines
+ * (designated default first, then the implicit single; a first receipt for
+ * a single-site org with no warehouse yet creates it). In-memory only: the
+ * converted receipt/fulfillment lines carry it forward while approved
+ * source lines stay untouched. Lines that already name a warehouse keep it.
+ */
+async function stampDefaultWarehouse(
+  tx: OrderCycleTx,
+  orgId: string,
+  userId: string,
+  subsidiaryId: string | null,
+  lines: { item_id: string | null; has_inventory_profile: boolean; stock_location_id: string | null }[],
+): Promise<void> {
+  if (!lines.some((line) => line.item_id && line.has_inventory_profile && !line.stock_location_id)) return
+  let defaultWarehouseId: string | null
+  try {
+    defaultWarehouseId = await ensureDefaultWarehouse(tx, orgId, userId, subsidiaryId)
+  } catch (error) {
+    // A dead designation or a disabled feature refuses typed with its
+    // remedy — never as an unexpected server failure.
+    if (error instanceof WarehouseRefusal) {
+      throw new ConversionError(error.message, error.status, error.code, { remedy: error.remedy })
+    }
+    throw error
+  }
+  if (!defaultWarehouseId) return
+  for (const line of lines) {
+    if (line.item_id && line.has_inventory_profile && !line.stock_location_id) {
+      line.stock_location_id = defaultWarehouseId
+    }
+  }
 }
 
 const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
@@ -733,6 +769,15 @@ export async function fulfillSalesOrderInTx(
     }
   }
 
+  // Blank stocked lines take the entity's default before any check below,
+  // so picks validate against the warehouse the fulfillment will relieve.
+  // Stock movements only: drop-ship lines route to the vendor, never here.
+  if (options.inventory === 'apply') {
+    await stampDefaultWarehouse(
+      tx, orgId, userId, source.subsidiary_id,
+      selected.map(({ line }) => line),
+    )
+  }
   // A named bin must be the line's own location or lie inside the
   // warehouse that location belongs to. Kit component bins ride the same
   // rule against the kit line's warehouse.
@@ -856,16 +901,19 @@ export async function fulfillSalesOrderInTx(
 
   // Orders approved before line warehouses existed carry NULL warehouses
   // and are storage-immutable, so fulfillment would otherwise fail deep
-  // inside the inventory kernel with a generic stock-location error.
-  // Refuse up front naming the line and the way forward.
+  // inside the inventory kernel with a generic stock-location error. Blank
+  // stocked lines take the entity's default warehouse (designated, then the
+  // implicit single); a first fulfillment for a single-site org with no
+  // warehouse yet creates it through the warehouse service. Refuse up front
+  // naming the line and the way forward only when no default answers.
   if (options.inventory === 'apply') {
     const activeWarehouses = await activeStockLocations(orgId)
     const unwarehoused = missingOrderLineWarehouses(
-      selected.map(({ line }) => ({
+      selected.map(({ line, request }) => ({
         lineNumber: line.line_number,
         itemId: line.item_id,
         hasInventoryProfile: line.has_inventory_profile,
-        stockLocationId: line.stock_location_id,
+        stockLocationId: request.stockLocationId ?? line.stock_location_id,
       })),
       activeWarehouses.length,
     )
@@ -874,7 +922,7 @@ export async function fulfillSalesOrderInTx(
       const details = { lineNumber: warehouseless.lineNumber, activeWarehouses: activeWarehouses.length }
       if (activeWarehouses.length === 0) {
         throw new ConversionError(
-          `Sales-order line ${warehouseless.lineNumber} is a stocked item with no warehouse, and this organization has no active warehouse — create one, assign it to the line, then fulfill again`,
+          `Sales-order line ${warehouseless.lineNumber} is a stocked item with no warehouse, and this organization has no active warehouse — create one in Warehouse → Warehouses, assign it to the line, then fulfill again`,
           422,
           ORDER_LINE_WAREHOUSE_REQUIRED,
           details,
@@ -1272,8 +1320,16 @@ export async function receivePurchaseOrderInTx(
 
     // Same legacy trap as the sales side: a NULL warehouse on a stocked
     // line would fail inside the inventory kernel with a generic error.
-    // Refuse up front naming the line and the way forward.
+    // Blank stocked lines take the entity's default warehouse (designated,
+    // then the implicit single) stamped onto the in-memory line before any
+    // check below; a first receipt for a single-site org with no warehouse
+    // yet creates it through the warehouse service. Refuse up front naming
+    // the line and the way forward only when no default answers.
     if (options.inventory === 'apply') {
+      await stampDefaultWarehouse(
+        tx, orgId, userId, source.subsidiary_id,
+        selected.map(({ line }) => line),
+      )
       const receiptWarehouses = await activeStockLocations(orgId)
       const unwarehousedReceipt = missingOrderLineWarehouses(
         selected.map(({ line }) => ({
@@ -1288,7 +1344,7 @@ export async function receivePurchaseOrderInTx(
         const details = { lineNumber: unwarehousedReceipt.lineNumber, activeWarehouses: receiptWarehouses.length }
         if (receiptWarehouses.length === 0) {
           throw new ConversionError(
-            `Purchase-order line ${unwarehousedReceipt.lineNumber} is a stocked item with no warehouse, and this organization has no active warehouse — create one, assign it to the line, then receive again`,
+            `Purchase-order line ${unwarehousedReceipt.lineNumber} is a stocked item with no warehouse, and this organization has no active warehouse — create one in Warehouse → Warehouses, assign it to the line, then receive again`,
             422,
             ORDER_LINE_WAREHOUSE_REQUIRED,
             details,

@@ -17,11 +17,19 @@ export interface StockLocationOption {
   code: string | null
 }
 
-/** Active warehouses, code-ordered, for line pickers. */
+/**
+ * Active warehouses, code-ordered, for line pickers and warehouse-choice
+ * counts. Warehouse-kind only: bins, zones, and staging areas hold stock
+ * under a warehouse (putaway distributes there after receipt) but never
+ * answer "which warehouse" — counting them forces hand-picking and strands
+ * single-warehouse defaults.
+ */
 export async function activeStockLocations(orgId: string): Promise<StockLocationOption[]> {
   return (
     await db.execute<{ id: string; code: string | null }>(sql`
-      select id, code from stock_locations where org_id = ${orgId} and is_active order by code`)
+      select id, code from stock_locations
+       where org_id = ${orgId} and is_active and kind = 'warehouse'
+       order by code`)
   ).rows
 }
 

@@ -120,8 +120,10 @@ export async function loadPurchaseOrders(
           subsidiaryUiOptions(authz.user.orgId),
           inventoryEnabled
             ? db.execute<ElementOf<OrderDrawerProps['stockLocations']>>(sql`
-              select id, code from stock_locations
-               where org_id = ${authz.user.orgId} and is_active order by code`)
+              select sl.id, sl.code, l.subsidiary_id as "subsidiaryId"
+                from stock_locations sl
+                join locations l on l.id = sl.location_id and l.org_id = sl.org_id
+               where sl.org_id = ${authz.user.orgId} and sl.is_active and sl.kind = 'warehouse' order by sl.code`)
             : null,
         ])
       : null,

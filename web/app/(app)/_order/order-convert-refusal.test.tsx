@@ -184,3 +184,166 @@ test('a partial conversion warns with every withheld line instead of a plain suc
   )
   assert.deepEqual(globalThis.__dashRouter.pushes, [`/ap/bills?doc=${BILL_ID}&mode=edit`])
 })
+
+const WH_ID = '77777777-7777-4777-8777-777777777777'
+const LINE_ID = '88888888-8888-4888-8888-888888888888'
+
+function approvedStockPo(): OrderPayload {
+  const po = approvedExpensePo()
+  return {
+    ...po,
+    lines: [
+      {
+        ...(po.lines[0] as Record<string, unknown>),
+        id: LINE_ID,
+        item_id: 'item-widget',
+        account_id: 'acct-1200',
+        description: 'Widget',
+        quantity: '10',
+        unit: 'ea',
+        unit_price: '2.00',
+        stock_location_id: null,
+      },
+    ],
+  } as OrderPayload
+}
+
+async function mountStockPo() {
+  return mountDashboard(
+    <OrderDrawer
+      order={approvedStockPo()}
+      kind="purchase_order"
+      parties={[{ id: 'vendor-1', display_name: 'Acme Supplies' }]}
+      accounts={[]}
+      items={[{ id: 'item-widget', display_name: 'Widget', has_inventory_profile: true }]}
+      stockLocations={[{ id: WH_ID, code: 'TACOMA-WH', subsidiaryId: null }]}
+      taxCodes={[]}
+      taxGroups={[]}
+      departments={[]}
+      projects={[]}
+      subsidiaries={[]}
+      segments={[]}
+      canManage
+      closeHref="/purchasing"
+    />,
+    messages,
+  )
+}
+
+function warehouseRefusal() {
+  return Response.json(
+    {
+      error: 'Purchase-order line 1 is a stocked item with no warehouse, and this organization has 1 active warehouse, so receipt cannot choose one — assign a warehouse to the line, then receive again',
+      code: 'ORDER_LINE_WAREHOUSE_REQUIRED',
+      details: { lineNumber: 1, activeWarehouses: 1 },
+    },
+    { status: 422 },
+  )
+}
+
+const { act } = await import('react')
+
+async function openConvert() {
+  const menu = buttonsNamed('Actions')[0]
+  assert.ok(menu, 'record actions must live behind the Actions menu')
+  await click(menu)
+  const convert = buttonsContaining('Convert to')[0]
+  assert.ok(convert, 'an approved PO must offer its convert targets')
+  await click(convert)
+  await tick()
+}
+
+async function setPickerValue(picker: HTMLSelectElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value')!.set!
+  await act(async () => {
+    setter.call(picker, value)
+    picker.dispatchEvent(new window.Event('change', { bubbles: true }))
+    await tick()
+  })
+  await tick()
+}
+
+test('a warehouse refusal renders the assign action and never navigates', async (t) => {
+  const restoreFetch = scriptFetch((url, init) => {
+    if (url === `/api/purchase-orders/${PO_ID}/convert` && init?.method === 'POST') {
+      return warehouseRefusal()
+    }
+    if (url.startsWith('/api/flows/')) {
+      return Response.json({ error: 'no flow state' }, { status: 404 })
+    }
+    return null
+  })
+  t.after(restoreFetch)
+  const { unmount } = await mountStockPo()
+  t.after(unmount)
+  await openConvert()
+  const alert = document.querySelector('[role="alert"]')
+  assert.ok(alert, 'the convert refusal must pin as an alert')
+  assert.match(alert.textContent ?? '', /no warehouse/, "the alert must carry the server's typed reason")
+  assert.deepEqual(
+    globalThis.__dashRouter.pushes,
+    [],
+    'a refused convert must not navigate away from the PO',
+  )
+  const panel = document.querySelector('[aria-label="Assign warehouses to stocked lines"]')
+  assert.ok(panel, 'the refusal must offer per-line warehouse assignment')
+  const picker = panel.querySelector('select') as HTMLSelectElement | null
+  assert.ok(picker, 'the missing line offers the entity warehouse picker')
+  assert.ok(
+    [...picker.options].some((option) => option.value === WH_ID && option.text === 'TACOMA-WH'),
+    'the picker lists the active warehouse',
+  )
+})
+
+test('assigning the warehouse then converting succeeds without re-pinning', async (t) => {
+  const seen: Array<{ url: string; method: string; body: Record<string, unknown> | null }> = []
+  const restoreFetch = scriptFetch((url, init) => {
+    seen.push({ url, method: init?.method ?? 'GET', body: typeof init?.body === 'string' ? JSON.parse(init.body) as Record<string, unknown> : null })
+    if (url === `/api/purchase-orders/${PO_ID}/convert` && init?.method === 'POST') {
+      return seen.some((request) => request.url.endsWith('/assign-warehouse') && request.method === 'POST')
+        ? Response.json({ kind: 'purchase_receipt', id: 'rcpt-1', documentNumber: 'RCPT-00001' })
+        : warehouseRefusal()
+    }
+    if (url === `/api/purchase-orders/${PO_ID}/assign-warehouse` && init?.method === 'POST') {
+      return Response.json({ doc: { id: PO_ID, updated_at: '2026-08-01T12:00:01.000000Z' }, lines: [], links: [] })
+    }
+    if (url.startsWith('/api/flows/')) {
+      return Response.json({ error: 'no flow state' }, { status: 404 })
+    }
+    return null
+  })
+  t.after(restoreFetch)
+  const { unmount } = await mountStockPo()
+  t.after(unmount)
+  await openConvert()
+  assert.deepEqual(globalThis.__dashRouter.pushes, [], 'the refused convert must not navigate')
+  const picker = document.querySelector('[aria-label="Assign warehouses to stocked lines"] select') as HTMLSelectElement | null
+  assert.ok(picker, 'the missing line offers the picker')
+  await setPickerValue(picker, WH_ID)
+  const apply = buttonsNamed('Assign warehouse')[0]
+  assert.ok(apply, 'the panel offers Apply per line')
+  await click(apply)
+  await tick()
+  const post = seen.find((request) => request.url.endsWith('/assign-warehouse') && request.method === 'POST')
+  assert.ok(post, 'apply posts to the assign-warehouse endpoint')
+  assert.equal(post?.body?.lineId, LINE_ID)
+  assert.equal(post?.body?.stockLocationId, WH_ID)
+  assert.ok(typeof post?.body?.expectedUpdatedAt === 'string', 'the assignment carries the revision token')
+  const toasts = globalThis.__dashToasts ?? []
+  assert.ok(
+    toasts.some((toast) => toast.kind === 'success'),
+    'a successful assignment toasts',
+  )
+  const menuAgain = buttonsNamed('Actions')[0]
+  assert.ok(menuAgain, 'the actions menu stays available after assigning')
+  await click(menuAgain)
+  const retry = buttonsContaining('Convert to')[0]
+  assert.ok(retry, 'the operator converts again after assigning')
+  await click(retry)
+  await tick()
+  assert.equal(
+    globalThis.__dashRouter.pushes.length,
+    1,
+    'the assigned convert navigates to the created receipt',
+  )
+})

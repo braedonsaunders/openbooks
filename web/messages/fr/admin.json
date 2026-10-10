@@ -2732,6 +2732,11 @@
         "singular": "Règle de rangement",
         "description": "Règles ordonnées qui choisissent où ranger le stock reçu dans un entrepôt."
       },
+      "warehouse-defaults": {
+        "title": "Entrepôts par défaut",
+        "singular": "Entrepôt par défaut",
+        "description": "L’entrepôt de réception et d’expédition par défaut pour chaque entité juridique — utilisé quand les lignes de commande n’en nomment aucun."
+      },
       "company": {
         "title": "Société et comptabilité",
         "description": "Identité de l'organisation, devise de base, exercice fiscal et comptes de contrôle."
@@ -4227,6 +4232,7 @@
       "saasFeatureMeter": "Clé du compteur pour les fonctions mesurées, résout l’usage via la facturation à l’usage. Vide pour les autres types.",
       "putawayItem": "Laissez vide pour appliquer la règle à tous les articles.",
       "putawayCapacity": "Quantité maximale de l’article dans la cible. Obligatoire pour une zone de vrac ; laissez vide sur un emplacement fixe pour ne pas fixer de limite.",
+      "warehouseDefaultSubsidiary": "Laissez vide pour la valeur de l’entreprise ; choisissez une entité juridique pour la remplacer.",
       "carrierServices": "Les niveaux de service proposés par ce transporteur, par exemple Standard ou Express. Chaque expédition en choisit un.",
       "carrierTrackingUrlTemplate": "L’adresse de la page de suivi du transporteur avec '{tracking}' à la place du numéro de suivi, par exemple https://carrier.example/track?number='{tracking}'. Laissez vide si le transporteur n’a pas de lien de suivi.",
       "carrierActive": "Décochez Actif pour un transporteur que vous n’utilisez plus. Un transporteur inactif ne peut être choisi sur aucune expédition ; les expéditions qui le mentionnent déjà le conservent.",

@@ -27,6 +27,7 @@ import { isDocumentRevisionToken } from '@/lib/api/registry-data'
 import { promptDialog } from '../../../lib/prompt'
 import { FlowManualButtons } from '../../../components/flow-manual-buttons'
 import { ApprovalActions } from '../../../components/approval-actions'
+import { AssignWarehousePanel } from './AssignWarehousePanel'
 import { ApprovalHistory } from '../../../components/approval-history'
 import { DropShipAssessmentButton } from './DropShipAssessmentButton'
 import { OrderBackorders } from './OrderBackorders'
@@ -496,8 +497,9 @@ export function OrderDrawer({
   accounts: Opt[]
   items: Opt[]
   /** Active warehouses for the line-level stock-location picker. Empty (or a
-   *  single location, stamped silently by the draft writer) renders NO picker. */
-  stockLocations?: { id: string; code: string | null }[]
+   *  single location, stamped silently by the draft writer) renders NO picker.
+   *  subsidiaryId scopes the assign-warehouse panel to the line's entity. */
+  stockLocations?: { id: string; code: string | null; subsidiaryId: string | null }[]
   taxCodes: Opt[]
   taxGroups: Opt[]
   departments: Opt[]
@@ -1324,6 +1326,12 @@ export function OrderDrawer({
     }, {
       fallbackMessage: t('convertFailed'),
       onOk: async (data) => {
+        if (!data || typeof data !== 'object' || typeof (data as { kind?: unknown }).kind !== 'string' || typeof (data as { id?: unknown }).id !== 'string' || !(data as { id?: string }).id) {
+          // Success trusts the status, but navigation needs a destination:
+          // a malformed success body pins instead of bouncing anywhere.
+          refuse(null, t('convertFailed'))
+          return
+        }
         if ('creditOverrideNeeded' in data) {
           const overrideReason = await promptDialog({
             title: t('creditOverrideTitle'),
@@ -1788,6 +1796,18 @@ export function OrderDrawer({
     >
       <div className="space-y-6 p-1">
         <ActionAlert error={refusal} fallbackMessage={t('actionFailed')} />
+        {refusal?.code === 'ORDER_LINE_WAREHOUSE_REQUIRED' && canManage && isApproved && (kind === 'purchase_order' || kind === 'sales_order') ? (
+          <AssignWarehousePanel
+            lines={rows
+              .filter((row) => row.itemId && stockedItemIds.has(row.itemId) && !row.stockLocationId && row.persistedLineId)
+              .map((row) => ({ persistedLineId: row.persistedLineId, description: row.description }))}
+            warehouses={stockLocations.filter((loc) => !loc.subsidiaryId || loc.subsidiaryId === doc.subsidiary_id)}
+            assignUrl={`${apiBase}/${doc.id}/assign-warehouse`}
+            getRevision={() => revisionRef.current}
+            onAssigned={() => router.refresh()}
+            disabled={busy}
+          />
+        ) : null}
         {priceLookupFailures.size > 0 ? <ul className="space-y-1 text-sm text-red-700 dark:text-red-300">{[...priceLookupFailures].map(([key, message]) => <li key={key} role="alert">{rows.find((row) => row.clientKey === key)?.description || t('columns.item')}: {message}</li>)}</ul> : null}
         {layout ? <HeaderFields layout={layout} editable={editable} renderField={renderHeaderField} /> : <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className={`${field} lg:col-span-2`}>

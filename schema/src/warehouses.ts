@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   check,
   integer,
   numeric,
@@ -72,3 +73,30 @@ export const putawayRules = pgTable(
 
 export type WarehouseRow = typeof warehouses.$inferSelect;
 export type PutawayRuleRow = typeof putawayRules.$inferSelect;
+
+/**
+ * Designated default receiving and fulfillment warehouse per legal entity.
+ * subsidiary_id null is the company-wide row; otherwise the legal entity.
+ * Single-warehouse orgs need no row — the only active warehouse is already
+ * the implicit default. Resolution prefers the entity row, then the company
+ * row, then the implicit default.
+ */
+export const warehouseDefaults = pgTable(
+  "warehouse_defaults",
+  {
+    id: id(),
+    orgId: orgRef(),
+    subsidiaryId: uuid("subsidiary_id"),
+    warehouseId: uuid("warehouse_id").notNull(),
+    isActive: boolean("is_active").notNull().default(true),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("warehouse_defaults_org_id_id_unique").on(t.orgId, t.id),
+    uniqueIndex("warehouse_defaults_org_subsidiary_unique")
+      .on(t.orgId, t.subsidiaryId)
+      .nullsNotDistinct(),
+  ],
+);
+
+export type WarehouseDefaultRow = typeof warehouseDefaults.$inferSelect;

@@ -84,6 +84,34 @@ export const WAREHOUSE_ENTITIES: SetupEntity[] = [
     ],
   },
   {
+    // Default receiving and fulfillment warehouse per legal entity: a blank
+    // subsidiary is the company-wide row, otherwise the legal entity. Receipt
+    // and fulfillment resolve the entity row first, then the company row,
+    // then the implicit single-warehouse default — so multi-warehouse
+    // companies name their defaults once instead of per line. Deleting a row
+    // falls back to the same chain; rows are audited like every setup write.
+    key: 'warehouse-defaults',
+    table: 'warehouse_defaults',
+    singularTitleKey: 'entities.warehouse-defaults.singular',
+    rehomed: true,
+    actorCols: true,
+    groupKey: 'inventory',
+    featureKey: 'warehousing',
+    iconKey: 'package',
+    orgScoped: true,
+    hasActive: true,
+    columns: [
+      { key: 'subsidiaryId', kind: 'ref', ref: 'subsidiaries' },
+      { key: 'warehouseId', kind: 'ref', ref: 'warehouses' },
+      { key: 'isActive', kind: 'badge-active' },
+    ],
+    fields: [
+      { key: 'subsidiaryId', kind: 'ref', ref: 'subsidiaries', helpTextKey: 'fieldHelp.warehouseDefaultSubsidiary' },
+      { key: 'warehouseId', kind: 'ref', ref: 'warehouses', required: true },
+      { key: 'isActive', kind: 'boolean', defaultValue: true },
+    ],
+  },
+  {
     // Carriers a shipment can name, with the service levels each offers and
     // an optional tracking-link template. Shipments reference carriers, so a
     // carrier is deactivated rather than deleted: an inactive carrier cannot

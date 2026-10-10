@@ -2807,6 +2807,11 @@
         "singular": "Putaway Rule",
         "description": "Ordered rules that choose where received stock goes inside a warehouse."
       },
+      "warehouse-defaults": {
+        "title": "Warehouse Defaults",
+        "singular": "Warehouse Default",
+        "description": "The default receiving and fulfillment warehouse for each legal entity — used when order lines name none."
+      },
       "company": {
         "title": "Company & Accounting",
         "description": "Organization identity, base currency, fiscal year, and control accounts."
@@ -4302,6 +4307,7 @@
       "saasFeatureMeter": "Meter key for metered features, resolving usage through usage billing. Leave empty for other types.",
       "putawayItem": "Leave blank to apply the rule to every item.",
       "putawayCapacity": "The most the target may hold of the item. Required for a bulk zone; leave blank on a fixed bin for no limit.",
+      "warehouseDefaultSubsidiary": "Leave blank for the company-wide default; choose a legal entity to override it there.",
       "carrierServices": "The service levels this carrier offers, such as Ground or Overnight. A shipment chooses one of them.",
       "carrierTrackingUrlTemplate": "The carrier's tracking page address with '{tracking}' where the tracking number goes, for example https://carrier.example/track?number='{tracking}'. Leave blank if the carrier has no tracking link.",
       "carrierActive": "Clear Active for a carrier you no longer use. An inactive carrier cannot be chosen on a shipment; shipments that already name it keep it.",
