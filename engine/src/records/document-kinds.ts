@@ -188,7 +188,7 @@ const DOC_KIND_ENTRIES: Record<string, Omit<DocKindConfig, 'permNamespace'>> = {
   // Lines are machine-built by engine/src/payroll/run.ts commitPayRun — the
   // drawer never edits them; the payroll workspace is the editing surface.
   pay_run: {
-    kind: 'pay_run', closeModule: 'gl', family: 'gl', numberPrefix: 'PAY-', i18n: 'banking',
+    kind: 'pay_run', closeModule: 'gl', family: 'gl', numberPrefix: 'PR-', i18n: 'banking',
     partyRole: null, accountTypes: null, hasTax: false, hasDueDate: false, hasReference: false,
     fundingSource: null, isOpenItem: false, showsBalance: false, directPost: true,
   },
