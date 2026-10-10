@@ -24,6 +24,7 @@ import {
 } from 'lucide-react'
 import { Popover, cn } from '@openbooks/ui'
 import { toast } from 'sonner'
+import { documentCreateHref } from '../lib/document-kinds'
 
 export interface GlobalCreatePermissions {
   accountsReceivable: boolean
@@ -82,25 +83,28 @@ interface CreateAction {
   destination?: (id: string) => string
 }
 
+// Ledger documents open the native unsaved-create drawer (`?doc=new&kind=`):
+// choosing one allocates no record and no number until the operator saves,
+// so an abandoned create leaves nothing behind.
 const ACTIONS: CreateAction[] = [
-  { key: 'invoice', group: 'sales', enabled: (p) => p.accountsReceivable, icon: FilePlus2, endpoint: '/api/documents/draft', body: { kind: 'customer_invoice' }, destination: (id) => `/ar/invoices?doc=${id}&mode=edit` },
-  { key: 'creditMemo', group: 'sales', enabled: (p) => p.accountsReceivable, icon: FileMinus2, endpoint: '/api/documents/draft', body: { kind: 'customer_credit' }, destination: (id) => `/ar/invoices?doc=${id}&mode=edit` },
-  { key: 'cashSale', group: 'sales', enabled: (p) => p.cashSales ?? false, icon: Banknote, endpoint: '/api/documents/draft', body: { kind: 'cash_sale' }, destination: (id) => `/cash-sales?doc=${id}&mode=edit` },
-  { key: 'cashRefund', group: 'sales', enabled: (p) => p.cashSales ?? false, icon: RotateCcw, endpoint: '/api/documents/draft', body: { kind: 'cash_refund' }, destination: (id) => `/cash-sales?doc=${id}&mode=edit` },
+  { key: 'invoice', group: 'sales', enabled: (p) => p.accountsReceivable, icon: FilePlus2, directHref: documentCreateHref('/ar/invoices', 'customer_invoice') },
+  { key: 'creditMemo', group: 'sales', enabled: (p) => p.accountsReceivable, icon: FileMinus2, directHref: documentCreateHref('/ar/invoices', 'customer_credit') },
+  { key: 'cashSale', group: 'sales', enabled: (p) => p.cashSales ?? false, icon: Banknote, directHref: documentCreateHref('/cash-sales', 'cash_sale') },
+  { key: 'cashRefund', group: 'sales', enabled: (p) => p.cashSales ?? false, icon: RotateCcw, directHref: documentCreateHref('/cash-sales', 'cash_refund') },
   { key: 'estimate', group: 'sales', enabled: (p) => p.accountsReceivable && p.orders, icon: ClipboardList, endpoint: '/api/estimates/draft', destination: (id) => `/estimates?estimate=${id}&mode=edit` },
   { key: 'salesOrder', group: 'sales', enabled: (p) => p.accountsReceivable && p.orders, icon: Send, endpoint: '/api/sales-orders/draft', destination: (id) => `/sales-orders?order=${id}&mode=edit` },
   { key: 'customerPayment', group: 'sales', enabled: (p) => p.customerPayments, icon: WalletCards, endpoint: '/api/payments/draft', body: { kind: 'customer_payment' }, destination: (id) => `/receipts?payment=${id}&mode=edit` },
-  { key: 'bill', group: 'purchases', enabled: (p) => p.accountsPayable, icon: Receipt, endpoint: '/api/documents/draft', body: { kind: 'vendor_bill' }, destination: (id) => `/ap/bills?doc=${id}&mode=edit` },
-  { key: 'vendorCredit', group: 'purchases', enabled: (p) => p.accountsPayable, icon: FileMinus2, endpoint: '/api/documents/draft', body: { kind: 'vendor_credit' }, destination: (id) => `/ap/bills?doc=${id}&mode=edit` },
+  { key: 'bill', group: 'purchases', enabled: (p) => p.accountsPayable, icon: Receipt, directHref: documentCreateHref('/ap/bills', 'vendor_bill') },
+  { key: 'vendorCredit', group: 'purchases', enabled: (p) => p.accountsPayable, icon: FileMinus2, directHref: documentCreateHref('/ap/bills', 'vendor_credit') },
   { key: 'purchaseOrder', group: 'purchases', enabled: (p) => p.accountsPayable && p.orders, icon: ShoppingCart, endpoint: '/api/purchase-orders/draft', destination: (id) => `/purchase-orders?order=${id}&mode=edit` },
   { key: 'vendorPayment', group: 'purchases', enabled: (p) => p.vendorPayments, icon: WalletCards, endpoint: '/api/payments/draft', body: { kind: 'vendor_payment' }, destination: (id) => `/payments?payment=${id}&mode=edit` },
   { key: 'journal', group: 'accounting', enabled: (p) => p.journal, icon: ScrollText, endpoint: '/api/journals/draft', destination: (id) => `/journal?entry=${id}&mode=edit` },
   { key: 'expense', group: 'accounting', enabled: (p) => p.expenses, icon: Receipt, endpoint: '/api/expenses/draft', destination: (id) => `/expenses/reports?expense=${id}&mode=edit` },
-  { key: 'cardCharge', group: 'accounting', enabled: (p) => p.accountsPayable, icon: WalletCards, endpoint: '/api/documents/draft', body: { kind: 'card_charge' }, destination: (id) => `/banking/transactions?doc=${id}&mode=edit` },
-  { key: 'cardRefund', group: 'accounting', enabled: (p) => p.accountsPayable, icon: WalletCards, endpoint: '/api/documents/draft', body: { kind: 'card_refund' }, destination: (id) => `/banking/transactions?doc=${id}&mode=edit` },
-  { key: 'check', group: 'accounting', enabled: (p) => p.accountsPayable, icon: FileMinus2, endpoint: '/api/documents/draft', body: { kind: 'check' }, destination: (id) => `/banking/transactions?doc=${id}&mode=edit` },
-  { key: 'deposit', group: 'accounting', enabled: (p) => p.journal, icon: Landmark, endpoint: '/api/documents/draft', body: { kind: 'deposit' }, destination: (id) => `/banking/transactions?doc=${id}&mode=edit` },
-  { key: 'transfer', group: 'accounting', enabled: (p) => p.journal, icon: Send, endpoint: '/api/documents/draft', body: { kind: 'transfer' }, destination: (id) => `/banking/transactions?doc=${id}&mode=edit` },
+  { key: 'cardCharge', group: 'accounting', enabled: (p) => p.accountsPayable, icon: WalletCards, directHref: documentCreateHref('/banking/transactions', 'card_charge') },
+  { key: 'cardRefund', group: 'accounting', enabled: (p) => p.accountsPayable, icon: WalletCards, directHref: documentCreateHref('/banking/transactions', 'card_refund') },
+  { key: 'check', group: 'accounting', enabled: (p) => p.accountsPayable, icon: FileMinus2, directHref: documentCreateHref('/banking/transactions', 'check') },
+  { key: 'deposit', group: 'accounting', enabled: (p) => p.journal, icon: Landmark, directHref: documentCreateHref('/banking/transactions', 'deposit') },
+  { key: 'transfer', group: 'accounting', enabled: (p) => p.journal, icon: Send, directHref: documentCreateHref('/banking/transactions', 'transfer') },
   { key: 'asset', group: 'accounting', enabled: (p) => p.assets, icon: Landmark, directHref: '/assets?assetNew=1' },
   { key: 'customer', group: 'peopleAndLists', enabled: (p) => p.parties, icon: UsersRound, directHref: '/entities/customers?partyNew=1&role=customer' },
   { key: 'vendor', group: 'peopleAndLists', enabled: (p) => p.parties, icon: Building2, directHref: '/entities/vendors?partyNew=1&role=vendor' },

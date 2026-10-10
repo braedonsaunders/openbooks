@@ -93,3 +93,54 @@ test('master-data choices navigate to their unsaved editor without creating draf
   }
   assert.equal(fetches, 0, 'master-data navigation must not allocate a draft record')
 })
+
+test('ledger document choices open the unsaved-create drawer and allocate nothing', async (t: TestContext) => {
+  const router = (globalThis as Record<string, unknown>).__createMenuRouter as { pushes: string[] }
+  router.pushes.length = 0
+  const priorFetch = globalThis.fetch
+  let fetches = 0
+  globalThis.fetch = (async () => {
+    fetches += 1
+    return Response.json({ id: 'unexpected-draft' })
+  }) as typeof fetch
+  t.after(() => { globalThis.fetch = priorFetch })
+  const host = document.createElement('div')
+  document.body.appendChild(host)
+  const root = createRoot(host)
+  t.after(async () => {
+    await act(async () => root.unmount())
+    host.remove()
+  })
+  await act(async () => {
+    root.render(
+      React.createElement(
+        IntlProvider,
+        { locale: 'en', messages, timeZone: 'UTC' },
+        React.createElement(GlobalCreateMenu, { permissions: { ...permissions, cashSales: true } }),
+      ),
+    )
+  })
+  const documents: [keyof typeof menuMessages.items, string][] = [
+    ['invoice', '/ar/invoices?doc=new&kind=customer_invoice&mode=edit'],
+    ['creditMemo', '/ar/invoices?doc=new&kind=customer_credit&mode=edit'],
+    ['cashSale', '/cash-sales?doc=new&kind=cash_sale&mode=edit'],
+    ['cashRefund', '/cash-sales?doc=new&kind=cash_refund&mode=edit'],
+    ['bill', '/ap/bills?doc=new&kind=vendor_bill&mode=edit'],
+    ['vendorCredit', '/ap/bills?doc=new&kind=vendor_credit&mode=edit'],
+    ['cardCharge', '/banking/transactions?doc=new&kind=card_charge&mode=edit'],
+    ['cardRefund', '/banking/transactions?doc=new&kind=card_refund&mode=edit'],
+    ['check', '/banking/transactions?doc=new&kind=check&mode=edit'],
+    ['deposit', '/banking/transactions?doc=new&kind=deposit&mode=edit'],
+    ['transfer', '/banking/transactions?doc=new&kind=transfer&mode=edit'],
+  ]
+  const trigger = document.querySelector(`button[aria-label="${menuMessages.ariaLabel}"]`)
+  assert.ok(trigger, 'the global create control is available')
+  for (const [key, href] of documents) {
+    if (trigger.getAttribute('aria-expanded') !== 'true') await click(trigger)
+    const action = [...document.querySelectorAll('button')].find((button) => button.textContent?.trim() === menuMessages.items[key])
+    assert.ok(action, `${key} is an available choice`)
+    await click(action)
+    assert.equal(router.pushes.at(-1), href, `${key} opens the unsaved-create drawer`)
+  }
+  assert.equal(fetches, 0, 'choosing a document never mints a numbered draft')
+})
