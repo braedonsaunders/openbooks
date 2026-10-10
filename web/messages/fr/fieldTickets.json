@@ -35,7 +35,10 @@
     "waiting": "Signature en attente",
     "signed": "Signé",
     "date": "Date",
-    "createFailed": "Impossible de créer le bon"
+    "createFailed": "Impossible de créer le bon",
+    "createTitle": "Nouveau bon de travaux",
+    "createHint": "Choisissez le projet, la période et la date. Le bon est numéroté à l’enregistrement ; fermer n’enregistre rien.",
+    "periodPolicy": "Politique du projet"
   },
   "editor": {
     "tabs": {

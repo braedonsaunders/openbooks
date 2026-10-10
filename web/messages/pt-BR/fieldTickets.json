@@ -35,7 +35,10 @@
     "waiting": "Aguardando assinatura",
     "signed": "Assinado",
     "date": "Data",
-    "createFailed": "Não foi possível criar o boletim"
+    "createFailed": "Não foi possível criar o boletim",
+    "createTitle": "Novo boletim de campo",
+    "createHint": "Escolha o projeto, o período e a data. O boletim é numerado ao salvar; fechar não grava nada.",
+    "periodPolicy": "Política do projeto"
   },
   "editor": {
     "tabs": { "time": "Tempo", "items": "Itens", "tasks": "Tarefas", "related": "Relacionados", "production": "Produção" },

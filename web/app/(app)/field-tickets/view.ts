@@ -5,8 +5,9 @@ import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@brae
 import { pickString } from '../../../lib/list-params'
 import { can, requirePermission } from '../../../lib/authz'
 import { requireFeatureEnabled } from '../../../lib/feature-gates'
-import { loadFieldTicketDrawerData } from '../../../lib/field-ticket-drawer-data'
+import { loadFieldTicketCreateData, loadFieldTicketDrawerData } from '../../../lib/field-ticket-drawer-data'
 import type { FieldTicketDrawer } from './FieldTicketDrawer'
+import type { FieldTicketCreateDrawerProps } from './FieldTicketCreateDrawer'
 import type { DrawerMode } from '../../../lib/drawer-mode'
 
 /**
@@ -22,9 +23,9 @@ import type { DrawerMode } from '../../../lib/drawer-mode'
  * `time.read` gate, the `fieldTickets` feature gate (404 when disabled), the
  * `?ticket=` flyout resolution through the shared `loadFieldTicketDrawerData`
  * helper (one call — pickers, form layout and subsidiary scoping all live
- * inside it), and the New-button labels. Unlike the order pages there is no
- * `?<param>=new` redirect: the New button POSTs an empty draft to the
- * collection endpoint and navigates to the real id.
+ * inside it), and the New-button labels. New is an unsaved create: it opens
+ * `?ticketNew=1`, a drawer that writes nothing until its Save POSTs the
+ * collection once and opens the persisted ticket.
  *
  * The drawer payload travels through the loader result and the widget renders
  * it keyless — the native page renders `<FieldTicketDrawer>` with no `key`,
@@ -34,7 +35,7 @@ import type { DrawerMode } from '../../../lib/drawer-mode'
 
 const BASE = '/field-tickets'
 const PARAM = 'ticket'
-const API = '/api/field-tickets'
+const CREATE_PARAM = 'ticketNew'
 
 type FieldTicketDrawerProps = Parameters<typeof FieldTicketDrawer>[0]
 
@@ -44,13 +45,12 @@ export interface FieldTicketsData {
   currentParams: Record<string, string | string[] | undefined>
   canManage: boolean
   newButton: {
-    apiPath: string
     base: string
     param: string
+    createParam: string
     label: string
-    createFailedMessage: string
   }
-  drawer: (FieldTicketDrawerProps & { initialMode: DrawerMode }) | null
+  drawer: (FieldTicketDrawerProps & { initialMode: DrawerMode }) | FieldTicketCreateDrawerProps | null
 }
 
 export async function loadFieldTickets(
@@ -65,6 +65,11 @@ export async function loadFieldTickets(
   const drawerData = openId
     ? await loadFieldTicketDrawerData({ authz, ticketId: openId, formLayoutId: pickString(sp.form) })
     : null
+  // Unsaved create: only for callers who may create, and never over an
+  // open ticket. Loading it reads pickers and allocates nothing.
+  const createData = !openId && pickString(sp[CREATE_PARAM]) === '1' && canManage
+    ? await loadFieldTicketCreateData({ authz })
+    : null
 
   return {
     title: t('title'),
@@ -72,15 +77,14 @@ export async function loadFieldTickets(
     currentParams: sp,
     canManage,
     newButton: {
-      apiPath: API,
       base: BASE,
       param: PARAM,
+      createParam: CREATE_PARAM,
       label: t('list.new'),
-      createFailedMessage: t('list.createFailed'),
     },
     drawer: drawerData
       ? { ...drawerData, initialMode: pickString(sp.mode) === 'edit' ? 'edit' : 'view' }
-      : null,
+      : createData,
   }
 }
 
@@ -90,11 +94,10 @@ export function fieldTicketsSpec(data: FieldTicketsData): PageSpec {
   const newOrder = {
     widget: 'new-order',
     props: {
-      apiPath: data.newButton.apiPath,
       base: data.newButton.base,
       param: data.newButton.param,
+      createParam: data.newButton.createParam,
       label: data.newButton.label,
-      createFailedMessage: data.newButton.createFailedMessage,
     },
   }
   return page({

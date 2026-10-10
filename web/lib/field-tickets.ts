@@ -78,6 +78,13 @@ export class FieldTicketNotFoundError extends FieldTicketError {
   readonly status = 404
 }
 
+/** A create replayed under its request key with a different project or period. */
+export class FieldTicketCreateConflictError extends FieldTicketError {
+  readonly status = 409
+  readonly code = 'idempotency_conflict'
+  readonly remedy = 'Reopen New ticket to start a fresh create, or open the ticket this request already created.'
+}
+
 type TicketTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 async function assertFieldTicketsEnabled(orgId: string): Promise<void> {
@@ -140,16 +147,28 @@ export async function resolveTicketPeriod(
 }
 
 /**
- * Create a draft ticket instantly (no inputs needed — the standard flyout form
- * picks the project, which then derives customer/PO/period). PO lives in
- * documents.reference_number and the work description in documents.memo, so
- * the ordinary configurable header form covers them.
+ * Create a draft ticket. Every input is optional: the project derives the
+ * customer, PO and subsidiary, and the period falls back to the effective
+ * Field Ticket policy. PO lives in documents.reference_number and the work
+ * description in documents.memo, so the ordinary configurable header form
+ * covers them.
+ *
+ * `requestId` is the caller's idempotency key and becomes the ticket id: the
+ * unsaved New-ticket drawer sends one per drawer session, so a retried Save
+ * returns the ticket its first attempt created instead of allocating a second
+ * number. A replay naming a different project or period is a conflict.
  */
 export async function createFieldTicket(
   orgId: string,
   userId: string,
-  input: { projectId?: string | null; date?: string; period?: TicketPeriod; allowedSubsidiaryIds: ReadonlySet<string> | null },
-): Promise<{ id: string; documentNumber: string }> {
+  input: {
+    projectId?: string | null
+    date?: string
+    period?: TicketPeriod
+    allowedSubsidiaryIds: ReadonlySet<string> | null
+    requestId?: string
+  },
+): Promise<{ id: string; documentNumber: string; created: boolean }> {
   return withOrg(orgId, async () => {
     // Fenced recheck inside the creation transaction (`withOrg` pins `db`
     // to it, so the default runners below execute on the writer's
@@ -160,6 +179,31 @@ export async function createFieldTicket(
     await acquireFeatureGateLock(orgId)
     if (!(await lockAndCheckOrgFeature(db, orgId, 'fieldTickets'))) {
       throw new FieldTicketNotFoundError('Ticket not found')
+    }
+    if (input.requestId !== undefined) {
+      if (!isUuid(input.requestId)) throw new FieldTicketError('Invalid request key')
+      // Replays of one key serialize here, so concurrent retries resolve to
+      // the single ticket the first attempt created.
+      await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`field-ticket-create:${input.requestId}`}, 0))`)
+      const existing = (await db.execute<{ id: string; document_number: string; kind: string; project_id: string | null; period: string | null; subsidiary_id: string | null }>(sql`
+        select d.id, d.document_number, d.kind, d.project_id, ft.period, d.subsidiary_id
+          from documents d
+          left join field_tickets ft on ft.document_id = d.id and ft.org_id = d.org_id
+         where d.org_id = ${orgId} and d.id = ${input.requestId}`)).rows[0]
+      if (existing) {
+        // A replay discloses nothing outside the caller's legal entities.
+        if (!subsidiaryScopeAllows(input.allowedSubsidiaryIds, existing.subsidiary_id)) {
+          throw new FieldTicketNotFoundError('Ticket not found')
+        }
+        if (
+          existing.kind !== 'field_ticket'
+          || (existing.project_id ?? null) !== (input.projectId ?? null)
+          || (input.period !== undefined && existing.period !== input.period)
+        ) {
+          throw new FieldTicketCreateConflictError('This create request was already used for a different ticket.')
+        }
+        return { id: existing.id, documentNumber: existing.document_number, created: false }
+      }
     }
     const proj = input.projectId
       ? (
@@ -192,9 +236,10 @@ export async function createFieldTicket(
     const foreman = (await db.execute<{ party_id: string | null }>(sql`select party_id from users where id = ${userId}`))
     const documentNumber = await nextDocumentNumber(orgId, 'field_ticket', 'FT-', ticketSubsidiaryId ?? undefined)
     const row = (await db.execute<{ id: string; document_number: string }>(sql`
-      insert into documents (org_id, kind, document_number, document_date, currency, status, party_id, project_id,
+      insert into documents (id, org_id, kind, document_number, document_date, currency, status, party_id, project_id,
                              subsidiary_id, reference_number, billing_method, subtotal, tax_total, total, custom, created_by)
-      values (${orgId}, 'field_ticket', ${documentNumber}, ${window.end}, ${org.rows[0]?.base_currency ?? 'CAD'},
+      values (${input.requestId !== undefined ? sql`${input.requestId}::uuid` : sql`gen_random_uuid()`},
+              ${orgId}, 'field_ticket', ${documentNumber}, ${window.end}, ${org.rows[0]?.base_currency ?? 'CAD'},
               'draft', ${proj?.customer_id ?? null}, ${proj?.id ?? null}, ${ticketSubsidiaryId},
               ${proj?.po ?? null}, 'time_and_materials', '0', '0', '0', '{}'::jsonb, ${userId})
       returning id, document_number`))
@@ -205,7 +250,7 @@ export async function createFieldTicket(
       values (${row.rows[0]!.id}, ${orgId}, ${period}, ${window.start}, ${window.end},
               ${foreman.rows[0]?.party_id ?? null}, ${userId}, ${userId})
     `)
-    return { id: row.rows[0]!.id, documentNumber: row.rows[0]!.document_number }
+    return { id: row.rows[0]!.id, documentNumber: row.rows[0]!.document_number, created: true }
   })
 }
 
@@ -1064,12 +1109,10 @@ async function auditTicketLifecycle(
 }
 
 /**
- * Discard an untouched draft. New ticket persists an empty
- * server-side draft on click, so closing the drawer without entering
- * anything must not orphan a shell row: an empty draft deletes cleanly,
- * anything with content, signatures, links, or status refuses with the
- * blocker named. The deletion itself is audited; the number is burned like
- * every other discarded draft document.
+ * Discard an untouched draft through the drawer's explicit Discard action:
+ * an empty draft deletes cleanly, while anything with content, signatures,
+ * links, or status refuses with the blocker named. The deletion itself is
+ * audited; the number is burned like every other discarded draft document.
  */
 export async function discardEmptyTicketDraft(
   orgId: string,

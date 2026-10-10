@@ -35,7 +35,10 @@
     "waiting": "待签署",
     "signed": "已签署",
     "date": "日期",
-    "createFailed": "创建工单失败"
+    "createFailed": "创建工单失败",
+    "createTitle": "新建现场工单",
+    "createHint": "选择项目、期间和日期。工单在保存时编号；关闭不会写入任何内容。",
+    "periodPolicy": "项目策略"
   },
   "editor": {
     "tabs": { "time": "工时", "items": "项目", "tasks": "任务", "related": "关联", "production": "产量" },

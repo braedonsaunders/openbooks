@@ -10,6 +10,7 @@ import { SupplyEvidencePanel } from './supply-evidence-panel'
 import { AppliedPaymentsPanel, type AppliedPayment } from './applied-payments-panel'
 import { CreditApplicationsPanel } from './credit-applications-panel'
 import { FieldTicketDrawer } from '../app/(app)/field-tickets/FieldTicketDrawer'
+import { FieldTicketCreateDrawer, type FieldTicketCreateDrawerProps } from '../app/(app)/field-tickets/FieldTicketCreateDrawer'
 import { ExpenseDrawer } from '../app/(app)/expenses/ExpenseDrawer'
 import { OrderDrawer } from '../app/(app)/_order/OrderDrawer'
 import { PickListDrawer } from '../app/(app)/picks/PickListDrawer'
@@ -104,9 +105,11 @@ const renderers = {
     )
   },
   'field-ticket-drawer': (props: { drawer: unknown }) => {
-    const drawer = props.drawer as ComponentProps<typeof FieldTicketDrawer> | null
+    const drawer = props.drawer as ComponentProps<typeof FieldTicketDrawer> | FieldTicketCreateDrawerProps | null
     if (!drawer) return null
-    return <FieldTicketDrawer {...drawer} />
+    // The unsaved New-ticket drawer shares the list's drawer slot.
+    if ('createMode' in drawer && drawer.createMode === true) return <FieldTicketCreateDrawer {...drawer} />
+    return <FieldTicketDrawer {...(drawer as ComponentProps<typeof FieldTicketDrawer>)} />
   },
   'expense-drawer': (props: { drawer: unknown }) => {
     const drawer = props.drawer as (ComponentProps<typeof ExpenseDrawer> & { remountKey: string }) | null

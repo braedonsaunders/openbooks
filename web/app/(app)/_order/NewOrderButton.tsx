@@ -11,15 +11,13 @@ import { UnsavedCreateButton } from '@/components/unsaved-create-button'
 /**
  * Order creation entry point, two modes:
  *
- * - Unsaved-create (`createParam` set: estimates/sales-orders/purchase-orders
- *   pass `estimateNew`/`orderNew`): opens a URL-controlled unsaved drawer
- *   (`?<createParam>=1`) with zero writes — the order is persisted only by
+ * - Unsaved-create (`createParam` set: estimates, sales orders, purchase
+ *   orders and field tickets): opens a URL-controlled unsaved drawer
+ *   (`?<createParam>=1`) with zero writes — the record is persisted only by
  *   the drawer's explicit Save (one idempotent collection POST).
- * - Instant draft (`createParam` absent: field tickets use this widget with
- *   their collection `apiPath`): creates the draft server-side, opens its flyout.
- *
- * The `apiPath` branch is used only by field tickets, whose editor requires a
- * persisted record before the operator can choose its project and period.
+ * - Instant draft (`createParam` absent): creates the draft server-side and
+ *   opens its flyout. Order pages use it only while the organization's
+ *   base currency is unconfigured.
  *
  * `base`/`param` build the list route deep-link (e.g. /estimates);
  * `label` and `createFailedMessage` arrive pre-translated from the owning
