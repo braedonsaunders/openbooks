@@ -4125,6 +4125,7 @@
       "carrierActive": "Desmarque Activo en un transportista que ya no utiliza. Un transportista inactivo no se puede elegir en un envío; los envíos que ya lo indican lo conservan.",
       "recognitionRulePolicy": "Cambiar el método, el plazo, las fechas, los desfases, el porcentaje o las cuentas de una regla ya utilizada en ingresos crea una nueva versión; las obligaciones existentes conservan la versión anterior.",
       "gapless": "Sin huecos significa que cada número de la secuencia debe quedar contabilizado, sin números omitidos. Actívelo solo cuando los requisitos legales o de auditoría exijan una numeración ininterrumpida.",
+      "nextNumber": "El número que recibirá el próximo registro de este tipo. Una vez emitidos números, solo puede avanzar.",
       "lienWaiverEnforcement": "Bloquear significa que una factura de esta clase no puede pagarse hasta que una renuncia firmada la cubra.",
       "defaultLienWaiverType": "Preseleccionado al crear una renuncia para estas contrapartes.",
       "defaultInformationReturn": "Se usa cuando un proveedor de esta clase no indica un formulario propio.",

@@ -210,13 +210,13 @@ test("storage refuses per-subsidiary rows, backward counters, and used-format ed
         inChain(error, (c) => c.code === "23514" && c.constraint === "number_sequences_org_wide_sequence"),
     );
 
-    // Counters are positive and one row per (org, kind) is exact.
+    // Counters are never negative and one row per (org, kind) is exact.
     await assert.rejects(
       db.execute(sql`
         insert into number_sequences (org_id, document_kind, prefix, next_number)
-        values (${org.orgId}, 'journal', 'JE-', 0)`),
+        values (${org.orgId}, 'quote', 'EST-', -1)`),
       (error: unknown) =>
-        inChain(error, (c) => c.code === "23514" && c.constraint === "number_sequences_next_number_positive"),
+        inChain(error, (c) => c.code === "23514" && c.constraint === "number_sequences_next_number_nonnegative"),
     );
     await assert.rejects(
       db.execute(sql`

@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm'
 import type { SetupEntity } from './types'
 import { EQUAL_VALUE_CRITERIA_SLOTS } from './hrm-compensation'
 import { toSnake } from './registry'
+import { NUMBER_SEQUENCE_READ_COLUMNS, numberSequenceReadColumn } from './number-sequence-position'
 
 /** Read-side projection/source for registry fields stored in a child relation. */
 export function setupReadProjection(entity: SetupEntity, columns?: readonly string[]) {
@@ -35,6 +36,11 @@ export function setupReadProjection(entity: SetupEntity, columns?: readonly stri
     const projected = (columns?.length ? columns : Object.keys(structuredColumns)).map((column) =>
       structuredColumns[column] ?? column)
     return sql.raw((columns?.length ? projected : ['*', ...projected]).join(', '))
+  }
+  if (entity.key === 'number-sequences') {
+    // Setup shows the number the next document receives, not the stored
+    // most-recently-issued position (see number-sequence-position.ts).
+    return sql.raw((columns?.length ? columns.map(numberSequenceReadColumn) : NUMBER_SEQUENCE_READ_COLUMNS).join(', '))
   }
   if (entity.key === 'hrm-job-levels') {
     const base = sql.raw(columns?.length ? columns.join(', ') : '*')

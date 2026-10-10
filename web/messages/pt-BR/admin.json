@@ -4200,6 +4200,7 @@
       "carrierActive": "Desmarque Ativo em uma transportadora que você não usa mais. Uma transportadora inativa não pode ser escolhida em uma remessa; as remessas que já a indicam a mantêm.",
       "recognitionRulePolicy": "Alterar o método, o prazo, as datas, os deslocamentos, o percentual ou as contas de uma regra já usada na receita cria uma nova versão; as obrigações existentes mantêm a versão anterior.",
       "gapless": "Sem lacunas significa que todos os números da sequência devem ser contabilizados, sem números pulados. Ative somente quando exigências legais ou de auditoria determinarem uma numeração ininterrupta.",
+      "nextNumber": "O número que o próximo registro deste tipo receberá. Depois que números forem emitidos, ele só pode avançar.",
       "lienWaiverEnforcement": "Bloquear significa que uma fatura desta classe não pode ser paga até que uma quitação assinada a cubra.",
       "defaultLienWaiverType": "Pré-selecionado ao criar uma quitação para uma dessas contrapartes.",
       "defaultInformationReturn": "Usado quando um fornecedor desta classe não nomeia um formulário.",

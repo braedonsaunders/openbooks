@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import type { SetupEntity } from './types'
+import { NUMBER_SEQUENCE_READ_COLUMNS } from './number-sequence-position'
 
 /** Snapshot the actual stored setup row, including its ordered join-table
  * values. Call with lock=true before a mutation, on its transaction executor. */
@@ -11,8 +12,11 @@ export async function loadSetupAuditRow(
   runner: Pick<typeof db, 'execute'>,
   lock = false,
 ): Promise<Record<string, unknown> | undefined> {
+  // Sequence audits record the operator's next number, matching what Setup
+  // displays and accepts (see number-sequence-position.ts).
+  const projection = entity.key === 'number-sequences' ? NUMBER_SEQUENCE_READ_COLUMNS.join(', ') : '*'
   const row = (await runner.execute(sql`
-    select * from ${sql.raw(entity.table)}
+    select ${sql.raw(projection)} from ${sql.raw(entity.table)}
      where ${sql.raw(entity.idColumn ?? 'id')} = ${rowId}
        ${entity.orgScoped ? sql`and org_id = ${orgId}` : sql``}
        ${lock ? sql`for update` : sql``}

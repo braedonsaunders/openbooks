@@ -4125,6 +4125,7 @@
       "carrierActive": "Décochez Actif pour un transporteur que vous n’utilisez plus. Un transporteur inactif ne peut être choisi sur aucune expédition ; les expéditions qui le mentionnent déjà le conservent.",
       "recognitionRulePolicy": "Modifier la méthode, la durée, les dates, les décalages, le pourcentage ou les comptes d’une règle déjà utilisée pour les produits crée une nouvelle version ; les obligations existantes conservent l’ancienne version.",
       "gapless": "Sans rupture signifie que chaque numéro de la séquence doit être justifié, sans aucun numéro sauté. Activez cette option uniquement si vos obligations légales ou d’audit imposent une numérotation ininterrompue.",
+      "nextNumber": "Le numéro que recevra le prochain enregistrement de ce type. Une fois des numéros attribués, il ne peut qu’augmenter.",
       "lienWaiverEnforcement": "Bloquer signifie qu'une facture de cette catégorie ne peut être payée sans renonciation signée qui la couvre.",
       "defaultLienWaiverType": "Présélectionné lors de la création d'une renonciation pour ces contreparties.",
       "defaultInformationReturn": "Utilisé lorsqu'un fournisseur de cette catégorie n'indique pas lui-même de formulaire.",

@@ -174,7 +174,7 @@ export const BILLING_ENTITIES: SetupEntity[] = [
       { key: 'documentKind', kind: 'ref', ref: 'number-sequence-kinds', required: true, lockedOnEdit: true },
       { key: 'subsidiaryId', kind: 'ref', ref: 'subsidiaries', lockedOnEdit: true },
       { key: 'prefix', kind: 'text', keepDefault: true },
-      { key: 'nextNumber', kind: 'integer', required: true, defaultValue: 1 },
+      { key: 'nextNumber', kind: 'integer', required: true, defaultValue: 1, helpTextKey: 'fieldHelp.nextNumber' },
       { key: 'padding', kind: 'integer', required: true, defaultValue: 5 },
       { key: 'gapless', kind: 'boolean', helpTextKey: 'fieldHelp.gapless' },
     ],
