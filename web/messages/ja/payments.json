@@ -57,6 +57,8 @@
     "amountReceived": "受領金額",
     "autoApply": "自動適用",
     "reservedByRun": "支払実行 {runNumber} で予約済み",
+    "openItemAccount": "勘定 {account}",
+    "otherControlAccount": "別の勘定にあります — 別の支払で消し込んでください",
     "autoApplyFailed": "適用案を提示できませんでした",
     "autoApplyNone": "この金額に一致する未消込項目はありません",
     "autoApplyDone": "{count, plural, one {# 件の項目} other {# 件の項目}}に適用しました（{strategy}）",

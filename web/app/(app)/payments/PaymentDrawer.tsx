@@ -61,6 +61,11 @@ export interface OpenItemClient {
   transactionOpen: string
   /** A live payment run that will pay this item; it is not payable here. */
   reservedByRun?: { runId: string; runNumber: string; runStatus: string } | null
+  /** The receivable/payable account the item sits on. One payment settles
+   *  one account, so items on another account wait for their own payment. */
+  accountId?: string
+  accountNumber?: string | null
+  accountName?: string
 }
 
 interface AllocationClient {
@@ -462,6 +467,13 @@ export function PaymentDrawer({
     [allocs, openItems, rowValid],
   )
   const hasInvalidRow = openItems.some((i) => !rowValid(i))
+  // A payment settles exactly one control account (the posting kernel and the
+  // application ledger both refuse a mix), so once an item is selected, items
+  // on any other receivable/payable account are held for a separate payment.
+  const selectedAccountId = openItems.find((item) => allocs[item.lineId] !== undefined)?.accountId ?? null
+  const showsItemAccounts = new Set(openItems.map((item) => item.accountId ?? '')).size > 1
+  const otherAccount = (item: OpenItemClient): boolean =>
+    selectedAccountId !== null && item.accountId !== undefined && item.accountId !== selectedAccountId
   const displayedOpenItems = editable
     ? openItems
     : openItems.filter((item) => allocs[item.lineId] !== undefined)
@@ -1088,7 +1100,7 @@ export function PaymentDrawer({
                               type="checkbox"
                               className="h-4 w-4 accent-teal-600"
                               checked={checked}
-                              disabled={!checked && Boolean(item.reservedByRun)}
+                              disabled={!checked && (Boolean(item.reservedByRun) || otherAccount(item))}
                               onChange={() => toggle(item)}
                               aria-label={t('applyAriaLabel', { document: item.documentNumber ?? item.entryNumber })}
                             />
@@ -1104,6 +1116,16 @@ export function PaymentDrawer({
                             {item.reservedByRun ? (
                               <span className="mt-0.5 block text-xs text-amber-700 dark:text-amber-400">
                                 {t('reservedByRun', { runNumber: item.reservedByRun.runNumber })}
+                              </span>
+                            ) : null}
+                            {showsItemAccounts && item.accountName ? (
+                              <span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">
+                                {t('openItemAccount', { account: `${item.accountNumber ? `${item.accountNumber} · ` : ''}${item.accountName}` })}
+                              </span>
+                            ) : null}
+                            {editable && !checked && otherAccount(item) ? (
+                              <span className="mt-0.5 block text-xs text-amber-700 dark:text-amber-400">
+                                {t('otherControlAccount')}
                               </span>
                             ) : null}
                           </SharedTableCell>

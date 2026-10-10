@@ -255,6 +255,7 @@ const FEATURE_DISABLE_CHECKS: Record<string, (orgId: string) => Promise<FeatureD
           join orgs o on o.id = jl.org_id
          where jl.org_id = ${orgId} and je.book_id = ${bookId}
            and jl.account_id = nullif(o.settings->'controlAccounts'->>'retainageReceivable', '')::uuid
+           and not jl.is_open_item
          group by jl.org_id
         having coalesce(sum(jl.amount), 0) <> 0`),
       () => countRows(sql`

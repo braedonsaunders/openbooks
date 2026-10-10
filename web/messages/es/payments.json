@@ -57,6 +57,8 @@
     "amountReceived": "Importe recibido",
     "autoApply": "Aplicar auto",
     "reservedByRun": "Reservado por la ejecución de pago {runNumber}",
+    "openItemAccount": "Cuenta {account}",
+    "otherControlAccount": "En otra cuenta: liquídelo en un pago aparte",
     "autoApplyFailed": "No se pudo sugerir una aplicación",
     "autoApplyNone": "Ningún elemento pendiente coincide con este importe",
     "autoApplyDone": "Aplicado a {count, plural, one {# elemento} other {# elementos}} ({strategy})",

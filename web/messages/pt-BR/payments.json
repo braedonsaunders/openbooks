@@ -57,6 +57,8 @@
     "amountReceived": "Valor recebido",
     "autoApply": "Aplicar automaticamente",
     "reservedByRun": "Reservado pela execução de pagamento {runNumber}",
+    "openItemAccount": "Conta {account}",
+    "otherControlAccount": "Em outra conta — liquide-o em um pagamento separado",
     "autoApplyFailed": "Não foi possível sugerir uma aplicação",
     "autoApplyNone": "Nenhum item em aberto corresponde a este valor",
     "autoApplyDone": "Aplicado a {count, plural, one {# item} other {# itens}} ({strategy})",

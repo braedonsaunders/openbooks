@@ -8,6 +8,7 @@ import { db, withOrgContext, withOrgTransaction } from '@openbooks/engine/src/pl
 import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/submit.ts'
 import { controlDeps } from '@openbooks/engine/src/ledger/document-service.ts'
 import { postDocument } from '@openbooks/engine/src/ledger/posting-document.ts'
+import { postedDocumentControlAccount } from '@openbooks/engine/src/ledger/posting-control-account.ts'
 import { runPostDocumentEffects } from '@openbooks/engine/src/ledger/posting-dispatch.ts'
 import { runRecordFlows } from '@openbooks/engine/src/flows/index.ts'
 import { canonicalDecimal, compareDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
@@ -630,6 +631,13 @@ export async function inspectReturnAuthorization(input: {
           reason: (input.waiveReason ?? '').trim(),
         })
       }
+      // A return against an invoice credits that invoice's own receivable
+      // account, so the credit can be applied to it; a fulfillment-sourced
+      // return resolves like any credit memo (customer default, else the
+      // organization control).
+      const sourceControlAccountId = current.sourceDocumentId
+        ? await postedDocumentControlAccount(db, input.orgId, current.sourceDocumentId)
+        : null
       const created = await createDocument({
         orgId: input.orgId,
         userId: input.actorId,
@@ -644,6 +652,7 @@ export async function inspectReturnAuthorization(input: {
           referenceNumber: current.documentNumber,
           memo: `Customer return under ${current.documentNumber}`,
           lines: creditLines,
+          ...(sourceControlAccountId ? { custom: { controlAccountId: sourceControlAccountId } } : {}),
         },
       })
       creditId = created.id

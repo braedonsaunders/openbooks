@@ -49,10 +49,13 @@ export async function suggestApplications(
     return { allocations: [sameCurrencyAllocation(exact.lineId, amount)], applied: amount, remaining: "0", strategy: "exact" };
   }
 
-  // 3) FIFO oldest-first (openItemsForParty is ordered by due/posting date)
+  // 3) FIFO oldest-first (openItemsForParty is ordered by due/posting date),
+  // within the oldest item's receivable/payable account: one payment settles
+  // one control account, so a mixed suggestion could never post.
   const allocations: AllocationInput[] = [];
   let remaining = target;
-  for (const i of items) {
+  const fifoAccount = items[0]!.accountId;
+  for (const i of items.filter((item) => item.accountId === fifoAccount)) {
     if (remaining <= 0n) break;
     const take = toUnits(i.transactionOpen) <= remaining ? toUnits(i.transactionOpen) : remaining;
     if (take > 0n) {
@@ -198,8 +201,12 @@ export async function openItemsForParty(
       reserved_run_id: string | null;
       reserved_run_number: string | null;
       reserved_run_status: string | null;
+      account_id: string;
+      account_number: string | null;
+      account_name: string;
     }>(sql`
     select jl.id as line_id, abs(jl.amount) as amount, jl.due_date, jl.memo,
+           jl.account_id, acct.number as account_number, acct.name as account_name,
            jl.currency, jl.fx_rate, abs(jl.txn_amount) as transaction_amount,
            je.id as entry_id, je.entry_number, je.posting_date,
            d.id as document_id, d.document_number, d.kind as document_kind, d.reference_number,
@@ -210,6 +217,7 @@ export async function openItemsForParty(
       from journal_lines jl
       -- Live entries only: a reversed entry no longer carries a settleable open item.
       join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
+      join accounts acct on acct.id = jl.account_id and acct.org_id = jl.org_id
       left join documents d on d.id = je.source_document_id and d.org_id = je.org_id
       left join lateral (
         select sum(a.amount) as applied, sum(a.target_transaction_amount) as transaction_applied
@@ -245,6 +253,9 @@ export async function openItemsForParty(
       documentKind: row.document_kind,
       referenceNumber: row.reference_number,
       memo: row.memo,
+      accountId: row.account_id,
+      accountNumber: row.account_number,
+      accountName: row.account_name,
       amount: row.amount,
       applied: row.applied,
       open: sum([row.amount, negStr(String(row.applied))]),
@@ -302,8 +313,12 @@ export async function creditItemsForParty(
     reserved_run_id: string | null;
     reserved_run_number: string | null;
     reserved_run_status: string | null;
+    account_id: string;
+    account_number: string | null;
+    account_name: string;
   }>(sql`
     select jl.id as line_id, abs(jl.amount) as amount, jl.due_date, jl.memo,
+           jl.account_id, acct.number as account_number, acct.name as account_name,
            jl.currency, jl.fx_rate, abs(jl.txn_amount) as transaction_amount,
            je.id as entry_id, je.entry_number, je.posting_date,
            d.id as document_id, d.document_number, d.kind as document_kind, d.reference_number,
@@ -315,6 +330,7 @@ export async function creditItemsForParty(
       -- Live entries only: a voided credit is never offered for application.
       join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
       join documents d on d.id = je.source_document_id and d.org_id = je.org_id and d.kind = ${creditKind}
+      join accounts acct on acct.id = jl.account_id and acct.org_id = jl.org_id
       left join lateral (
         select sum(a.source_amount) as applied, sum(a.source_transaction_amount) as transaction_applied
           from applications a
@@ -345,6 +361,9 @@ export async function creditItemsForParty(
       documentKind: row.document_kind,
       referenceNumber: row.reference_number,
       memo: row.memo,
+      accountId: row.account_id,
+      accountNumber: row.account_number,
+      accountName: row.account_name,
       amount: row.amount,
       applied: row.applied,
       open: sum([row.amount, negStr(String(row.applied))]),

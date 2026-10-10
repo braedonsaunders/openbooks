@@ -360,7 +360,10 @@ async function projectRetainageSettlement(
 
 /** Shared held balance for the release boundary and its overview. Amounts are
  * in the journal LINE entity's functional currency, regardless of txn currency.
- * A scalar primary-book lookup deliberately refuses ambiguous configuration. */
+ * A scalar primary-book lookup deliberately refuses ambiguous configuration.
+ * Held retainage is the withheld lines, never open items: a receivable whose
+ * customer or document control account is this same account is collectible
+ * AR settled through payments, not retainage awaiting release. */
 export function projectRetainageHeldSql(orgId: string, projectId: string, accountId: string) {
   return sql`
     select coalesce(sum(jl.amount), 0) as held
@@ -368,6 +371,7 @@ export function projectRetainageHeldSql(orgId: string, projectId: string, accoun
       join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
       join projects p on p.id = jl.project_id and p.org_id = jl.org_id and p.subsidiary_id = jl.subsidiary_id
      where jl.org_id = ${orgId} and jl.project_id = ${projectId} and jl.account_id = ${accountId}
+       and not jl.is_open_item
        and je.book_id = (select id from accounting_books where org_id = ${orgId} and is_primary and is_active and posts_gl)
        and je.status in ('posted', 'reversed')
   `;
