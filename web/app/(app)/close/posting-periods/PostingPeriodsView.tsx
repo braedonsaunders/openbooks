@@ -20,6 +20,8 @@ type Candidate = {
   periodName: string | null;
   blocked: boolean;
   blockReason: string | null;
+  adjustment?: boolean;
+  adjustmentPeriod?: { id: string; name: string } | null;
 };
 
 type CommitResult = {
@@ -115,8 +117,24 @@ export function PostingPeriodsView({
 
   const assignable = (rows ?? []).filter((row) => !row.blocked);
   const blocked = (rows ?? []).filter((row) => row.blocked);
+  // Blocked rows whose regular period is closed but whose fiscal year keeps
+  // an open adjustment period, grouped so each group commits to exactly the
+  // adjustment period the operator chose — never silently diverted.
+  const adjustmentGroups = (() => {
+    const groups = new Map<string, { name: string; rows: Candidate[] }>();
+    for (const row of blocked) {
+      if (!row.adjustmentPeriod) continue;
+      const entry = groups.get(row.adjustmentPeriod.id) ?? {
+        name: row.adjustmentPeriod.name,
+        rows: [],
+      };
+      entry.rows.push(row);
+      groups.set(row.adjustmentPeriod.id, entry);
+    }
+    return [...groups.entries()];
+  })();
 
-  async function commit() {
+  async function commit(adjustmentPeriodId?: string) {
     setBusy(true);
     try {
       const response = await fetch("/api/close/posting-periods", {
@@ -124,7 +142,12 @@ export function PostingPeriodsView({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           bookId,
-          documentIds: assignable.map((row) => row.documentId),
+          documentIds: adjustmentPeriodId
+            ? (adjustmentGroups.find(([id]) => id === adjustmentPeriodId)?.[1].rows ?? []).map(
+                (row) => row.documentId,
+              )
+            : assignable.map((row) => row.documentId),
+          adjustmentPeriodId,
         }),
       });
       // The status is checked before the body is trusted: a non-JSON failure
@@ -233,11 +256,29 @@ export function PostingPeriodsView({
           emptyAsRow
           rows={rows}
           toolbarAfter={
-            assignable.length > 0 ? (
-              <Button onClick={commit} disabled={busy}>
-                <Play size={14} />
-                {t("postingPeriods.assign", { count: assignable.length })}
-              </Button>
+            assignable.length > 0 || adjustmentGroups.length > 0 ? (
+              <div className="flex flex-wrap items-center gap-2">
+                {assignable.length > 0 ? (
+                  <Button onClick={() => void commit()} disabled={busy}>
+                    <Play size={14} />
+                    {t("postingPeriods.assign", { count: assignable.length })}
+                  </Button>
+                ) : null}
+                {adjustmentGroups.map(([id, group]) => (
+                  <Button
+                    key={id}
+                    variant="outline"
+                    onClick={() => void commit(id)}
+                    disabled={busy}
+                  >
+                    <Play size={14} />
+                    {t("postingPeriods.assignAdjustment", {
+                      count: group.rows.length,
+                      name: group.name,
+                    })}
+                  </Button>
+                ))}
+              </div>
             ) : undefined
           }
           rowKey={(row) => row.documentId}

@@ -36,6 +36,10 @@ export interface PostingPeriodCandidate {
   periodName: string | null;
   blocked: boolean;
   blockReason: string | null;
+  /** True when the derived period is the adjustment opt-in, not the regular cover. */
+  adjustment: boolean;
+  /** Open adjustment alternative for a closed regular period; null when none stands open. */
+  adjustmentPeriod: { id: string; name: string } | null;
 }
 
 export interface PostingPeriodAssignmentOptions {
@@ -44,6 +48,14 @@ export interface PostingPeriodAssignmentOptions {
   documentIds?: string[];
   /** Subsidiary scope; null/undefined means every subsidiary. */
   subsidiaryIds?: string[] | null;
+  /**
+   * Explicit adjustment-period opt-in for year-end corrections: candidates
+   * whose regular covering period is closed are assigned here instead of
+   * refused, after the same module-gate check the regular period gets. Never
+   * implicit — ordinary postings must not slide into the adjustment bucket
+   * unasked, so a caller that does not name it keeps the refusal.
+   */
+  adjustmentPeriodId?: string;
 }
 
 async function assertBookOwned(
@@ -114,11 +126,47 @@ async function loadCandidates(
   return rows;
 }
 
+/**
+ * The open adjustment period for a regular period's fiscal year, if one
+ * stands open for the document kind's module gate on the target book. Read
+ * only: naming it never assigns anything — the caller opts in explicitly.
+ */
+async function openAdjustmentAlternative(
+  runner: SqlExecutor,
+  orgId: string,
+  bookId: string,
+  module: CloseModule,
+  subsidiaryId: string | null,
+  calendarId: string,
+  fiscalYear: number,
+): Promise<{ id: string; name: string } | null> {
+  const adjustment = (await runner.execute<{ id: string; name: string }>(sql`
+    select id, name from accounting_periods
+     where org_id = ${orgId} and fiscal_calendar_id = ${calendarId}
+       and fiscal_year = ${fiscalYear} and is_adjustment
+     order by period_number limit 1`)).rows[0];
+  if (!adjustment) return null;
+  try {
+    await assertPeriodModulesOpen(runner, {
+      orgId,
+      periodId: adjustment.id,
+      bookId,
+      subsidiaryIds: [subsidiaryId as string],
+      modules: [module],
+    });
+  } catch (error) {
+    if (error instanceof CloseError) return null;
+    throw error;
+  }
+  return adjustment;
+}
+
 async function resolveCandidate(
   runner: SqlExecutor,
   orgId: string,
   bookId: string,
   row: CandidateRow,
+  adjustmentPeriodId?: string,
 ): Promise<PostingPeriodCandidate> {
   const base = {
     documentId: row.id,
@@ -126,6 +174,8 @@ async function resolveCandidate(
     kind: row.kind,
     subsidiaryId: row.subsidiary_id,
     effectiveDate: row.effective_date,
+    adjustment: false as boolean,
+    adjustmentPeriod: null as { id: string; name: string } | null,
   };
   let module: CloseModule;
   try {
@@ -174,19 +224,61 @@ async function resolveCandidate(
       modules: [module],
     });
   } catch (error) {
+    if (!(error instanceof CloseError)) {
+      return {
+        ...base,
+        periodId: period.id,
+        periodName: period.name,
+        blocked: true,
+        blockReason: error instanceof Error ? error.message : String(error),
+      };
+    }
+    // The regular period is closed for this kind: offer the fiscal year's
+    // open adjustment period instead, and take it only when the caller named
+    // exactly that period. The kernel re-validates the window and the gate
+    // at post time, so preview and commit agree by construction.
+    const alternative = await openAdjustmentAlternative(
+      runner, orgId, bookId, module, row.subsidiary_id,
+      period.fiscal_calendar_id, period.fiscal_year,
+    );
+    if (alternative && adjustmentPeriodId === alternative.id) {
+      return {
+        ...base,
+        periodId: alternative.id,
+        periodName: alternative.name,
+        blocked: false,
+        blockReason: null,
+        adjustment: true,
+        adjustmentPeriod: alternative,
+      };
+    }
     return {
       ...base,
       periodId: period.id,
       periodName: period.name,
       blocked: true,
-      blockReason: error instanceof CloseError
-        ? `period ${period.name} is closed for ${module.toUpperCase()} on this book`
-        : error instanceof Error
-          ? error.message
-          : String(error),
+      blockReason: `period ${period.name} is closed for ${module.toUpperCase()} on this book` +
+        (alternative ? `; the open adjustment period "${alternative.name}" can take it instead` : ""),
+      adjustmentPeriod: alternative,
     };
   }
   return { ...base, periodId: period.id, periodName: period.name, blocked: false, blockReason: null };
+}
+
+/** A named adjustment opt-in must name the org's own adjustment period — a
+ * typo'd id assigns nothing anywhere, which reads as success with zero
+ * writes, so it refuses instead. */
+async function assertAdjustmentOwned(
+  runner: SqlExecutor,
+  orgId: string,
+  adjustmentPeriodId: string,
+): Promise<void> {
+  const found = (await runner.execute<{ id: string }>(sql`
+    select id from accounting_periods
+     where id = ${adjustmentPeriodId} and org_id = ${orgId} and is_adjustment limit 1`));
+  if (!found.rows[0]) {
+    throw new PostingPeriodAssignmentError("adjustment period not found in this organization");
+  }
 }
 
 /** Read-only preview: every candidate with its derived period or refusal reason. */
@@ -195,9 +287,10 @@ export async function previewPostingPeriodAssignment(
   opts: PostingPeriodAssignmentOptions,
 ): Promise<{ bookId: string; rows: PostingPeriodCandidate[] }> {
   return withOrgTransaction(orgId, async () => {
+    if (opts.adjustmentPeriodId) await assertAdjustmentOwned(db, orgId, opts.adjustmentPeriodId);
     const candidates = await loadCandidates(db, orgId, opts);
     const rows: PostingPeriodCandidate[] = [];
-    for (const row of candidates) rows.push(await resolveCandidate(db, orgId, opts.bookId, row));
+    for (const row of candidates) rows.push(await resolveCandidate(db, orgId, opts.bookId, row, opts.adjustmentPeriodId));
     return { bookId: opts.bookId, rows };
   });
 }
@@ -221,6 +314,7 @@ export async function commitPostingPeriodAssignment(
 ): Promise<PostingPeriodCommitResult> {
   return withOrgTransaction(orgId, () =>
     db.transaction(async (tx) => {
+      if (opts.adjustmentPeriodId) await assertAdjustmentOwned(tx, orgId, opts.adjustmentPeriodId);
       const candidates = await loadCandidates(tx, orgId, opts);
       const scope = scopeSet(opts);
       const result: PostingPeriodCommitResult = { assigned: [], skipped: [], refused: [] };
@@ -239,7 +333,7 @@ export async function commitPostingPeriodAssignment(
           result.skipped.push({ documentId: row.id, reason: "no longer assignable" });
           continue;
         }
-        const resolved = await resolveCandidate(tx, orgId, opts.bookId, row);
+        const resolved = await resolveCandidate(tx, orgId, opts.bookId, row, opts.adjustmentPeriodId);
         if (resolved.blocked || !resolved.periodId) {
           result.refused.push({ documentId: row.id, reason: resolved.blockReason ?? "not assignable" });
           continue;
@@ -262,7 +356,9 @@ export async function commitPostingPeriodAssignment(
                   ${JSON.stringify({
                     before: { posting_period_id: null },
                     after: { posting_period_id: resolved.periodId },
-                    reason: "bulk posting-period assignment",
+                    reason: resolved.adjustment
+                      ? `bulk posting-period assignment to adjustment period ${resolved.periodName}`
+                      : "bulk posting-period assignment",
                   })}::jsonb, ${opts.actorId})`);
         result.assigned.push({ documentId: row.id, periodId: resolved.periodId });
       }

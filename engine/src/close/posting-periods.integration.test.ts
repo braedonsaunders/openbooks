@@ -7,6 +7,8 @@ import {
   commitPostingPeriodAssignment,
   previewPostingPeriodAssignment,
 } from "./posting-periods.ts";
+import { assertPeriodModulesOpen } from "../periods/period-policy.ts";
+import { setPeriodLockState } from "../periods/period-locks.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
 
 // Admin bulk assignment for the close-readiness `posting-period-missing`
@@ -19,7 +21,7 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 async function seedOrder(
   orgId: string,
   subsidiaryId: string,
-  kind: "sales_order" | "purchase_order" | "vendor_bill" | "customer_invoice" | "purchase_receipt",
+  kind: "sales_order" | "purchase_order" | "vendor_bill" | "customer_invoice" | "purchase_receipt" | "journal",
   date: string,
   status = "approved",
 ): Promise<string> {
@@ -126,6 +128,61 @@ test("assign-posting-period assigns decided inventory kinds and blocks undecided
     assert.equal(byId.get(bogusId)?.blocked, true);
     assert.match(byId.get(bogusId)?.blockReason ?? "", /not configured for period close/);
     assert.doesNotMatch(byId.get(bogusId)?.blockReason ?? "", /DOCUMENT_CLOSE_MODULES/);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("assign-posting-period offers the open adjustment period when the regular period is closed", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actors = await seedFlowActors(org.orgId);
+    await setPeriodLockState({
+      orgId: org.orgId, periodId: org.periodId, bookId: org.bookId,
+      module: "gl", state: "closed", actorId: actors.adminId, reason: "year-end close",
+    });
+    const regular = (await db.execute<{ fiscal_calendar_id: string; fiscal_year: number; ends_on: string }>(sql`
+      select fiscal_calendar_id, fiscal_year, ends_on::text as ends_on from accounting_periods
+       where id = ${org.periodId} and org_id = ${org.orgId}`)).rows[0]!;
+    const adjustmentId = randomUUID();
+    await db.execute(sql`
+      insert into accounting_periods
+        (id, org_id, fiscal_calendar_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment)
+      values (${adjustmentId}, ${org.orgId}, ${regular.fiscal_calendar_id}, ${regular.fiscal_year},
+              13, 'ADJ', ${regular.ends_on}, ${regular.ends_on}, true)`);
+    const journal = await seedOrder(org.orgId, org.subsidiaryId, "journal", org.date);
+
+    // Without the opt-in the row stays blocked but names the alternative.
+    const blocked = await previewPostingPeriodAssignment(org.orgId, { bookId: org.bookId });
+    const blockedRow = new Map(blocked.rows.map((row) => [row.documentId, row])).get(journal)!;
+    assert.equal(blockedRow.blocked, true);
+    assert.equal(blockedRow.adjustmentPeriod?.id, adjustmentId);
+    assert.match(blockedRow.blockReason ?? "", /adjustment period "ADJ" can take it instead/);
+
+    // The opt-in assigns into the adjustment period with an audited reason.
+    const committed = await commitPostingPeriodAssignment(org.orgId, {
+      bookId: org.bookId, documentIds: [journal], adjustmentPeriodId: adjustmentId, actorId: actors.adminId,
+    });
+    assert.deepEqual(committed.assigned, [{ documentId: journal, periodId: adjustmentId }]);
+    const audit = (await db.execute<{ reason: string }>(sql`
+      select changes->>'reason' as reason from audit_log
+       where org_id = ${org.orgId} and table_name = 'documents' and row_id = ${journal}
+       order by at desc, id desc limit 1`)).rows[0];
+    assert.match(audit?.reason ?? "", /adjustment period ADJ/);
+
+    // A bogus adjustment id refuses instead of silently assigning nothing.
+    await assert.rejects(
+      previewPostingPeriodAssignment(org.orgId, { bookId: org.bookId, adjustmentPeriodId: randomUUID() }),
+      /adjustment period not found/,
+    );
+
+    // The closed-period refusal names the controlled route.
+    await assert.rejects(
+      assertPeriodModulesOpen(db, {
+        orgId: org.orgId, periodId: org.periodId, bookId: org.bookId, modules: ["gl"],
+      }),
+      /controlled reopen, or post this entry into the open adjustment period "ADJ"/,
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }

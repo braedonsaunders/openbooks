@@ -15,6 +15,7 @@ import { isUuid } from "../../../../lib/list-params";
 const requestBodySchema = z.object({
   bookId: z.string().uuid(),
   documentIds: z.array(z.string().uuid()).max(1000).optional(),
+  adjustmentPeriodId: z.string().uuid().optional(),
 });
 
 
@@ -57,6 +58,10 @@ async function legacyGET(req: Request) {
   }
   const documentIds = parseIdList(url.searchParams.get("documentIds"));
   if (documentIds instanceof NextResponse) return documentIds;
+  const adjustmentPeriodId = url.searchParams.get("adjustmentPeriodId") ?? undefined;
+  if (adjustmentPeriodId !== undefined && !isUuid(adjustmentPeriodId)) {
+    return NextResponse.json({ error: "valid adjustmentPeriodId is required" }, { status: 400 });
+  }
   const scope = subsidiaryScope(gate);
   if (scope instanceof NextResponse) return scope;
   try {
@@ -64,6 +69,7 @@ async function legacyGET(req: Request) {
       bookId,
       documentIds,
       subsidiaryIds: scope,
+      adjustmentPeriodId,
     });
     return NextResponse.json(preview);
   } catch (error) {
@@ -113,11 +119,13 @@ export const POST = defineRoute({
     }
     const scope = subsidiaryScope(gate);
     if (scope instanceof NextResponse) return scope;
+    const adjustmentPeriodId = typeof body.adjustmentPeriodId === "string" ? body.adjustmentPeriodId : undefined;
     try {
       const result = await commitPostingPeriodAssignment(gate.user.orgId, {
         bookId,
         documentIds: rawIds as string[] | undefined,
         subsidiaryIds: scope,
+        adjustmentPeriodId,
         actorId: gate.user.id,
       });
       return NextResponse.json({ ok: true, ...result });

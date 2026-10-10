@@ -153,10 +153,61 @@ export async function assertPeriodModulesOpen(
          limit 1`));
       if (periodLockBlocksPosting(result.rows[0], args.allowImportedLocks === true))
         throw new CloseError(
-          `${module.toUpperCase()} is closed for this period and accounting book`,
+          `${module.toUpperCase()} is closed for this period and accounting book${await closedPeriodRoute(executor, args, module, subsidiaryId)}`,
         );
     }
   }
+}
+
+/**
+ * The controlled route out of a closed period, appended to the refusal so
+ * the operator is never left with a bare "closed". Year-end adjustments
+ * belong in the fiscal year's adjustment period while it stands open — the
+ * posting kernel honours an explicitly assigned adjustment period without a
+ * date-window check, so naming it here is a real path, not a hint. When no
+ * adjustment period stands open, the controlled reopen request is the route.
+ * Read-only and refusal-path only: the hot path never pays for it.
+ */
+async function closedPeriodRoute(
+  executor: SqlExecutor,
+  args: { orgId: string; bookId: string; periodId: string; allowImportedLocks?: boolean },
+  module: CloseModule,
+  subsidiaryId: string | null,
+): Promise<string> {
+  const adjustment = (await executor.execute<{ id: string; name: string; fiscal_year: number }>(sql`
+    select p2.id, p2.name, p2.fiscal_year
+      from accounting_periods p2
+      join accounting_periods p1
+        on p1.id = ${args.periodId} and p1.org_id = ${args.orgId}
+     where p2.org_id = ${args.orgId}
+       and p2.fiscal_calendar_id = p1.fiscal_calendar_id
+       and p2.fiscal_year = p1.fiscal_year
+       and p2.is_adjustment
+     order by p2.period_number limit 1`)).rows[0];
+  if (adjustment) {
+    // The adjustment period must be open for the same effective gate the
+    // posting just failed: the refused module plus GL, under the same
+    // exemption the caller opted into.
+    let blocked = false;
+    for (const name of [...new Set<CloseModule>([module, "gl"])]) {
+      const lock = (await executor.execute<{ state: string; reopenExpiresAt: Date | string | null; reason: string | null }>(sql`
+        select state, reopen_expires_at as "reopenExpiresAt", reason
+          from period_locks
+         where org_id = ${args.orgId} and period_id = ${adjustment.id}
+           and book_id = ${args.bookId} and module = ${name}
+           and (subsidiary_id is not distinct from ${subsidiaryId} or subsidiary_id is null)
+         order by (subsidiary_id is not null) desc
+         limit 1`));
+      if (periodLockBlocksPosting(lock.rows[0], args.allowImportedLocks === true)) {
+        blocked = true;
+        break;
+      }
+    }
+    if (!blocked) {
+      return ` — request a controlled reopen, or post this entry into the open adjustment period "${adjustment.name}" for fiscal year ${adjustment.fiscal_year}`;
+    }
+  }
+  return " — request a controlled reopen to post here";
 }
 
 /**
