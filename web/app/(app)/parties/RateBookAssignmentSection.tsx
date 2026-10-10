@@ -7,7 +7,8 @@ import { usePathname, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { ActionError, kindForStatus, transportError } from '@braedonsaunders/appkit-errors'
-import { Alert, Badge, Button, Card, CardContent, Input, Label, Select } from '@openbooks/ui'
+import { Alert, Badge, Button, Drawer, Input, Label, Select } from '@openbooks/ui'
+import { DrawerSublist, SublistAddButton, SublistEmpty, SublistPager } from '@/components/drawer-sublist'
 import { useAppAction } from '@/lib/use-app-action'
 import { confirmDialog } from '@/lib/confirm'
 
@@ -222,99 +223,33 @@ export function RateBookAssignmentSection({
   }
 
   return (
-    <section className="mt-4 space-y-3">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('title')}</h4>
-          <p className="text-xs text-slate-500 dark:text-slate-400">{t(`hint.${scope}`)}</p>
-        </div>
-        {!form && canEditAssignments ? (
-          <Button variant="outline" size="sm" onClick={startNew} disabled={busy || rateBooks.length === 0}>
-            {t('new')}
-          </Button>
-        ) : null}
-      </div>
-
-      {failure ? <Alert variant="destructive">{failure}</Alert> : null}
-
-      {loadError ? (
-        <div role="alert" className="flex flex-wrap items-center gap-2 text-sm text-amber-800 dark:text-amber-200">
-          <span>{t('staleLoadFailed')}</span>
-          <Button size="sm" variant="outline" onClick={() => void load()}>{common('actions.retry')}</Button>
-        </div>
-      ) : null}
-
-      {rateBooks.length === 0 ? (
-        <p className="text-xs text-slate-500 dark:text-slate-400">{t('noBooks')}</p>
-      ) : null}
-
-      {editable ? <div className="flex flex-wrap gap-2">
-        <Input
-          value={q}
-          onChange={(event) => { setQ(event.target.value); setPage(1) }}
-          placeholder={t('search')}
-          className="min-w-56 flex-1"
-        />
+    <DrawerSublist
+      title={t('title')}
+      description={t(`hint.${scope}`)}
+      action={canEditAssignments && rateBooks.length > 0 ? <SublistAddButton label={t('new')} onClick={startNew} disabled={busy} /> : undefined}
+      alert={(
+        <>
+          {!form && failure ? <Alert variant="destructive">{failure}</Alert> : null}
+          {loadError ? (
+            <div role="alert" className="flex flex-wrap items-center gap-2 text-sm text-amber-800 dark:text-amber-200">
+              <span>{t('staleLoadFailed')}</span>
+              <Button size="sm" variant="outline" onClick={() => void load()}>{common('actions.retry')}</Button>
+            </div>
+          ) : null}
+        </>
+      )}
+      search={{ value: q, onChange: (value) => { setQ(value); setPage(1) }, placeholder: t('search') }}
+      filters={(
         <Select value={status} onChange={(event) => { setStatus(event.target.value as 'active' | 'inactive' | 'all'); setPage(1) }} className="w-auto min-w-40" aria-label={t('statusFilter')}>
           <option value="active">{t('status.active')}</option>
           <option value="inactive">{t('status.inactive')}</option>
           <option value="all">{t('status.all')}</option>
         </Select>
-      </div> : null}
-
-      {form ? (
-        <Card>
-          <CardContent className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-5" inert={busy}>
-            <div className={`${field} lg:col-span-2`}>
-              <Label>{t('rateBook')}</Label>
-              <Select value={form.rateBookId} onChange={(e) => setForm({ ...form, rateBookId: e.target.value })}>
-                {rateBooks.map((b) => (
-                  <option key={b.id} value={b.id}>{b.name} · {b.currency}</option>
-                ))}
-              </Select>
-            </div>
-            <div className={`${field} lg:col-span-2`}>
-              <Label help={t('rateVersionHelp')}>{t('rateVersion')}</Label>
-              <Select name="rateVersionId" aria-label={t('rateVersion')} value={form.rateVersionId} onChange={(e) => setForm({ ...form, rateVersionId: e.target.value })}>
-                <option value="">{t('automaticVersion')}</option>
-                {form.rateVersionId && !versions.some(version => version.id === form.rateVersionId) ? (
-                  <option value={form.rateVersionId}>{t('unavailableVersion')}</option>
-                ) : null}
-                {versions.map(version => (
-                  <option key={version.id} value={version.id}>
-                    {String(version.effective_from).slice(0, 10)} · {version.effective_to ? String(version.effective_to).slice(0, 10) : t('openEnded')}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div className={field}>
-              <Label>{t('effectiveFrom')}</Label>
-              <Input type="date" value={form.effectiveFrom} onChange={(e) => setForm({ ...form, effectiveFrom: e.target.value })} />
-            </div>
-            <div className={field}>
-              <Label>{t('dateBasis')}</Label>
-              <Select value={form.dateBasis} onChange={(e)=>setForm({...form,dateBasis:e.target.value as 'usage_date'|'project_start'})}>
-                <option value="usage_date">{t('dateBasisOptions.usage_date')}</option>
-                <option value="project_start">{t('dateBasisOptions.project_start')}</option>
-              </Select>
-            </div>
-            <div className={field}>
-              <Label>{t('effectiveTo')}</Label>
-              <Input type="date" value={form.effectiveTo} onChange={(e) => setForm({ ...form, effectiveTo: e.target.value })} />
-            </div>
-            <label className="flex items-center gap-2 self-end pb-2 text-sm sm:col-span-2 lg:col-span-4">
-              <input type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
-                className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500" />
-              {common('status.active')}
-            </label>
-            <div className="flex gap-2 sm:col-span-2 lg:col-span-4">
-              <Button disabled={busy} onClick={save}>{busy ? common('actions.saving') : common('actions.save')}</Button>
-              <Button variant="outline" disabled={busy} onClick={() => setForm(null)}>{common('actions.cancel')}</Button>
-            </div>
-          </CardContent>
-        </Card>
+      )}
+      footer={total > 0 ? (
+        <SublistPager count={t('count', { count: total })} page={page} pages={pages} onPage={setPage} disabled={busy} />
       ) : null}
-
+    >
       {assignments.length > 0 ? (
         <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
           <SharedTable className="w-full text-sm">
@@ -350,19 +285,73 @@ export function RateBookAssignmentSection({
             </SharedTableBody>
           </SharedTable>
         </div>
-      ) : !form ? (
-        <p className="text-xs text-slate-500 dark:text-slate-400">{t('empty')}</p>
-      ) : null}
-      {total > 0 ? (
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-xs text-slate-500 dark:text-slate-400">{t('count', { count: total })}</span>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" disabled={page <= 1 || busy} onClick={() => setPage((value) => value - 1)}>{common('actions.previous')}</Button>
-            <span className="text-xs tabular-nums text-slate-500">{page} / {pages}</span>
-            <Button variant="outline" size="sm" disabled={page >= pages || busy} onClick={() => setPage((value) => value + 1)}>{common('actions.next')}</Button>
+      ) : (
+        <SublistEmpty text={t('empty')} hint={rateBooks.length === 0 ? t('noBooks') : undefined} />
+      )}
+
+      <Drawer
+        open={form !== null}
+        onClose={() => { if (!busy) setForm(null) }}
+        stacked
+        size="md"
+        title={form?.id ? t('editTitle') : t('new')}
+        footer={form ? (
+          <>
+            <Button variant="outline" disabled={busy} onClick={() => setForm(null)}>{common('actions.cancel')}</Button>
+            <Button disabled={busy} onClick={save}>{busy ? common('actions.saving') : common('actions.save')}</Button>
+          </>
+        ) : undefined}
+      >
+        {form ? (
+          <div className="space-y-4" inert={busy}>
+            {failure ? <Alert variant="destructive">{failure}</Alert> : null}
+            <div className={field}>
+              <Label>{t('rateBook')}</Label>
+              <Select value={form.rateBookId} onChange={(e) => setForm({ ...form, rateBookId: e.target.value })}>
+                {rateBooks.map((b) => (
+                  <option key={b.id} value={b.id}>{b.name} · {b.currency}</option>
+                ))}
+              </Select>
+            </div>
+            <div className={field}>
+              <Label help={t('rateVersionHelp')}>{t('rateVersion')}</Label>
+              <Select name="rateVersionId" aria-label={t('rateVersion')} value={form.rateVersionId} onChange={(e) => setForm({ ...form, rateVersionId: e.target.value })}>
+                <option value="">{t('automaticVersion')}</option>
+                {form.rateVersionId && !versions.some(version => version.id === form.rateVersionId) ? (
+                  <option value={form.rateVersionId}>{t('unavailableVersion')}</option>
+                ) : null}
+                {versions.map(version => (
+                  <option key={version.id} value={version.id}>
+                    {String(version.effective_from).slice(0, 10)} · {version.effective_to ? String(version.effective_to).slice(0, 10) : t('openEnded')}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div className={field}>
+                <Label>{t('effectiveFrom')}</Label>
+                <Input type="date" value={form.effectiveFrom} onChange={(e) => setForm({ ...form, effectiveFrom: e.target.value })} />
+              </div>
+              <div className={field}>
+                <Label>{t('effectiveTo')}</Label>
+                <Input type="date" value={form.effectiveTo} onChange={(e) => setForm({ ...form, effectiveTo: e.target.value })} />
+              </div>
+              <div className={field}>
+                <Label>{t('dateBasis')}</Label>
+                <Select value={form.dateBasis} onChange={(e)=>setForm({...form,dateBasis:e.target.value as 'usage_date'|'project_start'})}>
+                  <option value="usage_date">{t('dateBasisOptions.usage_date')}</option>
+                  <option value="project_start">{t('dateBasisOptions.project_start')}</option>
+                </Select>
+              </div>
+            </div>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
+                className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500" />
+              {common('status.active')}
+            </label>
           </div>
-        </div>
-      ) : null}
-    </section>
+        ) : null}
+      </Drawer>
+    </DrawerSublist>
   )
 }

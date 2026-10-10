@@ -51,6 +51,7 @@ const WAGES = {
   annualHoursRequired: msg("parties.drawer.wages.annualHoursRequired"),
   saveFailed: msg("parties.drawer.wages.saveFailed"),
   saved: msg("parties.drawer.wages.saved"),
+  save: msg("common.actions.save"),
 };
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
@@ -101,16 +102,31 @@ async function renderRates(posted: PostedRate[], postQueue: Response[], rates: R
   };
 }
 
-async function addButton(): Promise<HTMLButtonElement> {
+async function enabledButton(label: string): Promise<HTMLButtonElement> {
   const deadline = Date.now() + 5000;
   for (;;) {
     const button = [...document.querySelectorAll("button")].find(
-      (candidate) => candidate.textContent?.trim() === WAGES.add,
+      (candidate) => candidate.textContent?.trim() === label,
     ) as HTMLButtonElement | undefined;
     if (button && !button.disabled) return button;
-    if (Date.now() > deadline) throw new Error("the wage form never finished loading");
+    if (Date.now() > deadline) throw new Error(`the ${label} action never became available`);
     await tick();
   }
+}
+
+/** The rate form lives in the Add rate drawer, opened from the list's top-right action. */
+async function openRateDrawer() {
+  if (document.querySelector("#employee-wage-rate")) return;
+  const add = await enabledButton(WAGES.add);
+  await act(async () => {
+    add.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    await tick();
+  });
+  await tick();
+}
+
+function addButton(): Promise<HTMLButtonElement> {
+  return enabledButton(WAGES.save);
 }
 
 function setInputValue(input: HTMLInputElement, value: string) {
@@ -126,6 +142,7 @@ function setNativeSelect(select: HTMLSelectElement, value: string) {
 }
 
 async function setRate(value: string) {
+  await openRateDrawer();
   const input = document.querySelector("#employee-wage-rate") as HTMLInputElement | null;
   assert.ok(input, "the form must offer a rate input");
   await act(async () => {
@@ -188,11 +205,8 @@ test("adding a rate preserves decimal text and leaves the dated payroll policy t
   assert.equal(typeof body.rate, "string", "the rate must stay decimal text, never a float");
   assert.equal(body.annualHours, "2080.125");
   assert.equal(typeof body.annualHours, "string");
-  assert.equal(
-    (document.querySelector("#employee-wage-rate") as HTMLInputElement).value,
-    "",
-    "a saved rate must clear the form",
-  );
+  const cleared = document.querySelector("#employee-wage-rate") as HTMLInputElement | null;
+  assert.ok(!cleared || cleared.value === "", "a saved rate must clear the form");
   const toasts = globalThis.__wageToasts ?? [];
   assert.ok(
     toasts.some((toast) => toast.kind === "success" && toast.message === WAGES.saved),

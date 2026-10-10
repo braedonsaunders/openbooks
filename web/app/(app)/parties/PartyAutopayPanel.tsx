@@ -3,13 +3,16 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 
-import { Repeat } from 'lucide-react'
+import { CreditCard, Repeat } from 'lucide-react'
 
 import { fetchAction } from '@braedonsaunders/appkit-errors'
-import { Badge, Button } from '@openbooks/ui'
-import { Switch } from '../../../components/switch'
+import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
+import { Badge, Button, Drawer, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
+import { Switch, SwitchField } from '../../../components/switch'
 import { useAppAction } from '../../../lib/use-app-action'
-import { SublistHeading } from './PartySummary'
+import { readApiErrorMessage } from '../../../lib/api-error'
+import { DrawerSublist, SublistAddButton, SublistEmpty, SublistLoadError, SublistLoading } from '../../../components/drawer-sublist'
+import { AddPaymentMethodDrawer } from './PartyAddPaymentMethodDrawer'
 
 interface EnrollmentRow {
   id: string
@@ -18,60 +21,97 @@ interface EnrollmentRow {
   status: 'active' | 'paused'
 }
 
-export function PartyAutopayPanel({ partyId, canManageAutopay }: {
+interface MethodRow {
+  id: string
+  status: string
+}
+
+interface AutopayState {
+  enrollments: EnrollmentRow[]
+  methods: MethodRow[]
+}
+
+/**
+ * Autopay enrollments for one customer. Autopay charges the customer's
+ * default active payment method, so a customer without one is an empty
+ * state with its remedy — add a payment method — never an error. Only a
+ * failed read is an error, and it names what failed.
+ */
+export function PartyAutopayPanel({
+  partyId,
+  canManageAutopay,
+  canManageMethods = false,
+  revision = 0,
+  onChanged,
+}: {
   partyId: string
   canManageAutopay: boolean
+  /** Lets the empty state offer Add payment method. */
+  canManageMethods?: boolean
+  /** Bumped when payment methods change elsewhere in the drawer. */
+  revision?: number
+  /** Called after this panel adds a payment method. */
+  onChanged?: () => void
 }) {
   const t = useTranslations('parties.drawer.autopay')
   const tc = useTranslations('common')
-  const { busy, refusal, execute } = useAppAction()
-  const [enrollments, setEnrollments] = useState<EnrollmentRow[] | null>(null)
+  const { busy, refusal, execute, clearRefusal } = useAppAction()
+  const [state, setState] = useState<AutopayState | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [enrolling, setEnrolling] = useState(false)
   const [chargeOnIssue, setChargeOnIssue] = useState(false)
+  const [addingMethod, setAddingMethod] = useState(false)
 
   // The mount effect keeps its promise-chain shape, which never resets state
   // synchronously inside the effect body; mutations refresh through the
   // same reload and apply pair.
-  const reload = useCallback(async (signal?: AbortSignal) => {
-    const enrollmentsRes = await fetch(`/api/autopay/enrollments?partyId=${encodeURIComponent(partyId)}`, { signal })
-    if (!enrollmentsRes.ok) {
-      const body = await enrollmentsRes.json().catch(() => null)
-      throw new Error((body?.error as string | undefined) ?? t('loadFailed'))
-    }
+  const reload = useCallback(async (signal?: AbortSignal): Promise<AutopayState> => {
+    const query = `partyId=${encodeURIComponent(partyId)}`
+    const [enrollmentsRes, methodsRes] = await Promise.all([
+      fetch(`/api/autopay/enrollments?${query}`, { signal }),
+      fetch(`/api/autopay/methods?${query}`, { signal }),
+    ])
+    if (!enrollmentsRes.ok) throw new Error(await readApiErrorMessage(enrollmentsRes, t('enrollmentsLoadFailed')))
+    if (!methodsRes.ok) throw new Error(await readApiErrorMessage(methodsRes, t('loadFailed')))
     const enrollmentsBody = (await enrollmentsRes.json()) as { enrollments?: EnrollmentRow[] }
-    return enrollmentsBody.enrollments ?? []
+    const methodsBody = (await methodsRes.json()) as { methods?: MethodRow[] }
+    return { enrollments: enrollmentsBody.enrollments ?? [], methods: methodsBody.methods ?? [] }
   }, [partyId, t])
 
-  const applyLoaded = useCallback((applied: EnrollmentRow[]) => {
-    setEnrollments(applied)
+  const applyLoaded = useCallback((applied: AutopayState) => {
+    setState(applied)
     setLoadError(null)
   }, [])
 
   const applyRefusal = useCallback((error: unknown) => {
     if (error instanceof DOMException && error.name === 'AbortError') return
-    setLoadError(error instanceof Error ? error.message : t('loadFailed'))
-    setEnrollments(null)
+    setLoadError(error instanceof Error ? error.message : t('enrollmentsLoadFailed'))
+    setState(null)
   }, [t])
 
   useEffect(() => {
     const controller = new AbortController()
     reload(controller.signal).then(applyLoaded, applyRefusal)
     return () => controller.abort()
-  }, [reload, applyLoaded, applyRefusal])
+  }, [reload, applyLoaded, applyRefusal, revision])
 
   function refresh(): void {
     void reload().then(applyLoaded, applyRefusal)
   }
 
   async function enroll() {
-    await execute(() => fetchAction(`/api/autopay/enrollments`, {
+    const ok = await execute(() => fetchAction(`/api/autopay/enrollments`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ partyId, chargeOnIssue }),
     }), {
       fallbackMessage: t('enrollFailed'),
-      onOk: () => refresh(),
     })
+    if (ok) {
+      setEnrolling(false)
+      setChargeOnIssue(false)
+      refresh()
+    }
   }
 
   async function moveEnrollment(id: string, status: 'active' | 'paused') {
@@ -85,73 +125,115 @@ export function PartyAutopayPanel({ partyId, canManageAutopay }: {
     })
   }
 
-  const customerEnrollment = enrollments?.find((row) => row.subscriptionId === null)
-  const subscriptionEnrollments = enrollments?.filter((row) => row.subscriptionId !== null) ?? []
+  const enrollments = state?.enrollments ?? []
+  const customerEnrollment = enrollments.find((row) => row.subscriptionId === null)
+  const hasMethod = (state?.methods.length ?? 0) > 0
+  const hasActiveMethod = state?.methods.some((method) => method.status === 'active') ?? false
+  const addMethodButton = canManageMethods
+    ? <SublistAddButton label={t('addMethod')} onClick={() => setAddingMethod(true)} />
+    : undefined
 
   return (
-    <section className="space-y-4">
-      <SublistHeading
+    <>
+      <DrawerSublist
         title={t('enrollmentHeading')}
         description={t('enrollmentDescription')}
         icon={<Repeat size={16} />}
-      />
-      {refusal?.serverMessage ? (
-        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
-          {refusal.serverMessage}
-        </p>
-      ) : null}
-      {enrollments === null ? (
-        loadError ? (
-          <div className="space-y-2">
-            <p role="alert" className="text-sm text-red-600 dark:text-red-400">{loadError}</p>
-            <Button variant="outline" size="sm" onClick={() => refresh()}>{t('tryAgain')}</Button>
-          </div>
+        action={state && hasActiveMethod && !customerEnrollment && canManageAutopay ? (
+          <SublistAddButton label={t('enroll')} onClick={() => { clearRefusal(); setEnrolling(true) }} />
+        ) : undefined}
+        alert={!enrolling && refusal?.serverMessage ? (
+          <p role="alert" className="text-sm text-red-600 dark:text-red-400">{refusal.serverMessage}</p>
+        ) : null}
+      >
+        {state === null ? (
+          loadError ? <SublistLoadError message={loadError} onRetry={refresh} /> : <SublistLoading />
+        ) : !hasMethod ? (
+          <SublistEmpty
+            icon={<CreditCard size={22} />}
+            text={t('needsMethodTitle')}
+            hint={canManageMethods ? t('needsMethodHint') : t('needsMethodHintReadOnly')}
+            action={addMethodButton}
+          />
+        ) : !hasActiveMethod && enrollments.length === 0 ? (
+          <SublistEmpty icon={<CreditCard size={22} />} text={t('awaitingMethodTitle')} hint={t('awaitingMethodHint')} />
+        ) : enrollments.length === 0 ? (
+          <SublistEmpty icon={<Repeat size={22} />} text={t('notEnrolled')} />
         ) : (
-          <p className="text-sm text-slate-500 dark:text-slate-400" aria-live="polite">{tc('feedback.loading')}</p>
-        )
-      ) : (
-        <div className="space-y-2">
-          {customerEnrollment ? (
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <Switch
-                on={customerEnrollment.status === 'active'}
-                disabled={busy || !canManageAutopay}
-                label={t('customerScope')}
-                onToggle={() => void moveEnrollment(
-                  customerEnrollment.id,
-                  customerEnrollment.status === 'active' ? 'paused' : 'active',
-                )}
-              />
-              <Badge variant={customerEnrollment.status === 'active' ? 'success' : 'secondary'}>
-                {customerEnrollment.status === 'active' ? t('active') : t('paused')}
-              </Badge>
-            </div>
-          ) : canManageAutopay ? (
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-              <Button variant="outline" size="sm" disabled={busy} onClick={() => void enroll()}>
-                {t('enroll')}
-              </Button>
-              <Switch on={chargeOnIssue} disabled={busy} label={t('chargeOnIssue')} onToggle={() => setChargeOnIssue((flag) => !flag)} />
-            </div>
-          ) : null}
-          {subscriptionEnrollments.map((enrollment) => (
-            <div key={enrollment.id} className="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <Switch
-                on={enrollment.status === 'active'}
-                disabled={busy || !canManageAutopay}
-                label={t('subscriptionScope', { name: enrollment.subscriptionName ?? enrollment.subscriptionId ?? '' })}
-                onToggle={() => void moveEnrollment(
-                  enrollment.id,
-                  enrollment.status === 'active' ? 'paused' : 'active',
-                )}
-              />
-              <Badge variant={enrollment.status === 'active' ? 'success' : 'secondary'}>
-                {enrollment.status === 'active' ? t('active') : t('paused')}
-              </Badge>
-            </div>
-          ))}
-        </div>
-      )}
-    </section>
+          <Table>
+            <TableHeader><TableRow>
+              <TableHead>{t('scope')}</TableHead>
+              <TableHead>{tc('labels.status')}</TableHead>
+              <TableHead className="text-right">{t('collect')}</TableHead>
+            </TableRow></TableHeader>
+            <TableBody>
+              {enrollments.map((enrollment) => {
+                const label = enrollment.subscriptionId === null
+                  ? t('customerScope')
+                  : t('subscriptionScope', { name: enrollment.subscriptionName ?? enrollment.subscriptionId ?? '' })
+                return (
+                  <TableRow key={enrollment.id}>
+                    <TableCell className="font-medium text-slate-900 dark:text-slate-100">{label}</TableCell>
+                    <TableCell>
+                      <Badge variant={enrollment.status === 'active' ? 'success' : 'secondary'}>
+                        {enrollment.status === 'active' ? t('active') : t('paused')}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex justify-end">
+                        <Switch
+                          on={enrollment.status === 'active'}
+                          disabled={busy || !canManageAutopay}
+                          label={label}
+                          onToggle={() => void moveEnrollment(enrollment.id, enrollment.status === 'active' ? 'paused' : 'active')}
+                        />
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
+        )}
+      </DrawerSublist>
+      {canManageAutopay ? (
+        <Drawer
+          open={enrolling}
+          onClose={() => { if (!busy) setEnrolling(false) }}
+          stacked
+          size="md"
+          title={t('enroll')}
+          description={t('enrollDescription')}
+          footer={(
+            <>
+              <Button variant="outline" disabled={busy} onClick={() => setEnrolling(false)}>{tc('actions.cancel')}</Button>
+              <Button disabled={busy} onClick={() => void enroll()}>{t('enroll')}</Button>
+            </>
+          )}
+        >
+          <div className="space-y-4">
+            <ActionAlert error={refusal} fallbackMessage={t('enrollFailed')} />
+            <SwitchField
+              label={t('chargeOnIssue')}
+              description={t('chargeOnIssueHint')}
+              on={chargeOnIssue}
+              disabled={busy}
+              onToggle={() => setChargeOnIssue((flag) => !flag)}
+            />
+          </div>
+        </Drawer>
+      ) : null}
+      {canManageMethods ? (
+        <AddPaymentMethodDrawer
+          partyId={partyId}
+          open={addingMethod}
+          onClose={() => setAddingMethod(false)}
+          onCreated={() => {
+            refresh()
+            onChanged?.()
+          }}
+        />
+      ) : null}
+    </>
   )
 }

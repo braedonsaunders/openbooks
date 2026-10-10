@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useFormatter, useTranslations } from 'next-intl'
-import { Plus, Trash2 } from 'lucide-react'
+import { Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { Badge, Button, Input, Label, Select } from '@openbooks/ui'
+import { Badge, Button, Drawer, Input, Label, Select } from '@openbooks/ui'
+import { DrawerSublist, SublistAddButton, SublistLoadError, SublistLoading, useSublistRows } from '../../../components/drawer-sublist'
 import { useBusinessToday } from '../../../components/business-date-provider'
 import { PagedTable } from '../../../components/paged-table'
 import { canonicalDecimal } from '../../../lib/exact-decimal'
@@ -54,8 +55,9 @@ interface AssignmentsResponse {
 /**
  * Recurring per-employee pay-component assignments — fixed deductions,
  * taxable benefits and employee premiums priced every regular run. Same
- * composition as the wage-rates panel: an add form over a paged history with
- * end-today and delete, and a refused save stays visible on the record.
+ * composition as the wage-rates panel: the shared drawer sublist with an Add
+ * drawer over a paged history with end-today and delete, and a refused save
+ * stays visible on the record.
  */
 export function EmployeePayComponents({
   partyId,
@@ -84,6 +86,7 @@ export function EmployeePayComponents({
   const [effectiveFrom, setEffectiveFrom] = useState(today)
   const [effectiveTo, setEffectiveTo] = useState('')
   const [dirty, setDirty] = useState(false)
+  const [adding, setAdding] = useState(false)
 
   useEffect(() => {
     onDirtyChange?.(dirty)
@@ -205,6 +208,7 @@ export function EmployeePayComponents({
       setRunApplicability('standard_runs')
       setValue('')
       setEffectiveTo('')
+      setAdding(false)
     }
   }
 
@@ -218,124 +222,46 @@ export function EmployeePayComponents({
   const kindLabel = (kind: string) => kind === 'earning' ? t('earning') : kind === 'deduction' ? t('deduction') : t('employerContribution')
   const basisLabel = (basis: string) => basis === 'per_hour' ? t('ratePerHour') : basis === 'percent_of_gross' ? t('percentOfGross') : t('amountPerPeriod')
 
+  const assignmentText = (row: AssignmentRow) =>
+    `${row.componentCode} ${row.componentName} ${kindLabel(row.componentKind)} ${row.value ?? row.componentValue ?? ''} ${row.effectiveFrom} ${row.effectiveTo ?? ''}`
+  const list = useSublistRows(data?.assignments ?? [], assignmentText)
+  const refusal = actionError ? (
+    <p role="alert" className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
+      {t('saveFailed')}{actionError === t('saveFailed') ? null : `: ${actionError}`}
+    </p>
+  ) : null
+
+  function closeDraft() {
+    if (busy) return
+    setAdding(false)
+    setComponentId('')
+    setValue('')
+    setEmploymentId('')
+    setRunApplicability('standard_runs')
+    setEffectiveFrom(today)
+    setEffectiveTo('')
+    setDirty(false)
+  }
+
   return (
-    <section className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('title')}</h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400">{t('hint')}</p>
-        </div>
-      </div>
-
-      {actionError ? (
-        <p role="alert" className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
-          {t('saveFailed')}{actionError === t('saveFailed') ? null : `: ${actionError}`}
-        </p>
-      ) : null}
-
-      {readOnly ? null : (
-        <div className="flex flex-wrap items-end gap-2 rounded-lg border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-700 dark:bg-slate-900/60" inert={busy}>
-          <div>
-            <Label htmlFor="employee-pay-component">{t('component')}</Label>
-            <Select
-              id="employee-pay-component"
-              className="w-52"
-              value={componentId}
-              onChange={(event) => { setComponentId(event.target.value); markDirty() }}
-            >
-              <option value="">{t('chooseComponent')}</option>
-              {(data?.components ?? []).map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.code} · {c.name} ({kindLabel(c.kind)}, {basisLabel(c.basis)})
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div>
-            <Label htmlFor="employee-pay-value">
-              {selectedComponent ? basisLabel(selectedComponent.basis) : t('value')}
-            </Label>
-            <Input
-              id="employee-pay-value"
-              type="number"
-              min="0"
-              step="0.0001"
-              className="w-32"
-              placeholder={t('useDefault')}
-              value={value}
-              onChange={(event) => { setValue(event.target.value); markDirty() }}
-            />
-          </div>
-          {(data?.employments.length ?? 0) > 1 ? (
-            <div>
-              <Label htmlFor="employee-pay-employment">{t('employment')}</Label>
-              <Select
-                id="employee-pay-employment"
-                className="w-44"
-                value={employmentId}
-                onChange={(event) => { setEmploymentId(event.target.value); markDirty() }}
-              >
-                <option value="">{t('allEmployments')}</option>
-                {(data?.employments ?? []).map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.serviceStart ? formatDate(e.serviceStart) : e.id.slice(0, 8)}{e.subsidiaryName ? ` · ${e.subsidiaryName}` : ''}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          ) : null}
-          <div>
-            <Label htmlFor="employee-pay-run-applicability">{t('runApplicability')}</Label>
-            <Select id="employee-pay-run-applicability" value={runApplicability}
-              disabled={busy} onChange={(event) => { setRunApplicability(event.target.value as AssignmentRunApplicability); markDirty() }}>
-              <option value="standard_runs">{t('standardRuns')}</option>
-              <option value="regular_only">{t('regularOnly')}</option>
-              <option value="periodic_and_final">{t('periodicAndFinal')}</option>
-            </Select>
-          </div>
-          <div>
-            <Label htmlFor="employee-pay-effective-from">{t('effectiveFrom')}</Label>
-            <Input
-              id="employee-pay-effective-from"
-              type="date"
-              className="w-40"
-              value={effectiveFrom}
-              onChange={(event) => { setEffectiveFrom(event.target.value); markDirty() }}
-            />
-          </div>
-          <div>
-            <Label htmlFor="employee-pay-effective-to">{t('effectiveTo')}</Label>
-            <Input
-              id="employee-pay-effective-to"
-              type="date"
-              className="w-40"
-              value={effectiveTo}
-              onChange={(event) => { setEffectiveTo(event.target.value); markDirty() }}
-            />
-          </div>
-          <Button size="sm" onClick={() => void addAssignment()} disabled={busy || data === null}>
-            <Plus size={14} aria-hidden /> {t('add')}
-          </Button>
-        </div>
-      )}
-
+    <DrawerSublist
+      title={t('title')}
+      description={t('hint')}
+      action={readOnly ? undefined : <SublistAddButton label={t('add')} disabled={busy || data === null} onClick={() => { setActionError(null); setAdding(true) }} />}
+      alert={adding ? null : refusal}
+      // Read mode renders values with no editors: the payroll tab's contract
+      // counts every input, including a table filter.
+      search={!readOnly && data?.assignments.length ? { value: list.query, onChange: list.setQuery, placeholder: t('search') } : undefined}
+    >
       {loadError ? (
-        <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-center dark:border-rose-900 dark:bg-rose-950/30">
-          <p className="text-sm text-rose-700 dark:text-rose-300">{tc('feedback.loadFailed')}</p>
-          <Button size="sm" variant="outline" className="mt-3" onClick={() => { setLoadError(false); void load() }}>
-            {tc('actions.retry')}
-          </Button>
-        </div>
+        <SublistLoadError message={tc('feedback.loadFailed')} onRetry={() => { setLoadError(false); void load() }} />
       ) : data === null ? (
-        <p className="py-6 text-center text-sm text-slate-400">{tc('feedback.loading')}</p>
+        <SublistLoading />
       ) : (
         <PagedTable
-          rows={data.assignments}
+          rows={list.filtered}
           rowKey={(row) => row.id}
           rowClassName={(row) => row.isCurrent ? 'bg-teal-50/80 dark:bg-teal-950/30' : undefined}
-          // Read mode renders values with no editors: the payroll tab's
-          // contract counts every input, including a table filter.
-          searchable={!readOnly}
           pageSize={10}
           empty={<p className="py-6 text-center text-sm text-slate-400">{t('empty')}</p>}
           columns={[
@@ -424,6 +350,99 @@ export function EmployeePayComponents({
           ]}
         />
       )}
-    </section>
+      <Drawer
+        open={adding && !readOnly}
+        onClose={closeDraft}
+        stacked
+        size="md"
+        title={t('add')}
+        description={t('hint')}
+        footer={(
+          <>
+            <Button variant="outline" disabled={busy} onClick={closeDraft}>{tc('actions.cancel')}</Button>
+            <Button onClick={() => void addAssignment()} disabled={busy || data === null}>{busy ? tc('actions.saving') : tc('actions.save')}</Button>
+          </>
+        )}
+      >
+        <div className="space-y-4" inert={busy}>
+          {refusal}
+          <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <Label htmlFor="employee-pay-component">{t('component')}</Label>
+            <Select
+              id="employee-pay-component"
+              value={componentId}
+              onChange={(event) => { setComponentId(event.target.value); markDirty() }}
+            >
+              <option value="">{t('chooseComponent')}</option>
+              {(data?.components ?? []).map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.code} · {c.name} ({kindLabel(c.kind)}, {basisLabel(c.basis)})
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div>
+            <Label htmlFor="employee-pay-value">
+              {selectedComponent ? basisLabel(selectedComponent.basis) : t('value')}
+            </Label>
+            <Input
+              id="employee-pay-value"
+              type="number"
+              min="0"
+              step="0.0001"
+              placeholder={t('useDefault')}
+              value={value}
+              onChange={(event) => { setValue(event.target.value); markDirty() }}
+            />
+          </div>
+          {(data?.employments.length ?? 0) > 1 ? (
+            <div>
+              <Label htmlFor="employee-pay-employment">{t('employment')}</Label>
+              <Select
+                id="employee-pay-employment"
+                  value={employmentId}
+                onChange={(event) => { setEmploymentId(event.target.value); markDirty() }}
+              >
+                <option value="">{t('allEmployments')}</option>
+                {(data?.employments ?? []).map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.serviceStart ? formatDate(e.serviceStart) : e.id.slice(0, 8)}{e.subsidiaryName ? ` · ${e.subsidiaryName}` : ''}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          ) : null}
+          <div>
+            <Label htmlFor="employee-pay-run-applicability">{t('runApplicability')}</Label>
+            <Select id="employee-pay-run-applicability" value={runApplicability}
+              disabled={busy} onChange={(event) => { setRunApplicability(event.target.value as AssignmentRunApplicability); markDirty() }}>
+              <option value="standard_runs">{t('standardRuns')}</option>
+              <option value="regular_only">{t('regularOnly')}</option>
+              <option value="periodic_and_final">{t('periodicAndFinal')}</option>
+            </Select>
+          </div>
+          <div>
+            <Label htmlFor="employee-pay-effective-from">{t('effectiveFrom')}</Label>
+            <Input
+              id="employee-pay-effective-from"
+              type="date"
+              value={effectiveFrom}
+              onChange={(event) => { setEffectiveFrom(event.target.value); markDirty() }}
+            />
+          </div>
+          <div>
+            <Label htmlFor="employee-pay-effective-to">{t('effectiveTo')}</Label>
+            <Input
+              id="employee-pay-effective-to"
+              type="date"
+              value={effectiveTo}
+              onChange={(event) => { setEffectiveTo(event.target.value); markDirty() }}
+            />
+          </div>
+          </div>
+        </div>
+      </Drawer>
+    </DrawerSublist>
   )
 }

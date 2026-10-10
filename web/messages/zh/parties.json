@@ -80,10 +80,8 @@
       "emptyTitle": "尚未保存付款方式",
       "emptyDescription": "发送设置链接，客户可自行保存银行卡或代扣授权。在收取发票之前不会产生任何扣款。",
       "sendSetupLink": "发送设置链接",
-      "sendHint": "客户打开链接后在支付服务商处保存银行卡或代扣授权。发送链接不会产生扣款。",
       "provider": "服务商",
       "currency": "币种",
-      "currencyPlaceholder": "例如 CNY",
       "setupLinkReady": "设置链接已就绪，请发送给客户：",
       "copyLink": "复制链接",
       "linkCopied": "链接已复制",
@@ -96,7 +94,6 @@
       "removeFailed": "无法移除付款方式。",
       "setDefaultFailed": "无法更改默认方式。",
       "loadFailed": "无法加载付款方式。",
-      "tryAgain": "重试",
       "awaitingCustomer": "等待客户操作",
       "active": "有效",
       "expires": "有效期至 {month}/{year}",
@@ -119,7 +116,42 @@
       "backupDescription": "如果默认方式被拒，将按显示顺序扣款备用方式。",
       "moveUp": "在备用顺序中前移",
       "moveDown": "在备用顺序中后移",
-      "reorderFailed": "无法更改备用顺序。"
+      "reorderFailed": "无法更改备用顺序。",
+      "addMethod": "添加付款方式",
+      "addTitle": "添加付款方式",
+      "addDescription": "向客户发送安全链接，让其在您的支付服务商处保存银行卡或银行账户。保存时不会扣款。",
+      "recipient": "发送给",
+      "recipientSelect": "选择收件人…",
+      "recipientHint": "仅列出此客户的电子邮件地址。如需发送给其他人，请先添加联系人。",
+      "noRecipients": "此客户没有登记电子邮件地址，因此将创建链接供您分享。在“联系人”标签中添加邮箱即可直接发送。",
+      "emailNotConfigured": "尚未设置外发邮件，因此将创建链接供您复制和分享。<link>设置邮件</link>后即可直接发送设置链接。",
+      "noProviders": "尚无支付服务商接受在线付款。请先<link>启用服务商</link>。",
+      "noCurrencies": "此客户的法律实体没有启用任何币种。请在“公司设置 → 功能”中开启多币种，以便以其他币种收款。",
+      "whatIsSent": "{recipient} 将收到一封电子邮件，其中包含为此客户保存银行卡或银行账户的安全链接。在对方完成之前，该方式显示为“等待客户”。",
+      "chooseRecipient": "请选择接收设置链接的人。",
+      "whatIsCreated": "将创建一个安全的设置链接供您与客户分享。在客户完成之前，该方式显示为“等待客户”。",
+      "createLink": "创建设置链接",
+      "sent": "设置链接已发送至 {recipient}。",
+      "deliveryUncertain": "无法确认发往 {recipient} 的邮件。如未收到，请复制下方链接并通过其他方式分享。",
+      "deliveryFailed": "无法向 {recipient} 发送邮件。请复制下方链接并通过其他方式分享。",
+      "setupLink": "设置链接",
+      "copyFailed": "无法复制链接。请选中后手动复制。",
+      "optionsLoadFailed": "无法加载设置选项。",
+      "search": "搜索付款方式…",
+      "allStatuses": "全部状态",
+      "method": "方式",
+      "details": "详情",
+      "enrollmentsLoadFailed": "无法加载自动付款设置。",
+      "needsMethodTitle": "请先添加付款方式",
+      "needsMethodHint": "自动付款从客户的默认付款方式扣款。请向客户发送设置链接以保存银行卡或银行账户，然后开启自动付款。",
+      "needsMethodHintReadOnly": "自动付款从客户的默认付款方式扣款。需要由管理付款方式的人员先添加一个。",
+      "awaitingMethodTitle": "等待客户保存付款方式",
+      "awaitingMethodHint": "客户完成设置链接后即可开启自动付款。",
+      "notEnrolled": "此客户的自动付款已关闭。",
+      "scope": "适用于",
+      "collect": "自动收款",
+      "enrollDescription": "到期发票将自动从客户的默认付款方式扣款。",
+      "chargeOnIssueHint": "每张新发票在开具时立即扣款，而不是在到期日扣款。"
     },
     "debitMandates": {
       "heading": "扣款授权",
@@ -159,7 +191,9 @@
       "validation": {
         "bankAccount": "请为该授权选择一个已批准的银行账户。",
         "reference": "请输入授权引用。"
-      }
+      },
+      "search": "搜索授权…",
+      "allStatuses": "全部状态"
     },
     "wages": {
       "title": "工资费率",
@@ -200,7 +234,8 @@
       "timeEntryRounding": "按工时记录",
       "roundingEffectiveDateHint": "适用于此生效日期工资的计薪工时；固定薪资和已批准的项目成本保持不变。",
       "payrollRatePrecisionHelp": "在应用加班或其他薪酬倍数后、按工时计价前对时薪进行舍入。不会更改已记录的基本费率。",
-      "payrollAmountRoundingHelp": "先对每条工时记录的金额舍入再求和，或先按相同的工资和会计维度汇总再舍入到货币最小单位。"
+      "payrollAmountRoundingHelp": "先对每条工时记录的金额舍入再求和，或先按相同的工资和会计维度汇总再舍入到货币最小单位。",
+      "search": "搜索工资标准…"
     },
     "payComponents": {
       "title": "固定工资组成",
@@ -240,7 +275,8 @@
       "standardRuns": "常规、补充及离职",
       "regularOnly": "仅常规",
       "periodicAndFinal": "正常和最后一次工资",
-      "unknownApplicability": "适用范围未知"
+      "unknownApplicability": "适用范围未知",
+      "search": "搜索薪资项目…"
     },
     "summary": {
       "transactions": "交易",
@@ -555,7 +591,8 @@
       "references": "选择本组织的记录。",
       "overlap": "该记录在该日期范围的部分期间已有生效的人工定价。",
       "save": "无法保存人工定价分配。"
-    }
+    },
+    "editTitle": "编辑价目册分配"
   },
   "taxIds": {
     "title": "企业税号",
@@ -583,7 +620,12 @@
       "valid": "增值税号有效 ({scheme})",
       "invalid": "增值税号无效 ({scheme})",
       "unverified": "增值税号未验证 ({scheme})"
-    }
+    },
+    "addTaxId": "添加税号",
+    "addDescription": "登记企业税号。系统会向对应制度的主管机关进行验证。",
+    "search": "搜索税号…",
+    "verdict": "验证结果",
+    "lastChecked": "最近检查"
   },
   "billingRelationships": {
     "heading": "开票",
@@ -625,6 +667,7 @@
       "overlap": "该客户在该期间的一部分已通过另一付款方开票——请先关闭现有期间，再添加新期间。",
       "featureOff": "合并开票已关闭——请在公司设置的功能中重新开启，然后重试。",
       "save": "无法保存开票关系。"
-    }
+    },
+    "editTitle": "编辑账单关系"
   }
 }

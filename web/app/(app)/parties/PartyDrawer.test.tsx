@@ -870,6 +870,7 @@ test("relationship edits survive a tab round-trip", async (t) => {
   const { done } = await renderDrawer({
     role: "customer",
     recordType: "customer",
+    initialMode: "edit",
     grants: { canReadCrmAccounts: true, canManageCrmAccounts: true },
     fetchHandler: (url) =>
       url === `/api/crm/accounts/${PARTY_ID}`
@@ -974,6 +975,7 @@ test("an open bank account draft survives a tab round-trip", async (t) => {
 
 test("compliance class selection survives a tab round-trip", async (t) => {
   const { done } = await renderDrawer({
+    initialMode: "edit",
     grants: {
       complianceEnabled: true,
       compliance: {
@@ -1311,3 +1313,51 @@ test("the unified drawer offers role checkboxes on overview in edit mode", async
   const boxes = section?.querySelectorAll('input[type="checkbox"]') ?? [];
   assert.ok(boxes.length >= 3, "customer, vendor, and employee each offer an enable checkbox");
 });
+
+test("the relationship tab reads as values until Edit, and the drawer's single Save persists it", async (t) => {
+  const profile = {
+    lifecycle_stage: "lead", status_id: "s1", owner_user_id: null, territory_id: null, lead_source_id: null,
+    industry: null, category: null, annual_revenue: null, employee_count: null, qualification_score: null,
+    next_action_at: null, updated_at: "2026-09-17T12:00:00.000000Z",
+  };
+  const options = { statuses: [{ id: "s1", name: "New", lifecycle_stage: "lead", is_default: true }], owners: [], territories: [], sources: [] };
+  const seen: Array<{ url: string; method: string; body: Record<string, unknown> | null }> = [];
+  const { done } = await renderDrawer({
+    role: "customer",
+    recordType: "customer",
+    payload: CUSTOMER_PAYLOAD,
+    grants: { canReadCrmAccounts: true, canManageCrmAccounts: true },
+    fetchHandler: (url, init) => {
+      const method = init?.method ?? "GET";
+      seen.push({ url, method, body: typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : null });
+      if (url === `/api/crm/accounts/${PARTY_ID}`) {
+        return method === "PATCH" ? Response.json({ ok: true }) : Response.json({ account: { profile, opportunities: [] }, options });
+      }
+      if (url === `/api/parties/${PARTY_ID}` && method === "PATCH") return Response.json({ party: { is_active: true } });
+      return null;
+    },
+  });
+  t.after(done);
+  await clickTab(railTabNamed(en("parties.drawer.tabs.relationship"))!);
+  const panel = () => [...document.querySelectorAll("section")].find((section) => section.textContent?.includes("Relationship profile"));
+  assert.ok(await waitForText("Relationship profile"), "the relationship panel must render");
+  assert.equal(panel()!.querySelectorAll("input, select").length, 0, "view mode renders the relationship as values");
+  const saveButtons = () => [...document.querySelectorAll("button")].filter((button) => button.textContent?.trim() === en("common.actions.save"));
+  assert.equal(saveButtons().length, 0, "view mode offers no Save anywhere — the section has none of its own");
+
+  await clickButton(en("common.actions.edit"));
+  const industry = [...panel()!.querySelectorAll("input")].find((input) => (input as HTMLInputElement).type === "text") as HTMLInputElement | undefined;
+  assert.ok(industry, "edit mode opens the relationship fields");
+  assert.equal(saveButtons().length, 1, "edit mode has exactly one Save: the record's");
+  await act(async () => {
+    setInputValue(industry, "Software");
+    await tick();
+  });
+  await clickButton(en("common.actions.save"));
+  await tick();
+  const relationshipPatch = seen.find((request) => request.url === `/api/crm/accounts/${PARTY_ID}` && request.method === "PATCH");
+  assert.equal(relationshipPatch?.body?.industry, "Software", "the record Save persists the relationship edits");
+  assert.ok(seen.some((request) => request.url === `/api/parties/${PARTY_ID}` && request.method === "PATCH"), "the party itself saves in the same Save");
+  assert.equal(panel()!.querySelectorAll("input, select").length, 0, "a successful Save returns the relationship to view mode");
+});
+

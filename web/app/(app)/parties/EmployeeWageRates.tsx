@@ -5,9 +5,10 @@ import { type PayrollAmountRounding } from '@openbooks/engine/src/projects/payro
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useFormatter, useTranslations } from 'next-intl'
-import { BookOpen, Plus, SlidersHorizontal, Trash2 } from 'lucide-react'
+import { BookOpen, SlidersHorizontal, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { Badge, Button, Input, Label, Select } from '@openbooks/ui'
+import { Badge, Button, Drawer, Input, Label, Select } from '@openbooks/ui'
+import { DrawerSublist, SublistAddButton, SublistLoadError, SublistLoading, useSublistRows } from '../../../components/drawer-sublist'
 import { useBusinessToday } from '../../../components/business-date-provider'
 import { useMoney } from '../../../components/money-provider'
 import { PagedTable } from '../../../components/paged-table'
@@ -85,6 +86,7 @@ export function EmployeeWageRates({ partyId }: { partyId: string }) {
   const [basis, setBasis] = useState<PayRateBasis>('hour')
   const [annualHours, setAnnualHours] = useState('2080')
   const [effectiveFrom, setEffectiveFrom] = useState(today)
+  const [adding, setAdding] = useState(false)
 
   // Fetch chain: every state update sits in a promise continuation (the fetch
   // response), never synchronously in the effect body. The loading reset lives
@@ -192,7 +194,10 @@ export function EmployeeWageRates({ partyId }: { partyId: string }) {
       annualHours: hours,
       effectiveFrom,
     }, t('saved'))
-    if (saved) setRate('')
+    if (saved) {
+      setRate('')
+      setAdding(false)
+    }
   }
 
   const formatDate = (value: string) => format.dateTime(new Date(`${value}T12:00:00Z`), {
@@ -202,115 +207,40 @@ export function EmployeeWageRates({ partyId }: { partyId: string }) {
     timeZone: 'UTC',
   })
 
+  const rateText = useCallback((row: RateRow) => `${row.rate} ${t(BASIS_LABEL_KEYS[row.basis])} ${row.effective_from} ${row.effective_to ?? ''}`, [t])
+  const list = useSublistRows(data?.rates ?? [], rateText)
+  const refusal = actionError ? (
+    <p role="alert" className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
+      {t('saveFailed')}{actionError === t('saveFailed') ? null : `: ${actionError}`}
+    </p>
+  ) : null
+
   return (
-    <section className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('title')}</h3>
-        </div>
-        <div className="flex flex-wrap gap-3">
+    <DrawerSublist
+      title={t('title')}
+      description={(
+        <span className="flex flex-wrap gap-3">
           <Link href="/admin/setup/labor-costing" className="flex items-center gap-1 text-xs font-medium text-teal-700 hover:underline dark:text-teal-300">
             <SlidersHorizontal size={13} aria-hidden /> {t('payrollPolicy')}
           </Link>
           <Link href="/docs/labor-costing" className="flex items-center gap-1 text-xs font-medium text-teal-700 hover:underline dark:text-teal-300">
             <BookOpen size={13} aria-hidden /> {t('documentation')}
           </Link>
-        </div>
-      </div>
-
-      {actionError ? (
-        <p role="alert" className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
-          {t('saveFailed')}{actionError === t('saveFailed') ? null : `: ${actionError}`}
-        </p>
-      ) : null}
-
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-700 dark:bg-slate-900/60" inert={busy}>
-        <div className="flex min-w-max flex-nowrap items-end gap-3">
-          <div>
-            <Label htmlFor="employee-wage-rate" help={t('hint')}>{t('rate')}</Label>
-            <Input
-              id="employee-wage-rate"
-              type="number"
-              min="0"
-              step="0.0001"
-              className="w-28"
-              value={rate}
-              onChange={(event) => setRate(event.target.value)}
-            />
-          </div>
-          {data && data.currencies.length > 1 ? (
-            <div>
-              <Label htmlFor="employee-wage-currency">{t('currency')}</Label>
-              <Select
-                id="employee-wage-currency"
-                className="w-20"
-                value={currency}
-                onChange={(event) => setCurrency(event.target.value)}
-              >
-                {data.currencies.map((code) => <option key={code} value={code}>{code}</option>)}
-              </Select>
-            </div>
-          ) : null}
-          <div>
-            <Label htmlFor="employee-wage-basis">{t('basis')}</Label>
-            <Select
-              id="employee-wage-basis"
-              className="w-32"
-              value={basis}
-              onChange={(event) => {
-                if (isPayRateBasis(event.target.value)) setBasis(event.target.value)
-              }}
-            >
-              {PAY_RATE_BASES.map((value) => (
-                <option key={value} value={value}>{t(BASIS_LABEL_KEYS[value])}</option>
-              ))}
-            </Select>
-          </div>
-          {isTimePayRateBasis(basis) ? (
-            <div>
-              <Label htmlFor="employee-wage-annual-hours">{t('annualHours')}</Label>
-              <Input
-                id="employee-wage-annual-hours"
-                type="number"
-                min="0.0001"
-                step="0.01"
-                className="w-24"
-                value={annualHours}
-                onChange={(event) => setAnnualHours(event.target.value)}
-              />
-            </div>
-          ) : null}
-          <div>
-            <Label htmlFor="employee-wage-effective-from">{t('effectiveFrom')}</Label>
-            <Input
-              id="employee-wage-effective-from"
-              type="date"
-              className="w-36"
-              value={effectiveFrom}
-              onChange={(event) => setEffectiveFrom(event.target.value)}
-            />
-          </div>
-          <Button size="sm" onClick={() => void addRate()} disabled={busy || data === null}>
-            <Plus size={14} aria-hidden /> {t('add')}
-          </Button>
-        </div>
-      </div>
-
+        </span>
+      )}
+      action={<SublistAddButton label={t('add')} disabled={busy || data === null} onClick={() => { setActionError(null); setAdding(true) }} />}
+      alert={adding ? null : refusal}
+      search={data?.rates.length ? { value: list.query, onChange: list.setQuery, placeholder: t('search') } : undefined}
+    >
       {loadError ? (
-        <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-center dark:border-rose-900 dark:bg-rose-950/30">
-          <p className="text-sm text-rose-700 dark:text-rose-300">{tc('feedback.loadFailed')}</p>
-          <Button size="sm" variant="outline" className="mt-3" onClick={() => { setLoadError(false); void load() }}>
-            {tc('actions.retry')}
-          </Button>
-        </div>
+        <SublistLoadError message={tc('feedback.loadFailed')} onRetry={() => { setLoadError(false); void load() }} />
       ) : data === null ? (
-        <p className="py-6 text-center text-sm text-slate-400">{tc('feedback.loading')}</p>
+        <SublistLoading />
       ) : (
         <PagedTable
-          rows={data.rates}
+          rows={list.filtered}
           rowKey={(row) => row.id}
           rowClassName={(row) => row.is_current ? 'bg-teal-50/80 dark:bg-teal-950/30' : undefined}
-          searchable
           pageSize={10}
           empty={<p className="py-6 text-center text-sm text-slate-400">{t('empty')}</p>}
           columns={[
@@ -397,6 +327,85 @@ export function EmployeeWageRates({ partyId }: { partyId: string }) {
           ]}
         />
       )}
-    </section>
+      <Drawer
+        open={adding}
+        onClose={() => { if (!busy) setAdding(false) }}
+        stacked
+        size="md"
+        title={t('add')}
+        description={t('hint')}
+        footer={(
+          <>
+            <Button variant="outline" disabled={busy} onClick={() => setAdding(false)}>{tc('actions.cancel')}</Button>
+            <Button onClick={() => void addRate()} disabled={busy || data === null}>{busy ? tc('actions.saving') : tc('actions.save')}</Button>
+          </>
+        )}
+      >
+        <div className="space-y-4" inert={busy}>
+          {refusal}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <Label htmlFor="employee-wage-rate" help={t('hint')}>{t('rate')}</Label>
+            <Input
+              id="employee-wage-rate"
+              type="number"
+              min="0"
+              step="0.0001"
+              value={rate}
+              onChange={(event) => setRate(event.target.value)}
+            />
+          </div>
+          {data && data.currencies.length > 1 ? (
+            <div>
+              <Label htmlFor="employee-wage-currency">{t('currency')}</Label>
+              <Select
+                id="employee-wage-currency"
+                value={currency}
+                onChange={(event) => setCurrency(event.target.value)}
+              >
+                {data.currencies.map((code) => <option key={code} value={code}>{code}</option>)}
+              </Select>
+            </div>
+          ) : null}
+          <div>
+            <Label htmlFor="employee-wage-basis">{t('basis')}</Label>
+            <Select
+              id="employee-wage-basis"
+              value={basis}
+              onChange={(event) => {
+                if (isPayRateBasis(event.target.value)) setBasis(event.target.value)
+              }}
+            >
+              {PAY_RATE_BASES.map((value) => (
+                <option key={value} value={value}>{t(BASIS_LABEL_KEYS[value])}</option>
+              ))}
+            </Select>
+          </div>
+          {isTimePayRateBasis(basis) ? (
+            <div>
+              <Label htmlFor="employee-wage-annual-hours">{t('annualHours')}</Label>
+              <Input
+                id="employee-wage-annual-hours"
+                type="number"
+                min="0.0001"
+                step="0.01"
+                value={annualHours}
+                onChange={(event) => setAnnualHours(event.target.value)}
+              />
+            </div>
+          ) : null}
+          <div>
+            <Label htmlFor="employee-wage-effective-from">{t('effectiveFrom')}</Label>
+            <Input
+              id="employee-wage-effective-from"
+              type="date"
+              value={effectiveFrom}
+              onChange={(event) => setEffectiveFrom(event.target.value)}
+            />
+          </div>
+        </div>
+        </div>
+      </Drawer>
+    </DrawerSublist>
   )
 }

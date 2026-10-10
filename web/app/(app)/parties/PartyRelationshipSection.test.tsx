@@ -41,6 +41,17 @@ const { act } = await import("react");
 const { NextIntlClientProvider } = await import("next-intl");
 const messages = (await import("../../../messages/en")).default;
 const { PartyRelationshipSection } = await import("./PartyRelationshipSection");
+const { RecordSaveContext, useRecordSaveRegistry } = await import("../../../components/record-save-participants");
+
+type Registry = ReturnType<typeof useRecordSaveRegistry>;
+let recordSave: Registry | null = null;
+
+/** The record drawer's side of the contract: one registry, one Save. */
+function RecordHost({ children }: { children: React.ReactNode }) {
+  const registry = useRecordSaveRegistry();
+  recordSave = registry;
+  return <RecordSaveContext.Provider value={registry.context}>{children}</RecordSaveContext.Provider>;
+}
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 const PARTY_ID = "33333333-3333-4333-8333-333333333333";
@@ -86,7 +97,7 @@ function buttonsNamed(name: string): HTMLButtonElement[] {
   ) as HTMLButtonElement[];
 }
 
-async function mountSection() {
+async function mountSection(editable = false) {
   globalThis.__relationshipToasts = [];
   globalThis.__relationshipRouter = { push() {}, refresh() {} };
   const host = document.createElement("div");
@@ -95,7 +106,9 @@ async function mountSection() {
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-        <PartyRelationshipSection partyId={PARTY_ID} canManage />
+        <RecordHost>
+          <PartyRelationshipSection partyId={PARTY_ID} canManage editable={editable} />
+        </RecordHost>
       </NextIntlClientProvider>,
     );
     await tick();
@@ -190,7 +203,7 @@ test("a relationship save carries the read revision as its concurrency token", a
     });
   });
   t.after(restoreFetch);
-  const { unmount } = await mountSection();
+  const { unmount } = await mountSection(true);
   t.after(unmount);
   // The industry field is the first free-text input in the form grid.
   const industry = [...document.querySelectorAll("input")].find(
@@ -204,15 +217,13 @@ test("a relationship save carries the read revision as its concurrency token", a
     await tick();
   });
   await tick();
-  const save = buttonsNamed("Save")[0];
-  assert.ok(save, "Save must render");
+  assert.equal(recordSave?.dirty, true, "the typed edit marks the record dirty");
   await act(async () => {
-    save.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    await recordSave!.saveAll();
     await tick();
   });
   await tick();
-  await tick();
-  assert.equal(patches.length, 1, "Save is exactly one PATCH");
+  assert.equal(patches.length, 1, "the record's Save is exactly one PATCH");
   const body = JSON.parse(String(patches[0]!.init?.body)) as Record<string, unknown>;
   assert.equal(
     body.expectedUpdatedAt,
@@ -220,4 +231,30 @@ test("a relationship save carries the read revision as its concurrency token", a
     "the PATCH must echo the read revision verbatim",
   );
   assert.equal(body.industry, "Software");
+});
+
+const PROFILE_RESPONSE = () => Response.json({ account: { profile: PROFILE, opportunities: [] }, options: OPTIONS });
+
+test("outside edit mode the relationship reads as values with no controls and no Save", async (t) => {
+  const restoreFetch = scriptFetch((url) => (url === `/api/crm/accounts/${PARTY_ID}` ? PROFILE_RESPONSE() : null));
+  t.after(restoreFetch);
+  const { unmount } = await mountSection(false);
+  t.after(unmount);
+  const section = [...document.querySelectorAll("section")].find((element) => element.textContent?.includes("Relationship profile"));
+  assert.ok(section, "the profile renders");
+  assert.equal(section.querySelectorAll("input, select, textarea").length, 0, "view mode renders no editable controls");
+  assert.ok(section.querySelector("[data-relationship-read-only]"), "values render read-only");
+  assert.ok(section.textContent?.includes("New"), "the stored status reads as a value");
+  assert.equal(buttonsNamed("Save").length, 0, "the section never carries its own Save");
+});
+
+test("in edit mode the relationship edits through the record and still has no Save of its own", async (t) => {
+  const restoreFetch = scriptFetch((url) => (url === `/api/crm/accounts/${PARTY_ID}` ? PROFILE_RESPONSE() : null));
+  t.after(restoreFetch);
+  const { unmount } = await mountSection(true);
+  t.after(unmount);
+  const section = [...document.querySelectorAll("section")].find((element) => element.textContent?.includes("Relationship profile"));
+  assert.ok(section && section.querySelectorAll("select").length > 0, "edit mode offers the controls");
+  assert.equal(buttonsNamed("Save").length, 0, "the record's single Save persists the section");
+  assert.equal(recordSave?.dirty, false, "untouched fields leave the record clean");
 });

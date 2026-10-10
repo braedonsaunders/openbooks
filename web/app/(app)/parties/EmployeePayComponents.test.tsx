@@ -49,6 +49,7 @@ const COPY = {
   saved: msg("parties.drawer.payComponents.saved"),
   saveFailed: msg("parties.drawer.payComponents.saveFailed"),
   title: msg("parties.drawer.payComponents.title"),
+  save: msg("common.actions.save"),
 };
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
@@ -101,16 +102,37 @@ async function renderPanel(posted: PostedAssignment[], postQueue: Response[], as
   };
 }
 
-async function addButton(): Promise<HTMLButtonElement> {
+async function enabledButton(label: string): Promise<HTMLButtonElement> {
   const deadline = Date.now() + 5000;
   for (;;) {
     const button = [...document.querySelectorAll("button")].find(
-      (candidate) => candidate.textContent?.trim() === COPY.add,
+      (candidate) => candidate.textContent?.trim() === label,
     ) as HTMLButtonElement | undefined;
     if (button && !button.disabled) return button;
-    if (Date.now() > deadline) throw new Error("the assignment form never finished loading");
+    if (Date.now() > deadline) throw new Error(`the ${label} action never became available`);
     await tick();
   }
+}
+
+/** A match outside any drawer still playing its exit animation. */
+function live<T extends Element>(selector: string): T | null {
+  return ([...document.querySelectorAll(selector)] as T[]).find((node) => !node.closest("[data-overlay-exiting]")) ?? null;
+}
+
+/** The list's top-right add action; enabled once the panel has loaded. */
+function addButton(): Promise<HTMLButtonElement> {
+  return enabledButton(COPY.add);
+}
+
+/** The assignment form lives in the Add drawer opened from the list. */
+async function openAssignmentDrawer() {
+  if (live("#employee-pay-value")) return;
+  const add = await addButton();
+  await act(async () => {
+    add.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    await tick();
+  });
+  await tick();
 }
 
 function setInputValue(input: HTMLInputElement, value: string) {
@@ -126,8 +148,9 @@ function setNativeSelect(select: HTMLSelectElement, value: string) {
 }
 
 async function chooseComponent() {
+  await openAssignmentDrawer();
   const select = [...document.querySelectorAll("select")].find((candidate) =>
-    candidate.querySelector('option[value="comp-coveralls"]'),
+    !candidate.closest("[data-overlay-exiting]") && candidate.querySelector('option[value="comp-coveralls"]'),
   );
   assert.ok(select, "the form must offer a component picker");
   await act(async () => {
@@ -138,7 +161,7 @@ async function chooseComponent() {
 }
 
 async function setValue(value: string) {
-  const input = document.querySelector("#employee-pay-value") as HTMLInputElement | null;
+  const input = live<HTMLInputElement>("#employee-pay-value");
   assert.ok(input, "the form must offer an override value input");
   await act(async () => {
     setInputValue(input, value);
@@ -148,7 +171,8 @@ async function setValue(value: string) {
 }
 
 async function clickAdd() {
-  const button = await addButton();
+  await openAssignmentDrawer();
+  const button = await enabledButton(COPY.save);
   await act(async () => {
     button.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
     await tick();
@@ -174,8 +198,9 @@ test("assigning posts canonical decimal strings and clears the value", async (t)
   assert.equal(typeof body.value, "string", "the override must stay decimal text, never a float");
   assert.equal(body.employmentId, null);
   assert.equal(body.runApplicability, "standard_runs");
+  await openAssignmentDrawer();
   assert.equal(
-    (document.querySelector("#employee-pay-value") as HTMLInputElement).value,
+    live<HTMLInputElement>("#employee-pay-value")?.value,
     "",
     "a saved assignment must clear the override",
   );
@@ -232,5 +257,7 @@ test("regular-only assignments retain the selected policy in the API and reset a
   await clickAdd();
   assert.equal(posted.length, 1);
   assert.equal(posted[0]!.body.runApplicability, 'regular_only');
-  assert.equal(select.value, 'standard_runs');
+  await openAssignmentDrawer();
+  const reopened = [...document.querySelectorAll('select')].find(candidate => !candidate.closest('[data-overlay-exiting]') && candidate.querySelector('option[value="regular_only"]')) as HTMLSelectElement;
+  assert.equal(reopened.value, 'standard_runs');
 });
