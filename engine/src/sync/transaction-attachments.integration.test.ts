@@ -33,8 +33,8 @@ test('transaction files backfill old records, reconcile links without downloadin
     await withBypassContext(async () => {
       await db.execute(sql`insert into connections(id, org_id, source, display_name) values(${connectionId}, ${org.orgId}, 'qbo', 'Transaction evidence')`);
       for (const [owner, id, ref, kind] of [[org, docId, 'Bill:2', 'vendor_bill'], [org, secondId, 'Purchase:3', 'expense_report'], [foreign, foreignId, 'Bill:2', 'vendor_bill']] as const) {
-        await db.execute(sql`insert into documents(id, org_id, subsidiary_id, accounting_book_id, kind, number, date, currency, status, subtotal, tax_total, total, custom)
-          values(${id}, ${owner.orgId}, ${owner.subsidiaryId}, ${owner.bookId}, ${kind}, ${id}, '2026-01-01', 'CAD', 'draft', 0, 0, 0,
+        await db.execute(sql`insert into documents(id, org_id, subsidiary_id, kind, document_number, document_date, currency, status, subtotal, tax_total, total, custom)
+          values(${id}, ${owner.orgId}, ${owner.subsidiaryId}, ${kind}, ${id}, '2026-01-01', 'CAD', 'draft', 0, 0, 0,
             ${JSON.stringify({ qboId: ref, connectionId })}::jsonb)`);
       }
     });

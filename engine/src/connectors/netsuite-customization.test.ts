@@ -8,7 +8,7 @@ const choices = (success = true, total = 1) => xml(`<getCustomizationIdResponse>
 test('customization pickers use human names with stable script identities and scope child fields to the selected parent', async () => {
   const requests: string[] = [];
   const transport = (async (_input, init) => {
-    assert.equal(init?.redirect, 'error');
+    assert.equal(init?.redirect, 'manual');
     const body = String(init?.body); requests.push(body);
     if (new Headers(init?.headers).get('SOAPAction') === 'getCustomizationId') return new Response(choices());
     assert.match(body, /internalId="12" type="customRecordType"/);
@@ -18,6 +18,19 @@ test('customization pickers use human names with stable script identities and sc
   assert.deepEqual(await netsuiteCustomRecordFields('customrecord_time', creds, '2022_1', transport), [{ value: 'custrecord_multiplier', label: 'Multiplier', internalId: '19' }]);
   assert.ok(requests.every((body) => body.includes('<tokenPassport')));
   await assert.rejects(netsuiteCustomRecordFields('customrecord_other', creds, '2022_1', transport), /Selected source record is unavailable/);
+});
+
+test('customization reads refuse credential redirects without following or retrying', async () => {
+  for (const status of [301, 302, 303, 307, 308]) {
+    const requests: string[] = [];
+    const transport = (async (input, init) => {
+      requests.push(String(input));
+      assert.equal(init?.redirect, 'manual');
+      return new Response(null, { status, headers: { Location: 'https://redirect.example.invalid/credential-capture' } });
+    }) as typeof fetch;
+    await assert.rejects(netsuiteCustomizationChoices('customRecordType', creds, '2022_1', transport), /credentialed requests are never followed/);
+    assert.deepEqual(requests, ['https://example.invalid/services/NetSuitePort_2022_1'], 'redirect refusal makes exactly one request to the configured source');
+  }
 });
 
 test('customization choices refuse denied, incomplete and malformed metadata instead of showing an empty successful picker', async () => {

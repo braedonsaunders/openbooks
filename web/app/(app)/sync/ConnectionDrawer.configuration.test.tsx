@@ -39,7 +39,7 @@ async function fill(label: string, value: string) {
   if (input.tagName === 'BUTTON') {
     await act(async () => { input.click(); await tick() })
     const option = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((option) => option.textContent?.trim() === value)
-    assert.ok(option, `missing source choice ${value}`)
+    assert.ok(option, `missing choice ${value}`)
     await act(async () => { option.click(); await tick() })
     return
   }
@@ -100,7 +100,7 @@ test('structured connection mappings and content save and reopen without losing 
   await click('Projects')
   assert.match(document.body.textContent ?? '', /In Progress/)
   await fill('Source value', 'Completed')
-  await fill('Native value', 'closed')
+  await fill('Native value', 'Closed')
   await click('Sync content')
   await click('Save changes')
   assert.equal(saved, undefined, 'unfinished mapping is never silently discarded or saved')
