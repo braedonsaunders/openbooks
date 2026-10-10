@@ -24,6 +24,73 @@ export interface ParsedStatementLine {
   counterpartyRef?: string | null;
   /** Source-provided dedupe key (OFX FITID); null when the source supplies no sound transaction identity. */
   bankTransactionId?: string | null;
+  /**
+   * Set by CSV/OFX parsers when the row reads as a statement balance rather
+   * than a transaction (see detectStatementBalanceRole). The import splits
+   * hinted rows into balance candidates — offered as opening/closing
+   * balances in the preview, never imported as transactions.
+   */
+  balanceHint?: StatementBalanceRole | null;
+}
+
+/**
+ * A parsed row the import set aside as a likely statement balance: offered
+ * as an opening/closing balance in the preview, never written as a
+ * statement line.
+ */
+export interface BalanceCandidateLine {
+  /** ISO date (YYYY-MM-DD) from the source row, for display only. */
+  postedOn: string;
+  /** Signed decimal string from the bank's perspective. */
+  amount: string;
+  description: string | null;
+  counterpartyRef?: string | null;
+  bankTransactionId?: string | null;
+  role: StatementBalanceRole;
+}
+
+/**
+ * Liability account types carry bank statements in the opposite sign to the
+ * GL: a positive statement line (a charge increasing what is owed) books as
+ * a GL credit (negative transaction amount; debits post positive). Mirrors
+ * the liability class in records/account-types LIABILITY_TYPES; listed here
+ * so banking's module boundary (money, organization, platform) stays closed.
+ */
+const LIABILITY_STATEMENT_ACCOUNT_TYPES: ReadonlySet<string> = new Set([
+  "liability_payable",
+  "liability_card",
+  "liability_current_other",
+  "liability_long_term",
+]);
+
+/**
+ * Statement↔GL comparison direction for an account type: asset-style
+ * accounts compare directly (+1); liability accounts compare statement
+ * amounts against negated GL amounts (−1).
+ */
+export function statementComparisonSign(accountType: string): 1 | -1 {
+  return LIABILITY_STATEMENT_ACCOUNT_TYPES.has(accountType) ? -1 : 1;
+}
+
+/**
+ * True when a statement total and a journal total agree under the account's
+ * statement sign convention. Asset-style accounts require exact signed
+ * equality; liability accounts accept either pairing, because card feeds
+ * disagree in the wild (CSV portals print charges owing-positive while OFX
+ * carries them GL-signed). Sign-off's difference — keyed to the typed
+ * statement balance — stays the strict gate, so leniency here can never
+ * sign off a mismatched book.
+ */
+export function statementTotalsAgree(
+  statementTotalUnits: bigint,
+  journalTotalUnits: bigint,
+  accountType: string,
+): boolean {
+  if (statementTotalUnits === journalTotalUnits) return true;
+  return (
+    statementComparisonSign(accountType) === -1
+    && statementTotalUnits === -journalTotalUnits
+  );
 }
 
 export interface ParsedStatement {
@@ -174,10 +241,17 @@ export interface CsvMapping {
  * that looks like a transaction is never skipped: the parse refuses
  * instead.
  */
-export type SkippedStatementRowCode = "csv_metadata_row";
+export type SkippedStatementRowCode = "csv_metadata_row" | "csv_balance_row";
+/** A row the parser set aside as a likely statement balance (see
+ * detectStatementBalanceRole): offered as an opening/closing balance in the
+ * preview, never imported as a transaction. */
+export type StatementBalanceRole = "opening" | "closing";
 export interface SkippedStatementRow {
   line: number;
   code: SkippedStatementRowCode;
   /** Raw date-column cell of the set-aside row, for the localized sentence. */
   dateCell: string;
+  /** Set only for `csv_balance_row`: the normalized amount and the role the preview offers. */
+  amount?: string;
+  balanceRole?: StatementBalanceRole;
 }

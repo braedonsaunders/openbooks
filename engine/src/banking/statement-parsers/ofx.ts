@@ -1,7 +1,7 @@
 /** OFX statement parsing. Split from banking.ts (pure moves only). */
 import { BankingError, type ParsedStatementLine, type ParsedStatement, type StatementSourceContent } from "../banking-core"
 import { decodeStatementSourceText } from "../statement-encoding"
-import { decodeOfxEntities, assertRealDate, normalizeAmount } from "./shared"
+import { decodeOfxEntities, assertRealDate, detectStatementBalanceRole, normalizeAmount } from "./shared"
 
 
 /** First leaf value for `<TAG>value` (SGML, unclosed) or `<TAG>value</TAG>`. */
@@ -46,6 +46,9 @@ export function parseOfx(source: StatementSourceContent): ParsedStatement {
       description,
       counterpartyRef: ofxValue(block, "REFNUM") ?? ofxValue(block, "CHECKNUM") ?? null,
       bankTransactionId: ofxValue(block, "FITID") ?? null,
+      // Balance-summary pseudo-transactions some banks emit are tagged, not
+      // dropped: the import splits hinted rows into balance candidates.
+      balanceHint: detectStatementBalanceRole(description),
     };
   });
 

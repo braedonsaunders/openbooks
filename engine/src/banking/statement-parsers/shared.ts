@@ -1,5 +1,5 @@
 /** Helpers shared by two or more statement parsers. Split from banking.ts (pure moves only). */
-import { BankingError } from "../banking-core"
+import { BankingError, type StatementBalanceRole } from "../banking-core"
 import { assertLedgerRange } from "./bai2"
 import { utcDateFromParts } from "../../platform/business-date.ts"
 import { fromUnits, toUnits } from "../../money/money.ts"
@@ -121,4 +121,63 @@ export function normalizeAmount(raw: string, label: string, commaMode: "swift-de
   units = negative ? -units : units;
   assertLedgerRange(units, `${label}: amount "${raw}" is out of range for the ledger`);
   return fromUnits(units);
+}
+
+/**
+ * Opening/closing balance rows smuggled into transaction feeds: a summary
+ * row ("Opening balance 3,068.57") with no GL counterpart blocks sign-off
+ * forever when imported as a transaction, because statement lines can be
+ * matched or excluded but a phantom transaction is neither. Detection is
+ * deliberately conservative and English-keyword based — bank exports label
+ * these rows in a small set of ways. A flagged row is offered as a balance
+ * in the preview rather than imported, so a genuine transaction whose
+ * description happens to lead with one of these phrases must be reworded
+ * in the source text. A bare "Balance" with no direction word
+ * is not enough: direction is what separates a balance from money.
+ */
+const BALANCE_TEXT = "balance|b/f|c/f|brought forward|carried forward";
+const OPENING_LEAD =
+  /^(opening|open|beginning|starting|previous|prior|brought forward|balance\s*b\/f|b\/f)\b/;
+const CLOSING_LEAD =
+  /^(closing|close|ending|final|new|current|carried forward|balance\s*c\/f|c\/f)\b/;
+
+/** Opening/closing-balance role of a statement description, or null for a genuine transaction. */
+export function detectStatementBalanceRole(
+  description: string | null | undefined,
+): StatementBalanceRole | null {
+  const text = (description ?? "").trim().replace(/\s+/g, " ").toLowerCase();
+  if (!text) return null;
+  if (!new RegExp(`\\b(${BALANCE_TEXT})\\b`).test(text)) return null;
+  if (OPENING_LEAD.test(text)) return "opening";
+  if (CLOSING_LEAD.test(text)) return "closing";
+  return null;
+}
+
+const BALANCE_FILLER_WORD = /^(balances?|b\/f|c\/f)$/;
+const AMOUNT_TOKEN = /^[$£€¥]?\d[\d,]*(\.\d+)?$/;
+
+/**
+ * Balance-summary rows for auto-match to leave alone. Import detection above
+ * stays conservative (it needs the word "balance"), so a bare "Opening
+ * 1,914.90" still imports as a transaction line — but it still has no GL
+ * counterpart, and pairing it with a same-amount payment is the mismatch
+ * this guard exists to prevent. A summary row is a lead word plus at most an
+ * amount: once the lead, any amounts and balance fillers are set aside,
+ * nothing may remain. Genuine traffic ("Open invoice 123", "Final payment
+ * to vendor", "New equipment purchase") always has other words, so it still
+ * pairs; the reviewer matches or excludes the summary row by hand.
+ */
+export function isBalanceSummaryRow(description: string | null | undefined): boolean {
+  const text = (description ?? "").trim().replace(/\s+/g, " ").toLowerCase();
+  if (!text) return false;
+  if (detectStatementBalanceRole(text) !== null) return true;
+  if (!OPENING_LEAD.test(text) && !CLOSING_LEAD.test(text)) return false;
+  const rest = text.replace(OPENING_LEAD.test(text) ? OPENING_LEAD : CLOSING_LEAD, "").trim();
+  if (!rest) return true;
+  return rest
+    .split(" ")
+    .every((token) => {
+      const clean = token.replace(/^[^\p{L}\p{N}/]+|[^\p{L}\p{N}/]+$/gu, "");
+      return AMOUNT_TOKEN.test(clean) || BALANCE_FILLER_WORD.test(clean);
+    });
 }
