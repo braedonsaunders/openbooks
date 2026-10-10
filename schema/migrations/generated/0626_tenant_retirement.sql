@@ -847,7 +847,9 @@ BEGIN
  INSERT INTO tenant_retirement.fences(tenant_id) VALUES(NEW.id);
  RETURN NEW;
 END $$;
-CREATE TRIGGER tenant_retirement_new_org AFTER INSERT ON public.orgs FOR EACH ROW EXECUTE FUNCTION tenant_retirement.openbooks_tenant_retirement_new_org();
+-- The fence must exist before AFTER INSERT initializers create tenant children.
+-- Its insert rolls back with the organization if any initializer refuses.
+CREATE TRIGGER tenant_retirement_new_org BEFORE INSERT ON public.orgs FOR EACH ROW EXECUTE FUNCTION tenant_retirement.openbooks_tenant_retirement_new_org();
 CREATE TRIGGER tenant_retirement_org_fence BEFORE UPDATE OR DELETE ON public.orgs FOR EACH ROW EXECUTE FUNCTION tenant_retirement.openbooks_tenant_retirement_fence();
 DO $$
 DECLARE target record;
