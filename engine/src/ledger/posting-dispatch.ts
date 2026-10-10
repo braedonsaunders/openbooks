@@ -39,6 +39,49 @@ export async function postingEffectSubsidiaryId(
   return ctx.rootId;
 }
 
+/**
+ * The inventory side of a posted document: stock a sale or cash sale issues,
+ * a vendor bill receives, a vendor credit returns to the vendor, or a
+ * customer credit or cash refund restocks. Posting runs this inside the
+ * posting unit, so a stock refusal (insufficient quantity, missing tracking
+ * or accounts) refuses the post itself and no revenue, receivable or status
+ * change commits without its cost side. The post-commit drain calls it again;
+ * every service is idempotent by document line, so the repeat moves nothing.
+ */
+export async function applyPostedInventoryEffects(
+  doc: { id: string; orgId: string; kind: string; subsidiaryId: string | null; documentNumber: string | null },
+  postingDate: string,
+  entryId: string | null,
+  actorId: string | null,
+): Promise<void> {
+  if (doc.kind === "customer_invoice" || doc.kind === "cash_sale") {
+    await applyInventoryIssuesForInvoice(doc.orgId, actorId, doc.id, postingDate,
+      await postingEffectSubsidiaryId(doc.orgId, doc.subsidiaryId));
+  } else if (doc.kind === "vendor_bill") {
+    // A posted vendor_bill carries its entry id by construction — the
+    // kernel flips status and stamps posted_entry_id in one statement — so
+    // a missing id means the row is corrupt. Fail loudly rather than skip
+    // the receipts and record success.
+    if (!entryId) {
+      throw new Error(
+        `posted vendor bill ${doc.documentNumber} has no posted journal entry; inventory receipts cannot run`,
+      );
+    }
+    await applyInventoryReceiptsForBill(doc.orgId, actorId, doc.id, entryId, postingDate,
+      await postingEffectSubsidiaryId(doc.orgId, doc.subsidiaryId));
+  } else if (doc.kind === "vendor_credit") {
+    await applyInventoryReturnsForVendorCredit(doc.orgId, actorId, doc.id, postingDate,
+      await postingEffectSubsidiaryId(doc.orgId, doc.subsidiaryId));
+  } else if (doc.kind === "customer_credit" || doc.kind === "cash_refund") {
+    // The sell-side mirror of vendor_credit. Without it a sales return was
+    // a purely commercial credit: revenue reversed, the goods never came
+    // back into stock, and COGS kept the cost of units the customer had
+    // returned. Cash refunds restock through the same return engine.
+    await applyInventoryReturnsForCustomerCredit(doc.orgId, actorId, doc.id, postingDate,
+      await postingEffectSubsidiaryId(doc.orgId, doc.subsidiaryId));
+  }
+}
+
 export async function runPostDocumentEffects(
   documentId: string,
   previousStatus = "draft",
@@ -80,57 +123,14 @@ export async function runPostDocumentEffects(
     const effectActorId = options.actorId ?? claimed?.actor_id ?? null;
     const postingDate = doc.postingDate ?? claimed?.posting_date ?? doc.documentDate;
     const entryId = doc.postedEntryId ?? claimed?.entry_id ?? null;
+    await applyPostedInventoryEffects(doc, postingDate, entryId, effectActorId);
     if (doc.kind === "customer_invoice" || doc.kind === "cash_sale") {
-      // A cash sale issues stock and defers rev-rec lines exactly like an
-      // invoice; walk-in (party-less) sales simply produce no obligations,
-      // since recognition needs a counterparty contract.
+      // A cash sale defers rev-rec lines exactly like an invoice; walk-in
+      // (party-less) sales simply produce no obligations, since recognition
+      // needs a counterparty contract.
       await createObligationsFromInvoice(doc.id, doc.orgId, effectActorId);
-      await applyInventoryIssuesForInvoice(
-        doc.orgId,
-        effectActorId,
-        doc.id,
-        postingDate,
-        await postingEffectSubsidiaryId(doc.orgId, doc.subsidiaryId),
-      );
       await issueStoredValueForInvoice(doc.id, doc.orgId, effectActorId);
-    } else if (doc.kind === "vendor_bill") {
-      // A posted vendor_bill carries its entry id by construction — the
-      // kernel flips status and stamps posted_entry_id in one statement — so
-      // a missing id means the row is corrupt. Fail loudly into the retry/
-      // terminal lifecycle rather than skip the receipts and record success.
-      if (!entryId) {
-        throw new Error(
-          `posted vendor bill ${doc.documentNumber} has no posted journal entry; inventory receipts cannot run`,
-        );
-      }
-      await applyInventoryReceiptsForBill(
-        doc.orgId,
-        effectActorId,
-        doc.id,
-        entryId,
-        postingDate,
-        await postingEffectSubsidiaryId(doc.orgId, doc.subsidiaryId),
-      );
-    } else if (doc.kind === "vendor_credit") {
-      await applyInventoryReturnsForVendorCredit(
-        doc.orgId,
-        effectActorId,
-        doc.id,
-        postingDate,
-        await postingEffectSubsidiaryId(doc.orgId, doc.subsidiaryId),
-      );
     } else if (doc.kind === "customer_credit" || doc.kind === "cash_refund") {
-      // The sell-side mirror of vendor_credit. Without it a sales return was
-      // a purely commercial credit: revenue reversed, the goods never came
-      // back into stock, and COGS kept the cost of units the customer had
-      // returned. Cash refunds restock through the same return engine.
-      await applyInventoryReturnsForCustomerCredit(
-        doc.orgId,
-        effectActorId,
-        doc.id,
-        postingDate,
-        await postingEffectSubsidiaryId(doc.orgId, doc.subsidiaryId),
-      );
       // A cash refund's stored-value tenders settle per tender (top up the
       // named account, or mint from the memo program); the memo-level credit
       // effect stands down while tenders exist so the credit issues once.

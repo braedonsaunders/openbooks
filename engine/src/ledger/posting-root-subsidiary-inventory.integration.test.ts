@@ -10,9 +10,6 @@ import { postDocument } from "./posting-document.ts";
 import { runPostDocumentEffects } from "./posting-dispatch.ts";
 import {
   claimPostingEffectsForDocument,
-  MAX_POSTING_EFFECTS_ATTEMPTS,
-  processDuePostingEffects,
-  replayTerminalPostingEffect,
   type PostingEffectsRow,
 } from "./posting-effects.ts";
 import {
@@ -347,10 +344,10 @@ test("replay of a root-subsidiary bill runs its inventory effect exactly once", 
   }
 });
 
-test("a failed root-subsidiary effect retries through the outbox and can never be recorded as succeeded", { skip: !DB }, async () => {
+test("a root-subsidiary invoice short of stock refuses its post and commits nothing until the stock arrives", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
-    // No stock seeded: the COGS issue cannot possibly succeed.
+    // No stock seeded: the COGS issue cannot succeed, so the post must not.
     const invoiceId = await draftRootDocument(
       org,
       "customer_invoice",
@@ -366,44 +363,26 @@ test("a failed root-subsidiary effect retries through the outbox and can never b
       },
     );
     const lineId = await firstLineId(invoiceId);
+    const statusBefore = (await db.execute<{ status: string }>(sql`
+      select status from documents where id = ${invoiceId}`)).rows[0]!.status;
 
-    await postDocument(invoiceId, deps(org), { deferEffects: true });
-
-    // The synchronous drain fails loudly instead of skipping silently, and
-    // its own catch path records the failure (never success).
     await assert.rejects(
-      () => runPostDocumentEffects(invoiceId),
-      /insufficient stock/i,
+      () => postDocument(invoiceId, deps(org), { deferEffects: true }),
+      /insufficient stock of .*need 4/i,
     );
-    let status = await effectsStatus(invoiceId);
-    assert.equal(status, "failed");
-
-    // Drain to the attempt ceiling through the REAL outbox worker: every
-    // retry fails again, every intermediate state stays retryable-'failed',
-    // and the ceiling makes an explicit one-way transition to terminal.
-    for (let attempt = 2; attempt <= MAX_POSTING_EFFECTS_ATTEMPTS; attempt++) {
-      const now = new Date(Date.now() + attempt * 24 * 3600_000);
-      const outcome = await processDuePostingEffects(now, 50);
-      assert.equal(outcome.succeeded, 0);
-      assert.equal(outcome.fenced, 0);
-      assert.ok(outcome.processed >= 1, `attempt ${attempt} must run`);
-      status = await effectsStatus(invoiceId);
-      assert.equal(
-        status,
-        attempt < MAX_POSTING_EFFECTS_ATTEMPTS ? "failed" : "terminal_failed",
-      );
-    }
-
-    // Nothing was ever recorded as succeeded, and no partial effect leaked.
-    assert.notEqual(await effectsStatus(invoiceId), "succeeded");
+    // The refusal rolled the whole unit back: no status change, no journal,
+    // no receivable or revenue, no effect row, no movement.
+    const after = (await db.execute<{ status: string; entry: string | null }>(sql`
+      select status, posted_entry_id as entry from documents where id = ${invoiceId}`)).rows[0]!;
+    assert.equal(after.status, statusBefore);
+    assert.equal(after.entry, null);
+    assert.equal(await effectsStatus(invoiceId), null);
     assert.equal((await movementFacts(org.orgId, lineId, "issue")).count, 0);
-    assert.equal(
-      await glBalanceBySubsidiary(org.orgId, org.accounts.cogs, org.subsidiaryId),
-      0n,
-    );
+    assert.equal(await glBalanceBySubsidiary(org.orgId, org.accounts.revenue, org.subsidiaryId), 0n);
+    assert.equal(await glBalanceBySubsidiary(org.orgId, org.accounts.cogs, org.subsidiaryId), 0n);
 
-    // Authorized operator replay resets the terminal row, and repairing the
-    // underlying stock lets a fresh worker drain genuinely succeed.
+    // Once stock is received the same post commits revenue and its cost of
+    // sales together, and the post-commit drain moves nothing a second time.
     await receiveInventory(org.orgId, null, {
       itemId: org.items.fifo,
       stockLocationId: org.stockLocationId,
@@ -413,21 +392,14 @@ test("a failed root-subsidiary effect retries through the outbox and can never b
       offsetAccountId: org.accounts.clearing,
       date: org.date,
     });
-    const operator = await createScratchUser(org.orgId, "Operator", "admin");
-    const effectId = (await db.execute<{ id: string }>(sql`
-      select id from posting_effects where document_id = ${invoiceId}`)).rows[0]!.id;
-    await replayTerminalPostingEffect({
-      orgId: org.orgId,
-      id: effectId,
-      actorId: operator,
-      reason: "stock received after the original shortage; replay the issue",
-    });
-    await processDuePostingEffects(new Date(Date.now() + 48 * 3600_000), 50);
-
+    await postDocument(invoiceId, deps(org), { deferEffects: true });
+    assert.equal((await movementFacts(org.orgId, lineId, "issue")).count, 1);
+    assert.equal(await glBalanceBySubsidiary(org.orgId, org.accounts.cogs, org.subsidiaryId), toUnits("8"));
+    await runPostDocumentEffects(invoiceId);
     assert.equal(await effectsStatus(invoiceId), "succeeded");
-    const repaired = await movementFacts(org.orgId, lineId, "issue");
-    assert.equal(repaired.count, 1, "the repaired drain issues exactly once");
-    assert.deepEqual(repaired.subsidiaryIds, [org.subsidiaryId]);
+    const issued = await movementFacts(org.orgId, lineId, "issue");
+    assert.equal(issued.count, 1, "the drain issues nothing a second time");
+    assert.deepEqual(issued.subsidiaryIds, [org.subsidiaryId]);
   } finally {
     await dropScratchOrg(org.orgId);
   }

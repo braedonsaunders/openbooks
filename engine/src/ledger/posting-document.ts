@@ -14,7 +14,7 @@ import { PostingError, type PostingDeps, type PostDocumentOptions } from "../jou
 import { assertCustomerInvoiceCredit } from "./posting-invoice-credit.ts";
 import { prepareDocumentPosting } from "./posting-prepare.ts";
 import { commitDocumentPosting } from "./posting-commit.ts";
-import { runPostDocumentEffects } from "./posting-dispatch.ts";
+import { applyPostedInventoryEffects, runPostDocumentEffects } from "./posting-dispatch.ts";
 
 /**
  * Public posting coordinator: prepare, atomically commit, then dispatch durable effects.
@@ -110,6 +110,22 @@ export async function postDocument(documentId: string, deps: PostingDeps, option
       orgId: prepared.doc.orgId, paymentDocumentId: documentId, journalEntryId: entryId,
       actorId: options.audit?.actorId ?? null,
     });
+    if (!deps.migration) {
+      // Stock moves with the posting, not after it: an issue the stock
+      // position refuses rolls back the journal and the status flip, so a
+      // posted sale always carries its cost of sales.
+      const posted = (await db.execute<{ subsidiaryId: string | null; documentNumber: string | null; postingDate: string }>(sql`
+        select subsidiary_id as "subsidiaryId", document_number as "documentNumber",
+               coalesce(posting_date, document_date)::text as "postingDate"
+          from documents where id = ${documentId} and org_id = ${prepared.doc.orgId}`)).rows[0];
+      if (!posted) throw new PostingError(`document ${documentId} is not readable after posting`);
+      await applyPostedInventoryEffects(
+        { id: documentId, orgId: prepared.doc.orgId, kind: prepared.doc.kind, subsidiaryId: posted.subsidiaryId, documentNumber: posted.documentNumber },
+        posted.postingDate,
+        entryId,
+        options.audit?.actorId ?? null,
+      );
+    }
     return { prepared, entryId };
   };
 
