@@ -1,0 +1,1 @@
+Additive nullable/empty-default columns with no backfill: null max_occurrences means unlimited and an empty skipped_run_ons means nothing skipped, so existing rows already satisfy the new constraint and there is nothing to probe before install.
