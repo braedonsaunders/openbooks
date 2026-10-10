@@ -187,7 +187,7 @@ export function FlowRowActions({
     setBusy(true)
     const next = !isEnabled
     try {
-      const data = await apiJson<{ updatedAt: string }>(
+      const data = await apiJson<{ updatedAt: string; enabled?: unknown }>(
         `/api/admin/flows/${id}`,
         {
           method: 'PATCH',
@@ -196,7 +196,9 @@ export function FlowRowActions({
         },
         t('actions.updateFailed'),
       )
-      setIsEnabled(next)
+      // Render the persisted flag the server returns — the switch shows the
+      // stored state even if it differs from the optimistic next.
+      setIsEnabled(typeof data.enabled === 'boolean' ? data.enabled : next)
       setRevision(data.updatedAt)
       router.refresh()
     } catch (error) {

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { evaluateLogicRule, logicRuleSchema, type LogicRule } from '@openbooks/forms-core'
-import { makeGroup, withRuleValueType } from './logic-rule-builder.ts'
+import { evaluateLogicRule, logicRuleSchema, type FlowSubjectProfile, type LogicRule } from '@openbooks/forms-core'
+import { fieldPickerOptions, makeGroup, withRuleValueType } from './logic-rule-builder.ts'
 
 const child = (field: string): LogicRule => ({ op: 'isSet', field })
 
@@ -63,6 +63,30 @@ test('numeric scalar thresholds retain decimal text and exact comparison after s
   const threshold = withRuleValueType({ op: 'gt', field: 'value', value: '999999999999900.01' }, 'number');
   assert.equal(evaluateLogicRule(logicRuleSchema.parse(threshold), { values: { value: '999999999999900.02' }, rows: {} }), true);
 });
+
+test('the condition field picker shows each display label once, never label plus key', () => {
+  const profile = {
+    subjectKind: 'estimate',
+    label: 'Estimate',
+    triggers: ['on_submit'],
+    actions: ['notify'],
+    statuses: [],
+    fields: [
+      { key: 'total', label: 'Total', type: 'number' },
+      { key: 'memo', label: 'Memo', type: 'text' },
+    ],
+    roles: [],
+  } as unknown as FlowSubjectProfile
+  assert.deepEqual(fieldPickerOptions(profile), [
+    { value: 'total', label: 'Total' },
+    { value: 'memo', label: 'Memo' },
+  ])
+  // The storage key stays the option value (what the engine matches on) but
+  // never leaks into the visible label — "Total" reads once, not "Totaltotal".
+  for (const option of fieldPickerOptions(profile)) {
+    assert.ok(!('hint' in option), `no key hint may ride along, got: ${JSON.stringify(option)}`)
+  }
+})
 
 test('numeric list equality stays exact while switching to a text field restores identifier semantics', () => {
   const numeric = withRuleValueType({ op: 'in', field: 'value', value: ['100.00', '200.00'] }, 'number');
