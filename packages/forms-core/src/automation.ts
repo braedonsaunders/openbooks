@@ -265,6 +265,63 @@ export function emptyAutomationGraph(): AutomationGraph {
   return { schemaVersion: 1, nodes: [], edges: [] }
 }
 
+/**
+ * The user-visible name of a graph node: kind plus the author-facing label
+ * (trigger kind, condition label, gate title, action kind). Storage ids never
+ * appear — lint messages built from this name stay readable after nodes are
+ * renamed or deleted, and no enrichment pass is needed to show them.
+ */
+export function nodeDisplayName(node: AutomationNode): string {
+  const data = node.data
+  switch (data.kind) {
+    case 'trigger':
+      return `Trigger "${data.trigger.trigger}"`
+    case 'condition':
+      return data.label ? `Condition "${data.label}"` : 'Condition (unlabeled)'
+    case 'action':
+      return `Action "${data.action.action}"`
+    case 'gate':
+      return data.gate.title ? `Approval "${data.gate.title}"` : 'Approval (untitled)'
+  }
+}
+
+/** A rule with no leaf comparison matches everything (`and`) or nothing
+ * (`or`) — either way the author wrote no real predicate. */
+export function logicRuleIsEmpty(rule: LogicRule): boolean {
+  if ('rules' in rule) return !rule.rules.some((r) => !logicRuleIsEmpty(r))
+  if ('rule' in rule) return logicRuleIsEmpty(rule.rule)
+  return false
+}
+
+export type FlowReadiness =
+  | { state: 'ready' }
+  | { state: 'disabled' }
+  | { state: 'incomplete'; reasons: string[] }
+
+/**
+ * One shared vocabulary for "can this flow fire": a disabled flow never
+ * runs, an enabled flow with lint errors cannot be trusted to run, and only
+ * an enabled, error-free flow is ready. The designer banner and the flows
+ * list status column both render from this so they can never disagree.
+ */
+export function flowReadiness(enabled: boolean, errors: readonly string[]): FlowReadiness {
+  if (!enabled) return { state: 'disabled' }
+  if (errors.length > 0) return { state: 'incomplete', reasons: [...errors] }
+  return { state: 'ready' }
+}
+
+/** Stable serialization for duplicate-step detection (key order independent). */
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`
+  if (value !== null && typeof value === 'object') {
+    return `{${Object.keys(value)
+      .sort()
+      .map((k) => `${JSON.stringify(k)}:${stableStringify((value as Record<string, unknown>)[k])}`)
+      .join(',')}}`
+  }
+  return JSON.stringify(value) ?? 'null'
+}
+
 // --- {{field}} interpolation -------------------------------------------------
 
 /**
@@ -497,9 +554,18 @@ export function lintAutomationGraph(
     if (!ids.has(e.target)) errors.push(`Edge ${e.id}: unknown target node`)
   }
 
-  const triggerIds = graph.nodes.filter((n) => n.data.kind === 'trigger').map((n) => n.id)
+  const triggerNodes = graph.nodes.filter((n) => n.data.kind === 'trigger')
+  const triggerIds = triggerNodes.map((n) => n.id)
   if (triggerIds.length === 0) {
     errors.push('Flow has no trigger — add a trigger node to start it.')
+  } else if (triggerNodes.length > 1) {
+    // One flow, one entry point: with two triggers both branches would fire
+    // on the same record and duplicate every downstream step. Name every
+    // trigger by its user-visible kind so the author knows which to remove.
+    const names = triggerNodes.map((n) => nodeDisplayName(n)).join(', ')
+    errors.push(
+      `Flow has ${triggerNodes.length} triggers (${names}) — a flow starts from exactly one trigger; remove all but one.`,
+    )
   } else {
     // Unreachable nodes: not wired (directly or transitively) to any trigger.
     // Only meaningful once a trigger exists — otherwise EVERYTHING is
@@ -609,6 +675,41 @@ export function lintAutomationGraph(
       errors.push(`Action ${n.id}: set_field targets unknown field "${n.data.action.field}"`)
     }
   }
+  // Two payload-identical condition or approval nodes run the same step
+  // twice — the usual residue of a duplicated canvas card. Both are named by
+  // their user-visible label so the author can tell them apart on the canvas.
+  const seenPayloads = new Map<string, AutomationNode>()
+  for (const n of graph.nodes) {
+    if (n.data.kind !== 'condition' && n.data.kind !== 'gate') continue
+    const key = `${n.data.kind}:${stableStringify(n.data)}`
+    const first = seenPayloads.get(key)
+    if (first) {
+      errors.push(
+        `${nodeDisplayName(n)} duplicates ${nodeDisplayName(first)} — identical steps run twice; remove one.`,
+      )
+    } else {
+      seenPayloads.set(key, n)
+    }
+  }
+
+  // An empty rule is not a filter: `and` with no leaves matches every
+  // record, `or` with no leaves matches none. Either way the step cannot do
+  // what the author meant, so a flow carrying one must not read as valid.
+  for (const n of graph.nodes) {
+    if (n.data.kind === 'condition' && logicRuleIsEmpty(n.data.rule)) {
+      errors.push(
+        `${nodeDisplayName(n)} has an empty rule — add at least one comparison or remove the step.`,
+      )
+    }
+    if (n.data.kind === 'trigger' && n.data.trigger.trigger === 'on_field_value') {
+      if (logicRuleIsEmpty(n.data.trigger.rule)) {
+        errors.push(
+          `${nodeDisplayName(n)} has an empty rule — add at least one comparison or the trigger can never match anything.`,
+        )
+      }
+    }
+  }
+
   errors.push(...lintWorkerTriggerCompatibility(graph))
   return errors
 }

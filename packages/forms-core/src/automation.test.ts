@@ -7,14 +7,18 @@ import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   automationGraphSchema,
+  flowReadiness,
   gateDataSchema,
   interpolateTemplate,
   lintAutomationGraph,
   lintWorkerTriggerCompatibility,
+  logicRuleIsEmpty,
+  nodeDisplayName,
   planAutomation,
   planFromGate,
   type ActionData,
   type AutomationGraph,
+  type AutomationNode,
   type TriggerData,
   type TriggerEvent,
 } from './automation'
@@ -761,5 +765,187 @@ describe('explicit submission policy', () => {
     const unsupported: FlowSubjectProfile = { subjectKind: 'example', label: 'Example', triggers: ['on_submit'], actions: [], fields: [], statuses: [] }
     assert.match(lintAutomationGraph(graph, new Set(), unsupported).join(' '), /does not support automatic submission/)
     assert.equal(lintAutomationGraph(graph, new Set(), { ...unsupported, supportsUngatedSubmission: true }).length, 0)
+  })
+})
+
+describe('flow designer integrity', () => {
+  const triggerNode = (id: string, trigger: TriggerData): AutomationNode => ({
+    id,
+    position: { x: 0, y: 0 },
+    data: { kind: 'trigger', trigger },
+  })
+  const actionNode = (id: string): AutomationNode => ({
+    id,
+    position: { x: 200, y: 0 },
+    data: { kind: 'action', action: notify('x') },
+  })
+
+  test('a graph with more than one trigger is refused, naming every trigger', () => {
+    const graph: AutomationGraph = {
+      schemaVersion: 1,
+      nodes: [
+        triggerNode('t1', { trigger: 'on_submit' }),
+        triggerNode('t2', { trigger: 'manual', buttonId: 'btn_1', label: 'Run flow' }),
+        actionNode('a'),
+      ],
+      edges: [
+        { id: 'e1', source: 't1', target: 'a', sourceHandle: 'next' },
+        { id: 'e2', source: 't2', target: 'a', sourceHandle: 'next' },
+      ],
+    }
+    const errors = lintAutomationGraph(graph, new Set())
+    const refusal = errors.find((e) => /exactly one trigger/.test(e))
+    assert.ok(refusal, `expected a single-trigger refusal, got: ${errors.join(' | ')}`)
+    assert.ok(
+      refusal.includes('Trigger "on_submit"') && refusal.includes('Trigger "manual"'),
+      `the refusal must name every trigger by kind, got: ${refusal}`,
+    )
+    assert.ok(
+      !/t1|t2/.test(refusal.replace(/Trigger/g, '')),
+      `no storage id may appear in the refusal, got: ${refusal}`,
+    )
+    // One trigger stays silent.
+    const single = lintAutomationGraph(
+      { schemaVersion: 1, nodes: [triggerNode('t1', { trigger: 'on_submit' }), actionNode('a')], edges: [{ id: 'e1', source: 't1', target: 'a', sourceHandle: 'next' }] },
+      new Set(),
+    )
+    assert.ok(single.every((e) => !/exactly one trigger/.test(e)))
+  })
+
+  test('duplicate identical condition and approval nodes are flagged by label', () => {
+    const rule = { op: 'isSet', field: 'total' } as const
+    const graph: AutomationGraph = {
+      schemaVersion: 1,
+      nodes: [
+        triggerNode('t', { trigger: 'on_submit' }),
+        { id: 'c1', position: { x: 100, y: 0 }, data: { kind: 'condition', label: 'Big orders', rule: { ...rule } } },
+        { id: 'c2', position: { x: 100, y: 100 }, data: { kind: 'condition', label: 'Big orders', rule: { ...rule } } },
+        {
+          id: 'g1',
+          position: { x: 200, y: 0 },
+          data: { kind: 'gate', gate: { title: 'Manager sign-off', assignees: [{ type: 'role', role: 'approver' }], mode: 'any' } },
+        },
+        {
+          id: 'g2',
+          position: { x: 200, y: 100 },
+          data: { kind: 'gate', gate: { title: 'Manager sign-off', assignees: [{ type: 'role', role: 'approver' }], mode: 'any' } },
+        },
+      ],
+      edges: [
+        { id: 'e1', source: 't', target: 'c1', sourceHandle: 'next' },
+        { id: 'e2', source: 'c1', target: 'g1', sourceHandle: 'then' },
+        { id: 'e3', source: 't', target: 'c2', sourceHandle: 'next' },
+        { id: 'e4', source: 'c2', target: 'g2', sourceHandle: 'then' },
+      ],
+    }
+    const errors = lintAutomationGraph(graph, new Set(['total']))
+    const duplicates = errors.filter((e) => /duplicates/.test(e))
+    assert.equal(duplicates.length, 2, `expected a condition and a gate duplicate, got: ${errors.join(' | ')}`)
+    assert.ok(
+      duplicates.every((d) => /Condition "Big orders"/.test(d) || /Approval "Manager sign-off"/.test(d)),
+      `duplicates name labels, got: ${duplicates.join(' | ')}`,
+    )
+    // Distinct payloads stay silent.
+    const distinct = lintAutomationGraph(
+      {
+        schemaVersion: 1,
+        nodes: [
+          triggerNode('t', { trigger: 'on_submit' }),
+          { id: 'c1', position: { x: 100, y: 0 }, data: { kind: 'condition', label: 'Big', rule: { op: 'gt', field: 'total', value: 100 } } },
+          { id: 'c2', position: { x: 100, y: 100 }, data: { kind: 'condition', label: 'Small', rule: { op: 'lt', field: 'total', value: 10 } } },
+        ],
+        edges: [
+          { id: 'e1', source: 't', target: 'c1', sourceHandle: 'next' },
+          { id: 'e2', source: 't', target: 'c2', sourceHandle: 'next' },
+        ],
+      },
+      new Set(['total']),
+    )
+    assert.ok(distinct.every((e) => !/duplicates/.test(e)))
+  })
+
+  test('empty condition and on_field_value rules are refused as incomplete', () => {
+    assert.equal(logicRuleIsEmpty({ op: 'and', rules: [] }), true)
+    assert.equal(logicRuleIsEmpty({ op: 'or', rules: [] }), true)
+    assert.equal(logicRuleIsEmpty({ op: 'not', rule: { op: 'and', rules: [] } }), true)
+    assert.equal(logicRuleIsEmpty({ op: 'isSet', field: 'total' }), false)
+    assert.equal(logicRuleIsEmpty({ op: 'and', rules: [{ op: 'isSet', field: 'total' }] }), false)
+    const errors = lintAutomationGraph(
+      {
+        schemaVersion: 1,
+        nodes: [
+          triggerNode('t', { trigger: 'on_field_value', rule: { op: 'and', rules: [] } }),
+          { id: 'c', position: { x: 100, y: 0 }, data: { kind: 'condition', label: 'Total check', rule: { op: 'or', rules: [] } } },
+        ],
+        edges: [{ id: 'e1', source: 't', target: 'c', sourceHandle: 'next' }],
+      },
+      new Set(['total']),
+    )
+    const empty = errors.filter((e) => /empty rule/.test(e))
+    assert.equal(empty.length, 2, `expected both empty rules refused, got: ${errors.join(' | ')}`)
+    assert.ok(empty.some((e) => e.includes('Condition "Total check"')), `condition named by label, got: ${empty.join(' | ')}`)
+  })
+
+  test('node display names carry kind plus label, never a storage id', () => {
+    assert.equal(
+      nodeDisplayName(triggerNode('t_9f2c', { trigger: 'on_submit' })),
+      'Trigger "on_submit"',
+    )
+    assert.equal(
+      nodeDisplayName({ id: 'c_1', position: { x: 0, y: 0 }, data: { kind: 'condition', label: 'Big orders', rule: { op: 'isSet', field: 'total' } } }),
+      'Condition "Big orders"',
+    )
+    assert.equal(
+      nodeDisplayName({ id: 'c_2', position: { x: 0, y: 0 }, data: { kind: 'condition', rule: { op: 'isSet', field: 'total' } } }),
+      'Condition (unlabeled)',
+    )
+    assert.equal(
+      nodeDisplayName({ id: 'g_1', position: { x: 0, y: 0 }, data: { kind: 'gate', gate: { title: 'Sign-off', assignees: [{ type: 'role', role: 'approver' }], mode: 'any' } } }),
+      'Approval "Sign-off"',
+    )
+  })
+
+  test('lint messages reference only nodes and edges present in the graph', () => {
+    // Edges into the void, unknown fields, and every new integrity check:
+    // no message may name an id the graph does not contain.
+    const graph: AutomationGraph = {
+      schemaVersion: 1,
+      nodes: [
+        triggerNode('t1', { trigger: 'on_submit' }),
+        triggerNode('t2', { trigger: 'manual', buttonId: 'btn_1', label: 'Run' }),
+        { id: 'c1', position: { x: 100, y: 0 }, data: { kind: 'condition', label: 'Same', rule: { op: 'isSet', field: 'total' } } },
+        { id: 'c2', position: { x: 100, y: 100 }, data: { kind: 'condition', label: 'Same', rule: { op: 'isSet', field: 'total' } } },
+        { id: 'c3', position: { x: 100, y: 200 }, data: { kind: 'condition', rule: { op: 'and', rules: [] } } },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', target: 'c1', sourceHandle: 'next' },
+        { id: 'e2', source: 'ghost', target: 'c2', sourceHandle: 'next' },
+        { id: 'e3', source: 't2', target: 'vanished', sourceHandle: 'next' },
+      ],
+    }
+    const ids = new Set([...graph.nodes.map((n) => n.id), ...graph.edges.map((e) => e.id)])
+    // Trigger/action vocabulary also carries underscores (on_submit,
+    // set_field) — those name kinds, never nodes, so they are allowed.
+    const vocab = new Set([
+      'on_create', 'on_update', 'on_submit', 'before_post', 'after_post', 'before_void',
+      'status_change', 'on_field_value', 'scheduled', 'manual',
+      'send_email', 'notify', 'set_field', 'change_status', 'post_document',
+      'lock_record', 'unlock_record', 'distribute_schedule', 'send_board_schedule',
+    ])
+    const errors = lintAutomationGraph(graph, new Set(['total']))
+    assert.ok(errors.length > 0, 'the hostile graph must produce errors')
+    const stray = errors.filter((message) => {
+      const tokens = message.match(/[\w-]+_[\w-]+/g) ?? []
+      return tokens.some((token) => !ids.has(token) && !vocab.has(token))
+    })
+    assert.deepEqual(stray, [], `messages must not name ids outside the graph, got: ${stray.join(' | ')}`)
+  })
+
+  test('flow readiness shares one vocabulary for disabled, incomplete, and ready', () => {
+    assert.deepEqual(flowReadiness(false, ['anything']), { state: 'disabled' })
+    assert.deepEqual(flowReadiness(true, []), { state: 'ready' })
+    assert.deepEqual(flowReadiness(true, ['a', 'b']), { state: 'incomplete', reasons: ['a', 'b'] })
+    // Disabled wins over errors: a disabled flow never runs, whatever it carries.
+    assert.deepEqual(flowReadiness(false, []), { state: 'disabled' })
   })
 })
