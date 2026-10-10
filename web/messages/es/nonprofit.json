@@ -186,7 +186,9 @@
     "activityEmpty": "Aún sin actividad registrada.",
     "entryNumber": "Asiento",
     "changeAction": "Acción",
-    "changeAt": "Registrado el"
+    "changeAt": "Registrado el",
+    "reportsTitle": "Requisitos de informes",
+    "reportsSearch": "Buscar informes…"
   },
   "encumbrances": {
     "title": "Compromisos",

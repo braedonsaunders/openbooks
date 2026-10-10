@@ -229,7 +229,6 @@
     "circle": "圆形",
     "polygon": "多边形",
     "corners": "个顶点",
-    "inactive": "未启用",
     "removeGeofence": "删除",
     "latitude": "纬度",
     "longitude": "经度",
@@ -238,6 +237,12 @@
     "cornersPlaceholder": "43.6532,-79.3832",
     "useLocation": "使用我的位置",
     "locationDenied": "无法获取位置 — 请手动输入坐标。",
-    "saveGeofence": "保存围栏"
+    "saveGeofence": "保存围栏",
+    "addGeofence": "添加地理围栏",
+    "shape": "形状",
+    "area": "范围",
+    "status": "状态",
+    "activeBadge": "启用",
+    "inactiveBadge": "停用"
   }
 }

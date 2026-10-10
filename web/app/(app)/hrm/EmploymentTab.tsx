@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Button, Label, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
+import { SublistAddButton, SublistHeading } from '@/components/drawer-sublist'
 import { readApiErrorMessage } from '../../../lib/api-error'
 import { useBusinessToday } from '../../../components/business-date-provider'
 import { ChangeRequestActions } from './ChangeRequestActions'
@@ -561,14 +562,12 @@ export function EmploymentTab({
         </section>
       ) : null}
       <section aria-label={t('employment.changeRequests.title')}>
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-            {t('employment.changeRequests.title')}
-          </h3>
+        <div className="mb-2 flex items-start justify-between gap-3">
+          <SublistHeading title={t('employment.changeRequests.title')} />
           {canManageHrm ? (
-            <Button size="sm" variant="outline" onClick={() => setProposing(true)}>
-              {t('employment.changeRequests.proposeButton')}
-            </Button>
+            <div className="shrink-0">
+              <SublistAddButton label={t('employment.changeRequests.proposeButton')} onClick={() => setProposing(true)} />
+            </div>
           ) : null}
         </div>
         {state.changeRequests.length === 0 ? (

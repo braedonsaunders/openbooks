@@ -186,7 +186,9 @@
     "activityEmpty": "Aucune activité enregistrée pour l''instant.",
     "entryNumber": "Écriture",
     "changeAction": "Action",
-    "changeAt": "Enregistré le"
+    "changeAt": "Enregistré le",
+    "reportsTitle": "Obligations de rapport",
+    "reportsSearch": "Rechercher des rapports…"
   },
   "encumbrances": {
     "title": "Engagements",

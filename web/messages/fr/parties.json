@@ -624,7 +624,7 @@
     "addTaxId": "Ajouter un identifiant fiscal",
     "addDescription": "Enregistrez un identifiant fiscal d’entreprise. Il est validé auprès de l’autorité de son régime.",
     "search": "Rechercher des identifiants fiscaux…",
-    "verdict": "Verdict",
+    "verdict": "Résultat",
     "lastChecked": "Dernière vérification"
   },
   "billingRelationships": {

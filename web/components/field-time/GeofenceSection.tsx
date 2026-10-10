@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
-import { Button, Input } from '@openbooks/ui'
+import { MapPin } from 'lucide-react'
+import { Badge, Button, Drawer, Input, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { Field } from '@/components/field'
+import { DrawerSublist, SublistAddButton, SublistEmpty, SublistLoadError } from '@/components/drawer-sublist'
 
 export interface GeofenceRow {
   id: string
@@ -18,7 +20,7 @@ export interface GeofenceRow {
  * Project geofences, rehomed onto the project page: one circle and one
  * polygon per project, never two sources of truth. Circles edit as
  * center + radius with a use-my-location shortcut; polygons edit as
- * one lat,lng corner per line.
+ * one lat,lng corner per line, in the Add geofence drawer.
  */
 export function GeofenceSection({
   projectId,
@@ -41,6 +43,7 @@ export function GeofenceSection({
   const [corners, setCorners] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [adding, setAdding] = useState(false)
 
   const reload = useCallback(async () => {
     try {
@@ -124,6 +127,10 @@ export function GeofenceSection({
         setError(payload?.error ?? t('field.sendFailed'))
         return
       }
+      setAdding(false)
+      setLat('')
+      setLng('')
+      setCorners('')
       await reload()
     } catch {
       setError(t('field.sendFailed'))
@@ -170,87 +177,112 @@ export function GeofenceSection({
   }, [t])
 
   if (!visible) return null
+  const errorAlert = error ? (
+    <p className="text-sm text-red-600 dark:text-red-400" role="alert">
+      {error}
+    </p>
+  ) : null
   return (
-    <section className="space-y-3">
-      <div>
-        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('field.geofencesTitle')}</h3>
-        <p className="text-xs text-slate-500 dark:text-slate-400">{t('field.geofencesHint')}</p>
-      </div>
+    <DrawerSublist
+      title={t('field.geofencesTitle')}
+      description={t('field.geofencesHint')}
+      icon={<MapPin size={16} />}
+      action={canManage ? <SublistAddButton label={t('field.addGeofence')} onClick={() => { setError(null); setAdding(true) }} /> : undefined}
+      alert={adding ? null : errorAlert}
+    >
       {loadError ? (
-        <div role="alert" className="flex flex-wrap items-center gap-2 text-sm text-amber-800 dark:text-amber-200">
-          <span>{t('field.geofenceLoadFailed')}</span>
-          <Button variant="outline" size="sm" onClick={() => void reload()}>{t('field.retry')}</Button>
-        </div>
+        <SublistLoadError message={t('field.geofenceLoadFailed')} onRetry={() => void reload()} />
+      ) : loaded && fences.length === 0 ? (
+        <SublistEmpty icon={<MapPin size={22} />} text={t('field.noGeofences')} />
+      ) : fences.length > 0 ? (
+        <Table>
+          <TableHeader><TableRow>
+            <TableHead>{t('field.shape')}</TableHead>
+            <TableHead>{t('field.area')}</TableHead>
+            <TableHead>{t('field.status')}</TableHead>
+            {canManage ? <TableHead className="text-right" /> : null}
+          </TableRow></TableHeader>
+          <TableBody>
+            {fences.map((fence) => (
+              <TableRow key={fence.id}>
+                <TableCell className="font-medium">{fence.kind === 'circle' ? t('field.circle') : t('field.polygon')}</TableCell>
+                <TableCell className="text-slate-500 tabular-nums">
+                  {fence.kind === 'circle'
+                    ? `${fence.center?.lat ?? '–'}, ${fence.center?.lng ?? '–'} · ${fence.radiusM ?? '–'} m`
+                    : `${fence.polygon?.length ?? 0} ${t('field.corners')}`}
+                </TableCell>
+                <TableCell>{fence.isActive ? <Badge variant="success">{t('field.activeBadge')}</Badge> : <Badge variant="secondary">{t('field.inactiveBadge')}</Badge>}</TableCell>
+                {canManage ? (
+                  <TableCell className="text-right">
+                    <Button variant="ghost" size="sm" disabled={busy} onClick={() => remove(fence.id)}>
+                      {t('field.removeGeofence')}
+                    </Button>
+                  </TableCell>
+                ) : null}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       ) : null}
-      {loaded && !loadError && fences.length === 0 ? <p className="text-sm text-slate-500">{t('field.noGeofences')}</p> : null}
-      <ul className="space-y-2">
-        {fences.map((fence) => (
-          <li key={fence.id} className="flex items-center gap-2 rounded-lg border border-slate-100 p-3 text-sm dark:border-slate-800">
-            <span className="font-medium">{fence.kind === 'circle' ? t('field.circle') : t('field.polygon')}</span>
-            <span className="text-slate-500">
-              {fence.kind === 'circle'
-                ? `${fence.center?.lat ?? '–'}, ${fence.center?.lng ?? '–'} · ${fence.radiusM ?? '–'} m`
-                : `${fence.polygon?.length ?? 0} ${t('field.corners')}`}
-            </span>
-            {!fence.isActive ? <span className="text-xs text-slate-400">{t('field.inactive')}</span> : null}
-            {canManage ? (
-              <Button variant="outline" disabled={busy} onClick={() => remove(fence.id)} className="ml-auto">
-                {t('field.removeGeofence')}
-              </Button>
-            ) : null}
-          </li>
-        ))}
-      </ul>
+
       {canManage ? (
-      <div className="grid gap-2 rounded-lg border border-slate-100 p-3 dark:border-slate-800">
-        <div className="flex gap-2">
-          <Button variant={kind === 'circle' ? undefined : 'outline'} onClick={() => setKind('circle')}>
-            {t('field.circle')}
-          </Button>
-          <Button variant={kind === 'polygon' ? undefined : 'outline'} onClick={() => setKind('polygon')}>
-            {t('field.polygon')}
-          </Button>
-        </div>
-        {kind === 'circle' ? (
-          <div className="grid grid-cols-3 gap-2">
-            <Field label={t('field.latitude')}>
-              <Input value={lat} onChange={(event) => setLat(event.target.value)} inputMode="decimal" />
-            </Field>
-            <Field label={t('field.longitude')}>
-              <Input value={lng} onChange={(event) => setLng(event.target.value)} inputMode="decimal" />
-            </Field>
-            <Field label={t('field.radiusM')}>
-              <Input value={radius} onChange={(event) => setRadius(event.target.value)} inputMode="numeric" />
-            </Field>
+        <Drawer
+          open={adding}
+          onClose={() => { if (!busy) setAdding(false) }}
+          stacked
+          size="md"
+          title={t('field.addGeofence')}
+          description={t('field.geofencesHint')}
+          footer={(
+            <>
+              <Button variant="outline" disabled={busy} onClick={() => setAdding(false)}>{t('field.cancel')}</Button>
+              <Button disabled={busy} onClick={save}>{busy ? t('field.working') : t('field.saveGeofence')}</Button>
+            </>
+          )}
+        >
+          <div className="grid gap-3">
+            {errorAlert}
+            <div className="flex gap-2">
+              <Button variant={kind === 'circle' ? undefined : 'outline'} onClick={() => setKind('circle')}>
+                {t('field.circle')}
+              </Button>
+              <Button variant={kind === 'polygon' ? undefined : 'outline'} onClick={() => setKind('polygon')}>
+                {t('field.polygon')}
+              </Button>
+            </div>
+            {kind === 'circle' ? (
+              <>
+                <div className="grid grid-cols-3 gap-2">
+                  <Field label={t('field.latitude')}>
+                    <Input value={lat} onChange={(event) => setLat(event.target.value)} inputMode="decimal" />
+                  </Field>
+                  <Field label={t('field.longitude')}>
+                    <Input value={lng} onChange={(event) => setLng(event.target.value)} inputMode="decimal" />
+                  </Field>
+                  <Field label={t('field.radiusM')}>
+                    <Input value={radius} onChange={(event) => setRadius(event.target.value)} inputMode="numeric" />
+                  </Field>
+                </div>
+                <div>
+                  <Button variant="outline" onClick={useLocation}>
+                    {t('field.useLocation')}
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <Field label={t('field.cornersLabel')}>
+                <textarea
+                  value={corners}
+                  onChange={(event) => setCorners(event.target.value)}
+                  rows={4}
+                  placeholder={t('field.cornersPlaceholder')}
+                  className="w-full rounded-lg border border-slate-200 bg-transparent p-2 font-mono text-sm dark:border-slate-700"
+                />
+              </Field>
+            )}
           </div>
-        ) : (
-          <Field label={t('field.cornersLabel')}>
-            <textarea
-              value={corners}
-              onChange={(event) => setCorners(event.target.value)}
-              rows={4}
-              placeholder={t('field.cornersPlaceholder')}
-              className="w-full rounded-lg border border-slate-200 bg-transparent p-2 font-mono text-sm dark:border-slate-700"
-            />
-          </Field>
-        )}
-        <div className="flex gap-2">
-          {kind === 'circle' ? (
-            <Button variant="outline" onClick={useLocation}>
-              {t('field.useLocation')}
-            </Button>
-          ) : null}
-          <Button disabled={busy} onClick={save}>
-            {busy ? t('field.working') : t('field.saveGeofence')}
-          </Button>
-        </div>
-      </div>
+        </Drawer>
       ) : null}
-      {error ? (
-        <p className="text-sm text-red-600 dark:text-red-400" role="alert">
-          {error}
-        </p>
-      ) : null}
-    </section>
+    </DrawerSublist>
   )
 }

@@ -527,8 +527,15 @@ export async function SetupEntitySection({
 
       {!drawerOnly ? (
         <>
-      <div className="flex shrink-0 flex-wrap items-center gap-2">
-        <SearchInput placeholder={t('searchPlaceholder')} paramKey={qParam} pageParamKey={pageParam} />
+      {/* Inside a record drawer the list follows the drawer sublist
+          composition: the search stretches across the drawer. */}
+      <div className={stacked ? 'flex w-full shrink-0 flex-wrap items-center gap-2' : 'flex shrink-0 flex-wrap items-center gap-2'}>
+        <SearchInput
+          placeholder={t('searchPlaceholder')}
+          paramKey={qParam}
+          pageParamKey={pageParam}
+          className={stacked ? 'min-w-56 flex-1 shrink sm:w-auto sm:max-w-none' : undefined}
+        />
         {(entity.filters ?? []).map((filter) => (
           <ListFilterSelect
             key={filter.key}

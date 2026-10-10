@@ -186,7 +186,9 @@
     "activityEmpty": "No activity recorded yet.",
     "entryNumber": "Entry",
     "changeAction": "Action",
-    "changeAt": "Recorded at"
+    "changeAt": "Recorded at",
+    "reportsTitle": "Reporting requirements",
+    "reportsSearch": "Search reports…"
   },
   "encumbrances": {
     "title": "Encumbrances",

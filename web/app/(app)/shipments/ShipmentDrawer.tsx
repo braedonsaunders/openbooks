@@ -368,7 +368,7 @@ export function ShipmentDrawer({ data, initialMode = 'view' }: { data: Fulfillme
       }
       actions={actions}
       detailTabs={[
-        {key:'packing',label:'Packing',content:<PackExecutionPanel shipment={shipment} canManage={canEdit} canMove={canEdit&&data.shippingHubEnabled}/>},
+        {key:'packing',label:t('packingTab'),content:<PackExecutionPanel shipment={shipment} canManage={canEdit} canMove={canEdit&&data.shippingHubEnabled}/>},
         {
           key: 'lines',
           label: tCommon('labels.lines'),

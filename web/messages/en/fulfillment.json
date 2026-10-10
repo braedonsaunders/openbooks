@@ -246,5 +246,6 @@
         "labels": "Purchased labels"
       }
     }
-  }
+  },
+  "packingTab": "Packing"
 }
