@@ -224,6 +224,7 @@ export function ChargesSection({
           rows={charges}
           rowKey={(r) => r.id}
           searchable
+          searchLayout="drawer"
           empty={<p className="text-sm text-slate-500 dark:text-slate-400">{t('none')}</p>}
           columns={[
             { key: 'number', header: tCommon('labels.number'), cell: (c) => <span className="font-mono text-[13px] font-semibold">{c.documentNumber}</span>, search: (c) => c.documentNumber },

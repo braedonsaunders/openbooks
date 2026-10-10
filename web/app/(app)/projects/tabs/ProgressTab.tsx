@@ -208,6 +208,7 @@ export function ProgressTab({ projectId, canManage }: { projectId: string; canMa
             rows={data.tasks}
             rowKey={(task) => task.taskId}
             searchable
+            searchLayout="drawer"
             empty={<p className="text-sm text-slate-500 dark:text-slate-400">{t('empty')}</p>}
             columns={[
               {
