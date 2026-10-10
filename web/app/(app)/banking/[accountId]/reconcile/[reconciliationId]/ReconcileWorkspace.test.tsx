@@ -42,6 +42,12 @@ registerHooks({
         url: 'data:text/javascript,export async function confirmDialog(){return true}',
       }
     }
+    if (specifier.endsWith('/lib/prompt')) {
+      return {
+        shortCircuit: true,
+        url: 'data:text/javascript,export async function promptDialog(){return globalThis.__reconcileTestPrompt ?? "not a transaction"}',
+      }
+    }
     return next(specifier, context)
   },
 })
@@ -69,6 +75,7 @@ async function mountWorkspace(
     glRows?: { id: string; posting_date: string; entry_number: string; amount: string; memo: string | null; party?: string | null }[];
     glTotal?: number;
     glOutstandingTotal?: string;
+    glClearings?: { group_id: string; lines: number; entries: string | null; total: string }[];
   } = {},
 ): Promise<void> {
   const prior = globalThis.fetch
@@ -109,6 +116,7 @@ async function mountWorkspace(
             matchedRows={[]}
             matchedTotal={0}
             mParams={pane}
+            glClearings={override.glClearings ?? []}
           />
         </MoneyProvider>
       </NextIntlClientProvider>,
@@ -247,6 +255,158 @@ test('grouped selection posts both sides as one group', async (t) => {
   assert.ok(
     script.toasts.some((toast) => toast.kind === 'success'),
     `the group match must toast success, got ${JSON.stringify(script.toasts)}`,
+  )
+})
+
+test('a sign-off refusal persists the message with its blocking lines', async (t) => {
+  await mountWorkspace(t, (async (input: unknown) => {
+    if (String(input).includes('/blockers')) {
+      return Response.json({
+        ok: true,
+        lines: [
+          { id: 'stmt-x', postedOn: '2026-09-01', amount: '3068.57', description: 'Opening balance' },
+          { id: 'stmt-y', postedOn: '2026-09-02', amount: '-45.00', description: 'Card payment' },
+        ],
+        total: 2,
+      })
+    }
+    return Response.json(
+      { error: 'Cannot sign off: 2 statement line(s) through the cutoff remain unmatched' },
+      { status: 422 },
+    )
+  }) as typeof fetch, {
+    stmtRows: [
+      { id: 'stmt-x', posted_on: '2026-09-01', amount: '3068.57', description: 'Opening balance' },
+      { id: 'stmt-y', posted_on: '2026-09-02', amount: '-45.00', description: 'Card payment' },
+    ],
+    stmtTotal: 2,
+    stmtOutstandingTotal: '3023.57',
+  })
+  await act(async () => {
+    signOffButton().dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    for (let i = 0; i < 8; i++) await tick()
+  })
+  const alert = document.querySelector('[role="alert"]')
+  assert.ok(alert, 'the refusal must persist as a workspace alert')
+  assert.ok(
+    (alert.textContent ?? '').includes('2 statement line(s) through the cutoff remain unmatched'),
+    `the alert must carry the typed refusal, got ${JSON.stringify(alert.textContent)}`,
+  )
+  assert.ok((alert.textContent ?? '').includes('Blocking lines'), 'the alert must name the blocking lines')
+  assert.ok((alert.textContent ?? '').includes('Opening balance'), 'the alert must list the blocking row')
+  const link = document.querySelector('a[href="#stmt-line-stmt-x"]')
+  assert.ok(link, 'each blocking line must link to its workspace row')
+  assert.ok(
+    (link.textContent ?? '').includes('2026-09-01') && (link.textContent ?? '').includes('Opening balance'),
+    `the link must carry the date and description, got ${JSON.stringify(link.textContent)}`,
+  )
+  assert.ok(document.getElementById('stmt-line-stmt-x'), 'the linked row anchor must exist')
+  assert.equal(signOffButton().disabled, false, 'the workspace must not wedge busy after a refusal')
+})
+
+test('an unreadable blockers read still leaves the refusal standing', async (t) => {
+  await mountWorkspace(t, (async () => new Response('', { status: 422 })) as typeof fetch)
+  await act(async () => {
+    signOffButton().dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    for (let i = 0; i < 8; i++) await tick()
+  })
+  const alert = document.querySelector('[role="alert"]')
+  assert.ok(alert, 'the refusal must persist even when the blockers read fails')
+  assert.equal(document.querySelector('a[href^="#stmt-line-"]'), null, 'no blocker links render without blocker data')
+})
+
+test('clearing GL-only lines posts the group without a bank line', async (t) => {
+  const calls: { url: string; body?: string }[] = []
+  await mountWorkspace(t, (async (_input: unknown, init?: RequestInit) => {
+    if (String(_input).includes('/gl-clearing') && init?.method === 'POST') {
+      calls.push({ url: String(_input), body: String(init.body) })
+    }
+    return Response.json({ ok: true, totals: { difference: '0.00' } })
+  }) as typeof fetch, {
+    glRows: [
+      { id: 'gl-a', posting_date: '2026-09-01', entry_number: 'JE-1', amount: '271.20', memo: 'Voided deposit', party: null },
+      { id: 'gl-b', posting_date: '2026-09-02', entry_number: 'JE-2', amount: '-271.20', memo: 'Correction', party: null },
+    ],
+    glTotal: 2,
+    glOutstandingTotal: '0.00',
+  })
+  const boxes = [...document.querySelectorAll('input[type="checkbox"]')] as HTMLInputElement[]
+  assert.equal(boxes.length, 2, 'both ledger lines offer checkboxes')
+  await act(async () => {
+    for (const box of boxes) box.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    for (let i = 0; i < 6; i++) await tick()
+  })
+  const clear = [...document.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === 'Clear selected') as HTMLButtonElement | undefined
+  assert.ok(clear, 'the workspace offers Clear selected')
+  assert.equal(clear.disabled, false, 'a GL-only selection enables Clear selected')
+  const match = [...document.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === 'Match selected') as HTMLButtonElement | undefined
+  assert.ok(match && match.disabled, 'Match selected stays disabled without a bank line')
+  await act(async () => {
+    clear.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    for (let i = 0; i < 6; i++) await tick()
+  })
+  const posted = calls.find((c) => c.url.includes('/gl-clearing'))
+  assert.ok(posted, 'clearing must POST the session gl-clearing route')
+  const body = JSON.parse(posted.body ?? '{}') as { journalLineIds?: string[] }
+  assert.deepEqual([...(body.journalLineIds ?? [])].sort(), ['gl-a', 'gl-b'], 'both ledger lines post as the group')
+  assert.ok(
+    script.toasts.some((toast) => toast.kind === 'success' && toast.message.includes('Cleared')),
+    `clearing must toast success, got ${JSON.stringify(script.toasts)}`,
+  )
+})
+
+test('a GL clearing group lists with an unmatch action', async (t) => {
+  const calls: string[] = []
+  await mountWorkspace(t, (async (_input: unknown, init?: RequestInit) => {
+    if (String(_input).includes('/gl-clearing') && init?.method === 'DELETE') calls.push(String(_input))
+    return Response.json({ ok: true, totals: { difference: '0.00' } })
+  }) as typeof fetch, {
+    glClearings: [{ group_id: 'group-1', lines: 2, entries: 'JE-1, JE-2', total: '0.0000' }],
+  })
+  assert.ok(
+    (document.body.textContent ?? '').includes('GL clearing groups'),
+    'the workspace must list its clearing groups',
+  )
+  assert.ok((document.body.textContent ?? '').includes('JE-1, JE-2'), 'the group must name its entries')
+  const unmatch = [...document.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === 'Unmatch') as HTMLButtonElement | undefined
+  assert.ok(unmatch, 'the group must offer Unmatch')
+  await act(async () => {
+    unmatch.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    for (let i = 0; i < 6; i++) await tick()
+  })
+  assert.ok(
+    calls.some((url) => url.includes('/gl-clearing?groupId=group-1')),
+    `unmatching must call the group route, got ${JSON.stringify(calls)}`,
+  )
+})
+
+test('excluding a bank line prompts for a reason and patches the line', async (t) => {
+  const calls: { url: string; body?: string }[] = []
+  await mountWorkspace(t, (async (_input: unknown, init?: RequestInit) => {
+    if (String(_input).includes('/statement-lines/') && init?.method === 'PATCH') {
+      calls.push({ url: String(_input), body: String(init.body) })
+    }
+    return Response.json({ ok: true })
+  }) as typeof fetch, {
+    stmtRows: [
+      { id: 'stmt-x', posted_on: '2026-09-01', amount: '3068.57', description: 'Opening balance' },
+    ],
+    stmtTotal: 1,
+    stmtOutstandingTotal: '3068.57',
+  })
+  const exclude = [...document.querySelectorAll('button[title]')].find((b) => b.getAttribute('title') === 'Exclude') as HTMLButtonElement | undefined
+  assert.ok(exclude, 'the unmatched row must offer Exclude')
+  await act(async () => {
+    exclude.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    for (let i = 0; i < 6; i++) await tick()
+  })
+  assert.ok(
+    calls.some((c) => c.url.includes('/statement-lines/stmt-x') && (c.body ?? '').includes('"action":"exclude"') && (c.body ?? '').includes('not a transaction')),
+    `excluding must patch the line with the prompted reason, got ${JSON.stringify(calls)}`,
+  )
+  assert.ok(
+    script.toasts.some((toast) => toast.kind === 'success' && toast.message.includes('Line excluded')),
+    `excluding must toast success, got ${JSON.stringify(script.toasts)}`,
   )
 })
 
