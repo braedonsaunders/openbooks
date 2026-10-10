@@ -121,7 +121,6 @@ export function setupRail({
             { href: '/admin/setup/company', labelKey: 'admin.setup.entities.company.title', iconKey: 'building' },
             { href: '/admin/setup/company#sample-companies', labelKey: 'data.import.sample.industry', iconKey: 'sparkles' },
             { href: '/admin/setup/features', labelKey: 'admin.setup.features.navTitle', iconKey: 'layers' },
-            ...(canManageSetup && manufacturingEnabled ? [{ href: '/admin/setup/manufacturing', labelKey: 'manufacturing.setup', iconKey: 'settings' }] : []),
             ...entities(group.key),
           ]
         : group.key === 'banking'
@@ -153,6 +152,7 @@ export function setupRail({
           ]
         : group.key === 'projects'
         ? [
+            ...(canManageSetup && manufacturingEnabled ? [{ href: '/admin/setup/manufacturing', labelKey: 'manufacturing.setup', iconKey: 'settings' }] : []),
             ...(projectsEnabled
               ? [
                   { href: '/admin/setup/project-types', labelKey: 'projectTypes.title', iconKey: 'briefcase' },

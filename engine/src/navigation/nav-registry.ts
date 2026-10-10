@@ -904,7 +904,6 @@ export const NAV_MODULES: NavModule[] = [
     requiredPermission: 'admin.setup.manage',
   },
 
-  { key: 'admin-setup-manufacturing', href: '/admin/setup/manufacturing', label: 'Manufacturing setup', iconKey: 'settings', group: 'settings', subgroup: 'organization', requiredPermission: 'admin.setup.manage', featureKey: 'manufacturing', exact: true },
 
   // Customization, automation, and extension tools remain distinct so users do
   // not need to understand the implementation boundary between them.
@@ -1278,7 +1277,6 @@ export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
   settings: [
     'admin',
     'admin-setup',
-    'admin-setup-manufacturing',
     'docs',
     'admin-customization',
     'admin-pdf-templates',

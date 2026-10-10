@@ -51,13 +51,9 @@ export function reconcileNavConfig(saved: OrgNavConfig): OrgNavConfig {
       ensureGroup('customers').items.push(...sales)
     }
   }
-  const operationsSetup = groups.find(group => group.id === 'operations' && group.label === 'Operations')
-  if (operationsSetup) {
-    const inherited = operationsSetup.items.filter(item => item.kind === 'module' && item.moduleKey === 'admin-setup-manufacturing' && item.placement !== 'custom')
-    if (inherited.length) {
-      operationsSetup.items = operationsSetup.items.filter(item => !inherited.includes(item))
-      ensureGroup('settings').items.push(...inherited)
-    }
+  // Retired standalone setup destinations resolve through Company Setup.
+  for (const group of groups) {
+    group.items = group.items.filter(item => !(item.kind === 'module' && item.moduleKey === 'admin-setup-manufacturing'))
   }
   const present = new Set(groups.flatMap((group) => group.items.flatMap((item) => item.kind === 'module' ? [item.moduleKey] : [])))
   for (const module of NAV_MODULES) {

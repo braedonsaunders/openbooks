@@ -55,23 +55,21 @@ test("non-href stored values resolve to null", () => {
   assert.equal(resolveStoredHref("ar"), null);
 });
 
- test("Manufacturing setup belongs to Company Setup and preserves customized placements", () => {
-  const module=MODULE_BY_KEY.get('admin-setup-manufacturing')!;
-  assert.equal(module.href,'/admin/setup/manufacturing');
-  assert.equal(module.group,'settings');
-  assert.equal(module.featureKey,'manufacturing');
-  assert.equal(module.requiredPermission,'admin.setup.manage');
-  assert.equal(module.menuParent,undefined);
-  assert.ok(!LOCAL_NAVIGATION.find(workspace=>workspace.id==='manufacturing')!.tabs.some(tab=>tab.href===module.href));
-  const saved=defaultNavConfig();
-  const settings=saved.groups.find(group=>group.id==='settings')!;
-  const operations=saved.groups.find(group=>group.id==='operations')!;
-  settings.items=settings.items.filter(item=>!(item.kind==='module' && item.moduleKey===module.key));
-  const inherited={kind:'module' as const,moduleKey:module.key,label:'Production setup',hidden:true};
-  const custom={kind:'module' as const,moduleKey:module.key,placement:'custom' as const,label:'Shop controls'};
-  operations.items.push(inherited,custom);
-  const result=reconcileNavConfig(saved);
-  assert.ok(result.groups.find(group=>group.id==='settings')!.items.some(item=>item.kind==='module' && item.moduleKey===module.key && item.hidden && item.label===inherited.label));
-  assert.ok(result.groups.find(group=>group.id==='operations')!.items.some(item=>item.kind==='module' && item.moduleKey===module.key && item.placement==='custom'));
-  assert.deepEqual(reconcileNavConfig(result),result);
- });
+test("Manufacturing setup has one home inside Company Setup", () => {
+  const key = 'admin-setup-manufacturing';
+  assert.equal(MODULE_BY_KEY.has(key), false);
+  assert.ok(!LOCAL_NAVIGATION.find(workspace => workspace.id === 'manufacturing')!.tabs.some(tab => tab.href === '/admin/setup/manufacturing'));
+  const saved = defaultNavConfig();
+  const settings = saved.groups.find(group => group.id === 'settings')!;
+  const operations = saved.groups.find(group => group.id === 'operations')!;
+  settings.items.push({ kind: 'module', moduleKey: key });
+  operations.items.push({ kind: 'module', moduleKey: key, placement: 'custom', label: 'Shop controls' });
+  const unrelated = { kind: 'link' as const, href: '/docs', label: 'Our handbook', hidden: true };
+  settings.items.push(unrelated);
+  const before = structuredClone(saved);
+  const result = reconcileNavConfig(saved);
+  assert.deepEqual(saved, before);
+  assert.ok(!result.groups.some(group => group.items.some(item => item.kind === 'module' && item.moduleKey === key)));
+  assert.ok(result.groups.find(group => group.id === 'settings')!.items.some(item => item.kind === 'link' && item.href === unrelated.href && item.hidden));
+  assert.deepEqual(reconcileNavConfig(result), result);
+});
