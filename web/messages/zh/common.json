@@ -270,6 +270,8 @@
     "emptyDescription": "没有事件符合当前搜索和筛选条件。",
     "loadFailedTitle": "审计轨迹不可用",
     "loadFailedDescription": "无法加载审计轨迹。请稍后重试。",
+    "unavailableTitle": "审计轨迹不可用",
+    "unavailableDescription": "您的角色无权查看此记录的审计历史，或该记录已不存在。管理员可以授予此记录类型的读取权限。",
     "retry": "重试",
     "actions": {
       "insert": "已创建",

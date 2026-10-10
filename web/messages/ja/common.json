@@ -270,6 +270,8 @@
     "emptyDescription": "現在の検索とフィルターに一致するイベントはありません。",
     "loadFailedTitle": "監査証跡を表示できません",
     "loadFailedDescription": "監査証跡を読み込めませんでした。しばらくしてから再試行してください。",
+    "unavailableTitle": "監査証跡を表示できません",
+    "unavailableDescription": "お使いのロールではこのレコードの監査履歴を表示できないか、レコードが存在しません。管理者がこのレコード種別の閲覧権限を付与できます。",
     "retry": "再試行",
     "actions": {
       "insert": "作成",

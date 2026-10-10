@@ -270,6 +270,8 @@
     "emptyDescription": "Ningún evento coincide con la búsqueda y los filtros actuales.",
     "loadFailedTitle": "Registro de auditoría no disponible",
     "loadFailedDescription": "No se pudo cargar el registro de auditoría. Inténtalo de nuevo en unos instantes.",
+    "unavailableTitle": "Registro de auditoría no disponible",
+    "unavailableDescription": "Tu rol no puede ver el historial de auditoría de este registro, o el registro ya no existe. Un administrador puede conceder el permiso de lectura para este tipo de registro.",
     "retry": "Reintentar",
     "actions": {
       "insert": "Creado",

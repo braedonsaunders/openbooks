@@ -270,6 +270,8 @@
     "emptyDescription": "Nenhum evento corresponde à busca e aos filtros atuais.",
     "loadFailedTitle": "Trilha de auditoria indisponível",
     "loadFailedDescription": "Não foi possível carregar a trilha de auditoria. Tente novamente em instantes.",
+    "unavailableTitle": "Trilha de auditoria indisponível",
+    "unavailableDescription": "Sua função não pode ver o histórico de auditoria deste registro, ou o registro não existe mais. Um administrador pode conceder a permissão de leitura para este tipo de registro.",
     "retry": "Tentar novamente",
     "actions": {
       "insert": "Criado",

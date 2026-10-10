@@ -55,7 +55,10 @@ export function AuditTrailPanel({ table, recordId }: { table: AuditRecordTable; 
   const [page, setPage] = useState(1)
   const [data, setData] = useState<AuditResponse | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(false)
+  // 'unavailable' is the server's uniform no-access answer (404/403): the
+  // caller's role cannot read this record's history, or the record is gone.
+  // Retrying cannot change it, so it gets its own body without a retry.
+  const [error, setError] = useState<'failed' | 'unavailable' | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
   const [selected, setSelected] = useState<AuditRow | null>(null)
 
@@ -66,15 +69,20 @@ export function AuditTrailPanel({ table, recordId }: { table: AuditRecordTable; 
       if (q.trim()) params.set('q', q.trim())
       if (action) params.set('action', action)
       setLoading(true)
-      setError(false)
+      setError(null)
       fetch(`/api/audit/record?${params}`, { signal: controller.signal })
         .then(async (response) => {
+          if (response.status === 404 || response.status === 403) {
+            setData(null)
+            setError('unavailable')
+            return
+          }
           if (!response.ok) throw new Error('load failed')
           setData(await response.json() as AuditResponse)
         })
         .catch((error) => {
           if (error instanceof DOMException && error.name === 'AbortError') return
-          setError(true)
+          setError('failed')
         })
         .finally(() => setLoading(false))
     }, q ? 200 : 0)
@@ -107,7 +115,13 @@ export function AuditTrailPanel({ table, recordId }: { table: AuditRecordTable; 
         </Select>
       </div>
 
-      {error ? (
+      {error === 'unavailable' ? (
+        <EmptyState
+          icon={<History />}
+          title={t('unavailableTitle')}
+          description={t('unavailableDescription')}
+        />
+      ) : error ? (
         <EmptyState
           icon={<History />}
           title={t('loadFailedTitle')}

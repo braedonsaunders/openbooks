@@ -10,6 +10,7 @@ interface AuditState {
   featureOn: boolean
   hiddenEmployer: boolean
   reads: number
+  documentKind?: string
 }
 
 const stateKey = Symbol.for('openbooks.audit-record-route-test')
@@ -38,7 +39,7 @@ stubModules({
           if (['hrm_training_courses','hrm_training_sessions','hrm_training_participants'].some(table=>text.includes('from "'+table+'"'))) return state.recordExists ? {rows:[{kind:'training',created_at:new Date(),created_by:null,subsidiaryId:'employer-1'}]} : {rows:[]}
           if (text.includes('from documents')) {
             return state.recordExists
-              ? { rows: [{ org_id: 'org-1', kind: 'vendor_bill', created_at: new Date(), created_by: null,
+              ? { rows: [{ org_id: 'org-1', kind: state.documentKind ?? 'vendor_bill', created_at: new Date(), created_by: null,
                            updated_at: new Date(), updated_by: null, subsidiaryId: null }] }
               : { rows: [] }
           }
@@ -92,6 +93,24 @@ test('a caller with the kind permission still reads the record', async () => {
   assert.equal(response.status, 200)
   const body = (await response.json()) as { recordType?: unknown }
   assert.equal(body.recordType, 'vendor_bill')
+})
+
+test('a cash-sales role reads its cash sale history and nothing outside its kind', async () => {
+  auditState.recordExists = true
+  auditState.permissions = ['cash_sales.read']
+  auditState.documentKind = 'cash_sale'
+  try {
+    const own = await get('documents', EXISTING_ID)
+    assert.equal(own.status, 200)
+    assert.equal(((await own.json()) as { recordType?: unknown }).recordType, 'cash_sale')
+
+    auditState.documentKind = 'vendor_bill'
+    const other = await get('documents', EXISTING_ID)
+    assert.equal(other.status, 404)
+    assert.deepEqual(await other.json(), { error: 'not_found' })
+  } finally {
+    auditState.documentKind = undefined
+  }
 })
 
 test('benefit audit refuses permission and disabled features before disclosing existence', async () => {

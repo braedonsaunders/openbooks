@@ -270,6 +270,8 @@
     "emptyDescription": "Keine Ereignisse entsprechen der aktuellen Suche und den Filtern.",
     "loadFailedTitle": "Prüfprotokoll nicht verfügbar",
     "loadFailedDescription": "Das Prüfprotokoll konnte nicht geladen werden. Versuchen Sie es in Kürze erneut.",
+    "unavailableTitle": "Prüfprotokoll nicht verfügbar",
+    "unavailableDescription": "Ihre Rolle darf das Prüfprotokoll dieses Datensatzes nicht einsehen, oder der Datensatz existiert nicht mehr. Ein Administrator kann die Leseberechtigung für diesen Datensatztyp erteilen.",
     "retry": "Erneut versuchen",
     "actions": {
       "insert": "Erstellt",
