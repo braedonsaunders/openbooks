@@ -69,7 +69,10 @@ interface GridRow {
 }
 
 function emptyRow(timeTypes: TimeTypeOption[], workFamily: TimeWorkFamily = 'project'): GridRow {
-  const def = timeTypes[0]
+  // New lines start on the org's standard time type. List position is never
+  // the default: multiplier or alphabetical order would silently book premium
+  // or travel time as the operator's first, unexamined choice.
+  const def = timeTypes.find((t) => t.isDefault) ?? timeTypes[0]
   return {
     costTarget: workFamily,
     workOrderId: '',

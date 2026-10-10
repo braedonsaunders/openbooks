@@ -1,10 +1,10 @@
 'use client'
 
-import { useCallback, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { ChevronsDown, ChevronsUp, SlidersHorizontal } from 'lucide-react'
-import { Popover, Select, cn } from '@openbooks/ui'
+import { Button, Popover, Select, cn } from '@openbooks/ui'
 import { PERIOD_PRESETS, type PeriodPresetGroup } from '@openbooks/reports'
 import { SearchInput } from '../../../components/search-input'
 import { DEFAULT_SEGMENT_ALL_KEY, isDefaultSegmentName, type BuiltinSegmentKey } from '../../../lib/segment-labels'
@@ -176,6 +176,30 @@ export function ReportFilterBar({
   const scale = params.get('scale') ?? 'actual'
   const showZero = params.get('zero') === '1'
   const isCustom = period === 'custom' && !activeExtra
+  // Custom From/To stage locally until the operator applies them: committing
+  // per change re-ran the report on half-typed ranges, and typed dates never
+  // had an explicit moment to take effect (Enter and blur included).
+  const [rangeDraft, setRangeDraft] = useState<{ from: string; to: string } | null>(null)
+  // An outside change (preset pick, another control) discards the draft, so a
+  // staged range can never leak into a navigation it was not applied to.
+  useEffect(() => { setRangeDraft(null) }, [periodFrom, periodTo])
+  const rangeBaseFrom = periodFrom ?? (controls.dateRange ? dateRange?.from : undefined) ?? ''
+  const rangeBaseTo = periodTo ?? (controls.dateRange ? dateRange?.to : undefined) ?? ''
+  const shownFrom = rangeDraft?.from ?? rangeBaseFrom
+  const shownTo = rangeDraft?.to ?? rangeBaseTo
+  const rangeDirty = rangeDraft !== null && (rangeDraft.from !== rangeBaseFrom || rangeDraft.to !== rangeBaseTo)
+  const applyRange = useCallback(() => {
+    if (!rangeDirty) return
+    setParams({ period: 'custom', from: shownFrom || null, to: shownTo || null })
+  }, [rangeDirty, setParams, shownFrom, shownTo])
+  const applyRangeOnEnter = useCallback((e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') applyRange()
+  }, [applyRange])
+  const applyRangeButton = (isCustom || controls.dateRange) ? (
+    <Button type="button" size="sm" onClick={applyRange} disabled={!rangeDirty} className="h-8 shrink-0 text-xs">
+      {t('apply')}
+    </Button>
+  ) : null
   const breakoutOpts = controls.breakoutOptions ?? ['department', 'project', 'location', 'class', 'month', 'quarter']
   const builtinByKey = new Map((dimensions?.builtinSegments ?? []).map((segment) => [segment.key, segment]))
 
@@ -275,13 +299,17 @@ export function ReportFilterBar({
       )}
 
       {isCustom && controls.asOf && (
-        <input type="date" value={periodTo ?? ''} onChange={(e) => setParams({ from: e.target.value, to: e.target.value })} className={DATE} />
+        <>
+          <input type="date" value={shownTo} onChange={(e) => setRangeDraft({ from: e.target.value, to: e.target.value })} onKeyDown={applyRangeOnEnter} className={DATE} aria-label={t('asOf')} />
+          {applyRangeButton}
+        </>
       )}
       {isCustom && !controls.asOf && !controls.dateRange && (
         <>
-          <input type="date" value={periodFrom ?? ''} onChange={(e) => setParams({ from: e.target.value })} className={DATE} aria-label={t('from')} />
+          <input type="date" value={shownFrom} onChange={(e) => setRangeDraft({ from: e.target.value, to: shownTo })} onKeyDown={applyRangeOnEnter} className={DATE} aria-label={t('from')} />
           <span className="text-slate-400">–</span>
-          <input type="date" value={periodTo ?? ''} onChange={(e) => setParams({ to: e.target.value })} className={DATE} aria-label={t('to')} />
+          <input type="date" value={shownTo} onChange={(e) => setRangeDraft({ from: shownFrom, to: e.target.value })} onKeyDown={applyRangeOnEnter} className={DATE} aria-label={t('to')} />
+          {applyRangeButton}
         </>
       )}
 
@@ -290,8 +318,9 @@ export function ReportFilterBar({
           <Field label={t('from')}>
             <input
               type="date"
-              value={periodFrom ?? dateRange?.from ?? ''}
-              onChange={(e) => setParams({ period: 'custom', from: e.target.value, to: periodTo ?? dateRange?.to ?? null })}
+              value={shownFrom}
+              onChange={(e) => setRangeDraft({ from: e.target.value, to: shownTo })}
+              onKeyDown={applyRangeOnEnter}
               className={DATE}
               aria-label={t('from')}
             />
@@ -300,12 +329,14 @@ export function ReportFilterBar({
           <Field label={t('to')}>
             <input
               type="date"
-              value={periodTo ?? dateRange?.to ?? ''}
-              onChange={(e) => setParams({ period: 'custom', from: periodFrom ?? dateRange?.from ?? null, to: e.target.value })}
+              value={shownTo}
+              onChange={(e) => setRangeDraft({ from: shownFrom, to: e.target.value })}
+              onKeyDown={applyRangeOnEnter}
               className={DATE}
               aria-label={t('to')}
             />
           </Field>
+          {applyRangeButton}
         </>
       )}
 

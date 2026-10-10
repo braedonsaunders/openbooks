@@ -6,7 +6,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { fetchAction } from '@braedonsaunders/appkit-errors'
 import { Check, UserCog } from 'lucide-react'
-import { Badge, Button, cn, Drawer, Label, Popover, SearchSelect, Textarea } from '@openbooks/ui'
+import { Badge, BaseLabel, Button, cn, Drawer, Label, Popover, SearchSelect, Textarea } from '@openbooks/ui'
 import { confirmDialog } from '@/lib/confirm'
 import { useAppAction } from '@/lib/use-app-action'
 import { useDirtyClose } from '@/lib/use-dirty-close'
@@ -345,6 +345,8 @@ function LinkPersonDrawer({
   const [statusMessage, setStatusMessage] = useState<string | undefined>(undefined)
   const [reason, setReason] = useState('')
   const [attested, setAttested] = useState(false)
+  const [attestMissing, setAttestMissing] = useState(false)
+  const attestRef = useRef<HTMLInputElement>(null)
   const [error, setError] = useState<string | null>(null)
   const { busy, execute } = useAppAction()
   const closeGuard = useDirtyClose({
@@ -426,7 +428,11 @@ function LinkPersonDrawer({
       return
     }
     if (!attested) {
+      // Refusing without attestation must land the operator on the checkbox:
+      // focus it and highlight the control until it is checked.
       setError(t('linkAttestationRequired'))
+      setAttestMissing(true)
+      attestRef.current?.focus()
       return
     }
     setError(null)
@@ -514,20 +520,35 @@ function LinkPersonDrawer({
             required
           />
         </div>
-        <div className="flex items-start gap-2">
+        <div
+          className={cn(
+            'flex items-start gap-3 rounded-lg border p-3',
+            attestMissing
+              ? 'border-rose-400 ring-1 ring-rose-400 dark:border-rose-500'
+              : 'border-slate-200 dark:border-slate-800',
+          )}
+        >
           <input
+            ref={attestRef}
             id="link-person-attest"
             type="checkbox"
             checked={attested}
             disabled={busy}
-            onChange={(e) => setAttested(e.target.checked)}
-            className="mt-1 h-4 w-4 rounded border-slate-300"
+            onChange={(e) => {
+              setAttested(e.target.checked)
+              setAttestMissing(false)
+            }}
+            className="mt-0.5 h-5 w-5 shrink-0 accent-teal-600"
             required
+            aria-invalid={attestMissing}
+            aria-describedby={attestMissing ? 'link-person-error' : undefined}
           />
-          <Label htmlFor="link-person-attest">{t('linkAttestationLabel')}</Label>
+          <BaseLabel htmlFor="link-person-attest" className="text-sm leading-5 font-medium">
+            {t('linkAttestationLabel')}
+          </BaseLabel>
         </div>
         {error ? (
-          <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+          <p id="link-person-error" role="alert" className="text-sm text-red-600 dark:text-red-400">
             {error}
           </p>
         ) : null}
