@@ -695,11 +695,18 @@ async function assertKindPreconditions(
   if (payload.kind === "status_change" && payload.historicalObservation) {
     await assertHistoricalStatusWindow(exec, orgId, employmentId, payload);
   }
-  if (payload.kind === "termination" && live.every((version) => version.status === "terminated")) {
-    throw new HrmChangeRequestError(
-      "BAD_STATE",
-      "this employment is already terminated — a second termination is a duplicate, not an update",
-    );
+  // A termination is a duplicate only where it lands: the window it
+  // closes must already be fully terminated. History outside the window
+  // is preserved, never rewritten — a retained active slice beside a
+  // terminated one does not make a later termination a duplicate.
+  if (payload.kind === "termination") {
+    const overlapping = live.filter((version) => effectiveOverlaps(version, payload.effectiveDate, null));
+    if (overlapping.length > 0 && overlapping.every((version) => version.status === "terminated")) {
+      throw new HrmChangeRequestError(
+        "BAD_STATE",
+        "this employment is already terminated — a second termination is a duplicate, not an update",
+      );
+    }
   }
   if (payload.kind === "position_assignment" && payload.positionId !== null) {
     const position = (await exec.execute(sql`
@@ -1828,7 +1835,10 @@ async function applyHire(
     return;
   }
   const assignmentRevision = newRevision + 1;
-  await applyInitialAssignment(exec, {
+  // The request links the assignment's event: the guard proves the linked
+  // change carries the stamped revision, so the hire's own event (one
+  // revision back) must never be stamped here.
+  const assignmentChangeId = await applyInitialAssignment(exec, {
     orgId,
     actorId,
     request,
@@ -1838,7 +1848,7 @@ async function applyHire(
     recordedAt,
     recordedAtIso,
   });
-  await linkAppliedEvidence(exec, { orgId, actorId, request, newRevision: assignmentRevision, changeId });
+  await linkAppliedEvidence(exec, { orgId, actorId, request, newRevision: assignmentRevision, changeId: assignmentChangeId });
   await bumpAggregateRevision(exec, { orgId, actorId, request, expected: newRevision - 1, next: assignmentRevision });
 }
 
@@ -1862,7 +1872,10 @@ async function applyInitialAssignment(
     recordedAt: DbInstant;
     recordedAtIso: string;
   },
-): Promise<void> {
+): Promise<string> {
+  // Returns the assignment event id: the caller links the request to the
+  // event carrying the stamped revision (never the hire's own event, one
+  // revision back).
   const { orgId, actorId, request, hire, assignment, newRevision, recordedAt, recordedAtIso } = args;
   const windowStart = hire.effectiveFrom;
   const windowEnd = hire.effectiveTo;
@@ -1978,6 +1991,7 @@ async function applyInitialAssignment(
       positionRevision: target?.revision ?? 0,
     });
   }
+  return changeId;
 }
 
 /** Status corrections cannot reinterpret payroll already committed for their window. */
