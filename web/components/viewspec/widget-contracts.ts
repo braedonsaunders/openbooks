@@ -406,6 +406,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'overhead-rates-tab': { props: [], open: true },
   'page-layout-drawer': { props: ['drawer'] },
   'page-layout-summary': { props: ['text'] },
+  'page-notice': { props: ['message'] },
   'paper-view': { props: ['company', 'currency', 'data', 'emptyLabel'] },
   'parallel-run-workspace': { props: ['canManage', 'comparisons', 'registers', 'runs', 'slots', 'tolerances'] },
   'party-drawer': { props: ['drawer'] },

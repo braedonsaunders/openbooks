@@ -27,6 +27,7 @@ import {
   weekWindow,
 } from '../../api/timesheets/_lib'
 import type { WeeklyGrid } from './WeeklyGrid'
+import { managesOthersTime, resolveNewTimesheetStart } from './new-timesheet'
 
 /**
  * The weekly-timesheet list, split into a loader and a spec.
@@ -54,6 +55,10 @@ export interface TimesheetsData {
   basePath: string
   description: string
   canManage: boolean
+  /** True when New timesheet has a week it may open for this user. */
+  canStartTimesheet: boolean
+  /** Why New timesheet is withdrawn for a time enterer, with the remedy. */
+  newNotice: string | null
   currentParams: Record<string, string | string[] | undefined>
   newButton: { href: string; label: string }
   drawer: (Record<string, unknown> & { remountKey: string }) | null
@@ -88,16 +93,23 @@ export async function loadTimesheets(
            and exists (select 1 from employee_roles r where r.party_id = p.id and r.org_id = p.org_id and r.is_active)
          order by p.display_name`))
 
-  // "New timesheet" targets the current user's linked employee (or the first
-  // active employee as a fallback picker seed) and the current week.
-  const myEmployee = canManage ? await userEmployeeId(orgId, authz.user.id) : null
-  const scopedMyEmployee = myEmployee
-    ? await pinTimesheetEmployee(orgId, myEmployee, authz.allowedSubsidiaryIds)
-    : null
-  const newTarget = scopedMyEmployee ?? employees.rows[0]?.id ?? null
-  const newHref = newTarget
-    ? (`${basePath}?timesheet=${newTarget}:${await currentWeekStart(orgId)}` as const)
+  // "New timesheet" opens the current user's own week when the login is
+  // linked to an in-scope employee. Only someone who manages other people's
+  // time may instead start from the first active employee as a picker seed;
+  // a self-service login is never handed another person's timesheet. When
+  // there is nothing to open, the action is withdrawn and the page names the
+  // reason and its remedy instead of linking back to itself.
+  const timesheetStart = await resolveNewTimesheetStart({
+    canManage,
+    managesOthersTime: managesOthersTime((permission) => can(authz, permission)),
+    linkedEmployeeId: canManage ? await userEmployeeId(orgId, authz.user.id) : null,
+    pinInScope: (employeeId) => pinTimesheetEmployee(orgId, employeeId, authz.allowedSubsidiaryIds),
+    firstActiveEmployeeId: employees.rows[0]?.id ?? null,
+  })
+  const newHref = timesheetStart.employeeId
+    ? (`${basePath}?timesheet=${timesheetStart.employeeId}:${await currentWeekStart(orgId)}` as const)
     : basePath
+  const newNotice = timesheetStart.refusal ? t(`list.newRefusal.${timesheetStart.refusal}`) : null
 
   // Flyout: ?timesheet=<employeeId>:<weekStart>, the id the list emits.
   const openParam = pickString(sp.timesheet)
@@ -177,6 +189,8 @@ export async function loadTimesheets(
     title: workFamily === 'production' ? t('list.productionTitle') : t('list.title'),
     description: workFamily === 'production' ? t('list.productionDescription') : t('list.description'),
     canManage,
+    canStartTimesheet: timesheetStart.employeeId !== null,
+    newNotice,
     currentParams: sp,
     newButton: { href: newHref, label: t('list.newButton') },
     showClockLink: fieldTimeOn && can(authz, 'time.clock'),
@@ -206,18 +220,19 @@ export function timesheetsSpec(data: TimesheetsData): PageSpec {
         description: f('description'),
         // HR-20: field-time nav rides the header behind its own switches.
         actions: [
-          widget(newTimesheet.widget, newTimesheet.props, f('canManage')),
+          widget(newTimesheet.widget, newTimesheet.props, f('canStartTimesheet')),
           widget('link-button', { href: f('clockButton.href'), label: f('clockButton.label'), variant: 'outline' }, f('showClockLink')),
           widget('link-button', { href: f('crewButton.href'), label: f('crewButton.label'), variant: 'outline' }, f('showCrewLink')),
         ],
       }),
     ],
     body: [
+      widgetBlock('page-notice', { message: data.newNotice ?? '' }, f('newNotice')),
       widgetBlock('entity-list-view', {
         recordType: 'timesheet_week',
         timeWorkFamily: data.workFamily,
         sp: data.currentParams,
-        emptyAction: data.canManage ? newTimesheet : null,
+        emptyAction: data.canStartTimesheet ? newTimesheet : null,
         drawer: data.drawer ? [{ widget: 'timesheet-drawer', props: { drawer: data.drawer } }] : [],
       }),
     ],
