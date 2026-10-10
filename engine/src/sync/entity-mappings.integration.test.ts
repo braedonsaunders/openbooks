@@ -7,6 +7,7 @@ import { createScratchOrg, createScratchUser, dropScratchOrg } from '../testing/
 import { entityMappingMetadata } from './entity-mapping-contract.ts';
 import { connectionEntityMappingMetadata, validateConnectionEntityMappings, withEntityMappings } from './entity-mappings.ts';
 import { loadEntities } from './migrate.ts';
+import { stableMappingSnapshot } from './operational-entity-mappings.ts';
 import { runSync } from './sync.ts';
 import type { MigrationSource } from './source.ts';
 import type { NativeDocument } from './native.ts';
@@ -76,7 +77,7 @@ test('transaction and line custom mappings persist through the native writer and
       await db.execute(sql`insert into connections(id,org_id,source,display_name) values(${connectionId},${org.orgId},'qbo','Mapped documents')`);
       await db.execute(sql`insert into custom_field_defs(org_id,target_table,key,label,field_type) values(${org.orgId},'documents','evidence','Evidence','text'),(${org.orgId},'document_lines','classification','Classification','text')`);
     });
-    const doc: NativeDocument = { sourceRef: 'order-100', kind: 'sales_order', posting: false, lifecycleStatus: 'approved', partyId: org.customerId,
+    const doc: NativeDocument = { sourceRef: 'order-100', kind: 'sales_order', posting: false, lifecycleStatus: 'draft', partyId: org.customerId,
       subsidiaryId: org.subsidiaryId, currency: 'CAD', fxRate: '1', documentDate: org.date, dueDate: org.date, memo: 'Original memo', referenceNumber: null, controlAccountId: null, subtotal: '100', total: '100',
       lines: [{ lineNumber: 1, sourceLineRef: 'line-1', accountId: org.accounts.revenue, itemId: null, amount: '100', taxAmount: '0', taxOverridden: false, taxCodeId: null, departmentId: null, projectId: null, description: 'Original description' }] };
     const source: MigrationSource = { name: 'qbo', refKey: 'qboId', baseCurrency: 'CAD', entityMappingMetadata: entityMappingMetadata([]), accountingPeriods: async () => [], entities: async () => [],
@@ -93,14 +94,27 @@ test('transaction and line custom mappings persist through the native writer and
       assert.equal(line.custom.classification, 'Original description');
       const replay = await runSync(configured, 'mapping-control', { ...options, kind: 'incremental', since: new Date('2026-07-19T00:00:00Z') });
       assert.equal(replay.docsUnchanged, 1); assert.equal(replay.docsFailed, 0);
+      const draft = (await db.execute<{ status: string }>(sql`select status from documents where org_id=${org.orgId} and id=${saved.id}`)).rows[0]!;
+      assert.equal(draft.status, 'draft', 'ordinary operator edits are allowed only on the draft fixture');
       await db.execute(sql`update document_lines set custom=custom||'{"classification":"Operator edit"}'::jsonb where org_id=${org.orgId} and document_id=${saved.id}`);
       const reapplied = await runSync(configured, 'mapping-control', options);
       assert.equal(reapplied.docsAmended, 1, 'replay compares actual native mapped values, not a stale ownership marker');
       assert.equal((await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from document_lines where org_id=${org.orgId} and document_id=${saved.id}`)).rows[0]!.custom.classification, 'Original description');
+      doc.lifecycleStatus = 'approved';
       const changed = await runSync(withEntityMappings(source, mappings('Second'), org.orgId), 'mapping-control', options);
       assert.equal(changed.docsAmended, 1); assert.equal(changed.docsFailed, 0);
       const after = (await db.execute<{ id: string; custom: Record<string, unknown> }>(sql`select id,custom from documents where org_id=${org.orgId} and custom->>'qboId'='order-100'`)).rows[0]!;
       assert.equal(after.id, saved.id); assert.equal(after.custom.evidence, 'Second');
+      assert.equal((await db.execute<{ status: string }>(sql`select status from documents where org_id=${org.orgId} and id=${saved.id}`)).rows[0]!.status, 'approved');
+      await assert.rejects(db.execute(sql`update document_lines set custom=custom||'{"classification":"Forbidden edit"}'::jsonb where org_id=${org.orgId} and document_id=${saved.id}`), (cause: unknown) => {
+        for (let error = cause as { code?: string; cause?: unknown } | undefined; error; error = error.cause as typeof error) if (error.code === '55000') return true;
+        return false;
+      }, 'ordinary approved-line writes remain immutable');
+      doc.lines[0]!.description = 'Revised source description';
+      const approvedReplay = await runSync(withEntityMappings(source, mappings('Second'), org.orgId), 'mapping-control', options);
+      assert.equal(approvedReplay.docsAmended, 1); assert.equal(approvedReplay.docsFailed, 0, 'approved lines rebuild only through the native trusted mirror amendment');
+      assert.equal((await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from document_lines where org_id=${org.orgId} and document_id=${saved.id}`)).rows[0]!.custom.classification, 'Revised source description');
+      assert.equal((await db.execute<{ status: string }>(sql`select status from documents where org_id=${org.orgId} and id=${saved.id}`)).rows[0]!.status, 'approved');
     });
   } finally { await dropScratchOrg(org.orgId); }
 });
@@ -124,6 +138,9 @@ test('conflicting customer and vendor rules refuse shared identities instead of 
 });
 
 test('operational mappings preserve native lifecycle and money while applying saved fields, custom values and replay audits', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const initial = { revision_seq: 1, custom: { revision_seq: 'Operator value' } };
+  assert.deepEqual(stableMappingSnapshot(initial), stableMappingSnapshot({ ...initial, revision_seq: 2 }));
+  assert.notDeepEqual(stableMappingSnapshot(initial), stableMappingSnapshot({ ...initial, custom: { revision_seq: 'Changed operator value' } }), 'a custom field sharing the counter name remains business content');
   const org = await createScratchOrg();
   try {
     const { sealJson } = await import('../platform/secrets.ts');
@@ -143,13 +160,14 @@ test('operational mappings preserve native lifecycle and money while applying sa
         (${org.orgId},'crm_activities','topic','Topic','text','{}'::jsonb)`);
       await db.execute(sql`insert into connections(id,org_id,source,display_name,config,secrets) values(${connectionId},${org.orgId},'netsuite','Mapped CRM',${JSON.stringify({ account: '123456', host: 'https://123456.suitetalk.api.netsuite.com', baseCurrency: 'CAD', entityMappings: mappings })}::jsonb,${sealJson({ consumerKey: 'ck', consumerSecret: 'cs', tokenKey: 'tk', tokenSecret: 'ts' }, { orgId: org.orgId, purpose: 'connection.secrets' })})`);
     });
+    let sourceMemo = 'Source title';
     const transport: typeof fetch = async (input, init) => {
       const url = String(input);
       if (url.includes('/query/v1/suiteql')) {
         const q = String(JSON.parse(String(init?.body)).q);
         const items = q.includes('from entitystatus') ? [{ key: '17', name: 'Customer', entitytype: 'CUSTOMER' }]
           : q.includes('from customer') ? [{ id: '100', stage: 'customer', entitystatus: '17', datecreated: org.date }]
-          : q.includes("from transaction where type='Opprtnty'") ? [{ id: '200', tranid: 'OPP-200', entity: '100', currency: 'CAD', probability: '50', foreigntotal: '100.01', memo: 'Source title' }]
+          : q.includes("from transaction where type='Opprtnty'") ? [{ id: '200', tranid: 'OPP-200', entity: '100', currency: 'CAD', probability: '50', foreigntotal: '100.01', memo: sourceMemo }]
           : q.includes('from recentactivity') ? [{ id: '300', entity: '100', type: 'Note : 9', typecode: 'Note : 9', createddate: org.date, details: 'Source site visit', subdetails: 'Source note' }]
           : [];
         return Response.json({ items, hasMore: false });
@@ -170,6 +188,14 @@ test('operational mappings preserve native lifecycle and money while applying sa
       assert.equal(await count(), 4);
       await importNetSuiteCrm(org.orgId, connectionId, transport, { actorId });
       assert.equal(await count(), 4, 'unchanged operational replay retains stable source identity without duplicate mapping audit');
+      sourceMemo = 'Revised source description';
+      await importNetSuiteCrm(org.orgId, connectionId, transport, { actorId });
+      assert.equal(await count(), 5, 'a real opportunity content change still produces one business audit');
+      const audit = (await db.execute<{ changes: { before: Record<string, unknown>; after: Record<string, unknown> } }>(sql`select changes from audit_log where org_id=${org.orgId} and table_name='crm_opportunities' and action='update' and changes->>'event'='connector_entity_mapping_applied'`)).rows;
+      assert.equal(audit.length, 1);
+      assert.equal(audit[0]!.changes.before.description, 'Source title');
+      assert.equal(audit[0]!.changes.after.description, sourceMemo);
+      assert.ok(Object.hasOwn(audit[0]!.changes.after, 'revision_seq'), 'full stored audit evidence retains the native concurrency token');
     });
   } finally { await dropScratchOrg(org.orgId); }
 });

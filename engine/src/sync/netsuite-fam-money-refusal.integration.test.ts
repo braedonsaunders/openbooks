@@ -15,7 +15,7 @@ const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
 async function createConnection(orgId: string): Promise<string> {
   const id = randomUUID();
-  const saved = (await db.execute<{ id: string }>(sql`insert into connections(id,org_id,source,display_name) values(${id},${orgId},'netsuite','Fixed assets source') returning id`)).rows[0];
+  const saved = (await db.execute<{ id: string }>(sql`insert into connections(id,org_id,source,display_name) values(${id},${orgId},'netsuite',${`Fixed assets source ${id}`}) returning id`)).rows[0];
   if (!saved) throw new Error('The fixed assets connection fixture was not saved');
   return saved.id;
 }

@@ -48,10 +48,15 @@ export async function netSuiteOperationalMappingWriter(orgId: string, connection
 }
 export type OperationalMappingWriter = Awaited<ReturnType<typeof netSuiteOperationalMappingWriter>>;
 
-/** Source extraction timestamps and native bookkeeping do not create replay-only mapping audits. */
+/** Extraction timestamps and native revision counters do not create replay-only business audits. */
 export function stableMappingSnapshot(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(stableMappingSnapshot);
+  return stableSnapshotValue(value, true);
+}
+function stableSnapshotValue(value: unknown, nativeRow = false): unknown {
+  if (Array.isArray(value)) return value.map(entry => stableSnapshotValue(entry));
   if (!value || typeof value !== 'object') return value;
-  return Object.fromEntries(Object.entries(value as Record<string, unknown>).filter(([key]) => !['updated_at', 'updated_by', 'created_at', 'created_by', 'lastSyncedAt', 'extractedAt'].includes(key))
-    .sort(([a], [b]) => a.localeCompare(b)).map(([key, entry]) => [key, stableMappingSnapshot(entry)]));
+  return Object.fromEntries(Object.entries(value as Record<string, unknown>).filter(([key]) =>
+    !['updated_at', 'updated_by', 'created_at', 'created_by', 'lastSyncedAt', 'extractedAt'].includes(key)
+      && (!nativeRow || key !== 'revision_seq'))
+    .sort(([a], [b]) => a.localeCompare(b)).map(([key, entry]) => [key, stableSnapshotValue(entry)]));
 }
