@@ -563,6 +563,15 @@
   order: 9999;
 }
 
+/* A page whose body is the shared feature-unavailable canvas offers nothing
+   to create or act on: its header keeps the title and the sibling-page
+   navigation, and withdraws every other action. The server refuses those
+   actions regardless; this keeps the page from advertising them. */
+[data-page-layout]:has([data-route-placement="section"][data-route-state="feature-disabled"])
+  [data-page-actions] > :not([data-subtabs-track]):not(:has([data-subtabs-track])) {
+  display: none;
+}
+
 /* ── Route transitions ──────────────────────────────────────────────────────
    Keyframes for `components/route-transitions.tsx`. The browser animates
    snapshots of the old and new page on the compositor, so none of this costs

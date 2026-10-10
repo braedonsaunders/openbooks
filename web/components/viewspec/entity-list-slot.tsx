@@ -151,10 +151,15 @@ export async function EntityListSlot({
   if (!authz) return null
   let timeScope: ReturnType<typeof sql> | undefined
   let timeBasePath: string | undefined
+  let governingFeature: string | undefined
   if (recordType === 'timesheet_week') {
     const timeAuthz = await requirePermission('time.read')
     const production = timeWorkFamily === 'production'
-    await requireFeatureEnabled(timeAuthz.user.orgId, production ? 'manufacturing' : 'timeTracking')
+    // Production time is Manufacturing's workspace: it follows the
+    // Manufacturing switch, and weeks carrying project time stay hidden by
+    // the scope below while Time tracking is off.
+    governingFeature = production ? 'manufacturing' : 'timeTracking'
+    await requireFeatureEnabled(timeAuthz.user.orgId, governingFeature)
     if (production) await requirePermission('manufacturing.read')
     timeBasePath = production ? '/manufacturing/time' : '/timesheets'
     const projectVisible = can(authz,'projects.read') && await isFeatureEnabled(authz.user.orgId,'timeTracking')
@@ -204,6 +209,7 @@ export async function EntityListSlot({
       defaultPresentation={defaultPresentation}
       scopePredicate={timeScope}
       basePathOverride={timeBasePath}
+      governingFeature={governingFeature}
       formatValue={formatValue}
       rowTrailing={rowTrailing}
       recordType={recordType}

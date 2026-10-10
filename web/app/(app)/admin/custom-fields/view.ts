@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { registeredListTable } from '../../../../lib/list/prepared-spec'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -30,7 +30,8 @@ import {
   pickString,
   isUuid,
 } from '../../../../lib/list-params'
-import { disabledCustomFieldTargets } from '../../../../lib/customization/gates'
+import { customFieldTargetFeatureKey, disabledCustomFieldTargets } from '../../../../lib/customization/gates'
+import { featureRequiredHref } from '../../../../lib/gate-targets'
 import { BUILT_IN_ROLE_KEYS } from '../../../../lib/permissions'
 
 /**
@@ -134,7 +135,13 @@ export async function loadCustomFields(
   if (fieldId && fieldId !== 'new' && !isUuid(fieldId)) notFound()
   const orgId = authz.user.orgId
   const hidden = await disabledCustomFieldTargets(orgId)
-  if (target && hidden.tables.includes(target)) notFound()
+  if (target && hidden.tables.includes(target)) {
+    // A target whose module is switched off explains itself on the shared
+    // feature-required page; its definitions stay and return with the switch.
+    const feature = customFieldTargetFeatureKey(target)
+    if (feature) redirect(featureRequiredHref(feature))
+    notFound()
+  }
 
   const kindHide =
     hidden.kinds.length === 0

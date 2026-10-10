@@ -188,6 +188,27 @@
   font-weight: 600;
 }
 
+/* A body-level canvas sits under its host page's header: framed like a panel,
+   tall enough for the illustration, and titled one level below the page. */
+.section {
+  flex: none;
+  min-height: min(680px, calc(100dvh - 220px));
+  border: 1px solid rgb(15 118 110 / 10%);
+  border-radius: 16px;
+}
+
+.section .heading h2 {
+  margin: 0;
+  color: #0f172a;
+  text-wrap: balance;
+  font-size: clamp(26px, 3vw, 40px);
+  line-height: 1.15;
+  letter-spacing: -0.04em;
+  font-weight: 600;
+}
+
+.section .heading p { color: #64748b; }
+
 .heading p {
   display: block;
   max-width: 500px;
@@ -251,6 +272,9 @@
 :global(.dark) .label { border-color: rgb(94 234 212 / 12%); }
 :global(.dark) .node { box-shadow: 0 8px 24px -12px rgb(0 0 0 / 40%); }
 :global(.dark) .footer { color: #94a3b8; }
+:global(.dark) .section { border-color: rgb(94 234 212 / 10%); }
+:global(.dark) .section .heading h2 { color: #f1f5f9; }
+:global(.dark) .section .heading p { color: #94a3b8; }
 
 @keyframes appear {
   from { opacity: 0; transform: translateY(12px); }

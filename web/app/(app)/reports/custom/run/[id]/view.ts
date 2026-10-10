@@ -20,7 +20,7 @@ import {
   type ReportRunResult,
 } from '@openbooks/reports'
 import { requirePermission } from '../../../../../../lib/authz'
-import { canRunReportEntity } from '../../../../../../lib/report-authz'
+import { canRunReportEntity, requireReportEntityFeature } from '../../../../../../lib/report-authz'
 import { clamp, isUuid, pickString } from '../../../../../../lib/list-params'
 import {
   applyPeriodOverride, executeReport, executeReportPage, loadReportDefinition, reportPeriodField,
@@ -113,6 +113,7 @@ export async function loadReportRun(
   // Features switch on top of reports.read — same gate as /api/reports/run.
   const entityMap = await reportEntityCatalog(authz)
   const entity = entityMap[(definition.query as { entity?: string }).entity ?? '']
+  await requireReportEntityFeature(authz, definition.query)
   if (!(await canRunReportEntity(authz, definition.query))) notFound()
 
   const pagination = entity?.pagination

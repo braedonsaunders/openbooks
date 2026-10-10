@@ -87,7 +87,7 @@ test('disabled Projects refuses before any labor rate or picker data is read', a
   state.projects = false
   state.queries.length = 0
   await assert.rejects(loadLaborPricing({ card }), (error) =>
-    error instanceof Error && 'digest' in error && String(error.digest).includes('/admin/setup/features'))
+    error instanceof Error && 'digest' in error && String(error.digest).includes('/feature-required?feature=projects'))
   assert.equal(state.queries.some((sql) => /from (item_rate_versions|items|departments)\b/.test(sql)), false)
   state.projects = true
 })

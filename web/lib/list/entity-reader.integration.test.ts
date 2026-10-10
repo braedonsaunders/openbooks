@@ -147,6 +147,9 @@ test("feature-off refuses by name; outage rejects instead of refusing", enabled,
   try {
     const r = await readEntityListPage(query(org.orgId, owner));
     assert.ok(!r.ok && /feature_disabled/.test(r.error) && /Features/.test(r.remedy));
+    assert.equal(!r.ok && r.feature, "resourcing", "the refusal names the switch that is off so the UI can explain it");
+    const trustedRefusal = await trusted(org.orgId);
+    assert.ok(!trustedRefusal.ok && trustedRefusal.error === "feature_disabled" && trustedRefusal.feature === "resourcing");
     await assert.rejects(withOrgTransaction(org.orgId, async () => {
       // A real PostgreSQL transaction failure makes the next storage read
       // unavailable; malformed JSON configuration is not a storage outage.
@@ -158,6 +161,19 @@ test("feature-off refuses by name; outage rejects instead of refusing", enabled,
       assert.match(cause.message, /current transaction is aborted/);
       return true;
     });
+  } finally { await dropScratchOrgReporting(org.orgId); }
+});
+
+test("a host-governed list follows the host's switch and refuses by its name", enabled, async () => {
+  const { org } = await orgWith(true);
+  try {
+    assert.ok((await trusted(org.orgId)).ok, "the record type's own switch is on");
+    const governed = await trusted(org.orgId, { governingFeature: "manufacturing" });
+    assert.ok(!governed.ok, "an off host switch reads nothing even though the record type's switch is on");
+    assert.equal(!governed.ok && governed.error, "feature_disabled");
+    assert.equal(!governed.ok && governed.feature, "manufacturing");
+    const safe = await readEntityListPage({ ...query(org.orgId, randomUUID()), governingFeature: "manufacturing" } as never);
+    assert.ok(!safe.ok && safe.error === "unknown_property", "only the trusted UI path may name a governing switch");
   } finally { await dropScratchOrgReporting(org.orgId); }
 });
 

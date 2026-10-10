@@ -96,6 +96,11 @@ export type EntityReaderRefusal = {
   /** Usable remedy shown to the operator alongside the code. */
   remedy: string;
   field?: string;
+  /**
+   * With `feature_disabled`: the Features key that is off, so a UI renders
+   * the shared feature-unavailable state by name instead of the remedy text.
+   */
+  feature?: string;
 };
 
 export type EntityReaderResult = EntityReaderSuccess | EntityReaderRefusal;
@@ -132,6 +137,17 @@ const SAFE_QUERY_KEYS = new Set(["cursor",
 
 function refuse(error: string, remedy: string, field?: string): EntityReaderRefusal {
   return field === undefined ? { ok: false, error, remedy } : { ok: false, error, remedy, field };
+}
+
+function refuseFeatureDisabled(feature: string, recordType: string): EntityReaderRefusal {
+  return {
+    ...refuse(
+      "feature_disabled",
+      `turn on ${feature} on Company Settings → Features to list ${recordType} records`,
+      "recordType",
+    ),
+    feature,
+  };
 }
 
 function sameScope(left: EntityReaderScope, right: EntityReaderScope): boolean {
@@ -253,6 +269,13 @@ type ExecutorInput = {
   perPage?: number;
   labels?: Record<string, string>;
   /**
+   * Trusted UI path only: the Features switch that governs this list where a
+   * shared record type is served inside another module's workspace (weekly
+   * time in Manufacturing → Production time follows Manufacturing). Absent,
+   * the record type's own switch governs. Either way an off switch refuses.
+   */
+  governingFeature?: string;
+  /**
    * Accepted quick-filter values the trusted caller already loaded once.
    * The safe path passes none and each loader runs at most once per read.
    */
@@ -308,13 +331,9 @@ async function executeEntityListPage(
   }
   // The record type's Features switch refuses by name before compiling: a
   // list whose module is off reads nothing, exactly like its page.
-  const featureKey = recordTypeFeatureKey(input.recordType);
+  const featureKey = input.governingFeature ?? recordTypeFeatureKey(input.recordType);
   if (featureKey && !(await isFeatureEnabled(input.orgId, featureKey))) {
-    return refuse(
-      "feature_disabled",
-      `turn on ${featureKey} on Company Settings → Features to list ${input.recordType} records`,
-      "recordType",
-    );
+    return refuseFeatureDisabled(featureKey, input.recordType);
   }
   if (input.view.recordType !== input.recordType) {
     return refuse(

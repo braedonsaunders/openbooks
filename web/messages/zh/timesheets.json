@@ -2,6 +2,8 @@
   "list": {
     "title": "每周工时表",
     "description": "按周查看员工工时——录入、提交并审批各项目的工时。",
+    "productionTitle": "生产工时",
+    "productionDescription": "按周记录员工在生产订单上的工时——录入、提交并审批制造人工。",
     "newButton": "新建工时表",
     "emptyTitle": "暂无工时表",
     "emptyDescription": "工时记录会在此汇总为每周工时表。创建一张以记录项目工时。",

@@ -10,7 +10,7 @@ import { isUuid } from '../../../../../../lib/list-params'
 import { loadReportDefinition } from '../../../../../../lib/custom-reports'
 import { orgBranding } from '../../../../../../lib/report-pdf'
 import { statementPageHref } from '../../../../../../lib/report-run'
-import { canRunReportEntity, hiddenReportEntityKeys } from '../../../../../../lib/report-authz'
+import { canRunReportEntity, hiddenReportEntityKeys, requireReportEntityFeature } from '../../../../../../lib/report-authz'
 import type { ReportBuilder } from './ReportBuilder'
 
 /**
@@ -57,6 +57,7 @@ export async function loadReportBuilder(id: string): Promise<ReportBuilderData> 
   // Standard statement reports keep their rich drill-through pages — the entity
   // query-builder edits `query` definitions only.
   if (definition?.report_type === 'statement') redirect(statementPageHref(definition.statement))
+  if (definition?.query) await requireReportEntityFeature(authz, definition.query)
   if (definition && (!definition.query || !(await canRunReportEntity(authz, definition.query)))) notFound()
 
   return {

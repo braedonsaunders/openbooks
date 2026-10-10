@@ -2,6 +2,8 @@
   "list": {
     "title": "Quadros de horas semanais",
     "description": "Horas dos funcionários por semana — registre, envie e aprove horas em todos os trabalhos.",
+    "productionTitle": "Tempo de produção",
+    "productionDescription": "Horas dos funcionários por semana em ordens de produção: registre, envie e aprove a mão de obra de fabricação.",
     "newButton": "Novo quadro de horas",
     "emptyTitle": "Nenhum quadro de horas ainda",
     "emptyDescription": "Os registros de horas são consolidados em quadros semanais aqui. Crie um para registrar horas em um trabalho.",

@@ -39,6 +39,8 @@ import { ReportDrillLink } from '../app/(app)/reports/ReportDrillLink'
 import { OverlayLink } from './overlay-link'
 import { resolvePeriod } from '../lib/periods'
 import { DRILL_LINK_CLASS } from './viewspec/tone'
+import { can, resolveAuthzByUserId } from '../lib/authz-core'
+import { FeatureUnavailable } from './feature-unavailable'
 
 /**
  * The universal ENTITY list — the non-`documents` twin of RecordListView. Renders
@@ -86,12 +88,18 @@ export async function EntityListView({
   hrmEmploymentVisible = true,
   scopePredicate,
   basePathOverride,
+  governingFeature,
   defaultPresentation,
 }: {
   recordType: string
   defaultPresentation?: string
   /** Trusted host route for a shared native list, never a source or permission override. */
   basePathOverride?: string
+  /**
+   * Trusted host's Features switch for a shared native list served inside
+   * another module's workspace; the record type's own switch otherwise.
+   */
+  governingFeature?: string
   /** Additional trusted server-side authorization, shared by rows AND counts.
    * It only narrows the source's mandatory tenant/entity predicate. */
   scopePredicate?: SQL
@@ -303,18 +311,25 @@ export async function EntityListView({
       page: params.page,
       perPage: params.perPage,
       labels,
+      governingFeature,
     },
     { inventory: inventoryOn, crm: crmOn, hrm: hrmOn },
     scopePredicate,
     acceptedFilterValues,
   )
   if (!readResult.ok) {
-    return (
-      <>
-        <PageHeader title={viewName} description={`${readResult.error}: ${readResult.remedy}`} />
-        <EmptyState description={`${readResult.error}: ${readResult.remedy}`} />
-      </>
-    )
+    // A switched-off feature replaces the whole list body with the shared
+    // feature-unavailable canvas: no view switcher, filters or table, and the
+    // page header's create actions are withdrawn with it.
+    if (readResult.error === 'feature_disabled' && readResult.feature) {
+      const authz = await resolveAuthzByUserId(orgId, userId)
+      return FeatureUnavailable({
+        featureKey: readResult.feature,
+        placement: 'section',
+        canManageFeatures: !!authz && can(authz, 'admin.setup.manage'),
+      })
+    }
+    return <EmptyState description={readResult.remedy} />
   }
   const narrow = (predicate: SQL) => scopePredicate ? sql`(${predicate}) and (${scopePredicate})` : predicate
   // Counts ignore the ad-hoc status selection so every status remains visible

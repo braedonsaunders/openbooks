@@ -2,6 +2,8 @@
   "list": {
     "title": "Wöchentliche Stundenzettel",
     "description": "Arbeitszeit der Mitarbeiter nach Woche — Stunden über alle Aufträge erfassen, einreichen und genehmigen.",
+    "productionTitle": "Produktionszeiten",
+    "productionDescription": "Mitarbeiterstunden pro Woche für Fertigungsaufträge – Fertigungsarbeit erfassen, einreichen und genehmigen.",
     "newButton": "Neuer Stundenzettel",
     "emptyTitle": "Noch keine Stundenzettel",
     "emptyDescription": "Zeiterfassungen werden hier zu wöchentlichen Stundenzetteln zusammengefasst. Erstellen Sie einen, um Stunden auf einen Auftrag zu buchen.",

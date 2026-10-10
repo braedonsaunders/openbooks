@@ -15,6 +15,7 @@ export function RouteStateView({
   presentation = 'standard',
   label,
   secondaryAction,
+  placement = 'route',
 }: {
   icon?: React.ReactNode
   title: string
@@ -26,6 +27,13 @@ export function RouteStateView({
   presentation?: 'standard' | 'feature'
   label?: string
   secondaryAction?: React.ReactNode
+  /**
+   * Where the feature canvas sits. `route` owns the whole page: its heading is
+   * the page title. `section` fills a page body under the host's own header,
+   * so the heading steps down a level and the browser tab keeps the page's
+   * title.
+   */
+  placement?: 'route' | 'section'
   /**
    * Machine-readable name for WHY this boundary is showing.
    *
@@ -40,9 +48,15 @@ export function RouteStateView({
   state?: 'error' | 'not-found' | 'forbidden' | 'feature-disabled'
 }) {
   if (presentation === 'feature') {
+    const section = placement === 'section'
     return (
-      <div className={styles.canvas} data-route-state={state} data-route-presentation="feature">
-        <NavigationRefusalSettled />
+      <div
+        className={section ? `${styles.canvas} ${styles.section}` : styles.canvas}
+        data-route-state={state}
+        data-route-presentation="feature"
+        data-route-placement={placement}
+      >
+        {section ? null : <NavigationRefusalSettled />}
         <div className={styles.backdrop} aria-hidden="true" />
         <div className={styles.scroll}>
           <div className={styles.content}>
@@ -62,7 +76,14 @@ export function RouteStateView({
               <span className={`${styles.spark} ${styles.sparkThree}`} />
             </div>
             {label ? <div className={styles.label}>{label}</div> : null}
-            <PageHeader title={title} description={description} className={styles.heading} />
+            {section ? (
+              <div className={styles.heading}>
+                <h2>{title}</h2>
+                {description ? <p>{description}</p> : null}
+              </div>
+            ) : (
+              <PageHeader title={title} description={description} className={styles.heading} />
+            )}
             <div className={styles.actions}>{action}{secondaryAction}</div>
             {footer ? <p className={styles.footer}>{footer}</p> : null}
           </div>

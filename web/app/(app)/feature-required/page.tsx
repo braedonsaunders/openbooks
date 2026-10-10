@@ -1,8 +1,9 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
-import { ArrowRight, CircleCheck, Power, Workflow } from 'lucide-react'
-import { getMessages, getTranslations } from 'next-intl/server'
+import { CircleCheck } from 'lucide-react'
+import { getTranslations } from 'next-intl/server'
 import { Button } from '@openbooks/ui'
+import { FeatureUnavailable, featureDisplayName } from '@/components/feature-unavailable'
 import { RouteStateView } from '@/components/route-state'
 import { can, getAuthz } from '../../../lib/authz'
 import { FEATURE_BY_KEY, isFeatureEnabled } from '../../../lib/features'
@@ -29,22 +30,9 @@ export default async function FeatureRequiredPage({
   }
   const authz = await getAuthz()
   if (!authz) redirect('/login')
-  const t = await getTranslations('shell.routeState')
-  // Feature titles live at admin.features.<key>.title, but coverage is not
-  // complete in every locale — navigate the merged messages and fall back to
-  // the raw key rather than crash or leak a key path.
-  const messages = await getMessages()
-  const admin = (messages as { admin?: unknown }).admin as
-    | { features?: Record<string, { title?: unknown }> }
-    | undefined
-  const catalogTitle = admin?.features?.[key]?.title
-  const name = typeof catalogTitle === 'string' && catalogTitle.trim() ? catalogTitle : key
-  const dashboard = (
-    <Button asChild size="lg" variant="outline">
-      <Link href="/dashboard">{t('backToDashboard')}</Link>
-    </Button>
-  )
   if (await isFeatureEnabled(authz.user.orgId, key)) {
+    const t = await getTranslations('shell.routeState')
+    const name = await featureDisplayName(key)
     return (
       <RouteStateView
         presentation="feature"
@@ -53,38 +41,17 @@ export default async function FeatureRequiredPage({
         icon={<CircleCheck />}
         title={t('featureOnTitle', { name })}
         description={t('featureOnDescription')}
-        action={dashboard}
+        action={
+          <Button asChild size="lg" variant="outline">
+            <Link href="/dashboard">{t('backToDashboard')}</Link>
+          </Button>
+        }
       />
     )
   }
-  const description = t('featureOffDescription', { name })
-  if (!can(authz, 'admin.setup.manage')) {
-    return (
-      <RouteStateView
-        presentation="feature"
-        label={name}
-        state="feature-disabled"
-        icon={key === 'automations' ? <Workflow /> : <Power />}
-        title={t('featureOffTitle', { name })}
-        description={`${description} ${t('askAdministrator')}`}
-        action={dashboard}
-      />
-    )
-  }
-  return (
-    <RouteStateView
-      presentation="feature"
-      label={name}
-      state="feature-disabled"
-      icon={key === 'automations' ? <Workflow /> : <Power />}
-      title={t('featureOffTitle', { name })}
-      description={description}
-      action={
-        <Button asChild size="lg">
-          <Link href="/admin/setup/features">{t('turnOnFeature')}<ArrowRight aria-hidden="true" className="h-4 w-4" /></Link>
-        </Button>
-      }
-      secondaryAction={dashboard}
-    />
-  )
+  return FeatureUnavailable({
+    featureKey: key,
+    placement: 'route',
+    canManageFeatures: can(authz, 'admin.setup.manage'),
+  })
 }

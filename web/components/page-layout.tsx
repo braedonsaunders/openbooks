@@ -60,14 +60,14 @@ export function ListPageLayout({
   const section = useContext(PagePresentationContext) === 'section'
   if (section) {
     return (
-      <div className="space-y-4">
+      <div data-page-layout className="space-y-4">
         <FadeInHeader>{header}</FadeInHeader>
         <FadeInBody className={className}>{children}</FadeInBody>
       </div>
     )
   }
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div data-page-layout className="flex h-full min-h-0 flex-col">
       <div className="shrink-0 border-b border-slate-200 bg-white px-3 pt-3 pb-2.5 sm:px-6 sm:pt-4 sm:pb-3 dark:border-slate-800 dark:bg-slate-900">
         <FadeInHeader className={cn('space-y-2 sm:space-y-2.5', !contained && 'mx-auto max-w-screen-2xl')}>
           <PageHeaderNavigationProvider navigation={<PageViewTabs />}>{header}</PageHeaderNavigationProvider>
@@ -108,7 +108,7 @@ export function DetailPageLayout({
   className?: string
 }) {
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div data-page-layout className="flex h-full min-h-0 flex-col">
       <div className="border-b border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
         <FadeInHeader className="mx-auto max-w-screen-2xl px-3 pt-3 sm:px-6 sm:pt-5">
           <PageHeaderNavigationProvider navigation={<PageViewTabs />}>{header}</PageHeaderNavigationProvider>

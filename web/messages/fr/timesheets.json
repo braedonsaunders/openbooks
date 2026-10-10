@@ -2,6 +2,8 @@
   "list": {
     "title": "Feuilles de temps hebdomadaires",
     "description": "Le temps des employés par semaine — saisissez, soumettez et approuvez les heures sur chaque chantier.",
+    "productionTitle": "Temps de production",
+    "productionDescription": "Heures des employés par semaine sur les ordres de fabrication : saisissez, soumettez et approuvez la main-d’œuvre de production.",
     "newButton": "Nouvelle feuille de temps",
     "emptyTitle": "Aucune feuille de temps pour l’instant",
     "emptyDescription": "Les saisies de temps se regroupent ici en feuilles de temps hebdomadaires. Créez-en une pour consigner des heures sur un chantier.",
