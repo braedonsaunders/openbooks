@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { saveBomPolicy, readBomPolicyVersion } from '@openbooks/engine/src/inventory/bom-policy.ts'
+import { BomPolicyError, saveBomPolicy, readBomPolicyVersion } from '@openbooks/engine/src/inventory/bom-policy.ts'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { can } from '@/lib/authz'
@@ -45,7 +45,18 @@ export const PUT = defineRoute({
         })),
       }));
       return NextResponse.json(result);
-    } catch(error) { return apiErrorResponse(error,{request}); }
+    } catch(error) {
+      // The editor highlights the offending component from the refusal, so
+      // the overlap answers with its structured evidence at the top level —
+      // the same body the pre-consolidation route returned.
+      if (error instanceof BomPolicyError && error.code === 'bom_effectivity_overlap' && error.details) {
+        const componentItemId = (error.details as { componentItemId?: unknown }).componentItemId;
+        const windows = (error.details as { windows?: unknown }).windows;
+        if (typeof componentItemId === 'string' && Array.isArray(windows))
+          return NextResponse.json({ error: error.message, code: error.code, componentItemId, windows }, { status: 422 });
+      }
+      return apiErrorResponse(error,{request});
+    }
   },
 })
 
