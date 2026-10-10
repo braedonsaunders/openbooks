@@ -59,7 +59,9 @@ const WIDGET_PERMISSIONS: Record<string, readonly string[]> = {
   'home-upcoming': [],
   'celebrations-list': [],
   'announcements-card': [],
-  'home-ask': [],
+  // The ask box opens the assistant, so it shows only where the assistant
+  // would admit the caller (the same assistant.use the /assistant route needs).
+  'home-ask': ['assistant.use'],
   'team-approvals': [],
   'team-steps': [],
   'team-nudges': [],
