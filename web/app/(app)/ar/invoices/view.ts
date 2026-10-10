@@ -21,6 +21,7 @@ import { readProviderTransactionsForDocument } from '@openbooks/engine/tax'
 import type { TaxProviderChipRow } from '../../../../components/tax-provider-chip'
 import { TAX_FILING_WRITE_PERMISSION } from '../../../../lib/tax-filing-permission'
 import { DISPLAY_DOCUMENT_NUMBER_EXPR } from '../../../../lib/customization/list-query'
+import { documentSettlementHref } from '../../../../lib/settlement-href'
 
 /**
  * Customer invoices + credits, split into a loader and a spec.
@@ -80,6 +81,8 @@ export interface ArInvoicesDrawer {
   appliedPayments: { payments: AppliedPayment[]; currency: string } | null
   creditApplications: { documentId: string; side: 'ap' | 'ar'; partyId: string | null; canApply: boolean } | null
   returnAuthorizationHref: string | null
+  /** Receive payment for this posted invoice (party + invoice preselected). */
+  settlementHref: string | null
   promotionsEnabled: boolean
   /** Provider commit rows for a posted sales document; null while the
    *  document is a draft or has nothing to commit to. */
@@ -314,6 +317,10 @@ export async function loadArInvoices(
             drawerKind === 'customer_invoice' && featureEnabled(featureState, 'returnAuthorizations') && can(authz, 'orders.fulfill')
               ? '/returns?doc=new&kind=rma'
               : null,
+          settlementHref: documentSettlementHref(openDoc?.doc as Record<string, unknown> | undefined, {
+            ar: can(authz, 'ar.pay'),
+            ap: false,
+          }),
           promotionsEnabled: featureEnabled(featureState, 'promotions'),
           config: DOC_KINDS[drawerKind]!,
           initialMode: (isCreate || pickString(sp.mode) === 'edit' ? 'edit' : 'view') as 'edit' | 'view',

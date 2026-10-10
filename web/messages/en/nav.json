@@ -263,5 +263,9 @@
     "setup-overhead": "Overhead",
     "crm-sales": "Sales",
     "hrm-compensation": "Compensation"
+  },
+  "moduleKeywords": {
+    "receipts": "receipt, receipts, receive payment, payment, customer payment, cash receipt",
+    "payments": "pay bills, pay bill, bill payment, payment, cheque, check"
   }
 }

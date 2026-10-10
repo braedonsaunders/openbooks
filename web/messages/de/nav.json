@@ -263,5 +263,9 @@
     "setup-overhead": "Gemeinkosten",
     "crm-sales": "Vertrieb",
     "hrm-compensation": "Vergütung"
+  },
+  "moduleKeywords": {
+    "receipts": "Beleg, Zahlungseingang, Zahlung erfassen, Zahlung, Kundenzahlung, Einzahlung",
+    "payments": "Rechnungen bezahlen, Rechnung bezahlen, Rechnungszahlung, Zahlung, Scheck"
   }
 }

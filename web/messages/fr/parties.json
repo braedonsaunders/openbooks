@@ -34,6 +34,8 @@
     "updateFailed": "Échec de la mise à jour",
     "nameRequired": "Saisissez un nom pour enregistrer ce tiers",
     "viewStatement": "Voir le relevé",
+    "receivePayment": "Recevoir un paiement",
+    "payBills": "Payer des factures",
     "activated": "Tiers activé",
     "deactivated": "Tiers désactivé",
     "payrollTabs": {

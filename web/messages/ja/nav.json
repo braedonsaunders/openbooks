@@ -263,5 +263,9 @@
     "setup-overhead": "間接費",
     "crm-sales": "営業",
     "hrm-compensation": "報酬"
+  },
+  "moduleKeywords": {
+    "receipts": "領収, 入金, 入金を受け取る, 支払, 得意先入金, 入金消込",
+    "payments": "請求書を支払う, 請求書支払, 支払, 小切手"
   }
 }

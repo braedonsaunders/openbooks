@@ -29,7 +29,7 @@ export interface ApCockpitData {
   canPay: boolean
   captureHref: string
   captureLabel: string
-  newItems: { kind: string; label: string }[]
+  newItems: { kind: string; label: string; href?: string }[]
   newBasePath: string
   newTriggerLabel: string
   tabs: unknown
@@ -79,6 +79,9 @@ export async function loadApCockpit(): Promise<ApCockpitData> {
     newItems: [
       { kind: 'vendor_bill', label: t('actions.newBill') },
       { kind: 'vendor_credit', label: t('actions.newCredit') ?? t('actions.newBill') },
+      ...(can(authz, 'ap.pay')
+        ? [{ kind: 'vendor_payment', label: t('actions.payBills'), href: '/payments?paymentNew=1&mode=edit' }]
+        : []),
     ],
     newBasePath: '/ap/bills',
     newTriggerLabel: t('actions.newBill'),

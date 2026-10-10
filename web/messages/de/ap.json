@@ -22,7 +22,9 @@
     "newBill": "Neue Eingangsrechnung",
     "newCredit": "Neue Lieferantengutschrift",
     "capture": "Rechnungen erfassen",
-    "submitForApproval": "Zur Genehmigung einreichen"
+    "submitForApproval": "Zur Genehmigung einreichen",
+    "payBill": "Rechnung bezahlen",
+    "payBills": "Rechnungen bezahlen"
   },
   "drawer": {
     "editingHint": "Bearbeitung — Zum Übernehmen der Änderungen speichern",
@@ -57,7 +59,12 @@
     "formPreferredCleared": "Bevorzugtes Formular zurückgesetzt",
     "formPreferredFailed": "Bevorzugtes Formular konnte nicht gespeichert werden",
     "returnsReceipt": "Retourniert Wareneingang",
-    "returnsNone": "Keine Warenrückgabe"
+    "returnsNone": "Keine Warenrückgabe",
+    "controlAccount": "Verbindlichkeitenkonto",
+    "controlAccountHelp": "Das Verbindlichkeitenkonto, auf das dieser Beleg gebucht wird. Zahlungen und Lieferantengutschriften gleichen ihn auf demselben Konto aus. Leer lassen, um den Standard zu verwenden.",
+    "controlAccountPartyDefault": "Lieferantenstandard — {account}",
+    "controlAccountOrganizationDefault": "Unternehmensstandard — {account}",
+    "controlAccountUnset": "Kein Verbindlichkeitenkonto eingerichtet – legen Sie eines unter Einrichtung → Unternehmen & Buchhaltung → Kontrollkonten fest"
   },
   "capture": {
     "title": "Rechnungserfassung",

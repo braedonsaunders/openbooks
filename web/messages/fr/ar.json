@@ -28,7 +28,8 @@
     "newCredit": "Nouvelle note de crédit",
     "newCashSale": "Nouvelle vente au comptant",
     "newCashRefund": "Nouveau remboursement au comptant",
-    "submitForApproval": "Soumettre pour approbation"
+    "submitForApproval": "Soumettre pour approbation",
+    "receivePayment": "Recevoir un paiement"
   },
   "tenders": {
     "title": "Modes de règlement",
@@ -103,7 +104,12 @@
     "returnsNone": "Aucun stock retourné",
     "marketplaceCollectedBy": "Collecteur de la taxe",
     "marketplaceCollectedByHelp": "La part de la place de marché est comptabilisée sur son compte de compensation, jamais sur votre dette fiscale.",
-    "marketplaceMerchant": "Commerçant"
+    "marketplaceMerchant": "Commerçant",
+    "controlAccount": "Compte client",
+    "controlAccountHelp": "Le compte client sur lequel ce document est comptabilisé. Les paiements et avoirs le soldent sur ce même compte. Laissez vide pour utiliser le compte par défaut.",
+    "controlAccountPartyDefault": "Défaut du client — {account}",
+    "controlAccountOrganizationDefault": "Défaut de l’organisation — {account}",
+    "controlAccountUnset": "Aucun compte client configuré — définissez-en un dans Configuration → Société et comptabilité → Comptes de contrôle"
   },
   "toasts": {
     "actionFailed": "Échec de l’action",

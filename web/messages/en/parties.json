@@ -34,6 +34,8 @@
     "updateFailed": "Update failed",
     "nameRequired": "Enter a name to save this party",
     "viewStatement": "View statement",
+    "receivePayment": "Receive payment",
+    "payBills": "Pay bills",
     "activated": "Party activated",
     "deactivated": "Party deactivated",
     "payrollTabs": {

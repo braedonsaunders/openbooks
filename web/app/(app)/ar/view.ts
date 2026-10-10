@@ -25,7 +25,7 @@ export interface ArCockpitData {
   description: string
   canCreate: boolean
   canCollect: boolean
-  newItems: { kind: string; label: string }[]
+  newItems: { kind: string; label: string; href?: string }[]
   newBasePath: string
   newTriggerLabel: string
   tabs: unknown
@@ -84,6 +84,9 @@ export async function loadArCockpit(): Promise<ArCockpitData> {
     newItems: [
       { kind: 'customer_invoice', label: t('actions.newInvoice') },
       { kind: 'customer_credit', label: t('actions.newCredit') },
+      ...(can(authz, 'ar.pay')
+        ? [{ kind: 'customer_payment', label: t('actions.receivePayment'), href: '/receipts?paymentNew=1&mode=edit' }]
+        : []),
     ],
     newBasePath: '/ar/invoices',
     newTriggerLabel: t('actions.new'),

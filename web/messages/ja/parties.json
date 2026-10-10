@@ -34,6 +34,8 @@
     "updateFailed": "更新に失敗しました",
     "nameRequired": "この取引先を保存するには名前を入力してください",
     "viewStatement": "取引明細を表示",
+    "receivePayment": "入金を受け取る",
+    "payBills": "請求書を支払う",
     "creditHold": "与信保留",
     "paymentHold": "支払保留",
     "holdReason": "保留理由",

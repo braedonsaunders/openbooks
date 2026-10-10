@@ -263,5 +263,9 @@
     "setup-overhead": "Custos indiretos",
     "crm-sales": "Vendas",
     "hrm-compensation": "Remuneração"
+  },
+  "moduleKeywords": {
+    "receipts": "recibo, recibos, receber pagamento, pagamento, recebimento, pagamento de cliente",
+    "payments": "pagar contas, pagar conta, pagamento de contas, pagamento, cheque"
   }
 }

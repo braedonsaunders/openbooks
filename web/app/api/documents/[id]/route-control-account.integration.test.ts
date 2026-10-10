@@ -116,3 +116,35 @@ test('a bill payable choice accepts only payable accounts', async () => {
     await dropScratchOrg(org.orgId)
   }
 })
+
+test('the receivable picker lists receivable accounts and names the customer default an empty choice resolves to', async () => {
+  const org = await createScratchOrg()
+  state.orgId = org.orgId
+  state.actorId = randomUUID()
+  try {
+    const retainage = await account(org.orgId, '1110', 'Retainage Receivable', 'asset_receivable')
+    const { GET } = await import('../control-account/route.ts')
+    const choices = async (query: string) => {
+      const response = await withOrgContext(org.orgId, () => GET(new Request(`http://documents.test/api/documents/control-account?${query}`)))
+      return { status: response.status, json: await response.json().catch(() => null) as Record<string, unknown> | null }
+    }
+    const before = await choices(`kind=customer_invoice&partyId=${org.customerId}&subsidiaryId=${org.subsidiaryId}`)
+    assert.equal(before.status, 200, JSON.stringify(before.json))
+    const listed = (before.json!.accounts as { id: string }[]).map((option) => option.id).sort()
+    assert.deepEqual(listed, [org.accounts.ar, retainage].sort(), 'only receivable accounts are offered')
+    assert.equal(before.json!.partyDefault, null)
+    assert.equal((before.json!.organizationDefault as { id: string }).id, org.accounts.ar)
+
+    await db.execute(sql`
+      insert into customer_roles (org_id, party_id, ar_account_id, is_on_hold)
+      values (${org.orgId}, ${org.customerId}, ${retainage}, false)
+      on conflict (party_id) do update set ar_account_id = excluded.ar_account_id`)
+    const after = await choices(`kind=customer_invoice&partyId=${org.customerId}&subsidiaryId=${org.subsidiaryId}`)
+    assert.equal((after.json!.partyDefault as { id: string; number: string }).number, '1110')
+
+    const wrongKind = await choices('kind=journal')
+    assert.equal(wrongKind.status, 400)
+  } finally {
+    await dropScratchOrg(org.orgId)
+  }
+})

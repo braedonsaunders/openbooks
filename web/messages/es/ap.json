@@ -22,7 +22,9 @@
     "newBill": "Nueva factura",
     "newCredit": "Nueva nota de crédito",
     "capture": "Capturar facturas",
-    "submitForApproval": "Enviar para aprobación"
+    "submitForApproval": "Enviar para aprobación",
+    "payBill": "Pagar factura",
+    "payBills": "Pagar facturas"
   },
   "drawer": {
     "editingHint": "Editando — Guarde para aplicar los cambios",
@@ -57,7 +59,12 @@
     "formPreferredCleared": "Formulario preferido borrado",
     "formPreferredFailed": "No se pudo guardar el formulario preferido",
     "returnsReceipt": "Devuelve recepción",
-    "returnsNone": "Sin devolución de existencias"
+    "returnsNone": "Sin devolución de existencias",
+    "controlAccount": "Cuenta por pagar",
+    "controlAccountHelp": "La cuenta por pagar en la que se contabiliza este documento. Los pagos y créditos de proveedor lo liquidan en la misma cuenta. Déjela vacía para usar la predeterminada.",
+    "controlAccountPartyDefault": "Predeterminada del proveedor — {account}",
+    "controlAccountOrganizationDefault": "Predeterminada de la organización — {account}",
+    "controlAccountUnset": "No hay cuenta por pagar configurada: defina una en Configuración → Empresa y contabilidad → Cuentas de control"
   },
   "capture": {
     "title": "Captura de facturas",

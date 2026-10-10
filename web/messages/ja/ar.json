@@ -28,7 +28,8 @@
     "newCredit": "新規得意先貸方票",
     "newCashSale": "新規現金販売",
     "newCashRefund": "新規現金返金",
-    "submitForApproval": "承認のために提出"
+    "submitForApproval": "承認のために提出",
+    "receivePayment": "入金を受け取る"
   },
   "tenders": {
     "title": "支払方法",
@@ -103,7 +104,12 @@
     "returnsNone": "在庫の返品なし",
     "marketplaceCollectedBy": "税金の徴収者",
     "marketplaceCollectedByHelp": "マーケットプレイス分はその清算口座に計上され、自社の税金負債にはなりません。",
-    "marketplaceMerchant": "自社"
+    "marketplaceMerchant": "自社",
+    "controlAccount": "売掛金勘定",
+    "controlAccountHelp": "この伝票が計上される売掛金勘定です。入金とクレジットは同じ勘定で消し込まれます。空欄の場合は既定の勘定を使用します。",
+    "controlAccountPartyDefault": "得意先の既定 — {account}",
+    "controlAccountOrganizationDefault": "組織の既定 — {account}",
+    "controlAccountUnset": "売掛金勘定が設定されていません — 「セットアップ → 会社と会計 → 統制勘定」で設定してください"
   },
   "toasts": {
     "actionFailed": "アクションに失敗しました",

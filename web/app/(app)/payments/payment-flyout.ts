@@ -56,7 +56,13 @@ export async function loadPaymentFlyout({
   userRoles,
   authz,
   formId,
+  prefill,
 }: {
+  /** Unsaved-create prefill from another record's "Receive payment" / "Pay
+   *  bill" action: the party, and optionally one of its posted documents
+   *  whose open items are selected in full. Ids outside the caller's party
+   *  list or the party's open items are ignored, never trusted. */
+  prefill?: { partyId?: string; documentId?: string }
   /** Persisted record to open; omitted for the unsaved-create drawer. */
   paymentId?: string
   /** Unsaved-create: no persisted row exists. Opening writes nothing and no
@@ -137,7 +143,33 @@ export async function loadPaymentFlyout({
   if (creating) {
     // The unsaved-create payload: no row exists, so the drawer edits blanks
     // and posts them once. Draft by default, dated today; party, bank
-    // account, and applications start empty for the operator to fill.
+    // account, and applications start empty for the operator to fill —
+    // unless another record opened the drawer for a known party (and
+    // document), which preselects them. Opening still writes nothing.
+    const currency = defaults?.[1].rows[0]?.base_currency ?? ''
+    const prefillParty = prefill?.partyId
+      ? parties.rows.find((party) => party.id === prefill.partyId) ?? null
+      : null
+    const prefillItems: OpenItemClient[] = prefillParty
+      ? await openItemsForParty(prefillParty.id, side, orgId, authz.allowedSubsidiaryIds)
+      : []
+    // Same-currency items of the named document, unreserved, on one control
+    // account: exactly the selection the drawer itself would accept.
+    const documentItems = prefill?.documentId
+      ? prefillItems.filter((item) =>
+          item.documentId === prefill.documentId && item.currency === currency && !item.reservedByRun)
+      : []
+    const prefillAccount = documentItems[0]?.accountId
+    const prefillAllocations = documentItems
+      .filter((item) => item.accountId === prefillAccount)
+      .map((item) => ({
+        openLineId: item.lineId,
+        sourceTransactionAmount: item.transactionOpen,
+        targetTransactionAmount: item.transactionOpen,
+        settlementRate: '1',
+        settlementRateSource: 'same_currency' as const,
+        settlementRateReference: 'same transaction currency',
+      }))
     return {
       mode: 'create',
       payment: {
@@ -145,11 +177,11 @@ export async function loadPaymentFlyout({
           id: '',
           kind,
           status: 'draft',
-          currency: defaults?.[1].rows[0]?.base_currency ?? '',
+          currency,
           total: '0',
           document_number: null,
-          party_id: null,
-          party_name: null,
+          party_id: prefillParty?.id ?? null,
+          party_name: prefillParty?.display_name ?? null,
           document_date: defaults?.[0] ?? '',
           reference_number: null,
           memo: null,
@@ -161,11 +193,11 @@ export async function loadPaymentFlyout({
         // A sole eligible bank account is an unambiguous draft default;
         // the shared drawer still requires explicit Save and posting.
         bankAccountId: banks.rows.length === 1 ? banks.rows[0]!.id : null,
-        allocations: [],
+        allocations: prefillAllocations,
         applied: [],
         withholdingEnabled: kind === 'vendor_payment' && await isFeatureEnabled(orgId, 'contractorWithholding'),
       } as PaymentPayload,
-      initialOpenItems: [],
+      initialOpenItems: prefillItems,
       parties: parties.rows,
       bankAccounts: banks.rows,
       side,

@@ -26,7 +26,7 @@ export function ApHeaderActions({
   captureHref: string
   captureLabel: string
   canCreate: boolean
-  newItems: { kind: string; label: string }[]
+  newItems: { kind: string; label: string; href?: string }[]
   newBasePath: string
   newTriggerLabel: string
 }) {

@@ -28,7 +28,8 @@
     "newCredit": "Nueva nota de crédito",
     "newCashSale": "Nueva venta al contado",
     "newCashRefund": "Nuevo reembolso al contado",
-    "submitForApproval": "Enviar para aprobación"
+    "submitForApproval": "Enviar para aprobación",
+    "receivePayment": "Recibir pago"
   },
   "tenders": {
     "title": "Formas de pago",
@@ -103,7 +104,12 @@
     "returnsNone": "Sin devolución de existencias",
     "marketplaceCollectedBy": "Recaudador del impuesto",
     "marketplaceCollectedByHelp": "La parte del marketplace se contabiliza en su cuenta de compensación, nunca en su deuda fiscal.",
-    "marketplaceMerchant": "Comerciante"
+    "marketplaceMerchant": "Comerciante",
+    "controlAccount": "Cuenta por cobrar",
+    "controlAccountHelp": "La cuenta por cobrar en la que se contabiliza este documento. Los pagos y créditos lo liquidan en la misma cuenta. Déjela vacía para usar la predeterminada.",
+    "controlAccountPartyDefault": "Predeterminada del cliente — {account}",
+    "controlAccountOrganizationDefault": "Predeterminada de la organización — {account}",
+    "controlAccountUnset": "No hay cuenta por cobrar configurada: defina una en Configuración → Empresa y contabilidad → Cuentas de control"
   },
   "toasts": {
     "actionFailed": "La acción falló",

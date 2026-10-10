@@ -93,6 +93,28 @@ async function navigationConfig(orgId: string): Promise<OrgNavConfig> {
     ?? (await essentialsWorkspace(orgId) ? essentialsNavConfig() : defaultNavConfig())
 }
 
+/**
+ * Search synonyms for a module, in the reader's locale (nav.moduleKeywords,
+ * comma-separated): words people use for the page that its menu label does
+ * not contain ("receipt" for Customer Payments). Tenant-renamed items keep
+ * the synonyms of the page they open. Missing keys yield none, silently.
+ */
+export function resolveModuleKeywords(
+  t: (key: string) => string,
+  moduleKey: string,
+  has?: (key: string) => boolean,
+): string[] {
+  const key = `moduleKeywords.${moduleKey}`
+  try {
+    if (!has || !has(key)) return []
+    const out = t(key)
+    if (out === '' || out === key || out.endsWith(`.${key}`)) return []
+    return out.split(',').map((word) => word.trim()).filter(Boolean)
+  } catch {
+    return []
+  }
+}
+
 export async function resolveNav(
   orgId: string,
   can: (permission: string | undefined) => boolean,
@@ -143,6 +165,7 @@ export async function resolveNav(
           href: mod.href,
           label: fullLabel,
           shortLabel: resolveModuleShortLabel(t, mod.key, fullLabel, useCatalogLabel, has),
+          keywords: resolveModuleKeywords(t, mod.key, has),
           iconKey: item.iconKey ?? mod.iconKey,
           exact: mod.exact,
           mobile: item.mobile,

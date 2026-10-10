@@ -22,7 +22,9 @@
     "newBill": "New bill",
     "newCredit": "New vendor credit",
     "capture": "Capture bills",
-    "submitForApproval": "Submit for approval"
+    "submitForApproval": "Submit for approval",
+    "payBill": "Pay bill",
+    "payBills": "Pay bills"
   },
   "drawer": {
     "editingHint": "Editing — Save to apply changes",
@@ -57,7 +59,12 @@
     "formPreferredCleared": "Preferred form cleared",
     "formPreferredFailed": "Could not save the preferred form",
     "returnsReceipt": "Returns receipt",
-    "returnsNone": "No stock returned"
+    "returnsNone": "No stock returned",
+    "controlAccount": "Payable account",
+    "controlAccountHelp": "The payable this document posts to. Payments and vendor credits settle it on the same account. Leave empty to use the default.",
+    "controlAccountPartyDefault": "Vendor default — {account}",
+    "controlAccountOrganizationDefault": "Organization default — {account}",
+    "controlAccountUnset": "No payable account configured — set one in Setup → Company & Accounting → Control accounts"
   },
   "capture": {
     "title": "Bill capture",

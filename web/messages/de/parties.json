@@ -34,6 +34,8 @@
     "updateFailed": "Aktualisierung fehlgeschlagen",
     "nameRequired": "Benennen Sie den Geschäftspartner, um ihn zu speichern",
     "viewStatement": "Kontoauszug anzeigen",
+    "receivePayment": "Zahlung erfassen",
+    "payBills": "Rechnungen bezahlen",
     "creditHold": "Kreditsperre",
     "paymentHold": "Zahlungssperre",
     "holdReason": "Grund der Sperre",

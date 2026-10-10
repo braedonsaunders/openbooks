@@ -209,6 +209,8 @@ export type SidebarNavItem = {
    * por…"). Unset items fall back to label.
    */
   shortLabel?: string
+  /** Localized search synonyms for the page (global search only). */
+  keywords?: string[]
 }
 
 export type SidebarNavGroup = {

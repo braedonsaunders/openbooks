@@ -22,6 +22,7 @@ import { isFeatureEnabled } from '../../../../lib/features'
 import { isMultiSubsidiary, subsidiaryOptions } from '../../../../lib/subsidiaries'
 import { isUuid, pickString } from '../../../../lib/list-params'
 import { resolveFormLayout } from '../../../../lib/customization/resolve'
+import { documentSettlementHref } from '../../../../lib/settlement-href'
 
 /**
  * Vendor bills + credits — the AP document list, split into a loader and a spec.
@@ -72,6 +73,8 @@ export interface ApBillsDrawer {
   currentLayoutId: string | null
   recordType: string
   canCustomize: boolean
+  /** Pay this posted bill (vendor + bill preselected). */
+  settlementHref: string | null
 }
 
 export interface ApBillsData {
@@ -267,6 +270,10 @@ export async function loadApBills(
           currentLayoutId: resolvedForm.row?.id ?? null,
           recordType: drawerKind,
           canCustomize: can(authz, 'admin.customization.manage'),
+          settlementHref: documentSettlementHref(openDoc?.doc as Record<string, unknown> | undefined, {
+            ar: false,
+            ap: can(authz, 'ap.pay'),
+          }),
           // Only a posted vendor credit can settle a bill without cash. The
           // panel reads its own state; the loader supplies identity and the
           // permission, mirroring the customer-credit side.

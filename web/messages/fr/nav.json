@@ -263,5 +263,9 @@
     "setup-overhead": "Frais généraux",
     "crm-sales": "Ventes",
     "hrm-compensation": "Rémunération"
+  },
+  "moduleKeywords": {
+    "receipts": "reçu, reçus, recevoir un paiement, paiement, encaissement, paiement client",
+    "payments": "payer des factures, payer la facture, paiement de facture, paiement, chèque"
   }
 }

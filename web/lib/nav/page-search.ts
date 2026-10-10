@@ -16,9 +16,11 @@ export type PageSearchHit = {
   /** Where the page lives in the menu, outermost first. */
   trail: string[]
   iconKey: string
+  /** Localized synonyms the page is also found by. */
+  keywords?: string[]
 }
 
-type Entry = PageSearchHit & { order: number; titleKey: string; trailKey: string }
+type Entry = PageSearchHit & { order: number; titleKey: string; trailKey: string; keywordKeys: string[] }
 
 export const PAGE_SEARCH_LIMIT = 6
 
@@ -57,6 +59,7 @@ export function buildPageIndex(
         title: item.label,
         trail: item.subgroup ? [group.label, item.subgroup] : [group.label],
         iconKey: item.iconKey,
+        ...(item.keywords?.length ? { keywords: item.keywords } : {}),
       })
     }
   }
@@ -99,6 +102,10 @@ function rank(entry: Entry, words: string[], phrase: string): number {
   if (words.every((word) => title.includes(word))) return 4
   const anywhere = `${title} ${entry.trailKey}`
   if (words.some((word) => title.includes(word)) && words.every((word) => anywhere.includes(word))) return 5
+  // A synonym names the page as well as its label does ("receipt" for
+  // Customer Payments), but never outranks a page whose own name matches.
+  if (entry.keywordKeys.some((keyword) => keyword === phrase || keyword.startsWith(phrase))) return 6
+  if (entry.keywordKeys.some((keyword) => words.every((word) => keyword.includes(word)))) return 7
   return -1
 }
 
@@ -107,7 +114,13 @@ export function searchPages(index: readonly PageSearchHit[], query: string, limi
   const words = phrase.split(' ').filter(Boolean)
   if (words.length === 0) return []
   return index
-    .map((hit, order): Entry => ({ ...hit, order, titleKey: fold(hit.title), trailKey: fold(hit.trail.join(' ')) }))
+    .map((hit, order): Entry => ({
+      ...hit,
+      order,
+      titleKey: fold(hit.title),
+      trailKey: fold(hit.trail.join(' ')),
+      keywordKeys: (hit.keywords ?? []).map(fold),
+    }))
     .map((entry) => ({ entry, score: rank(entry, words, phrase) }))
     .filter(({ score }) => score >= 0)
     .sort((a, b) => a.score - b.score || a.entry.order - b.entry.order)
