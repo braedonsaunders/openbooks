@@ -270,6 +270,8 @@
     "emptyDescription": "Aucun événement ne correspond à la recherche et aux filtres actuels.",
     "loadFailedTitle": "Piste d’audit indisponible",
     "loadFailedDescription": "La piste d’audit n’a pas pu être chargée. Réessayez dans un instant.",
+    "unavailableTitle": "Piste d’audit indisponible",
+    "unavailableDescription": "Votre rôle ne permet pas de consulter l’historique d’audit de cet enregistrement, ou l’enregistrement n’existe plus. Un administrateur peut accorder l’autorisation de lecture pour ce type d’enregistrement.",
     "retry": "Réessayer",
     "actions": {
       "insert": "Créé",

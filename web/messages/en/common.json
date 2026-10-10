@@ -270,6 +270,8 @@
     "emptyDescription": "No events match the current search and filters.",
     "loadFailedTitle": "Audit trail unavailable",
     "loadFailedDescription": "The audit trail could not be loaded. Try again shortly.",
+    "unavailableTitle": "Audit trail not available",
+    "unavailableDescription": "Your role cannot view this record's audit history, or the record no longer exists. An administrator can grant the read permission for this record type.",
     "retry": "Retry",
     "actions": {
       "insert": "Created",
