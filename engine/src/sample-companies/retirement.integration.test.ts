@@ -5,6 +5,9 @@ import { Client } from "pg";
 import { sql } from "drizzle-orm";
 import { db, withBypass, withMaintenanceTransaction, withOrgContext, withOrgTransaction } from "../platform/db.ts";
 import { installEngineSeams } from "../composition/install.ts";
+import { publishOperatingProfile, readPinnedOperatingProfile, saveOperatingProfileScope } from "../organization/operating-profiles.ts";
+import { OPERATING_PRESETS } from "../organization/operating-profile-model.ts";
+import { createProject } from "../projects/project-create.ts";
 import { seedRolesForOrg } from "../provisioning/seed-roles.ts";
 import { createScriptJournal } from "../ledger/journal-writes.ts";
 import { submitForApproval } from "../flows/submit.ts";
@@ -21,7 +24,7 @@ import { drainSampleFixtureFlowEmails, retireSampleFixtureCompanies } from "./re
 installEngineSeams();
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL };
 type Plan = Awaited<ReturnType<typeof sampleRetirementPlan>>;
-type Evidence = { org: ScratchOrg; actorId: string; postedId: string; draftId: string; gateId: string; sessionId: string; aiRunId: string };
+type Evidence = { org: ScratchOrg; actorId: string; postedId: string; draftId: string; gateId: string; sessionId: string; aiRunId: string; profileId: string; profileVersionId: string };
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 
 /** Synthetic attestations exercise the disposable-fixture admission contract.
@@ -72,11 +75,39 @@ async function createEvidence(org: ScratchOrg): Promise<Evidence> {
     await db.execute(sql`insert into ai_work_item_evidence(org_id,work_item_id,kind,source_type,source_id,data)
       values(${org.orgId},${workItemId},'document','document',${draft.id},'{"fixture":"linked native dependency"}'::jsonb)`);
   });
+  const preset = OPERATING_PRESETS.find(profile => profile.key === "shop_jobs")!;
+  const profileId = randomUUID();
+  const firstProfile = await withOrgTransaction(org.orgId, () => publishOperatingProfile(db, org.orgId, actorId, {
+    id: profileId, code: "recovery_shop", name: "Shop work", definition: preset.definition,
+    expectedVersion: 0, reason: "Preserve the workflow version used by existing customer work",
+  }));
+  await withOrgTransaction(org.orgId, () => saveOperatingProfileScope(db, org.orgId, actorId, {
+    id: randomUUID(), departmentId: null, family: "project", profileIds: [profileId], defaultProfileId: profileId,
+    expectedRevision: 0, reason: "Use the published shop workflow for new customer work",
+  }));
+  const projectId = randomUUID();
+  await createProject({ orgId: org.orgId, actorId, allowedSubsidiaryIds: null }, projectId, {
+    name: "Customer work with a pinned workflow", subsidiaryId: org.subsidiaryId,
+  });
+  const revised = { ...preset.definition, terminology: { singular: "Shop job", plural: "Shop jobs" } };
+  await withOrgTransaction(org.orgId, () => publishOperatingProfile(db, org.orgId, actorId, {
+    id: profileId, code: "recovery_shop", name: "Shop work", definition: revised,
+    expectedVersion: 1, reason: "Improve names for future work while retaining prior evidence",
+  }));
+  await withOrgTransaction(org.orgId, async () => {
+    assert.deepEqual(await readPinnedOperatingProfile(db, org.orgId, firstProfile.versionId, "project"), preset.definition);
+    assert.equal((await db.execute<{ versionId: string }>(sql`select operating_profile_version_id as "versionId"
+      from projects where org_id=${org.orgId} and id=${projectId}`)).rows[0]?.versionId, firstProfile.versionId);
+  });
+  for (const command of [
+    () => db.execute(sql`update operating_profile_versions set reason='Forbidden historical rewrite' where org_id=${org.orgId} and id=${firstProfile.versionId}`),
+    () => db.execute(sql`delete from operating_profile_versions where org_id=${org.orgId} and id=${firstProfile.versionId}`),
+  ]) await assert.rejects(withOrgTransaction(org.orgId, command), error => /immutable/.test(nativeMessage(error)));
   const outstanding = await withMaintenanceTransaction(null, () => retirementOutstandingWork([org.orgId]));
   assert.equal(outstanding.find(row => row.table === "scheduler_outbox")?.count, "2", "native pending notices block retirement before their delivery lifecycle settles");
   assert.equal(await drainSampleFixtureFlowEmails(org.orgId), 2, "native gate and decision notices settle through the mocked queue boundary");
   assert.equal((await withMaintenanceTransaction(null, () => retirementOutstandingWork([org.orgId]))).some(row => row.table === "scheduler_outbox"), false);
-  return { org, actorId, postedId: posted.id, draftId: draft.id, gateId, sessionId, aiRunId };
+  return { org, actorId, postedId: posted.id, draftId: draft.id, gateId, sessionId, aiRunId, profileId, profileVersionId: firstProfile.versionId };
 }
 async function planFor(retireIds: string[]): Promise<Plan> {
   const { database, live } = await withMaintenanceTransaction(null, async () => ({
@@ -130,7 +161,7 @@ async function refusedStatement(command: () => Promise<unknown>, pattern: RegExp
   try { await assert.rejects(command(), error => pattern.test(nativeMessage(error))); }
   finally { await db.execute(sql`rollback to savepoint refusal_probe`); await db.execute(sql`release savepoint refusal_probe`); }
 }
-async function runtimeForgery(runtime: Client, orgId: string, runId: string, digest: string, postedId: string) {
+async function runtimeForgery(runtime: Client, orgId: string, runId: string, digest: string, postedId: string, profileVersionId: string) {
   const run = async (command: () => Promise<unknown>) => {
     await runtime.query("begin");
     try {
@@ -149,6 +180,7 @@ async function runtimeForgery(runtime: Client, orgId: string, runId: string, dig
   await run(() => assert.rejects(runtime.query("select tenant_retirement.openbooks_retirement_row_org('auth_sessions',jsonb_build_object('user_id',$1::uuid))", [orgId]), /permission denied/i));
   await run(() => assert.rejects(runtime.query("insert into tenant_retirement.delete_authorities(transaction_id,backend_pid,tenant_id,run_id,login_name) values(txid_current(),pg_backend_pid(),$1,$2,session_user)", [orgId, runId]), /permission denied/i));
   await run(() => assert.rejects(runtime.query("delete from documents where org_id=$1 and id=$2", [orgId, postedId])));
+  await run(() => assert.rejects(runtime.query("delete from operating_profile_versions where org_id=$1 and id=$2", [orgId, profileVersionId]), /immutable|retirement fence/i)));
 }
 
 test("native tenant retirement rejects forged authority and preserves posted, draft, approval and auth evidence through quarantine, rollback and release", enabled, async () => {
@@ -196,20 +228,20 @@ test("native tenant retirement rejects forged authority and preserves posted, dr
     const beforeRetained = await fingerprint(retainedOrg.orgId);
     const beforeTarget = await fingerprint(targetOrg.orgId, true);
     for (const evidence of [beforeRetained, beforeTarget]) {
-      for (const table of ["documents", "document_lines", "journal_entries", "journal_lines", "flow_gates", "audit_log", "auth_sessions", "role_assignments", "ai_agent_runs", "ai_work_items", "ai_work_item_evidence"])
+      for (const table of ["documents", "document_lines", "journal_entries", "journal_lines", "flow_gates", "audit_log", "auth_sessions", "role_assignments", "ai_agent_runs", "ai_work_items", "ai_work_item_evidence", "operating_profiles", "operating_profile_versions", "operating_profile_scopes", "projects"])
         assert.ok(BigInt(evidence.tables.find(row => row.table === table)!.count) > 0n, `the preservation proof includes real ${table} evidence`);
     }
     const plan = await planFor([targetOrg.orgId]);
     const runId = randomUUID();
     await assert.rejects(admitSampleRetirement({ plan, runId, actorId: anchorActor, recovery: {} }), /Recovery evidence/);
-    await runtimeForgery(runtime, targetOrg.orgId, runId, plan.digest, target.postedId);
+    await runtimeForgery(runtime, targetOrg.orgId, runId, plan.digest, target.postedId, target.profileVersionId);
     await assert.rejects(admitSampleRetirement({ plan, runId, actorId: anchorActor, recovery: { ...recovery(), verifiedAt: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString() } }), error => /verified within 24 hours/.test(nativeMessage(error)));
     await admitSampleRetirement({ plan, runId, actorId: anchorActor, recovery: recovery() });
     active = { runId, plan };
     assert.equal((await tenantRetirementStatus(runId)).targets[0]!.state, "quarantined");
     assert.deepEqual(await fingerprint(targetOrg.orgId), beforeTarget, "quarantine changes no target business/auth rows");
     await assert.rejects(withOrgTransaction(targetOrg.orgId, () => db.execute(sql`update documents set memo='Disallowed while quarantined' where org_id=${targetOrg.orgId} and id=${target.draftId}`)), error => /retirement fence/.test(nativeMessage(error)));
-    await runtimeForgery(runtime, targetOrg.orgId, runId, plan.digest, target.postedId);
+    await runtimeForgery(runtime, targetOrg.orgId, runId, plan.digest, target.postedId, target.profileVersionId);
     await assert.rejects(withMaintenanceTransaction(null, () => beginTenantRetirement(runId, retainedOrg.orgId, plan.digest)), error => /Unreviewed retirement target/.test(nativeMessage(error)));
     await assert.rejects(withMaintenanceTransaction(null, () => beginTenantRetirement(runId, targetOrg.orgId, hash("unreviewed plan"))), error => /Unreviewed retirement target/.test(nativeMessage(error)));
     // A real competing row lock makes the public execution command time out
@@ -232,6 +264,14 @@ test("native tenant retirement rejects forged authority and preserves posted, dr
         values(${targetOrg.orgId},${`quarantined-${randomUUID()}`},'Forbidden publication','1.0.0',${target.actorId},${target.actorId})`), /retirement fence/);
       await refusedStatement(() => db.execute(sql`delete from documents where org_id=${retainedOrg.orgId} and id=${retained.postedId}`), /posted|immutable|delete/i);
       await refusedStatement(() => db.execute(sql`delete from ai_agent_runs where org_id=${targetOrg.orgId} and id=${target.aiRunId}`), /retirement fence/);
+      await refusedStatement(() => db.execute(sql`update operating_profile_versions set reason='DELETE authority cannot rewrite published versions'
+        where org_id=${targetOrg.orgId} and id=${target.profileVersionId}`), /immutable|retirement fence/);
+      await refusedStatement(() => db.execute(sql`update operating_profiles set name='Forbidden quarantined configuration'
+        where org_id=${targetOrg.orgId} and id=${target.profileId}`), /retirement fence/);
+      await refusedStatement(() => db.execute(sql`insert into operating_profiles(org_id,code,name,family)
+        values(${targetOrg.orgId},'forbidden_workflow','Forbidden workflow','project')`), /retirement fence/);
+      await refusedStatement(() => db.execute(sql`delete from operating_profile_versions
+        where org_id=${retainedOrg.orgId} and id=${retained.profileVersionId}`), /immutable/);
       await db.execute(sql`set constraints all deferred`);
       await deleteRetiredTenantRows(await loadCatalog(), targetOrg.orgId);
       assert.equal((await db.execute(sql`select id from orgs where id=${targetOrg.orgId}`)).rows.length, 0);
@@ -260,6 +300,10 @@ test("native tenant retirement rejects forged authority and preserves posted, dr
     for (const table of ["ai_work_item_evidence", "ai_work_items", "ai_agent_runs"]) {
       assert.equal(receipt.explicitlyDeletedRows[table], "1", `${table} is removed explicitly, without cascade deletion or SET NULL updates`);
     }
+    assert.equal(receipt.explicitlyDeletedRows.operating_profiles, "1");
+    assert.equal(receipt.explicitlyDeletedRows.operating_profile_versions, "2", "both published versions are removed only through exact-target DELETE authority");
+    assert.equal(receipt.explicitlyDeletedRows.operating_profile_scopes, "1");
+    assert.equal(receipt.explicitlyDeletedRows.projects, "1", "native work referencing the historical version is deleted before its parent evidence");
     assert.ok(receipt.administrativeDeltas && receipt.storageManifestDigest);
     assert.deepEqual(await executeSampleRetirement({ runId: freshRun, orgId: targetOrg.orgId, planDigest: fresh.digest }), completed, "a completed target is a durable replay with no second deletion");
     await assert.rejects(releaseTenantRetirement({ runId: freshRun, orgId: targetOrg.orgId, planDigest: fresh.digest, actorId: anchorActor, reason: "Cannot release a deleted company" }), error => /existing quarantined target/.test(nativeMessage(error)));

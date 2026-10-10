@@ -345,10 +345,10 @@ export const TENANT_RETIREMENT_GUARDS = [
   },
   {
     "name": "financial_change_guard",
-    "source": "0458_mfg_scrap_frozen_snapshot.sql",
-    "sha256": "ccb63c80d1213a103a75a36dbe44601dcfbf5714bf16a30448c54a774df4e2a4",
-    "newSha256": "d31367c8e253a2a2804ecf971c8726bab2ebbd38f916bff34255f6f8b305cdda",
-    "patch": true
+    "source": "0619_operating_profiles_production_extensions.sql",
+    "sha256": "efe979c6590ab8b5138d12cd198e7e6d4680fb2a1b2bc042255b611effec0436",
+    "newSha256": "efe979c6590ab8b5138d12cd198e7e6d4680fb2a1b2bc042255b611effec0436",
+    "patch": false
   },
   {
     "name": "fulfillment_documents_guard",
@@ -1420,6 +1420,118 @@ export const TENANT_RETIREMENT_GUARDS = [
     "sha256": "6b77c2d1c0de0455a425ef2201c1703e2a197b67fcfcd19e81a97fbc8829ef83",
     "newSha256": "7154c9c44fe3b809e2c3f1e583fe2ad9d7518e4704618edd4935894974454965",
     "patch": true
+  },
+  {
+    "name": "inventory_inspection_guard",
+    "source": "0619_operating_profiles_production_extensions.sql",
+    "sha256": "87abd8a490ad156ca294264fb7fd0c8d0cfdd600ad88bf798f84ea4eb88f3d9a",
+    "newSha256": "2f70e53880dbd1ba12c9ec717d1a07f17b422b65ef2c6b82025f9fd136b00dba",
+    "patch": true
+  },
+  {
+    "name": "inventory_inspection_plan_guard",
+    "source": "0619_operating_profiles_production_extensions.sql",
+    "sha256": "e1f1ef711bc83e995e6caa276a83e824ca218e215f00382254fc8edfdd17fcdc",
+    "newSha256": "eeb4cb150fb455ec4e112b0a61ecfce5aca02d5179ece9c5b423e695890ee5a6",
+    "patch": true
+  },
+  {
+    "name": "manufacturing_completion_trace_guard",
+    "source": "0619_operating_profiles_production_extensions.sql",
+    "sha256": "4ed78f55c5ceb65b2760f4e50d0d47498d505fd65d3df9b5019cc8e86f5d1c86",
+    "newSha256": "ffdd0af706b48efe4aa129c5c60854976b1425cc18046a407c99cfd9dda5ec85",
+    "patch": true
+  },
+  {
+    "name": "manufacturing_loss_event_guard",
+    "source": "0619_operating_profiles_production_extensions.sql",
+    "sha256": "ebea147d60d88a371454df2613da0f541e872e95f0a645bd386124eb1df20eb1",
+    "newSha256": "cf0a5f7ebccce75940bd50d6759ab6152625acdf05d140be7b936837a44954de",
+    "patch": true
+  },
+  {
+    "name": "manufacturing_routing_operation_guard",
+    "source": "0619_operating_profiles_production_extensions.sql",
+    "sha256": "69203aa3d81c983e36295fa70b52cecd659c394491658696e60afb5728dba9a5",
+    "newSha256": "1adc332d19775925ee422fc05c9971d5676f42950a198da540c033a1170e8e5f",
+    "patch": true
+  },
+  {
+    "name": "manufacturing_snapshot_configuration_guard",
+    "source": "0619_operating_profiles_production_extensions.sql",
+    "sha256": "f21502bd08a491970ef4a6a1e534c20535c86a104c88bd3a6b48593236bfe843",
+    "newSha256": "ffa91fa3734e9b87601a8113eca9af71a1dc553756390852b166b5f73234604e",
+    "patch": true
+  },
+  {
+    "name": "operating_profile_version_immutable",
+    "source": "0619_operating_profiles_production_extensions.sql",
+    "sha256": "a8cd948497ee05a7a75731460aafd700620190b35666f0ca2d68481f262683cf",
+    "newSha256": "3a046c0386a9f7235041a3daf65d6050cae83d432235cc18913f60da56a2a1e1",
+    "patch": true
+  },
+  {
+    "name": "production_bom_revision_complete_guard",
+    "source": "0619_operating_profiles_production_extensions.sql",
+    "sha256": "cdbdfbd9d0fc157734ff441424f5e5f88892eb2c210c98f232454a209bfdc803",
+    "newSha256": "83c6996d0c0a971eb30726ed7bb50eb32660333eef94e7a7b9285a0018ba61de",
+    "patch": true
+  },
+  {
+    "name": "production_bom_revision_guard",
+    "source": "0619_operating_profiles_production_extensions.sql",
+    "sha256": "bd7a264752e9542c1dc1490afa3befa2423acb357729729c2dd1c76823832ac0",
+    "newSha256": "01dab22ed6c14cfadd50ab5c282e2a8dd7e4937fc31f9462c9f71c7b6b55de74",
+    "patch": true
+  },
+  {
+    "name": "production_mrp_run_evidence_guard",
+    "source": "0619_operating_profiles_production_extensions.sql",
+    "sha256": "0529ca5df11a5faef2ed243c06fe690bb346f0b5e55e219cb2e32b98ce1d4844",
+    "newSha256": "6e1dec4430843c6cd8c98c5e7a8c753b265dcc9393a73ae09e06070ed60285e1",
+    "patch": true
+  },
+  {
+    "name": "production_subcontract_guard",
+    "source": "0619_operating_profiles_production_extensions.sql",
+    "sha256": "303c6ee342bba6467ef63e91376b9bae1759b221eec4ca64eb6c3c44679d0b06",
+    "newSha256": "69314c560cc4731d7b79b3baf143535d03137f6eabb6e7fdeb62e2ba8b7cb0d1",
+    "patch": true
+  },
+  {
+    "name": "production_subcontract_material_return_guard",
+    "source": "0619_operating_profiles_production_extensions.sql",
+    "sha256": "345bf575dbc7bae8af474c0682d11631503ead6bd5d0035e55af8f243c8ea5ac",
+    "newSha256": "61852036a10829759b618bd83fdd9027e8a2688a796ef3732da964bc509e3b44",
+    "patch": true
+  },
+  {
+    "name": "production_subcontract_return_guard",
+    "source": "0619_operating_profiles_production_extensions.sql",
+    "sha256": "2d3964e196a0abc9494b9ba8e93723e7e13f11be843ef7c3313df4a447a4fa93",
+    "newSha256": "b7c83b0e49d2c03e3fe859e9a83cc790238d3481c2ee3f3a5ac2416a8aafd600",
+    "patch": true
+  },
+  {
+    "name": "production_subcontract_service_guard",
+    "source": "0619_operating_profiles_production_extensions.sql",
+    "sha256": "48de6e18d59b2d95394b0d0858edab52b806a0b226e1e0e8ac31d5d7f41e2b6d",
+    "newSha256": "dfc4ac97773b7e725258727e1a43640a0899b695927f02951b7a8deb8eb00cb5",
+    "patch": true
+  },
+  {
+    "name": "production_subcontract_shipment_guard",
+    "source": "0619_operating_profiles_production_extensions.sql",
+    "sha256": "05c5386f6281cf941e2d9f9c35570f4a2a980d359f38217b1ab51f2bcb17c89f",
+    "newSha256": "45c77b504b342953bfee5b7956bcbcab1618cbab512d1037ea28748ee537de21",
+    "patch": true
+  },
+  {
+    "name": "production_time_history_guard",
+    "source": "0619_operating_profiles_production_extensions.sql",
+    "sha256": "50de2b351b1ccac50df8c909b860946c2c0675700304f872adb589c1e0a046c5",
+    "newSha256": "3e183f14cc7ae30730320daaaf841d8807b01a7e19bdab996139d86c03786a34",
+    "patch": true
   }
 ] as const;
 
@@ -2339,6 +2451,102 @@ export const TENANT_RETIREMENT_GUARD_ATTRIBUTES = [
   {
     "name": "worker_employment_versions_closure_guard",
     "config": []
+  },
+  {
+    "name": "inventory_inspection_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "inventory_inspection_plan_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "manufacturing_completion_trace_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "manufacturing_loss_event_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "manufacturing_routing_operation_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "manufacturing_snapshot_configuration_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "operating_profile_version_immutable",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "production_bom_revision_complete_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "production_bom_revision_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "production_mrp_run_evidence_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "production_subcontract_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "production_subcontract_material_return_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "production_subcontract_return_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "production_subcontract_service_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "production_subcontract_shipment_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "production_time_history_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
   }
 ] as const;
 
@@ -3772,6 +3980,101 @@ export const TENANT_RETIREMENT_TRIGGER_CONTRACTS = [
     "table": "handling_unit_contents",
     "trigger": "handling_unit_content_history",
     "function": "handling_unit_content_history_guard"
+  },
+  {
+    "table": "operating_profile_versions",
+    "trigger": "operating_profile_version_immutable",
+    "function": "operating_profile_version_immutable"
+  },
+  {
+    "table": "time_entries",
+    "trigger": "production_time_history_guard",
+    "function": "production_time_history_guard"
+  },
+  {
+    "table": "mfg_routing_operations",
+    "trigger": "manufacturing_routing_operation_guard",
+    "function": "manufacturing_routing_operation_guard"
+  },
+  {
+    "table": "mfg_completion_batches",
+    "trigger": "manufacturing_completion_batch_guard",
+    "function": "manufacturing_completion_trace_guard"
+  },
+  {
+    "table": "mfg_completion_inputs",
+    "trigger": "manufacturing_completion_input_guard",
+    "function": "manufacturing_completion_trace_guard"
+  },
+  {
+    "table": "inventory_inspection_plans",
+    "trigger": "inventory_inspection_plan_guard",
+    "function": "inventory_inspection_plan_guard"
+  },
+  {
+    "table": "inventory_inspections",
+    "trigger": "inventory_inspection_guard",
+    "function": "inventory_inspection_guard"
+  },
+  {
+    "table": "mfg_subcontract_returns",
+    "trigger": "production_subcontract_return_guard",
+    "function": "production_subcontract_return_guard"
+  },
+  {
+    "table": "mfg_subcontracts",
+    "trigger": "production_subcontract_guard",
+    "function": "production_subcontract_guard"
+  },
+  {
+    "table": "mfg_subcontract_shipments",
+    "trigger": "production_subcontract_shipment_guard",
+    "function": "production_subcontract_shipment_guard"
+  },
+  {
+    "table": "mfg_subcontract_service_bills",
+    "trigger": "production_subcontract_service_guard",
+    "function": "production_subcontract_service_guard"
+  },
+  {
+    "table": "mfg_subcontract_material_returns",
+    "trigger": "production_subcontract_material_return_guard",
+    "function": "production_subcontract_material_return_guard"
+  },
+  {
+    "table": "mfg_scrap_events",
+    "trigger": "manufacturing_loss_event_guard",
+    "function": "manufacturing_loss_event_guard"
+  },
+  {
+    "table": "mfg_wo_operations",
+    "trigger": "manufacturing_snapshot_configuration_guard",
+    "function": "manufacturing_snapshot_configuration_guard"
+  },
+  {
+    "table": "mfg_wo_materials",
+    "trigger": "manufacturing_snapshot_configuration_guard",
+    "function": "manufacturing_snapshot_configuration_guard"
+  },
+  {
+    "table": "mfg_wo_byproducts",
+    "trigger": "manufacturing_snapshot_configuration_guard",
+    "function": "manufacturing_snapshot_configuration_guard"
+  },
+  {
+    "table": "bom_components",
+    "trigger": "production_bom_revision_guard",
+    "function": "production_bom_revision_guard"
+  },
+  {
+    "table": "bom_components",
+    "trigger": "production_bom_revision_complete_guard",
+    "function": "production_bom_revision_complete_guard"
+  },
+  {
+    "table": "mfg_mrp_runs",
+    "trigger": "production_mrp_run_evidence_guard",
+    "function": "production_mrp_run_evidence_guard"
   }
 ] as const;
 
