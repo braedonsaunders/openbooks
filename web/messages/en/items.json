@@ -117,7 +117,9 @@
     "subscriptionRequired": "Enable Subscription Billing to configure recurring pricing.",
     "saveFirst": "Save the item before configuring effective-dated rates.",
     "featureRequired": "Enable Projects to use rate books and scoped pricing.",
-    "back": "Change pricing style"
+    "back": "Change pricing style",
+    "editToChange": "Open Edit on this item to choose a pricing style.",
+    "rulesRequirePromotions": "Enable Promotions in Company Settings → Features to use pricing rules and temporary offers."
   },
   "structure": {
     "title": "{kind}: single item or variants?",
@@ -161,7 +163,7 @@
     "unitPrice": "Unit price",
     "scope": "Pricing scope",
     "scopes": { "base": "Base price level", "level": "Price level", "customer": "Specific customer" },
-    "priceLevel": "Price level",
+    "priceLevel": "Price level", "noLevelsHint": "No price tiers yet. Create a Wholesale tier in Setup → Price Levels, then price it here with its effective date.",
     "customer": "Customer",
     "selectCustomer": "Select a customer…",
     "currency": "Currency",

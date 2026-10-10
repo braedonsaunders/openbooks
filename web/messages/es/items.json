@@ -104,7 +104,9 @@
     "subscriptionTitle": "Precios de suscripción y uso", "subscriptionDescription": "Configure planes recurrentes, cantidades, versiones y modificaciones.", "subscriptionDetail": "Abrir el área de suscripciones.", "subscriptionRequired": "Active Facturación de suscripciones para precios recurrentes.",
     "saveFirst": "Guarde el artículo antes de configurar tarifas con vigencia.",
     "featureRequired": "Active Proyectos para usar libros de tarifas y precios por ámbito.",
-    "back": "Cambiar el modelo de precios"
+    "back": "Cambiar el modelo de precios",
+    "editToChange": "Abra Editar en este artículo para elegir un estilo de precios.",
+    "rulesRequirePromotions": "Active Promotions en Configuración de la empresa → Funciones para usar reglas de precios y ofertas temporales."
   },
   "structure": {
     "title": "¿{kind}: artículo único o familia?",
@@ -143,7 +145,7 @@
   "pricingMatrix": {
     "title": "Matriz de precios", "description": "Precios con vigencia por moneda, nivel o cliente y tramos de cantidad.", "addSchedule": "Añadir esquema de precios", "minimumQuantity": "Cantidad mínima", "unitPrice": "Precio unitario", "scope": "Ámbito del precio",
     "scopes": { "base": "Precio base", "level": "Nivel de precio", "customer": "Cliente específico" },
-    "priceLevel": "Nivel de precio", "customer": "Cliente", "selectCustomer": "Seleccionar cliente…", "currency": "Moneda", "quantityBasis": "Base de cantidad",
+    "priceLevel": "Nivel de precio", "noLevelsHint": "Aún no hay niveles de precio. Cree un nivel Wholesale en Configuración → Niveles de precio y defina su precio aquí con su fecha de vigencia.", "customer": "Cliente", "selectCustomer": "Seleccionar cliente…", "currency": "Moneda", "quantityBasis": "Base de cantidad",
     "quantityBases": { "line": "Cantidad de línea", "overallItem": "Cantidad total del artículo" },
     "effectiveFrom": "Vigente desde", "effectiveTo": "Vigente hasta", "breaksTitle": "Tramos de cantidad", "breaksDescription": "La mayor cantidad mínima alcanzada fija el precio de todas las unidades.", "addBreak": "Añadir tramo", "saveFailed": "No se pudo guardar el esquema.", "loadFailed": "No se pudieron cargar los esquemas de precios.", "saved": "Esquema guardado", "changeReason": "Motivo del cambio", "changeReasonPlaceholder": "¿Por qué cambia este precio?", "changeReasonHint": "Obligatorio cuando los nuevos precios cubren fechas que ya están vigentes. La versión anterior se conserva y el motivo queda registrado en la auditoría.", "endDateTitle": "Finalizar esquema", "endDateReasonLabel": "Motivo de la finalización", "ended": "Esquema finalizado", "confirmDelete": "¿Eliminar este esquema?", "deleteFailed": "No se pudo eliminar el esquema.", "deleted": "Esquema eliminado", "customerTarget": "Cliente · {customer}", "baseTarget": "Precio base", "empty": "No hay precios matriciales para este artículo.", "target": "Destino", "effective": "Vigencia", "breaks": "Precios por cantidad", "familyDescription": "Las tarifas aquí se aplican a cada variante sin tarifa propia para el ámbito.", "inheritedTitle": "Heredado de la familia", "inheritedDescription": "Tarifas de la familia aplicadas a esta variante; sustituya una para tarifar solo esta variante.", "override": "Sustituir para esta variante", "inheritedBadge": "Heredado de {family}", "overriddenBadge": "Sustituido", "source": "Origen",
     "search": "Buscar programas de precios…",
