@@ -104,6 +104,9 @@
       "cancelConfirm": "取消剩余数量",
       "cancelFailed": "无法取消剩余数量。",
       "cancelled": "已取消第 {line} 行的剩余数量"
-    }
+    },
+    "receiveAllConfirmTitle": "接收所有未完成的数量？",
+    "receiveAllConfirmMessage": "这将按今天的日期，把本订单所有剩余数量的收货计入每行的仓库。过账后无法编辑。",
+    "receiveAllConfirmLabel": "接收并过账"
   }
 }

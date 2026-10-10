@@ -104,6 +104,9 @@
     "deleteConfirmTitle": "Supprimer cette commande ?",
     "deleteConfirmMessage": "Cette action supprime définitivement la commande et ses lignes. Elle est irréversible.",
     "toastDeleted": "Commande supprimée",
-    "issueHint": "Ajoutez un client ou un fournisseur et au moins une ligne pour émettre cette commande."
+    "issueHint": "Ajoutez un client ou un fournisseur et au moins une ligne pour émettre cette commande.",
+    "receiveAllConfirmTitle": "Recevoir tout ce qui reste ouvert ?",
+    "receiveAllConfirmMessage": "Cette action comptabilise une réception de marchandises pour toutes les quantités restantes de cette commande, datée d'aujourd'hui, dans l'entrepôt de chaque ligne. Elle ne peut pas être modifiée après comptabilisation.",
+    "receiveAllConfirmLabel": "Recevoir et comptabiliser"
   }
 }

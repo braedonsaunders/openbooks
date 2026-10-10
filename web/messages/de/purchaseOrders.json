@@ -104,6 +104,9 @@
       "cancelConfirm": "Restmenge stornieren",
       "cancelFailed": "Die Restmenge konnte nicht storniert werden.",
       "cancelled": "Restmenge von Zeile {line} storniert"
-    }
+    },
+    "receiveAllConfirmTitle": "Alles Offene empfangen?",
+    "receiveAllConfirmMessage": "Damit wird ein Wareneingang für alle offenen Mengen dieser Bestellung mit dem heutigen Datum im Lager jeder Position gebucht. Nach dem Buchen kann er nicht mehr bearbeitet werden.",
+    "receiveAllConfirmLabel": "Empfangen und buchen"
   }
 }
