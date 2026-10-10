@@ -240,6 +240,12 @@ export async function reportsHubFor(
         card('registers', '/reports/registers?side=ar', 'Receipt', 'ledger'),
         card('receivables', '/reports/partners?kind=receivable', 'Wallet', 'aging'),
         card('payables', '/reports/partners?kind=payable', 'Landmark', 'aging'),
+        // 1099-NEC preparation reads vendor payments + masked TIN status on
+        // AP read: no feature switch, so the accountant reaches it whenever
+        // the compliance workspace is off.
+        ...(authz && can(authz, 'ap.read')
+          ? [card('necPreparation', '/reports/1099-preparation', 'FileText', 'list')]
+          : []),
         ...definitionCards(receivablesPayablesDefinitions, 'Receipt', t('hub.cards.builtInDescription')),
       ],
     },

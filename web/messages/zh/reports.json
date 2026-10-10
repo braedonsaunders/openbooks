@@ -44,7 +44,9 @@
       "resourcingEngagementTitle": "项目预测",
       "resourcingEngagementDescription": "按月份和币种预测工时、收入、人工成本和利润。",
       "projectBudgetVsActualTitle": "项目预算与实际",
-      "projectBudgetVsActualDescription": "按任务对比原始预算、当前预算与实际工时和成本。"
+      "projectBudgetVsActualDescription": "按任务对比原始预算、当前预算与实际工时和成本。",
+      "necPreparationTitle": "1099-NEC 准备",
+      "necPreparationDescription": "按申报年度现金制供应商付款（分项）。"
     },
     "groups": {
       "financial": "财务报表",
@@ -258,6 +260,27 @@
     },
     "noPartyOnLines": "（行上无往来方）",
     "noPartyDrillLabel": "无往来方的统制科目明细"
+  },
+  "necPreparation": {
+    "cashBasisNotice": "现金制：{year}年实际支付的款项，而非开票金额。卡付款除外。",
+    "searchPlaceholder": "搜索供应商",
+    "columnThreshold": "阈值",
+    "columnPayments": "付款",
+    "columnNotes": "备注",
+    "columnCardPaid": "卡付款（已除外）",
+    "columnDate": "日期",
+    "columnNumber": "单号",
+    "columnCash": "已付",
+    "totalLabel": "NEC 应申报总额",
+    "cardTotalLabel": "已除外的卡付款",
+    "thresholdReportable": "应申报",
+    "thresholdBelow": "低于阈值",
+    "cardExcluded": "卡付款{amount} — 已除外",
+    "paymentsTitle": "向{vendor}的付款",
+    "allVendors": "所有供应商",
+    "emptyTitle": "无应申报供应商",
+    "emptyDescription": "{year}年没有计入1099-NEC项的已过账供应商付款。",
+    "refusalTitle": "准备不可用"
   },
   "aging": {
     "receivablesTitle": "应收账龄",

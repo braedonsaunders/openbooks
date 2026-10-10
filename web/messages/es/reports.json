@@ -44,7 +44,9 @@
       "resourcingEngagementTitle": "Previsión de proyectos",
       "resourcingEngagementDescription": "Horas, ingresos, costes laborales y margen previstos por mes y moneda.",
       "projectBudgetVsActualTitle": "Presupuesto del proyecto frente a real",
-      "projectBudgetVsActualDescription": "Presupuesto original y actual frente a horas y coste reales, por tarea."
+      "projectBudgetVsActualDescription": "Presupuesto original y actual frente a horas y coste reales, por tarea.",
+      "necPreparationTitle": "Preparación 1099-NEC",
+      "necPreparationDescription": "Pagos a proveedores en efectivo por casilla para el año fiscal."
     },
     "groups": {
       "financial": "Estados financieros",
@@ -258,6 +260,27 @@
     },
     "noPartyOnLines": "(sin tercero en las líneas)",
     "noPartyDrillLabel": "Líneas de cuentas de control sin contraparte"
+  },
+  "necPreparation": {
+    "cashBasisNotice": "Base de efectivo: pagos efectivamente realizados en {year}, no importes facturados. Se excluyen los pagos con tarjeta.",
+    "searchPlaceholder": "Buscar proveedores",
+    "columnThreshold": "Umbral",
+    "columnPayments": "Pagos",
+    "columnNotes": "Notas",
+    "columnCardPaid": "Con tarjeta (excluido)",
+    "columnDate": "Fecha",
+    "columnNumber": "Número",
+    "columnCash": "Pagado",
+    "totalLabel": "Total NEC declarable",
+    "cardTotalLabel": "Pagos con tarjeta excluidos",
+    "thresholdReportable": "Declarable",
+    "thresholdBelow": "Bajo el umbral",
+    "cardExcluded": "{amount} pagado con tarjeta — excluido",
+    "paymentsTitle": "Pagos a {vendor}",
+    "allVendors": "Todos los proveedores",
+    "emptyTitle": "Sin proveedores declarables",
+    "emptyDescription": "Sin pagos contabilizados a proveedores en casillas 1099-NEC para {year}.",
+    "refusalTitle": "Preparación no disponible"
   },
   "aging": {
     "receivablesTitle": "Antigüedad de CxC",

@@ -44,7 +44,9 @@
       "resourcingEngagementTitle": "Prévision des missions",
       "resourcingEngagementDescription": "Prévision des heures, revenus, coûts de main-d’œuvre et marges par mois et devise.",
       "projectBudgetVsActualTitle": "Budget du projet vs réel",
-      "projectBudgetVsActualDescription": "Budget initial et actuel par rapport aux heures et coûts réels, par tâche."
+      "projectBudgetVsActualDescription": "Budget initial et actuel par rapport aux heures et coûts réels, par tâche.",
+      "necPreparationTitle": "Préparation 1099-NEC",
+      "necPreparationDescription": "Paiements fournisseurs au comptant par case pour l'année fiscale."
     },
     "groups": {
       "financial": "États financiers",
@@ -258,6 +260,27 @@
     },
     "noPartyOnLines": "(aucun tiers sur les lignes)",
     "noPartyDrillLabel": "Lignes de comptes de contrôle sans contrepartie"
+  },
+  "necPreparation": {
+    "cashBasisNotice": "Base caisse : paiements effectivement versés en {year}, non les montants facturés. Les paiements par carte sont exclus.",
+    "searchPlaceholder": "Rechercher des fournisseurs",
+    "columnThreshold": "Seuil",
+    "columnPayments": "Paiements",
+    "columnNotes": "Notes",
+    "columnCardPaid": "Par carte (exclu)",
+    "columnDate": "Date",
+    "columnNumber": "Numéro",
+    "columnCash": "Payé",
+    "totalLabel": "Total NEC déclarable",
+    "cardTotalLabel": "Paiements par carte exclus",
+    "thresholdReportable": "Déclarable",
+    "thresholdBelow": "Sous le seuil",
+    "cardExcluded": "{amount} payé par carte — exclu",
+    "paymentsTitle": "Paiements à {vendor}",
+    "allVendors": "Tous les fournisseurs",
+    "emptyTitle": "Aucun fournisseur déclarable",
+    "emptyDescription": "Aucun paiement fournisseur comptabilisé dans les cases 1099-NEC pour {year}.",
+    "refusalTitle": "Préparation indisponible"
   },
   "aging": {
     "receivablesTitle": "Balance âgée clients",

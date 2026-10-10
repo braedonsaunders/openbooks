@@ -44,7 +44,9 @@
       "resourcingEngagementTitle": "Engagement forecast",
       "resourcingEngagementDescription": "Forecast assignment hours, revenue, labor cost, and margin by month and currency.",
       "projectBudgetVsActualTitle": "Project Budget vs Actual",
-      "projectBudgetVsActualDescription": "Original and current budget against actual hours and cost, by task."
+      "projectBudgetVsActualDescription": "Original and current budget against actual hours and cost, by task.",
+      "necPreparationTitle": "1099-NEC preparation",
+      "necPreparationDescription": "Cash-basis vendor payments by box for the filing year."
     },
     "groups": {
       "financial": "Financial Statements",
@@ -242,6 +244,27 @@
       "credits": "Credits"
     },
     "totals": "Totals"
+  },
+  "necPreparation": {
+    "cashBasisNotice": "Cash basis: payments actually made in {year}, not amounts billed. Card-funded payments are excluded.",
+    "searchPlaceholder": "Search vendors",
+    "columnThreshold": "Threshold",
+    "columnPayments": "Payments",
+    "columnNotes": "Notes",
+    "columnCardPaid": "Card-paid (excluded)",
+    "columnDate": "Date",
+    "columnNumber": "Number",
+    "columnCash": "Cash paid",
+    "totalLabel": "Reportable NEC total",
+    "cardTotalLabel": "Excluded card-funded payments",
+    "thresholdReportable": "Reportable",
+    "thresholdBelow": "Below threshold",
+    "cardExcluded": "Paid {amount} by card — excluded",
+    "paymentsTitle": "Payments to {vendor}",
+    "allVendors": "All vendors",
+    "emptyTitle": "No reportable vendors",
+    "emptyDescription": "No posted vendor payments traced to 1099-NEC boxes for {year}.",
+    "refusalTitle": "Preparation unavailable"
   },
   "partners": {
     "payablesTitle": "Payables by Vendor",

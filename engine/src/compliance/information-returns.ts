@@ -1058,6 +1058,59 @@ export function filedTotal(form: FormDefinition, boxAmounts: Record<string, stri
     .reduce((total, [, amount]) => add(total, amount), "0");
 }
 
+export type NecPreparationVendor = {
+  partyId: string;
+  vendorName: string;
+  tinLast4: string | null;
+  box1: string;
+  withheld: string;
+  reportableTotal: string;
+  belowThreshold: boolean;
+  paymentCount: number;
+  /** Card-funded total, excluded from the payer's 1099 by rule. */
+  cardPaid: string;
+  /** Exception kinds for the notes column; never missing_tin (the TIN column owns that). */
+  exclusionKinds: string[];
+  /** Filing-order detail strings behind the kinds, for the same column. */
+  exclusionDetails: string[];
+};
+
+/**
+ * Preparation rows are a pure projection of the filing computation: the same
+ * recipients in filing order with their exception vocabulary attached, plus
+ * per-vendor card-funded totals. Reports render this; they never recompute
+ * boxes, thresholds or exclusions themselves.
+ */
+export function buildNecPreparationRows(
+  computation: FilingComputation,
+  cardPaidByParty: Map<string, string>,
+): NecPreparationVendor[] {
+  const exceptionsByParty = new Map<string, ComputationException[]>();
+  for (const exception of computation.exceptions) {
+    if (!exception.partyId) continue;
+    const list = exceptionsByParty.get(exception.partyId) ?? [];
+    list.push(exception);
+    exceptionsByParty.set(exception.partyId, list);
+  }
+  return computation.recipients.map((recipient) => ({
+    partyId: recipient.profile.partyId,
+    vendorName: recipient.profile.displayName,
+    tinLast4: recipient.profile.tinLast4,
+    box1: recipient.amounts.boxAmounts["nec1"] ?? "0",
+    withheld: recipient.amounts.boxAmounts["nec4"] ?? "0",
+    reportableTotal: recipient.amounts.reportableTotal,
+    belowThreshold: recipient.belowThreshold,
+    paymentCount: recipient.amounts.paymentCount,
+    cardPaid: cardPaidByParty.get(recipient.profile.partyId) ?? "0",
+    exclusionKinds: (exceptionsByParty.get(recipient.profile.partyId) ?? [])
+      .map((exception) => exception.kind)
+      .filter((kind) => kind !== "missing_tin"),
+    exclusionDetails: (exceptionsByParty.get(recipient.profile.partyId) ?? [])
+      .filter((exception) => exception.kind !== "missing_tin")
+      .map((exception) => exception.detail),
+  }));
+}
+
 // ---------------------------------------------------------------------------
 // Filing lifecycle
 // ---------------------------------------------------------------------------

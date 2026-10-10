@@ -44,7 +44,9 @@
       "resourcingEngagementTitle": "Auftragsprognose",
       "resourcingEngagementDescription": "Prognostizierte Stunden, Umsätze, Arbeitskosten und Margen nach Monat und Währung.",
       "projectBudgetVsActualTitle": "Projektbudget vs. Ist",
-      "projectBudgetVsActualDescription": "Ursprüngliches und aktuelles Budget gegenüber Ist-Stunden und -Kosten, je Aufgabe."
+      "projectBudgetVsActualDescription": "Ursprüngliches und aktuelles Budget gegenüber Ist-Stunden und -Kosten, je Aufgabe.",
+      "necPreparationTitle": "1099-NEC-Vorbereitung",
+      "necPreparationDescription": "Lieferantenzahlungen (Kassenprinzip) nach Feld für das Meldejahr."
     },
     "groups": {
       "financial": "Finanzberichte",
@@ -258,6 +260,27 @@
     },
     "noPartyOnLines": "(kein Geschäftspartner in den Zeilen)",
     "noPartyDrillLabel": "Kontrollkonten-Zeilen ohne Gegenpartei"
+  },
+  "necPreparation": {
+    "cashBasisNotice": "Kassenprinzip: tatsächlich in {year} geleistete Zahlungen, nicht fakturierte Beträge. Kartenzahlungen sind ausgeschlossen.",
+    "searchPlaceholder": "Lieferanten suchen",
+    "columnThreshold": "Schwellenwert",
+    "columnPayments": "Zahlungen",
+    "columnNotes": "Hinweise",
+    "columnCardPaid": "Per Karte (ausgeschlossen)",
+    "columnDate": "Datum",
+    "columnNumber": "Nummer",
+    "columnCash": "Gezahlt",
+    "totalLabel": "NEC-Summe (meldepflichtig)",
+    "cardTotalLabel": "Ausgeschlossene Kartenzahlungen",
+    "thresholdReportable": "Meldepflichtig",
+    "thresholdBelow": "Unter Schwellenwert",
+    "cardExcluded": "{amount} per Karte gezahlt — ausgeschlossen",
+    "paymentsTitle": "Zahlungen an {vendor}",
+    "allVendors": "Alle Lieferanten",
+    "emptyTitle": "Keine meldepflichtigen Lieferanten",
+    "emptyDescription": "Keine gebuchten Lieferantenzahlungen für {year} auf 1099-NEC-Feldern.",
+    "refusalTitle": "Vorbereitung nicht verfügbar"
   },
   "aging": {
     "receivablesTitle": "Fälligkeitsanalyse Forderungen",

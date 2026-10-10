@@ -44,7 +44,9 @@
       "resourcingEngagementTitle": "案件予測",
       "resourcingEngagementDescription": "月および通貨別に、予定時間、売上、労務費、利益を予測します。",
       "projectBudgetVsActualTitle": "プロジェクト予算と実績",
-      "projectBudgetVsActualDescription": "タスク別の当初予算・現行予算と実績時間・原価の比較。"
+      "projectBudgetVsActualDescription": "タスク別の当初予算・現行予算と実績時間・原価の比較。",
+      "necPreparationTitle": "1099-NEC 準備",
+      "necPreparationDescription": "申告年ごとの現金主義ベンダー支払額（ボックス別）。"
     },
     "groups": {
       "financial": "財務諸表",
@@ -258,6 +260,27 @@
     },
     "noPartyOnLines": "（明細に取引先なし）",
     "noPartyDrillLabel": "相手先のない統制勘定の明細"
+  },
+  "necPreparation": {
+    "cashBasisNotice": "現金主義：請求額ではなく{year}年に実際に支払われた金額。カード払いは除外されます。",
+    "searchPlaceholder": "ベンダーを検索",
+    "columnThreshold": "しきい値",
+    "columnPayments": "支払い",
+    "columnNotes": "備考",
+    "columnCardPaid": "カード払い（除外）",
+    "columnDate": "日付",
+    "columnNumber": "番号",
+    "columnCash": "支払額",
+    "totalLabel": "NEC 申告対象合計",
+    "cardTotalLabel": "除外されたカード払い",
+    "thresholdReportable": "申告対象",
+    "thresholdBelow": "しきい値未満",
+    "cardExcluded": "カード払い{amount} — 除外",
+    "paymentsTitle": "{vendor}への支払い",
+    "allVendors": "すべてのベンダー",
+    "emptyTitle": "申告対象ベンダーなし",
+    "emptyDescription": "{year}年の1099-NECボックスに計上されたベンダー支払いはありません。",
+    "refusalTitle": "準備を利用できません"
   },
   "aging": {
     "receivablesTitle": "売掛金年齢分析",
