@@ -28,14 +28,15 @@ for (const profile of SAMPLE_COMPANY_PROFILES) test(`${profile.companyName}: nat
       await withBypass(() => db.execute(sql`update users set is_super_admin=true where org_id=${home.orgId} and id=${actorId}`));
       actorOptions = { actorId };
     }
-    if (["general_business", "nonprofit", "healthcare_practice"].includes(profile.industryKey)) {
+    if (["construction_contractor", "general_business", "nonprofit", "healthcare_practice"].includes(profile.industryKey)) {
       const home = await withBypass(() => createScratchOrg());
       try {
         const foreignActor = await withBypass(() => createScratchUser(home.orgId, "Explicit platform author", "operator"));
         await withBypass(() => db.execute(sql`update users set is_super_admin=true where org_id=${home.orgId} and id=${foreignActor}`));
         const unchanged = () => withOrgContext(world.orgId, async () => (await db.execute(sql`
           select settings,(select count(*)::int from documents where org_id=${world.orgId}) as documents,
-            (select count(*)::int from audit_log where org_id=${world.orgId}) as audits
+            (select count(*)::int from audit_log where org_id=${world.orgId}) as audits,
+            (select count(*)::int from field_ticket_labor_snapshots where org_id=${world.orgId}) as labor_snapshots
           from orgs where id=${world.orgId}`)).rows);
         const beforeRefusal = await unchanged();
         await assert.rejects(installDemoScenarios(world.orgId, profile.industryKey, { actorId: foreignActor }),
@@ -60,6 +61,15 @@ for (const profile of SAMPLE_COMPANY_PROFILES) test(`${profile.companyName}: nat
       assert.equal(versions.length, 2, "package corrections append a new immutable revision");
       assert.deepEqual(versions[0]!.manifest, { name: "Earlier demonstration" });
       assert.equal(versions[1]!.version, "1.0.1");
+    });
+    if (profile.industryKey === "construction_contractor") await withOrgContext(world.orgId, async () => {
+      const snapshots = (await db.execute<{ snapshots: number; foreign_authors: number }>(sql`
+        select count(*)::int as snapshots,count(*) filter(where u.id is null or
+          (s.superseded_by is not null and not exists(select 1 from users prior where prior.org_id=s.org_id and prior.id=s.superseded_by)))::int as foreign_authors
+        from field_ticket_labor_snapshots s left join users u on u.org_id=s.org_id and u.id=s.captured_by
+        where s.org_id=${world.orgId}`)).rows[0]!;
+      assert.ok(snapshots.snapshots >= 3, "construction executes the native capture workflow for its site tickets");
+      assert.equal(snapshots.foreign_authors, 0, "captured and superseded labor evidence keeps tenant-local authors");
     });
     const snapshot = () => withOrgContext(world.orgId, async () => (await db.execute(sql`
       select (select count(*)::int from audit_log where org_id=${world.orgId}) as audits,

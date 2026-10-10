@@ -38,6 +38,7 @@ export function sampleOperatorAuthorship(industryKey: string): SampleAuthorContr
   const f = sampleCompanyFeatures(industryKey);
   const contracts: SampleAuthorContract[] = [];
   if (f.einvoicing) contracts.push({ table: "einvoice_settings", actorColumns: ["created_by", "updated_by"], requiresPerson: false });
+  if (f.fieldTickets) contracts.push({ table: "field_ticket_labor_snapshots", actorColumns: ["captured_by", "superseded_by"], requiresPerson: false });
   if (f.nonprofit) contracts.push({ table: "nonprofit_frameworks", actorColumns: ["set_by", "created_by", "updated_by"], requiresPerson: false });
   if (f.compensationPackages) contracts.push({ table: "payroll_compensation_packages", actorColumns: ["created_by", "updated_by"], requiresPerson: false });
   if (f.hrmTraining) contracts.push({ table: "hrm_training_courses", actorColumns: ["created_by", "updated_by"], requiresPerson: true });

@@ -18,13 +18,34 @@ export type RetirementFingerprint = { digest: string; tables: Array<{ table: str
 export async function retirementFingerprint(catalog: Catalog, orgId: string): Promise<RetirementFingerprint> {
   const tables: RetirementFingerprint["tables"] = [];
   const owned = [...catalog.tenantTables.filter(t => t.name !== "orgs"), { name: "orgs", hasOrgId: false }, ...RETIREMENT_AUTH_TABLES.map(name => ({ name, hasOrgId: false }))];
-  for (const table of owned.sort((a, b) => a.name.localeCompare(b.name))) {
-    const result = await db.execute<{ count: string; digest: string }>(sql`
-      select count(*)::text as count,encode(digest(coalesce(string_agg(row_hash,E'\n' order by row_hash),''),'sha256'),'hex') as digest
+  owned.sort((a, b) => a.name.localeCompare(b.name));
+  if (new Set(owned.map(table => table.name)).size !== owned.length) throw new Error("Duplicate retirement fingerprint table identity");
+  // Bound statement size and round trips without changing row content, tenant
+  // ownership, empty-table evidence or the established digest ordering.
+  const batchSize = 32;
+  for (let offset = 0; offset < owned.length; offset += batchSize) {
+    const batch = owned.slice(offset, offset + batchSize);
+    const result = await db.execute<RetirementFingerprint["tables"][number]>(sql.join(batch.map(table => sql`
+      select ${table.name}::text as "table",count(*)::text as count,
+        encode(digest(coalesce(string_agg(row_hash,E'\n' order by row_hash),''),'sha256'),'hex') as digest
       from (select encode(digest(to_jsonb(owned_row)::text,'sha256'),'hex') as row_hash
-        from public.${sql.identifier(table.name)} owned_row where ${retirementPredicate(table, orgId)}) owned_rows`);
-    if (!result.rows[0]) throw new Error(`Missing retirement fingerprint for ${table.name}`);
-    tables.push({ table: table.name, ...result.rows[0] });
+        from public.${sql.identifier(table.name)} owned_row where ${retirementPredicate(table, orgId)}) owned_rows`), sql` union all `));
+    const requested = new Set(batch.map(table => table.name));
+    const received = new Map<string, RetirementFingerprint["tables"][number]>();
+    for (const row of result.rows) {
+      if (!requested.has(row.table)) throw new Error(`Unexpected retirement fingerprint table ${row.table}`);
+      if (received.has(row.table)) throw new Error(`Duplicate retirement fingerprint for ${row.table}`);
+      if (typeof row.count !== "string" || !/^(0|[1-9][0-9]*)$/.test(row.count)
+        || typeof row.digest !== "string" || !/^[0-9a-f]{64}$/.test(row.digest)) {
+        throw new Error(`Invalid retirement fingerprint for ${row.table}`);
+      }
+      received.set(row.table, row);
+    }
+    for (const table of batch) {
+      const row = received.get(table.name);
+      if (!row) throw new Error(`Missing retirement fingerprint for ${table.name}`);
+      tables.push({ table: table.name, count: row.count, digest: row.digest });
+    }
   }
   return { digest: retirementDigest(tables), tables };
 }
@@ -92,7 +113,9 @@ export async function deleteRetiredTenantRows(catalog: Catalog, orgId: string) {
 /** Foreign children outside the native ownership catalog require explicit
  * classification; orphaning an unknown global record is never a teardown step. */
 export async function unclassifiedRetirementChildren(tenantTables: readonly string[]): Promise<string[]> {
-  const known = [...tenantTables, "orgs", ...RETIREMENT_AUTH_TABLES];
+  // Marketplace snapshots are shared publisher authority, never auth children.
+  // Their target-specific dependency is checked separately before quarantine.
+  const known = [...tenantTables, "orgs", "app_listings", ...RETIREMENT_AUTH_TABLES];
   const result = await db.execute<{ table: string }>(sql`
     select distinct child.relname as table from pg_class child join pg_namespace n on n.oid=child.relnamespace
     where n.nspname='public' and child.relkind in ('r','p') and not child.relname=any(${sql.param(known)}::text[])
@@ -102,6 +125,15 @@ export async function unclassifiedRetirementChildren(tenantTables: readonly stri
         and a.atttypid='uuid'::regtype and (a.attname='user_id' or a.attname like '%_user_id')))
     order by child.relname`);
   return result.rows.map(row => row.table);
+}
+
+/** Published and withdrawn marketplace snapshots retain their publisher.
+ * Withdrawal preserves the shared row and therefore cannot authorize deletion. */
+export async function retirementSharedDependencies(orgIds: readonly string[]) {
+  return (await db.execute<{ table: string; orgId: string; count: string }>(sql`
+    select 'app_listings' as table,publisher_org_id as "orgId",count(*)::text as count
+    from public.app_listings where publisher_org_id=any(${sql.param([...orgIds])}::uuid[])
+    group by publisher_org_id order by publisher_org_id`)).rows;
 }
 
 /** Queued or leased work must be resolved through its native lifecycle before

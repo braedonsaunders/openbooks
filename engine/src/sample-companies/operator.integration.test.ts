@@ -7,6 +7,7 @@ import { assertSampleOperator, sampleOperatorId, sampleOperatorPermissions, samp
 
 import { sampleRefreshPlan, refreshAllSampleCompanies } from "./refresh.ts";
 import { SAMPLE_COMPANY_PROFILES } from "./catalog.ts";
+import { sampleCompanyFeatures } from "./features.ts";
 
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL };
 
@@ -20,8 +21,10 @@ test("sample operator selection is explicit and canonical", () => {
 
 test("native local authorship is required only for the industries that write tenant-owned author records", () => {
   const local = SAMPLE_COMPANY_PROFILES.filter(profile => sampleOperatorAuthorship(profile.industryKey).length).map(profile => profile.industryKey).sort();
-  assert.deepEqual(local, ["general_business", "healthcare_practice", "nonprofit"]);
+  assert.deepEqual(local, ["construction_contractor", "general_business", "healthcare_practice", "nonprofit"]);
   assert.deepEqual(sampleOperatorAuthorship("general_business"), [{ table: "einvoice_settings", actorColumns: ["created_by", "updated_by"], requiresPerson: false }]);
+  assert.deepEqual(SAMPLE_COMPANY_PROFILES.filter(profile => sampleCompanyFeatures(profile.industryKey).fieldTickets).map(profile => profile.industryKey), ["construction_contractor"]);
+  assert.deepEqual(sampleOperatorAuthorship("construction_contractor"), [{ table: "field_ticket_labor_snapshots", actorColumns: ["captured_by", "superseded_by"], requiresPerson: false }]);
   assert.ok(sampleOperatorAuthorship("nonprofit").some(contract => contract.actorColumns.includes("set_by")));
   assert.ok(sampleOperatorAuthorship("healthcare_practice").some(contract => contract.requiresPerson));
 });
@@ -68,7 +71,7 @@ test("explicit platform operator remains identity-locked while business writes s
         const detail = error as { code?: string; cause?: { code?: string } };
         return (detail.code ?? detail.cause?.code) === "55P03";
       }, "home identity cannot be revoked halfway through the selected tenant command");
-      for (const industry of ["general_business", "nonprofit", "healthcare_practice"]) {
+      for (const industry of ["construction_contractor", "general_business", "nonprofit", "healthcare_practice"]) {
         await assert.rejects(assertSampleOperator(db, target.orgId, actorId, target.subsidiaryId, industry, true), (error: unknown) =>
           error instanceof SampleLocalAuthorRequiredError && error.code === "SAMPLE_LOCAL_AUTHOR_REQUIRED" && error.industryKey === industry && error.requiredRecords.length > 0);
       }

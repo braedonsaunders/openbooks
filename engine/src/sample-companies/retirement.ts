@@ -6,7 +6,7 @@ import { listSandboxS3VersionIds } from "../sandbox/clone.ts";
 import { beginTenantRetirement, finishTenantRetirement, parseTenantRetirementRecovery, recordRetirementStorage, recordTenantRetirementFailure, registerTenantRetirement, tenantRetirementStatus } from "../organization/tenant-retirement.ts";
 import { sampleRetirementPlan } from "./retirement-plan.ts";
 import { retirementDigest } from "./retirement-contract.ts";
-import { deleteRetiredTenantRows, retirementFingerprint, retirementOutstandingWork } from "./retirement-data.ts";
+import { deleteRetiredTenantRows, retirementFingerprint, retirementOutstandingWork, retirementSharedDependencies } from "./retirement-data.ts";
 
 type ReviewedPlan = Awaited<ReturnType<typeof sampleRetirementPlan>>;
 function readPlan(value: unknown): ReviewedPlan {
@@ -31,6 +31,7 @@ export async function admitSampleRetirement(input: { plan: unknown; recovery: un
     // The durable fences now hold every target against concurrent writers.
     // A write between the read-only plan and quarantine invalidates admission.
     if ((await retirementOutstandingWork(live.selection.retireOrgIds)).length) throw new Error("Executable work appeared before quarantine; admission rolled back. Resolve it through native work controls.");
+    if ((await retirementSharedDependencies(live.selection.retireOrgIds)).length) throw new Error("Shared marketplace publication appeared before quarantine; preserve its publisher. Admission rolled back.");
     const catalog = await loadCatalog();
     for (const target of live.targets) {
       const actual = await retirementFingerprint(catalog, target.orgId);
@@ -47,6 +48,7 @@ export async function executeSampleRetirement(input: { runId: string; orgId: str
     await db.execute(sql`set local lock_timeout='5s'`);
     await db.execute(sql`set local statement_timeout='600000ms'`);
     if (!await beginTenantRetirement(input.runId, input.orgId, input.planDigest)) return;
+    if ((await retirementSharedDependencies([input.orgId])).length) throw new Error("Shared marketplace snapshots retain this publisher; the target transaction was rolled back.");
     const status = await tenantRetirementStatus(input.runId);
     const catalog = await loadCatalog();
     const beforeTarget = await retirementFingerprint(catalog, input.orgId);

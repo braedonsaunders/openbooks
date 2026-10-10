@@ -3788,7 +3788,7 @@ export const TENANT_RETIREMENT_AUTHORITY_FUNCTIONS = [
   },
   {
     "name": "openbooks_retirement_row_org",
-    "sha256": "3d4113d4349185656b95ef222a8c67db0c3b7bf57e5f9df172a6005591d5d242",
+    "sha256": "0b6d0d93ea67b449e0b987f192aa09163a8c64ddf3ca5a01b611b02b21d80325",
     "returns": "uuid",
     "language": "plpgsql",
     "volatility": "s",
@@ -3848,7 +3848,7 @@ export const TENANT_RETIREMENT_AUTHORITY_FUNCTIONS = [
   },
   {
     "name": "openbooks_retirement_register",
-    "sha256": "f2566ed4715b8f239e6cb98c5815787938d99805b8d403ed1ca06ce406b3ea32",
+    "sha256": "b327ec48ffb86a5533fba87b53d70c44d967c29b38eefc980b027c4ecbdd48cb",
     "returns": "uuid",
     "language": "plpgsql",
     "volatility": "v",
@@ -3858,7 +3858,7 @@ export const TENANT_RETIREMENT_AUTHORITY_FUNCTIONS = [
   },
   {
     "name": "openbooks_retirement_begin",
-    "sha256": "1654948150630ad9b65841929c064a90402a6ad7fd0466bc6b5826f15a5f6926",
+    "sha256": "f7990c270b08ac9a595a95c2a4c7dc4aa2a8dd974218729b7f315c3a83e66928",
     "returns": "boolean",
     "language": "plpgsql",
     "volatility": "v",
