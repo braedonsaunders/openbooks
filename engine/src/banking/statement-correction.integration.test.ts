@@ -214,7 +214,7 @@ test(
         { accountId: org.accounts.bank, throughDate: org.date, statementBalance: "40" },
         ctx,
       );
-      await createMatch({ reconciliationId: recon.id, statementLineId: matchedId, journalLineIds: journals }, ctx);
+      await createMatch({ reconciliationId: recon.id, statementLineIds: [matchedId], journalLineIds: journals }, ctx);
       await excludeStatementLine(excludedId, "Fee the bookkeeper records directly", ctx);
 
       await assert.rejects(
@@ -261,7 +261,7 @@ test(
         { accountId: org.accounts.bank, throughDate: org.date, statementBalance: "25" },
         ctx,
       );
-      await createMatch({ reconciliationId: recon.id, statementLineId: signedId, journalLineIds: journals }, ctx);
+      await createMatch({ reconciliationId: recon.id, statementLineIds: [signedId], journalLineIds: journals }, ctx);
       await markReconciled(recon.id, ctx);
 
       // A later import is fenced to dates after the cutoff; moving one back
@@ -370,7 +370,7 @@ test(
         { accountId: org.accounts.bank, throughDate: org.date, statementBalance: "33" },
         ctx,
       );
-      await createMatch({ reconciliationId: recon.id, statementLineId: matchedId, journalLineIds: journals }, ctx);
+      await createMatch({ reconciliationId: recon.id, statementLineIds: [matchedId], journalLineIds: journals }, ctx);
       await excludeStatementLine(excludedId, "Duplicate confirmed by the counterparty advice", ctx);
 
       await assert.rejects(

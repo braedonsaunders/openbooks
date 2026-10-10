@@ -116,7 +116,7 @@ export function MatchWorkspace({
   const router = useRouter()
   const accountPickerId = useId()
   const [busy, setBusy] = useState(false)
-  const [selection, setSelection] = useState<{ scope: string; stmt: string | null; gl: Set<string> }>({ scope: '', stmt: null, gl: new Set() })
+  const [selection, setSelection] = useState<{ scope: string; stmt: Set<string>; gl: Set<string> }>({ scope: '', stmt: new Set(), gl: new Set() })
   const [addLine, setAddLine] = useState<{ id: string; label: string } | null>(null)
   const [correctLine, setCorrectLine] = useState<{ id: string; posted_on: string; amount: string; description: string | null } | null>(null)
   const [offsetId, setOffsetId] = useState('')
@@ -140,9 +140,9 @@ export function MatchWorkspace({
   ])
   const selectionIsCurrent = matchSelectionMatchesScope(selection.scope, matchScope)
   const visibleStmtIds = new Set((data?.stmtRows ?? []).map((row) => row.id))
-  const selectedStmt = selectionIsCurrent && selection.stmt && visibleStmtIds.has(selection.stmt)
-    ? selection.stmt
-    : null
+  const selectedStmts = selectionIsCurrent
+    ? new Set([...selection.stmt].filter((id) => visibleStmtIds.has(id)))
+    : new Set<string>()
   const selectedGl = useMemo<ReadonlySet<string>>(() => {
     if (!matchSelectionMatchesScope(selection.scope, matchScope)) return NO_SELECTED_GL
     const visibleIds = new Set((data?.glRows ?? []).map((row) => row.id))
@@ -208,9 +208,13 @@ export function MatchWorkspace({
     () => sum((data?.glRows ?? []).filter((r) => selectedGl.has(r.id)).map((r) => r.amount)),
     [data, selectedGl],
   )
+  const stmtSelectionSum = useMemo(
+    () => sum((data?.stmtRows ?? []).filter((r) => selectedStmts.has(r.id)).map((r) => r.amount)),
+    [data, selectedStmts],
+  )
 
   function clearSelection() {
-    setSelection((current) => current.scope === matchScope ? { scope: matchScope, stmt: null, gl: new Set() } : current)
+    setSelection((current) => current.scope === matchScope ? { scope: matchScope, stmt: new Set(), gl: new Set() } : current)
   }
 
   async function call(method: string, url: string, body?: unknown, onError?: (message: string) => void): Promise<MatchActionResult | null> {
@@ -270,8 +274,8 @@ export function MatchWorkspace({
   }
 
   async function matchSelected() {
-    if (!session || !selectedStmt || selectedGl.size === 0) return
-    const d = await call('POST', `/api/banking/reconciliations/${session.id}/matches`, { statementLineId: selectedStmt, journalLineIds: [...selectedGl] })
+    if (!session || selectedStmts.size === 0 || selectedGl.size === 0) return
+    const d = await call('POST', `/api/banking/reconciliations/${session.id}/matches`, { statementLineIds: [...selectedStmts], journalLineIds: [...selectedGl] })
     if (!d) return
     toast.success(tW('matchedToast')); clearSelection(); router.refresh()
   }
@@ -286,7 +290,12 @@ export function MatchWorkspace({
     if (!reason) return
     const d = await call('PATCH', `/api/banking/statement-lines/${id}`, { action: 'exclude', reason })
     if (!d) return
-    toast.success(t('excludedToast')); if (selectedStmt === id) setSelection((current) => current.scope === matchScope ? { ...current, stmt: null } : current); router.refresh()
+    toast.success(t('excludedToast')); if (selectedStmts.has(id)) setSelection((current) => {
+      if (current.scope !== matchScope) return current
+      const stmt = new Set(current.stmt)
+      stmt.delete(id)
+      return { ...current, stmt }
+    }); router.refresh()
   }
   async function restore(id: string) {
     const d = await call('PATCH', `/api/banking/statement-lines/${id}`, { action: 'restore' })
@@ -298,7 +307,12 @@ export function MatchWorkspace({
     if (!ok) return
     const d = await call('PATCH', `/api/banking/statement-lines/${id}`, { action: 'clear-duplicate' })
     if (!d) return
-    toast.success(t('clearedDuplicateToast')); if (selectedStmt === id) setSelection((current) => current.scope === matchScope ? { ...current, stmt: null } : current); router.refresh()
+    toast.success(t('clearedDuplicateToast')); if (selectedStmts.has(id)) setSelection((current) => {
+      if (current.scope !== matchScope) return current
+      const stmt = new Set(current.stmt)
+      stmt.delete(id)
+      return { ...current, stmt }
+    }); router.refresh()
   }
   async function excludeFlaggedDuplicates() {
     if (!account || (data?.flaggedTotal ?? 0) === 0) return
@@ -422,8 +436,8 @@ export function MatchWorkspace({
           <Button variant="outline" disabled={busy} onClick={excludeFlaggedDuplicates}><Ban size={15} /> {t('excludeFlagged', { count: data?.flaggedTotal ?? 0 })}</Button>
         ) : null}
         <span className="flex-1" />
-        {selectedStmt ? <span className="text-xs text-slate-600 tabular-nums dark:text-slate-300">{tW('selectionSummary', { bank: money((data.stmtRows.find((r) => r.id === selectedStmt)?.amount) ?? 0), gl: money(glSelectionSum) })}</span> : null}
-        <Button disabled={busy || !selectedStmt || selectedGl.size === 0} onClick={matchSelected}><Link2 size={15} /> {tW('matchSelected')}</Button>
+        {selectedStmts.size > 0 || selectedGl.size > 0 ? <span className="text-xs text-slate-600 tabular-nums dark:text-slate-300">{tW('selectionSummary', { bank: money(stmtSelectionSum), gl: money(glSelectionSum) })}</span> : null}
+        <Button disabled={busy || selectedStmts.size === 0 || selectedGl.size === 0} onClick={matchSelected}><Link2 size={15} /> {tW('matchSelected')}</Button>
         <Button disabled={busy || !zero} onClick={signOff} title={zero ? undefined : tW('signOffDisabledTitle')}><CheckCheck size={15} /> {tW('signOff')}</Button>
       </div>
 
@@ -457,10 +471,15 @@ export function MatchWorkspace({
                 {data.stmtRows.length === 0 ? (
                   <TableRow><TableCell colSpan={5} className="text-center text-slate-500 dark:text-slate-400">{data.stmtParams.q ? tW('noBankLinesSearch') : tW('allBankLinesMatched')}</TableCell></TableRow>
                 ) : data.stmtRows.map((l) => {
-                  const sel = selectedStmt === l.id
+                  const sel = selectedStmts.has(l.id)
+                  const toggleStmt = () => setSelection((current) => {
+                    const next = new Set(current.scope === matchScope ? selectedStmts : new Set<string>())
+                    if (next.has(l.id)) next.delete(l.id); else next.add(l.id)
+                    return { scope: matchScope, stmt: next, gl: current.scope === matchScope ? new Set(selectedGl) : new Set<string>() }
+                  })
                   return (
-                    <InteractiveTableRow key={l.id} className={cn('cursor-pointer', sel && selectedRow)} onClick={() => setSelection({ scope: matchScope, stmt: sel ? null : l.id, gl: new Set(selectedGl) })}>
-                      <TableCell className="w-8"><input type="radio" name="stmt" checked={sel} onChange={() => setSelection({ scope: matchScope, stmt: sel ? null : l.id, gl: new Set(selectedGl) })} onClick={(e) => e.stopPropagation()} className="accent-teal-700" aria-label={tW('selectBankLineAria', { date: l.posted_on, amount: money(l.amount) })} /></TableCell>
+                    <InteractiveTableRow key={l.id} className={cn('cursor-pointer', sel && selectedRow)} onClick={toggleStmt}>
+                      <TableCell className="w-8"><input type="checkbox" checked={sel} onChange={toggleStmt} onClick={(e) => e.stopPropagation()} className="accent-teal-700" aria-label={tW('selectBankLineAria', { date: l.posted_on, amount: money(l.amount) })} /></TableCell>
                       <TableCell className="whitespace-nowrap">{l.posted_on}</TableCell>
                       <TableCell className="max-w-[14rem]">
                         <div className="truncate">{l.description ?? '—'}{l.counterparty_ref ? <span className="ml-1.5 text-xs text-slate-400">{l.counterparty_ref}</span> : null}</div>
@@ -530,7 +549,7 @@ export function MatchWorkspace({
                   const toggle = () => setSelection((current) => {
                     const next = new Set(current.scope === matchScope ? selectedGl : NO_SELECTED_GL)
                     if (next.has(l.id)) next.delete(l.id); else next.add(l.id)
-                    return { scope: matchScope, stmt: current.scope === matchScope ? selectedStmt : null, gl: next }
+                    return { scope: matchScope, stmt: current.scope === matchScope ? new Set(selectedStmts) : new Set<string>(), gl: next }
                   })
                   return (
                     <InteractiveTableRow key={l.id} className={cn('cursor-pointer', sel && selectedRow)} onClick={toggle}>

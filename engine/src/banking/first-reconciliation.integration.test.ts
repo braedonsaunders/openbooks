@@ -114,7 +114,7 @@ test(
         ctx,
       );
       await createMatch(
-        { reconciliationId: recon.id, statementLineId, journalLineIds: periodLines },
+        { reconciliationId: recon.id, statementLineIds: [statementLineId], journalLineIds: periodLines },
         ctx,
       );
 
@@ -143,8 +143,8 @@ test(
         assert.deepEqual(posture, { rolsuper: false, rolbypassrls: false, allowed: false },
           "the refusal is exercised by the actual runtime login");
         await assert.rejects(runtime.query(`insert into reconciliation_matches
-          (id,org_id,reconciliation_id,statement_line_id,journal_line_id,matched_by)
-          values($1,$2,$3,$4,$5,'manual')`, [randomUUID(),org.orgId,recon.id,statementLineId,periodLines[0]]),
+          (id,org_id,reconciliation_id,statement_line_id,journal_line_id,group_id,matched_by)
+          values($1,$2,$3,$4,$5,$6,'manual')`, [randomUUID(),org.orgId,recon.id,statementLineId,periodLines[0],randomUUID()]),
         /signed-off reconciliation matches are immutable/,
         "runtime flags cannot authorize an additional match on signed-off history");
       } finally {
@@ -197,7 +197,7 @@ test(
         ctx,
       );
       await createMatch(
-        { reconciliationId: recon2.id, statementLineId: statement2Id, journalLineIds: period2 },
+        { reconciliationId: recon2.id, statementLineIds: [statement2Id], journalLineIds: period2 },
         ctx,
       );
       assert.deepEqual(await reconciliationTotals(recon2.id, ctx), {
@@ -266,7 +266,7 @@ test(
         ctx,
       );
       await createMatch(
-        { reconciliationId: recon.id, statementLineId, journalLineIds: periodLines },
+        { reconciliationId: recon.id, statementLineIds: [statementLineId], journalLineIds: periodLines },
         ctx,
       );
 

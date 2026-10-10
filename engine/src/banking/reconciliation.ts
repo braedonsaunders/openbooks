@@ -156,9 +156,12 @@ export async function firstReconciliationCarry(
       coalesce(sum(jl.txn_amount) filter (where m.journal_line_id is not null), 0) as matched_old
       from journal_lines jl
       join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status in ('posted', 'reversed')
-      left join reconciliation_matches m
-        on m.journal_line_id = jl.id and m.org_id = jl.org_id
-       and m.reconciliation_id = ${recon.id} and m.org_id = ${ctx.orgId}
+      -- Distinct journals: one journal of a many-to-one group joins one row
+      -- here, so its amount counts once no matter how many bank lines share it.
+      left join (
+        select distinct journal_line_id from reconciliation_matches
+         where reconciliation_id = ${recon.id} and org_id = ${ctx.orgId}
+      ) m on m.journal_line_id = jl.id
      where jl.account_id = ${recon.account_id} and jl.org_id = ${ctx.orgId}
        and je.book_id = ${bookId}
        and jl.currency = ${recon.currency}
@@ -513,8 +516,36 @@ export async function markReconciled(
       );
     }
 
-    const invalidMatches = (await tx.execute<{ statement_line_id: string }>(sql`
-      select m.statement_line_id
+    // Group cross-footing in exact units: every condition the old
+    // per-statement having clause enforced, now footed per match group so a
+    // many-to-one group (two wires, one journal) validates as the unit it
+    // cleared as. A group foots only when every member still reads as it did
+    // at match time and both sides sum exactly alike.
+    const groupRows = (await tx.execute<{
+      group_id: string;
+      stmt_id: string;
+      stmt_amount: string;
+      stmt_account: string;
+      stmt_currency: string;
+      stmt_posted_on: string;
+      stmt_status: string;
+      journal_id: string;
+      journal_amount: string;
+      journal_account: string;
+      journal_currency: string;
+      journal_subsidiary: string | null;
+      journal_reconciled_at: string | null;
+      entry_book: string;
+      entry_status: string;
+      entry_posting_date: string;
+    }>(sql`
+      select m.group_id,
+             l.id as stmt_id, l.amount::text as stmt_amount, l.account_id as stmt_account,
+             l.currency as stmt_currency, l.posted_on::text as stmt_posted_on, l.match_status as stmt_status,
+             jl.id as journal_id, jl.txn_amount::text as journal_amount, jl.account_id as journal_account,
+             jl.currency as journal_currency, jl.subsidiary_id as journal_subsidiary,
+             jl.reconciled_at::text as journal_reconciled_at,
+             je.book_id as entry_book, je.status as entry_status, je.posting_date::text as entry_posting_date
         from reconciliation_matches m
         join bank_statement_lines l
           on l.id = m.statement_line_id
@@ -527,29 +558,48 @@ export async function markReconciled(
          and je.org_id = jl.org_id
        where m.reconciliation_id = ${recon.id}
          and m.org_id = ${ctx.orgId}
-       group by m.statement_line_id, l.amount, l.account_id, l.currency,
-                l.posted_on, l.match_status
-      having l.account_id <> ${recon.account_id}
-          or l.currency <> ${recon.currency}
-          or l.posted_on > ${recon.through_date}
-          or l.match_status <> 'matched'
-          or bool_or(jl.account_id <> ${recon.account_id})
-          or bool_or(jl.currency <> ${recon.currency})
-          or bool_or(je.book_id <> ${bookId})
-          -- Live entries only: a match whose entry has since been reversed is stale.
-          or bool_or(je.status <> 'posted')
-          or bool_or(je.posting_date > ${recon.through_date})
-          or bool_or(jl.reconciled_at is not null)
-          or sum(jl.txn_amount) <> l.amount
-          ${ctx.allowedSubsidiaryIds == null
-            ? sql``
-            : sql`or bool_or(not (jl.subsidiary_id = any(${`{${[...ctx.allowedSubsidiaryIds].join(",")}}`}::uuid[])))`}
-       limit 1
-    `));
-    if (invalidMatches.rows[0]) {
-      throw new BankingError(
-        "Cannot sign off: one or more matches fail book, account, currency, cutoff, availability, or exact-amount cross-footing",
-      );
+    `)).rows;
+    const groups = new Map<string, typeof groupRows>();
+    for (const row of groupRows) {
+      const list = groups.get(row.group_id) ?? [];
+      list.push(row);
+      groups.set(row.group_id, list);
+    }
+    const groupInvalid = (rows: typeof groupRows): string | null => {
+      for (const row of rows) {
+        if (
+          row.stmt_account !== recon.account_id
+          || row.stmt_currency !== recon.currency
+          || row.stmt_posted_on > recon.through_date
+          || row.stmt_status !== "matched"
+          || row.journal_account !== recon.account_id
+          || row.journal_currency !== recon.currency
+          || row.entry_book !== bookId
+          // Live entries only: a match whose entry has since been reversed is stale.
+          || row.entry_status !== "posted"
+          || row.entry_posting_date > recon.through_date
+          || row.journal_reconciled_at !== null
+          || (ctx.allowedSubsidiaryIds !== null && !subsidiaryScopeAllows(ctx.allowedSubsidiaryIds, row.journal_subsidiary))
+        ) {
+          return "one or more matches fail book, account, currency, cutoff, or availability";
+        }
+      }
+      // Distinct members only: the group's rows are the complete bipartite
+      // edges, so a naive sum would count each side's members many times.
+      const stmtTotal = [...new Map(rows.map((row) => [row.stmt_id, row.stmt_amount])).values()]
+        .reduce((total, amount) => total + toUnits(amount), 0n);
+      const journalTotal = [...new Map(rows.map((row) => [row.journal_id, row.journal_amount])).values()]
+        .reduce((total, amount) => total + toUnits(amount), 0n);
+      if (stmtTotal !== journalTotal) {
+        return `group total ${fromUnits(stmtTotal)} does not foot to ${fromUnits(journalTotal)}`;
+      }
+      return null;
+    };
+    for (const rows of groups.values()) {
+      const reason = groupInvalid(rows);
+      if (reason) {
+        throw new BankingError(`Cannot sign off: ${reason} in exact-amount cross-footing`);
+      }
     }
 
     const carry = await firstReconciliationCarry(tx, recon, ctx, bookId);

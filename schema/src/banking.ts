@@ -188,6 +188,10 @@ export const reconciliationMatches = pgTable(
     reconciliationId: uuid("reconciliation_id").notNull(),
     statementLineId: uuid("statement_line_id").notNull(),
     journalLineId: uuid("journal_line_id").notNull(),
+    /** One match operation writes one group: unmatch removes the whole
+     * group and sign-off cross-foots group sums. A journal belongs to a
+     * single group (storage backstop: recon_matches_one_journal_one_group). */
+    groupId: uuid("group_id").notNull(),
     matchedBy: text("matched_by", { enum: ["auto", "manual", "rule"] }).notNull(),
     confidence: money("confidence"), // 0..1 for auto matches
     ...auditColumns,
@@ -195,7 +199,8 @@ export const reconciliationMatches = pgTable(
   (t) => [
     index("recon_matches_stmt_line").on(t.statementLineId),
     index("recon_matches_journal_line").on(t.journalLineId),
-    uniqueIndex("recon_matches_one_journal_claim").on(t.journalLineId),
+    uniqueIndex("recon_matches_pair_claim").on(t.orgId, t.statementLineId, t.journalLineId),
+    index("recon_matches_group").on(t.orgId, t.groupId),
   ],
 );
 

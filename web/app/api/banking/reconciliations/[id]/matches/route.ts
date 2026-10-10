@@ -5,14 +5,14 @@ import { NextResponse } from 'next/server'
 import { createMatch, unmatchStatementLine } from '@openbooks/engine/src/banking/banking.ts'
 import { isUuid } from '../../../../../../lib/list-params'
 import { notFound } from "@/lib/api/responses";
-const POSTBodySchema1 = z.object({ statementLineId: z.string().uuid(), journalLineIds: z.array(z.string().uuid()).min(1) });
+const POSTBodySchema1 = z.object({ statementLineIds: z.array(z.string().uuid()).min(1), journalLineIds: z.array(z.string().uuid()).min(1) });
 
 
 
 export const runtime = 'nodejs'
 
 
-/** Manual match: one statement line ↔ one or more journal lines. */
+/** Manual match: statement lines ↔ journal lines as one group when both sides sum alike. */
 export const POST = defineRoute({
   permission: 'banking.reconcile',
   feature: 'banking',
@@ -24,22 +24,23 @@ export const POST = defineRoute({
     const { id } = await params
     if (!isUuid(id)) return notFound("record")
 
-    const body = (routeBody) as { statementLineId?: string; journalLineIds?: string[] }
+    const body = (routeBody) as { statementLineIds?: string[]; journalLineIds?: string[] }
     if (
-        !body.statementLineId ||
-        !isUuid(body.statementLineId) ||
+        !Array.isArray(body.statementLineIds) ||
+        body.statementLineIds.length === 0 ||
+        !body.statementLineIds.every((s) => typeof s === 'string' && isUuid(s)) ||
         !Array.isArray(body.journalLineIds) ||
         body.journalLineIds.length === 0 ||
         !body.journalLineIds.every((j) => typeof j === 'string' && isUuid(j))
       ) {
         return NextResponse.json(
-          { error: 'statementLineId and at least one journalLineId are required' },
+          { error: 'statementLineIds and journalLineIds are required, each with at least one entry' },
           { status: 400 },
         )
       }
     try {
         const totals = await createMatch(
-          { reconciliationId: id, statementLineId: body.statementLineId, journalLineIds: body.journalLineIds },
+          { reconciliationId: id, statementLineIds: body.statementLineIds, journalLineIds: body.journalLineIds },
           { orgId: user.orgId, userId: user.id, allowedSubsidiaryIds: gate.allowedSubsidiaryIds },
         )
         return NextResponse.json({ ok: true, totals })

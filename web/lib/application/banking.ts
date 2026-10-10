@@ -330,7 +330,9 @@ export async function matchStatementLine(context: ApplicationContext, input: {
         const totals = await createMatch(
           {
             reconciliationId: input.reconciliationId,
-            statementLineId: input.statementLineId,
+            // The agent tool still proposes one line at a time: a single
+            // line is a one-member group.
+            statementLineIds: [input.statementLineId],
             journalLineIds: input.journalLineIds,
           },
           bankingContext(context),

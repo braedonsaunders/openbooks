@@ -212,18 +212,18 @@ test(
         createMatch(
           {
             reconciliationId,
-            statementLineId: withdrawalId,
+            statementLineIds: [withdrawalId],
             journalLineIds: [splitWithdrawal[0]!],
           },
           ctx,
         ),
-        /total -5\.0000; the statement line is -20\.0000/,
+        /Selected bank lines total -20\.0000; selected journal lines total -5\.0000/,
       );
       await assert.rejects(
         createMatch(
           {
             reconciliationId,
-            statementLineId: withdrawalId,
+            statementLineIds: [withdrawalId],
             journalLineIds: otherTenantLine,
           },
           ctx,
@@ -233,7 +233,7 @@ test(
       await createMatch(
         {
           reconciliationId,
-          statementLineId: withdrawalId,
+          statementLineIds: [withdrawalId],
           journalLineIds: splitWithdrawal,
         },
         ctx,
@@ -447,7 +447,7 @@ test(
         createMatch(
           {
             reconciliationId: reconciliation.id,
-            statementLineId,
+            statementLineIds: [statementLineId],
             journalLineIds: [reversedLineId!],
           },
           ctx,
@@ -952,7 +952,7 @@ test(
         ctx,
       );
       await createMatch(
-        { reconciliationId, statementLineId: lineId, journalLineIds: [bankLineId!] },
+        { reconciliationId, statementLineIds: [lineId], journalLineIds: [bankLineId!] },
         ctx,
       );
 
@@ -1041,7 +1041,7 @@ test(
       );
 
       await createMatch(
-        { reconciliationId, statementLineId: lineId, journalLineIds: [bankLineId!] },
+        { reconciliationId, statementLineIds: [lineId], journalLineIds: [bankLineId!] },
         ctx,
       );
       await unmatchStatementLine({ reconciliationId, statementLineId: lineId }, ctx);
@@ -1309,7 +1309,7 @@ test(
       // Manual matching refuses the flagged line by name.
       await assert.rejects(
         createMatch(
-          { reconciliationId: recon.id, statementLineId: flaggedId, journalLineIds: [journalLineId!] },
+          { reconciliationId: recon.id, statementLineIds: [flaggedId], journalLineIds: [journalLineId!] },
           ctx,
         ),
         /possible duplicate/,
@@ -1333,7 +1333,7 @@ test(
       // ...and the cleared line matches normally afterwards.
       const [journalLineId2] = await postBankJournal(org, actor, ["-5.0000"], "cleared-coffee");
       await createMatch(
-        { reconciliationId: recon.id, statementLineId: flaggedId, journalLineIds: [journalLineId2!] },
+        { reconciliationId: recon.id, statementLineIds: [flaggedId], journalLineIds: [journalLineId2!] },
         ctx,
       );
       // Clearing an unflagged line refuses instead of no-op success.
