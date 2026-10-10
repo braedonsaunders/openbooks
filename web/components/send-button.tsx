@@ -7,11 +7,26 @@
 import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Send } from 'lucide-react'
+import { RotateCcw, Send } from 'lucide-react'
 import { Button, Input, Label, Popover } from '@openbooks/ui'
+
+/**
+ * Opaque machine codes the record-PDF send boundary can answer (the uniform
+ * 404 stays `{ error: "not_found" }` by design so a probe learns nothing, and
+ * the sibling print routes use the same terse bodies). They name no remedy,
+ * so the dialog maps them to the localized failure message with a retry —
+ * a raw machine code never renders in the dialog.
+ */
+const OPAQUE_SEND_FAILURES = new Set([
+  'not_found',
+  'record not found',
+  'template not found',
+  'unknown record type',
+])
 
 export function SendButton({ recordType, recordId, baseUrl }: { recordType: string; recordId: string; baseUrl?: string }) {
   const t = useTranslations('pdfTemplates')
+  const tCommon = useTranslations('common')
   const [open, setOpen] = useState(false)
   const [to, setTo] = useState('')
   const [message, setMessage] = useState('')
@@ -54,13 +69,21 @@ export function SendButton({ recordType, recordId, baseUrl }: { recordType: stri
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ to: to.trim(), message: message.trim() || undefined }),
       })
+      // The status is checked before the error body is trusted: a non-JSON
+      // error body (proxy page) must surface the localized failure, never a
+      // SyntaxError or an empty throw.
       const d = (await res.json().catch(() => ({}))) as { to?: string; error?: string }
-      if (!res.ok) throw new Error(d.error)
+      if (!res.ok) throw new Error(typeof d.error === 'string' ? d.error : '')
       toast.success(t('send.sent', { to: d.to ?? to.trim() }))
       setOpen(false)
       setMessage('')
     } catch (e) {
-      const failure = e instanceof Error && e.message ? e.message : t('send.failed')
+      const raw = e instanceof Error ? e.message.trim() : ''
+      // Opaque machine codes (not_found and its terse siblings) name no
+      // remedy, so they render as the localized failure with a retry instead
+      // of the raw code. Actionable server sentences (no recipient, no email
+      // transport, renderer refusal) still read verbatim.
+      const failure = raw && !OPAQUE_SEND_FAILURES.has(raw) ? raw : t('send.failed')
       setError(failure)
       toast.error(failure)
     } finally {
@@ -102,9 +125,15 @@ export function SendButton({ recordType, recordId, baseUrl }: { recordType: stri
           />
         </div>
         {error ? (
-          <p role="alert" className="text-xs text-red-600 dark:text-red-400">
-            {error}
-          </p>
+          <div className="space-y-1.5">
+            <p role="alert" className="text-xs text-red-600 dark:text-red-400">
+              {error}
+            </p>
+            <Button variant="outline" size="sm" className="w-full" onClick={send} disabled={busy}>
+              <RotateCcw size={14} className="mr-1.5" />
+              {tCommon('actions.retry')}
+            </Button>
+          </div>
         ) : null}
         <Button className="w-full" onClick={send} disabled={busy}>
           <Send size={14} className="mr-1.5" />

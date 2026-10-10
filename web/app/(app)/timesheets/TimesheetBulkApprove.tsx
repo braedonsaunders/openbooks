@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { Check, CircleAlert, Loader2 } from 'lucide-react'
@@ -37,6 +37,9 @@ export function TimesheetBulkApprove({ weeks }: { weeks: BulkApproveWeek[] }) {
   const [working, setWorking] = useState(false)
   const [results, setResults] = useState<WeekResult[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Synchronous re-entry fence: state lands on the next render, so two rapid
+  // clicks would both read working=false and approve twice.
+  const inflight = useRef(false)
 
   if (weeks.length === 0) return null
   const keyOf = (week: BulkApproveWeek) => `${week.employeeId}:${week.weekStart}`
@@ -54,7 +57,8 @@ export function TimesheetBulkApprove({ weeks }: { weeks: BulkApproveWeek[] }) {
 
   async function approveSelected() {
     const chosen = weeks.filter((week) => selected.has(keyOf(week)))
-    if (chosen.length === 0 || working) return
+    if (chosen.length === 0 || working || inflight.current) return
+    inflight.current = true
     setWorking(true)
     setError(null)
     try {
@@ -67,6 +71,7 @@ export function TimesheetBulkApprove({ weeks }: { weeks: BulkApproveWeek[] }) {
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : t('grid.networkError'))
     } finally {
+      inflight.current = false
       setWorking(false)
     }
   }

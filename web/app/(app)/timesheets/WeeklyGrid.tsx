@@ -23,7 +23,7 @@ import { toast } from 'sonner'
 import { useBusinessToday } from '../../../components/business-date-provider'
 import { confirmDialog } from '../../../lib/confirm'
 import { promptDialog } from '../../../lib/prompt'
-import { CalendarCheck, ChevronLeft, ChevronRight, FilePenLine, Lock, Plus, RotateCcw, Trash2, Undo2 } from 'lucide-react'
+import { CalendarCheck, Check, ChevronLeft, ChevronRight, FilePenLine, Loader2, Lock, Plus, RotateCcw, Trash2, Undo2 } from 'lucide-react'
 import { fillFromSchedule } from '../../../lib/scheduling/timesheet-fill'
 import { Badge, Button, SearchSelect, Select, UrlDrawer, cn } from '@openbooks/ui'
 import { type CustomFieldDefClient } from '../../../components/custom-field-inputs'
@@ -62,6 +62,10 @@ interface GridRow {
   memo: string
   hours: string[]
   productionEntryIds: string[][]
+  /** Per-entry statuses behind this line (empty for unsaved lines). An
+   * approver may retarget the billable flag only when every entry is still
+   * submitted — the server re-checks, this gates the checkbox. */
+  entryStatuses: string[]
   custom: Record<string, unknown>
   immutable: boolean
   amendsEntryId: string | null
@@ -109,6 +113,7 @@ function emptyRow(
     memo: '',
     hours: ['', '', '', '', '', '', ''],
     productionEntryIds: Array.from({length:7},()=>[]),
+    entryStatuses: [],
     custom: {},
     immutable: false,
     amendsEntryId: null,
@@ -131,6 +136,7 @@ function fromPayload(rows: WeekRow[], timeTypes: TimeTypeOption[], workFamily: T
     memo: r.memo ?? '',
     productionEntryIds: r.productionEntryIds ?? Array.from({length:7},()=>[]),
     hours: r.hours.map((h) => (h === '' ? '' : String(Number(h)))),
+    entryStatuses: r.entryStatuses ?? [],
     custom: r.custom ?? {},
     immutable: r.immutable,
     amendsEntryId: r.amendsEntryId,
@@ -162,6 +168,7 @@ function seedRows(payload: WeekPayload, pickers: TimesheetPickers, workFamily: T
         projectId: booking.projectId,
         itemId: booking.itemId ?? '',
         isBillable: booking.isBillable,
+        entryStatuses: [],
         plannedHours: booking.plannedHours,
         plannedOnly: true,
       })
@@ -284,6 +291,18 @@ export function WeeklyGrid({
   const [status, setStatus] = useState(payload.status)
   const [dirty, setDirty] = useState(false)
   const [busy, setBusy] = useState(false)
+  // Which decision is in flight (save/submit/approve/…). The button for that
+  // action shows its spinner + progress label while every action stays
+  // disabled — a slow approval reads as working, never as a silent failure.
+  const [pendingAction, setPendingAction] = useState<string | null>(null)
+  // A completed decision pins its confirmation beside the actions until the
+  // next action — a toast alone vanishes, and the operator reads silence as
+  // success or success as silence. Mirrors the pinned refusal below.
+  const [notice, setNotice] = useState<string | null>(null)
+  // Synchronous re-entry fence: React state lands on the next render, so two
+  // rapid clicks would both read busy=false and post twice. The ref flips in
+  // the same tick as the first click, so the second click is refused.
+  const inflight = useRef(false)
   // The revision this editor loaded. Every save sends it back; the server
   // refuses a save over a moved week with a named 409 instead of silently
   // overwriting the other editor's hours.
@@ -404,9 +423,14 @@ export function WeeklyGrid({
     body: unknown,
     method: 'PUT' | 'POST' = 'POST',
     onConflict?: (message: string) => void,
+    action: string | null = null,
   ) {
+    if (inflight.current) return null
+    inflight.current = true
     setBusy(true)
+    setPendingAction(action)
     setRefusal(null)
+    setNotice(null)
     try {
       const target = workFamily === 'production' ? `${url}?workFamily=production` : url
       const res = await fetch(target, {
@@ -453,7 +477,9 @@ export function WeeklyGrid({
       toast.error(t('grid.networkError'))
       return null
     } finally {
+      inflight.current = false
       setBusy(false)
+      setPendingAction(null)
     }
   }
 
@@ -497,9 +523,10 @@ export function WeeklyGrid({
       toast.error(t('grid.saveBeforeSubmit'))
       return
     }
-    const data = await post('/api/timesheets/submit', { employee: employeeId, week })
+    const data = await post('/api/timesheets/submit', { employee: employeeId, week }, 'POST', undefined, 'submit')
     if (data) {
       applyPayload(data)
+      setNotice(t('grid.submittedToast'))
       toast.success(t('grid.submittedToast'))
     }
   }
@@ -521,19 +548,50 @@ export function WeeklyGrid({
       confirmLabel: t('grid.noHoursConfirm'),
     })
     if (!reason) return
-    const data = await post('/api/timesheets/submit', { employee: employeeId, week, noHours: true, reason })
+    const data = await post('/api/timesheets/submit', { employee: employeeId, week, noHours: true, reason }, 'POST', undefined, 'submit')
     if (data) {
       applyPayload(data)
+      setNotice(t('grid.noHoursToast'))
       toast.success(t('grid.noHoursToast'))
     }
   }
 
   const onApprove = async () => {
     if (!employeeId) return
-    const data = await post('/api/timesheets/approve', { employee: employeeId, week })
+    const data = await post('/api/timesheets/approve', { employee: employeeId, week }, 'POST', undefined, 'approve')
     if (data) {
       applyPayload(data)
+      setNotice(t('grid.approvedToast'))
       toast.success(t('grid.approvedToast'))
+    }
+  }
+
+  // An approver holding time.approve may mark a submitted line billable or
+  // not (a write-off) before deciding the week. The flag posts immediately
+  // through the native billable route — it is never a local draft the weekly
+  // save could silently drop (the save skips submitted lines). The approval
+  // that follows snapshots bill rates off the final flag.
+  const onBillableApprover = async (index: number, value: boolean) => {
+    if (!employeeId) return
+    const line = rows[index]
+    if (!line) return
+    const data = await post('/api/timesheets/billable', {
+      employee: employeeId,
+      week,
+      line: {
+        projectId: line.projectId || null,
+        itemId: line.itemId || null,
+        timeTypeId: line.timeTypeId || null,
+        departmentId: line.departmentId || null,
+        memo: line.memo || null,
+        custom: line.custom,
+      },
+      isBillable: value,
+    }, 'POST', undefined, 'billable')
+    if (data) {
+      applyPayload(data)
+      setNotice(t('grid.billableUpdatedToast'))
+      toast.success(t('grid.billableUpdatedToast'))
     }
   }
 
@@ -546,9 +604,10 @@ export function WeeklyGrid({
       confirmLabel: t('grid.reject'),
     })
     if (!reason) return
-    const data = await post('/api/timesheets/reject', { employee: employeeId, week, reason })
+    const data = await post('/api/timesheets/reject', { employee: employeeId, week, reason }, 'POST', undefined, 'reject')
     if (data) {
       applyPayload(data)
+      setNotice(t('grid.rejectedToast'))
       toast.success(t('grid.rejectedToast'))
     }
   }
@@ -561,9 +620,10 @@ export function WeeklyGrid({
       confirmLabel: t('grid.withdraw'),
     })
     if (!ok) return
-    const data = await post('/api/timesheets/withdraw', { employee: employeeId, week })
+    const data = await post('/api/timesheets/withdraw', { employee: employeeId, week }, 'POST', undefined, 'withdraw')
     if (data) {
       applyPayload(data)
+      setNotice(t('grid.withdrawnToast'))
       toast.success(t('grid.withdrawnToast'))
     }
   }
@@ -641,6 +701,10 @@ export function WeeklyGrid({
   // Withdraw is the submitter's own recall of a week still awaiting decision:
   // decided weeks stay decided (approved reopens, rejected is already back).
   const canWithdraw = requireApproval && canManage && employeeId != null && status === 'submitted'
+  // Approver billable retargeting is a submitted-week right: the per-row
+  // gate below additionally requires every entry still submitted, no
+  // amendment offset, and never a production line.
+  const canEditBillable = requireApproval && canApprove && employeeId != null && status === 'submitted'
 
   // Column widths mirror LineGrid's data-driven track model.
   // Org-defined line fields become real grid columns, between the built-in
@@ -684,12 +748,20 @@ export function WeeklyGrid({
           ) : null}
           {canSubmit && grandTotal > 0 ? (
             <Button size="sm" variant="outline" onClick={onSubmit} disabled={busy || dirty}>
-              {t('grid.submitForApproval')}
+              {pendingAction === 'submit' ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />{t('grid.submitting')}
+                </span>
+              ) : t('grid.submitForApproval')}
             </Button>
           ) : null}
           {canSubmit && grandTotal === 0 && !dirty ? (
             <Button size="sm" variant="outline" onClick={onDeclareNoHours} disabled={busy}>
-              {t('grid.noHoursAction')}
+              {pendingAction === 'submit' ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />{t('grid.submitting')}
+                </span>
+              ) : t('grid.noHoursAction')}
             </Button>
           ) : null}
           {canDoApprove ? (
@@ -701,7 +773,11 @@ export function WeeklyGrid({
                 disabled={busy || approveBlockedReason != null}
                 title={approveBlockedReason ?? undefined}
               >
-                {tCommon('actions.approve')}
+                {pendingAction === 'approve' ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />{t('grid.approving')}
+                  </span>
+                ) : tCommon('actions.approve')}
               </Button>
               {approveBlockedReason ? (
                 <span className="max-w-64 text-xs text-slate-500 dark:text-slate-400">{approveBlockedReason}</span>
@@ -724,14 +800,31 @@ export function WeeklyGrid({
               ) : null}
             </div>
           ) : null}
+          {!refusal && notice ? (
+            <div
+              role="status"
+              className="flex w-full flex-wrap items-center gap-2 rounded-lg border border-teal-200 bg-teal-50 px-4 py-2.5 text-sm text-teal-800 dark:border-teal-900/60 dark:bg-teal-950/40 dark:text-teal-200"
+            >
+              <Check className="h-4 w-4 shrink-0" />
+              <span>{notice}</span>
+            </div>
+          ) : null}
           {canDoReject ? (
             <Button size="sm" variant="outline" onClick={onReject} disabled={busy}>
-              {t('grid.reject')}
+              {pendingAction === 'reject' ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />{t('grid.rejecting')}
+                </span>
+              ) : t('grid.reject')}
             </Button>
           ) : null}
           {canWithdraw ? (
             <Button size="sm" variant="outline" onClick={onWithdraw} disabled={busy}>
-              <Undo2 size={14} /> {t('grid.withdraw')}
+              {pendingAction === 'withdraw' ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />{t('grid.withdrawing')}
+                </span>
+              ) : (<span className="inline-flex items-center gap-1.5"><Undo2 size={14} /> {t('grid.withdraw')}</span>)}
             </Button>
           ) : null}
           {canDoReopen ? (
@@ -906,6 +999,13 @@ export function WeeklyGrid({
             {/* rows */}
             {rows.map((r, i) => {
               const total = rowTotal(r)
+              // An approver's billable retarget stays available on a
+              // submitted line although the row is otherwise immutable: the
+              // flag posts immediately through the billable route (never a
+              // local draft), and the server refuses approved/invoiced lines.
+              const approverBillable = canEditBillable && !busy
+                && r.costTarget !== 'production' && r.amendsEntryId == null
+                && r.entryStatuses.length > 0 && r.entryStatuses.every((s) => s === 'submitted')
               return (
                 <RowFragment
                   key={i}
@@ -916,6 +1016,7 @@ export function WeeklyGrid({
                   // the inputs while busy means hours typed mid-save cannot
                   // vanish under the applied payload.
                   readOnly={readOnly || busy || r.immutable}
+                  billableEditable={approverBillable}
                   pickers={pickers}
                   cellInput={cellInput}
                   productionAvailable={productionAvailable}
@@ -927,7 +1028,10 @@ export function WeeklyGrid({
                   onItem={(v) => setRow(i, { itemId: v })}
                   onTimeType={(v) => onTimeType(i, v)}
                   onDept={(v) => setRow(i, { departmentId: v })}
-                  onBillable={(v) => setRow(i, { isBillable: v })}
+                  onBillable={(v) => {
+                    if (approverBillable) void onBillableApprover(i, v)
+                    else setRow(i, { isBillable: v })
+                  }}
                   onMemo={(v) => setRow(i, { memo: v })}
                   customCols={customCols}
                   onCustom={(v) => setRow(i, { custom: v })}
@@ -990,6 +1094,7 @@ function RowFragment({
   i,
   total,
   readOnly,
+  billableEditable,
   pickers,
   cellInput,
   onProject,
@@ -1014,6 +1119,9 @@ function RowFragment({
   i: number
   total: number
   readOnly: boolean
+  /** Approver retarget of the billable flag on a submitted line (posts
+   * through the billable route; every other cell stays read-only). */
+  billableEditable: boolean
   pickers: TimesheetPickers
   cellInput: string
   onProject: (v: string) => void
@@ -1125,7 +1233,7 @@ function RowFragment({
         <input
           type="checkbox"
           checked={r.isBillable}
-          disabled={readOnly || r.costTarget === 'production'}
+          disabled={r.costTarget === 'production' || (readOnly && !billableEditable)}
           onChange={(e) => onBillable(e.target.checked)}
           aria-label={t('grid.lineBillableAria', { line: i + 1 })}
           className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
