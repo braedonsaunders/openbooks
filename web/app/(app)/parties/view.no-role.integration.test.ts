@@ -91,3 +91,33 @@ test('managers see bulk assignment only on the role-less slice', { skip: !proces
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }
 })
+
+test('unsaved-create presets a person or company kind with no role', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypassContext(() => createScratchOrg())
+  const manager = await withBypassContext(() => createScratchUser(org.orgId, 'Manager', 'manager'))
+  try {
+    await withBypassContext(() =>
+      db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='manager'`),
+    )
+    state.user = sessionFor(org.orgId, manager)
+
+    const partyOf = (data: { drawer?: { payload?: { party?: { kind?: unknown }; customer?: unknown; vendor?: unknown; employee?: unknown } } | null }) =>
+      data.drawer?.payload
+    const person = await withOrgContext(org.orgId, () => loadParties({ partyNew: '1', kind: 'person' }))
+    assert.equal(partyOf(person)?.party?.kind, 'person')
+    assert.deepEqual(
+      [partyOf(person)?.customer, partyOf(person)?.vendor, partyOf(person)?.employee],
+      [null, null, null],
+      'a preset person starts with no role',
+    )
+
+    const company = await withOrgContext(org.orgId, () => loadParties({ partyNew: '1', kind: 'company' }))
+    assert.equal(partyOf(company)?.party?.kind, 'company')
+
+    const bogus = await withOrgContext(org.orgId, () => loadParties({ partyNew: '1', kind: 'vendor' }))
+    assert.equal(partyOf(bogus)?.party?.kind, 'company', 'roles are never smuggled through the create URL')
+  } finally {
+    state.user = null
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})

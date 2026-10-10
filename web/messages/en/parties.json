@@ -19,6 +19,8 @@
   },
   "newParty": {
     "defaultLabel": "New party",
+  "companyLabel": "New company",
+  "personLabel": "New person",
     "createFailed": "Could not create a draft party"
   },
   "drawer": {
@@ -303,6 +305,10 @@
     "additionalSubsidiaries": "Additional subsidiaries",
     "additionalSubsidiariesHint": "Allow this entity to transact with these additional legal entities.",
     "rolesHeading": "Roles",
+    "removeRole": "Remove role",
+    "removeRoleTitle": "Remove the {role} role?",
+    "removeRoleConfirm": "Remove the {role} role from this party? Its settings are deleted; past documents keep their history.",
+    "removeRoleFailed": "The role could not be removed.",
     "paymentTerms": "Payment terms",
     "creditLimit": "Credit limit",
     "receivableAccount": "Receivable account",

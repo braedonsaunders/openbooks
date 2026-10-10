@@ -19,6 +19,8 @@
   },
   "newParty": {
     "defaultLabel": "Nuevo tercero",
+  "companyLabel": "Nueva empresa",
+  "personLabel": "Nueva persona",
     "createFailed": "No se pudo crear un borrador de tercero"
   },
   "drawer": {
@@ -303,6 +305,10 @@
     "additionalSubsidiaries": "Subsidiarias adicionales",
     "additionalSubsidiariesHint": "Permita que este tercero opere con estas entidades jurídicas adicionales.",
     "rolesHeading": "Roles",
+    "removeRole": "Eliminar rol",
+    "removeRoleTitle": "¿Eliminar el rol {role}?",
+    "removeRoleConfirm": "¿Eliminar el rol {role} de este tercero? Su configuración se elimina; los documentos anteriores conservan su historial.",
+    "removeRoleFailed": "No se pudo eliminar el rol.",
     "paymentTerms": "Condiciones de pago",
     "creditLimit": "Límite de crédito",
     "receivableAccount": "Cuenta por cobrar",

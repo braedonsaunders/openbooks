@@ -19,6 +19,8 @@
   },
   "newParty": {
     "defaultLabel": "新建往来单位",
+  "companyLabel": "新建公司",
+  "personLabel": "新建个人",
     "createFailed": "无法创建往来单位草稿"
   },
   "drawer": {
@@ -306,6 +308,10 @@
     "additionalSubsidiaries": "其他子公司",
     "additionalSubsidiariesHint": "允许此实体与以下其他法人实体进行交易。",
     "rolesHeading": "角色",
+    "removeRole": "移除角色",
+    "removeRoleTitle": "要移除“{role}”角色吗?",
+    "removeRoleConfirm": "要从该往来单位移除“{role}”角色吗?其设置将被删除；过往单据保留历史记录。",
+    "removeRoleFailed": "无法移除角色。",
     "paymentTerms": "付款条件",
     "creditLimit": "信用额度",
     "receivableAccount": "应收账款科目",

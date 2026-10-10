@@ -19,6 +19,8 @@
   },
   "newParty": {
     "defaultLabel": "Nouveau tiers",
+  "companyLabel": "Nouvelle entreprise",
+  "personLabel": "Nouvelle personne",
     "createFailed": "Impossible de créer un tiers brouillon"
   },
   "drawer": {
@@ -303,6 +305,10 @@
     "additionalSubsidiaries": "Filiales supplémentaires",
     "additionalSubsidiariesHint": "Autoriser ce tiers à effectuer des transactions avec ces entités juridiques supplémentaires.",
     "rolesHeading": "Rôles",
+    "removeRole": "Supprimer le rôle",
+    "removeRoleTitle": "Supprimer le rôle {role} ?",
+    "removeRoleConfirm": "Supprimer le rôle {role} de ce tiers ? Ses paramètres sont supprimés ; les documents passés gardent leur historique.",
+    "removeRoleFailed": "Le rôle n’a pas pu être supprimé.",
     "paymentTerms": "Conditions de paiement",
     "creditLimit": "Limite de crédit",
     "receivableAccount": "Compte client",

@@ -19,6 +19,8 @@
   },
   "newParty": {
     "defaultLabel": "Neuer Geschäftspartner",
+  "companyLabel": "Neues Unternehmen",
+  "personLabel": "Neue Person",
     "createFailed": "Entwurf für Geschäftspartner konnte nicht erstellt werden"
   },
   "drawer": {
@@ -306,6 +308,10 @@
     "additionalSubsidiaries": "Weitere Tochtergesellschaften",
     "additionalSubsidiariesHint": "Erlauben Sie dieser Einheit, mit diesen weiteren Rechtseinheiten Geschäfte zu tätigen.",
     "rolesHeading": "Rollen",
+    "removeRole": "Rolle entfernen",
+    "removeRoleTitle": "Die Rolle {role} entfernen?",
+    "removeRoleConfirm": "Die Rolle {role} von diesem Partner entfernen? Ihre Einstellungen werden gelöscht; vergangene Belege bleiben erhalten.",
+    "removeRoleFailed": "Die Rolle konnte nicht entfernt werden.",
     "paymentTerms": "Zahlungsbedingungen",
     "creditLimit": "Kreditlimit",
     "receivableAccount": "Forderungskonto",
