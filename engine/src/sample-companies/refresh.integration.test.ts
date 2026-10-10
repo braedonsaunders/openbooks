@@ -53,6 +53,24 @@ test("native exploration refresh preserves rebased posted history, member drafts
     });
     memberOrgId = company.orgId;
     const orgId = memberOrgId;
+    const signedOffMatches = (tenantId: string) => withOrgContext(tenantId, async () =>
+      (await db.execute<{ matches: number; invalid: number }>(sql`
+        select count(*)::int as matches,count(*) filter(where
+          jl.org_id is distinct from m.org_id or jl.account_id is distinct from r.account_id
+          or jl.currency is distinct from r.currency or jl.reconciliation_id is distinct from r.id
+          or jl.reconciled_at is null or je.posting_date>r.through_date
+          or sl.org_id is distinct from m.org_id or sl.account_id is distinct from r.account_id
+          or sl.currency is distinct from r.currency or sl.posted_on>r.through_date)::int as invalid
+        from reconciliation_matches m join reconciliations r on r.org_id=m.org_id and r.id=m.reconciliation_id
+        join journal_lines jl on jl.org_id=m.org_id and jl.id=m.journal_line_id
+        join journal_entries je on je.org_id=m.org_id and je.id=jl.entry_id
+        join bank_statement_lines sl on sl.org_id=m.org_id and sl.id=m.statement_line_id
+        where m.org_id=${tenantId} and r.status='signed_off'`)).rows[0]!);
+    const sourceMatches = await signedOffMatches(master.orgId);
+    assert.ok(sourceMatches.matches >= 4, "native source contains signed-off bank evidence to preserve");
+    assert.equal(sourceMatches.invalid, 0);
+    assert.deepEqual(await signedOffMatches(orgId), sourceMatches,
+      "exploration copies preserve signed-off match counts and exact native journal ownership");
     const identity = await withOrgContext(orgId, async () => (await db.execute<{ seed: string }>(sql`select sandbox_seed::text as seed from orgs where id=${orgId}`)).rows[0]!);
     const draftId = scenarioRecordId({ orgId, identitySourceOrgId: master.orgId, identitySeed: identity.seed }, "documents", "operations-quote-3");
     await withOrgContext(orgId, async () => {

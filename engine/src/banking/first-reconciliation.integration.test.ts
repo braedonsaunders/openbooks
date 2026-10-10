@@ -130,6 +130,22 @@ test(
         select status from reconciliations where org_id = ${org.orgId} and id = ${recon.id}
       `)).rows[0]!.status;
       assert.equal(status, "signed_off");
+      await assert.rejects(db.transaction(async (tx) => {
+        await tx.execute(sql`select set_config('openbooks.clone','on',true),
+          set_config('openbooks.migration','on',true),set_config('openbooks.amend','on',true)`);
+        assert.equal((await tx.execute<{ allowed: boolean }>(sql`
+          select public.openbooks_clone_authority() as allowed`)).rows[0]!.allowed, false);
+        await tx.execute(sql`insert into reconciliation_matches
+          (id,org_id,reconciliation_id,statement_line_id,journal_line_id,matched_by)
+          values(${randomUUID()},${org.orgId},${recon.id},${statementLineId},${periodLines[0]},'manual')`);
+      }), /signed-off reconciliation matches are immutable/,
+      "runtime flags cannot authorize an additional match on signed-off history");
+      await assert.rejects(db.execute(sql`update reconciliation_matches set confidence='0.5000'
+        where org_id=${org.orgId} and reconciliation_id=${recon.id}`),
+      /signed-off reconciliation matches are immutable/);
+      await assert.rejects(db.execute(sql`delete from reconciliation_matches
+        where org_id=${org.orgId} and reconciliation_id=${recon.id}`),
+      /signed-off reconciliation matches are immutable/);
       const signoff = (await db.execute<{ changes: { openingCarriedForward: string; openingCarryStartDate: string } }>(sql`
         select changes from audit_log
          where org_id = ${org.orgId} and table_name = 'reconciliations' and row_id = ${recon.id}
