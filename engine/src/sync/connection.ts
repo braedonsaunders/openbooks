@@ -18,6 +18,7 @@ import { refusedConnectionBaseCurrency } from "./base-currency.ts";
 export { refusedConnectionBaseCurrency } from "./base-currency.ts";
 import { sealJson } from "../platform/secrets.ts";
 import type { MigrationSource } from "./source.ts";
+import { connectorSettings, resolveSyncSelection, type MappingGroup, type SyncCapabilities } from "./connection-settings.ts";
 
 /**
  * Connection layer — the seam between a tenant's stored `connections` row and a
@@ -36,7 +37,7 @@ export interface SourceFieldSpec {
   required?: boolean;
   help?: string;
   /** Render as a dropdown instead of a text input. */
-  kind?: "text" | "select" | "textarea";
+  kind?: "text" | "select" | "textarea" | "mappings" | "sync-options";
   /** Static options for a `select` field. */
   options?: { value: string; label: string }[];
   /** Populate a `select` from a live app list (resolved by the API layer). */
@@ -53,6 +54,8 @@ export interface SourceTypeManifest {
   configFields: SourceFieldSpec[];
   /** Secret credentials sealed into `connections.secrets` (never returned). */
   secretFields: SourceFieldSpec[];
+  mappingGroups?: readonly MappingGroup[];
+  syncCapabilities?: SyncCapabilities;
   /**
    * OAuth app-registration guidance rendered in the connection drawer: where
    * to create the app and exactly what to register. The redirect URI is
@@ -83,7 +86,7 @@ const QBD_REGION_LABELS: Record<(typeof QBD_WEB_CONNECTOR_REGIONS)[number], stri
   UK: "United Kingdom",
 };
 
-export const SOURCE_TYPES: SourceTypeManifest[] = [
+export const SOURCE_TYPES: SourceTypeManifest[] = ([
   {
     source: "netsuite",
     displayName: "NetSuite",
@@ -114,9 +117,8 @@ export const SOURCE_TYPES: SourceTypeManifest[] = [
       {
         key: "mappingJson",
         label: "Account field mappings",
-        kind: "textarea",
-        placeholder: "{}",
-        help: "Optional JSON mapping account-specific custom field and record IDs to OpenBooks concepts (including sales/purchase tax code fallbacks). See the extraction-bridge documentation for the supported keys.",
+        kind: "mappings",
+        help: "Map account-specific fields, records and source values to native concepts.",
       },
     ],
     secretFields: [
@@ -253,7 +255,11 @@ export const SOURCE_TYPES: SourceTypeManifest[] = [
       ],
     },
   },
-];
+] satisfies SourceTypeManifest[]).map((manifest) => ({
+  ...manifest,
+  ...connectorSettings(manifest.source),
+  configFields: [...manifest.configFields, { key: "syncOptions", label: "Sync content", kind: "sync-options" as const }],
+}));
 
 export function sourceType(source: string): SourceTypeManifest | undefined {
   return SOURCE_TYPES.find((s) => s.source === source);
@@ -264,6 +270,9 @@ export function validateSourceConfig(
   config: Record<string, unknown>,
   opts?: { today?: string },
 ): string | null {
+  try {
+    resolveSyncSelection(config.syncOptions, manifest.syncCapabilities ?? connectorSettings(manifest.source).syncCapabilities);
+  } catch (error) { return error instanceof Error ? error.message : "Sync content is invalid"; }
   // Truthful refusal before the generic option check below: an AU/NZ (or any
   // other unsupported) region must hear that the Intuit Web Connector does
   // not support it, not a bare "invalid value".

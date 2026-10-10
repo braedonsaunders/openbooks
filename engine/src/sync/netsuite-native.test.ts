@@ -607,6 +607,7 @@ test("NetSuite account mappings accept explicit custom IDs without connector con
       }),
     ),
     {
+      crmProbabilityField: undefined,
       projectForemanField: "custentity_foreman",
       lineMarkupField: undefined,
       lineBillableField: "custcol_billable_override",

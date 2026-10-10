@@ -1,3 +1,4 @@
+import { NETSUITE_MAPPING_GROUPS, validateConnectionMappings } from "./connection-settings.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { importNetSuiteCrm } from "./netsuite-crm.ts";
 import { syncNetSuiteFixedAssets } from "./netsuite-fixed-assets.ts";
@@ -161,6 +162,7 @@ export const NETSUITE_TRANSACTION_WATERMARK_QUERY =
   "SELECT TO_CHAR(MAX(lastmodifieddate), 'YYYY-MM-DD HH24:MI:SS') AS now FROM transaction";
 
 export interface NetSuiteAccountMappings {
+  crmProbabilityField?: string;
   projectForemanField?: string;
   /** Line field holding the rebill markup, if this account records one. */
   lineMarkupField?: string;
@@ -392,7 +394,8 @@ export function parseNetSuiteMappings(value: unknown): NetSuiteAccountMappings {
         }
         return [key.toUpperCase(), normalized];
       })) as NetSuiteAccountMappings["projectBillingTypes"];
-  return {
+  const mappings: NetSuiteAccountMappings = {
+    crmProbabilityField: safeSuiteScriptId(raw.crmProbabilityField, "crmProbabilityField") ?? undefined,
     projectForemanField: safeSuiteScriptId(raw.projectForemanField, "projectForemanField") ?? undefined,
     lineMarkupField: safeSuiteScriptId(raw.lineMarkupField, "lineMarkupField") ?? undefined,
     lineBillableField:
@@ -413,6 +416,8 @@ export function parseNetSuiteMappings(value: unknown): NetSuiteAccountMappings {
     projectBillingTypes,
     taxCodeFallbacks,
   };
+  validateConnectionMappings(raw, NETSUITE_MAPPING_GROUPS);
+  return mappings;
 }
 
 const isT = (v: unknown) => v === "T" || v === true;
@@ -816,14 +821,18 @@ export class NetSuiteSource implements MigrationSource {
     return normalizeNetSuiteAccountingPeriods(rows);
   }
 
-  async syncOperationalRecords(options: { orgId: string; connectionId: string; actorId: string | null }): Promise<SourceOperationalSyncResult> {
+  async syncOperationalRecords(options: { orgId: string; connectionId: string; actorId: string | null; populations?: { crm: boolean; fixedAssets: boolean } }): Promise<SourceOperationalSyncResult> {
     const result: SourceOperationalSyncResult = { disabledFeatures: [] };
-    if (await orgFeatureEnabled(options.orgId, "fixedAssets")) {
-      result.fixedAssets = await syncNetSuiteFixedAssets(this, options);
-    } else result.disabledFeatures.push("fixedAssets");
-    if (await orgFeatureEnabled(options.orgId, "crm")) {
-      result.crm = await importNetSuiteCrm(options.orgId, options.connectionId, undefined, { actorId: options.actorId });
-    } else result.disabledFeatures.push("crm");
+    if (options.populations?.fixedAssets !== false) {
+      if (await orgFeatureEnabled(options.orgId, "fixedAssets")) {
+        result.fixedAssets = await syncNetSuiteFixedAssets(this, options);
+      } else result.disabledFeatures.push("fixedAssets");
+    }
+    if (options.populations?.crm !== false) {
+      if (await orgFeatureEnabled(options.orgId, "crm")) {
+        result.crm = await importNetSuiteCrm(options.orgId, options.connectionId, undefined, { actorId: options.actorId });
+      } else result.disabledFeatures.push("crm");
+    }
     return result;
   }
 
