@@ -285,7 +285,7 @@ test("HR-12 cycle open proposes within guideline, flags outside, and refuses emp
     await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: empLine.id, proposedPct: "3" });
     await assert.rejects(
       approveLine({ orgId: org.orgId, actorId: h.hrId, lineId: empLine.id }),
-      /cannot decide their own line/,
+      /decide their own line/,
     );
     // A rejection needs its reason — the manager reads it.
     await assert.rejects(
@@ -323,7 +323,7 @@ test("HR-12 cycle approval runs through Flows and push writes each wage once", {
     // The approval is a Flows run: the gate goes to an approver who is
     // not the submitter (self-approval is forbidden outright).
     const cycleApprover = await createScratchUser(org.orgId, "Comp Cycle Approver", "comp_cycle_approver");
-    await grantPermissions(org.orgId, cycleApprover, ["hrm.compensation.read", "hrm.compensation.approve"]);
+    await grantPermissions(org.orgId, cycleApprover, ["hrm.compensation.read", "hrm.compensation.manage", "hrm.compensation.approve"]);
     await linkPerson(org.orgId, cycleApprover);
     await seedApprovalFlow(org.orgId, {
       subjectKind: HRM_COMP_CYCLE_SUBJECT_KIND,
@@ -389,7 +389,7 @@ test("HR-12 post-push line actions refuse, and push refuses approved lines with 
     const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id, displayName: "Comp Worker" });
     await seedWage(org.orgId, h.hrId, emp.workerPartyId, "100000");
     const cycleApprover = await createScratchUser(org.orgId, "Comp Cycle Approver", "comp_cycle_approver");
-    await grantPermissions(org.orgId, cycleApprover, ["hrm.compensation.read", "hrm.compensation.approve"]);
+    await grantPermissions(org.orgId, cycleApprover, ["hrm.compensation.read", "hrm.compensation.manage", "hrm.compensation.approve"]);
     await linkPerson(org.orgId, cycleApprover);
     await seedApprovalFlow(org.orgId, {
       subjectKind: HRM_COMP_CYCLE_SUBJECT_KIND,

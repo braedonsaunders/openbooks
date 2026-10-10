@@ -682,7 +682,7 @@ test("per-line approval racing a cycle push returns only named outcomes", { skip
     await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: line!.id, proposedPct: "3", reason: "race setup" });
 
     const approver = await createScratchUser(org.orgId, "Race Approver", "race_approver");
-    await grantPermissions(org.orgId, approver, ["hrm.compensation.approve"]);
+    await grantPermissions(org.orgId, approver, ["hrm.compensation.manage", "hrm.compensation.approve"]);
     await linkPerson(org.orgId, approver);
     await seedApprovalFlow(org.orgId, {
       subjectKind: HRM_COMP_CYCLE_SUBJECT_KIND,
@@ -762,7 +762,7 @@ test("F11 proposal wages round once, exactly, and the push carries them", { skip
     assert.equal(annualStored.proposed_pct, "3.000000");
     // The push writes the exact decided wage, not the float neighbour.
     const approver = await createScratchUser(org.orgId, "Exact Approver", "exact_approver");
-    await grantPermissions(org.orgId, approver, ["hrm.compensation.read", "hrm.compensation.approve"]);
+    await grantPermissions(org.orgId, approver, ["hrm.compensation.read", "hrm.compensation.manage", "hrm.compensation.approve"]);
     await linkPerson(org.orgId, approver);
     await seedApprovalFlow(org.orgId, {
       subjectKind: HRM_COMP_CYCLE_SUBJECT_KIND,
