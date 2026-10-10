@@ -31,15 +31,18 @@ const sendRecordBody = z.object({
  * reuses the family's existing gate: document/order creates (ar.create,
  * ap.create), payment drafts (ar.pay / ap.pay), journals post (gl.post),
  * expense submit (expenses.create), field-ticket manage (time.manage),
- * payroll run delivery (payroll.run), and the sales-order create grant for
- * a shipment's packing slip (ar.create): sending is customer correspondence,
- * stronger than the fulfilment grant that reads it.
+ * payroll run delivery (payroll.run), the cash_sales create grant for sales
+ * and refund receipts (cash_sales.create), and the sales-order create grant
+ * for a shipment's packing slip (ar.create): sending is customer
+ * correspondence, stronger than the fulfilment grant that reads it.
  */
 const RECORD_TYPE_SEND_PERMISSION: Record<string, string> = {
   customer_invoice: 'ar.create',
   customer_credit: 'ar.create',
   quote: 'ar.create',
   sales_order: 'ar.create',
+  cash_sale: 'cash_sales.create',
+  cash_refund: 'cash_sales.create',
   customer_payment: 'ar.pay',
   purchase_order: 'purchase_orders.create',
   vendor_bill: 'ap.create',
