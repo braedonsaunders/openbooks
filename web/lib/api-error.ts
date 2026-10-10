@@ -73,6 +73,7 @@ function readNamedRefusal(body: unknown): string | null {
     detail?: unknown
     errors?: unknown
     remedy?: unknown
+    issues?: unknown
   }
   const fields = [record.error, record.message, record.detail]
   const single =
@@ -83,7 +84,10 @@ function readNamedRefusal(body: unknown): string | null {
         .filter((entry): entry is string => typeof entry === 'string' && entry.trim() !== '')
         .map((entry) => entry.trim())
     : []
-  const refusal = single ?? (listed.length > 0 ? listed.join('; ') : null)
+  const unnamed = single ?? (listed.length > 0 ? listed.join('; ') : null)
+  // A schema refusal names its field so the operator knows what to correct.
+  const field = issueField(record.issues)
+  const refusal = unnamed && field && !unnamed.includes(field) ? `${field}: ${unnamed}` : unnamed
   if (!refusal) return null
   const remedy =
     typeof record.remedy === 'string' && record.remedy.trim() !== '' ? record.remedy.trim() : null
@@ -194,4 +198,13 @@ export async function apiJson<T>(url: string, init?: RequestInit, fallbackMessag
   } catch {
     throw new ApiResponseError(messageFromBody(null, res.status, fallbackMessage), res.status)
   }
+}
+
+function issueField(issues: unknown): string | null {
+  if (!Array.isArray(issues)) return null
+  const path = (issues[0] as { path?: unknown } | undefined)?.path
+  if (typeof path !== 'string' || path.trim() === '') return null
+  const leaf = path.split('.').filter((segment) => !/^\d+$/.test(segment)).pop() ?? path
+  const words = leaf.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').trim().toLowerCase()
+  return words === '' ? null : words.charAt(0).toUpperCase() + words.slice(1)
 }

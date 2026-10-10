@@ -53,9 +53,11 @@ export const assignWarehouseBody = z.object({
   expectedUpdatedAt: z.string().optional(),
 });
 
-/** Optional nullable uuid reference (null clears the reference). */
+/** Optional nullable uuid reference. Null or a blank form value clears the
+ *  reference; anything else must be an id. */
 export const nullableUuidId = z
   .union([z.string(), z.null()])
+  .transform((v) => (v === null || v.trim() === "" ? null : v))
   .refine((v) => v === null || isUuid(v), UUID_MESSAGE);
 
 /** Calendar date (YYYY-MM-DD), matching every document-date column. */
