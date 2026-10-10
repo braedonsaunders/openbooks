@@ -391,3 +391,42 @@ test('assigning the warehouse then converting succeeds without re-pinning', asyn
     'the assigned convert navigates to the created receipt',
   )
 })
+
+// A receipt refused for a missing received-not-billed account must link the
+// fix, not just name it: the item's costing profile (deep-linked to its
+// costing tab) and the company default.
+test('an RNB refusal links the item costing profile and the company default', async (t) => {
+  const restoreFetch = scriptFetch((url, init) => {
+    if (url === `/api/purchase-orders/${PO_ID}/convert` && init?.method === 'POST') {
+      return Response.json(
+        {
+          error: 'Purchase-order line 1 (Widget) cannot be received: Widget has no received-not-billed account — set it on the item\u2019s costing profile, or set the company Received not billed control account under Company Settings, then retry',
+          code: 'ITEM_MISSING_RNB_ACCOUNT',
+          details: { lineNumber: 1, itemId: 'item-9', itemName: 'Widget' },
+        },
+        { status: 422 },
+      )
+    }
+    if (url.startsWith('/api/flows/')) {
+      return Response.json({ error: 'no flow state' }, { status: 404 })
+    }
+    return null
+  })
+  t.after(restoreFetch)
+  const { unmount } = await mountStockPo()
+  t.after(unmount)
+  await openConvert()
+  await tick()
+  const alert = document.querySelector('[role="alert"]')
+  assert.ok(alert, 'the convert refusal must pin as an alert')
+  assert.match(alert.textContent ?? '', /no received-not-billed account/, "the alert must carry the server's typed reason")
+  const costing = document.querySelector('a[href="/items?item=item-9&itemTab=costing"]')
+  assert.ok(costing, 'the refusal must link the item\u2019s costing profile for the edit')
+  const company = document.querySelector('a[href="/admin/setup/company"]')
+  assert.ok(company, 'the refusal must link the company default named as the alternative')
+  assert.deepEqual(
+    globalThis.__dashRouter.pushes,
+    [],
+    'a refused convert must not navigate away from the PO',
+  )
+})

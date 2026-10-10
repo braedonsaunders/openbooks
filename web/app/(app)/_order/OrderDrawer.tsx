@@ -382,6 +382,37 @@ function plainQuantity(value: string): string {
   return value.includes('.') ? value.replace(/0+$/, '').replace(/\.$/, '') : value
 }
 
+/** The item a refused receipt names, for the costing-profile next step. */
+interface RnbRemedyTarget {
+  itemId: string
+  itemName: string | null
+  lineNumber: number | null
+}
+
+/**
+ * Read the convert refusal's typed identity before the action reader
+ * consumes the body: the error `code` survives on the pinned refusal but
+ * its `details` do not, and the costing link needs the item id. Never
+ * branches on message text — only on the machine code and its shape.
+ */
+async function readRnbRemedyTarget(res: Response): Promise<RnbRemedyTarget | null> {
+  if (res.ok || typeof res.clone !== 'function') return null
+  const body = (await res.clone().json().catch(() => null)) as {
+    code?: unknown
+    details?: unknown
+  } | null
+  if (!body || typeof body !== 'object' || body.code !== 'ITEM_MISSING_RNB_ACCOUNT') return null
+  const details = body.details as { itemId?: unknown; itemName?: unknown; lineNumber?: unknown } | null
+  if (!details || typeof details !== 'object' || typeof details.itemId !== 'string' || details.itemId === '') {
+    return null
+  }
+  return {
+    itemId: details.itemId,
+    itemName: typeof details.itemName === 'string' && details.itemName !== '' ? details.itemName : null,
+    lineNumber: typeof details.lineNumber === 'number' ? details.lineNumber : null,
+  }
+}
+
 function targetHref(kind: string, id: string): string {
   switch (kind) {
     case 'customer_invoice':
@@ -674,6 +705,10 @@ export function OrderDrawer({
   // alone never survives attention — AND toasts, and busy always
   // releases through the package's finally.
   const { busy, refusal, execute, refuse, clearRefusal } = useAppAction()
+  // The item a refused receipt names: kept beside the pinned refusal so the
+  // panel below can link its costing profile. Cleared with every new convert
+  // and shown only while the matching refusal is pinned.
+  const [rnbRemedy, setRnbRemedy] = useState<RnbRemedyTarget | null>(null)
   // Frozen while an action is in flight (the same busy convention the buttons
   // already use): the grid otherwise accepts typing during the save PATCH,
   // and those un-sent edits would be shown as saved and lost on close.
@@ -1535,6 +1570,7 @@ export function OrderDrawer({
   ) {
     // Goods receipts never post from here: "Convert to Goods receipt" opens
     // the prefilled receipt form, which posts only on explicit save.
+    setRnbRemedy(null)
     await execute<ConvertedDocument | { creditOverrideNeeded: true }>(async () => {
       const res = await fetch(`${apiBase}/${doc.id}/convert`, {
         method: 'POST',
@@ -1545,7 +1581,9 @@ export function OrderDrawer({
           expectedUpdatedAt: revisionRef.current,
         }),
       })
+      const remedy = await readRnbRemedyTarget(res)
       const result = await readActionResult<ConvertedDocument>(res)
+      if (!result.ok && remedy) setRnbRemedy(remedy)
       if (
         !result.ok
         && result.error.code === 'CUSTOMER_CREDIT_LIMIT_EXCEEDED'
@@ -2073,6 +2111,22 @@ export function OrderDrawer({
             onAssigned={() => router.refresh()}
             disabled={busy}
           />
+        ) : null}
+        {refusal?.code === 'ITEM_MISSING_RNB_ACCOUNT' && rnbRemedy && kind === 'purchase_order' ? (
+          <section aria-label={t('rnbRemedyTitle')} className="space-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+            <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{t('rnbRemedyTitle')}</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">{t('rnbRemedyHint')}</p>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" asChild>
+                <Link href={`/items?item=${encodeURIComponent(rnbRemedy.itemId)}&itemTab=costing`}>
+                  {t('rnbRemedyOpenCosting', { item: rnbRemedy.itemName ?? t('rnbRemedyThisItem') })}
+                </Link>
+              </Button>
+              <Button variant="ghost" size="sm" asChild>
+                <Link href="/admin/setup/company">{t('rnbRemedyCompanyDefault')}</Link>
+              </Button>
+            </div>
+          </section>
         ) : null}
         {priceLookupFailures.size > 0 ? <ul className="space-y-1 text-sm text-red-700 dark:text-red-300">{[...priceLookupFailures].map(([key, message]) => <li key={key} role="alert">{rows.find((row) => row.clientKey === key)?.description || t('columns.item')}: {message}</li>)}</ul> : null}
         {layout ? <HeaderFields layout={layout} editable={editable} renderField={renderHeaderField} /> : <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
