@@ -389,7 +389,7 @@ export function PartyRelationshipSection({
           <PartyReadOnlyField label={t('fields.category')} value={form.category} />
           <PartyReadOnlyField label={t('fields.annualRevenue')} value={form.annualRevenue} />
           <PartyReadOnlyField label={t('fields.employeeCount')} value={form.employeeCount} />
-          <ReadField
+          <PartyReadOnlyField
             label={t('fields.nextAction')}
             value={form.nextActionAt ? format.dateTime(new Date(form.nextActionAt), { dateStyle: 'medium', timeStyle: 'short' }) : ''}
           />
