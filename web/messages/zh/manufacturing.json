@@ -290,7 +290,7 @@
   "retry": "重试",
   "saving": "保存中…",
   "cancelForm": "取消",
-  "discardDraft": "放弃未保存的命令信息？",
+  "discardDraft": "放弃未保存的更改？",
   "emptyChildren": "暂无记录",
   "emptyChildrenNote": "相关记录会随着父记录进展出现。",
   "selectRecord": "选择{name}",
