@@ -47,5 +47,6 @@
   "refused": "Could not complete: {message}",
   "sourceUnavailable": "{source} unavailable: {reason}",
   "delegatePlaceholder": "Delegate to…",
-  "count": "{count, plural, one {# item} other {# items}}"
+  "count": "{count, plural, one {# item} other {# items}}",
+  "sourceFailed": "{source} tasks couldn't be loaded right now. Your other tasks are shown; try again in a moment, and tell your administrator if this keeps happening."
 }

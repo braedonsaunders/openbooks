@@ -58,6 +58,7 @@ const mockSources = new Map<string, string>([
     "mock:business-date",
     `
       export async function businessToday() { return '2026-08-24' }
+      export async function businessTimeZone() { return 'America/Toronto' }
     `,
   ],
   [

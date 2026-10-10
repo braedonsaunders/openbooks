@@ -59,7 +59,7 @@ function processStepItem(row: StepRow, ctx: InboxListContext): InboxItem {
       : `${row.process_kind} for ${row.worker_name}${row.required ? " — required" : ""}`,
     dueAt,
     createdAt: dueAt,
-    priority: priorityForDueDate(dueAt, ctx.asOf),
+    priority: priorityForDueDate(dueAt, ctx.asOf, ctx.timeZone),
     subjectHref: `/hrm/processes?process=${row.process_id}`,
     actions: needsFile
       ? []

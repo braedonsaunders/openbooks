@@ -479,3 +479,29 @@ test("B-INB-2: with 101 unread notices the oldest is listed on the next page and
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("an unsubmitted own week opens that week's timesheet, not the bare list", { skip: !DB }, async () => {
+  const org: ScratchOrg = await createScratchOrg();
+  try {
+    const userId = await createScratchUser(org.orgId, "Inbox Week Owner", "inbox_week_owner");
+    const partyId = await linkPerson(org.orgId, userId, "Inbox Week Owner");
+    // A Sunday well before the current week, so the week has ended.
+    const weekStart = "2026-01-04";
+    await db.execute(sql`
+      insert into timesheet_weeks (org_id, employee_party_id, week_start, status)
+      values (${org.orgId}, ${partyId}, ${weekStart}, 'draft')`);
+    const read = (asOf: string) => listInbox({ orgId: org.orgId, actorId: userId, asOf, timeZone: "America/Toronto" }, { kinds: ["timesheet_week"] });
+    // Sunday 4 January through Saturday 10 January: on its last day the week
+    // is still open, so nothing is owed yet.
+    assert.deepEqual((await read("2026-01-10")).filter((item) => item.title.includes(weekStart)), []);
+    const dueDay = (await read("2026-01-11")).find((item) => item.title.includes(weekStart));
+    assert.ok(dueDay, "the unsubmitted week is a task once it has ended");
+    assert.equal(dueDay.subjectHref, `/timesheets?timesheet=${partyId}:${weekStart}`);
+    assert.equal(dueDay.dueAt, "2026-01-11");
+    assert.equal(dueDay.priority, "due_soon", "due on the Sunday after the week, not overdue that day");
+    const later = (await read("2026-01-12")).find((item) => item.title.includes(weekStart));
+    assert.equal(later?.priority, "overdue");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});

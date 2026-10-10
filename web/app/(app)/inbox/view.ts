@@ -7,6 +7,7 @@ import { getTranslations } from 'next-intl/server'
 import { db, schema } from '@openbooks/engine/src/platform/db.ts'
 import { type WorklistGate } from '@openbooks/engine/src/flows/index.ts'
 import {
+  dueBusinessDay,
   type InboxItem,
   type InboxSourceNotice,
 } from '@openbooks/engine/src/inbox/index.ts'
@@ -598,27 +599,30 @@ export async function loadApprovals(
   // legs still list, and the loader renders them as small named notices
   // beside the surviving rows. Keyed by kind so count and list refusals
   // cannot double-report the same source.
-  const taskNoticeByKind = new Map<string, string>()
+  const taskNoticeByKind = new Map<string, InboxSourceNotice>()
   for (const notice of counts.notices)
-    taskNoticeByKind.set(notice.kind, notice.message)
+    taskNoticeByKind.set(notice.kind, notice)
   const { filters: taskFilters, notices: listNotices } = await inboxTaskFilters(ctx, tab === 'tasks')
-  for (const notice of listNotices) taskNoticeByKind.set(notice.kind, notice.message)
+  for (const notice of listNotices) taskNoticeByKind.set(notice.kind, notice)
   const tasksActive = taskFilters[filter]
   // Named per-source notices for the legs that refused or failed, in stable
-  // kind order. The frame is translated; the reason is the designed refusal
-  // intact, or a generic reason for an unexpected source failure (driver
-  // text never reaches the notice).
+  // kind order. A designed refusal keeps its remedy; an unexpected failure
+  // reads as plain, localized copy naming the area and what to do (driver
+  // text never reaches the notice). Sources the person holds no grant for
+  // never arrive here: the engine skips them as "no work".
   const failedSourceNotices = [...taskNoticeByKind.entries()]
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-    .map(([kind, reason]) =>
-      ti('sourceUnavailable', { source: ti(`kinds.${kind}`), reason }),
+    .map(([kind, notice]) =>
+      notice.code === 'failed'
+        ? ti('sourceFailed', { source: ti(`kinds.${kind}`) })
+        : ti('sourceUnavailable', { source: ti(`kinds.${kind}`), reason: notice.message }),
     )
   const toTaskRow = (item: InboxItem): InboxTaskListRow => ({
     id: item.id,
     kindLabel: ti(`kinds.${item.kind}`),
     title: item.title,
     subtitle: item.subtitle,
-    dueLabel: item.dueAt ? item.dueAt.slice(0, 10) : null,
+    dueLabel: item.dueAt ? dueBusinessDay(item.dueAt, ctx.timeZone) : null,
     priorityLabel:
       item.priority === 'overdue'
         ? ti('priorities.overdue')

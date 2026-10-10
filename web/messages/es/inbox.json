@@ -47,5 +47,6 @@
   "refused": "No se pudo completar: {message}",
   "sourceUnavailable": "{source} no disponible: {reason}",
   "delegatePlaceholder": "Delegar a…",
-  "count": "{count, plural, one {# elemento} other {# elementos}}"
+  "count": "{count, plural, one {# elemento} other {# elementos}}",
+  "sourceFailed": "No se pudieron cargar ahora las tareas de {source}. Se muestran sus demás tareas; vuelva a intentarlo en un momento y avise a su administrador si sigue ocurriendo."
 }
