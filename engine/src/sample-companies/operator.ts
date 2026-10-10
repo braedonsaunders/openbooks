@@ -26,6 +26,34 @@ export function sampleOperatorPermissions(industryKey: string): string[] {
     ...(f.compensationPackages ? ["payroll.manage"] : [])];
 }
 
+export interface SampleAuthorContract {
+  table: string;
+  actorColumns: readonly string[];
+  requiresPerson: boolean;
+}
+
+/** Authorship is separate from permission authority. These native records
+ * reference a user in the same company, including an otherwise privileged user. */
+export function sampleOperatorAuthorship(industryKey: string): SampleAuthorContract[] {
+  const f = sampleCompanyFeatures(industryKey);
+  const contracts: SampleAuthorContract[] = [];
+  if (f.einvoicing) contracts.push({ table: "einvoice_settings", actorColumns: ["created_by", "updated_by"], requiresPerson: false });
+  if (f.nonprofit) contracts.push({ table: "nonprofit_frameworks", actorColumns: ["set_by", "created_by", "updated_by"], requiresPerson: false });
+  if (f.compensationPackages) contracts.push({ table: "payroll_compensation_packages", actorColumns: ["created_by", "updated_by"], requiresPerson: false });
+  if (f.hrmTraining) contracts.push({ table: "hrm_training_courses", actorColumns: ["created_by", "updated_by"], requiresPerson: true });
+  if (f.hrmShiftPlanning) contracts.push({ table: "hrm_shift_templates", actorColumns: ["created_by", "updated_by"], requiresPerson: true });
+  if (f.hrmAttendance) contracts.push({ table: "hrm_attendance_devices", actorColumns: ["created_by", "updated_by"], requiresPerson: false });
+  return contracts;
+}
+
+export class SampleLocalAuthorRequiredError extends SampleCompanyError {
+  readonly name = "SampleLocalAuthorRequiredError";
+  readonly code = "SAMPLE_LOCAL_AUTHOR_REQUIRED";
+  constructor(readonly industryKey: string, readonly requiredRecords: readonly SampleAuthorContract[]) {
+    super(`The ${industryKey} sample requires a local author for ${requiredRecords.map(record => record.table).join(", ")}. These native records reference users in their own company${requiredRecords.some(record => record.requiresPerson) ? " and training/roster authorship also requires a local person identity" : ""}. Select an active home-company user through the supported audited Users & Roles workflow, then review refresh-plan --industry ${industryKey} --actor UUID. A platform permission grant does not replace native record authorship; sample refresh never creates shadow users or changes grants.`);
+  }
+}
+
 /** A foreign platform identity is locked separately while tenant writes retain
  * their ordinary scoped connection. No existing role or grant is changed. */
 export async function withSampleOperator<T>(orgId: string, options: SampleOperatorOptions, command: () => Promise<T>): Promise<T> {
@@ -56,8 +84,8 @@ export async function assertSampleOperator(tx: SqlExecutor, orgId: string, actor
   const identity = await actorIdentity(tx, orgId, actorId);
   if (!identity?.isActive || (!local && !identity.isSuperAdmin)) throw new SampleCompanyError("The selected sample operator is unavailable in this company. Choose an active authorized local user or explicitly supply a platform superadmin with --actor UUID.");
   if (lock && !local && (pinned.getStore()?.actorId !== actorId || pinned.getStore()?.orgId !== orgId || !pinned.getStore()?.foreignIdentityLocked)) throw new SampleCompanyError("Foreign sample operator identity must remain locked through the native sample command entry point.");
-  const f = sampleCompanyFeatures(industryKey);
-  if (!local && (f.hrmTraining || f.hrmShiftPlanning)) throw new SampleCompanyError("Training and roster authorship require a user and person identity in this company. Use a native audited operator authorization to select a local author, then review an industry-specific refresh-plan with that --actor; a foreign platform identity cannot replace native authorship.");
+  const authorship = sampleOperatorAuthorship(industryKey);
+  if (!local && authorship.length) throw new SampleLocalAuthorRequiredError(industryKey, authorship);
   for (const permission of sampleOperatorPermissions(industryKey)) {
     if (lock) {
       try { await lockActorCommandAuthority(tx, orgId, actorId, subsidiaryId, permission); }

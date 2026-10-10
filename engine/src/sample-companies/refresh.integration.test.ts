@@ -9,6 +9,7 @@ import { createScratchOrg, createScratchUser, dropSampleCloneOrg, dropScratchOrg
 import { createSampleCompany } from "./service.ts";
 import { installDemoScenarios, DEMO_DATA_VERSION, verifyDemoScenarios } from "./install-scenarios.ts";
 import { refreshAllSampleCompanies, refreshSampleCompany, sampleRefreshPlan } from "./refresh.ts";
+import { SampleLocalAuthorRequiredError } from "./operator.ts";
 import { scenarioRecordId } from "./scenarios.ts";
 import { sampleCompanyFeatures } from "./features.ts";
 
@@ -66,10 +67,9 @@ test("native exploration refresh preserves rebased posted history, member drafts
     const plan = await sampleRefreshPlan("general_business");
     const operator = await withBypass(() => createScratchUser(home.orgId, "Explicit sample operator", "platform_operator"));
     await withBypass(() => db.execute(sql`update users set is_super_admin=true where id=${operator} and org_id=${home.orgId}`));
-    const operatorPlan = await sampleRefreshPlan("general_business", { actorId: operator });
-    assert.equal(operatorPlan.operatorActorId, operator);
-    assert.notEqual(operatorPlan.digest, plan.digest, "reviewed refresh pins the explicit operator");
-    await assert.rejects(refreshAllSampleCompanies({ industryKey: "general_business", digest: operatorPlan.digest }), /sample population changed/i);
+    await assert.rejects(sampleRefreshPlan("general_business", { actorId: operator }), SampleLocalAuthorRequiredError);
+    await assert.rejects(refreshSampleCompany(orgId, "general_business", { actorId: operator }), SampleLocalAuthorRequiredError);
+    assert.deepEqual(await snapshot(), before, "foreign-author refusal preserves all inherited posting before any refresh writes");
 
     assert.ok(plan.targets.some(target => target.orgId === orgId && target.kind === "member" && target.installedVersion === 4));
     assert.ok(!plan.targets.some(target => target.orgId === home.orgId));
@@ -87,10 +87,10 @@ test("native exploration refresh preserves rebased posted history, member drafts
       assert.deepEqual(row, { projects: true, payroll: false, memo: "Member-owned scope revision" });
     });
     assert.equal((await sampleRefreshPlan("general_business")).digest, plan.digest, "advancing a version leaves the reviewed membership resumable");
-    await refreshSampleCompany(orgId, "general_business", { actorId: operator });
+    await refreshSampleCompany(orgId, "general_business");
     assert.deepEqual(await snapshot(), before);
     await withBypass(() => db.execute(sql`update users set is_active=false where id=${operator} and org_id=${home.orgId}`));
-    await assert.rejects(refreshAllSampleCompanies({ industryKey: "general_business", digest: operatorPlan.digest, actorId: operator }), /operator is unavailable/);
+    await assert.rejects(sampleRefreshPlan("general_business", { actorId: operator }), /operator is unavailable/);
     assert.deepEqual(await snapshot(), before, "revoked operator refuses without touching existing records");
     await assert.rejects(refreshAllSampleCompanies({ industryKey: "general_business", digest: "stale" }), /sample population changed/i);
   } finally {

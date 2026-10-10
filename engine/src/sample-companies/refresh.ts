@@ -1,5 +1,4 @@
-import { assertSampleOperator, sampleOperatorId, sampleOperatorPermissions, withSampleOperator, type SampleOperatorOptions } from "./operator.ts";
-import { sampleCompanyFeatures } from "./features.ts";
+import { assertSampleOperator, sampleOperatorId, sampleOperatorPermissions, sampleOperatorAuthorship, withSampleOperator, type SampleOperatorOptions, type SampleAuthorContract } from "./operator.ts";
 import { snapshotSampleRecords, assertSampleRecordsPreserved, assertSampleSettingsPreserved } from "./preservation.ts";
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
@@ -17,7 +16,7 @@ export interface SampleRefreshTarget {
 }
 
 /** Explicit inventory includes every prepared master and every ready exploration copy. */
-export async function sampleRefreshPlan(industryKey?: string, options: SampleOperatorOptions = {}): Promise<{ operatorActorId: string | null; operatorRequirements: Array<{ industryKey: string; permissions: string[]; requiresLocalAuthor: boolean }>; version: number; definitionDigest: string; digest: string; targets: SampleRefreshTarget[]; preserved: Array<{ orgId: string; name: string; reason: string }>; excluded: Array<{ orgId: string; name: string; reason: string }> }> {
+export async function sampleRefreshPlan(industryKey?: string, options: SampleOperatorOptions = {}): Promise<{ operatorActorId: string | null; operatorRequirements: Array<{ industryKey: string; permissions: string[]; requiresLocalAuthor: boolean; authorship: SampleAuthorContract[] }>; version: number; definitionDigest: string; digest: string; targets: SampleRefreshTarget[]; preserved: Array<{ orgId: string; name: string; reason: string }>; excluded: Array<{ orgId: string; name: string; reason: string }> }> {
   const operatorActorId = sampleOperatorId(options) ?? null;
   if (industryKey && !SAMPLE_COMPANY_BY_INDUSTRY.has(industryKey)) throw new SampleCompanyError(`Unknown sample industry: ${industryKey}`);
   const candidates = await withBypassContext(() => db.execute<{
@@ -52,7 +51,7 @@ export async function sampleRefreshPlan(industryKey?: string, options: SampleOpe
   }
   targets.sort((a,b) => a.kind.localeCompare(b.kind) || a.industryKey.localeCompare(b.industryKey) || a.orgId.localeCompare(b.orgId));
   const operatorRequirements = [...new Set(targets.map(target => target.industryKey))].sort().map(key => ({ industryKey: key,
-    permissions: sampleOperatorPermissions(key), requiresLocalAuthor: sampleCompanyFeatures(key).hrmTraining || sampleCompanyFeatures(key).hrmShiftPlanning }));
+    permissions: sampleOperatorPermissions(key), requiresLocalAuthor: sampleOperatorAuthorship(key).length > 0, authorship: sampleOperatorAuthorship(key) }));
   if (operatorActorId) for (const target of targets) await withOrgTransaction(target.orgId, async () => {
     const subsidiary = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id=${target.orgId} and parent_id is null and is_active limit 1`)).rows[0];
     if (!subsidiary) throw new SampleCompanyError("The refresh target has no active root legal entity; restore its native configuration before planning.");

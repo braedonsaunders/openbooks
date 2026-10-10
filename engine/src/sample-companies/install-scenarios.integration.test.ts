@@ -7,9 +7,10 @@ import { installEngineSeams } from "../composition/install.ts";
 import { db, withOrgContext, withBypass } from "../platform/db.ts";
 import { provisionOrg, wipeSimOrg } from "../sim/world.ts";
 import { getProfile } from "../sim/profiles/index.ts";
-import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 import { SAMPLE_COMPANY_PROFILES } from "./catalog.ts";
 import { DEMO_DATA_VERSION, installDemoScenarios, verifyDemoScenarios } from "./install-scenarios.ts";
+import { SampleLocalAuthorRequiredError } from "./operator.ts";
 import { demoRecordId } from "./scenarios.ts";
 
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL };
@@ -17,13 +18,37 @@ installEngineSeams();
 
 for (const profile of SAMPLE_COMPANY_PROFILES) test(`${profile.companyName}: native demo installation is complete, balanced, and idempotent`, enabled, async () => {
   const world = await provisionOrg(getProfile(profile.profileId), { startDate: "2026-01-01", endDate: "2027-12-31" });
+  let platformHomeOrgId: string | undefined;
+  let actorOptions: { actorId?: string } = {};
   try {
+    if (profile.industryKey === "engineering_architecture") {
+      const home = await withBypass(() => createScratchOrg());
+      platformHomeOrgId = home.orgId;
+      const actorId = await withBypass(() => createScratchUser(home.orgId, "Explicit engineering operator", "operator"));
+      await withBypass(() => db.execute(sql`update users set is_super_admin=true where org_id=${home.orgId} and id=${actorId}`));
+      actorOptions = { actorId };
+    }
+    if (["general_business", "nonprofit", "healthcare_practice"].includes(profile.industryKey)) {
+      const home = await withBypass(() => createScratchOrg());
+      try {
+        const foreignActor = await withBypass(() => createScratchUser(home.orgId, "Explicit platform author", "operator"));
+        await withBypass(() => db.execute(sql`update users set is_super_admin=true where org_id=${home.orgId} and id=${foreignActor}`));
+        const unchanged = () => withOrgContext(world.orgId, async () => (await db.execute(sql`
+          select settings,(select count(*)::int from documents where org_id=${world.orgId}) as documents,
+            (select count(*)::int from audit_log where org_id=${world.orgId}) as audits
+          from orgs where id=${world.orgId}`)).rows);
+        const beforeRefusal = await unchanged();
+        await assert.rejects(installDemoScenarios(world.orgId, profile.industryKey, { actorId: foreignActor }),
+          (error: unknown) => error instanceof SampleLocalAuthorRequiredError && error.industryKey === profile.industryKey);
+        assert.deepEqual(await unchanged(), beforeRefusal, "a foreign platform author refuses before configuration, document or audit writes");
+      } finally { await withBypass(() => dropScratchOrg(home.orgId)); }
+    }
     if (profile.industryKey === "general_business") await withOrgContext(world.orgId, async () => {
       const appId = demoRecordId(world.orgId, "apps", "main");
       await db.execute(sql`insert into apps(id,org_id,key,name,status,created_by,updated_by) values (${appId},${world.orgId},'demo-operations','Operations extension example','disabled',${world.actors.admin},${world.actors.admin})`);
       await db.execute(sql`insert into app_versions(id,org_id,app_id,version,manifest,status,created_by,updated_by) values (${demoRecordId(world.orgId,"app_versions","main")},${world.orgId},${appId},'1.0.0','{"name":"Earlier demonstration"}'::jsonb,'draft',${world.actors.admin},${world.actors.admin})`);
     });
-    const result = await installDemoScenarios(world.orgId, profile.industryKey);
+    const result = await installDemoScenarios(world.orgId, profile.industryKey, actorOptions);
     assert.equal(result.version, DEMO_DATA_VERSION);
     assert.ok(result.inserted > 20);
     const verified = await verifyDemoScenarios(world.orgId, profile.industryKey);
@@ -84,7 +109,10 @@ for (const profile of SAMPLE_COMPANY_PROFILES) test(`${profile.companyName}: nat
       await db.execute(sql`delete from hrm_goals where org_id=${world.orgId}`);
     });
     if (verified.features.hrmPerformance) assert.equal((await verifyDemoScenarios(world.orgId, profile.industryKey)).ready, false, "metadata alone must never hide missing feature data");
-  } finally { await wipeSimOrg(world.orgId); }
+  } finally {
+    await wipeSimOrg(world.orgId);
+    if (platformHomeOrgId) await withBypass(() => dropScratchOrg(platformHomeOrgId!));
+  }
 });
 
 test("installer refuses an ordinary tenant before writing demo records", enabled, async () => {
