@@ -228,6 +228,7 @@
       "runApplicability": "Paies",
       "standardRuns": "Régulières, supplémentaires et de cessation",
       "regularOnly": "Régulières uniquement",
+      "periodicAndFinal": "Paies régulières et finales",
       "unknownApplicability": "Applicabilité inconnue"
     },
     "summary": {

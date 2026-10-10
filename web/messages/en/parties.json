@@ -228,6 +228,7 @@
       "runApplicability": "Pay runs",
       "standardRuns": "Regular, supplemental and termination",
       "regularOnly": "Regular only",
+      "periodicAndFinal": "Regular and final runs",
       "unknownApplicability": "Unknown applicability"
     },
     "summary": {

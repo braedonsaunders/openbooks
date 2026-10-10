@@ -9,6 +9,7 @@ import { useBusinessToday } from '../../../components/business-date-provider'
 import { PagedTable } from '../../../components/paged-table'
 import { canonicalDecimal } from '../../../lib/exact-decimal'
 import { confirmDialog } from '@/lib/confirm'
+import type { AssignmentRunApplicability } from '@openbooks/engine/payroll/assigned-components'
 
 interface AssignmentRow {
   id: string
@@ -20,7 +21,7 @@ interface AssignmentRow {
   componentKind: string
   componentBasis: string
   value: string | null
-  runApplicability: "standard_runs" | "regular_only"
+  runApplicability: AssignmentRunApplicability
   componentValue: string | null
   effectiveFrom: string
   effectiveTo: string | null
@@ -77,7 +78,7 @@ export function EmployeePayComponents({
   // silent no-op. The detail is the server's refusal text when present.
   const [actionError, setActionError] = useState<string | null>(null)
   const [componentId, setComponentId] = useState('')
-  const [runApplicability, setRunApplicability] = useState<'standard_runs' | 'regular_only'>('standard_runs')
+  const [runApplicability, setRunApplicability] = useState<AssignmentRunApplicability>('standard_runs')
   const [value, setValue] = useState('')
   const [employmentId, setEmploymentId] = useState('')
   const [effectiveFrom, setEffectiveFrom] = useState(today)
@@ -286,9 +287,10 @@ export function EmployeePayComponents({
           <div>
             <Label htmlFor="employee-pay-run-applicability">{t('runApplicability')}</Label>
             <Select id="employee-pay-run-applicability" value={runApplicability}
-              disabled={busy} onChange={(event) => { setRunApplicability(event.target.value as 'standard_runs' | 'regular_only'); markDirty() }}>
+              disabled={busy} onChange={(event) => { setRunApplicability(event.target.value as AssignmentRunApplicability); markDirty() }}>
               <option value="standard_runs">{t('standardRuns')}</option>
               <option value="regular_only">{t('regularOnly')}</option>
+              <option value="periodic_and_final">{t('periodicAndFinal')}</option>
             </Select>
           </div>
           <div>
@@ -371,7 +373,7 @@ export function EmployeePayComponents({
               key: 'runApplicability',
               header: t('runApplicability'),
               search: (row) => row.runApplicability,
-              cell: (row) => row.runApplicability === 'regular_only' ? t('regularOnly') : row.runApplicability === 'standard_runs' ? t('standardRuns') : t('unknownApplicability'),
+              cell: (row) => row.runApplicability === 'regular_only' ? t('regularOnly') : row.runApplicability === 'standard_runs' ? t('standardRuns') : row.runApplicability === 'periodic_and_final' ? t('periodicAndFinal') : t('unknownApplicability'),
             },
             {
               key: 'from',

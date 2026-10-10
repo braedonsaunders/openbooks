@@ -231,6 +231,7 @@
       "runApplicability": "Gehaltsläufe",
       "standardRuns": "Regulär, zusätzlich und bei Beendigung",
       "regularOnly": "Nur regulär",
+      "periodicAndFinal": "Reguläre und letzte Abrechnung",
       "unknownApplicability": "Unbekannte Anwendbarkeit"
     },
     "summary": {

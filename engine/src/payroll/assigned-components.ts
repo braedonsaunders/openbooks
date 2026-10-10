@@ -84,7 +84,7 @@ export async function validateEmployeePayComponentAssignment(
   if (component.system_key !== null) {
     throw new PayrollError(`Payroll component ${component.code} is statutory (${component.system_key}) — statutory amounts are always recomputed, so assign a user-defined component instead`);
   }
-  if (input.runApplicability === 'regular_only') {
+  if (input.runApplicability !== undefined && input.runApplicability !== 'standard_runs') {
     const rateCard = (await exec.execute(sql`select id from pay_derived_rules
       where org_id=${orgId} and component_id=${componentId} and is_active and rate_mode='rate_card'
         and effective_from <= coalesce(${effectiveTo}::date, 'infinity'::date)

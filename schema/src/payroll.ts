@@ -490,7 +490,7 @@ export const employeePayComponents = pgTable(
     index("employee_pay_components_employment").on(t.orgId, t.employmentId),
     index("employee_pay_components_employee").on(t.orgId, t.employeePartyId, t.effectiveFrom),
     check("employee_pay_components_run_applicability",
-      sql`${t.runApplicability} in ('standard_runs', 'regular_only')`),
+      sql`${t.runApplicability} in ('standard_runs', 'regular_only', 'periodic_and_final')`),
     check("employee_pay_components_range",
       sql`${t.effectiveTo} is null or ${t.effectiveTo} >= ${t.effectiveFrom}`),
   ],

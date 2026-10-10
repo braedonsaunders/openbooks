@@ -231,6 +231,7 @@
       "runApplicability": "給与計算",
       "standardRuns": "通常・追加・退職",
       "regularOnly": "通常のみ",
+      "periodicAndFinal": "通常給与および最終給与",
       "unknownApplicability": "適用範囲が不明"
     },
     "summary": {
