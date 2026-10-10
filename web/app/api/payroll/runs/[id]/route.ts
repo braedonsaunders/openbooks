@@ -19,7 +19,7 @@ import { submitForApproval } from '@openbooks/engine/src/flows/index.ts'
 import { rendererStatusResponse } from '../../../../../lib/api/pdf-renderer'
 import { emailRunStubs } from '../../../../../lib/payroll-outputs'
 import { assemblePayRunEvidence } from '../../../../../lib/payroll-evidence'
-import { canonicalAdjustmentHours, mutatePayRunAdjustment, payRunBulkAdjustmentId, PayRunAdjustmentIdempotencyConflict } from '@openbooks/engine/src/payroll/run-adjustments.ts'
+import { canonicalAdjustmentHours, mutatePayRunAdjustment, recordPayRunHolidayHours, payRunBulkAdjustmentId, PayRunAdjustmentIdempotencyConflict } from '@openbooks/engine/src/payroll/run-adjustments.ts'
 import { storedHolidayEligibilityForRun } from '@openbooks/engine/src/payroll/holiday-attestations.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import '../../../../../lib/feature-gates';
@@ -56,6 +56,7 @@ const requestBodySchema = z.discriminatedUnion('action', [
   z.strictObject({ ...actionBody('bulk-adjustment'), componentId: payrollRunUuid('componentId', 'a pay component id', "choose one from this run's adjustableComponents"), amount: payrollRunMoney, employeePartyIds: employeeIds('pass the employees to adjust as a list'), note: z.json().optional(), replaceComponent: z.json().optional() }),
   z.strictObject({ ...actionBody('preview-gl') }),
   z.strictObject({ ...actionBody('add-adjustment'), employeePartyId: payrollRunUuid('employeePartyId', 'an employee id', 'pass the employee as an employee id', 'fix the id and try again'), componentId: payrollRunUuid('componentId', 'a pay component id', "choose one from this run's adjustableComponents"), amount: payrollRunMoney, hours: z.string().nullable().optional(), note: z.json().optional(), replaceComponent: z.json().optional() }),
+  z.strictObject({ ...actionBody('record-holiday-hours'), employeePartyId: payrollRunUuid('employeePartyId', 'an employee id', 'select the employee whose paid holiday hours are being recorded'), hours: z.string(), reason: z.string().trim().min(1).max(500), note: z.string().max(500).optional() }),
   z.strictObject({ ...actionBody('delete-adjustment'), adjustmentId: payrollRunUuid('adjustmentId', 'a pay adjustment id', 'pass the adjustment to delete as an id', 'fix the id and try again') }),
   z.strictObject({ ...actionBody('set-scope'), employeePartyIds: employeeIds('pass the employees to include as a list'), rosterPartyIds: rosterIds }),
   z.strictObject({ ...actionBody('exclude-employee'), employeePartyId: payrollRunUuid('employeePartyId', 'an employee id', 'pass the employee as an employee id', 'fix the id and try again') }),
@@ -404,6 +405,22 @@ export const POST = defineRoute({
         // the route is already gated payroll.run.
         const result = await previewPayRunGl(gate.user.orgId, id, gate.allowedSubsidiaryIds)
         return NextResponse.json({ ok: true, ...result })
+      }
+      if (body.action === 'record-holiday-hours') {
+        const hours = canonicalAdjustmentHours(body.hours)
+        if (hours === null) return NextResponse.json({ error: decimalNullRefusal('hours', 'a non-negative number of paid hours', body.hours, 2) }, { status: 422 })
+        const key = req.headers.get('Idempotency-Key')?.trim() ?? ''
+        if (key !== '' && !isUuid(key)) return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 400 })
+        try {
+          const result = await recordPayRunHolidayHours({ orgId: gate.user.orgId, documentId: id,
+            actorId: gate.user.id, employeePartyId: body.employeePartyId, hours,
+            reason: body.reason, note: body.note, allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+            ...(key === '' ? {} : { idempotencyKey: key }) })
+          return NextResponse.json({ ok: true, ...result })
+        } catch (e) {
+          if (e instanceof PayRunAdjustmentIdempotencyConflict) return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 409 })
+          throw e
+        }
       }
       if (body.action === 'add-adjustment') {
         const { employeePartyId, componentId, amount, hours, note, replaceComponent } = body

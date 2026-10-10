@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { SqlExecutor } from "../platform/db.ts";
-import { canonicalNonNegativeDecimal, isPositiveDecimal } from "../money/exact-decimal.ts";
+import { canonicalNonNegativeDecimal, isZeroDecimal } from "../money/exact-decimal.ts";
 import { PayrollError } from "./error.ts";
 import { resolvePayRate } from "./run-calculation-support.ts";
 import { payrollHourlyWage } from "./rate.ts";
@@ -11,8 +11,8 @@ export async function priceRunHolidayHours(tx: SqlExecutor, input: {
   orgId: string; documentId: string; employeePartyId: string; hours: string;
 }): Promise<string> {
   const hours = canonicalNonNegativeDecimal(input.hours, 2);
-  if (hours === null || !isPositiveDecimal(hours)) {
-    throw new PayrollError("Recorded holiday pay requires positive paid hours with at most two decimal places.");
+  if (hours === null) {
+    throw new PayrollError("Recorded holiday pay requires non-negative paid hours with at most two decimal places.");
   }
   const runs = await tx.execute<{ period_end: string; currency: string }>(sql`
     select r.period_end::text, d.currency
@@ -21,6 +21,9 @@ export async function priceRunHolidayHours(tx: SqlExecutor, input: {
   `);
   const run = runs.rows[0];
   if (runs.rows.length !== 1 || !run?.currency) throw new PayrollError("The holiday input requires a pay run with a resolved currency.");
+  // An explicit zero input suppresses additional holiday earnings; it does
+  // not assert an absence or require a wage calculation with no cash impact.
+  if (isZeroDecimal(hours)) return "0.00";
   const wage = await resolvePayRate(tx, input.orgId, input.employeePartyId, run.period_end, run.currency);
   if (!wage) throw new PayrollError("The paid holiday hours have no dated native wage; configure the employee's wage for this pay period.");
   const priced = priceDatedWageEntries(payrollHourlyWage(wage), "1", [{ workedOn: run.period_end, hours }], wage);

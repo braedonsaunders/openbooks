@@ -374,7 +374,7 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
       if (component.rows[0]!.system_key === "stat_holiday") {
         if (component.rows[0]!.kind !== "earning" || component.rows[0]!.payment_kind !== "cash"
           || !replaceComponent || !hours || !(input.reason ?? note)?.trim()) {
-          throw new PayrollError("Recorded holiday pay requires a cash earning component, positive paid hours, component replacement and a supporting reason.");
+          throw new PayrollError("Recorded holiday pay requires a cash earning component, non-negative paid hours, component replacement and a supporting reason.");
         }
         const priced = await priceRunHolidayHours(tx, { orgId, documentId, employeePartyId: mutation.employeePartyId, hours });
         if (cmp(amount, priced) !== 0) throw new PayrollError("Holiday pay must equal the native dated wage calculation; supply paid hours instead of a cash override.");
