@@ -927,6 +927,16 @@
         "hint": "Uma linha assim altera o saldo do razão sem item em aberto, e o aging, os extratos e os saldos em aberto deixam de conferir com o razão. Avisar lança a linha e mostra a solução; Recusar bloqueia o lançamento e orienta a usar Receber pagamento, Pagar contas ou informar a contraparte na linha. Vale apenas para novos lançamentos.",
         "warn": "Avisar e lançar",
         "refuse": "Recusar o lançamento"
+      },
+      "expectedTypes": "Aceita: {types}",
+      "incompatibleOption": "{account} (tipo não aceito)",
+      "incompatibleSelected": "O tipo da conta selecionada não é aceito para {role}. Escolha {types}.",
+      "noEligibleAccounts": "Nenhuma conta ativa do tipo {types} — adicione uma no plano de contas",
+      "refusals": {
+        "type": "{role} deve ser {types}; a conta selecionada é {actual}.",
+        "inactive": "{role}: a conta selecionada está inativa. Escolha uma conta ativa.",
+        "summary": "{role}: a conta selecionada é uma conta sintética. Escolha uma conta que aceite lançamentos.",
+        "missing": "{role}: a conta selecionada não existe mais. Escolha a conta novamente."
       }
     },
     "revenue": {

@@ -95,6 +95,77 @@ export const CONTROL_ACCOUNT_ROLES = Object.keys(
   CONTROL_ACCOUNT_TYPE_POLICY,
 ) as ControlAccountRole[];
 
+/**
+ * Operator-facing name of each role, used in refusals so a rejected mapping
+ * names the field the operator sees ("Translation adjustment"), never the
+ * storage key. Typed against the policy, so a new role cannot ship without
+ * one.
+ */
+export const CONTROL_ACCOUNT_ROLE_LABELS: Record<ControlAccountRole, string> = {
+  ar: "Accounts receivable",
+  ap: "Accounts payable",
+  bank: "Default bank account",
+  taxCollected: "Sales tax collected",
+  taxPaid: "Sales tax paid",
+  employeePayable: "Employee payable",
+  payrollDeductions: "Payroll deductions payable",
+  employeeReceivable: "Employee receivable",
+  fxUnrealizedGainLoss: "Unrealized FX gain/loss",
+  fxRealizedGainLoss: "Realized FX gain/loss",
+  translationAdjustment: "Translation adjustment",
+  retainagePayable: "Retainage payable",
+  retainageReceivable: "Retainage receivable",
+  laborWip: "Labor WIP",
+  mfgWip: "Manufacturing WIP",
+  mfgMaterialUsageVariance: "Material usage variance",
+  mfgLaborEfficiencyVariance: "Labor efficiency variance",
+  mfgOverheadVariance: "Overhead variance",
+  mfgOverheadApplied: "Overhead applied",
+  laborClearing: "Labor clearing",
+  payrollVariance: "Payroll variance",
+  unbilledReceivable: "Unbilled receivable",
+  projectRevenue: "Project revenue",
+  incomeTaxExpense: "Income tax expense",
+  incomeTaxPayable: "Income tax payable",
+  deferredTaxAsset: "Deferred tax asset",
+  deferredTaxLiability: "Deferred tax liability",
+  valuationAllowance: "Valuation allowance",
+  storedValueLiability: "Stored value liability",
+};
+
+/** Operator-facing chart account-type names for control-account refusals. */
+export const CONTROL_ACCOUNT_TYPE_LABELS: Readonly<Record<string, string>> = {
+  asset_bank: "Bank",
+  asset_receivable: "Accounts receivable",
+  asset_current_other: "Other current asset",
+  asset_fixed: "Fixed asset",
+  asset_other: "Other asset",
+  liability_payable: "Accounts payable",
+  liability_card: "Credit card",
+  liability_current_other: "Other current liability",
+  liability_long_term: "Long-term liability",
+  equity: "Equity",
+  income: "Income",
+  income_other: "Other income",
+  cogs: "Cost of goods sold",
+  expense: "Expense",
+  expense_other: "Other expense",
+  expense_deferred: "Deferred expense",
+};
+
+function accountTypeLabel(type: string): string {
+  return CONTROL_ACCOUNT_TYPE_LABELS[type] ?? type;
+}
+
+/** The role's accepted account types as prose: "Equity", or
+ *  "Other current asset or Other current liability". */
+export function controlAccountExpectedTypes(role: ControlAccountRole): string {
+  const labels = CONTROL_ACCOUNT_TYPE_POLICY[role].map(accountTypeLabel);
+  return labels.length <= 1
+    ? (labels[0] ?? "")
+    : `${labels.slice(0, -1).join(", ")} or ${labels[labels.length - 1]}`;
+}
+
 /** Org-level control accounts from orgs.settings.controlAccounts. */
 export type OrgControlAccounts = Partial<Record<ControlAccountRole, string>>;
 
@@ -110,10 +181,30 @@ export interface ControlAccountRecord extends Record<string, unknown> {
  * legacy mappings deliberately share the incomplete-settings error family:
  * neither condition may be allowed to reach the posting kernel.
  */
+export type ControlAccountRefusalReason = "missing" | "inactive" | "summary" | "type";
+
 export class ControlAccountsIncompleteError extends Error {
-  constructor(message: string) {
+  /** The rejected role and why, when the refusal concerns one mapping, so a
+   *  settings surface can name the field in the operator's language. */
+  readonly role?: ControlAccountRole;
+  readonly reason?: ControlAccountRefusalReason;
+  readonly accountType?: string;
+  readonly allowedTypes?: readonly string[];
+  constructor(
+    message: string,
+    detail: {
+      role?: ControlAccountRole;
+      reason?: ControlAccountRefusalReason;
+      accountType?: string;
+      allowedTypes?: readonly string[];
+    } = {},
+  ) {
     super(message);
     this.name = "ControlAccountsIncompleteError";
+    this.role = detail.role;
+    this.reason = detail.reason;
+    this.accountType = detail.accountType;
+    this.allowedTypes = detail.allowedTypes;
   }
 }
 
@@ -134,32 +225,38 @@ export function assertValidControlAccountMappings(
   for (const role of CONTROL_ACCOUNT_ROLES) {
     const accountId = mappings[role];
     if (accountId === undefined) continue;
+    const label = CONTROL_ACCOUNT_ROLE_LABELS[role];
     if (typeof accountId !== "string" || accountId.length === 0) {
       throw new ControlAccountsIncompleteError(
-        `${role} control account must be a non-empty account id`,
+        `${label} control account must be a non-empty account id`,
+        { role, reason: "missing" },
       );
     }
 
     const account = accounts.get(accountId);
     if (!account) {
       throw new ControlAccountsIncompleteError(
-        `${role} control account ${accountId} does not exist in this organization`,
+        `${label} control account ${accountId} does not exist in this organization`,
+        { role, reason: "missing" },
       );
     }
     if (!account.isActive) {
       throw new ControlAccountsIncompleteError(
-        `${role} control account is inactive`,
+        `${label} control account is inactive — choose an active account`,
+        { role, reason: "inactive" },
       );
     }
     if (account.isSummary) {
       throw new ControlAccountsIncompleteError(
-        `${role} control account is a summary account`,
+        `${label} control account is a summary account — choose a postable account`,
+        { role, reason: "summary" },
       );
     }
     const allowedTypes: readonly string[] = CONTROL_ACCOUNT_TYPE_POLICY[role];
     if (!allowedTypes.includes(account.type)) {
       throw new ControlAccountsIncompleteError(
-        `${role} control account type ${account.type} is incompatible; expected ${allowedTypes.join(", ")}`,
+        `${label} control account must be ${controlAccountExpectedTypes(role)}; the selected account is ${accountTypeLabel(account.type)}`,
+        { role, reason: "type", accountType: account.type, allowedTypes },
       );
     }
   }
@@ -179,7 +276,8 @@ function parseStoredControlAccounts(value: unknown): OrgControlAccounts {
       !isUuid(accountId)
     ) {
       throw new ControlAccountsIncompleteError(
-        `${role} control account id is invalid`,
+        `${CONTROL_ACCOUNT_ROLE_LABELS[role]} control account id is invalid`,
+        { role, reason: "missing" },
       );
     }
     mappings[role] = accountId;

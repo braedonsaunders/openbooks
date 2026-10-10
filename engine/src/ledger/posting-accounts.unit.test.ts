@@ -236,7 +236,7 @@ test("a missing, inactive, summary, mistyped, or malformed control is refused by
     {
       name: "mistyped",
       row: { raw: controlId, id: controlId, type: "liability_payable", isActive: true, isSummary: false },
-      match: /is incompatible; expected asset_receivable, asset_current_other/,
+      match: /must be Accounts receivable or Other current asset; the selected account is Accounts payable/,
     },
   ];
   for (const { name, row, match } of cases) {

@@ -3,6 +3,10 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import {
   assertValidControlAccountMappings,
+  CONTROL_ACCOUNT_ROLE_LABELS,
+  CONTROL_ACCOUNT_ROLES,
+  CONTROL_ACCOUNT_TYPE_LABELS,
+  CONTROL_ACCOUNT_TYPE_POLICY,
   type ControlAccountRecord,
   ControlAccountsIncompleteError,
   loadRequiredControlAccounts,
@@ -38,7 +42,8 @@ test(
           ),
         (error: unknown) =>
           error instanceof ControlAccountsIncompleteError &&
-          /ar control account type income is incompatible/.test(error.message),
+          /Accounts receivable control account must be Accounts receivable; the selected account is Income/.test(error.message) &&
+          error.role === "ar" && error.reason === "type",
       );
 
       // Happy path: repairing the stored role restores the posting dependency
@@ -98,9 +103,48 @@ test(
         ),
       (error: unknown) =>
         error instanceof ControlAccountsIncompleteError &&
-        /retainageReceivable control account type liability_payable is incompatible/.test(
+        /Retainage receivable control account must be Accounts receivable or Other current asset; the selected account is Accounts payable/.test(
           error.message,
         ),
     );
   },
 );
+
+test("every role and every accepted account type has an operator-facing name", () => {
+  for (const role of CONTROL_ACCOUNT_ROLES) {
+    const label = CONTROL_ACCOUNT_ROLE_LABELS[role];
+    assert.ok(label && label !== role, `${role} needs a human label`);
+    for (const type of CONTROL_ACCOUNT_TYPE_POLICY[role]) {
+      assert.ok(CONTROL_ACCOUNT_TYPE_LABELS[type], `${type} needs a human label`);
+    }
+  }
+});
+
+test("a mistyped mapping is refused by the role's name and expected type, never its storage key", () => {
+  const clearing: ControlAccountRecord = {
+    id: "33333333-3333-4333-8333-333333333333",
+    type: "asset_current_other",
+    isActive: true,
+    isSummary: false,
+  };
+  assert.throws(
+    () => assertValidControlAccountMappings({ translationAdjustment: clearing.id }, [clearing]),
+    (error: unknown) =>
+      error instanceof ControlAccountsIncompleteError &&
+      error.message === "Translation adjustment control account must be Equity; the selected account is Other current asset" &&
+      error.role === "translationAdjustment" &&
+      error.reason === "type" &&
+      error.accountType === "asset_current_other" &&
+      JSON.stringify(error.allowedTypes) === JSON.stringify(["equity"]),
+  );
+  const revenue: ControlAccountRecord = { ...clearing, type: "income" };
+  assert.throws(
+    () => assertValidControlAccountMappings({ laborClearing: revenue.id }, [revenue]),
+    (error: unknown) =>
+      error instanceof ControlAccountsIncompleteError &&
+      error.message === "Labor clearing control account must be Other current asset or Other current liability; the selected account is Income" &&
+      !error.message.includes("laborClearing"),
+  );
+  // An accepted type passes for the same role.
+  assertValidControlAccountMappings({ laborClearing: clearing.id }, [clearing]);
+});

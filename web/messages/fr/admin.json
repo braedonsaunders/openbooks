@@ -927,6 +927,16 @@
         "hint": "Une telle ligne modifie le solde du grand livre sans pièce ouverte : la balance âgée, les relevés et les soldes ouverts ne concordent plus avec le grand livre. Avertir comptabilise la ligne et affiche la solution ; Refuser bloque la comptabilisation et renvoie vers Recevoir un paiement, Payer des factures ou l’indication du tiers sur la ligne. S’applique uniquement aux nouvelles comptabilisations.",
         "warn": "Avertir et comptabiliser",
         "refuse": "Refuser la comptabilisation"
+      },
+      "expectedTypes": "Accepte : {types}",
+      "incompatibleOption": "{account} (type non accepté)",
+      "incompatibleSelected": "Le type du compte sélectionné n'est pas accepté pour {role}. Choisissez {types}.",
+      "noEligibleAccounts": "Aucun compte actif de type {types} — ajoutez-en un dans le plan comptable",
+      "refusals": {
+        "type": "{role} doit être {types} ; le compte sélectionné est {actual}.",
+        "inactive": "{role} : le compte sélectionné est inactif. Choisissez un compte actif.",
+        "summary": "{role} : le compte sélectionné est un compte de regroupement. Choisissez un compte mouvementable.",
+        "missing": "{role} : le compte sélectionné n'existe plus. Choisissez de nouveau le compte."
       }
     },
     "revenue": {

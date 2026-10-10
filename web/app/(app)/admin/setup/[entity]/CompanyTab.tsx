@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
-import { CONTROL_ACCOUNT_ROLES } from '@openbooks/engine/src/records/control-accounts.ts'
+import { CONTROL_ACCOUNT_ROLES, CONTROL_ACCOUNT_TYPE_POLICY } from '@openbooks/engine/src/records/control-accounts.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { canonicalTimeZone, listCanonicalTimeZones } from '@openbooks/engine/src/platform/time-zone.ts'
 import { hasVendorBillApprovalFlow } from '@openbooks/engine/src/flows/index.ts'
@@ -119,6 +119,7 @@ export async function CompanyTab({ orgId }: { orgId: string }) {
           })(),
         }}
         controlAccountRoles={CONTROL_ACCOUNT_ROLES}
+        controlAccountPolicy={CONTROL_ACCOUNT_TYPE_POLICY}
         accounts={accountOptions}
         currencies={currencies.rows as { code: string; name: string }[]}
         timeZones={listCanonicalTimeZones()}

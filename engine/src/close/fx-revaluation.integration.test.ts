@@ -32,7 +32,7 @@ test("period-end FX revaluation rejects a balance-sheet unrealized gain/loss acc
       () => runRevaluation(org.orgId, org.periodId, null),
       (error: unknown) =>
         error instanceof ControlAccountsIncompleteError &&
-        /fxUnrealizedGainLoss control account type asset_receivable is incompatible/.test(error.message),
+        /Unrealized FX gain\/loss control account must be Income, Other income, Expense or Other expense; the selected account is Accounts receivable/.test(error.message),
     );
   } finally {
     await dropScratchOrg(org.orgId);

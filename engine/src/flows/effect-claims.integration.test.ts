@@ -315,7 +315,7 @@ test("post_document flow rejects semantically invalid control accounts", { skip:
     const rejected = await executeFlowPlan({ orgId: org.orgId }, adapter, params);
     assert.equal(rejected.completed.length, 0);
     assert.equal(rejected.failed.length, 1);
-    assert.match(rejected.failed[0]!, /ar control account type expense is incompatible/);
+    assert.match(rejected.failed[0]!, /Accounts receivable control account must be Accounts receivable; the selected account is Expense/);
     assert.equal(
       await countRows(sql`select count(*) as n from flow_run_effects where run_id = ${run.runId}`),
       0,

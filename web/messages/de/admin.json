@@ -927,6 +927,16 @@
         "hint": "Eine solche Zeile ändert den Hauptbuchsaldo ohne offenen Posten, sodass Altersliste, Kontoauszüge und offene Salden nicht mehr mit dem Hauptbuch übereinstimmen. „Warnen“ bucht die Zeile und zeigt die Abhilfe; „Ablehnen“ verhindert die Buchung und verweist auf „Zahlung erfassen“, „Rechnungen bezahlen“ oder die Angabe des Partners auf der Zeile. Gilt nur für neue Buchungen.",
         "warn": "Warnen und buchen",
         "refuse": "Buchung ablehnen"
+      },
+      "expectedTypes": "Zulässig: {types}",
+      "incompatibleOption": "{account} (Kontotyp nicht zulässig)",
+      "incompatibleSelected": "Der Typ des ausgewählten Kontos ist für {role} nicht zulässig. Wählen Sie {types}.",
+      "noEligibleAccounts": "Keine aktiven Konten vom Typ {types} – legen Sie eines im Kontenplan an",
+      "refusals": {
+        "type": "{role} muss {types} sein; das ausgewählte Konto ist {actual}.",
+        "inactive": "{role}: Das ausgewählte Konto ist inaktiv. Wählen Sie ein aktives Konto.",
+        "summary": "{role}: Das ausgewählte Konto ist ein Summenkonto. Wählen Sie ein bebuchbares Konto.",
+        "missing": "{role}: Das ausgewählte Konto existiert nicht mehr. Wählen Sie das Konto erneut."
       }
     },
     "revenue": {

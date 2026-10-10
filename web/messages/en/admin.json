@@ -927,6 +927,16 @@
         "hint": "Such a line changes the GL balance without an open item, so aging, statements and open balances stop agreeing with the GL. Warn posts it and shows the remedy; Refuse blocks the posting and directs the user to Receive payment, Pay bills, or naming the party on the line. Applies to new postings only.",
         "warn": "Warn and post",
         "refuse": "Refuse the posting"
+      },
+      "expectedTypes": "Accepts: {types}",
+      "incompatibleOption": "{account} (type not accepted)",
+      "incompatibleSelected": "The selected account's type isn't accepted for {role}. Choose {types}.",
+      "noEligibleAccounts": "No active accounts of type {types} — add one in the chart of accounts",
+      "refusals": {
+        "type": "{role} must be {types}; the selected account is {actual}.",
+        "inactive": "{role}: the selected account is inactive. Choose an active account.",
+        "summary": "{role}: the selected account is a summary account. Choose a postable account.",
+        "missing": "{role}: the selected account no longer exists. Choose the account again."
       }
     },
     "revenue": {

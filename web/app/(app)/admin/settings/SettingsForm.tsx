@@ -26,6 +26,7 @@ import { LOCALES, isLocale, type Locale } from '../../../../i18n/config'
 import { SaasMetricsNormalization } from './SaasMetricsNormalization'
 import type { ControlAccountRole } from '@openbooks/engine/src/records/control-accounts.ts'
 import { countryOptions } from '../../../../lib/countries'
+import { accountTypeMessageKey, controlAccountPickerOptions } from './control-account-options'
 
 export type AccountOption = { id: string; label: string; type: string }
 
@@ -80,6 +81,7 @@ export function SettingsForm({
   initial,
   accounts,
   controlAccountRoles,
+  controlAccountPolicy,
   currencies,
   timeZones,
   multiSubsidiary = false,
@@ -93,6 +95,10 @@ export function SettingsForm({
   initial: Initial
   accounts: AccountOption[]
   controlAccountRoles: readonly ControlAccountRole[]
+  /** Accepted chart account types per role — the engine's
+   *  CONTROL_ACCOUNT_TYPE_POLICY, handed over by the server loader so each
+   *  picker offers only accounts the save would accept. */
+  controlAccountPolicy: Readonly<Partial<Record<ControlAccountRole, readonly string[]>>>
   currencies: { code: string; name: string }[]
   /** Canonical IANA zone names the business-time-zone picker offers. */
   timeZones: string[]
@@ -118,6 +124,7 @@ export function SettingsForm({
 }) {
   const t = useTranslations('admin.settings')
   const tCommon = useTranslations('common')
+  const tAccounts = useTranslations('accounts')
   const locale = useLocale()
   const countries = useMemo(() => countryOptions(locale), [locale])
   const router = useRouter()
@@ -142,10 +149,32 @@ export function SettingsForm({
   const fiscalRangeLabel = (startMonth: number) =>
     t('fiscal.range', { start: monthLabel(startMonth), end: monthLabel(((startMonth + 10) % 12) + 1) })
 
-  const accountOptions: SelectOption[] = useMemo(
-    () => accounts.map((a) => ({ value: a.id, label: a.label })),
-    [accounts],
-  )
+  /** "Equity" / "Other Current Assets or Other Current Liabilities", localized. */
+  const expectedTypesLabel = (types: readonly string[]) => {
+    const names = types.map((type) => tAccounts(`types.${accountTypeMessageKey(type)}`))
+    return new Intl.ListFormat(locale, { type: 'disjunction' }).format(names)
+  }
+
+  /** A save refusal that names one control-account role is restated with the
+   *  field's own label and its accepted types in the operator's language. */
+  const controlAccountRefusal = (data: Record<string, unknown>): string | null => {
+    const role = data.role
+    if (data.code !== 'control-account-invalid' || typeof role !== 'string') return null
+    if (!controlAccountRoles.some((known) => known === role)) return null
+    const label = t(`controlAccounts.fields.${role as ControlAccountRole}.label`)
+    if (data.reason === 'type') {
+      const allowed = Array.isArray(data.allowedTypes)
+        ? data.allowedTypes.filter((type): type is string => typeof type === 'string')
+        : controlAccountPolicy[role as ControlAccountRole] ?? []
+      const actual = typeof data.accountType === 'string'
+        ? tAccounts(`types.${accountTypeMessageKey(data.accountType)}`)
+        : ''
+      return t('controlAccounts.refusals.type', { role: label, types: expectedTypesLabel(allowed), actual })
+    }
+    if (data.reason === 'inactive') return t('controlAccounts.refusals.inactive', { role: label })
+    if (data.reason === 'summary') return t('controlAccounts.refusals.summary', { role: label })
+    return t('controlAccounts.refusals.missing', { role: label })
+  }
 
   // Till settlement accounts: bank and asset-clearing only — tenders never
   // settle into receivables, payables, or income directly.
@@ -198,8 +227,11 @@ export function SettingsForm({
     })
     setSaving(false)
     if (!res.ok) {
-      const data = await res.json().catch(() => ({}))
-      toast.error(data.error ?? tCommon('feedback.saveFailed'))
+      const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
+      toast.error(
+        controlAccountRefusal(data)
+          ?? (typeof data.error === 'string' && data.error ? data.error : tCommon('feedback.saveFailed')),
+      )
       return
     }
     const data = (await res.json()) as { changed?: boolean; periodsRederived?: boolean }
@@ -600,6 +632,14 @@ export function SettingsForm({
         <CardContent className="grid gap-4 sm:grid-cols-2">
           {controlAccountRoles.map((role) => {
             const label = t(`controlAccounts.fields.${role}.label`)
+            const allowedTypes = controlAccountPolicy[role] ?? []
+            const expected = expectedTypesLabel(allowedTypes)
+            const picker = controlAccountPickerOptions({
+              accounts,
+              allowedTypes,
+              selectedId: form.controlAccounts[role] || undefined,
+              incompatibleLabel: (accountLabel) => t('controlAccounts.incompatibleOption', { account: accountLabel }),
+            })
             return (
               <div key={role} className="space-y-1.5">
                 <FieldLabel htmlFor={`ctrl-${role}`} help={t(`controlAccounts.fields.${role}.hint`)}>{label}</FieldLabel>
@@ -607,14 +647,24 @@ export function SettingsForm({
                   id={`ctrl-${role}`}
                   value={form.controlAccounts[role] ?? ''}
                   onChange={(v) => setControl(role, v)}
-                  options={accountOptions}
+                  options={picker.options}
                   placeholder={t('controlAccounts.selectPlaceholder')}
                   searchPlaceholder={t('controlAccounts.searchPlaceholder')}
                   sheetTitle={label}
                   clearable
-                  emptyLabel={tCommon('labels.notSet')}
+                  emptyLabel={picker.options.length === 0 ? t('controlAccounts.noEligibleAccounts', { types: expected }) : tCommon('labels.notSet')}
                   ariaLabel={label}
                 />
+                <p
+                  id={`ctrl-${role}-expected`}
+                  className={picker.selectedIncompatible
+                    ? 'text-xs text-amber-700 dark:text-amber-400'
+                    : 'text-xs text-slate-500 dark:text-slate-400'}
+                >
+                  {picker.selectedIncompatible
+                    ? t('controlAccounts.incompatibleSelected', { role: label, types: expected })
+                    : t('controlAccounts.expectedTypes', { types: expected })}
+                </p>
               </div>
             )
           })}

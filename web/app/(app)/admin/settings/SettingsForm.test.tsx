@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { CONTROL_ACCOUNT_ROLES } from '@openbooks/engine/src/records/control-accounts.ts'
+import { CONTROL_ACCOUNT_ROLES, CONTROL_ACCOUNT_TYPE_POLICY } from '@openbooks/engine/src/records/control-accounts.ts'
 
 declare global {
   var __settingsRouter: { push(url: string): void; refresh(): void } | undefined
@@ -88,6 +88,7 @@ const INITIAL: FormProps['initial'] = {
 
 const PROPS: Omit<FormProps, 'initial'> = {
   controlAccountRoles: CONTROL_ACCOUNT_ROLES,
+  controlAccountPolicy: CONTROL_ACCOUNT_TYPE_POLICY,
   accounts: [],
   currencies: [
     { code: 'USD', name: 'US Dollar' },
@@ -106,6 +107,7 @@ interface SeenRequest {
 async function mountForm(
   initial: FormProps['initial'] = INITIAL,
   extraProps: Partial<Omit<FormProps, 'initial'>> = {},
+  respond?: () => Response,
 ) {
   globalThis.__settingsRouter = { push() {}, refresh() {} }
   globalThis.__settingsToasts = []
@@ -117,7 +119,7 @@ async function mountForm(
       method: (init?.method ?? 'GET').toUpperCase(),
       body: init?.body ? JSON.parse(String(init.body)) : null,
     })
-    return Response.json({ changed: true })
+    return respond ? respond() : Response.json({ changed: true })
   }) as typeof fetch
   const host = document.createElement('div')
   document.body.appendChild(host)
@@ -177,6 +179,64 @@ test('a blank display name pins an inline required error on the field', async ()
     const alert = document.getElementById('name-error')
     assert.equal(alert?.getAttribute('role'), 'alert', 'the error persists as an alert, not only a toast')
     assert.equal(alert?.textContent, String(settingsCopy.validation?.nameRequired))
+  } finally {
+    await unmount()
+  }
+})
+
+test('each control-account field states the account types its role accepts', async () => {
+  const { unmount } = await mountForm(INITIAL, {
+    accounts: [
+      { id: 'eq1', label: '3200 · Translation reserve', type: 'equity' },
+      { id: 'ca1', label: '1250 · Clearing', type: 'asset_current_other' },
+    ],
+  })
+  try {
+    const expected = document.getElementById('ctrl-translationAdjustment-expected')
+    assert.equal(expected?.textContent, 'Accepts: Equity')
+    const labor = document.getElementById('ctrl-laborClearing-expected')
+    assert.equal(labor?.textContent, 'Accepts: Other Current Assets or Other Current Liabilities')
+  } finally {
+    await unmount()
+  }
+})
+
+test('a stored mapping of the wrong type is flagged for correction, not shown blank', async () => {
+  const { unmount } = await mountForm(
+    { ...INITIAL, controlAccounts: { ...INITIAL.controlAccounts, translationAdjustment: 'ca1' } },
+    { accounts: [{ id: 'ca1', label: '1250 · Clearing', type: 'asset_current_other' }] },
+  )
+  try {
+    const note = document.getElementById('ctrl-translationAdjustment-expected')
+    assert.equal(
+      note?.textContent,
+      "The selected account's type isn't accepted for Translation adjustment. Choose Equity.",
+    )
+  } finally {
+    await unmount()
+  }
+})
+
+test('a control-account refusal is restated with the field label, never the storage key', async () => {
+  const { unmount } = await mountForm(INITIAL, {}, () => Response.json({
+    error: 'Translation adjustment control account must be Equity; the selected account is Other current asset',
+    code: 'control-account-invalid',
+    role: 'translationAdjustment',
+    reason: 'type',
+    accountType: 'asset_current_other',
+    allowedTypes: ['equity'],
+  }, { status: 400 }))
+  try {
+    await act(async () => {
+      saveButton().click()
+      await tick()
+    })
+    await tick()
+    const errors = (globalThis.__settingsToasts ?? []).filter((toast) => toast.kind === 'error')
+    assert.deepEqual(errors.map((toast) => toast.message), [
+      'Translation adjustment must be Equity; the selected account is Other Current Assets.',
+    ])
+    assert.ok(!errors[0]!.message.includes('translationAdjustment'))
   } finally {
     await unmount()
   }
