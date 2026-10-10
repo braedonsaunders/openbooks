@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+import { sampleTenantInventory } from "./tenant-inventory.ts";
+import { verifyDemoScenarios } from "./install-scenarios.ts";
+import { sampleSourceManifest } from "./manifest.ts";
 import {
   createSampleCompany,
   prepareAllSampleCompanyTemplates,
@@ -7,6 +10,7 @@ import {
   promoteExistingSampleTemplate,
   sampleCompanyStatuses,
 } from "./service.ts";
+import { sampleRefreshPlan, refreshAllSampleCompanies } from "./refresh.ts";
 import { sampleCompanyFeatures } from "./features.ts";
 import { SAMPLE_COMPANY_BY_INDUSTRY, SAMPLE_COMPANY_PROFILES } from "./catalog.ts";
 import { pool, longPool } from "../platform/db.ts";
@@ -26,11 +30,32 @@ function line(value: unknown): void {
 
 async function main(): Promise<void> {
   const command = process.argv[2] ?? "inventory";
+  if (command === "tenant-inventory") { for (const tenant of await sampleTenantInventory()) line(tenant); return; }
+  if (command === "manifest") { line(sampleSourceManifest()); return; }
   if (command === "inventory") {
     // Status does not use the member ID when no user copy exists; the sentinel
     // can never match a UUID owner and keeps this operation read-only.
     const statuses = await sampleCompanyStatuses("00000000-0000-0000-0000-000000000000");
     for (const status of statuses) line(status);
+    return;
+  }
+
+  if (command === "inspect") {
+    const orgId = valueAfter("--org");
+    const industryKey = valueAfter("--industry");
+    if (!orgId || !industryKey) throw new Error("inspect requires --org UUID --industry KEY");
+    line(await verifyDemoScenarios(orgId, industryKey));
+    return;
+  }
+
+  if (command === "refresh-plan") {
+    line(await sampleRefreshPlan(valueAfter("--industry") ?? undefined));
+    return;
+  }
+  if (command === "refresh") {
+    const digest = valueAfter("--plan-digest");
+    if (!digest) throw new Error("refresh requires --plan-digest SHA256 from a reviewed refresh-plan");
+    await refreshAllSampleCompanies({ digest, industryKey: valueAfter("--industry") ?? undefined, onResult: line });
     return;
   }
 
@@ -72,7 +97,7 @@ async function main(): Promise<void> {
   }
 
   if (command !== "prepare") {
-    throw new Error("usage: npm -w engine run samples -- inventory | prepare [--industry KEY] | install --member-user UUID --source-org UUID --member-name NAME [--industry KEY] | resume --run-dir PATH | promote --industry KEY --source-org UUID --confirm-sample-data [--unmasked --confirm-synthetic]");
+    throw new Error("usage: npm -w engine run samples -- manifest | tenant-inventory | inventory | inspect --org UUID --industry KEY | refresh-plan [--industry KEY] | refresh --plan-digest SHA256 [--industry KEY] | prepare [--industry KEY] | install --member-user UUID --source-org UUID --member-name NAME [--industry KEY] | resume --run-dir PATH | promote --industry KEY --source-org UUID --confirm-sample-data [--unmasked --confirm-synthetic]");
   }
 
   const industry = valueAfter("--industry");

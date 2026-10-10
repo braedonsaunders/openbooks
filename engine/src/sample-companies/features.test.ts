@@ -1,10 +1,13 @@
+import { createHash } from "node:crypto";
+import { operatingDocuments } from "./industry-operations.ts";
+import { sampleOperatingPolicy } from "./policy.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { FEATURES, featureRequirements } from "../organization/feature-registry.ts";
 import { SAMPLE_COMPANY_PROFILES } from "./catalog.ts";
-import { DEMO_FEATURES_BY_INDUSTRY, sampleCompanyFeatures } from "./features.ts";
+import { DEMO_FEATURES_BY_INDUSTRY, sampleCompanyFeatures, sampleRefreshFeatures, UPCOMING_DEMO_FEATURES } from "./features.ts";
 import { DEMO_FEATURE_EVIDENCE, demoFeatureEvidence } from "./coverage.ts";
-import { demoRecords, demoRecordId, type DemoContext } from "./scenarios.ts";
+import { demoRecords, demoRecordId, scenarioRecordId, type DemoContext } from "./scenarios.ts";
 
 export function demoContext(industryKey: string): DemoContext {
   const uuid = (key: string) => demoRecordId("00000000-0000-4000-8000-000000000001", "fixture", key);
@@ -15,7 +18,8 @@ export function demoContext(industryKey: string): DemoContext {
 test("industry demos collectively cover every authoritative feature and its dependencies", () => {
   const registry = new Set(FEATURES.map((feature) => feature.key));
   assert.deepEqual(Object.keys(DEMO_FEATURES_BY_INDUSTRY).sort(), SAMPLE_COMPANY_PROFILES.map((p) => p.industryKey).sort());
-  assert.deepEqual(Object.keys(DEMO_FEATURE_EVIDENCE).sort(), [...registry].sort());
+  const available = [...registry].filter(key => !(UPCOMING_DEMO_FEATURES as readonly string[]).includes(key));
+  assert.deepEqual(Object.keys(DEMO_FEATURE_EVIDENCE).sort(), available.sort());
   const covered = new Set<string>();
   for (const profile of SAMPLE_COMPANY_PROFILES) {
     for (const key of DEMO_FEATURES_BY_INDUSTRY[profile.industryKey]!) assert.ok(registry.has(key), `Unknown feature ${key} in ${profile.companyName}`);
@@ -27,7 +31,7 @@ test("industry demos collectively cover every authoritative feature and its depe
     }
     assert.deepEqual(Object.keys(demoFeatureEvidence(profile.industryKey)).sort(), Object.keys(features).filter((key) => features[key]).sort());
   }
-  assert.deepEqual([...covered].sort(), [...registry].sort());
+  assert.deepEqual([...covered].sort(), available.sort());
   assert.throws(() => sampleCompanyFeatures("unknown"), /Unknown sample-company industry/);
 });
 
@@ -54,4 +58,55 @@ test("demo coverage declares integration limits and unsupported execution honest
   assert.equal(DEMO_FEATURE_EVIDENCE.automationFieldTriggers?.mode, "unsupported");
   assert.equal(DEMO_FEATURE_EVIDENCE.automationWebhooks?.mode, "unsupported");
   for (const key of ["onlinePayments", "bankFeeds", "automationWebhooks", "payroll"]) assert.ok(DEMO_FEATURE_EVIDENCE[key]?.limitation);
+});
+
+
+test("cloned scenarios retain the published native rebase identity", () => {
+  const master = demoContext("general_business");
+  const clone = { ...master, orgId: "00000000-0000-4000-8000-000000000003", identitySourceOrgId: master.orgId, identitySeed: "00000000-0000-4000-8000-000000000004" };
+  const source = demoRecordId(master.orgId, "documents", "operations-vendor_bill-1");
+  const hex = createHash("md5").update(`${clone.identitySeed}:${source}`).digest("hex");
+  assert.equal(scenarioRecordId(clone,"documents","operations-vendor_bill-1").replaceAll("-",""), hex);
+  assert.notEqual(scenarioRecordId(clone,"documents","operations-vendor_bill-1"), demoRecordId(clone.orgId,"documents","operations-vendor_bill-1"));
+});
+
+test("every industry has deterministic counterparty and transaction volume without fabricated posting states", () => {
+  for (const profile of SAMPLE_COMPANY_PROFILES) {
+    const context = demoContext(profile.industryKey);
+    const policy = sampleOperatingPolicy(profile.industryKey);
+    const documents = operatingDocuments(context);
+    assert.equal(documents.filter(d => d.kind === "vendor_bill").length, policy.vendorBills);
+    assert.equal(documents.filter(d => d.kind === "customer_invoice").length, policy.customerInvoices);
+    assert.equal(new Set(documents.filter(d => d.kind === "vendor_bill").map(d => d.partyId)).size, policy.vendors);
+    assert.equal(new Set(documents.filter(d => d.kind === "customer_invoice").map(d => d.partyId)).size, policy.customers);
+    for (const kind of ["vendor_credit","customer_credit","expense_report","check","deposit","card_charge","card_refund","transfer"]) assert.equal(documents.filter(d => d.kind === kind).length, 3);
+    for (const record of demoRecords(context).filter(record => record.table === "documents")) assert.ok(record.values.status === undefined || record.values.status === "draft");
+  }
+});
+
+
+test("preserving refresh adds required demo gates and retains unrelated explicit choices", () => {
+  const before = { crm: false, projects: true, payroll: false, manufacturingSubcontract: true, futureOperatorChoice: false };
+  const refreshed = sampleRefreshFeatures("general_business", before);
+  assert.equal(refreshed.crm, true);
+  assert.equal(refreshed.projects, true);
+  assert.equal(refreshed.payroll, false);
+  assert.equal(refreshed.manufacturingSubcontract, true);
+  assert.equal(refreshed.futureOperatorChoice, false);
+  assert.equal(before.crm, false, "refresh cannot mutate the supplied settings snapshot");
+});
+
+test("posted ordinary operations span native dates, parties and editable follow-up work", () => {
+  for (const profile of SAMPLE_COMPANY_PROFILES) {
+    const c = { ...demoContext(profile.industryKey), operationDates: ["2026-07-31", "2026-08-31", "2026-09-30"] };
+    for (const kind of ["vendor_bill", "customer_invoice"]) {
+      const documents = operatingDocuments(c).filter(row => row.kind === kind);
+      assert.equal(new Set(documents.filter(row => row.post).map(row => row.documentDate)).size, 3);
+      assert.ok(documents.some(row => !row.post));
+      assert.ok(documents.filter(row => row.post).length >= 12);
+    }
+    assert.equal(DEMO_FEATURE_EVIDENCE.autopay?.stage, "configured");
+    assert.equal(DEMO_FEATURE_EVIDENCE.projectProgress?.stage, "executed");
+    assert.equal(DEMO_FEATURE_EVIDENCE.revenueContracts?.stage, "draft");
+  }
 });

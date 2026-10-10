@@ -68,7 +68,7 @@ function serviceProfile(input: {
     utilization: input.utilization ?? 0.74,
     engagementsPerCustomer: 2,
     cadence: {
-      billsPerDay: 0.45,
+      billsPerDay: 1.1,
       invoicesPerDay: 1.25,
       expenseReportsPerDay: 0.45,
       journalPerDay: 0.15,
@@ -101,7 +101,7 @@ function tradeProfile(input: {
     utilization: undefined,
     economics: input.economics,
     cadence: {
-      billsPerDay: high ? 1.6 : 0.8,
+      billsPerDay: high ? 2.8 : 1.4,
       invoicesPerDay: high ? 2.4 : 1.25,
       expenseReportsPerDay: 0.25,
       journalPerDay: 0.15,

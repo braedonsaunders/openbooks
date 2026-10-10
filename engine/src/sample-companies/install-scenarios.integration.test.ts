@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
+import { verifySampleOperatingHistory } from "./readiness.ts";
 import { cmp } from "../money/money.ts";
 import { installEngineSeams } from "../composition/install.ts";
 import { db, withOrgContext, withBypass } from "../platform/db.ts";
@@ -28,6 +29,7 @@ for (const profile of SAMPLE_COMPANY_PROFILES) test(`${profile.companyName}: nat
     const verified = await verifyDemoScenarios(world.orgId, profile.industryKey);
     assert.deepEqual(verified.missing, []);
     assert.equal(verified.ready, true);
+    assert.deepEqual(await withOrgContext(world.orgId, () => verifySampleOperatingHistory(world.orgId, profile.industryKey)), [], "each industry meets posted volume, counterparties, months and settlement diversity");
     if (profile.industryKey === "general_business") await withOrgContext(world.orgId, async () => {
       const versions = (await db.execute<{ version: string; manifest: Record<string, unknown> }>(sql`select version,manifest from app_versions where org_id=${world.orgId} and app_id=${demoRecordId(world.orgId,"apps","main")} order by version`)).rows;
       assert.equal(versions.length, 2, "package corrections append a new immutable revision");
@@ -73,7 +75,7 @@ for (const profile of SAMPLE_COMPANY_PROFILES) test(`${profile.companyName}: nat
 test("installer refuses an ordinary tenant before writing demo records", enabled, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {
-    await assert.rejects(installDemoScenarios(org.orgId, "general_business"), /only be installed into the matching synthetic master company/);
+    await assert.rejects(installDemoScenarios(org.orgId, "general_business"), /matching synthetic master or a fully provisioned native exploration company/);
     await withOrgContext(org.orgId, async () => {
       assert.equal((await db.execute(sql`select id from parties where org_id=${org.orgId} and id=${demoRecordId(org.orgId,"parties","employee")}`)).rows.length, 0);
     });
@@ -117,7 +119,7 @@ test("demo preparation extends fully closed history without reopening it", enabl
       `)).rows[0]!;
       assert.equal(old.total, 12); assert.equal(old.closed, old.total);
       assert.equal((await db.execute(sql`select 1 from accounting_periods where org_id=${world.orgId} and fiscal_year=2027`)).rows.length, 12);
-      const future = await db.execute(sql`select 1 from documents where org_id=${world.orgId} and idempotency_key like 'industry-demo:%' and document_date >= '2027-01-01' and status='posted'`);
+      const future = await db.execute(sql`select 1 from documents where org_id=${world.orgId} and idempotency_key in (${`industry-demo:${world.orgId}:opening-cash`},${`industry-demo:${world.orgId}:bank-charge`}) and document_date >= '2027-01-01' and status='posted'`);
       assert.equal(future.rows.length, 2);
     });
   } finally { await wipeSimOrg(world.orgId); }

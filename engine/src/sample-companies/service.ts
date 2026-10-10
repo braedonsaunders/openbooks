@@ -1395,6 +1395,15 @@ export async function cloneSampleCompanyTemplate(
  * access grant is never staged — its specific errors (foreign record,
  * missing finalize) propagate as known refusals.
  */
+/** Transport credentials and device identities are intentionally excluded by cloning.
+ * Restore only inert authored examples before exposing a fully numbered copy. */
+async function restoreClonedSampleScenarios(orgId: string, industryKey: string): Promise<void> {
+  const version = await withOrgContext(orgId, async () => (await db.execute<{ version: number | null }>(sql`
+    select (settings->'demoData'->>'version')::int as version from orgs where id=${orgId}
+  `)).rows[0]?.version);
+  if (version === DEMO_DATA_VERSION) await installDemoScenarios(orgId, industryKey);
+}
+
 async function resumePartialSampleCompany(args: {
   partial: PartialSampleCompany;
   input: CreateSampleCompanyInput;
@@ -1421,6 +1430,7 @@ async function resumePartialSampleCompany(args: {
     );
     await setSampleCompanyStage(args.partial.id, "numbering_reconciled");
   }
+  await runProvisioningStage("finalize", () => restoreClonedSampleScenarios(args.partial.id, args.input.industryKey));
   await grantSampleCompanyAccess({
     sandboxOrgId: args.partial.id,
     memberUserId: args.input.memberUserId,
@@ -1608,6 +1618,7 @@ export async function createSampleCompany(
       reconcileNumbering(cloned.sandboxOrgId),
     );
     await setSampleCompanyStage(cloned.sandboxOrgId, "numbering_reconciled");
+    await runProvisioningStage("finalize", () => restoreClonedSampleScenarios(cloned.sandboxOrgId, input.industryKey));
     // Access is granted last: only a fully reconciled company becomes ready.
     await grantSampleCompanyAccess({
       sandboxOrgId: cloned.sandboxOrgId,

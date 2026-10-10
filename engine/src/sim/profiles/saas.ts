@@ -185,7 +185,7 @@ export const saasCompany: Profile = {
     payment: { onTime: 0.7, late: 0.2, veryLate: 0.06, shortPay: 0.02, delinquent: 0.02 },
   })),
   cadence: {
-    billsPerDay: 0.8,
+    billsPerDay: 1.2,
     invoicesPerDay: 0, // 100% recurring — no random invoicing
     expenseReportsPerDay: 0.3,
     journalPerDay: 0.2,
