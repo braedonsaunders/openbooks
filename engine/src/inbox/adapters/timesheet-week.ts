@@ -30,6 +30,58 @@ type OwnWeekRow = {
   status: string;
 };
 
+/**
+ * True when a week owes no timesheet: nothing is recorded in it, and every
+ * day is either covered by the person's approved leave or is not a working
+ * day. Working days come from the business calendar governing the
+ * employee's legal entity; where no calendar is configured this reminder
+ * treats Monday to Friday as working days. The answer only decides whether
+ * to nudge — it never records, approves or costs any time.
+ */
+async function weekNeedsNoTimesheet(ctx: InboxListContext, partyId: string, weekStartIso: string): Promise<boolean> {
+  const exec = ctx.exec ?? db;
+  const facts = (await exec.execute<{ entries: number; subsidiary_id: string | null; leave_days: string[] | null }>(sql`
+    select
+      (select count(*)::int from time_entries te
+        where te.org_id = ${ctx.orgId} and te.employee_party_id = ${partyId}
+          and te.worked_on >= ${weekStartIso}::date and te.worked_on <= ${weekStartIso}::date + 6) as entries,
+      coalesce(
+        (select min(e.employer_subsidiary_id::text) from worker_employments e
+          where e.org_id = ${ctx.orgId} and e.worker_party_id = ${partyId}
+         having count(distinct e.employer_subsidiary_id) = 1),
+        (select p.subsidiary_id::text from parties p where p.org_id = ${ctx.orgId} and p.id = ${partyId})
+      ) as subsidiary_id,
+      (select array_agg(distinct day::date::text)
+         from generate_series(${weekStartIso}::date, ${weekStartIso}::date + 6, interval '1 day') day
+        where exists (
+          select 1 from hrm_leave_requests r
+            join worker_employments e on e.id = r.employment_id and e.org_id = r.org_id
+           where r.org_id = ${ctx.orgId} and e.worker_party_id = ${partyId}
+             and r.status = 'approved' and day::date between r.starts_on and r.ends_on)) as leave_days
+  `)).rows[0];
+  if (!facts || facts.entries > 0) return false;
+  const leave = new Set(facts.leave_days ?? []);
+  const days = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(`${weekStartIso}T00:00:00Z`);
+    date.setUTCDate(date.getUTCDate() + index);
+    return date.toISOString().slice(0, 10);
+  });
+  let isWorkingDay: (date: string) => boolean;
+  try {
+    const { businessCalendarOver } = await import("../../payroll/business-calendars.ts");
+    const calendar = await businessCalendarOver(ctx.orgId, facts.subsidiary_id, days[0]!, days[6]!);
+    isWorkingDay = (date) => calendar.day(date).isBusinessDay;
+  } catch (error) {
+    const name = (error as { name?: unknown } | null)?.name;
+    if (name !== "BusinessCalendarMissingError" && name !== "SubsidiaryCalendarMismatchError") throw error;
+    isWorkingDay = (date) => {
+      const weekday = new Date(`${date}T00:00:00Z`).getUTCDay();
+      return weekday >= 1 && weekday <= 5;
+    };
+  }
+  return days.every((date) => leave.has(date) || !isWorkingDay(date));
+}
+
 export const timesheetWeekAdapter: InboxAdapter = {
   kind: "timesheet_week",
   async list(ctx: InboxListContext): Promise<InboxItem[]> {
@@ -74,6 +126,9 @@ export const timesheetWeekAdapter: InboxAdapter = {
          limit 10
       `)).rows;
       for (const week of weeks) {
+        // A week with nothing recorded in which every working day was
+        // approved leave or a non-working calendar day owes no timesheet.
+        if (await weekNeedsNoTimesheet(ctx, partyId, week.week_start)) continue;
         const dueAt = new Date(`${week.week_start}T00:00:00Z`);
         dueAt.setUTCDate(dueAt.getUTCDate() + 7);
         const dueDay = dueAt.toISOString().slice(0, 10);
@@ -84,7 +139,7 @@ export const timesheetWeekAdapter: InboxAdapter = {
           subtitle:
             week.status === "rejected"
               ? "rejected — fix the flagged entries and submit the week in Timesheets"
-              : "the week ended with no submission — submit it in Timesheets",
+              : "the week ended with no submission — submit it in Timesheets, or declare it a no-hours week with a reason if you did not work",
           dueAt: dueDay,
           createdAt: dueAt.toISOString(),
           priority: priorityForDueDate(dueDay, ctx.asOf, ctx.timeZone),

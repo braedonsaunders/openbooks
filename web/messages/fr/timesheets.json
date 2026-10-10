@@ -86,7 +86,14 @@
       "costed": "comptabilisées",
       "ticketed": "dans un bon de travail"
     },
-    "checksLink": "Ouvrir les contrôles de paie"
+    "checksLink": "Ouvrir les contrôles de paie",
+    "noHoursAction": "Déclarer aucune heure",
+    "noHoursTitle": "Déclarer une semaine sans heures",
+    "noHoursMessage": "Utilisez cette option si vous n’avez pas travaillé cette semaine, par exemple en congé. La déclaration est soumise à approbation comme toute feuille de temps.",
+    "noHoursReasonLabel": "Motif",
+    "noHoursPlaceholder": "En congé toute la semaine",
+    "noHoursConfirm": "Soumettre la déclaration",
+    "noHoursToast": "Semaine sans heures soumise à approbation."
   },
   "field": {
     "title": "Pointage terrain",

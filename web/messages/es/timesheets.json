@@ -86,7 +86,14 @@
       "costed": "contabilizadas",
       "ticketed": "en un parte de trabajo"
     },
-    "checksLink": "Abrir controles de nómina"
+    "checksLink": "Abrir controles de nómina",
+    "noHoursAction": "Declarar sin horas",
+    "noHoursTitle": "Declarar una semana sin horas",
+    "noHoursMessage": "Úselo cuando no trabajó esta semana, por ejemplo por estar de vacaciones. La declaración se envía para aprobación como cualquier hoja de horas.",
+    "noHoursReasonLabel": "Motivo",
+    "noHoursPlaceholder": "De vacaciones toda la semana",
+    "noHoursConfirm": "Enviar declaración",
+    "noHoursToast": "Semana sin horas enviada para aprobación."
   },
   "field": {
     "title": "Fichaje en campo",
