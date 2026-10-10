@@ -246,6 +246,40 @@ export async function pinTimesheetLineRefs(
   return { projectId, itemId, timeTypeId, departmentId }
 }
 
+export interface WeekLeaveCover {
+  requestId: string
+  leaveType: string
+  from: string
+  to: string
+}
+
+/**
+ * Approved leave overlapping a date window, newest first. Scoped to the
+ * employee's own employments: another person's approved absence must never
+ * surface as this week's cover story. Shared by the week loader (so the
+ * declaration can name it) and the no-hours submit (so the audit records it).
+ */
+export async function weekLeaveCover(
+  orgId: string,
+  employeePartyId: string,
+  fromIso: string,
+  throughIso: string,
+): Promise<WeekLeaveCover[]> {
+  return (await db.execute<WeekLeaveCover>(sql`
+    select r.id as "requestId",
+           (t.code || ' — ' || t.name) as "leaveType",
+           r.starts_on::text as "from", r.ends_on::text as "to"
+      from hrm_leave_requests r
+      join worker_employments e on e.id = r.employment_id and e.org_id = r.org_id
+      join hrm_leave_types t on t.id = r.leave_type_id and t.org_id = r.org_id
+     where r.org_id = ${orgId}
+       and e.worker_party_id = ${employeePartyId}
+       and r.status = 'approved'
+       and r.starts_on <= ${throughIso} and r.ends_on >= ${fromIso}
+     order by r.starts_on desc, r.id desc
+  `)).rows
+}
+
 export interface WeekPayload {
   employeeId: string | null
   week: string
@@ -254,6 +288,9 @@ export interface WeekPayload {
   planned: PlannedRow[]
   /** Published bookings from boards that pre-fill timesheets, for one-click entry while the week is editable. */
   scheduled: ScheduledWork[]
+  /** Approved leave overlapping the week, so a no-hours declaration can name
+   * the absence it records instead of standing alone. */
+  leaveCover: WeekLeaveCover[]
   status: WeekStatus
   /** True when any entry in the week is approved (those must not be overwritten). */
   hasApproved: boolean
@@ -383,6 +420,7 @@ export async function loadWeek(
   }
 
   const rows = Array.from(byKey.values())
+  const leaveCover = await weekLeaveCover(orgId, ownedEmployee, days[0]!, days[6]!)
   const status: WeekStatus =
     allStatuses.length === 0 && header.status === 'draft' ? 'empty' : header.status
   const editable = status === 'draft' || status === 'empty' || status === 'rejected'
@@ -400,6 +438,7 @@ export async function loadWeek(
     rows,
     planned,
     scheduled,
+    leaveCover,
     // Status is the header's, not a fold over the entries: a week with no
     // hours yet is 'draft' (a real, submittable record), and 'empty' is
     // reserved for describing that it carries nothing.

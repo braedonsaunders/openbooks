@@ -22,6 +22,7 @@ const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.t
 const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { GET, PUT } = await import('./route')
 const { POST: submitWeek } = await import('./submit/route')
+const { POST: withdrawWeek } = await import('./withdraw/route')
 const { loadWeek } = await import('./_lib')
 
 const WEEK = '2026-07-12'
@@ -63,10 +64,16 @@ async function fixture() {
   const submit = (employee: string) => withOrgContext(org.orgId, () => submitWeek(new Request('http://time.local/api/timesheets/submit', {
     method: 'POST', body: JSON.stringify({ employee, week: WEEK }),
   })))
+  const withdraw = (employee: string) => withOrgContext(org.orgId, () => withdrawWeek(new Request('http://time.local/api/timesheets/withdraw', {
+    method: 'POST', body: JSON.stringify({ employee, week: WEEK }),
+  })))
+  const declareNoHours = (employee: string, reason?: string) => withOrgContext(org.orgId, () => submitWeek(new Request('http://time.local/api/timesheets/submit', {
+    method: 'POST', body: JSON.stringify({ employee, week: WEEK, noHours: true, ...(reason === undefined ? {} : { reason }) }),
+  })))
   const entries = async (employee: string) => (await db.execute<{ status: string }>(sql`
     select status from time_entries where org_id=${org.orgId} and employee_party_id=${employee}`)).rows
   const close = async () => { session.user = null; await dropScratchOrgReporting(org.orgId) }
-  return { org, worker, supervisor, clocker, own, coworker, as, read, save, submit, entries, close }
+  return { org, worker, supervisor, clocker, own, coworker, as, read, save, submit, withdraw, declareNoHours, entries, close }
 }
 
 test('a self-service time user reads, enters and submits only their own week', async () => {
@@ -98,6 +105,38 @@ test("a coworker's week is refused by name for read, save and submit, with nothi
       assert.ok(body.remedy, 'the refusal names its remedy')
     }
     assert.deepEqual(await f.entries(f.coworker), before, 'the coworker week is untouched')
+  } finally { await f.close() }
+})
+
+test('a zero-hour week submits through the no-hours declaration, never empty', async () => {
+  const f = await fixture()
+  try {
+    f.as(f.worker, 'Field technician')
+    assert.deepEqual(await f.entries(f.own), [], 'the week holds nothing at all')
+    const refused = await f.declareNoHours(f.own)
+    assert.equal(refused.status, 422, 'a declaration without a reason is refused')
+    const declared = await f.declareNoHours(f.own, 'On vacation all week')
+    assert.equal(declared.status, 200, await declared.clone().text())
+    assert.deepEqual((await f.entries(f.own)).map((entry) => entry.status), [], 'no entries are invented by the declaration')
+  } finally { await f.close() }
+})
+
+test('a submitted week is recallable by its owner and no one else', async () => {
+  const f = await fixture()
+  try {
+    f.as(f.supervisor, 'Time supervisor')
+    assert.equal((await f.save(f.coworker)).status, 200, 'the supervisor seeds the coworker week')
+    assert.equal((await f.submit(f.coworker)).status, 200, 'the coworker week submits')
+
+    f.as(f.worker, 'Field technician')
+    const refused = await f.withdraw(f.coworker)
+    assert.equal(refused.status, 403, "a coworker's submitted week is not recallable")
+    assert.equal(((await refused.json()) as { code?: string }).code, 'time_self_only')
+    assert.deepEqual((await f.entries(f.coworker)).map((entry) => entry.status), ['submitted'])
+
+    f.as(f.supervisor, 'Time supervisor')
+    assert.equal((await f.withdraw(f.coworker)).status, 200, 'a supervisor recalls through the same governed path')
+    assert.deepEqual((await f.entries(f.coworker)).map((entry) => entry.status), ['draft'])
   } finally { await f.close() }
 })
 

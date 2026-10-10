@@ -16,6 +16,7 @@ import {
   loadWeek,
   pinTimekeeper,
   setTimesheetWeekStatus,
+  weekLeaveCover,
   weekStart,
   weekWindow,
 } from "../_lib";
@@ -117,6 +118,10 @@ export const POST = defineRoute({
         // header stamp and the dispatch; throwing rolls the flip back.
         await assertWeekSubmittable(orgId, header.id, moved.rowCount ?? 0, { declaredNoHours: body.noHours === true });
         if (body.noHours === true) {
+          // A declaration over approved leave names the absence it records:
+          // re-derived here (never trusted from the client) so the audit
+          // carries the leave the approver must see.
+          const leaveRequests = await weekLeaveCover(orgId, ownedEmployee, days[0]!, days[6]!);
           const audited = (await db.execute<{ id: string }>(sql`
             insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
             values (${orgId}, 'timesheet_weeks', ${header.id}, 'update', ${JSON.stringify({
@@ -124,6 +129,12 @@ export const POST = defineRoute({
               before: { status: header.status },
               after: { status: "submitted" },
               reason: body.reason,
+              leaveRequests: leaveRequests.map((leave) => ({
+                requestId: leave.requestId,
+                leaveType: leave.leaveType,
+                from: leave.from,
+                to: leave.to,
+              })),
             })}::jsonb, ${user.id})
             returning id
           `)).rows[0];
