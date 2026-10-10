@@ -3,7 +3,10 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, orgContext, withBypass, withBypassContext, withOrgTransaction } from "../platform/db.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
-import { assertSampleOperator, sampleOperatorId, sampleOperatorPermissions, withSampleOperator } from "./operator.ts";
+import { assertSampleOperator, sampleOperatorId, sampleOperatorPermissions, sampleOperatorAuthorship, SampleLocalAuthorRequiredError, withSampleOperator } from "./operator.ts";
+
+import { sampleRefreshPlan, refreshAllSampleCompanies } from "./refresh.ts";
+import { SAMPLE_COMPANY_PROFILES } from "./catalog.ts";
 
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL };
 
@@ -12,6 +15,15 @@ test("sample operator selection is explicit and canonical", () => {
   assert.equal(sampleOperatorId({ actorId: "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA" }), "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
   assert.throws(() => sampleOperatorId({ actorId: "admin" }), /explicit native user UUID/);
   assert.throws(() => sampleOperatorId({ actorId: "" }), /explicit native user UUID/);
+});
+
+
+test("native local authorship is required only for the industries that write tenant-owned author records", () => {
+  const local = SAMPLE_COMPANY_PROFILES.filter(profile => sampleOperatorAuthorship(profile.industryKey).length).map(profile => profile.industryKey).sort();
+  assert.deepEqual(local, ["general_business", "healthcare_practice", "nonprofit"]);
+  assert.deepEqual(sampleOperatorAuthorship("general_business"), [{ table: "einvoice_settings", actorColumns: ["created_by", "updated_by"], requiresPerson: false }]);
+  assert.ok(sampleOperatorAuthorship("nonprofit").some(contract => contract.actorColumns.includes("set_by")));
+  assert.ok(sampleOperatorAuthorship("healthcare_practice").some(contract => contract.requiresPerson));
 });
 
 
@@ -48,7 +60,7 @@ test("explicit platform operator remains identity-locked while business writes s
     await command(async () => {
       assert.equal(orgContext.getStore()?.bypass, false);
       assert.equal(orgContext.getStore()?.orgId, target.orgId);
-      await assertSampleOperator(db, target.orgId, actorId, target.subsidiaryId, "general_business", true);
+      await assertSampleOperator(db, target.orgId, actorId, target.subsidiaryId, "engineering_architecture", true);
       await assert.rejects(withBypassContext(() => withBypass(async () => {
         await db.execute(sql`set local lock_timeout='100ms'`);
         await db.execute(sql`update users set is_active=false where id=${actorId} and org_id=${home.orgId}`);
@@ -56,9 +68,19 @@ test("explicit platform operator remains identity-locked while business writes s
         const detail = error as { code?: string; cause?: { code?: string } };
         return (detail.code ?? detail.cause?.code) === "55P03";
       }, "home identity cannot be revoked halfway through the selected tenant command");
-      await assert.rejects(assertSampleOperator(db, target.orgId, actorId, target.subsidiaryId, "healthcare_practice", true), /authorship require a user and person identity in this company/);
+      for (const industry of ["general_business", "nonprofit", "healthcare_practice"]) {
+        await assert.rejects(assertSampleOperator(db, target.orgId, actorId, target.subsidiaryId, industry, true), (error: unknown) =>
+          error instanceof SampleLocalAuthorRequiredError && error.code === "SAMPLE_LOCAL_AUTHOR_REQUIRED" && error.industryKey === industry && error.requiredRecords.length > 0);
+      }
     });
+    await withBypass(() => db.execute(sql`update orgs set settings=settings || '{"simHarness":true,"sampleTemplate":{"enabled":true,"profileId":"engineering-architecture"}}'::jsonb where id=${target.orgId}`));
+    const defaultPlan = await sampleRefreshPlan("engineering_architecture");
+    const selectedPlan = await sampleRefreshPlan("engineering_architecture", { actorId });
+    assert.ok(selectedPlan.targets.some(row => row.orgId === target.orgId));
+    assert.notEqual(selectedPlan.digest, defaultPlan.digest, "the plan pins the explicitly selected platform author where native contracts permit it");
+    await assert.rejects(refreshAllSampleCompanies({ industryKey: "engineering_architecture", digest: selectedPlan.digest }), /sample population changed/i);
     await withBypass(() => db.execute(sql`update users set is_active=false where id=${actorId} and org_id=${home.orgId}`));
+    await assert.rejects(sampleRefreshPlan("engineering_architecture", { actorId }), /operator is unavailable/);
     await assert.rejects(command(async () => {}), /active platform superadmin/);
   } finally {
     await withBypass(() => dropScratchOrg(target.orgId));
