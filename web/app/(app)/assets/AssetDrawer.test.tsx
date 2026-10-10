@@ -211,7 +211,7 @@ async function chooseCategory(categoryId: string): Promise<void> {
   const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!
   await act(async () => {
     setter.call(select, categoryId)
-    select.dispatchEvent(new Event('change', { bubbles: true }))
+    select.dispatchEvent(new window.Event('change', { bubbles: true }))
     await tick()
   })
 }
