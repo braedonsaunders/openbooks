@@ -19,7 +19,7 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 async function seedOrder(
   orgId: string,
   subsidiaryId: string,
-  kind: "sales_order" | "purchase_order" | "vendor_bill" | "customer_invoice",
+  kind: "sales_order" | "purchase_order" | "vendor_bill" | "customer_invoice" | "purchase_receipt",
   date: string,
   status = "approved",
 ): Promise<string> {
@@ -99,6 +99,33 @@ test("assign-posting-period refuses closed periods and dateless calendars per do
       select count(*)::text as n from documents
        where org_id = ${org.orgId} and id in (${sales}, ${dateless}) and posting_period_id is null`);
     assert.equal(stillNull.rows[0]?.n, "2");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("assign-posting-period assigns decided inventory kinds and blocks undecided kinds with operator copy", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const receipt = await seedOrder(org.orgId, org.subsidiaryId, "purchase_receipt", org.date);
+    const bogusId = randomUUID();
+    await db.execute(sql`
+      insert into documents
+        (id, org_id, subsidiary_id, kind, status, document_number, document_date,
+         posting_date, currency, subtotal, tax_total, total)
+      values (${bogusId}, ${org.orgId}, ${org.subsidiaryId}, 'not_a_mapped_kind', 'approved', ${bogusId},
+              ${org.date}, ${org.date}, 'CAD', '10.0000', '0.0000', '10.0000')`);
+
+    const preview = await previewPostingPeriodAssignment(org.orgId, { bookId: org.bookId });
+    const byId = new Map(preview.rows.map((row) => [row.documentId, row]));
+    // A decided inventory kind resolves exactly like the drawer kinds.
+    assert.equal(byId.get(receipt)?.blocked, false);
+    assert.equal(byId.get(receipt)?.periodId, org.periodId);
+    // An undecided kind stays blocked, and the reason names the remedy for
+    // the operator — never the engineering registry name.
+    assert.equal(byId.get(bogusId)?.blocked, true);
+    assert.match(byId.get(bogusId)?.blockReason ?? "", /not configured for period close/);
+    assert.doesNotMatch(byId.get(bogusId)?.blockReason ?? "", /DOCUMENT_CLOSE_MODULES/);
   } finally {
     await dropScratchOrg(org.orgId);
   }

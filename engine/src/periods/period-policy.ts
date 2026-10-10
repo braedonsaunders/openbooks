@@ -49,10 +49,11 @@ export function periodLockBlocksPosting(
  * web/lib/document-kinds.ts `closeModule` (a required registry field, so a
  * new kind cannot be declared without a module decision); the parity test in
  * close.test.ts fails if this map and that field ever drift. Kinds outside
- * the drawer registry — payments, orders, expenses, manual journals — are
- * decided here. An unknown kind is a hard failure: silently posting under
- * the GL lock alone once let cheques, deposits, and transfers bypass their
- * closed AP and banking locks.
+ * the drawer registry — payments, orders, expenses, manual journals,
+ * inventory receipts and fulfillments, field tickets — are decided here. An
+ * unknown kind is a hard failure: silently posting under the GL lock alone
+ * once let cheques, deposits, and transfers bypass their closed AP and
+ * banking locks.
  */
 const DOCUMENT_CLOSE_MODULES = {
   // Drawer registry kinds (web/lib/document-kinds.ts DOC_KINDS).
@@ -81,6 +82,14 @@ const DOCUMENT_CLOSE_MODULES = {
   shipment: "ar",
   rma: "ar",
   journal: "gl",
+  // Inventory execution documents: the buy-side goods receipt pairs with the
+  // vendor bill, the sell-side fulfillment with the customer invoice.
+  purchase_receipt: "ap",
+  sales_fulfillment: "ar",
+  // Field tickets are project time/equipment evidence released through Flows,
+  // never posted directly; the GL lock governs their close-period handling
+  // like the other project billing sources.
+  field_ticket: "gl",
 } as const satisfies Record<string, CloseModule>;
 
 /**
@@ -94,14 +103,15 @@ const DOCUMENT_CLOSE_MODULES = {
 export const DOCUMENT_KINDS: readonly string[] = Object.keys(DOCUMENT_CLOSE_MODULES);
 
 /**
- * Kinds that never carry a posted journal entry (quotes, orders). Their
- * close module still governs whether they may be created or voided in a
- * locked period, but they have no posting period to assign and cannot be
- * "unposted" — so close readiness must not count them as drafts or as
- * documents missing a posting period. A mirror tenant with hundreds of open
- * orders otherwise sees a permanent critical blocker it can never clear.
+ * Kinds that never carry a posted journal entry (quotes, orders, field
+ * tickets). Their close module still governs whether they may be created or
+ * voided in a locked period, but they have no posting period to assign and
+ * cannot be "unposted" — so close readiness must not count them as drafts or
+ * as documents missing a posting period. A mirror tenant with hundreds of
+ * open orders otherwise sees a permanent critical blocker it can never
+ * clear.
  */
-export const NON_POSTING_DOCUMENT_KINDS: readonly string[] = ["quote", "sales_order", "purchase_order", "pick_list", "shipment", "rma"];
+export const NON_POSTING_DOCUMENT_KINDS: readonly string[] = ["quote", "sales_order", "purchase_order", "pick_list", "shipment", "rma", "field_ticket"];
 
 export function closeModuleForDocument(kind: string): CloseModule {
   const decided = (DOCUMENT_CLOSE_MODULES as Record<string, CloseModule>)[kind];

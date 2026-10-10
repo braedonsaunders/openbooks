@@ -3,7 +3,10 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { addCloseEvidence } from "./tasks.ts";
-import { CloseError, closeModuleForDocument, periodLockBlocksPosting, periodLockRequiresApprovedReopen } from "../periods/period-policy.ts";
+import { CloseError, closeModuleForDocument, NON_POSTING_DOCUMENT_KINDS, periodLockBlocksPosting, periodLockRequiresApprovedReopen } from "../periods/period-policy.ts";
+import { DOCUMENT_PERMISSION_NAMESPACE } from "../records/document-kind-permissions.ts";
+import { PURCHASE_RECEIPT_DOCUMENT_KIND } from "../inventory/documents-purchasing.ts";
+import { SALES_FULFILLMENT_DOCUMENT_KIND } from "../inventory/documents-customer-credits.ts";
 import { decidePeriodReopen, requestPeriodReopen } from "./reopening.ts";
 import { requireLockWriteRow, setPeriodLockState } from "../periods/period-locks.ts";
 import { startCloseRun } from "./run-start.ts";
@@ -117,6 +120,35 @@ test("an unmapped document kind fails explicitly instead of posting under GL alo
     () => closeModuleForDocument("not_a_real_document_kind"),
     CloseError,
   );
+});
+
+test("inventory and field documents map to their buy/sell/project close modules", () => {
+  assert.equal(closeModuleForDocument(PURCHASE_RECEIPT_DOCUMENT_KIND), "ap");
+  assert.equal(closeModuleForDocument(SALES_FULFILLMENT_DOCUMENT_KIND), "ar");
+  assert.equal(closeModuleForDocument("field_ticket"), "gl");
+  assert.ok(NON_POSTING_DOCUMENT_KINDS.includes("field_ticket"));
+});
+
+test("every known document kind carries a period-close module decision", () => {
+  const kinds = new Set([
+    ...Object.keys(DOC_KINDS),
+    ...Object.keys(DOCUMENT_PERMISSION_NAMESPACE),
+    PURCHASE_RECEIPT_DOCUMENT_KIND,
+    SALES_FULFILLMENT_DOCUMENT_KIND,
+  ]);
+  assert.ok(kinds.size > 0);
+  for (const kind of kinds) {
+    let decided: string | null = null;
+    try {
+      decided = closeModuleForDocument(kind);
+    } catch {
+      decided = null;
+    }
+    assert.ok(
+      decided,
+      `document kind "${kind}" has no period-close module decision; add it to DOCUMENT_CLOSE_MODULES in engine/src/periods/period-policy.ts`,
+    );
+  }
 });
 
 const DB = !!process.env.OPENBOOKS_DB_URL;

@@ -131,6 +131,19 @@ async function resolveCandidate(
   try {
     module = closeModuleForDocument(row.kind);
   } catch (error) {
+    // An undecided kind stays blocked with operator copy: the registry name
+    // is an engineering detail and never reaches the screen. Only kinds the
+    // product itself creates can land here, so this names the document, the
+    // consequence, and the fix.
+    if (error instanceof CloseError) {
+      return {
+        ...base,
+        periodId: null,
+        periodName: null,
+        blocked: true,
+        blockReason: `document kind "${row.kind}" is not configured for period close, so ${row.document_number} cannot be assigned a period and stays blocked; your system administrator must add a period-close decision for this kind`,
+      };
+    }
     return {
       ...base,
       periodId: null,
