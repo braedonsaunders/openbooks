@@ -217,7 +217,9 @@ function TrendTile({ widgetId, trend }: { widgetId: string; trend: WidgetCardPro
       icon={<ChartArea size={14} />}
       href={HREF}
       headline={margin ? undefined : money(last.revenue, { maximumFractionDigits: 0 })}
-      context={t('analytics.trailingMonths', { count: points.length })}
+      context={margin
+        ? t('analytics.trailingMonths', { count: points.length })
+        : `${trend.value.periodLabel} · ${t('analytics.trailingMonths', { count: points.length })}`}
     >
       {margin ? (
         <TrendChart
