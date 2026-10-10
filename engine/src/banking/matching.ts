@@ -789,6 +789,9 @@ export async function correctStatementLine(
     ) {
       return;
     }
+    // Governed-correction marker for the statement-line guard: transaction
+    // scoped, so only this line's audited update passes the content fence.
+    await tx.execute(sql`select set_config('app.statement_correction_line', ${statementLineId}, true)`);
     await tx.execute(sql`
       update bank_statement_lines
          set amount = ${after.amount},

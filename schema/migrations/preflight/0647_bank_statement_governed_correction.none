@@ -1,0 +1,1 @@
+Guard-function-only change: CREATE OR REPLACE with no schema, data, or privilege impact, so existing rows already satisfy every check and there is nothing to probe before install.
