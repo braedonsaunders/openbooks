@@ -8,7 +8,7 @@ const inScope = async (id: string) => id
 const outOfScope = async () => null
 
 test('a self-service time enterer is never handed another employee\'s week', async () => {
-  const selfService = managesOthersTime((p) => ['time.read', 'time.manage', 'time.clock'].includes(p))
+  const selfService = managesOthersTime((p) => ['time.self', 'time.clock'].includes(p))
   assert.equal(selfService, false)
   assert.deepEqual(
     await resolveNewTimesheetStart({ canManage: true, managesOthersTime: selfService, linkedEmployeeId: null, pinInScope: inScope, firstActiveEmployeeId: FIRST }),
@@ -32,8 +32,7 @@ test('a linked login always starts its own week, manager or not', async () => {
 test('only managers of other people\'s time seed from the first active employee', async () => {
   const manager = managesOthersTime((p) => ['time.manage', 'time.approve'].includes(p))
   assert.equal(manager, true)
-  assert.equal(managesOthersTime((p) => ['time.manage', 'time.crew.enter'].includes(p)), true)
-  assert.equal(managesOthersTime((p) => ['time.approve', 'time.crew.enter'].includes(p)), false, 'entering time still needs time.manage')
+  assert.equal(managesOthersTime((p) => ['time.self', 'time.approve', 'time.crew.enter'].includes(p)), false, 'entering anyone else\'s time needs time.manage')
   assert.deepEqual(
     await resolveNewTimesheetStart({ canManage: true, managesOthersTime: manager, linkedEmployeeId: null, pinInScope: inScope, firstActiveEmployeeId: FIRST }),
     { employeeId: FIRST, refusal: null },

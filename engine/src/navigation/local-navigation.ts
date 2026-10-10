@@ -144,7 +144,7 @@ export const LOCAL_NAVIGATION: LocalNavigationSet[] = [
   ] },
   ...Object.entries(HRM_LOCAL_NAVIGATION).map(([id, tabs]) => ({ id: `hrm-${id}`, label: ({ people: 'Employees', hiring: 'Hiring', timeOff: 'Time Off', talent: 'Talent', compensation: 'Compensation', benefits: 'Benefits' } as Record<string, string>)[id]!, feature: 'hrm', tabs })),
   { id: 'time', label: 'Time', feature: 'timeTracking', tabs: [
-    { href: '/timesheets', ns: 'timesheets', key: 'field.timesheetsTab', label: 'Timesheets', permission: 'time.read' },
+    { href: '/timesheets', ns: 'timesheets', key: 'field.timesheetsTab', label: 'Timesheets', permissionsAny: ['time.read', 'time.self'] },
     { href: '/time/clock', ns: 'timesheets', key: 'field.clockTab', label: 'Time Clock', permission: 'time.clock', feature: 'fieldTime' },
     { href: '/time/crew', ns: 'timesheets', key: 'field.crewTab', label: 'Crew Time', permissionsAny: ['time.read', 'time.crew.enter'], feature: 'fieldTime' },
   ] },

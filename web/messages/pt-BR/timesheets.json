@@ -13,7 +13,8 @@
       "unlinked": "Seu login não está vinculado a um cadastro de funcionário, então não há quadro de horas para iniciar. Peça a um administrador para vincular seu login ao seu cadastro de funcionário em Administração → Usuários.",
       "linkedOutOfScope": "Seu cadastro de funcionário está fora das subsidiárias que sua função abrange, então não há quadro de horas para iniciar. Peça a um administrador para revisar o acesso a subsidiárias da sua função.",
       "noEmployees": "Ainda não há funcionários ativos para registrar horas. Adicione um funcionário em Pessoas → Funcionários e depois inicie um quadro de horas."
-    }
+    },
+    "selfOnly": "Você só pode ver e alterar seu próprio quadro de horas. Para trabalhar com o tempo de um colega, peça a um administrador uma função que veja ou registre o tempo de todos."
   },
   "labels": {
     "totalHours": "Total de horas",

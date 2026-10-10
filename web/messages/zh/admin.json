@@ -471,7 +471,7 @@
       "sales_rep": "处理分配的客户、活动、商机和个人预测，并起草发票和现金销售。不能过账、收款或查看总账。",
       "buyer": "创建采购订单并按单收货，可读取供应商、物料和应付账款。不能过账或支付账单、过账库存，也不能查看银行业务或总账。",
       "cashier": "在收银台登记、过账和退款现金销售，并查询礼品卡余额。不能查看发票、银行业务或总账。",
-      "project_coordinator": "记录工时、跟进项目并起草客户发票供审批。不能过账发票、收付款，也不能查看银行业务或总账。"
+      "project_coordinator": "记录本人工时、跟进项目并起草客户发票供审批。不能查看同事的工时、过账发票、收付款，也不能查看银行业务或总账。"
     }
   },
   "scripts": {
@@ -1310,8 +1310,8 @@
     "resourcing_manage": "管理资源分配和请求",
     "retainers_read": "查看预付服务费",
     "retainers_manage": "管理预付服务费",
-    "time_read": "查看工时单",
-    "time_manage": "录入并编辑工时",
+    "time_read": "查看所有人的工时单",
+    "time_manage": "录入并编辑所有人的工时",
     "time_approve": "审批工时单",
     "time_reopen": "重新打开已批准的工时表",
     "payroll_read": "查看工资运行与工资条",
@@ -1409,7 +1409,8 @@
     "hrm_org_chart_read": "查看组织结构图",
     "purchase_orders_read": "查看采购订单和收货单",
     "purchase_orders_create": "创建、修改和作废采购订单",
-    "goods_receipts_create": "按采购订单收货"
+    "goods_receipts_create": "按采购订单收货",
+    "time_self": "录入并提交本人工时"
   },
   "ai": {
     "metaTitle": "AI 设置",

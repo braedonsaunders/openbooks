@@ -79,7 +79,7 @@ export async function loadClockPage(): Promise<ClockPageData> {
   const t = await getTranslations('timesheets')
   return loadClockPageData(authz.user.orgId, authz.user.id, t as unknown as ClockText, {
     canManageSetup: can(authz, 'time.manage'),
-    canReadTimesheets: can(authz, 'time.read'),
+    canReadTimesheets: can(authz, 'time.read') || can(authz, 'time.self'),
     canEnterCrew: can(authz, 'time.read') || can(authz, 'time.crew.enter'),
   })
 }

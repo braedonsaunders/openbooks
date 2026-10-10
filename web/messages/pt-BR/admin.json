@@ -471,7 +471,7 @@
       "sales_rep": "Trabalha as contas, atividades, oportunidades e previsões pessoais atribuídas, e prepara rascunhos de faturas e vendas à vista. Não pode contabilizar, receber pagamentos nem ver o razão geral.",
       "buyer": "Emite pedidos de compra e recebe as mercadorias correspondentes, com acesso de leitura a fornecedores, itens e contas a pagar. Não pode contabilizar nem pagar contas, lançar estoque, nem ver banco ou o razão geral.",
       "cashier": "Registra, contabiliza e reembolsa vendas à vista no caixa e consulta saldos de vale-presente. Não pode ver faturas, banco nem o razão geral.",
-      "project_coordinator": "Registra horas, acompanha projetos e prepara rascunhos de faturas para aprovação. Não pode contabilizar faturas, receber ou fazer pagamentos, nem ver banco ou o razão geral."
+      "project_coordinator": "Registra o próprio tempo, acompanha projetos e prepara rascunhos de faturas para aprovação. Não pode ver o tempo dos colegas, contabilizar faturas, receber ou fazer pagamentos, nem ver banco ou o razão geral."
     }
   },
   "scripts": {
@@ -1310,8 +1310,8 @@
     "resourcing_manage": "Gerenciar alocações e solicitações de recursos",
     "retainers_read": "Ver retenções",
     "retainers_manage": "Gerenciar retenções",
-    "time_read": "Ver planilhas de horas",
-    "time_manage": "Registrar e editar tempo",
+    "time_read": "Ver as planilhas de horas de todos",
+    "time_manage": "Registrar e editar o tempo de todos",
     "time_approve": "Aprovar planilhas de horas",
     "time_reopen": "Reabrir folhas de ponto aprovadas",
     "payroll_read": "Ver folhas e holerites",
@@ -1409,7 +1409,8 @@
     "hrm_org_chart_read": "Ver organograma",
     "purchase_orders_read": "Ver pedidos de compra e recebimentos",
     "purchase_orders_create": "Criar, alterar e anular pedidos de compra",
-    "goods_receipts_create": "Receber mercadorias de pedidos de compra"
+    "goods_receipts_create": "Receber mercadorias de pedidos de compra",
+    "time_self": "Registrar e enviar o próprio tempo"
   },
   "ai": {
     "metaTitle": "Configurações de IA",

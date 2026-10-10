@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm'
 import type { SqlExecutor } from '../platform/db.ts'
 import { lockActorCommandAuthority } from '../organization/actor-command-authority.ts'
+import { actorHasPermission } from '../organization/actor-permissions.ts'
 import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature } from '../organization/org-feature-lock.ts'
 import { ScopeNotFoundError, subsidiaryScopeAllows } from '../organization/subsidiary-scope.ts'
 import { orderResourcesVisible,pinProductionOrderResources } from '../organization/production-resource-scope.ts'
@@ -12,7 +13,7 @@ export class TimeWorkTargetError extends Error {
   constructor(message: string, readonly status = 422, readonly code = 'time_work_target_refused', readonly remedy = 'Choose an available released production order and an open operation, or record project time separately.') { super(message); this.name = 'TimeWorkTargetError' }
 }
 /** Shared time references the production record; it never creates a second job or posts production WIP. */
-export async function lockTimeWorkOrderTarget(tx: SqlExecutor, orgId: string, actorId: string, input: { workOrderId: string; operationId?: string | null; requestedScope: ReadonlySet<string> | null; permission?: 'time.read' | 'time.manage' | 'time.approve' | 'time.reopen'; requireOpen?: boolean; lockMode?: 'share' | 'update' }) {
+export async function lockTimeWorkOrderTarget(tx: SqlExecutor, orgId: string, actorId: string, input: { workOrderId: string; operationId?: string | null; requestedScope: ReadonlySet<string> | null; permission?: 'time.read' | 'time.manage' | 'time.approve' | 'time.reopen' | 'time.self'; requireOpen?: boolean; lockMode?: 'share' | 'update' }) {
   if(!isUuid(input.workOrderId)||(input.operationId!=null&&!isUuid(input.operationId))) throw new ScopeNotFoundError()
   await acquireOrgFeatureGateLock(tx, orgId)
   if (!await lockAndCheckOrgFeature(tx, orgId, 'manufacturing')) throw new TimeWorkTargetError('Production time is unavailable while Manufacturing is turned off.', 404)
@@ -51,6 +52,23 @@ export async function lockTimeWorkOrderTarget(tx: SqlExecutor, orgId: string, ac
 
 export type TimeWorkFamily = 'project' | 'production'
 export type TimeCommandPermission = 'time.read' | 'time.manage' | 'time.approve' | 'time.reopen'
+
+/**
+ * Commands an employee may run on their OWN time with the self-service
+ * time.self grant: reading and entering/submitting a week. Approving and
+ * reopening always need the supervisory grant.
+ */
+const SELF_SERVICE_TIME_COMMANDS: ReadonlySet<TimeCommandPermission> = new Set(['time.read', 'time.manage'])
+
+/** The refusal a self-service time user meets on anyone else's time. */
+export function selfServiceTimeRefusal(): TimeWorkTargetError {
+  return new TimeWorkTargetError(
+    "You can only see and change your own timesheet.",
+    403,
+    'time_self_only',
+    "To work with a coworker's time, ask an administrator for a role that views or enters everyone's time; your own week stays under My timesheet.",
+  )
+}
 /** Pin a shared week and every actual target before its lifecycle changes. A workspace selector never grants access to another family's records. */
 export async function lockSharedTimeAuthority(tx: SqlExecutor, orgId: string, actorId: string, input: {
   employeeId: string; from: string; through: string; requestedScope: ReadonlySet<string> | null;
@@ -70,7 +88,19 @@ export async function lockSharedTimeAuthority(tx: SqlExecutor, orgId: string, ac
     select p.subsidiary_id as "subsidiaryId" from parties p where p.org_id=${orgId} and p.id=${input.employeeId} and p.is_active
     and exists(select 1 from employee_roles r where r.org_id=p.org_id and r.party_id=p.id and r.is_active) for share of p`)).rows[0]
   if (!employee || !subsidiaryScopeAllows(input.requestedScope,employee.subsidiaryId)) throw new ScopeNotFoundError()
-  const actualScope = await lockActorCommandAuthority(tx,orgId,actorId,employee.subsidiaryId,input.permission)
+  // Supervisory grants act on anyone's week inside the actor's scope. Without
+  // one, the self-service time.self grant acts only on the employee linked to
+  // the actor's own login — never a coworker, whatever the request names.
+  const supervisory = await actorHasPermission(tx, orgId, actorId, input.permission)
+  let selfOnly = false
+  if (!supervisory) {
+    if (!SELF_SERVICE_TIME_COMMANDS.has(input.permission) || !(await actorHasPermission(tx, orgId, actorId, 'time.self'))) throw new ScopeNotFoundError()
+    const own = (await tx.execute<{ partyId: string | null }>(sql`
+      select party_id as "partyId" from users where id=${actorId} and org_id=${orgId} for share`)).rows[0]?.partyId ?? null
+    if (own !== input.employeeId) throw selfServiceTimeRefusal()
+    selfOnly = true
+  }
+  const actualScope = await lockActorCommandAuthority(tx,orgId,actorId,employee.subsidiaryId,selfOnly ? 'time.self' : input.permission)
   const entries = (await tx.execute<{ projectId: string | null; workOrderId: string | null; operationId: string | null }>(sql`
     select distinct project_id as "projectId", work_order_id as "workOrderId", wo_operation_id as "operationId"
     from time_entries where org_id=${orgId} and employee_party_id=${input.employeeId} and worked_on>=${input.from}::date and worked_on<=${input.through}::date
@@ -78,13 +108,15 @@ export async function lockSharedTimeAuthority(tx: SqlExecutor, orgId: string, ac
   for (const entry of entries) {
     if (entry.projectId && entry.workOrderId) throw new TimeWorkTargetError('Split project and production work into separate time lines.')
     if (entry.workOrderId) {
-      await lockTimeWorkOrderTarget(tx,orgId,actorId,{ workOrderId:entry.workOrderId,operationId:entry.operationId,requestedScope:input.requestedScope,permission:input.permission,requireOpen:false,lockMode:input.permission==='time.read' ? 'share' : 'update' })
+      await lockTimeWorkOrderTarget(tx,orgId,actorId,{ workOrderId:entry.workOrderId,operationId:entry.operationId,requestedScope:input.requestedScope,permission:selfOnly ? 'time.self' : input.permission,requireOpen:false,lockMode:input.permission==='time.read' ? 'share' : 'update' })
     } else if (entry.projectId) {
       if (!projectOn) throw new TimeWorkTargetError('This week contains project time. Enable Projects and Time Tracking before changing or reading the complete week.',404)
       const project = (await tx.execute<{ subsidiaryId: string | null }>(sql`select subsidiary_id as "subsidiaryId" from projects where org_id=${orgId} and id=${entry.projectId} for share`)).rows[0]
       if (!project || !subsidiaryScopeAllows(actualScope,project.subsidiaryId) || !subsidiaryScopeAllows(input.requestedScope,project.subsidiaryId)) throw new ScopeNotFoundError()
-      await lockActorCommandAuthority(tx,orgId,actorId,project.subsidiaryId,'projects.read')
+      // Reading another person's project time needs project visibility; a
+      // person's own week shows the projects they booked to.
+      if (!selfOnly) await lockActorCommandAuthority(tx,orgId,actorId,project.subsidiaryId,'projects.read')
     }
   }
-  return { actualScope, employeeSubsidiaryId: employee.subsidiaryId }
+  return { actualScope, employeeSubsidiaryId: employee.subsidiaryId, selfOnly }
 }

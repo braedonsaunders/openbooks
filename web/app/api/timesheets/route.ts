@@ -1,4 +1,4 @@
-import { authorizeTimeWorkspace, timeWorkFamily } from "@/lib/time-workspace";
+import { authorizeTimeWorkspace, refuseOthersTime, timeWorkFamily } from "@/lib/time-workspace";
 import { lockSharedTimeAuthority } from "@openbooks/engine/src/projects/time-work-target.ts";
 import { z } from "zod";
 import { isoDate, uuidId } from "@/lib/api/json";
@@ -18,6 +18,7 @@ import {
   isFeatureEnabled,
 } from "../../../lib/features";
 import { isUuid } from "../../../lib/list-params";
+import { can } from "../../../lib/authz";
 import {
   findUnownedCustomReferences,
   loadFieldDefs,
@@ -143,6 +144,9 @@ export const GET = defineRoute({
       authz.allowedSubsidiaryIds,
     );
     if (!ownedEmployee) return unprocessable("Employee not found");
+    // A self-service caller reads only their own week.
+    const othersRefused = await refuseOthersTime(authz, "time.read", ownedEmployee);
+    if (othersRefused) return othersRefused;
     try {
       return await withOrgTransaction(orgId, async () => {
         const days = weekWindow(weekStart(weekParam));
@@ -202,6 +206,13 @@ const save = defineRoute({
       gate.allowedSubsidiaryIds,
     );
     if (!ownedEmployee) return bad("Employee not found");
+    // A self-service caller enters only their own week; refused before any
+    // of the named employee's entries are read.
+    const othersRefused = await refuseOthersTime(gate, "time.manage", ownedEmployee);
+    if (othersRefused) return othersRefused;
+    // The grant production targets are fenced with: the supervisory grant,
+    // or time.self for a caller entering their own week.
+    const timeEntryPermission = can(gate, "time.manage") ? "time.manage" : "time.self";
 
     // Normalize each grid row × day into a flat list of entries to persist.
     interface Persist {
@@ -386,7 +397,7 @@ const save = defineRoute({
           gate.allowedSubsidiaryIds, "share",
         );
         for (const p of toPersist) {
-          const production = p.workOrderId ? await lockTimeWorkOrderTarget(tx, orgId, user.id, { workOrderId: p.workOrderId, operationId: p.woOperationId, requestedScope: gate.allowedSubsidiaryIds, requireOpen: false }) : null;
+          const production = p.workOrderId ? await lockTimeWorkOrderTarget(tx, orgId, user.id, { workOrderId: p.workOrderId, operationId: p.woOperationId, requestedScope: gate.allowedSubsidiaryIds, requireOpen: false, permission: timeEntryPermission }) : null;
           const projectEntity = production?.subsidiaryId ?? projectScopes.find((row) => row.id === p.projectId)?.subsidiaryId;
           if (employeeScope.subsidiaryId != null && projectEntity != null && employeeScope.subsidiaryId !== projectEntity) {
             throw new TimeLineEntityRefusal("The project belongs to a different legal entity than the employee");
@@ -570,7 +581,7 @@ const save = defineRoute({
         }
         const deleteIds = Array.from(replaceableIds.values()).flat();
         for (const row of stored.filter(row => deleteIds.includes(row.id) && row.work_order_id)) {
-          await lockTimeWorkOrderTarget(tx, orgId, user.id, { workOrderId: row.work_order_id!, operationId: row.wo_operation_id, requestedScope: gate.allowedSubsidiaryIds });
+          await lockTimeWorkOrderTarget(tx, orgId, user.id, { workOrderId: row.work_order_id!, operationId: row.wo_operation_id, requestedScope: gate.allowedSubsidiaryIds, permission: timeEntryPermission });
         }
         if (deleteIds.length > 0) {
           const deleted = await tx.execute(sql`
@@ -582,7 +593,7 @@ const save = defineRoute({
         }
         const savedIds: string[] = [];
         for (const p of toInsert) {
-          if (p.workOrderId) await lockTimeWorkOrderTarget(tx, orgId, user.id, { workOrderId: p.workOrderId, operationId: p.woOperationId, requestedScope: gate.allowedSubsidiaryIds });
+          if (p.workOrderId) await lockTimeWorkOrderTarget(tx, orgId, user.id, { workOrderId: p.workOrderId, operationId: p.woOperationId, requestedScope: gate.allowedSubsidiaryIds, permission: timeEntryPermission });
           const saved = await tx.execute<{ id: string }>(sql`
         insert into time_entries
           (org_id, employee_party_id, worked_on, hours, time_type_id, item_id,

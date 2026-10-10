@@ -471,7 +471,7 @@
       "sales_rep": "Works assigned accounts, activities, opportunities and personal forecasts, and drafts invoices and cash sales. Cannot post, collect payments or see the ledger.",
       "buyer": "Raises purchase orders and receives goods against them, with read access to vendors, items and payables. Cannot post or pay bills, post inventory, or see banking or the ledger.",
       "cashier": "Rings up, posts and refunds cash sales at the till and looks up gift card balances. Cannot see invoices, banking or the ledger.",
-      "project_coordinator": "Logs time, follows projects and drafts customer invoices for approval. Cannot post invoices, take or make payments, or see banking or the ledger."
+      "project_coordinator": "Logs their own time, follows projects and drafts customer invoices for approval. Cannot see coworkers' time, post invoices, take or make payments, or see banking or the ledger."
     }
   },
   "scripts": {
@@ -1299,8 +1299,8 @@
     "resourcing_manage": "Manage resource assignments and requests",
     "retainers_read": "View retainers",
     "retainers_manage": "Manage retainers",
-    "time_read": "View timesheets",
-    "time_manage": "Enter and edit time",
+    "time_read": "View everyone's timesheets",
+    "time_manage": "Enter and edit everyone's time",
     "time_approve": "Approve timesheets",
     "time_reopen": "Reopen approved timesheets",
     "payroll_read": "View pay runs and stubs",
@@ -1409,7 +1409,8 @@
     "hrm_org_chart_read": "View org chart",
     "purchase_orders_read": "View purchase orders and receipts",
     "purchase_orders_create": "Create, change and void purchase orders",
-    "goods_receipts_create": "Receive goods against purchase orders"
+    "goods_receipts_create": "Receive goods against purchase orders",
+    "time_self": "Enter and submit own time"
   },
   "ai": {
     "metaTitle": "AI providers",
