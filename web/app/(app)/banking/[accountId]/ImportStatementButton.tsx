@@ -20,6 +20,22 @@ interface SkippedRow {
   line: number
   code: string
   dateCell: string
+  amount?: string | null
+  balanceRole?: 'opening' | 'closing' | null
+}
+
+interface BalanceCandidate {
+  postedOn: string
+  amount: string
+  description: string | null
+  role: 'opening' | 'closing'
+}
+
+interface DialogAccount {
+  id: string
+  label: string
+  currency: string | null
+  type: string
 }
 
 interface StatementPreview {
@@ -28,6 +44,8 @@ interface StatementPreview {
   duplicates: number
   possibleDuplicates: number
   skipped: SkippedRow[]
+  balanceCandidates: BalanceCandidate[]
+  currency: string | null
   sourceRevision: number
   accountId: string
 }
@@ -117,6 +135,28 @@ async function prepareBrowserStatementUpload(
 
 const PREVIEW_CAP = 100
 
+const FORMAT_MEMORY_PREFIX = 'openbooks.statementImport.format.'
+
+/** Last used statement format for an account, or the fallback when none was remembered. */
+function rememberedFormat(accountId: string, fallback: StatementTextSource): StatementTextSource {
+  try {
+    const saved = window.localStorage.getItem(FORMAT_MEMORY_PREFIX + accountId)
+    return saved === 'ofx' || saved === 'csv' || saved === 'camt053' || saved === 'bai2' || saved === 'mt940'
+      ? saved
+      : fallback
+  } catch {
+    return fallback
+  }
+}
+
+function rememberFormat(accountId: string, source: StatementTextSource) {
+  try {
+    window.localStorage.setItem(FORMAT_MEMORY_PREFIX + accountId, source)
+  } catch {
+    // Private mode and locked-down browsers: the memory just doesn't stick.
+  }
+}
+
 /**
  * Import-statement flyout: paste OFX/CSV text or read a file client-side,
  * retaining browser uploads as base64 source bytes. The engine is the sole
@@ -136,7 +176,10 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
   const [sourceRevisionView, setSourceRevisionView] = useState(0)
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [source, setSource] = useState<StatementTextSource>('ofx')
+  const [source, setSource] = useState<StatementTextSource>(() => rememberedFormat(accountId, 'ofx'))
+  const [dialogAccounts, setDialogAccounts] = useState<DialogAccount[] | null>(null)
+  const [accountsFailed, setAccountsFailed] = useState(false)
+  const [selectedAccountId, setSelectedAccountId] = useState(accountId)
   const [text, setText] = useState('')
   const [uploadEvidence, setUploadEvidence] = useState<BrowserUploadEvidence | null>(null)
   const [header, setHeader] = useState<string[] | null>(null)
@@ -227,8 +270,11 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
     duplicates?: number
     possibleDuplicates?: number
     skipped?: SkippedRow[]
+    balanceCandidates?: BalanceCandidate[]
     statementDate?: string
     closingBalance?: string
+    currency?: string
+    accounts?: DialogAccount[]
   }
 
   async function post(body: Record<string, unknown>): Promise<ImportResponse> {
@@ -257,7 +303,63 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
       }
     : { text }
   const hasSource = uploadEvidence !== null || text.trim() !== ''
-  const visiblePreview = preview?.accountId === accountId ? preview : null
+  const visiblePreview = preview?.accountId === selectedAccountId ? preview : null
+  const previewStale = preview !== null && (visiblePreview === null || preview.sourceRevision !== sourceRevisionView)
+  const selectedAccount = dialogAccounts?.find((a) => a.id === selectedAccountId) ?? null
+  const statementCurrency = visiblePreview?.currency ?? null
+  const currencyMismatch = statementCurrency !== null
+    && selectedAccount?.currency != null
+    && statementCurrency !== selectedAccount.currency
+  const nextStep = !hasSource
+    ? t('nextStepSource')
+    : source === 'csv' && header === null
+      ? t('nextStepDetect')
+      : visiblePreview === null || previewStale
+        ? t('nextStepPreview')
+        : t('nextStepImport')
+
+  function openDialog() {
+    setSelectedAccountId(accountId)
+    setSource((current) => rememberedFormat(accountId, current))
+    setAccountsFailed(false)
+    setOpen(true)
+    void loadDialogAccounts()
+  }
+
+  async function loadDialogAccounts() {
+    // The dialog requires its account visibly: defaulted from the page, so
+    // lines can never land in whatever account a filter happens to name.
+    // A failed list falls back to the page account — the engine gates it.
+    try {
+      const res = await fetch('/api/banking/accounts')
+      const data = (await res.json().catch(() => null)) as ImportResponse | null
+      if (!res.ok || !Array.isArray(data?.accounts)) {
+        setAccountsFailed(true)
+        return
+      }
+      setDialogAccounts(data.accounts ?? [])
+    } catch {
+      setAccountsFailed(true)
+    }
+  }
+
+  function pickAccount(id: string) {
+    reviseInputs()
+    setActionError(null)
+    setSelectedAccountId(id)
+    setPreview(null)
+    // Every account remembers its own last used format.
+    setSource((current) => rememberedFormat(id, current))
+  }
+
+  function useCandidateAsBalance(amount: string, field: 'openingBalance' | 'closingBalance') {
+    // A balance change needs a fresh preview, exactly like an edited
+    // statement date: the notice below says so and Import stays disabled.
+    reviseInputs()
+    setActionError(null)
+    if (field === 'openingBalance') setOpeningBalance(amount)
+    else setClosingBalance(amount)
+  }
 
   async function detectColumns() {
     const requestRevision = sourceRevision.current
@@ -288,11 +390,12 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
 
   async function runPreview() {
     const requestRevision = sourceRevision.current
+    const requestAccountId = selectedAccountId
     setBusy(true)
     setActionError(null)
     try {
       const data = await post({
-        accountId,
+        accountId: requestAccountId,
         source,
         ...sourcePayload,
         mode: 'preview',
@@ -309,8 +412,10 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
         duplicates: data.duplicates ?? 0,
         possibleDuplicates: data.possibleDuplicates ?? 0,
         skipped: data.skipped ?? [],
+        balanceCandidates: data.balanceCandidates ?? [],
+        currency: data.currency ?? null,
         sourceRevision: requestRevision,
-        accountId,
+        accountId: requestAccountId,
       })
       const { statementDate: previewStatementDate, closingBalance: previewClosingBalance } = data
       if (previewStatementDate) setStatementDate((current) => current || previewStatementDate)
@@ -326,7 +431,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
   }
 
   async function runImport() {
-    if (!preview || preview.sourceRevision !== sourceRevision.current || preview.accountId !== accountId) {
+    if (!preview || preview.sourceRevision !== sourceRevision.current || preview.accountId !== selectedAccountId) {
       setPreview(null)
       return
     }
@@ -334,7 +439,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
     setActionError(null)
     try {
       const data = await post({
-        accountId,
+        accountId: selectedAccountId,
         source,
         ...sourcePayload,
         mode: 'import',
@@ -343,6 +448,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
         closingBalance: closingBalance || null,
         ...(source === 'csv' ? { mapping: toEngineMapping(mapping) } : {}),
       })
+      rememberFormat(selectedAccountId, source)
       toast.success(t('importedToast', { imported: data.imported ?? 0, duplicates: data.duplicates ?? 0, possibleDuplicates: data.possibleDuplicates ?? 0 }))
       setOpen(false)
       reset()
@@ -385,7 +491,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
 
   return (
     <>
-      <Button variant="outline" onClick={() => setOpen(true)}>
+      <Button variant="outline" onClick={openDialog}>
         <FileUp size={15} /> {t('button')}
       </Button>
       <Drawer
@@ -425,6 +531,42 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
               {actionError}
             </p>
           ) : null}
+          <div className={field}>
+            <Label htmlFor={`${fieldId}-account`}>{t('importAccount')}</Label>
+            {dialogAccounts !== null && dialogAccounts.length > 0 ? (
+              <>
+                <Select
+                  id={`${fieldId}-account`}
+                  disabled={busy}
+                  value={selectedAccountId}
+                  onChange={(e) => pickAccount(e.target.value)}
+                >
+                  {dialogAccounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.label}
+                    </option>
+                  ))}
+                </Select>
+                {selectedAccount ? (
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {tBanking(`types.${selectedAccount.type}` as 'types.asset_bank')} · {selectedAccount.currency ?? t('unknownCurrency')}
+                  </p>
+                ) : null}
+              </>
+            ) : accountsFailed || dialogAccounts !== null ? (
+              <p className="text-sm text-slate-500 dark:text-slate-400">{t('singleAccountFallback')}</p>
+            ) : (
+              <p className="text-sm text-slate-500 dark:text-slate-400">{tCommon('labels.loading')}…</p>
+            )}
+          </div>
+          {currencyMismatch && selectedAccount ? (
+            <p
+              role="alert"
+              className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-300"
+            >
+              {t('currencyMismatchWarning', { statement: statementCurrency, account: selectedAccount.currency })}
+            </p>
+          ) : null}
           <div className="grid gap-4 sm:grid-cols-2">
             <div className={field}>
               <Label htmlFor={`${fieldId}-format`}>{t('format')}</Label>
@@ -436,7 +578,9 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
                   fileReadVersion.current += 1
                   reviseInputs()
                   setActionError(null)
-                  setSource(e.target.value as StatementTextSource)
+                  const next = e.target.value as StatementTextSource
+                  setSource(next)
+                  rememberFormat(selectedAccountId, next)
                   setHeader(null)
                   setPreview(null)
                   clearDerivedStatementValues()
@@ -487,7 +631,16 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
               className="font-mono text-xs"
               placeholder={source === 'csv' ? t('pastePlaceholderCsv') : t('pastePlaceholderOfx')}
             />
+            <p className="text-xs text-slate-500 dark:text-slate-400">{nextStep}</p>
           </div>
+          {previewStale ? (
+            <p
+              role="note"
+              className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-300"
+            >
+              {t('repreviewNotice')}
+            </p>
+          ) : null}
 
           {source === 'csv' ? (
             header ? (
@@ -504,14 +657,55 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
                 <p className="text-xs text-slate-500 dark:text-slate-400">{t('mappingHelp')}</p>
               </div>
             ) : (
-              <Button variant="outline" disabled={busy || !hasSource} onClick={detectColumns}>
-                {t('detectColumns')}
-              </Button>
+              <div className="space-y-1.5">
+                <Button variant="outline" disabled={busy || !hasSource} onClick={detectColumns}>
+                  {t('detectColumns')}
+                </Button>
+                {hasSource ? (
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{t('detectColumnsHint')}</p>
+                ) : null}
+              </div>
             )
           ) : null}
 
           {visiblePreview ? (
             <div className="space-y-4">
+              {visiblePreview.balanceCandidates.length > 0 ? (
+                <div
+                  role="note"
+                  className="space-y-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-300"
+                >
+                  <p>{t('balanceCandidatesTitle')}</p>
+                  <ul className="space-y-1.5">
+                    {visiblePreview.balanceCandidates.map((c, i) => (
+                      <li key={i} className="flex flex-wrap items-center gap-2">
+                        <span>
+                          {c.description ?? '—'} · {money(c.amount)} ·{' '}
+                          {c.role === 'opening' ? t('balanceRoleOpening') : t('balanceRoleClosing')}
+                        </span>
+                        <span className="flex gap-1">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={busy}
+                            onClick={() => useCandidateAsBalance(c.amount, 'openingBalance')}
+                          >
+                            {t('useAsOpening')}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={busy}
+                            onClick={() => useCandidateAsBalance(c.amount, 'closingBalance')}
+                          >
+                            {t('useAsClosing')}
+                          </Button>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
               <div className="grid gap-4 sm:grid-cols-3">
                 <div className={field}>
                   <Label htmlFor={`${fieldId}-statement-date`}>{tBanking('labels.statementDate')}</Label>
@@ -555,9 +749,37 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
                   className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-300"
                 >
                   <p>{t('skippedNotice', { count: visiblePreview.skipped.length })}</p>
-                  <ul className="mt-1 list-disc pl-5">
+                  <ul className="mt-1 list-disc space-y-1.5 pl-5">
                     {visiblePreview.skipped.map((row) => (
-                      <li key={row.line}>{t('skippedRow', { line: row.line, dateCell: row.dateCell })}</li>
+                      <li key={row.line}>
+                        {row.code === 'csv_balance_row' && row.amount ? (
+                          <span className="flex flex-wrap items-center gap-2">
+                            <span>
+                              {t('skippedBalanceRow', {
+                                line: row.line,
+                                dateCell: row.dateCell,
+                                amount: money(row.amount),
+                                role: row.balanceRole === 'opening' ? t('balanceRoleOpening') : t('balanceRoleClosing'),
+                              })}
+                            </span>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={busy}
+                              onClick={() =>
+                                useCandidateAsBalance(
+                                  row.amount as string,
+                                  row.balanceRole === 'opening' ? 'openingBalance' : 'closingBalance',
+                                )
+                              }
+                            >
+                              {row.balanceRole === 'opening' ? t('useAsOpening') : t('useAsClosing')}
+                            </Button>
+                          </span>
+                        ) : (
+                          t('skippedRow', { line: row.line, dateCell: row.dateCell })
+                        )}
+                      </li>
                     ))}
                   </ul>
                 </div>

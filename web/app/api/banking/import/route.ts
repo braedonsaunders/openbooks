@@ -193,6 +193,11 @@ export const POST = defineRoute({
         )
 
         if (mode === 'import' && result.statementId === null) {
+          if (result.balanceCandidates.length > 0 && result.duplicates === 0) {
+            throw new BankingError(
+              `Nothing imported — ${result.balanceCandidates.length} row${result.balanceCandidates.length === 1 ? '' : 's'} look${result.balanceCandidates.length === 1 ? 's' : ''} like a statement balance, not a transaction; use ${result.balanceCandidates.length === 1 ? 'it' : 'them'} as the opening or closing balance instead`,
+            )
+          }
           throw new BankingError(
             `Nothing imported — all ${result.duplicates} line${result.duplicates === 1 ? '' : 's'} were already on this account`,
           )
@@ -205,6 +210,7 @@ export const POST = defineRoute({
           duplicates: result.duplicates,
           possibleDuplicates: result.possibleDuplicates,
           skipped: result.skipped,
+          balanceCandidates: result.balanceCandidates,
           statementDate: meta.statementDate ?? null,
           closingBalance: meta.closingBalance ?? null,
           currency: meta.currency ?? null,

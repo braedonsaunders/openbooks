@@ -14,6 +14,8 @@ export interface ReconcilableBankAccount {
   number: string | null
   name: string
   type: string
+  /** Posting currency; null = unrestricted (never for reconcilable accounts, by check). */
+  currency: string | null
   /** Owning subsidiary; null = shared. Scoping stays each query's decision. */
   subsidiaryId: string | null
 }
@@ -23,6 +25,7 @@ interface ReconcilableBankAccountRow extends Record<string, unknown> {
   number: string | null
   name: string
   type: string
+  currency: string | null
   subsidiaryId: string | null
 }
 
@@ -42,7 +45,7 @@ export function bankAccountMembership() {
 /** Detail-page membership; reconciliation eligibility is exposed separately. */
 export async function bankAccount(orgId: string, accountId: string): Promise<(ReconcilableBankAccount & { reconcilable: boolean }) | null> {
   const res = await db.execute<ReconcilableBankAccountRow & { reconcilable: boolean }>(sql`
-    select a.id, a.number, a.name, a.type, a.subsidiary_id as "subsidiaryId", a.reconcilable
+    select a.id, a.number, a.name, a.type, a.currency_restriction as "currency", a.subsidiary_id as "subsidiaryId", a.reconcilable
       from accounts a
      where a.id = ${accountId} and a.org_id = ${orgId} and ${bankAccountMembership()}
   `)
@@ -52,12 +55,12 @@ export async function bankAccount(orgId: string, accountId: string): Promise<(Re
 /** Every reconcilable bank/card account in the org, by number. */
 export async function listReconcilableBankAccounts(orgId: string): Promise<ReconcilableBankAccount[]> {
   const res = await db.execute<ReconcilableBankAccountRow>(sql`
-    select a.id, a.number, a.name, a.type, a.subsidiary_id as "subsidiaryId"
+    select a.id, a.number, a.name, a.type, a.currency_restriction as "currency", a.subsidiary_id as "subsidiaryId"
       from accounts a
      where a.org_id = ${orgId} and ${reconcilableBankMembership()}
      order by a.number nulls last
   `)
-  return res.rows.map((a) => ({ id: a.id, number: a.number, name: a.name, type: a.type, subsidiaryId: a.subsidiaryId }))
+  return res.rows.map((a) => ({ id: a.id, number: a.number, name: a.name, type: a.type, currency: a.currency, subsidiaryId: a.subsidiaryId }))
 }
 
 /** Read a bank/card account eligible for reconciliation: null means ineligible. */
@@ -66,12 +69,12 @@ export async function reconcilableBankAccount(
   accountId: string,
 ): Promise<ReconcilableBankAccount | null> {
   const res = await db.execute<ReconcilableBankAccountRow>(sql`
-    select a.id, a.number, a.name, a.type, a.subsidiary_id as "subsidiaryId"
+    select a.id, a.number, a.name, a.type, a.currency_restriction as "currency", a.subsidiary_id as "subsidiaryId"
       from accounts a
      where a.id = ${accountId} and a.org_id = ${orgId} and ${reconcilableBankMembership()}
   `)
   const a = res.rows[0]
-  return a ? { id: a.id, number: a.number, name: a.name, type: a.type, subsidiaryId: a.subsidiaryId } : null
+  return a ? { id: a.id, number: a.number, name: a.name, type: a.type, currency: a.currency, subsidiaryId: a.subsidiaryId } : null
 }
 
 interface OpeningCarryRow extends Record<string, unknown> {
