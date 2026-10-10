@@ -49,7 +49,7 @@ test('independent provision assessments recognize and remeasure one tenant liabi
       assert.equal(disclosed.entryId, null)
       const first = await proposeProvisionAssessment(org.orgId, actors.submitterId, input)
       assert.equal(await proposeProvisionAssessment(org.orgId, actors.submitterId, input), first)
-      await assert.rejects(applyProvisionAssessment(org.orgId, first, actors.submitterId), /independent approval/)
+      await assert.rejects(applyProvisionAssessment(org.orgId, first, actors.submitterId), /approval policy/)
       await approve(first)
       const initial = await applyProvisionAssessment(org.orgId, first, actors.submitterId)
       assert.equal(initial.liability, '50000.0000')

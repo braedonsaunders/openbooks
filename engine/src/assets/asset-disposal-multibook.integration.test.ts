@@ -214,7 +214,7 @@ test(
       const changeId = await proposeAssetChange(f.org.orgId, f.assetId, f.submitterId, request);
       await assert.rejects(
         () => applyAssetChange(f.org.orgId, changeId, f.submitterId),
-        /independent approval/,
+        /approval policy/,
       );
       await approve(f.org.orgId, changeId, f.submitterId, f.approverId);
       const applied = await applyAssetChange(f.org.orgId, changeId, f.submitterId);

@@ -40,7 +40,7 @@ test('approved breakage follows customer use and reversals through the native re
       const input:BreakageProposal={grantId:grant.id,effectiveOn:date,reason:'Recognize the supported expected prepaid breakage',idempotencyKey:randomUUID(),estimate:{method:'expected_proportional',expectedBreakage:'20',entitled:true,meetsReversalConstraint:true,thirdPartyObligation:false,evidence:'Reviewed redemption history supports twenty of expected breakage and no significant reversal; legal review confirms entitlement and no unclaimed-property liability.'}}
       const id=await proposeExpectedBreakage(ledger.orgId,actors.submitterId,input)
       assert.equal(await proposeExpectedBreakage(ledger.orgId,actors.submitterId,input),id)
-      await assert.rejects(applyExpectedBreakage(ledger.orgId,id,actors.submitterId),/independent approval/)
+      await assert.rejects(applyExpectedBreakage(ledger.orgId,id,actors.submitterId),/approval policy/)
       const stale=await proposeExpectedBreakage(ledger.orgId,actors.submitterId,{...input,idempotencyKey:randomUUID()})
       await approve(id);await approve(stale)
       const result=await applyExpectedBreakage(ledger.orgId,id,actors.submitterId)

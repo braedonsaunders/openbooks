@@ -229,7 +229,7 @@ test(
       }
       await assert.rejects(
         applyLossOfControl(f.org.orgId, id, f.actors.submitterId),
-        /independent approval/,
+        /approval policy/,
       );
       await approve(f, id);
       const result = await applyLossOfControl(

@@ -12,6 +12,7 @@ import {
   type FlowActors,
 } from "../testing/fixtures.ts";
 import {
+  TransactionPriceError,
   buildRecognitionSchedule,
   runRevenueRecognition,
   setContractPricing,
@@ -164,7 +165,7 @@ test(
         );
       await assert.rejects(
         applyRevenueModification(f.org.orgId, changeId, f.actors.submitterId),
-        /independent approval/,
+        /approval policy/,
       );
       await approve(f, changeId);
       const applied = await applyRevenueModification(
@@ -231,6 +232,8 @@ test(
         ).changeId,
         changeId,
       );
+      // Direct repricing stays locked once allocated; the typed refusal
+      // names the governed modification path through its remedy.
       await assert.rejects(
         setContractPricing(
           f.org.orgId,
@@ -238,7 +241,10 @@ test(
           { fixedConsideration: "9000" },
           f.actors.submitterId,
         ),
-        /Modify contract/,
+        (error: unknown) =>
+          error instanceof TransactionPriceError &&
+          error.code === "revenue_contract_pricing_locked" &&
+          /Modify contract/.test(error.remedy),
       );
     }),
 );
