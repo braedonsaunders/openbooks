@@ -104,7 +104,7 @@ test('non-registry document kinds resolve to their dedicated route grant', () =>
   assert.equal(flowSubjectPermissions('expense_report')?.read, 'expenses.read')
   assert.equal(flowSubjectPermissions('expense_report')?.edit, 'expenses.create')
   assert.equal(flowSubjectPermissions('sales_order')?.read, 'ar.read')
-  assert.equal(flowSubjectPermissions('purchase_order')?.read, 'ap.read')
+  assert.equal(flowSubjectPermissions('purchase_order')?.read, 'purchase_orders.read')
   assert.equal(flowSubjectPermissions('field_ticket')?.read, 'time.read')
   assert.equal(flowSubjectPermissions('field_ticket')?.edit, 'time.manage')
 })

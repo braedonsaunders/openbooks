@@ -27,7 +27,7 @@ const plus = (day: string, count: number) => { const date = new Date(`${day}T00:
 test("buy suggestions create one vendor purchase draft and preserve conversion refusals", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   const actorId = await withBypassContext(() => createScratchUser(org.orgId, "MRP buyer", "admin"));
-  state.gate = { user: { id: actorId, orgId: org.orgId }, permissions: new Set(["manufacturing.manage", "ap.create"]), allowedSubsidiaryIds: null };
+  state.gate = { user: { id: actorId, orgId: org.orgId }, permissions: new Set(["manufacturing.manage", "purchase_orders.create"]), allowedSubsidiaryIds: null };
   try {
     await withBypassContext(() => db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"manufacturing":true,"inventory":true,"warehousing":true,"manufacturingMrp":true,"orders":true}'::jsonb) where id=${org.orgId}`));
     const due = plus(await businessToday(org.orgId), 30);

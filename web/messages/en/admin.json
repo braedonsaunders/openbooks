@@ -459,6 +459,19 @@
       "permissionsLoadFailed": "Unable to load app permissions",
       "inactivePermissions": "Inactive app permissions",
       "saveNotConfirmed": "The server did not confirm that every permission change was saved. Reopen the role to see its current permissions, then apply your changes again."
+    },
+    "builtInDescriptions": {
+      "admin": "Full access to everything, including users, roles, navigation and company settings.",
+      "controller": "Owns the books: ledger, payables, receivables, purchasing, approvals, period close, reporting and the audit log. Cannot manage users or roles.",
+      "accountant": "Day-to-day bookkeeping: enters and posts journals, bills and invoices, pays and receives, and builds reports. Cannot approve, close periods, reconcile banks or manage users.",
+      "production": "Manages manufacturing masters and shop-floor work, and posts inventory movements. Cannot reverse inventory postings or see the ledger.",
+      "approver": "Reviews and decides approval requests, with read access to the ledger, subledgers and reports. Cannot enter, post or pay transactions.",
+      "viewer": "Read-only access to the ledger, subledgers, reports and insights. Cannot create, change, post or pay transactions.",
+      "sales_manager": "Runs the sales team: accounts, activities, opportunities, quotas and forecasts, and drafts invoices and cash sales. Cannot post, collect payments or see the ledger.",
+      "sales_rep": "Works assigned accounts, activities, opportunities and personal forecasts, and drafts invoices and cash sales. Cannot post, collect payments or see the ledger.",
+      "buyer": "Raises purchase orders and receives goods against them, with read access to vendors, items and payables. Cannot post or pay bills, post inventory, or see banking or the ledger.",
+      "cashier": "Rings up, posts and refunds cash sales at the till and looks up gift card balances. Cannot see invoices, banking or the ledger.",
+      "project_coordinator": "Logs time, follows projects and drafts customer invoices for approval. Cannot post invoices, take or make payments, or see banking or the ledger."
     }
   },
   "scripts": {
@@ -1208,7 +1221,11 @@
       "assets": "Fixed assets & depreciation",
       "data": "Import & Export",
       "crm": "Customer relationship management",
-      "compliance": "Compliance"
+      "compliance": "Compliance",
+      "purchasing": "Purchasing",
+      "parties": "People & companies",
+      "banking": "Banking",
+      "expenses": "Expense reports"
     },
     "gl_read": "View journals and balances",
     "gl_manage": "Manage the chart of accounts",
@@ -1389,7 +1406,10 @@
     "time_clock": "Clock in from the field",
     "time_crew_enter": "Enter crew time batches",
     "time_kiosk_manage": "Manage kiosk devices and PINs",
-    "hrm_org_chart_read": "View org chart"
+    "hrm_org_chart_read": "View org chart",
+    "purchase_orders_read": "View purchase orders and receipts",
+    "purchase_orders_create": "Create, change and void purchase orders",
+    "goods_receipts_create": "Receive goods against purchase orders"
   },
   "ai": {
     "metaTitle": "AI providers",

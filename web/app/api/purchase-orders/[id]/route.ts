@@ -5,7 +5,7 @@ import { z } from 'zod'
 
 export const runtime = 'nodejs'
 
-const cfg = { kind: 'purchase_order', readPerm: 'ap.read', createPerm: 'ap.create' } as const
+const cfg = { kind: 'purchase_order', readPerm: 'purchase_orders.read', createPerm: 'purchase_orders.create' } as const
 
 const getOrder = makeGET(cfg)
 const patchOrder = makePATCH(cfg)

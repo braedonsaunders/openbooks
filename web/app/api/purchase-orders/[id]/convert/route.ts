@@ -4,16 +4,24 @@ import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 import { conversionWouldCopyInventoryKinds } from '../../../../../lib/order-cycle'
 import { notFound } from "@/lib/api/responses";
+import { PURCHASE_ORDER_PERMISSIONS, purchaseOrderConversionPermission } from '@/lib/permissions'
 import { defineRoute } from '@/lib/api/route'
 import { z } from 'zod'
 
 
 export const runtime = 'nodejs'
 
-const convert = makeConvertPOST({ kind: 'purchase_order', readPerm: 'ap.read', createPerm: 'ap.create' })
+// Reading the order opens the endpoint; the conversion target decides the
+// rest: receiving goods needs goods_receipts.create, billing needs ap.create.
+const convert = makeConvertPOST({
+  kind: 'purchase_order',
+  readPerm: PURCHASE_ORDER_PERMISSIONS.read,
+  createPerm: PURCHASE_ORDER_PERMISSIONS.create,
+  convertPerm: purchaseOrderConversionPermission,
+})
 
 async function convertPurchaseOrder(req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const gate = await guardFeaturePermission('ap.create', 'orders')
+  const gate = await guardFeaturePermission(PURCHASE_ORDER_PERMISSIONS.read, 'orders')
   if (gate instanceof NextResponse) return gate
   const { id } = await ctx.params
   // A malformed id names no uuid document: refuse it before the
@@ -27,8 +35,8 @@ async function convertPurchaseOrder(req: Request, ctx: { params: Promise<{ id: s
 }
 
 export const POST = defineRoute({
-  authorize: () => guardFeaturePermission('ap.create', 'orders'),
-  feature: { none: 'Purchase-order conversion is guarded by ap.create and the orders feature before dispatch.' },
+  authorize: () => guardFeaturePermission(PURCHASE_ORDER_PERMISSIONS.read, 'orders'),
+  feature: { none: 'Purchase-order conversion is guarded by purchase_orders.read and the orders feature before dispatch; the target kind decides its own grant.' },
   params: z.object({ id: z.string() }),
   handler: async ({ request, params }) => convertPurchaseOrder(request, { params: Promise.resolve(params) }),
 })

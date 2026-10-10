@@ -87,7 +87,10 @@
         "salesManager": "営業マネージャー",
         "salesRepresentative": "営業担当者",
         "viewer": "閲覧者",
-        "production": "製造"
+        "production": "製造",
+        "buyer": "購買担当者",
+        "cashier": "レジ担当者",
+        "projectCoordinator": "プロジェクトコーディネーター"
       },
       "due": "期限",
       "overdue": "延滞",

@@ -504,7 +504,7 @@ test('drop shipping off hides drawer actions, returns bare route 404s, and prese
   await withFencedOrg(async (org, actorId) => {
     state.authz = {
       ...(state.authz as object),
-      permissions: new Set(['assistant.use', 'items.read', 'items.post', 'orders.fulfill', 'ap.create', 'ar.read', 'ap.read', 'ar.create', 'admin.setup.manage']),
+      permissions: new Set(['assistant.use', 'items.read', 'items.post', 'orders.fulfill', 'ap.create', 'ar.read', 'ap.read', 'ar.create', 'purchase_orders.read', 'purchase_orders.create', 'goods_receipts.create', 'admin.setup.manage']),
     }
     await setFeature(org.orgId, 'orders', true)
     await setFeature(org.orgId, 'inventory', true)

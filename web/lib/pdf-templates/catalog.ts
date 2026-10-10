@@ -557,7 +557,7 @@ export const PDF_RECORD_TYPES: PdfRecordTypeMeta[] = [
   docType({ key: 'cash_refund', docTitle: 'Refund Receipt', partyHeading: 'Refunded to', readPermission: 'cash_sales.read', hasParty: true, hasDue: false, hasReference: true }),
   docType({ key: 'quote', docTitle: 'Quote', partyHeading: 'Prepared for', readPermission: 'ar.read', hasParty: true, hasDue: false, hasReference: true }),
   docType({ key: 'sales_order', docTitle: 'Sales Order', partyHeading: 'Sold to', readPermission: 'ar.read', hasParty: true, hasDue: false, hasReference: true, workPeriod: true }),
-  docType({ key: 'purchase_order', docTitle: 'Purchase Order', partyHeading: 'Vendor', readPermission: 'ap.read', hasParty: true, hasDue: false, hasReference: true, extraFields: [
+  docType({ key: 'purchase_order', docTitle: 'Purchase Order', partyHeading: 'Vendor', readPermission: 'purchase_orders.read', hasParty: true, hasDue: false, hasReference: true, extraFields: [
     { key: 'ship_to_name', label: 'Ship-to name', sample: 'Acme — Site 4 receiving' },
     { key: 'ship_to_address', label: 'Ship-to address', sample: '400 King St W, Suite 300, Toronto, ON M5V 1K2, CA' },
   ] }),

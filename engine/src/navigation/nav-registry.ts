@@ -415,7 +415,7 @@ export const NAV_MODULES: NavModule[] = [
     iconKey: 'clipboard',
     group: 'purchasing',
     subgroup: 'buy',
-    requiredPermission: 'ap.read',
+    requiredPermission: 'purchase_orders.read',
     featureKey: 'orders',
     recordTarget: { kind: 'query', param: 'order' },
   },

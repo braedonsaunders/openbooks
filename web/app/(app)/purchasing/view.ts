@@ -98,8 +98,9 @@ export interface PurchasingData {
   heroTitle: string
   heroHint: string
   heroEmpty: string
-  /** Create action for the empty commitments hero: present only when the
-   *  caller may create purchase orders or vendor bills (ap.create). */
+  /** Create action for the empty commitments hero: a purchase order where
+   *  orders are on and the caller holds purchase_orders.create, otherwise a
+   *  vendor bill where the caller holds ap.create. */
   heroEmptyAction: { href: string; label: string } | null
   topExposure: VendorExposureRow[]
   hasExposure: boolean
@@ -127,7 +128,7 @@ export async function loadPurchasing(
   const { moneyCompact } = await getMoneyFormatter()
   const authz = await getAuthz()
   if (!authz) redirect('/login')
-  if (!['ap.read', 'parties.read', 'expenses.read'].some((p) => can(authz, p))) assertCan(authz, 'ap.read')
+  if (!['ap.read', 'purchase_orders.read', 'parties.read', 'expenses.read'].some((p) => can(authz, p))) assertCan(authz, 'ap.read')
   const t = await getTranslations('purchasing')
   const locale = await getLocale()
   const tNav = await getTranslations('nav')
@@ -170,7 +171,7 @@ export async function loadPurchasing(
   // sees no AP vitals.
   const grants = {
     ap: can(authz, 'ap.read'),
-    orders: can(authz, 'ap.read'),
+    orders: can(authz, 'purchase_orders.read'),
     expenses: can(authz, 'expenses.read'),
     parties: can(authz, 'parties.read'),
   }
@@ -282,13 +283,13 @@ export async function loadPurchasing(
     heroHint: t('home.hero.hint'),
     heroEmpty: t('home.hero.empty'),
     // The empty hero names its prerequisite in copy; the action goes one
-    // step further only where the caller holds ap.create — a reader without
-    // it keeps the honest zero with no misleading button.
-    heroEmptyAction: !can(authz, 'ap.create')
-      ? null
-      : data.ordersEnabled
-        ? { href: '/purchase-orders?orderNew=1', label: t('home.hero.createOrder') }
-        : { href: '/ap/bills?doc=new&kind=vendor_bill', label: t('home.hero.createBill') },
+    // step further only where the caller holds the matching create grant —
+    // a reader without it keeps the honest zero with no misleading button.
+    heroEmptyAction: data.ordersEnabled && can(authz, 'purchase_orders.create')
+      ? { href: '/purchase-orders?orderNew=1', label: t('home.hero.createOrder') }
+      : can(authz, 'ap.create')
+        ? { href: '/ap/bills?doc=new&kind=vendor_bill', label: t('home.hero.createBill') }
+        : null,
     topExposure: data.topExposure,
     hasExposure: data.topExposure.length > 0,
     pulseTitle: t('home.pulse.title'),

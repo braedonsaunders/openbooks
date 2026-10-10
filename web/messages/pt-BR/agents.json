@@ -87,7 +87,10 @@
         "salesManager": "Gerente de vendas",
         "salesRepresentative": "Representante de vendas",
         "viewer": "Visualizador",
-        "production": "Produção"
+        "production": "Produção",
+        "buyer": "Comprador",
+        "cashier": "Caixa",
+        "projectCoordinator": "Coordenador de projetos"
       },
       "due": "Vence",
       "overdue": "Vencido",

@@ -9,7 +9,7 @@ export const LIST_DRAWER_ROUTES = {
   bank_transaction: { path: '/banking/transactions', param: 'doc', widget: 'document-drawer', permission: 'banking.read' },
   quote: { path: '/estimates', param: 'estimate', widget: 'order-drawer', permission: 'ar.read', feature: 'orders' },
   sales_order: { path: '/sales-orders', param: 'order', widget: 'order-drawer', permission: 'ar.read', feature: 'orders' },
-  purchase_order: { path: '/purchase-orders', param: 'order', widget: 'order-drawer', permission: 'ap.read', feature: 'orders' },
+  purchase_order: { path: '/purchase-orders', param: 'order', widget: 'order-drawer', permission: 'purchase_orders.read', feature: 'orders' },
   rma: { path: '/returns', param: 'doc', widget: 'document-drawer', permission: 'orders.fulfill', feature: 'returnAuthorizations' },
   expense_report: { path: '/expenses/reports', param: 'expense', widget: 'expense-drawer', permission: 'expenses.read', feature: 'expenses' },
   field_ticket: { path: '/field-tickets', param: 'ticket', widget: 'field-ticket-drawer', permission: 'time.read', feature: 'fieldTickets' },

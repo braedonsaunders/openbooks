@@ -87,8 +87,8 @@ test('order reads: backlog, line remainders, and subsidiary isolation', { skip: 
     const backordered = (position as { ok: true; data: { items: { lineNumber: number; open: string }[] } }).data.items;
     assert.deepEqual(backordered.map((row) => [row.lineNumber, row.open]), [[2, '2.00000000']]);
 
-    // ap-only caller cannot read the sales order; ar-only caller cannot read purchase kinds.
-    const apOnly = reader(org.orgId, new Set([org.subsidiaryId]), ['assistant.use', 'ap.read']);
+    // a purchasing-only caller cannot read the sales order; ar-only caller cannot read purchase kinds.
+    const apOnly = reader(org.orgId, new Set([org.subsidiaryId]), ['assistant.use', 'purchase_orders.read']);
     const crossKind = await withOrgContext(org.orgId, () =>
       executeAssistantTool(apOnly, 'get_order', { kind: 'sales_order', id: soId }));
     assert.equal(crossKind.ok, false);

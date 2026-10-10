@@ -427,7 +427,7 @@ hooks.deregister();
 const KINDS = [
   { kind: "quote", createPerm: "ar.create", numberPrefix: "EST-", path: "/api/estimates" },
   { kind: "sales_order", createPerm: "ar.create", numberPrefix: "SO-", path: "/api/sales-orders" },
-  { kind: "purchase_order", createPerm: "ap.create", numberPrefix: "PO-", path: "/api/purchase-orders" },
+  { kind: "purchase_order", createPerm: "purchase_orders.create", numberPrefix: "PO-", path: "/api/purchase-orders" },
 ] as const;
 
 const KEY_A = "00000000-0000-4000-8000-000000001011";
@@ -660,7 +660,7 @@ test("subsidiary write is refused when the feature is off, stored when on", asyn
   reset();
   const POST = createModule.makePOST({
     kind: "purchase_order",
-    createPerm: "ap.create",
+    createPerm: "purchase_orders.create",
     numberPrefix: "PO-",
   });
   const off = await post(POST, "/api/purchase-orders", KEY_A, {

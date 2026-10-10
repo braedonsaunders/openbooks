@@ -763,7 +763,7 @@ const orderLifecycleCases = [
               const { actorId, other, orderId } = seed
               state.gate = { user: { orgId: org.orgId, id: actorId }, permissions: new Set(['ar.read']),
                 allowedSubsidiaryIds: new Set([org.subsidiaryId]) } as Authz
-              const get = makeGET({ kind, readPerm: kind === 'purchase_order' ? 'ap.read' : 'ar.read', createPerm: kind === 'purchase_order' ? 'ap.create' : 'ar.create' })
+              const get = makeGET({ kind, readPerm: kind === 'purchase_order' ? 'purchase_orders.read' : 'ar.read', createPerm: kind === 'purchase_order' ? 'purchase_orders.create' : 'ar.create' })
               // The call under test runs org-scoped; ambient reads are RLS-enforced
               // after the handlers import tripped the request-org resolver.
               const request = () => withOrgContext(org.orgId, () => get(new Request('http://audit.local/orders/' + orderId), { params: Promise.resolve({ id: orderId }) }))

@@ -14,6 +14,8 @@ import {
 import { mergeHref, pickString, isUuid } from '../../../lib/list-params'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { requirePermission, can } from '../../../lib/authz'
+import { purchaseOrderConversionPermission } from '../../../lib/permissions'
+import { CONVERSION_TARGETS } from '../../../lib/order-kinds'
 import { requireFeatureEnabled } from '../../../lib/feature-gates'
 import { isFeatureEnabled } from '../../../lib/features'
 import { dropShipOrderStatus } from '@openbooks/engine/src/sales/drop-ship.ts'
@@ -60,12 +62,12 @@ export interface PurchaseOrdersData {
 export async function loadPurchaseOrders(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<PurchaseOrdersData> {
-  const authz = await requirePermission('ap.read')
+  const authz = await requirePermission('purchase_orders.read')
   await requireFeatureEnabled(authz.user.orgId, 'orders')
   const inventoryEnabled = await isFeatureEnabled(authz.user.orgId, 'inventory')
   const dropShipping = await isFeatureEnabled(authz.user.orgId, 'dropShipping')
   const barcodeScanningEnabled = await isFeatureEnabled(authz.user.orgId, 'barcodeScanning')
-  const canManage = can(authz, 'ap.create')
+  const canManage = can(authz, 'purchase_orders.create')
   const t = await getTranslations('purchaseOrders')
   const openId = pickString(sp[PARAM])
   // Only a real document id may reach the uuid comparison: the create view
@@ -203,6 +205,13 @@ export async function loadPurchaseOrders(
               .filter((subsidiary) => !authz.allowedSubsidiaryIds || authz.allowedSubsidiaryIds.has(subsidiary.id))
               .map((subsidiary) => ({ id: subsidiary.id, name: `${'  '.repeat(subsidiary.depth)}${subsidiary.name}` })),
             canManage,
+            // Receiving and billing are granted apart from authoring the
+            // order; the drawer offers exactly the conversions the convert
+            // endpoint will accept (receiving stock also needs items.post).
+            allowedConvertKinds: CONVERSION_TARGETS.purchase_order
+              .map((target) => target.kind)
+              .filter((target) => can(authz, purchaseOrderConversionPermission(target))
+                && (target !== 'purchase_receipt' || !inventoryEnabled || can(authz, 'items.post'))),
             layout: resolvedForm?.layout,
             dropShipping,
             dropShipLines,

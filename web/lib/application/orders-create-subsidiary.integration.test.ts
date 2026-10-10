@@ -17,7 +17,7 @@ function contextFor(orgId: string, actor: string, allowed: Set<string> | null): 
   return {
     authz: {
       user: { id: actor, orgId, name: "Creator", email: "c@scratch.test", roles: [], isSuperAdmin: false, envKind: "production", productionOrgId: orgId, homeOrgId: orgId, homeUserId: actor },
-      permissions: new Set(["ap.create"]),
+      permissions: new Set(["purchase_orders.create"]),
       allowedSubsidiaryIds: allowed,
     },
     source: "api",

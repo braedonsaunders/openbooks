@@ -612,6 +612,19 @@
       "inactivePermissions": "Permisos de aplicación inactivos",
       "permissionsLoadFailed": "No se pudieron cargar los permisos de la aplicación",
       "saveNotConfirmed": "El servidor no confirmó que se guardaran todos los cambios de permisos. Vuelva a abrir el rol para ver sus permisos actuales y aplique de nuevo sus cambios."
+    },
+    "builtInDescriptions": {
+      "admin": "Acceso total a todo, incluidos usuarios, roles, navegación y configuración de la empresa.",
+      "controller": "Responsable de los libros: libro mayor, cuentas por pagar y por cobrar, compras, aprobaciones, cierre de períodos, informes y registro de auditoría. No puede gestionar usuarios ni roles.",
+      "accountant": "Contabilidad diaria: registra y contabiliza asientos, facturas de proveedor y de cliente, paga y cobra, y crea informes. No puede aprobar, cerrar períodos, conciliar bancos ni gestionar usuarios.",
+      "production": "Gestiona los datos maestros de fabricación y el trabajo de planta, y contabiliza movimientos de inventario. No puede revertir contabilizaciones de inventario ni ver el libro mayor.",
+      "approver": "Revisa y decide solicitudes de aprobación, con acceso de lectura al libro mayor, los auxiliares y los informes. No puede registrar, contabilizar ni pagar transacciones.",
+      "viewer": "Acceso de solo lectura al libro mayor, los auxiliares, los informes y los análisis. No puede crear, modificar, contabilizar ni pagar transacciones.",
+      "sales_manager": "Dirige el equipo de ventas: cuentas, actividades, oportunidades, cuotas y pronósticos, y prepara borradores de facturas y ventas al contado. No puede contabilizar, cobrar pagos ni ver el libro mayor.",
+      "sales_rep": "Trabaja las cuentas, actividades, oportunidades y pronósticos personales asignados, y prepara borradores de facturas y ventas al contado. No puede contabilizar, cobrar pagos ni ver el libro mayor.",
+      "buyer": "Emite órdenes de compra y recibe la mercancía contra ellas, con acceso de lectura a proveedores, artículos y cuentas por pagar. No puede contabilizar ni pagar facturas, contabilizar inventario ni ver bancos o el libro mayor.",
+      "cashier": "Registra, contabiliza y reembolsa ventas al contado en caja y consulta saldos de tarjetas regalo. No puede ver facturas, bancos ni el libro mayor.",
+      "project_coordinator": "Registra horas, sigue proyectos y prepara borradores de facturas de cliente para aprobación. No puede contabilizar facturas, cobrar ni pagar, ni ver bancos o el libro mayor."
     }
   },
   "scripts": {
@@ -1219,7 +1232,11 @@
       "compliance": "Cumplimiento",
       "allocations": "Distribuciones",
       "nonprofit": "Entidades sin fines de lucro",
-      "payroll": "Nómina"
+      "payroll": "Nómina",
+      "purchasing": "Compras",
+      "parties": "Personas y empresas",
+      "banking": "Bancos",
+      "expenses": "Informes de gastos"
     },
     "gl_read": "Ver asientos y saldos",
     "gl_manage": "Gestionar el plan de cuentas",
@@ -1389,7 +1406,10 @@
     "time_clock": "Fichar en campo",
     "time_crew_enter": "Cargar lotes de cuadrilla",
     "time_kiosk_manage": "Gestionar quioscos y PIN",
-    "hrm_org_chart_read": "Ver organigrama"
+    "hrm_org_chart_read": "Ver organigrama",
+    "purchase_orders_read": "Ver órdenes de compra y recepciones",
+    "purchase_orders_create": "Crear, modificar y anular órdenes de compra",
+    "goods_receipts_create": "Recibir mercancía contra órdenes de compra"
   },
   "ai": {
     "metaTitle": "Proveedores de IA",

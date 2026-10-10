@@ -89,7 +89,7 @@ function voidPermission(kind: string): string {
   if (kind === "customer_payment") return "ar.pay";
   if (kind === "journal") return "gl.post";
   if (kind === "expense_report") return "ap.post";
-  if (kind === "purchase_order") return "ap.create";
+  if (kind === "purchase_order") return "purchase_orders.create";
   if (kind === "sales_order" || kind === "quote") return "ar.create";
   try {
     return postPermission(kind);

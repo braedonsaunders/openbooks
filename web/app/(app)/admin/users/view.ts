@@ -2,6 +2,7 @@ import 'server-only'
 
 import { sql, type SQL } from 'drizzle-orm'
 import { getLocale, getTranslations } from 'next-intl/server'
+import { displayRoleDescription } from '../../../../lib/role-display'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { grid, page, pageHeader, pagination, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
@@ -51,7 +52,7 @@ export interface AdminUsersData {
   emptyTitle: string
   emptyDescription: string
   users: AdminUserRow[]
-  allRoles: { id: string; name: string; isBuiltIn: boolean }[]
+  allRoles: { id: string; name: string; isBuiltIn: boolean; description: string | null }[]
   labels: {
     name: string
     email: string
@@ -79,6 +80,7 @@ export async function loadAdminUsers(
   // and audited); the server re-checks this inside the write.
   const soleAdministrator = (await countOtherActiveUserAdministrators(db, authz.user.orgId, authz.user.id)) === 0
   const t = await getTranslations('admin.users')
+  const tRoles = await getTranslations('admin.roles')
   const tCommon = await getTranslations('common')
   const tHub = await getTranslations('admin.hub')
   // Sign-in timestamps render in the viewer's locale, not the
@@ -133,8 +135,8 @@ export async function loadAdminUsers(
     db.execute<{ is_active: boolean; c: number }>(sql`
       select u.is_active, count(*)::int as c from users u
        where ${searchWhere} group by u.is_active`),
-    db.execute<{ id: string; key: string; name: string; is_built_in: boolean }>(sql`
-      select id, key, name, is_built_in from app_roles
+    db.execute<{ id: string; key: string; name: string; is_built_in: boolean; description: string | null }>(sql`
+      select id, key, name, is_built_in, description from app_roles
        where org_id = ${orgId}
        order by is_built_in desc, name asc`),
   ])
@@ -201,7 +203,17 @@ export async function loadAdminUsers(
       partyName: u.party_name,
       partyKind: u.party_kind,
     })),
-    allRoles: allRoles.map((r) => ({ id: r.id, name: r.name, isBuiltIn: r.is_built_in })),
+    // Each role carries its one-line "can and cannot" description, so the
+    // invite and role pickers say what a role grants before it is assigned.
+    allRoles: allRoles.map((r) => ({
+      id: r.id,
+      name: r.name,
+      isBuiltIn: r.is_built_in,
+      description: displayRoleDescription(
+        { key: r.key, isBuiltIn: r.is_built_in, description: r.description },
+        (key) => (tRoles.has(`builtInDescriptions.${key}` as never) ? tRoles(`builtInDescriptions.${key}` as never) : null),
+      ),
+    })),
     labels: {
       name: tCommon('labels.name'),
       email: tCommon('labels.email'),

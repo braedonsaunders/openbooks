@@ -17,6 +17,12 @@ export interface OrderHandlerConfig {
   kind: OrderKind;
   readPerm: string;
   createPerm: string;
+  /**
+   * Grant per conversion target when converting is not authoring the order
+   * itself (purchase orders: receiving and billing have their own grants).
+   * Absent targets fall back to createPerm.
+   */
+  convertPerm?: (targetKind: string) => string;
 }
 
 export interface OrderEditContext {

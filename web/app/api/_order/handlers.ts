@@ -45,7 +45,9 @@ export const orderEditServices: OrderEditServices = {
  *
  *   quote          → ar.read / ar.create
  *   sales_order    → ar.read / ar.create
- *   purchase_order → ap.read / ap.create
+ *   purchase_order → purchase_orders.read / purchase_orders.create; converting
+ *                    to a receipt needs goods_receipts.create and to a vendor
+ *                    bill ap.create (PURCHASE_ORDER_PERMISSIONS)
  */
 
 /** GET: full order payload (header + lines + links) scoped to the org. */
@@ -151,7 +153,7 @@ export function makeDELETE(cfg: OrderHandlerConfig) {
 /** POST convert: pull the order forward into `targetKind` via convertOrder(). */
 export function makeConvertPOST(cfg: OrderHandlerConfig) {
   return async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-    const gate = await guardFeaturePermission(cfg.createPerm, 'orders')
+    const gate = await guardFeaturePermission(cfg.convertPerm ? cfg.readPerm : cfg.createPerm, 'orders')
     if (gate instanceof NextResponse) return gate
     const { user } = gate
     const { id } = await params
@@ -164,6 +166,10 @@ export function makeConvertPOST(cfg: OrderHandlerConfig) {
       creditOverrideReason?: string
     }
     if (!body.targetKind) return NextResponse.json({ error: 'targetKind required' }, { status: 400 })
+    if (cfg.convertPerm) {
+      const required = cfg.convertPerm(body.targetKind)
+      if (!can(gate, required)) return NextResponse.json({ error: `missing permission: ${required}` }, { status: 403 })
+    }
 
     // Scope check: the source must be this kind, in the caller's org, and
     // inside the caller's subsidiary scope.

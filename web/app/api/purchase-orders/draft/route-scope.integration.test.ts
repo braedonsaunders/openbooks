@@ -58,7 +58,7 @@ const { POST: postEstimate } = await import('../../estimates/draft/route.ts')
 test.after(() => hooks.deregister())
 
 const CASES = [
-  { kind: 'purchase_order', post: postPurchase, permission: 'ap.create' },
+  { kind: 'purchase_order', post: postPurchase, permission: 'purchase_orders.create' },
   { kind: 'sales_order', post: postSales, permission: 'ar.create' },
   { kind: 'quote', post: postEstimate, permission: 'ar.create' },
 ] as const

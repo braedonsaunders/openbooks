@@ -375,7 +375,7 @@ const KIND_PERM: Record<string, string> = {
   vendor_bill: "ap.read",
   vendor_payment: "ap.read",
   vendor_credit: "ap.read",
-  purchase_order: "ap.read",
+  purchase_order: "purchase_orders.read",
   check: "ap.read",
   card_charge: "ap.read",
   card_refund: "ap.read",

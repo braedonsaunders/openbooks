@@ -459,6 +459,19 @@
       "inactivePermissions": "Inaktive App-Berechtigungen",
       "permissionsLoadFailed": "App-Berechtigungen konnten nicht geladen werden",
       "saveNotConfirmed": "Der Server hat nicht bestätigt, dass alle Berechtigungsänderungen gespeichert wurden. Öffnen Sie die Rolle erneut, um ihre aktuellen Berechtigungen zu sehen, und wenden Sie Ihre Änderungen dann erneut an."
+    },
+    "builtInDescriptions": {
+      "admin": "Vollzugriff auf alles, einschließlich Benutzern, Rollen, Navigation und Unternehmenseinstellungen.",
+      "controller": "Verantwortet die Bücher: Hauptbuch, Kreditoren, Debitoren, Einkauf, Genehmigungen, Periodenabschluss, Berichte und Prüfprotokoll. Kann keine Benutzer oder Rollen verwalten.",
+      "accountant": "Tägliche Buchhaltung: erfasst und bucht Journale, Eingangs- und Ausgangsrechnungen, zahlt und vereinnahmt und erstellt Berichte. Kann nicht genehmigen, Perioden abschließen, Banken abstimmen oder Benutzer verwalten.",
+      "production": "Verwaltet Fertigungsstammdaten und Werkstattarbeit und bucht Lagerbewegungen. Kann keine Lagerbuchungen stornieren und das Hauptbuch nicht sehen.",
+      "approver": "Prüft und entscheidet Genehmigungsanfragen, mit Lesezugriff auf Hauptbuch, Nebenbücher und Berichte. Kann keine Vorgänge erfassen, buchen oder bezahlen.",
+      "viewer": "Lesezugriff auf Hauptbuch, Nebenbücher, Berichte und Insights. Kann keine Vorgänge erstellen, ändern, buchen oder bezahlen.",
+      "sales_manager": "Leitet das Vertriebsteam: Konten, Aktivitäten, Verkaufschancen, Quoten und Prognosen, und erstellt Entwürfe von Rechnungen und Barverkäufen. Kann nicht buchen, keine Zahlungen vereinnahmen und das Hauptbuch nicht sehen.",
+      "sales_rep": "Bearbeitet zugewiesene Konten, Aktivitäten, Verkaufschancen und eigene Prognosen und erstellt Entwürfe von Rechnungen und Barverkäufen. Kann nicht buchen, keine Zahlungen vereinnahmen und das Hauptbuch nicht sehen.",
+      "buyer": "Erstellt Bestellungen und bucht Wareneingänge dazu, mit Lesezugriff auf Lieferanten, Artikel und Kreditoren. Kann keine Eingangsrechnungen buchen oder bezahlen, keinen Bestand buchen und weder Banking noch Hauptbuch sehen.",
+      "cashier": "Kassiert, bucht und erstattet Barverkäufe an der Kasse und prüft Gutscheinguthaben. Kann weder Rechnungen noch Banking oder das Hauptbuch sehen.",
+      "project_coordinator": "Erfasst Zeiten, verfolgt Projekte und erstellt Rechnungsentwürfe zur Genehmigung. Kann keine Rechnungen buchen, keine Zahlungen empfangen oder leisten und weder Banking noch Hauptbuch sehen."
     }
   },
   "scripts": {
@@ -1219,7 +1232,11 @@
       "allocations": "Umlagen",
       "nonprofit": "Gemeinnützige Organisationen",
       "compliance": "Compliance",
-      "payroll": "Lohnabrechnung"
+      "payroll": "Lohnabrechnung",
+      "purchasing": "Einkauf",
+      "parties": "Personen & Unternehmen",
+      "banking": "Banking",
+      "expenses": "Spesenabrechnungen"
     },
     "gl_read": "Journale und Salden anzeigen",
     "gl_manage": "Kontenplan verwalten",
@@ -1389,7 +1406,10 @@
     "time_clock": "Vor Ort stempeln",
     "time_crew_enter": "Team-Chargen erfassen",
     "time_kiosk_manage": "Kioskgeräte und PINs verwalten",
-    "hrm_org_chart_read": "Organigramm anzeigen"
+    "hrm_org_chart_read": "Organigramm anzeigen",
+    "purchase_orders_read": "Bestellungen und Wareneingänge anzeigen",
+    "purchase_orders_create": "Bestellungen erstellen, ändern und stornieren",
+    "goods_receipts_create": "Wareneingänge zu Bestellungen buchen"
   },
   "ai": {
     "metaTitle": "KI-Einstellungen",

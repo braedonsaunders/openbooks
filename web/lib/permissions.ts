@@ -9,6 +9,8 @@ export {
   resolveEffectivePermissions,
   resolveKeyScopeAuthority,
   isCataloguePermission,
+  PURCHASE_ORDER_PERMISSIONS,
+  purchaseOrderConversionPermission,
   type PermissionKey,
   type CataloguePermission,
 } from '@openbooks/engine/src/organization/permissions.ts'

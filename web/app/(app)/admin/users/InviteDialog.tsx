@@ -16,7 +16,7 @@ import { InviteLinkDrawer } from './InviteLinkDrawer'
 export function InviteUserButton({
   allRoles,
 }: {
-  allRoles: { id: string; name: string; isBuiltIn: boolean }[]
+  allRoles: { id: string; name: string; isBuiltIn: boolean; description?: string | null }[]
 }) {
   const t = useTranslations('admin.users')
   const router = useRouter()
@@ -36,7 +36,7 @@ function InviteDrawer({
   allRoles,
   onClose,
 }: {
-  allRoles: { id: string; name: string; isBuiltIn: boolean }[]
+  allRoles: { id: string; name: string; isBuiltIn: boolean; description?: string | null }[]
   onClose: () => void
 }) {
   const t = useTranslations('admin.users')
@@ -155,6 +155,11 @@ function InviteDrawer({
               ))}
             </Select>
           )}
+          {allRoles.find((role) => role.id === roleId)?.description ? (
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              {allRoles.find((role) => role.id === roleId)!.description}
+            </p>
+          ) : null}
         </div>
       </div>
     </Drawer>

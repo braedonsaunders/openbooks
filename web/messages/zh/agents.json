@@ -87,7 +87,10 @@
         "salesManager": "销售经理",
         "salesRepresentative": "销售代表",
         "viewer": "查看者",
-        "production": "生产"
+        "production": "生产",
+        "buyer": "采购员",
+        "cashier": "收银员",
+        "projectCoordinator": "项目协调员"
       },
       "due": "到期",
       "overdue": "逾期",

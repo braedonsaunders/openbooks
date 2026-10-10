@@ -35,7 +35,7 @@ export interface FileViewer {
 export function attachmentReadPermission(targetTable: string, kind?: string | null): string | null {
   if (targetTable === 'documents') {
     const permissions: Record<string, string> = {
-      vendor_bill: 'ap.read', vendor_payment: 'ap.pay', vendor_credit: 'ap.read', purchase_order: 'ap.read',
+      vendor_bill: 'ap.read', vendor_payment: 'ap.pay', vendor_credit: 'ap.read', purchase_order: 'purchase_orders.read',
       check: 'ap.read', card_charge: 'ap.read', card_refund: 'ap.read', customer_invoice: 'ar.read',
       customer_credit: 'ar.read', cash_sale: 'cash_sales.read', cash_refund: 'cash_sales.read',
       customer_payment: 'ar.pay', sales_order: 'ar.read', quote: 'ar.read',

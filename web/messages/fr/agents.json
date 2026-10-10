@@ -87,7 +87,10 @@
         "salesManager": "Responsable commercial",
         "salesRepresentative": "Représentant commercial",
         "viewer": "Lecteur",
-        "production": "Production"
+        "production": "Production",
+        "buyer": "Acheteur",
+        "cashier": "Caissier",
+        "projectCoordinator": "Coordinateur de projets"
       },
       "due": "Échéance",
       "overdue": "En retard",

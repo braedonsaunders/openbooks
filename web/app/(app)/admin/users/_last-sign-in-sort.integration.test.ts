@@ -18,7 +18,7 @@ const mockAuthz = `
   export function can(authz, permission) { return authz.permissions.has(permission) }
 `;
 const mockIntl = `
-  export async function getTranslations() { return (key) => key }
+  export async function getTranslations() { return Object.assign((key) => key, { has: () => false }) }
   export async function getLocale() { return 'en' }
 `;
 

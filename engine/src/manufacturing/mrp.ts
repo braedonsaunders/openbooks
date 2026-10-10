@@ -642,7 +642,7 @@ async function lockAuthorizedSuggestion(tx:SqlExecutor,orgId:string,actorId:stri
     from mfg_planned_orders suggestion join mfg_mrp_runs run on run.org_id=suggestion.org_id and run.id=suggestion.run_id
     where suggestion.org_id=${orgId} and suggestion.id=${id}`)).rows[0];
   if(!subject) throw new ManufacturingNotFoundError();
-  const scope=await lockPlanningAuthority(tx,orgId,actorId,subject.subsidiaryId,converting?(subject.action==='buy'?'ap.create':'items.post'):undefined);
+  const scope=await lockPlanningAuthority(tx,orgId,actorId,subject.subsidiaryId,converting?(subject.action==='buy'?'purchase_orders.create':'items.post'):undefined);
   return {row:await lockSuggestion(tx,orgId,id),scope};
 }
 

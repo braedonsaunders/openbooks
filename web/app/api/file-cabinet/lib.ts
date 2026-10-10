@@ -51,7 +51,7 @@ const DOCUMENT_ATTACHMENT_WRITE_PERMS: Record<string, string> = {
   vendor_bill: 'ap.create',
   vendor_payment: 'ap.pay',
   vendor_credit: 'ap.create',
-  purchase_order: 'ap.create',
+  purchase_order: 'purchase_orders.create',
   check: 'ap.create',
   card_charge: 'ap.create',
   card_refund: 'ap.create',

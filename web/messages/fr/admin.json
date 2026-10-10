@@ -459,6 +459,19 @@
       "inactivePermissions": "Permissions d’application inactives",
       "permissionsLoadFailed": "Impossible de charger les permissions d’application",
       "saveNotConfirmed": "Le serveur n’a pas confirmé l’enregistrement de toutes les modifications d’autorisations. Rouvrez le rôle pour voir ses autorisations actuelles, puis appliquez de nouveau vos modifications."
+    },
+    "builtInDescriptions": {
+      "admin": "Accès complet à tout, y compris les utilisateurs, les rôles, la navigation et les paramètres de l’entreprise.",
+      "controller": "Responsable des livres : grand livre, fournisseurs, clients, achats, approbations, clôture des périodes, rapports et journal d’audit. Ne peut pas gérer les utilisateurs ni les rôles.",
+      "accountant": "Comptabilité courante : saisit et comptabilise les écritures, factures fournisseurs et clients, paie et encaisse, et crée des rapports. Ne peut pas approuver, clôturer les périodes, rapprocher les banques ni gérer les utilisateurs.",
+      "production": "Gère les données de fabrication et le travail en atelier, et comptabilise les mouvements de stock. Ne peut pas contrepasser les mouvements de stock ni voir le grand livre.",
+      "approver": "Examine et tranche les demandes d’approbation, avec un accès en lecture au grand livre, aux auxiliaires et aux rapports. Ne peut pas saisir, comptabiliser ni payer de transactions.",
+      "viewer": "Accès en lecture seule au grand livre, aux auxiliaires, aux rapports et aux analyses. Ne peut pas créer, modifier, comptabiliser ni payer de transactions.",
+      "sales_manager": "Dirige l’équipe commerciale : comptes, activités, opportunités, quotas et prévisions, et prépare des brouillons de factures et de ventes au comptant. Ne peut pas comptabiliser, encaisser ni voir le grand livre.",
+      "sales_rep": "Gère les comptes, activités, opportunités et prévisions personnelles qui lui sont attribués, et prépare des brouillons de factures et de ventes au comptant. Ne peut pas comptabiliser, encaisser ni voir le grand livre.",
+      "buyer": "Émet des bons de commande et réceptionne les marchandises correspondantes, avec un accès en lecture aux fournisseurs, articles et comptes fournisseurs. Ne peut pas comptabiliser ni payer de factures, comptabiliser le stock, ni voir la banque ou le grand livre.",
+      "cashier": "Encaisse, comptabilise et rembourse les ventes au comptant à la caisse et consulte les soldes des cartes cadeaux. Ne peut voir ni les factures, ni la banque, ni le grand livre.",
+      "project_coordinator": "Saisit le temps, suit les projets et prépare des brouillons de factures clients pour approbation. Ne peut pas comptabiliser de factures, encaisser ou payer, ni voir la banque ou le grand livre."
     }
   },
   "scripts": {
@@ -1219,7 +1232,11 @@
       "compliance": "Conformité",
       "allocations": "Répartitions",
       "nonprofit": "Organismes sans but lucratif",
-      "payroll": "Paie"
+      "payroll": "Paie",
+      "purchasing": "Achats",
+      "parties": "Personnes et entreprises",
+      "banking": "Banque",
+      "expenses": "Notes de frais"
     },
     "gl_read": "Consulter les journaux et les soldes",
     "gl_manage": "Gérer le plan comptable",
@@ -1389,7 +1406,10 @@
     "time_clock": "Pointer sur le terrain",
     "time_crew_enter": "Saisir les lots d'équipe",
     "time_kiosk_manage": "Gérer bornes et PIN",
-    "hrm_org_chart_read": "Consulter l’organigramme"
+    "hrm_org_chart_read": "Consulter l’organigramme",
+    "purchase_orders_read": "Consulter les bons de commande et les réceptions",
+    "purchase_orders_create": "Créer, modifier et annuler des bons de commande",
+    "goods_receipts_create": "Réceptionner des marchandises sur bons de commande"
   },
   "ai": {
     "metaTitle": "Fournisseurs d'IA",
