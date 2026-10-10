@@ -7,6 +7,7 @@ import { sql } from 'drizzle-orm';
 import type { db } from '../platform/db.ts';
 import { parseMoney } from '../money/brands.ts';
 import { add, sum, cmp } from '../money/money.ts';
+import { compareDecimal } from '../money/exact-decimal.ts';
 import { canonicalJson } from './run-calculation-evidence.ts';
 import { assignmentCoveredDays } from './assignment-windows.ts';
 import { coveredPayrollLines } from './covered-payroll-lines.ts';
@@ -204,7 +205,7 @@ export async function appendRecurringBenefitLines(tx: Executor, args: {
       // by a per-hour election. Its cash amount cannot establish those hours.
       // Non-hour quantities and native salary coverage retain their own bases.
       const fixedZero = term.electionMode === 'fixed'
-        && term.electedRate !== null && cmp(term.electedRate, '0') === 0;
+        && term.electedRate !== null && compareDecimal(term.electedRate, '0') === 0;
       const matchingIneligible = rule.requiresMatchEligibility && enrollment.matchEligible === false;
       if (rule.basis === 'per_hour' && selected !== null && !fixedZero && !matchingIneligible) {
         for (const line of hourLines) {
