@@ -165,6 +165,7 @@
     "manufacturing-mrp": "MRP运行"
   },
   "groups": {
+    "manufacturing": "制造",
     "workforce": "员工队伍",
     "my-work": "我的工作",
     "customers": "客户",

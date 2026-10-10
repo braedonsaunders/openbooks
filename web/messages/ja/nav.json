@@ -165,6 +165,7 @@
     "manufacturing-mrp": "MRP実行"
   },
   "groups": {
+    "manufacturing": "製造",
     "workforce": "従業員体制",
     "my-work": "マイワーク",
     "customers": "顧客",
