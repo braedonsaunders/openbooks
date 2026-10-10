@@ -104,9 +104,21 @@ function fakeEasyPost(labelPdf: Buffer): Server {
         json({ id: SHIPMENT_ID, status: "refunded" });
         return;
       }
-      if (req.method === "GET" && req.url === "/v2/trackers/trk_test123") {
+      const refreshTracker = req.method === "POST" && req.url === "/v2/trackers";
+      if (refreshTracker) {
+        const tracker = (JSON.parse(body) as { tracker?: { tracking_code?: string; carrier?: string } }).tracker;
+        if (tracker?.tracking_code !== TRACKING || tracker.carrier !== "UPS") {
+          res.statusCode = 422;
+          json({ error: { message: "unknown carrier tracking reference" } });
+          return;
+        }
+      }
+      if (refreshTracker || (req.method === "GET" && req.url === "/v2/trackers/trk_test123")) {
         json({
           id: "trk_test123",
+          carrier: "UPS",
+          tracking_code: TRACKING,
+          shipment_id: SHIPMENT_ID,
           status: "delivered",
           tracking_details: [
             { status: "in_transit", message: "Departed facility", datetime: "2026-10-04T10:00:00Z" },
