@@ -7,6 +7,7 @@
     "emptyTitle": "Aucun bon de commande pour l’instant",
     "emptyDescription": "Créez le premier bon de commande pour lancer le flux approvisionnement-paiement.",
     "newButton": "Nouveau bon de commande",
+    "createHintAction": "des bons de commande",
     "createDraftFailed": "Impossible de créer un bon de commande brouillon"
   },
   "shared": {

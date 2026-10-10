@@ -7,6 +7,7 @@
     "emptyTitle": "Aún no hay órdenes de venta",
     "emptyDescription": "Cree una orden de venta o convierta una desde una cotización.",
     "newButton": "Nueva orden de venta",
+    "createHintAction": "órdenes de venta",
     "createDraftFailed": "No se pudo crear un borrador de orden de venta"
   },
   "agency": {

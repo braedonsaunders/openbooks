@@ -7,6 +7,7 @@
     "emptyTitle": "Nenhum orçamento ainda",
     "emptyDescription": "Crie o primeiro orçamento para iniciar o fluxo de pedido a recebimento.",
     "newButton": "Novo orçamento",
+    "createHintAction": "orçamentos",
     "createDraftFailed": "Não foi possível criar um orçamento rascunho"
   },
   "quoteCash": {
@@ -105,6 +106,7 @@
   },
   "award": {
     "action": "Adjudicar",
+    "awardHintAction": "uma adjudicação para este orçamento",
     "awardedTo": "Adjudicado → {project}",
     "title": "Adjudicar {number}",
     "description": "Cria o projeto e seu orçamento a partir deste orçamento de venda: as horas, o custo e o preço orçados, uma tarefa por linha.",

@@ -7,6 +7,7 @@
     "emptyTitle": "No estimates yet",
     "emptyDescription": "Create the first estimate to start the order-to-cash workflow.",
     "newButton": "New estimate",
+    "createHintAction": "estimates",
     "createDraftFailed": "Could not create a draft estimate"
   },
   "quoteCash": {
@@ -105,6 +106,7 @@
   },
   "award": {
     "action": "Award",
+    "awardHintAction": "an award for this quote",
     "awardedTo": "Awarded → {project}",
     "title": "Award {number}",
     "description": "Creates the project and its budget from this quote: the quoted hours, cost and price, one task per line.",

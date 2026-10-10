@@ -1,4 +1,5 @@
 {
+  "permissionHint": "创建{action}需要{permission}权限，请向管理员申请。",
   "actions": {
     "save": "保存",
     "saving": "保存中…",

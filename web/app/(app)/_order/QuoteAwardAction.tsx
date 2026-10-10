@@ -15,6 +15,7 @@ import {
   type AwardTaskSpec,
 } from '@openbooks/engine/src/projects/award-plan.ts'
 import { readApiErrorMessage } from '../../../lib/api-error'
+import { PermissionHint } from '../../../components/permission-hint'
 
 /**
  * Award an issued quote: one action on the quote that opens a drawer to
@@ -47,7 +48,7 @@ function hoursText(value: string): string {
   return value.includes('.') ? value.replace(/0+$/, '').replace(/\.$/, '') : value
 }
 
-export function QuoteAwardAction({ quoteId, docStatus }: { quoteId: string; docStatus: string }) {
+export function QuoteAwardAction({ quoteId, docStatus, canAward = true }: { quoteId: string; docStatus: string; canAward?: boolean }) {
   const t = useTranslations('estimates.award')
   const tCommon = useTranslations('common')
   const router = useRouter()
@@ -79,7 +80,7 @@ export function QuoteAwardAction({ quoteId, docStatus }: { quoteId: string; docS
   }, [quoteId, t])
 
   useEffect(() => {
-    if (!eligible) return
+    if (!eligible || !canAward) return
     let cancelled = false
     load()
       .then((data) => { if (!cancelled) setPreview(data) })
@@ -204,6 +205,19 @@ export function QuoteAwardAction({ quoteId, docStatus }: { quoteId: string; docS
     }
   }
 
+  // Without the project-management grant the award stays visible but
+  // disabled, with the shared missing-grant hint naming what to ask for —
+  // never silently absent. No preview fetch: nothing to decide with.
+  if (!canAward && eligible) {
+    return (
+      <span className="inline-flex items-center gap-2">
+        <Button variant="outline" disabled title={t('awardHintAction')}>
+          {t('action')}
+        </Button>
+        <PermissionHint permission="projects.manage" action={t('awardHintAction')} />
+      </span>
+    )
+  }
   if (!eligible || !preview) return null
   if (preview.awarded) {
     return (

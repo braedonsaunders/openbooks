@@ -1,4 +1,5 @@
 {
+  "permissionHint": "Sie benötigen die Berechtigung {permission}, um {action} zu erstellen. Bitten Sie einen Administrator um Zugang.",
   "actions": {
     "save": "Speichern",
     "saving": "Wird gespeichert…",

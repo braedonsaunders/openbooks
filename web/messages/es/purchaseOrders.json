@@ -7,6 +7,7 @@
     "emptyTitle": "Aún no hay órdenes de compra",
     "emptyDescription": "Cree la primera orden de compra para iniciar el flujo de compra a pago.",
     "newButton": "Nueva orden de compra",
+    "createHintAction": "órdenes de compra",
     "createDraftFailed": "No se pudo crear un borrador de orden de compra"
   },
   "shared": {

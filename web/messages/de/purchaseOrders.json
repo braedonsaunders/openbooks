@@ -7,6 +7,7 @@
     "emptyTitle": "Noch keine Bestellungen",
     "emptyDescription": "Erstellen Sie die erste Bestellung, um den Procure-to-Pay-Workflow zu starten.",
     "newButton": "Neue Bestellung",
+    "createHintAction": "Bestellungen",
     "createDraftFailed": "Bestellungsentwurf konnte nicht erstellt werden"
   },
   "shared": {

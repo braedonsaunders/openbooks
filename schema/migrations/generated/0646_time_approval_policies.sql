@@ -38,4 +38,15 @@ CREATE POLICY org_isolation ON public.time_approval_policies
  WITH CHECK (public.app_bypass_rls_active() OR org_id::text = current_setting('app.current_org', true));
 COMMENT ON POLICY org_isolation ON public.time_approval_policies IS 'openbooks:org_isolation:v1';
 
+-- The tenant retirement fence only reaches tables present when 0626 ran:
+-- attach it here, create-if-absent, so a fresh install fences this table
+-- exactly like the coordinated lane (the 0643 late-tables shape).
+DO $fences$
+BEGIN
+ IF NOT EXISTS(SELECT 1 FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_namespace n ON n.oid = c.relnamespace
+  WHERE n.nspname = 'public' AND c.relname = 'time_approval_policies' AND t.tgname = 'tenant_retirement_fence') THEN
+  EXECUTE 'CREATE TRIGGER tenant_retirement_fence BEFORE INSERT OR UPDATE OR DELETE ON public.time_approval_policies FOR EACH ROW EXECUTE FUNCTION tenant_retirement.openbooks_tenant_retirement_fence()';
+ END IF;
+END $fences$;
+
 SELECT public.openbooks_refresh_query_catalog();

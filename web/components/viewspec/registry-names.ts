@@ -428,6 +428,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'paper-view',
   'parallel-run-workspace',
   'payroll-work-locations',
+  'permission-hint',
   'party-drawer',
   'party-heading',
   'party-link-cell',
