@@ -10,6 +10,7 @@ import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { addCalendarDays, daysInCivilMonth, mondayOfIsoWeek } from "../platform/civil-date.ts";
 import { db, orgContext, withBypass, withOrg, type SqlExecutor } from "../platform/db.ts";
+import { isUuid } from "../platform/uuid.ts";
 
 /**
  * Payer hierarchies and consolidated billing. A subscription's service-to
@@ -467,6 +468,11 @@ async function lockConsolidationCommandAuthority(orgId: string, opts: Consolidat
   if (opts.actorId === undefined || opts.actorId === null) {
     if (opts.autoPost) throw new ConsolidatedBillingError("Choose an authorized operator before posting consolidated invoices.", 404);
     return;
+  }
+  // An unparseable operator identity refuses as unknown rather than leaking
+  // the driver's uuid syntax error through a typed command boundary.
+  if (!isUuid(opts.actorId)) {
+    throw new ConsolidatedBillingError("Consolidated billing is unavailable for this operator.", 404);
   }
   const actor = (await db.execute(sql`
     select id from users where id=${opts.actorId} and is_active and (org_id=${orgId} or is_super_admin) for share
