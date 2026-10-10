@@ -14,6 +14,7 @@ import {
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { getAuthz, can, assertCan } from '../../../lib/authz'
+import { canAccessStatement } from '../../../lib/report-authz'
 import { resolveNav } from '../../../lib/nav/resolve'
 import { resolvePeriod } from '../../../lib/periods'
 import { financialHealth, scoreLabelOf, type FinancialHealth, type RatioResult } from '../../../lib/analytics/financial-health'
@@ -102,6 +103,11 @@ export async function loadAccounting(): Promise<AccountingData> {
 
   // Same default period as the analytics dashboard, so the score matches it.
   const period = await resolvePeriod(null, { orgId: authz.user.orgId })
+  // The health score, net income and the ratio set are financial-statement
+  // figures: they follow the same data grants as the statements they come
+  // from (reports.read plus the ledger grant the balance sheet and P&L
+  // require), never reports.read alone.
+  const financialsVisible = can(authz, 'reports.read') && canAccessStatement(authz, 'balance-sheet') && canAccessStatement(authz, 'pnl')
   const access = {
     gl: can(authz, 'gl.read'),
     close: can(authz, 'close.read'),
@@ -112,7 +118,7 @@ export async function loadAccounting(): Promise<AccountingData> {
   }
   const [data, healthResult, navGroups] = await Promise.all([
     accountingHome(authz.user.orgId, authz.allowedSubsidiaryIds, access),
-    can(authz, 'reports.read')
+    financialsVisible
       ? financialHealth({ from: period.from, to: period.to, label: period.label }, authz.user.orgId, authz.allowedSubsidiaryIds, healthStrings(tAnalytics, await getLocale()))
       : Promise.resolve(null),
     resolveNav(
@@ -135,8 +141,8 @@ export async function loadAccounting(): Promise<AccountingData> {
       },
     ),
   ])
-  // Without reports.read the health widgets are not composed at all (their
-  // `when` is access.reports), so no figure is ever fabricated for them.
+  // Without the statement grants the health widgets are not composed at all
+  // (their `when` is access.reports), so no figure is ever fabricated for them.
   const health: FinancialHealth | null = healthResult
   // Tones follow the organization's configured score bands, never fixed cut-offs.
   const toneOf = (score: number | null): HealthTone => {
@@ -146,7 +152,7 @@ export async function loadAccounting(): Promise<AccountingData> {
 
   // close.read/gl.read callers see the ratios but must never be deep-linked
   // into financial-health, which requires reports.read.
-  const canReadReports = can(authz, 'reports.read')
+  const canReadReports = financialsVisible
   const groupItems = navGroups.find((g) => g.id === 'accounting')?.items ?? []
   const tabs = await groupTabs('accounting', '/accounting', {
     exclude: canReadReports ? [] : ['/analytics/financial-health'],
@@ -208,7 +214,7 @@ export async function loadAccounting(): Promise<AccountingData> {
   }
 
   return {
-    access: { reports: can(authz, 'reports.read'), close: access.close, gl: access.gl, findings: access.findings },
+    access: { reports: financialsVisible, close: access.close, gl: access.gl, findings: access.findings },
     title: t('home.title'),
     description: t('home.description'),
     tabs,
@@ -277,7 +283,7 @@ export async function loadAccounting(): Promise<AccountingData> {
     directory,
     attentionTitle: t('home.attention.title'),
     attentionAllClear: t('home.attention.allClear'),
-    hasAttention: can(authz, 'reports.read') || access.gl || access.findings,
+    hasAttention: financialsVisible || access.gl || access.findings,
     // Capped where the native call site caps it: the rail shows six.
     attention: attention.slice(0, 6),
   }
