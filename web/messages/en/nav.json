@@ -1,5 +1,6 @@
 {
   "modules": {
+    "admin-setup-manufacturing": "Manufacturing setup",
     "hrm-performance-cycles": "Manage reviews",
     "hrm-performance-goals": "Goals",
     "hrm-performance-conversations": "Conversations",
@@ -232,6 +233,7 @@
     "scheduling": "Scheduling"
   },
   "localWorkspaces": {
+    "manufacturing": "Manufacturing",
     "collections-views": "Collections",
     "hrm-people": "Employees",
     "hrm-hiring": "Hiring",

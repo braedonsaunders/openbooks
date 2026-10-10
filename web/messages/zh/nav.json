@@ -1,5 +1,6 @@
 {
   "modules": {
+    "admin-setup-manufacturing": "制造设置",
     "hrm-performance-cycles": "管理评估",
     "hrm-performance-goals": "目标",
     "hrm-performance-conversations": "一对一谈话",
@@ -232,6 +233,7 @@
     "hrm-training": "培训"
   },
   "localWorkspaces": {
+    "manufacturing": "制造",
     "collections-views": "应收催收",
     "hrm-people": "员工",
     "hrm-hiring": "招聘",
