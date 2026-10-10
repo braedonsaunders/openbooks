@@ -13,6 +13,7 @@ import { connectMigrationClient, describeBootstrapMigrationFailure, executeMigra
 import { PREFLIGHT_MIN_ORDINAL, earlierPendingCreatesObject, evaluatePreflight, formatFinding, ordinalOf as preflightOrdinalOf, preflightDecisionFor, preflightDirFor, preflightStatementTimeoutMs, readNoneReason, readPreflightSql, type PreflightFinding } from "../migration-preflight.ts"
 import { assertBaselineHistory, historicalMigrationPlan, migrationIdentityIsApplied, releaseMigrationPlan } from "../migration-baseline-plan.mjs"
 import { publishedMigrationSessionPrelude } from "../migration-session-headers.mjs"
+import { ensureRetirementAuthorityOwnership } from "./retirement-ownership.ts"
 
 async function executeTrackedMigration(
   filename: string,
@@ -538,6 +539,7 @@ export async function migrate(historicalMigrations = false): Promise<void> {
 
   const applied = await readAppliedMigrationFilenames();
   const pending = pendingMigrationItems(plan.filenames, applied);
+  await ensureRetirementAuthorityOwnership();
   let deferred: DeferredPreflight[] = [];
   if (!ledgerPreexisted) {
     console.log("[bootstrap] fresh install: no _applied_migrations table, nothing to preflight");
@@ -551,6 +553,9 @@ export async function migrate(historicalMigrations = false): Promise<void> {
     const deferredPreflight = deferred.find((candidate) => candidate.filename === filename);
     if (deferredPreflight) await runDeferredPreflight(deferredPreflight, appliedThisRun);
     if (await applyTracked("migration", filename, content)) appliedThisRun.push(filename);
+    if (filename === "generated/0626_tenant_retirement.sql" || filename === "generated/0619_operating_profiles_production_extensions.sql") {
+      await ensureRetirementAuthorityOwnership();
+    }
   }
   if (await isPaymentLinkSealApplicable(plan.baseline)) {
     await sealLegacyPaymentLinkTokens();
@@ -563,6 +568,7 @@ export async function migrate(historicalMigrations = false): Promise<void> {
   // adoption compares like with like; ordinary bootstrap then applies the
   // current one.
   await applyRowLevelSecurity(historical?.environment);
+  await ensureRetirementAuthorityOwnership();
 }
 
 async function assertReleaseBaselineReady(baseline: ReturnType<typeof releaseMigrationPlan>["baseline"], ledgerExists: boolean): Promise<void> {
