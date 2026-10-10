@@ -2860,6 +2860,11 @@
         "singular": "Einlagerungsregel",
         "description": "Geordnete Regeln, die bestimmen, wohin empfangener Bestand innerhalb eines Lagers kommt."
       },
+      "warehouse-defaults": {
+        "title": "Standardlager",
+        "singular": "Standardlager",
+        "description": "Das Standardlager für Wareneingang und Versand je Rechtseinheit — greift, wenn Auftragszeilen keines nennen."
+      },
       "company": {
         "title": "Unternehmen & Buchhaltung",
         "description": "Organisationsidentität, Basiswährung, Geschäftsjahr und Kontrollkonten."
@@ -4355,6 +4360,7 @@
       "saasFeatureMeter": "Zählerschlüssel für gemessene Leistungen, löst die Nutzung über die nutzungsbasierte Abrechnung auf. Für andere Typen leer lassen.",
       "putawayItem": "Leer lassen, damit die Regel für alle Artikel gilt.",
       "putawayCapacity": "Die Höchstmenge des Artikels am Ziel. Für eine Blockzone erforderlich; bei einem festen Lagerplatz leer lassen für keine Begrenzung.",
+      "warehouseDefaultSubsidiary": "Leer lassen für den unternehmensweiten Standard; Rechtseinheit wählen, um ihn dort zu überschreiben.",
       "carrierServices": "Die Versandarten dieses Dienstleisters, etwa Standard oder Express. Eine Sendung wählt eine davon.",
       "carrierTrackingUrlTemplate": "Die Adresse der Sendungsverfolgungsseite mit '{tracking}' an der Stelle der Sendungsnummer, zum Beispiel https://carrier.example/track?number='{tracking}'. Leer lassen, wenn der Dienstleister keinen Verfolgungslink hat.",
       "carrierActive": "Deaktivieren Sie einen Versanddienstleister, den Sie nicht mehr nutzen. Ein inaktiver Dienstleister kann auf keiner Sendung gewählt werden; Sendungen, die ihn bereits nennen, behalten ihn.",

@@ -2807,6 +2807,11 @@
         "singular": "上架规则",
         "description": "决定收货库存在仓库内存放位置的有序规则。"
       },
+      "warehouse-defaults": {
+        "title": "默认仓库",
+        "singular": "默认仓库",
+        "description": "每个法人实体的默认收货和发货仓库 — 用于订单行未指定仓库时。"
+      },
       "company": {
         "title": "公司与会计",
         "description": "组织标识、基准币种、财年和控制科目。"
@@ -4302,6 +4307,7 @@
       "saasFeatureMeter": "按量功能的计量器键,通过用量计费解析用量。其他类型请留空。",
       "putawayItem": "留空则规则适用于所有物料。",
       "putawayCapacity": "目标位置可存放该物料的最大数量。批量区必填；固定库位留空表示不限。",
+      "warehouseDefaultSubsidiary": "留空表示使用公司默认值；选择法人实体以覆盖。",
       "carrierServices": "该承运商提供的服务级别，例如标准或次日达。每张发货单从中选择一个。",
       "carrierTrackingUrlTemplate": "承运商跟踪页面的地址，在跟踪号所在位置写入 '{tracking}'，例如 https://carrier.example/track?number='{tracking}'。如承运商没有跟踪链接，请留空。",
       "carrierActive": "不再使用的承运商请取消“启用”。停用的承运商不能在发货单上选择；已指定该承运商的发货单保持不变。",

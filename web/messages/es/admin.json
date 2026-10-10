@@ -2732,6 +2732,11 @@
         "singular": "Regla de ubicación",
         "description": "Reglas ordenadas que deciden dónde se ubican las existencias recibidas dentro de un almacén."
       },
+      "warehouse-defaults": {
+        "title": "Almacenes predeterminados",
+        "singular": "Almacén predeterminado",
+        "description": "El almacén predeterminado de recepción y envío para cada entidad legal — se usa cuando las líneas del pedido no nombran ninguno."
+      },
       "company": {
         "title": "Empresa y contabilidad",
         "description": "Identidad de la organización, moneda base, ejercicio fiscal y cuentas de control."
@@ -4227,6 +4232,7 @@
       "saasFeatureMeter": "Clave del medidor para prestaciones medidas, resuelve el uso mediante la facturación por uso. Vacío para otros tipos.",
       "putawayItem": "Déjelo en blanco para aplicar la regla a todos los artículos.",
       "putawayCapacity": "Lo máximo que el destino puede contener del artículo. Obligatorio en una zona a granel; déjelo en blanco en un hueco fijo para no poner límite.",
+      "warehouseDefaultSubsidiary": "Déjelo en blanco para el valor predeterminado de la empresa; elija una entidad legal para anularlo allí.",
       "carrierServices": "Los niveles de servicio que ofrece este transportista, como Terrestre o Urgente. Cada envío elige uno de ellos.",
       "carrierTrackingUrlTemplate": "La dirección de la página de seguimiento del transportista con '{tracking}' donde va el número de seguimiento, por ejemplo https://carrier.example/track?number='{tracking}'. Déjelo en blanco si el transportista no tiene enlace de seguimiento.",
       "carrierActive": "Desmarque Activo en un transportista que ya no utiliza. Un transportista inactivo no se puede elegir en un envío; los envíos que ya lo indican lo conservan.",

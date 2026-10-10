@@ -160,8 +160,8 @@ export default async function Inventory({
            where b.org_id = ${orgId}
            group by b.assembly_item_id, assembly.code, assembly.name
            order by assembly.name nulls last, assembly.code nulls last, b.assembly_item_id`),
-        db.execute<{ id: string; code: string | null; name: string | null }>(sql`
-          select it.id, it.code, it.name from items it
+        db.execute<{ id: string; code: string | null; name: string | null; kind: string }>(sql`
+          select it.id, it.code, it.name, it.kind from items it
             join item_inventory_profiles p on p.item_id = it.id and p.org_id = it.org_id
            where it.org_id = ${orgId} and it.is_active
            order by it.name nulls last, it.code nulls last, it.id`),

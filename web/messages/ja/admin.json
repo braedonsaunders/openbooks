@@ -2860,6 +2860,11 @@
         "singular": "格納ルール",
         "description": "入庫した在庫を倉庫内のどこに格納するかを決める順序付きルール。"
       },
+      "warehouse-defaults": {
+        "title": "標準倉庫",
+        "singular": "標準倉庫",
+        "description": "法主体ごとの標準の受入・出荷倉庫 — 受注行に指定がない場合に使用されます。"
+      },
       "company": {
         "title": "会社と会計",
         "description": "組織の識別情報、基準通貨、会計年度、および統制勘定。"
@@ -4355,6 +4360,7 @@
       "saasFeatureMeter": "従量機能のメーターキー。使用量課金で使用量を解決します。他の種類では空にします。",
       "putawayItem": "空欄にするとすべての品目に適用されます。",
       "putawayCapacity": "格納先に置ける品目の上限数量。バルクゾーンでは必須です。固定棚で空欄にすると上限なしになります。",
+      "warehouseDefaultSubsidiary": "会社全体の標準は空欄のままにし、上書きする法主体を選択してください。",
       "carrierServices": "この配送業者が提供するサービス区分（例：通常便、翌日配達）。出荷ごとにいずれか1つを選択します。",
       "carrierTrackingUrlTemplate": "配送業者の追跡ページのアドレス。追跡番号が入る位置に '{tracking}' を記述します（例：https://carrier.example/track?number='{tracking}'）。追跡リンクがない場合は空欄にします。",
       "carrierActive": "使用しなくなった配送業者は「有効」をオフにします。無効な配送業者は出荷で選択できませんが、既にその業者を指定している出荷はそのまま保持されます。",

@@ -7,6 +7,7 @@ import { useDirtyClose } from '@/lib/use-dirty-close'
 import { toast } from 'sonner'
 import { Plus } from 'lucide-react'
 import { Button, Label, SearchSelect, Textarea, UrlDrawer } from '@openbooks/ui'
+import { isAssemblyCapableKind } from '@openbooks/engine/src/inventory/bom-policy.ts'
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
 import { PagedTable, type PagedColumn } from '../../../components/paged-table'
 
@@ -34,7 +35,7 @@ export interface BomAssembly extends Record<string, unknown> {
   components: BomComponent[]
 }
 
-type ItemOption = { id: string; code: string | null; name: string | null }
+type ItemOption = { id: string; code: string | null; name: string | null; kind?: string | null }
 type EditableBomLine = Record<string, unknown> & {
   componentItemId: string
   quantityPer: string
@@ -243,7 +244,11 @@ export function BomDrawer({
 
   const showManufacturing = manufacturingEnabled && parentKind !== 'kit' && !hideManufacturingFields
   const usedAssemblies = new Set(assemblies.map((candidate) => candidate.assemblyItemId))
+  // A recipe parent must be something the BOM service accepts as an
+  // assembly: raw materials and packaging never qualify, so they never
+  // appear as choices. Components keep the full profiled catalog.
   const assemblyOptions = items
+    .filter((item) => isAssemblyCapableKind(item.kind))
     .filter((item) => item.id === assemblyItemId || !usedAssemblies.has(item.id))
     .map((item) => ({ value: item.id, label: itemLabel(item) }))
   const componentOptions = items
