@@ -277,7 +277,12 @@
       "withAssignment": "Erste Position und Zuordnung mit dieser Einstellung erfassen.",
       "departmentEmpty": "Keine Abteilung",
       "locationEmpty": "Kein Standort",
-      "positionEmpty": "Keine Positionsverknüpfung"
+      "positionEmpty": "Keine Positionsverknüpfung",
+      "existingPersonLabel": "Bestehende Person",
+      "existingPersonPlaceholder": "Personen suchen…",
+      "existingPersonEmpty": "Niemand sonst kann eingestellt werden — jede aktive Person hat bereits eine laufende Beschäftigung.",
+      "existingPersonNote": "Beim Speichern wird dieser Person die Mitarbeiterrolle hinzugefügt und mit der Einstellung fortgefahren — kein doppelter Datensatz.",
+      "existingPersonFailed": "Die Personenliste konnte nicht geladen werden."
     },
     "multiple": {
       "title": "Mehr als ein Beschäftigungsdatensatz",

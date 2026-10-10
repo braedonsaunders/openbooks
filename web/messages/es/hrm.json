@@ -277,7 +277,12 @@
       "withAssignment": "Registrar el primer puesto y la asignación con esta contratación.",
       "departmentEmpty": "Sin departamento",
       "locationEmpty": "Sin ubicación",
-      "positionEmpty": "Sin puesto vinculado"
+      "positionEmpty": "Sin puesto vinculado",
+      "existingPersonLabel": "Persona existente",
+      "existingPersonPlaceholder": "Buscar personas…",
+      "existingPersonEmpty": "Nadie más puede ser contratado — cada persona activa ya tiene un empleo vigente.",
+      "existingPersonNote": "Al guardar se añade el rol de empleado a esta persona y se continúa con la contratación, sin duplicar el registro.",
+      "existingPersonFailed": "No se pudo cargar la lista de personas."
     },
     "multiple": {
       "title": "Más de un registro de empleo",

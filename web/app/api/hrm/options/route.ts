@@ -3,6 +3,7 @@ import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
 import {
   EmploymentReadError,
+  listEmployablePeopleOptions,
   listEmployerSubsidiaryOptions,
   listEmploymentOptions,
   listHireablePeopleOptions,
@@ -32,6 +33,10 @@ import { isUuid } from "../../../../lib/list-params";
  * `source=hireable-people` names active employee parties holding no
  * employment at all for the Hire drawer's person picker (the same
  * population the cockpit readiness panel counts),
+ * `source=employable-people` names active person parties with no live
+ * active employment, any role or none, for the New-employee form's
+ * existing-person picker (a vendor, contractor, or partner gains the
+ * role plus a first employment on the same party),
  * `source=employer-subsidiaries` names active legal entities for the
  * Hire drawer's employer picker,
  * `source=positions` names the funded establishment for the
@@ -62,6 +67,7 @@ export const GET = defineRoute({
       source !== "positions" &&
       source !== "people" &&
       source !== "hireable-people" &&
+      source !== "employable-people" &&
       source !== "employer-subsidiaries" &&
       source !== "leave-types" &&
       source !== "leave-filing-employments" &&
@@ -70,7 +76,7 @@ export const GET = defineRoute({
       return NextResponse.json(
         {
           error:
-            "source must be one of employments, locations, positions, people, hireable-people, employer-subsidiaries, leave-types, leave-filing-employments, leave-own-employments",
+            "source must be one of employments, locations, positions, people, hireable-people, employable-people, employer-subsidiaries, leave-types, leave-filing-employments, leave-own-employments",
         },
         { status: 400 },
       );
@@ -175,6 +181,14 @@ export const GET = defineRoute({
                   // party for the Hire drawer's person picker — the same
                   // read grant and party-side scope as the people picker.
                   await listHireablePeopleOptions(
+                    include === null ? base : { ...base, includePartyId: include },
+                  )
+              : source === "employable-people"
+                ? // Active people with no live active employment, any role
+                  // or none, keyed by party for the New-employee form's
+                  // existing-person picker — the same read grant and
+                  // party-side scope as the hireable picker.
+                  await listEmployablePeopleOptions(
                     include === null ? base : { ...base, includePartyId: include },
                   )
                 : source === "employer-subsidiaries"

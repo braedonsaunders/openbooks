@@ -344,3 +344,136 @@ test("choosing kind vendor creates the party with its vendor role in one step", 
   assert.equal(body.kind, "vendor");
   assert.equal(body.roles.vendor.enabled, true, "kind vendor must carry its role in the same POST");
 });
+
+test("new employee from an existing person patches the role and chains Hire on the same party", async (t) => {
+  const seen: { url: string; method: string; body: unknown }[] = [];
+  const prior = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const method = init?.method ?? "GET";
+    let body: unknown = null;
+    try {
+      body = init?.body ? JSON.parse(String(init.body)) : null;
+    } catch {
+      body = null;
+    }
+    globalThis.__partyCreateFetches!.push({ url, init });
+    if (url.startsWith("/api/hrm/options?source=employable-people")) {
+      return Response.json({ options: [{ partyId: "person-7", label: "Vendor Val", hasEmployeeRole: false }] });
+    }
+    if (url.startsWith("/api/hrm/options?source=employer-subsidiaries")) {
+      return Response.json({ options: [{ subsidiaryId: "sub-1", label: "Main Co" }] });
+    }
+    if (url.startsWith("/api/hrm/options")) return Response.json({ options: [] });
+    if (url === "/api/parties/person-7" && method === "GET") {
+      return Response.json({ party: { updated_at: "2026-09-17T12:00:00.000000Z" } });
+    }
+    if (url === "/api/parties/person-7" && method === "PATCH") {
+      seen.push({ url, method, body });
+      return Response.json({ party: { is_active: true } });
+    }
+    if (url === "/api/hrm/employments" && method === "POST") {
+      seen.push({ url, method, body });
+      return Response.json(
+        { employment: { id: "emp-7" }, request: { id: "req-7", status: "applied" }, applied: true },
+        { status: 201 },
+      );
+    }
+    return Response.json({});
+  }) as typeof fetch;
+  t.after(() => {
+    globalThis.fetch = prior;
+  });
+  globalThis.__partyCreateToasts = [];
+  globalThis.__partyCreateRouter = { pushes: [], replaces: [], refreshes: 0 };
+  const { BusinessDateProvider } = await import("../../../components/business-date-provider");
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  await act(async () => {
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <MoneyProvider currency="USD">
+          <BusinessDateProvider today="2026-09-17">
+            <PartyDrawer
+              payload={{ ...NEW_PAYLOAD, party: { ...NEW_PAYLOAD.party, kind: "person" } } as never}
+              paymentTerms={[]}
+              departments={[]}
+              trades={[]}
+              fieldDefs={[]}
+              subsidiaries={[]}
+              canManage
+              canHire
+              recordType="employee"
+              createMode
+              closeHref="/parties"
+            />
+          </BusinessDateProvider>
+        </MoneyProvider>
+      </NextIntlClientProvider>,
+    );
+    await tick();
+  });
+  await tick();
+  await tick();
+  t.after(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  });
+  // Pick the existing person instead of naming a new party.
+  const trigger = document.querySelector('button[aria-label="Existing person"]') as HTMLButtonElement | null;
+  assert.ok(trigger, "the employee create form offers an existing person");
+  await click(trigger);
+  await tick();
+  await tick();
+  const choice = [...document.querySelectorAll("button")].find(
+    (button) => button.textContent?.trim() === "Vendor Val",
+  ) as HTMLButtonElement | undefined;
+  assert.ok(choice, "employable people list the role-less person");
+  await click(choice);
+  await tick();
+  // Save stays enabled with no typed name: nothing new is minted.
+  const save = buttonsNamed("Save")[0];
+  assert.ok(save, "Save must render");
+  assert.equal(save.disabled, false, "an existing person is savable without a typed name");
+  await click(save);
+  await tick();
+  await tick();
+  await tick();
+  const rolePatch = seen.find((request) => request.url === "/api/parties/person-7" && request.method === "PATCH");
+  assert.ok(rolePatch, "Save adds the employee role to the picked party");
+  assert.equal(
+    (rolePatch?.body as { roles?: { employee?: { enabled?: boolean } } })?.roles?.employee?.enabled,
+    true,
+    "the role add enables the employee role",
+  );
+  assert.equal(
+    globalThis.__partyCreateFetches!.filter((f) => f.url === "/api/parties" && f.init?.method === "POST").length,
+    0,
+    "no duplicate party is created",
+  );
+  // The same form continues into Hire for that party.
+  const reason = document.getElementById("hire-reason") as HTMLTextAreaElement | null;
+  assert.ok(reason, "the form continues into the Hire step");
+  await act(async () => {
+    setInputValue(reason!, "Vendor becomes an employee");
+    await tick();
+  });
+  await tick();
+  const record = buttonsNamed("Record hire")[0];
+  assert.ok(record, "the Hire step offers Record hire");
+  await click(record);
+  await tick();
+  await tick();
+  await tick();
+  const hire = seen.find((request) => request.url === "/api/hrm/employments" && request.method === "POST");
+  assert.ok(hire, "the Hire step posts the first employment");
+  assert.equal(
+    (hire?.body as { workerPartyId?: string })?.workerPartyId,
+    "person-7",
+    "the employment names the existing party",
+  );
+  assert.deepEqual(globalThis.__partyCreateRouter!.replaces, ["/parties?party=person-7"]);
+});

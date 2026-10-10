@@ -277,7 +277,12 @@
       "withAssignment": "この採用とあわせて最初のポジションと配属を記録する。",
       "departmentEmpty": "部門なし",
       "locationEmpty": "拠点なし",
-      "positionEmpty": "ポジションのリンクなし"
+      "positionEmpty": "ポジションのリンクなし",
+      "existingPersonLabel": "既存の人物",
+      "existingPersonPlaceholder": "人物を検索…",
+      "existingPersonEmpty": "他に採用できる人はいません — 有効な人物はすべて雇用中です。",
+      "existingPersonNote": "保存するとこの人物に従業員ロールが追加され、採用に進みます — 重複レコードは作成されません。",
+      "existingPersonFailed": "人物の一覧を読み込めませんでした。"
     },
     "multiple": {
       "title": "複数の雇用記録",

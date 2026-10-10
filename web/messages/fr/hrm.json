@@ -277,7 +277,12 @@
       "withAssignment": "Enregistrer le premier poste et l'affectation avec cette embauche.",
       "departmentEmpty": "Aucun service",
       "locationEmpty": "Aucun site",
-      "positionEmpty": "Aucun poste lié"
+      "positionEmpty": "Aucun poste lié",
+      "existingPersonLabel": "Personne existante",
+      "existingPersonPlaceholder": "Rechercher des personnes…",
+      "existingPersonEmpty": "Personne d'autre ne peut être embauché — chaque personne active occupe déjà un emploi en cours.",
+      "existingPersonNote": "L'enregistrement ajoute le rôle d'employé à cette personne puis enchaîne sur l'embauche — sans doublon.",
+      "existingPersonFailed": "La liste des personnes n'a pas pu être chargée."
     },
     "multiple": {
       "title": "Plus d'un dossier d'emploi",

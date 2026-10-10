@@ -22,7 +22,7 @@ import { fetchAction } from '@braedonsaunders/appkit-errors'
 import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
 import { useAppAction } from '@/lib/use-app-action'
 import { customFieldDefKey, defaultFormLayout, isCustomFieldKey, type FormLayoutConfig, type HeaderFieldPlacement } from '@openbooks/customization'
-import { Badge, Button, Drawer, Input, Label, Select, TabContent } from '@openbooks/ui'
+import { Badge, Button, Drawer, Input, Label, SearchSelect, Select, TabContent } from '@openbooks/ui'
 import { FieldControlAssociations } from '@/components/field'
 import { currencyDisplayName, currencyOptions } from '../../../lib/iso-currencies'
 import { InvoicingPreferenceFields, type InvoicingPref } from '../../../components/invoicing-preference-fields'
@@ -450,6 +450,68 @@ export function PartyDrawer({
     jobTitle: string
     departmentId: string
   } | null>(null)
+  // New-employee from an existing person: instead of minting a duplicate
+  // party, Save adds the employee role to the picked person and chains
+  // into Hire on the same party. Identity inputs lock while picked — they
+  // are not written.
+  const [existingPersonId, setExistingPersonId] = useState('')
+  const [existingPersonLabel, setExistingPersonLabel] = useState('')
+  const [existingPersonOptions, setExistingPersonOptions] = useState<{ value: string; label: string; hasEmployeeRole?: boolean }[]>([])
+  const [existingPersonQuery, setExistingPersonQuery] = useState('')
+  const [existingPersonLoading, setExistingPersonLoading] = useState(false)
+  const [existingPersonStatus, setExistingPersonStatus] = useState<string | undefined>(undefined)
+  const existingPersonRequestId = useRef(0)
+  const showExistingPersonPicker = createMode && recordType === 'employee' && canHire
+  const identityLocked = createMode && existingPersonId !== ''
+
+  // Existing-person options over the employable-people source: bounded
+  // page per query, sequence-guarded, refusal in the status line. Loads
+  // only while the picker can show.
+  useEffect(() => {
+    if (!showExistingPersonPicker) return
+    const id = (existingPersonRequestId.current += 1)
+    setExistingPersonLoading(true)
+    const params = new URLSearchParams()
+    params.set('source', 'employable-people')
+    params.set('limit', '25')
+    if (existingPersonQuery.trim()) params.set('q', existingPersonQuery.trim())
+    if (existingPersonId) params.set('include', existingPersonId)
+    fetch(`/api/hrm/options?${params.toString()}`, { method: 'GET' })
+      .then(async (res) => {
+        if (id !== existingPersonRequestId.current) return
+        if (!res.ok) {
+          setExistingPersonStatus(th('employment.hire.existingPersonFailed'))
+          setExistingPersonLoading(false)
+          return
+        }
+        const payload = (await res.json().catch(() => ({}))) as {
+          options?: { partyId?: unknown; label?: unknown; hasEmployeeRole?: unknown }[]
+        }
+        if (id !== existingPersonRequestId.current) return
+        const page = Array.isArray(payload.options) ? payload.options : []
+        const merged: { value: string; label: string; hasEmployeeRole?: boolean }[] = []
+        for (const row of page) {
+          if (typeof row.partyId === 'string' && typeof row.label === 'string') {
+            merged.push({
+              value: row.partyId,
+              label: row.label,
+              ...(typeof row.hasEmployeeRole === 'boolean' ? { hasEmployeeRole: row.hasEmployeeRole } : {}),
+            })
+          }
+        }
+        if (existingPersonId && !merged.some((option) => option.value === existingPersonId)) {
+          merged.push({ value: existingPersonId, label: existingPersonLabel || existingPersonId })
+        }
+        setExistingPersonOptions(merged)
+        setExistingPersonStatus(undefined)
+        setExistingPersonLoading(false)
+      })
+      .catch(() => {
+        if (id !== existingPersonRequestId.current) return
+        setExistingPersonStatus(th('employment.hire.existingPersonFailed'))
+        setExistingPersonLoading(false)
+      })
+  }, [showExistingPersonPicker, existingPersonQuery, existingPersonId, existingPersonLabel, th])
   // Address/contact rows save on their own lifecycle beside the main form —
   // one pin per surface, so a refused row save pins in its own editor.
   const relatedAction = useAppAction()
@@ -741,7 +803,77 @@ export function PartyDrawer({
    * party instead of a duplicate. Cancel/close before this point wrote
    * nothing — this is the first and only write.
    */
+  /**
+   * New-employee from an existing person: read the concurrency token,
+   * add the employee role natively, then chain into Hire on the same
+   * party — one form, no duplicate record. A refused role add pins its
+   * reason with the form intact; the Hire step owns hire refusals.
+   */
+  async function saveExistingAsEmployee() {
+    setSaveState('saving')
+    let updatedAt: string | null = null
+    try {
+      const got = await fetch(`/api/parties/${existingPersonId}`, { method: 'GET' })
+      if (!got.ok) {
+        refuse(th('employment.hire.existingPersonFailed'), t('autosaveFailed'))
+        setSaveState('error')
+        return
+      }
+      const data = (await got.json().catch(() => null)) as { party?: { updated_at?: unknown } } | null
+      updatedAt = typeof data?.party?.updated_at === 'string' ? data.party.updated_at : null
+    } catch {
+      refuse(th('employment.hire.existingPersonFailed'), t('autosaveFailed'))
+      setSaveState('error')
+      return
+    }
+    if (!updatedAt) {
+      refuse(th('employment.hire.existingPersonFailed'), t('autosaveFailed'))
+      setSaveState('error')
+      return
+    }
+    const ok = await execute(
+      () =>
+        fetchAction(`/api/parties/${existingPersonId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            expectedUpdatedAt: updatedAt,
+            roles: {
+              employee: {
+                enabled: true,
+                jobTitle: employee.jobTitle || null,
+                departmentId: employee.departmentId || null,
+              },
+            },
+          }),
+        }),
+      {
+        fallbackMessage: t('autosaveFailed'),
+        successMessage: tc('feedback.saved'),
+        onOk: () => {
+          setSaveState('saved')
+          setDirty(false)
+          setHiredAfterCreate({
+            partyId: existingPersonId,
+            partyName: existingPersonLabel,
+            jobTitle: employee.jobTitle,
+            departmentId: employee.departmentId,
+          })
+          router.refresh()
+        },
+        onRefused: () => {
+          setSaveState('error')
+        },
+      },
+    )
+    if (ok) router.refresh()
+  }
+
   async function saveNew() {
+    if (existingPersonId) {
+      await saveExistingAsEmployee()
+      return
+    }
     // A blank display name must never persist a nameless record: fail fast
     // with an inline error instead of POSTing a request known to 422.
     if (!nameValid) {
@@ -899,7 +1031,9 @@ export function PartyDrawer({
       },
     )
     if (!ok) return
-    if (partySaved) await saveSections()
+    // The submitted role (not live state, which a mid-flight edit may have
+    // moved past the persisted draft) drives the kind-flip Hire chain.
+    if (partySaved) await saveSections(submitted.roles.employee.enabled === true)
     router.refresh()
   }
 
@@ -908,7 +1042,7 @@ export function PartyDrawer({
    * edit mode. A refused section keeps the drawer in edit mode on that
    * section's tab, where its fields show the reason.
    */
-  async function saveSections() {
+  async function saveSections(submittedEmployee = false) {
     setSaveState('saving')
     setSavingSections(true)
     try {
@@ -919,6 +1053,25 @@ export function PartyDrawer({
         return
       }
       setSaveState('saved')
+      // A newly added employee role routes into Hire in the same drawer
+      // when the grant allows and no employment exists yet: a kind flip
+      // to Employee never leaves an employment-less employee without its
+      // Hire step. Otherwise the record opens in view mode with the
+      // Employment tab's Hire button.
+      if (
+        !createMode && canHire && submittedEmployee && payload.employee == null
+        && hrm && hrm.employmentIds.length === 0
+      ) {
+        setMode('view')
+        setHiredAfterCreate({
+          partyId: String(p.id),
+          partyName: displayName,
+          jobTitle: employee.jobTitle,
+          departmentId: employee.departmentId,
+        })
+        router.refresh()
+        return
+      }
       setMode('view')
     } finally {
       setSavingSections(false)
@@ -1075,8 +1228,8 @@ export function PartyDrawer({
     const labelId = `${controlId}-label`
     const content = (() => {
     switch (placement.key) {
-      case 'kind': return <><Label>{label(placement, t('kind'))}</Label>{editable ? <Select value={kind} onChange={(event) => setKind(event.target.value)}><option value="company">{t('kindCompany')}</option><option value="person">{t('kindPerson')}</option><option value="customer">{t('kindCustomer')}</option><option value="vendor">{t('kindVendor')}</option><option value="employee">{t('kindEmployee')}</option></Select> : partyValue(kindLabel)}</>
-      case 'display_name': return <><Label>{label(placement, t('displayName'))}{editable ? <span className="text-red-500"> *</span> : null}</Label>{editable ? <><Input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder={kind === 'person' ? t('personNamePlaceholder') : t('companyNamePlaceholder')} aria-invalid={nameError && !nameValid} />{nameError && !nameValid ? <p className="mt-1 text-xs text-red-600 dark:text-red-400">{t('nameRequired')}</p> : null}</> : partyValue(displayName)}</>
+      case 'kind': return <><Label>{label(placement, t('kind'))}</Label>{editable && !identityLocked ? <Select value={kind} onChange={(event) => setKind(event.target.value)}><option value="company">{t('kindCompany')}</option><option value="person">{t('kindPerson')}</option><option value="customer">{t('kindCustomer')}</option><option value="vendor">{t('kindVendor')}</option><option value="employee">{t('kindEmployee')}</option></Select> : partyValue(kindLabel)}</>
+      case 'display_name': return <><Label>{label(placement, t('displayName'))}{editable && !identityLocked ? <span className="text-red-500"> *</span> : null}</Label>{editable && !identityLocked ? <><Input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder={kind === 'person' ? t('personNamePlaceholder') : t('companyNamePlaceholder')} aria-invalid={nameError && !nameValid} />{nameError && !nameValid ? <p className="mt-1 text-xs text-red-600 dark:text-red-400">{t('nameRequired')}</p> : null}</> : partyValue(displayName)}</>
       case 'short_code': return <><Label>{label(placement, t('shortCode'))}</Label>{editable ? <Input value={shortCode} onChange={(event) => setShortCode(event.target.value)} className="font-mono" placeholder={t('shortCodePlaceholder')} /> : partyValue(shortCode, 'font-mono')}</>
       case 'legal_name': return <><Label>{label(placement, t('legalName'))}</Label>{editable ? <Input value={legalName} onChange={(event) => setLegalName(event.target.value)} /> : partyValue(legalName)}</>
       case 'email': return <><Label>{label(placement, tc('labels.email'))}</Label>{editable ? <Input type="email" value={email} onChange={(event) => setEmail(event.target.value)} /> : partyValue(email)}</>
@@ -1278,7 +1431,7 @@ export function PartyDrawer({
           </span>
           {mode === 'edit' ? (
             <div className="ml-auto flex items-center gap-2">
-              <Button disabled={busy || savingSections || (createMode && !nameValid)} onClick={save}>{busy || savingSections ? tc('actions.saving') : tc('actions.save')}</Button>
+              <Button disabled={busy || savingSections || (createMode && !nameValid && !existingPersonId)} onClick={save}>{busy || savingSections ? tc('actions.saving') : tc('actions.save')}</Button>
             </div>
           ) : null}
         </div>
@@ -1308,6 +1461,45 @@ export function PartyDrawer({
           ) : (
           <>
           <PartySummary payload={payload} />
+          {showExistingPersonPicker ? (
+            <section className="space-y-3 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+              <div className="space-y-1.5">
+                <Label htmlFor="new-employee-person">{th('employment.hire.existingPersonLabel')}</Label>
+                <SearchSelect
+                  id="new-employee-person"
+                  value={existingPersonId}
+                  onChange={(next) => {
+                    const picked = existingPersonOptions.find((option) => option.value === next)
+                    setExistingPersonId(next)
+                    setExistingPersonLabel(picked?.label ?? next)
+                    clearRefusal()
+                  }}
+                  options={existingPersonOptions}
+                  ariaLabel={th('employment.hire.existingPersonLabel')}
+                  sheetTitle={th('employment.hire.existingPersonLabel')}
+                  emptyLabel={th('employment.hire.existingPersonPlaceholder')}
+                  clearable
+                  remote
+                  loading={existingPersonLoading}
+                  statusMessage={existingPersonStatus ?? (existingPersonOptions.length === 0 && !existingPersonLoading ? th('employment.hire.existingPersonEmpty') : undefined)}
+                  statusTone={existingPersonStatus ? 'error' : 'muted'}
+                  onSearchChange={(next) => {
+                    setExistingPersonQuery(next)
+                    setExistingPersonLoading(true)
+                    setExistingPersonStatus(undefined)
+                  }}
+                  disabled={busy}
+                />
+              </div>
+              {existingPersonId ? (
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {th('employment.hire.existingPersonNote')}
+                </p>
+              ) : null}
+            </section>
+          ) : null}
+        {!identityLocked ? (
+        <>
         {/* -- identity ------------------------------------------------- */}
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className={field}>
@@ -1413,6 +1605,8 @@ export function PartyDrawer({
               </div>
             </div>
           </section>
+        ) : null}
+        </>
         ) : null}
 
           </>
