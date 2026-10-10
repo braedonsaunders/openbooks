@@ -76,7 +76,7 @@ export const GET = defineRoute({
   const manufacturingEnabled = await isFeatureEnabled(gate.user.orgId, 'manufacturing')
   const today = await businessToday(gate.user.orgId)
   const canProposeRevision = gate.allowedSubsidiaryIds === null && can(gate,'manufacturing.manage') && can(gate,'admin.setup.manage')
-  const subsidiaries = canProposeRevision ? (await db.execute<{id:string;name:string}>(sql`select id,name from subsidiaries where org_id=${gate.user.orgId} and is_active and entity_kind='operating' order by name,id`)).rows : []
+  const subsidiaries = canProposeRevision ? (await db.execute<{id:string;name:string}>(sql`select id,name from subsidiaries where org_id=${gate.user.orgId} and is_active and not is_elimination order by name,id`)).rows : []
   if (!assemblyItemId) return NextResponse.json({ manufacturingEnabled,canProposeRevision,subsidiaries,today })
   if (!isUuid(assemblyItemId)) return refusal('Choose a valid assembly item.')
 

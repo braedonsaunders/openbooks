@@ -43,6 +43,9 @@ const mockAuthz = `
     if (authz.allowedSubsidiaryIds == null) return null
     return Response.json({ error: 'requires unrestricted subsidiary access' }, { status: 403 })
   }
+  export function can(authz, perm) {
+    return authz.permissions.has(perm)
+  }
   export function guardPermission(perm) {
     if (!state.authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
     if (!state.authz.permissions.has(perm)) return NextResponse.json({ error: 'missing permission: ' + perm }, { status: 403 })
@@ -214,6 +217,36 @@ test("BOM replacement accepts adjacent effectivity windows and names overlapping
     assert.match(body.error, /2026-01-01.*2026-08-01.*2026-07-01/);
     assert.equal((await bomRows(org.orgId, org.items.assembly)).length, 2);
   } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a manufacturing planner reads the revision context with every operating entity and no elimination entity", async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = await createScratchUser(org.orgId, "BOM Planner", "admin");
+    routeState.authz = {
+      user: { orgId: org.orgId, id: actorId },
+      permissions: new Set(["admin.setup.manage", "manufacturing.manage"]),
+      allowedSubsidiaryIds: null,
+    };
+    const elimination = (await db.execute<{ id: string }>(sql`
+      insert into subsidiaries (org_id, parent_id, name, base_currency, country, is_elimination, is_active)
+      select org_id, id, 'Group eliminations', base_currency, country, true, true
+        from subsidiaries where org_id = ${org.orgId} and id = ${org.subsidiaryId}
+      returning id`)).rows[0]!.id;
+    const context = await GET(new Request("http://localhost/api/inventory/bom"));
+    assert.equal(context.status, 200);
+    const contextBody = await context.json() as { canProposeRevision: boolean; subsidiaries: { id: string }[] };
+    assert.equal(contextBody.canProposeRevision, true);
+    const ids = contextBody.subsidiaries.map((row) => row.id);
+    assert.ok(ids.includes(org.subsidiaryId), "the operating entity is offered for a revision proposal");
+    assert.ok(!ids.includes(elimination), "an elimination entity never holds a recipe revision");
+    const detail = await GET(new Request(`http://localhost/api/inventory/bom?assemblyItemId=${org.items.assembly}`));
+    assert.equal(detail.status, 200);
+    assert.equal((await detail.json() as { assemblyItemId: string }).assemblyItemId, org.items.assembly);
+  } finally {
+    routeState.authz = null;
     await dropScratchOrg(org.orgId);
   }
 });
