@@ -252,7 +252,9 @@
     },
     "noRecord": {
       "title": "Sem registro de emprego",
-      "description": "Esta pessoa ainda não tem registro de emprego. Registre o primeiro vínculo com Contratar — headcount, licenças e folha se vinculam assim que ele existir."
+      "description": "Esta pessoa ainda não tem registro de emprego. Registre o primeiro vínculo com Contratar — headcount, licenças e folha se vinculam assim que ele existir.",
+      "notice": "Este funcionário ainda não tem vínculo, então autoatendimento, ausências e registros de RH não estão disponíveis para ele. Admita-o na aba Emprego para criá-lo.",
+      "openTab": "Abrir Emprego"
     },
     "hire": {
       "title": "Contratar funcionário",
@@ -871,7 +873,7 @@
     "fileEmploymentLabel": "Emprego",
     "fileEmploymentPlaceholder": "Escolha um vínculo",
     "fileEmploymentRequired": "Escolha o vínculo para o qual esta solicitação é registrada.",
-    "fileNoEmployment": "Nenhum dos seus vínculos aceita solicitações de ausência — peça ajuda a um administrador de RH.",
+    "fileNoEmployment": "Nenhum dos seus vínculos aceita solicitações de ausência. Se você ainda não tem vínculo registrado, peça ao RH ou a um administrador para admitir você na aba Emprego do seu cadastro de funcionário (Pessoas → Funcionários).",
     "fileTypeLabel": "Tipo de licença",
     "fileTypePlaceholder": "Escolha um tipo",
     "fileHoursLabel": "Horas",

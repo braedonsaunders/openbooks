@@ -7,7 +7,7 @@ export const selfService: DocArticle = {
   order: 12,
   summary:
     'The Me workspace shows your employment summary, contact profile, leave, checklist steps, reviews, benefits, and — for managers — the direct-report team. Profile edits file a request HR approves before anything updates.',
-  updated: '2026-09-20',
+  updated: '2026-10-10',
   keywords: ['self-service', 'me', 'profile', 'team', 'reviews', 'benefits', 'goals', 'enrollment', 'emergency contact', 'my employment', 'manager'],
   related: ['payroll', 'hrm-processes'],
   body: `# Your Employment Record
@@ -15,6 +15,16 @@ export const selfService: DocArticle = {
 The Me workspace is your own view of your employment: the summary HR holds about you, your contact profile, your leave requests and balances, the checklist steps assigned to you, and — when you manage people — your direct-report team. Every row is scoped to the person behind your login. A colleague's rows can never appear here, and a missing person link refuses with the remedy instead of showing an empty page.
 
 Enable the module in Company Settings → Features → HRM. The workspace exists only while HRM is on, and every built-in role carries the self-service grants: seeing your own record is part of every login, not an extra permission to request.
+
+## Before you start
+
+Me appears under My Work when three things are true. If one is missing, this is what you see and who fixes it:
+
+- **Human Resources is on.** While it is off there is no Me entry in the menu, and opening /me explains that the feature is turned off. An administrator turns it on in Company Settings → Features.
+- **Your login is linked to your employee record.** Without the link every Me page says so. An administrator links it in Administration → Users with Link person. A sole administrator can link their own login there too: the link is attested, recorded in the audit log with a reason, and refused once a second active administrator exists, who must then perform it.
+- **Your employee record has an employment.** Creating an employee in People → Employees does not create an employment. The employee record says when one is missing and points to its Employment tab, where HR hires the employee. Until then the overview shows no employment and leave requests refuse with the same remedy.
+
+A custom role also needs the self-service grants (View own employment summary, File profile changes for own party) for Me to appear.
 
 ## Overview
 

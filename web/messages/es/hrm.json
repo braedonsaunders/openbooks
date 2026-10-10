@@ -252,7 +252,9 @@
     },
     "noRecord": {
       "title": "Sin registro de empleo",
-      "description": "Esta persona aún no tiene registro de empleo. Registre el primer empleo con Contratar — plantilla, vacaciones y nómina se vinculan una vez que existe."
+      "description": "Esta persona aún no tiene registro de empleo. Registre el primer empleo con Contratar — plantilla, vacaciones y nómina se vinculan una vez que existe.",
+      "notice": "Este empleado aún no tiene un empleo, así que el autoservicio, las ausencias y los registros de RR. HH. no están disponibles para él. Contrátalo desde la pestaña Empleo para crearlo.",
+      "openTab": "Abrir Empleo"
     },
     "hire": {
       "title": "Contratar empleado",
@@ -871,7 +873,7 @@
     "fileEmploymentLabel": "Empleo",
     "fileEmploymentPlaceholder": "Elija un empleo",
     "fileEmploymentRequired": "Elija el empleo para el que se presenta esta solicitud.",
-    "fileNoEmployment": "Ninguno de sus empleos admite solicitudes de ausencia — pida ayuda a un administrador de RR. HH.",
+    "fileNoEmployment": "Ninguno de tus empleos admite solicitudes de ausencia. Si aún no tienes un empleo registrado, pide a RR. HH. o a un administrador que te contrate desde la pestaña Empleo de tu registro de empleado (Personas → Empleados).",
     "fileTypeLabel": "Tipo de ausencia",
     "fileTypePlaceholder": "Elija un tipo",
     "fileHoursLabel": "Horas",
