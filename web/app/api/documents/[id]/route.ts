@@ -225,7 +225,9 @@ export const DELETE = defineRoute({
         }
       }
     try {
-        const routeBodySchema2 = z.object({ reason: z.string().optional(), expectedUpdatedAt: z.string().min(1) });
+        // An omitted token reaches the named revision refusal below; a supplied
+        // token must still be a non-empty string.
+        const routeBodySchema2 = z.object({ reason: z.string().optional(), expectedUpdatedAt: z.string().min(1).optional() });
     const parsedBody2 = await parseJsonBody(req, routeBodySchema2);
         if (!parsedBody2.ok) return parsedBody2.response;
         const body = (parsedBody2.data) as { reason?: string; expectedUpdatedAt?: string }

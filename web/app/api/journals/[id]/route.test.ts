@@ -139,7 +139,7 @@ registerHooks({
 })
 
 const routeUrl = './route.ts?journal-occ-test'
-const { GET, PATCH } = (await import(routeUrl)) as typeof import('./route.ts')
+const { GET, PATCH, DELETE } = (await import(routeUrl)) as typeof import('./route.ts')
 const STORED_REVISION = '2026-08-24T12:00:00.200001Z'
 const NEXT_REVISION = '2026-08-24T12:00:00.200002Z'
 const JOURNAL_ID = '00000000-0000-4000-8000-00000000j001'.replace('j', 'a')
@@ -163,6 +163,18 @@ function patch(body: Record<string, unknown>): Promise<Response> {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
+    }),
+    { params: Promise.resolve({ id: JOURNAL_ID }) },
+  )
+}
+
+function remove(body?: Record<string, unknown>): Promise<Response> {
+  return DELETE(
+    new Request(`http://openbooks.test/api/journals/${JOURNAL_ID}`, {
+      method: 'DELETE',
+      ...(body === undefined
+        ? {}
+        : { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }),
     }),
     { params: Promise.resolve({ id: JOURNAL_ID }) },
   )
@@ -241,6 +253,27 @@ test('PATCH saves lines and header atomically under an exact matching revision',
   // Journal totals are the summed debits; the credit leg rides as negative.
   const inserted = routeState.calls.filter((call) => call.text.includes('insert into document_lines'))
   assert.equal(inserted.length, 2)
+})
+
+test('DELETE with an empty body reaches the named revision refusal, never a raw body error', async () => {
+  reset()
+
+  const response = await remove()
+
+  assert.equal(response.status, 409)
+  const payload = (await response.json()) as { error?: unknown }
+  assert.equal(payload.error, 'the document revision is required; reload and review the latest revision')
+  assert.ok(!routeState.calls.some((call) => call.kind === 'tx-execute'), 'no transactional write ran')
+})
+
+test('DELETE for an unknown journal answers not-found before fencing', async () => {
+  reset()
+  routeState.respondExecute = () => ({ rows: [] })
+
+  const response = await remove({ expectedUpdatedAt: STORED_REVISION })
+
+  assert.equal(response.status, 404)
+  assert.ok(!routeState.calls.some((call) => call.kind === 'tx-execute'), 'no transactional write ran')
 })
 
 test('GET exposes the exact persisted revision so callers can fence their next save', async () => {
