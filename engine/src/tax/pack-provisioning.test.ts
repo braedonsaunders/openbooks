@@ -94,7 +94,7 @@ test("pack completeness is explicit and never inferred from a jurisdiction check
   });
   assert.deepEqual(us.completeness, {
     jurisdictions: "complete",
-    standardRates: "complete",
+    standardRates: "partial",
     returnDefinitions: "partial",
     localRates: "partial",
     taxability: "partial",
@@ -268,7 +268,7 @@ test("US exposes every state plus DC and identifies maintained detailed packs", 
   );
   assert.deepEqual(
     us.subs.filter((s) => s.coverage === "detailed_pack").map((s) => s.region).sort(),
-    ["CA", "FL", "NY", "TX"],
+    ["CA", "FL", "NY", "TX", "WA"],
   );
   assert.ok(us.subs.some((s) => s.region === "DC" && s.name === "District of Columbia"));
 })
@@ -276,6 +276,12 @@ test("US exposes every state plus DC and identifies maintained detailed packs", 
 test("US supplies a sourced effective-dated statewide rate or explicitly has no statewide sales tax", () => {
   const pack = COUNTRY_TAX_PACKS.find((entry) => entry.country === "US")!;
   const noStatewideSalesTax = new Set(["AK", "DE", "MT", "NH", "OR"]);
+  // Statutory starts the pack could not verify from online government
+  // sources stay omitted rather than seeded at the review date: Alabama
+  // (1963 act), Hawaii (1965 act), Mississippi (1992 Education Enhancement
+  // Act), and Missouri (1984 parks/soils tenth). Transcribing a
+  // session-law start date removes the region from this set.
+  const unverifiedStatutoryStart = new Set(["AL", "HI", "MS", "MO"]);
   const detailedByRegion = new Map(
     pack.jurisdictions.flatMap((jurisdiction) => {
       if (!jurisdiction.returnPackCode) return [];
@@ -289,6 +295,10 @@ test("US supplies a sourced effective-dated statewide rate or explicitly has no 
     const definition = jurisdiction.defaultTaxCode ?? detailedByRegion.get(jurisdiction.region);
     if (noStatewideSalesTax.has(jurisdiction.region)) {
       assert.equal(definition, undefined, `${jurisdiction.region} must not fabricate a statewide rate`);
+      continue;
+    }
+    if (unverifiedStatutoryStart.has(jurisdiction.region)) {
+      assert.equal(definition, undefined, `${jurisdiction.region} must not seed an unverified statutory start`);
       continue;
     }
     assert.ok(definition, `${jurisdiction.region} is missing its statewide/base rate`);
@@ -305,7 +315,7 @@ test("US supplies a sourced effective-dated statewide rate or explicitly has no 
 
 test("US future enacted rate changes are installed without replacing the current headline rate", () => {
   const dc = TAX_SUBDIVISION_CATALOG.find((item) => item.country === "US" && item.region === "DC")!;
-  assert.equal(dc.defaultTaxCode?.ratePercent, "6");
+  assert.equal(dc.defaultTaxCode?.ratePercent, "7");
   assert.deepEqual(dc.defaultTaxCode?.rates, [
     { ratePercent: "6", effectiveFrom: "2026-07-31", effectiveTo: "2026-09-30", sourceId: "dc_2025_rate_notice" },
     { ratePercent: "7", effectiveFrom: "2026-10-01", sourceId: "dc_2025_rate_notice" },
@@ -314,6 +324,26 @@ test("US future enacted rate changes are installed without replacing the current
   assert.equal(sd.defaultTaxCode?.ratePercent, "4.2");
   assert.equal(sd.defaultTaxCode?.rates?.at(-1)?.ratePercent, "4.5");
   assert.equal(sd.defaultTaxCode?.rates?.at(-1)?.effectiveFrom, "2027-07-01");
+});
+
+test("Washington B&O classifications carry current rates with the enacted 2027 increase", () => {
+  const wa = COUNTRY_TAX_PACKS.find((pack) => pack.country === "US")!;
+  const codes = new Map(packTaxCodesForReturn(wa, "US_WA_CET").map((code) => [code.code, code]));
+  assert.equal(codes.get("US-WA-ST")?.ratePercent, "6.5");
+  assert.equal(codes.get("US-WA-BO-RET")?.ratePercent, "0.471");
+  assert.deepEqual(codes.get("US-WA-BO-RET")?.rates, [
+    { ratePercent: "0.471", effectiveFrom: "1982-07-01", effectiveTo: "2026-12-31", sourceId: "wa_dor_tax_history_notes" },
+    { ratePercent: "0.5", effectiveFrom: "2027-01-01", sourceId: "wa_eshb_2081_session_law" },
+  ]);
+  assert.equal(codes.get("US-WA-BO-WHO")?.ratePercent, "0.484");
+  assert.equal(codes.get("US-WA-BO-MFG")?.ratePercent, "0.484");
+  assert.equal(codes.get("US-WA-BO-SVC")?.ratePercent, "1.5");
+  assert.deepEqual(codes.get("US-WA-BO-SVC1M")?.rates, [
+    { ratePercent: "1.75", effectiveFrom: "2020-04-01", sourceId: "wa_dor_2020_tax_legislation" },
+  ]);
+  assert.deepEqual(codes.get("US-WA-BO-SVC5M")?.rates, [
+    { ratePercent: "2.1", effectiveFrom: "2025-10-01", sourceId: "wa_dor_workforce_education" },
+  ]);
 });
 
 test("New Mexico uses the current official statewide GRT base rate", () => {
