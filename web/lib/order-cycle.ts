@@ -1978,7 +1978,8 @@ export async function convertOrder(
       // same ceiling the remainder was computed from, so a concurrent channel
       // that consumed the cover makes THIS conversion fail whole (the row
       // lock already serializes; the predicate documents and enforces it).
-      const receiptRequired = l.item_id != null && lineRequiresReceipt(l.item_kind ?? null)
+      // Only fulfillment-governed sources cap billing by received or shipped quantity.
+      const receiptRequired = fulfillmentGovernedBilling && l.item_id != null && lineRequiresReceipt(l.item_kind ?? null)
       const advanced = (await tx.execute<{ id: string }>(sql`
         update document_lines set quantity_billed = quantity_billed + ${coveredQty}, updated_by = ${userId}
          where id = ${l.id} and org_id = ${orgId}
