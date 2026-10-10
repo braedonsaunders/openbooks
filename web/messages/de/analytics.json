@@ -4470,7 +4470,7 @@
     "noFlags": "Keine Einzugswarnzeichen",
     "customerDocuments": "{count} offene Belege",
     "customerCredits": "{amount} nicht zugeordnete Gutschriften",
-    "creditLimit": "Limit {amount}",
+    "creditLimit": "Kreditlimit {amount}",
     "oldestDays": "Ältester Verzug: {days} Tage",
     "recoveredOf": "{cash} von {opening} eingezogen",
     "behavior": {

@@ -1,6 +1,6 @@
 {
   "title": "排程",
-  "description": "Plan people and resources by day or hour on configurable boards. Project schedules live on project records.",
+  "description": "在可配置的排程板上按天或按小时安排人员和资源。项目排程位于项目记录中。",
   "views": {
     "grid": "网格",
     "targets": "按目标",
@@ -44,12 +44,12 @@
     "date": "跳转到日期",
     "resourceBoards": "资源",
     "manageBoards": "管理看板",
-    "display": "Display options",
-    "showHoursColumn": "Show booked hour column",
-    "email": "Email schedule",
-    "openBoard": "Open board",
-    "returnProject": "Return to project",
-    "retry": "Retry schedule load"
+    "display": "显示选项",
+    "showHoursColumn": "显示已预订小时列",
+    "email": "邮件发送排程",
+    "openBoard": "打开排程板",
+    "returnProject": "返回项目",
+    "retry": "重新加载排程"
   },
   "empty": {
     "title": "设置您的第一个排程板",
@@ -162,7 +162,7 @@
     "notesPlaceholder": "班组需要了解的事项"
   },
   "targets": {
-    "where": "Target",
+    "where": "目标",
     "count": "{count} 个已预订行",
     "add": "添加目标",
     "empty": "这些日期内尚无任何安排。",
@@ -174,8 +174,8 @@
     "zoomOut": "缩小"
   },
   "calendar": {
-    "person": "Person or resource",
-    "everyone": "Everyone",
+    "person": "人员或资源",
+    "everyone": "所有人",
     "onLeave": "{count} 人休假",
     "more": "另外 {count} 项"
   },
@@ -275,7 +275,7 @@
     "link": "查看您的排程",
     "footer": "您收到此邮件，是因为{board}会在人员排程变更时通知相关人员。",
     "noTransport": "尚未设置邮件，因此仅在 OpenBooks 中通知了相关人员。请在“管理 → 邮件”中设置邮件。",
-    "nativeDistribution": "Email schedules through a reviewed Schedule distribution Flow."
+    "nativeDistribution": "通过已审核的排程分发流程发送排程邮件。"
   },
   "mine": {
     "tab": "排程",
@@ -300,27 +300,27 @@
     "return": "返回排程"
   },
   "distribution": {
-    "title": "Email schedule",
-    "close": "Close",
-    "preview": "Preview report",
-    "send": "Send reviewed schedule",
-    "working": "Preparing…",
-    "refused": "Schedule distribution could not be completed.",
-    "explanation": "Choose personal reports or a whole-board report for every selected recipient. Published bookings and literal source-date observations are shown separately. Sending uses your enabled Schedule distribution Flow and configured email provider.",
+    "title": "邮件发送排程",
+    "close": "关闭",
+    "preview": "预览报告",
+    "send": "发送已审核的排程",
+    "working": "正在准备…",
+    "refused": "无法完成排程分发。",
+    "explanation": "为每位所选收件人选择个人报告或整个排程板报告。已发布的预订与按字面来源日期记录的观察结果分开显示。发送将使用您已启用的排程分发流程和已配置的邮件服务商。",
     "everyone": "所选范围内的所有人",
-    "reason": "Reason for sending",
-    "queued": "The reviewed schedule is queued for email delivery.",
-    "deliveryStatus": "Queued is not delivered. Follow the native Flow run, Email log and delivery audit for actual provider results.",
-    "version": "Reviewed version",
-    "recipients": "Exact recipients and associated schedules",
-    "missingEmail": "Email missing",
-    "report": "Recipient schedule report preview",
-    "flows": "Configure native Flows",
+    "reason": "发送原因",
+    "queued": "已审核的排程已加入邮件投递队列。",
+    "deliveryStatus": "已加入队列不代表已送达。实际的服务商结果请查看原生流程运行记录、邮件日志和投递审计。",
+    "version": "已审核版本",
+    "recipients": "确切的收件人及其关联排程",
+    "missingEmail": "缺少邮箱",
+    "report": "收件人排程报告预览",
+    "flows": "配置原生流程",
     "contacts": "资源发送联系人",
-    "sharing": "Report sharing",
-    "personal": "Each recipient’s own schedule/resources",
-    "wholeBoard": "The whole visible board schedule for each recipient",
-    "wholeBoardReview": "Every selected recipient will receive the whole reviewed board report, including other people/resources. Board Settings must explicitly allow this sharing within the board’s legal entity.",
+    "sharing": "报告共享",
+    "personal": "每位收件人本人的排程/资源",
+    "wholeBoard": "每位收件人均可收到整个可见排程板的排程",
+    "wholeBoardReview": "每位所选收件人都将收到完整的已审核排程板报告，其中包含其他人员/资源。排程板设置必须明确允许在该排程板所属法人实体内进行此类共享。",
     "cohort": "员工收件范围",
     "cohorts": {
       "scope": "当前范围内及借调员工",
@@ -364,10 +364,10 @@
     },
     "pdfOptions": {
       "paperSize": {
-        "letter": "US Letter",
+        "letter": "美国信纸",
         "a4": "A4",
-        "legal": "US Legal",
-        "tabloid": "Tabloid"
+        "legal": "美国法律用纸",
+        "tabloid": "小报纸"
       },
       "orientation": {
         "portrait": "纵向",

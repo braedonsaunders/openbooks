@@ -1,6 +1,6 @@
 {
   "title": "Einsatzplanung",
-  "description": "Plan people and resources by day or hour on configurable boards. Project schedules live on project records.",
+  "description": "Planen Sie Personen und Ressourcen tag- oder stundenweise auf konfigurierbaren Boards. Projektpläne befinden sich in den Projektdatensätzen.",
   "views": {
     "grid": "Raster",
     "targets": "Nach Ziel",
@@ -44,12 +44,12 @@
     "date": "Zum Datum",
     "resourceBoards": "Ressourcen",
     "manageBoards": "Boards verwalten",
-    "display": "Display options",
-    "showHoursColumn": "Show booked hour column",
-    "email": "Email schedule",
-    "openBoard": "Open board",
-    "returnProject": "Return to project",
-    "retry": "Retry schedule load"
+    "display": "Anzeigeoptionen",
+    "showHoursColumn": "Spalte mit gebuchten Stunden anzeigen",
+    "email": "Einsatzplan per E-Mail senden",
+    "openBoard": "Board öffnen",
+    "returnProject": "Zurück zum Projekt",
+    "retry": "Laden des Einsatzplans erneut versuchen"
   },
   "empty": {
     "title": "Richten Sie Ihre erste Plantafel ein",
@@ -162,7 +162,7 @@
     "notesPlaceholder": "Was die Kolonne wissen muss"
   },
   "targets": {
-    "where": "Target",
+    "where": "Ziel",
     "count": "{count} gebuchte Zeilen",
     "add": "Ziel hinzufügen",
     "empty": "In diesem Zeitraum ist noch nichts eingeplant.",
@@ -174,8 +174,8 @@
     "zoomOut": "Verkleinern"
   },
   "calendar": {
-    "person": "Person or resource",
-    "everyone": "Everyone",
+    "person": "Person oder Ressource",
+    "everyone": "Alle",
     "onLeave": "{count} abwesend",
     "more": "{count} weitere"
   },
@@ -275,7 +275,7 @@
     "link": "Ihren Plan ansehen",
     "footer": "Sie erhalten diese Nachricht, weil {board} Personen benachrichtigt, wenn sich ihr Plan ändert.",
     "noTransport": "E-Mail ist nicht eingerichtet, daher wurden die Personen nur in OpenBooks benachrichtigt. Richten Sie E-Mail unter Administration → E-Mail ein.",
-    "nativeDistribution": "Email schedules through a reviewed Schedule distribution Flow."
+    "nativeDistribution": "Einsatzpläne über einen geprüften Planversand-Flow per E-Mail senden."
   },
   "mine": {
     "tab": "Einsatzplan",
@@ -300,27 +300,27 @@
     "return": "Zurück zum Zeitplan"
   },
   "distribution": {
-    "title": "Email schedule",
-    "close": "Close",
-    "preview": "Preview report",
-    "send": "Send reviewed schedule",
-    "working": "Preparing…",
-    "refused": "Schedule distribution could not be completed.",
-    "explanation": "Choose personal reports or a whole-board report for every selected recipient. Published bookings and literal source-date observations are shown separately. Sending uses your enabled Schedule distribution Flow and configured email provider.",
+    "title": "Einsatzplan per E-Mail senden",
+    "close": "Schließen",
+    "preview": "Berichtsvorschau",
+    "send": "Geprüften Einsatzplan senden",
+    "working": "Wird vorbereitet…",
+    "refused": "Der Versand des Einsatzplans konnte nicht abgeschlossen werden.",
+    "explanation": "Wählen Sie für jeden ausgewählten Empfänger persönliche Berichte oder einen Bericht für das gesamte Board. Veröffentlichte Buchungen und wörtliche Beobachtungen aus Quelldaten werden getrennt angezeigt. Der Versand erfolgt über Ihren aktivierten Planversand-Flow und den konfigurierten E-Mail-Anbieter.",
     "everyone": "Alle im ausgewählten Empfängerkreis",
-    "reason": "Reason for sending",
-    "queued": "The reviewed schedule is queued for email delivery.",
-    "deliveryStatus": "Queued is not delivered. Follow the native Flow run, Email log and delivery audit for actual provider results.",
-    "version": "Reviewed version",
-    "recipients": "Exact recipients and associated schedules",
-    "missingEmail": "Email missing",
-    "report": "Recipient schedule report preview",
-    "flows": "Configure native Flows",
+    "reason": "Grund für den Versand",
+    "queued": "Der geprüfte Einsatzplan wurde zur E-Mail-Zustellung eingereiht.",
+    "deliveryStatus": "Eingereiht bedeutet nicht zugestellt. Die tatsächlichen Ergebnisse des Anbieters finden Sie im Lauf des nativen Flows, im E-Mail-Protokoll und im Zustellungsaudit.",
+    "version": "Geprüfte Version",
+    "recipients": "Genaue Empfänger und zugehörige Einsatzpläne",
+    "missingEmail": "E-Mail fehlt",
+    "report": "Vorschau des Einsatzplanberichts für Empfänger",
+    "flows": "Native Flows konfigurieren",
     "contacts": "Versandkontakte für Ressourcen",
-    "sharing": "Report sharing",
-    "personal": "Each recipient’s own schedule/resources",
-    "wholeBoard": "The whole visible board schedule for each recipient",
-    "wholeBoardReview": "Every selected recipient will receive the whole reviewed board report, including other people/resources. Board Settings must explicitly allow this sharing within the board’s legal entity.",
+    "sharing": "Berichtsfreigabe",
+    "personal": "Eigener Einsatzplan bzw. eigene Ressourcen jedes Empfängers",
+    "wholeBoard": "Der gesamte sichtbare Board-Plan für jeden Empfänger",
+    "wholeBoardReview": "Jeder ausgewählte Empfänger erhält den gesamten geprüften Board-Bericht, einschließlich anderer Personen und Ressourcen. Die Board-Einstellungen müssen diese Freigabe innerhalb der juristischen Einheit des Boards ausdrücklich erlauben.",
     "cohort": "Mitarbeiterkreis",
     "cohorts": {
       "scope": "Aktuelle Mitarbeitende im Board und ausgeliehene Mitarbeitende",
@@ -364,10 +364,10 @@
     },
     "pdfOptions": {
       "paperSize": {
-        "letter": "US Letter",
+        "letter": "US-Letter",
         "a4": "A4",
-        "legal": "US Legal",
-        "tabloid": "Tabloid"
+        "legal": "US-Legal",
+        "tabloid": "Tabloid (US)"
       },
       "orientation": {
         "portrait": "Hochformat",

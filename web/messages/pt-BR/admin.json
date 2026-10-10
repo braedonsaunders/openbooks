@@ -4233,15 +4233,15 @@
       "prefillTimesheets": "Preencher folhas de horas",
       "prefillCrewTime": "Preencher horas da equipe",
       "prefillFieldTickets": "Preencher boletins de campo",
-      "notifyAssignees": "Notify people in the app",
+      "notifyAssignees": "Notificar as pessoas no aplicativo",
       "resourceKind": "Tipo de recurso",
       "showTotals": "Mostrar totais inferiores",
       "cellColorRules": "Regras de cor",
       "field": "Campo",
       "match": "Correspondência",
       "dayPolicyKnown": "Horário diário configurado",
-      "showHoursColumn": "Show booked hour column",
-      "distributionVisibility": "Schedule report sharing",
+      "showHoursColumn": "Mostrar a coluna de horas alocadas",
+      "distributionVisibility": "Compartilhamento do relatório de escala",
       "purpose": "Finalidade",
       "autonomy": "Nível de revisão declarado",
       "boardId": "Quadro de planejamento",
@@ -4444,7 +4444,7 @@
       "scheduleBoardPrefillTimesheets": "As alocações publicadas neste quadro aparecem na folha de horas semanal de cada pessoa como tempo programado, que ela pode adicionar com um clique e depois confirmar ou corrigir.",
       "scheduleBoardPrefillCrewTime": "As alocações de projeto publicadas neste quadro oferecem à folha de horas da equipe do encarregado, para aquele projeto e dia, a equipe e as horas alocadas, adicionadas com um clique.",
       "scheduleBoardPrefillFieldTickets": "As alocações de projeto publicadas neste quadro oferecem ao boletim de campo daquele projeto a equipe e as horas alocadas para o período do boletim, adicionadas com um clique.",
-      "scheduleBoardNotifyAssignees": "Send in-app notices for published changes. Configure schedule email separately using the native Schedule distribution Flow and its publish/update triggers.",
+      "scheduleBoardNotifyAssignees": "Envia avisos no aplicativo para as alterações publicadas. Configure o e-mail da escala separadamente usando o Fluxo nativo de distribuição de escala e seus gatilhos de publicação/atualização.",
       "scheduleCode": "Até 16 letras maiúsculas, dígitos ou / & + . _ -, como TRAIN, SHOP ou FORCED.",
       "scheduleCodeCategory": "Códigos de trabalho contam como tempo programado. Códigos de indisponibilidade marcam um dia em que a pessoa não trabalha, sem registrar ausência.",
       "scheduleCodeColor": "A cor em que as alocações com este código são exibidas, como valor hexadecimal, por exemplo #38bdf8.",
@@ -4452,8 +4452,8 @@
       "scheduleShowTotals": "Mostrar linhas e horas reservadas após as pausas configuradas.",
       "scheduleCellColorRules": "A primeira correspondência sem diferenciar maiúsculas define a cor. Use cores hexadecimais de seis dígitos, como #38bdf8.",
       "scheduleBoardDayPolicyKnown": "Desative quando somente as datas forem conhecidas. O histórico continua visível sem horas; configure início, fim e intervalo antes de reservar um dia.",
-      "scheduleShowHoursColumn": "Show the right-side sum of booked hours. Source dates without hours remain unknown. Daily footer totals are configured separately.",
-      "scheduleDistributionVisibility": "Personal reports contain only the recipient’s own schedule or associated resources. Whole-board reports require an explicit sharing policy and a legal-entity-scoped board. Every send still requires a reviewed audience/version or an authored, enabled native Flow.",
+      "scheduleShowHoursColumn": "Mostra a soma das horas alocadas no lado direito. Datas de origem sem horas continuam desconhecidas. Os totais diários do rodapé são configurados separadamente.",
+      "scheduleDistributionVisibility": "Os relatórios pessoais contêm apenas a escala do próprio destinatário ou dos recursos associados. Os relatórios do quadro inteiro exigem uma política de compartilhamento explícita e um quadro com escopo de entidade legal. Todo envio ainda exige um público/versão revisado ou um Fluxo nativo elaborado e ativado.",
       "scheduleAutomaticDelivery": "Política opcional: configure seu próprio operador autorizado e o fuso do quadro. Ative separadamente um fluxo de envio com dias e horários explícitos. Remover esta política interrompe envios futuros e preserva o histórico.",
       "hrmJobDescriptionName": "Como a entrada aparece na biblioteca, por exemplo Gerente de projeto – Campo.",
       "hrmJobDescriptionTitle": "O título do cargo que os candidatos veem na vaga.",
@@ -5234,10 +5234,10 @@
         "combined": "Público automático e destinatários selecionados"
       },
       "schedulePdfPaper": {
-        "letter": "US Letter",
+        "letter": "Carta (EUA)",
         "a4": "A4",
-        "legal": "US Legal",
-        "tabloid": "Tabloid"
+        "legal": "Ofício (EUA)",
+        "tabloid": "Tabloide"
       },
       "schedulePdfOrientation": {
         "portrait": "Retrato",
@@ -7387,7 +7387,7 @@
         "post_document": "Lançar o documento",
         "lock_record": "Bloquear o registro",
         "unlock_record": "Desbloquear o registro",
-        "distribute_schedule": "Email reviewed schedule",
+        "distribute_schedule": "Enviar escala revisada por e-mail",
         "send_board_schedule": "Enviar a escala atual do quadro"
       },
       "recipients": "Destinatários",
@@ -7418,7 +7418,7 @@
       "lockExemptRoles": "Funções isentas",
       "lockExemptHint": "Administradores estão sempre isentos; as funções selecionadas ainda podem editar.",
       "unlockHint": "Remove o bloqueio do flow para que o registro possa ser editado novamente.",
-      "scheduleReportHelp": "Email the immutable reviewed schedule report to its exact recipient audience. It may be a personal report or an explicitly permitted whole-board report. Contact, legal entity, schedule version and provider changes refuse delivery.",
+      "scheduleReportHelp": "Envia por e-mail o relatório imutável da escala revisada ao público exato de destinatários. Pode ser um relatório pessoal ou um relatório do quadro inteiro explicitamente permitido. Alterações de contato, entidade legal, versão da escala e provedor recusam a entrega.",
       "automaticScheduleHelp": "Usa o operador autorizado salvo, o público nativo atual e a política do quadro. Cada ocorrência prepara um relatório novo; editar ou visualizar o fluxo não envia e-mails."
     },
     "gate": {

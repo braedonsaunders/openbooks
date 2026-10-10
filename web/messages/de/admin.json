@@ -4286,15 +4286,15 @@
       "prefillTimesheets": "Stundenzettel vorbelegen",
       "prefillCrewTime": "Teamzeit vorbelegen",
       "prefillFieldTickets": "Regieberichte vorbelegen",
-      "notifyAssignees": "Notify people in the app",
+      "notifyAssignees": "Personen in der App benachrichtigen",
       "resourceKind": "Ressourcenart",
       "showTotals": "Summen unten anzeigen",
       "cellColorRules": "Farbregeln",
       "field": "Feld",
       "match": "Vergleich",
       "dayPolicyKnown": "Arbeitstag ist konfiguriert",
-      "showHoursColumn": "Show booked hour column",
-      "distributionVisibility": "Schedule report sharing",
+      "showHoursColumn": "Spalte mit gebuchten Stunden anzeigen",
+      "distributionVisibility": "Freigabe von Einsatzplanberichten",
       "purpose": "Zweck",
       "autonomy": "Deklarierte Prüfstufe",
       "boardId": "Planungstafel",
@@ -4497,7 +4497,7 @@
       "scheduleBoardPrefillTimesheets": "Veröffentlichte Einplanungen auf dieser Plantafel erscheinen im Wochenstundenzettel jeder Person als geplante Zeit, die sie mit einem Klick übernehmen und dann bestätigen oder korrigieren kann.",
       "scheduleBoardPrefillCrewTime": "Veröffentlichte Projekteinplanungen auf dieser Plantafel schlagen im Teamzeitbogen des Vorarbeiters für dieses Projekt und diesen Tag die eingeplante Kolonne und ihre Stunden vor, die sich mit einem Klick übernehmen lassen.",
       "scheduleBoardPrefillFieldTickets": "Veröffentlichte Projekteinplanungen auf dieser Plantafel schlagen im Regiebericht dieses Projekts die eingeplante Kolonne und ihre Stunden für den Berichtszeitraum vor, die sich mit einem Klick übernehmen lassen.",
-      "scheduleBoardNotifyAssignees": "Send in-app notices for published changes. Configure schedule email separately using the native Schedule distribution Flow and its publish/update triggers.",
+      "scheduleBoardNotifyAssignees": "Sendet In-App-Benachrichtigungen bei veröffentlichten Änderungen. Den E-Mail-Versand des Einsatzplans konfigurieren Sie separat über den nativen Planversand-Flow und dessen Veröffentlichungs- und Aktualisierungsauslöser.",
       "scheduleCode": "Bis zu 16 Großbuchstaben, Ziffern oder / & + . _ -, etwa TRAIN, SHOP oder FORCED.",
       "scheduleCodeCategory": "Arbeitscodes zählen als geplante Zeit. Codes für Nichtverfügbarkeit kennzeichnen einen Tag, an dem die Person nicht arbeitet, ohne eine Abwesenheit zu erfassen.",
       "scheduleCodeColor": "Die Farbe, in der Einplanungen mit diesem Code angezeigt werden, als Hex-Wert wie #38bdf8.",
@@ -4505,8 +4505,8 @@
       "scheduleShowTotals": "Gebuchte Zeilen und Stunden nach den konfigurierten Pausen anzeigen.",
       "scheduleCellColorRules": "Der erste Treffer ohne Beachtung der Großschreibung bestimmt die Farbe. Sechsstellige Hexfarben verwenden, etwa #38bdf8.",
       "scheduleBoardDayPolicyKnown": "Deaktivieren, wenn nur Quelldaten bekannt sind. Historie bleibt ohne Stunden sichtbar; Tagesbuchungen benötigen konfigurierte Arbeitszeiten.",
-      "scheduleShowHoursColumn": "Show the right-side sum of booked hours. Source dates without hours remain unknown. Daily footer totals are configured separately.",
-      "scheduleDistributionVisibility": "Personal reports contain only the recipient’s own schedule or associated resources. Whole-board reports require an explicit sharing policy and a legal-entity-scoped board. Every send still requires a reviewed audience/version or an authored, enabled native Flow.",
+      "scheduleShowHoursColumn": "Zeigt rechts die Summe der gebuchten Stunden an. Quelldaten mit Datum, aber ohne Stunden bleiben unbekannt. Die Tagessummen in der Fußzeile werden separat konfiguriert.",
+      "scheduleDistributionVisibility": "Persönliche Berichte enthalten nur den eigenen Einsatzplan oder die zugehörigen Ressourcen des jeweiligen Empfängers. Berichte für das gesamte Board erfordern eine ausdrückliche Freigaberichtlinie und ein auf eine juristische Einheit begrenztes Board. Jeder Versand erfordert weiterhin einen geprüften Empfängerkreis bzw. eine geprüfte Version oder einen erstellten, aktivierten nativen Flow.",
       "scheduleAutomaticDelivery": "Optionale Berichtsrichtlinie: Wählen Sie sich selbst als berechtigten Bediener und die Board-Zeitzone. Aktivieren Sie einen Planversand-Flow separat mit ausdrücklichen Tagen und Uhrzeiten. Das Löschen dieser Richtlinie stoppt künftige Sendungen und erhält den Versandverlauf.",
       "hrmJobDescriptionName": "So erscheint der Eintrag in der Bibliothek, zum Beispiel Projektleitung – Außendienst.",
       "hrmJobDescriptionTitle": "Der Stellentitel, den Bewerbende in der Ausschreibung sehen.",
@@ -5287,10 +5287,10 @@
         "combined": "Automatischer Kreis und ausgewählte Empfänger"
       },
       "schedulePdfPaper": {
-        "letter": "US Letter",
+        "letter": "US-Letter",
         "a4": "A4",
-        "legal": "US Legal",
-        "tabloid": "Tabloid"
+        "legal": "US-Legal",
+        "tabloid": "Tabloid (US)"
       },
       "schedulePdfOrientation": {
         "portrait": "Hochformat",
@@ -7387,7 +7387,7 @@
         "post_document": "Das Dokument buchen",
         "lock_record": "Den Datensatz sperren",
         "unlock_record": "Den Datensatz entsperren",
-        "distribute_schedule": "Email reviewed schedule",
+        "distribute_schedule": "Einen geprüften Einsatzplan per E-Mail senden",
         "send_board_schedule": "Aktuellen Board-Plan senden"
       },
       "recipients": "Empfänger",
@@ -7418,7 +7418,7 @@
       "lockExemptRoles": "Ausgenommene Rollen",
       "lockExemptHint": "Administratoren sind immer ausgenommen; ausgewählte Rollen dürfen weiterhin bearbeiten.",
       "unlockHint": "Entfernt die Flow-Sperre, sodass der Datensatz wieder bearbeitet werden kann.",
-      "scheduleReportHelp": "Email the immutable reviewed schedule report to its exact recipient audience. It may be a personal report or an explicitly permitted whole-board report. Contact, legal entity, schedule version and provider changes refuse delivery.",
+      "scheduleReportHelp": "Sendet den unveränderlichen, geprüften Einsatzplanbericht per E-Mail an genau den festgelegten Empfängerkreis. Es kann ein persönlicher Bericht oder ein ausdrücklich zugelassener Bericht für das gesamte Board sein. Bei Änderungen an Kontakt, juristischer Einheit, Einsatzplanversion oder Anbieter wird der Versand abgelehnt.",
       "automaticScheduleHelp": "Verwendet den gespeicherten berechtigten Bediener, aktuelle native Empfänger und die Berichtsrichtlinie. Jede Timer-Ausführung erstellt einen aktuellen Bericht. Beim Bearbeiten oder Vorschauen werden keine E-Mails gesendet."
     },
     "gate": {

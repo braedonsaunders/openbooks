@@ -4158,15 +4158,15 @@
       "prefillTimesheets": "Prellenar partes de horas",
       "prefillCrewTime": "Prellenar tiempo de cuadrilla",
       "prefillFieldTickets": "Prellenar partes de obra",
-      "notifyAssignees": "Notify people in the app",
+      "notifyAssignees": "Notificar a las personas en la aplicación",
       "resourceKind": "Tipo de recurso",
       "showTotals": "Mostrar totales inferiores",
       "cellColorRules": "Reglas de color",
       "field": "Campo",
       "match": "Coincidencia",
       "dayPolicyKnown": "Horario diario configurado",
-      "showHoursColumn": "Show booked hour column",
-      "distributionVisibility": "Schedule report sharing",
+      "showHoursColumn": "Mostrar columna de horas reservadas",
+      "distributionVisibility": "Uso compartido de informes de horarios",
       "purpose": "Propósito",
       "autonomy": "Nivel de revisión declarado",
       "boardId": "Tablero de planificación",
@@ -4369,7 +4369,7 @@
       "scheduleBoardPrefillTimesheets": "Las asignaciones publicadas en este tablero aparecen en el parte de horas semanal de cada persona como tiempo planificado que puede añadir con un clic y después confirmar o corregir.",
       "scheduleBoardPrefillCrewTime": "Las asignaciones de proyecto publicadas en este tablero ofrecen a la hoja de tiempo de cuadrilla del capataz para ese proyecto y día la cuadrilla y las horas asignadas, que se añaden con un clic.",
       "scheduleBoardPrefillFieldTickets": "Las asignaciones de proyecto publicadas en este tablero ofrecen al parte de obra de ese proyecto la cuadrilla y las horas asignadas para el período del parte, que se añaden con un clic.",
-      "scheduleBoardNotifyAssignees": "Send in-app notices for published changes. Configure schedule email separately using the native Schedule distribution Flow and its publish/update triggers.",
+      "scheduleBoardNotifyAssignees": "Envíe avisos en la aplicación para los cambios publicados. Configure el correo de horarios por separado mediante el Flujo nativo de distribución de horarios y sus disparadores de publicación y actualización.",
       "scheduleCode": "Hasta 16 letras mayúsculas, dígitos o / & + . _ -, como TRAIN, SHOP o FORCED.",
       "scheduleCodeCategory": "Los códigos de trabajo cuentan como tiempo planificado. Los códigos de no disponibilidad marcan un día en que la persona no trabaja sin registrar una ausencia.",
       "scheduleCodeColor": "El color con el que se muestran las asignaciones con este código, como valor hexadecimal, por ejemplo #38bdf8.",
@@ -4377,8 +4377,8 @@
       "scheduleShowTotals": "Mostrar filas y horas reservadas después de las pausas configuradas.",
       "scheduleCellColorRules": "La primera coincidencia sin distinguir mayúsculas establece el color. Use colores hexadecimales de seis dígitos, como #38bdf8.",
       "scheduleBoardDayPolicyKnown": "Desactive si solo se conocen las fechas. El historial sigue visible sin horas; configure el inicio, fin y descanso antes de reservar un día.",
-      "scheduleShowHoursColumn": "Show the right-side sum of booked hours. Source dates without hours remain unknown. Daily footer totals are configured separately.",
-      "scheduleDistributionVisibility": "Personal reports contain only the recipient’s own schedule or associated resources. Whole-board reports require an explicit sharing policy and a legal-entity-scoped board. Every send still requires a reviewed audience/version or an authored, enabled native Flow.",
+      "scheduleShowHoursColumn": "Muestra a la derecha la suma de las horas reservadas. Las fechas de origen sin horas permanecen como desconocidas. Los totales diarios del pie se configuran por separado.",
+      "scheduleDistributionVisibility": "Los informes personales contienen únicamente el horario propio del destinatario o de sus recursos asociados. Los informes de todo el tablero requieren una política de uso compartido explícita y un tablero limitado a una entidad legal. Cada envío sigue requiriendo una audiencia o versión revisada, o un Flujo nativo creado y habilitado.",
       "scheduleAutomaticDelivery": "Política opcional: configure su propio operador autorizado y la zona horaria del tablero. Active por separado un flujo de envío con días y horas explícitos. Borrar esta política detiene futuros envíos y conserva el historial.",
       "hrmJobDescriptionName": "Cómo aparece en la biblioteca, por ejemplo Jefe de proyecto – Campo.",
       "hrmJobDescriptionTitle": "El título del puesto que ven los candidatos en la publicación.",
@@ -5159,10 +5159,10 @@
         "combined": "Destinatarios automáticos y seleccionados"
       },
       "schedulePdfPaper": {
-        "letter": "US Letter",
+        "letter": "Carta (EE. UU.)",
         "a4": "A4",
-        "legal": "US Legal",
-        "tabloid": "Tabloid"
+        "legal": "Oficio (EE. UU.)",
+        "tabloid": "Tabloide"
       },
       "schedulePdfOrientation": {
         "portrait": "Vertical",
@@ -7387,7 +7387,7 @@
         "post_document": "Contabilizar el documento",
         "lock_record": "Bloquear el registro",
         "unlock_record": "Desbloquear el registro",
-        "distribute_schedule": "Email reviewed schedule",
+        "distribute_schedule": "Enviar por correo el horario revisado",
         "send_board_schedule": "Enviar el horario actual del tablero"
       },
       "recipients": "Destinatarios",
@@ -7418,7 +7418,7 @@
       "lockExemptRoles": "Roles exentos",
       "lockExemptHint": "Los administradores siempre están exentos; los roles seleccionados aún pueden editar.",
       "unlockHint": "Elimina el bloqueo del flujo para permitir la edición de nuevo.",
-      "scheduleReportHelp": "Email the immutable reviewed schedule report to its exact recipient audience. It may be a personal report or an explicitly permitted whole-board report. Contact, legal entity, schedule version and provider changes refuse delivery.",
+      "scheduleReportHelp": "Envía por correo el informe de horario revisado e inmutable a su audiencia exacta de destinatarios. Puede ser un informe personal o un informe de todo el tablero expresamente permitido. Los cambios de contacto, entidad legal, versión del horario o proveedor rechazan el envío.",
       "automaticScheduleHelp": "Usa el operador autorizado guardado, los destinatarios nativos actuales y la política del tablero. Cada ocurrencia prepara un informe nuevo; editar o previsualizar el flujo no envía correo."
     },
     "gate": {
