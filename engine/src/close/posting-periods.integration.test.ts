@@ -179,7 +179,7 @@ test("assign-posting-period offers the open adjustment period when the regular p
     // The closed-period refusal names the controlled route.
     await assert.rejects(
       assertPeriodModulesOpen(db, {
-        orgId: org.orgId, periodId: org.periodId, bookId: org.bookId, modules: ["gl"],
+        orgId: org.orgId, periodId: org.periodId, bookId: org.bookId, subsidiaryIds: [], modules: ["gl"],
       }),
       /controlled reopen, or post this entry into the open adjustment period "ADJ"/,
     );
