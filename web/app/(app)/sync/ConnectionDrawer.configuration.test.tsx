@@ -5,7 +5,7 @@ import { bootJsdomEnvironment } from '../../../testing/jsdom-env'
 import { stubModules } from '../../../testing/stub-modules'
 import { connectorSettings } from '@openbooks/engine/src/sync/connection-settings.ts'
 
-await bootJsdomEnvironment({ url: 'http://localhost/sync' })
+await bootJsdomEnvironment({ url: 'http://localhost/sync', event: 'jsdom' })
 const uiSource = new URL('../../../../packages/ui/src/index.ts', import.meta.url).href
 registerHooks({ resolve(specifier, context, next) {
   return specifier === '@openbooks/ui' ? { shortCircuit: true, url: uiSource } : next(specifier, context)
@@ -41,6 +41,7 @@ async function fill(label: string, value: string) {
     const option = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((option) => option.textContent?.trim() === value)
     assert.ok(option, `missing choice ${value}`)
     await act(async () => { option.click(); await tick() })
+    assert.equal(input.textContent?.trim(), value, `${label} commits the selected choice`)
     return
   }
   await act(async () => {
@@ -112,7 +113,7 @@ test('structured connection mappings and content save and reopen without losing 
   const filesLabel = [...document.querySelectorAll('label')].find((label) => label.textContent === 'Sync transaction documents and files')!
   await act(async () => { (document.getElementById(filesLabel.htmlFor) as HTMLInputElement).click(); await tick() })
   await click('Save changes')
-  assert.ok(saved)
+  assert.ok(saved, `save must send a request after completing the mapping: ${errorMessages().at(-1) ?? 'no refusal'}`)
   assert.equal(saved.config.realmId, undefined, 'callback identity is not edited')
   assert.deepEqual(saved.config.syncOptions, { attachments: false, projectFinancials: true, crm: true, fixedAssets: true })
   const mappings = saved.config.mappingJson as Record<string, unknown>
