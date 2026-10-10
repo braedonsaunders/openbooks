@@ -367,12 +367,12 @@ export async function suggestVoidReversalDate(
     select distinct l.subsidiary_id as "subsidiaryId" from journal_lines l
      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
      where e.org_id = ${orgId} and e.source_document_id = ${doc.id} and e.status = 'posted'`)).rows;
-  const postedBookIds = [...new Set(books.rows.map((row) => row.bookId))];
+  const postedBookIds = [...new Set(books.map((row) => row.bookId))];
   const primaryBookId = postedBookIds.length > 0 ? null : await activePostingPrimaryBookId(orgId, runner);
   const bookIds = postedBookIds.length > 0 ? postedBookIds : (primaryBookId ? [primaryBookId] : []);
   const subsidiaryIds = [
     ...new Set(
-      (lines.rows.length > 0 ? lines.rows.map((row) => row.subsidiaryId) : [doc.subsidiaryId])
+      (lines.length > 0 ? lines.map((row) => row.subsidiaryId) : [doc.subsidiaryId])
         .filter((value): value is string => value != null),
     ),
   ];
@@ -404,7 +404,7 @@ export async function suggestVoidReversalDate(
        and p.starts_on > ${covering.ends_on}
      order by p.starts_on, p.ends_on, p.id
      limit 25`)).rows;
-  for (const candidate of later.rows) {
+  for (const candidate of later) {
     if (await openIn(candidate.id)) {
       return {
         originalDate,

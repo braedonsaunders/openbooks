@@ -303,7 +303,12 @@
     "voidReversalSummaryReversal": "振替",
     "voidReversalFiscalYear": "FY",
     "voidReversalFallbackNotice": "元の会計期間は締め済みのため、振替は次の未締め期間を既定とします。",
-    "voidReversalClosedNotice": "元仕訳の後に未締め期間がありません。取消前に後の期間を作成するか、期間を再オープンしてください。"
+    "voidReversalClosedNotice": "元仕訳の後に未締め期間がありません。取消前に後の期間を作成するか、期間を再オープンしてください。",
+    "consequenceTitle": "転記済み文書の変更内容",
+    "consequenceMetadata": "この変更は摘要情報のみを修正します。元帳の金額は移動せず、文書は転記済みのままです。",
+    "consequenceReclass": "この変更はディメンションを変更し、転記済み明細が対象の場合に均衡する振替仕訳を計上します。文書は転記済みのままです。",
+    "consequenceVoid": "この変更は転記済み文書を無効化し、代替の下書きを作成します。元の期間がオープンである必要があります。",
+    "correctionApplied": "転記済み文書を修正しました"
   },
   "approvalFlow": {
     "pendingWith": "{names}の承認待ち",

@@ -303,7 +303,12 @@
     "voidReversalSummaryReversal": "Reversal",
     "voidReversalFiscalYear": "FY",
     "voidReversalFallbackNotice": "The original period is closed, so the reversal defaults to the first open period after it.",
-    "voidReversalClosedNotice": "No open period follows the original. Generate a later period or reopen one before voiding."
+    "voidReversalClosedNotice": "No open period follows the original. Generate a later period or reopen one before voiding.",
+    "consequenceTitle": "What this posted change does",
+    "consequenceMetadata": "This change corrects descriptive details only. No ledger amounts move and the document stays posted.",
+    "consequenceReclass": "This change moves the dimension link, posting a balanced reclass entry when posted lines carry it. The document stays posted.",
+    "consequenceVoid": "This change voids the posted document and reissues a replacement draft. The original period must be open.",
+    "correctionApplied": "Posted document corrected"
   },
   "approvalFlow": {
     "pendingWith": "Pending with {names}",

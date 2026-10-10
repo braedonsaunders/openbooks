@@ -367,24 +367,38 @@ export async function correctPostedDocument(
       try {
         // The engine locks and rechecks the source, grants and feature state.
         // Completed idempotency keys replay without invoking this callback.
-        const { replacement, voidResult } = await correctPostedDocumentWithEditor(
+        const corrected = await correctPostedDocumentWithEditor(
           input.documentId,
           input.correction,
           { orgId: context.authz.user.orgId, userId: context.authz.user.id, source: context.source },
         );
+        const { replacement } = corrected;
         // Approval routing is part of the idempotent command. Flow runs, gates,
         // and deferred effects must commit with the correction and void so a
         // failed dispatch rolls the command back and a replay cannot skip it.
-        await runPostedCorrectionDraftFlows(replacement.id, replacement.kind, {
-          orgId: context.authz.user.orgId,
-          userId: context.authz.user.id,
-          source: context.source,
-        });
+        // In-place corrections keep the source: no replacement draft exists.
+        if (corrected.kind === 'void-and-reissue') {
+          await runPostedCorrectionDraftFlows(replacement.id, replacement.kind, {
+            orgId: context.authz.user.orgId,
+            userId: context.authz.user.id,
+            source: context.source,
+          });
+          return {
+            correctionOutcome: corrected.kind,
+            correctionId: replacement.id,
+            correctionNumber: replacement.documentNumber,
+            voidStatus: corrected.voidResult.status,
+            requestId: corrected.voidResult.runId,
+            reclassEntryIds: [],
+          };
+        }
         return {
+          correctionOutcome: corrected.kind,
           correctionId: replacement.id,
           correctionNumber: replacement.documentNumber,
-          voidStatus: voidResult.status,
-          requestId: voidResult.runId,
+          voidStatus: null,
+          requestId: null,
+          reclassEntryIds: corrected.reclassEntryIds,
         };
       } catch (error) {
         // executeIdempotent owns the transaction; an error rolls both the
