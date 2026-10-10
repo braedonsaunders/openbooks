@@ -52,6 +52,8 @@ export interface PurchasingHome {
   }
   /** False when Orders is off — hide PO vitals rather than show zeros. */
   ordersEnabled: boolean
+  /** Quotes & orders is on for the organization, whatever this reader may see. */
+  ordersFeatureOn: boolean
   /** False when Expenses is off — hide unposted-expense vitals rather than show zeros. */
   expensesEnabled: boolean
   /** False when the caller lacks ap.read — hide every AP-derived figure rather
@@ -153,10 +155,11 @@ export async function purchasingHome(
     parties: false,
   },
 ): Promise<PurchasingHome> {
-  const [ordersOn, expensesOn] = await Promise.all([
-    grants.ap && grants.orders ? isFeatureEnabled(orgId, 'orders') : false,
+  const [ordersFeatureOn, expensesOn] = await Promise.all([
+    isFeatureEnabled(orgId, 'orders'),
     grants.expenses ? isFeatureEnabled(orgId, 'expenses') : false,
   ])
+  const ordersOn = grants.ap && grants.orders && ordersFeatureOn
   const today = await businessToday(orgId)
   // Vendor names fall back to the catalog, never a hardcoded 'Unspecified'.
   const { getTranslations } = await import('next-intl/server')
@@ -377,6 +380,7 @@ export async function purchasingHome(
       vendors: Number(badge.vendors ?? 0),
     },
     ordersEnabled: ordersOn,
+    ordersFeatureOn,
     expensesEnabled: expensesOn,
     apAllowed: grants.ap,
     grants,

@@ -8,7 +8,8 @@
   },
   "empty": {
     "title": "Nichts wartet auf Sie",
-    "description": "Genehmigungen, die Ihnen zugewiesen, weitergeleitet oder delegiert wurden, werden hier angezeigt."
+    "description": "Genehmigungen, die Ihnen zugewiesen, weitergeleitet oder delegiert wurden, werden hier angezeigt.",
+    "noApprovalFlows": "Es ist kein Genehmigungs-Flow eingerichtet, daher wird nichts zur Genehmigung weitergeleitet und Belege folgen ihren direkten Genehmigungs- und Buchungsschritten. Ein Administrator kann unter Einstellungen → Flows einen Genehmigungs-Flow anlegen."
   },
   "emptySubmitted": {
     "title": "Keine ausstehenden Einreichungen",

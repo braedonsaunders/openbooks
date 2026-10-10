@@ -8,7 +8,8 @@
   },
   "empty": {
     "title": "Rien n’attend votre intervention",
-    "description": "Les approbations qui vous sont assignées, acheminées ou déléguées apparaîtront ici."
+    "description": "Les approbations qui vous sont assignées, acheminées ou déléguées apparaîtront ici.",
+    "noApprovalFlows": "Aucun flux d’approbation n’est configuré : rien n’est donc acheminé pour approbation et les documents suivent leurs étapes directes d’approbation et de comptabilisation. Un administrateur peut ajouter un flux d’approbation dans Paramètres → Flux."
   },
   "emptySubmitted": {
     "title": "Aucune soumission en attente",

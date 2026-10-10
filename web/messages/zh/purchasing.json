@@ -33,7 +33,10 @@
       "openBills": "账单",
       "oldestDue": "最早到期",
       "overdue": "逾期",
-      "billedOpen": "已开票未付"
+      "billedOpen": "已开票未付",
+      "hintBillsOnly": "未结供应商账单，按敞口从大到小",
+      "emptyBillsOnly": "没有未结应付款。记录供应商账单后，敞口将在此处显示。",
+      "emptyOrdersOff": "没有未结应付款。记录供应商账单后，敞口将在此处显示。采购订单属于“报价与订单”功能，该功能已关闭——管理员可以在“公司设置 → 功能”中开启。"
     },
     "trend": {
       "title": "支出趋势",

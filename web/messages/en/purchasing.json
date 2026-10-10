@@ -33,7 +33,10 @@
       "openBills": "Bills",
       "oldestDue": "Oldest due",
       "overdue": "Overdue",
-      "billedOpen": "Billed open"
+      "billedOpen": "Billed open",
+      "hintBillsOnly": "Open vendor bills, largest exposure first",
+      "emptyBillsOnly": "No open payables. Record a vendor bill and the exposure will appear here.",
+      "emptyOrdersOff": "No open payables. Record a vendor bill and the exposure will appear here. Purchase orders are part of Quotes & orders, which is turned off — an administrator can turn it on in Company Settings → Features."
     },
     "trend": {
       "title": "Spend trend",

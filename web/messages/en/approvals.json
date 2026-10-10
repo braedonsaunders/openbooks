@@ -8,7 +8,8 @@
   },
   "empty": {
     "title": "Nothing waiting on you",
-    "description": "Approvals assigned, routed, or delegated to you will appear here."
+    "description": "Approvals assigned, routed, or delegated to you will appear here.",
+    "noApprovalFlows": "No approval Flow is set up, so nothing is routed to anyone for approval and documents follow their direct approve and post steps. An administrator can add an approval Flow in Settings → Flows."
   },
   "emptySubmitted": {
     "title": "No pending submissions",

@@ -280,8 +280,12 @@ export async function loadPurchasing(
     unpostedSub: t('home.vitals.unpostedSub'),
     unpostedTone: data.badges.unpostedExpenses > 0 ? 'warning' : 'positive',
     heroTitle: t('home.hero.title'),
-    heroHint: t('home.hero.hint'),
-    heroEmpty: t('home.hero.empty'),
+    // With Quotes & orders off there are no purchase orders to show or
+    // create: the copy speaks only of bills and names how orders come back.
+    heroHint: data.ordersEnabled ? t('home.hero.hint') : t('home.hero.hintBillsOnly'),
+    heroEmpty: data.ordersEnabled
+      ? t('home.hero.empty')
+      : data.ordersFeatureOn ? t('home.hero.emptyBillsOnly') : t('home.hero.emptyOrdersOff'),
     // The empty hero names its prerequisite in copy; the action goes one
     // step further only where the caller holds the matching create grant —
     // a reader without it keeps the honest zero with no misleading button.

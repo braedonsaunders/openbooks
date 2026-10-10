@@ -33,7 +33,10 @@
       "openBills": "Faturas",
       "oldestDue": "Mais antiga",
       "overdue": "Vencido",
-      "billedOpen": "Faturado em aberto"
+      "billedOpen": "Faturado em aberto",
+      "hintBillsOnly": "Faturas de fornecedor abertas, maior exposição primeiro",
+      "emptyBillsOnly": "Sem contas a pagar em aberto. Registre uma fatura de fornecedor e a exposição aparecerá aqui.",
+      "emptyOrdersOff": "Sem contas a pagar em aberto. Registre uma fatura de fornecedor e a exposição aparecerá aqui. Pedidos de compra fazem parte de Orçamentos e pedidos, que está desativado — um administrador pode ativá-lo em Configurações da empresa → Recursos."
     },
     "trend": {
       "title": "Tendência de gastos",
