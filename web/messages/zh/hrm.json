@@ -277,7 +277,12 @@
       "withAssignment": "随本次聘用记录首个职位和岗位分配。",
       "departmentEmpty": "无部门",
       "locationEmpty": "无地点",
-      "positionEmpty": "无职位关联"
+      "positionEmpty": "无职位关联",
+      "existingPersonLabel": "现有人员",
+      "existingPersonPlaceholder": "搜索人员…",
+      "existingPersonEmpty": "没有其他可聘用人员 — 每位在职人员均已有有效雇用。",
+      "existingPersonNote": "保存时将为此人添加员工角色并继续聘用 — 不会创建重复记录。",
+      "existingPersonFailed": "无法加载人员列表。"
     },
     "multiple": {
       "title": "存在多条雇用记录",

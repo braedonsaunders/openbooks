@@ -103,6 +103,11 @@ const mockSources = new Map<string, string>([
         if (state.serviceThrow) throw state.serviceThrow
         return [{ partyId: 'party-9', label: 'No Employment Yet' }]
       }
+      export async function listEmployablePeopleOptions(args) {
+        state.calls.push({ fn: 'employable-people', args })
+        if (state.serviceThrow) throw state.serviceThrow
+        return [{ partyId: 'party-7', label: 'Vendor Val', hasEmployeeRole: false }]
+      }
       export async function listEmployerSubsidiaryOptions(args) {
         state.calls.push({ fn: 'employer-subsidiaries', args })
         if (state.serviceThrow) throw state.serviceThrow
@@ -356,6 +361,22 @@ test("hireable-people forwards the pin under its own key for the Hire person pic
   assert.deepEqual(routeState.calls, [
     {
       fn: "hireable-people",
+      args: { orgId: "org-1", actorId: "user-1", q: undefined, includePartyId: include },
+    },
+  ]);
+});
+
+test("employable-people forwards the pin under its own key for the existing-person picker", async () => {
+  reset();
+  const include = "00000000-0000-4000-8000-000000000047";
+  const response = await optionsRoute!.GET(getRequest(`?source=employable-people&include=${include}`));
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    options: [{ partyId: "party-7", label: "Vendor Val", hasEmployeeRole: false }],
+  });
+  assert.deepEqual(routeState.calls, [
+    {
+      fn: "employable-people",
       args: { orgId: "org-1", actorId: "user-1", q: undefined, includePartyId: include },
     },
   ]);

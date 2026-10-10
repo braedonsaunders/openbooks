@@ -277,7 +277,12 @@
       "withAssignment": "Registrar a primeira posição e atribuição nesta contratação.",
       "departmentEmpty": "Sem departamento",
       "locationEmpty": "Sem local",
-      "positionEmpty": "Sem posição vinculada"
+      "positionEmpty": "Sem posição vinculada",
+      "existingPersonLabel": "Pessoa existente",
+      "existingPersonPlaceholder": "Buscar pessoas…",
+      "existingPersonEmpty": "Ninguém mais pode ser contratado — cada pessoa ativa já tem vínculo vigente.",
+      "existingPersonNote": "Ao salvar, a função de funcionário é adicionada a esta pessoa e o fluxo continua para a contratação, sem duplicar o registro.",
+      "existingPersonFailed": "A lista de pessoas não pôde ser carregada."
     },
     "multiple": {
       "title": "Mais de um registro de emprego",

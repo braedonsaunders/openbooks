@@ -476,6 +476,48 @@ test("a withdrawn gated hire retries onto the same reserved identity", { skip: !
   });
 });
 
+test("an existing person gains the role and hires onto the same party, never a duplicate", { skip: !DB }, async () => {
+  await withHarness(() => setupHarness(FIRST_EMPLOYMENT_SPEC), async (h) => {
+    // A vendor contact with no employee role cannot hire yet.
+    const stranger = randomUUID();
+    await db.execute(sql`
+      insert into parties (id, org_id, kind, display_name, is_active, custom)
+      values (${stranger}, ${h.org.orgId}, 'person', 'Vendor Val', true, '{}'::jsonb)
+    `);
+    const refused = await refusalOf(
+      proposeFirstEmployment({
+        orgId: h.org.orgId,
+        actorId: h.hrId,
+        workerPartyId: stranger,
+        employerSubsidiaryId: h.org.subsidiaryId,
+        effectiveFrom: "2026-09-01",
+        reason: "hire before the role exists",
+      }),
+      HrmChangeRequestError,
+    );
+    assert.equal(refused.code, "REFUSED");
+    // The New-employee form adds the role natively, then hires the same
+    // party: one person, one employment, no duplicate record.
+    await seedActiveEmployment(h.org.orgId, stranger, "2026-09-01");
+    const hire = await proposeFirstEmployment({
+      orgId: h.org.orgId,
+      actorId: h.hrId,
+      workerPartyId: stranger,
+      employerSubsidiaryId: h.org.subsidiaryId,
+      effectiveFrom: "2026-09-01",
+      reason: "vendor becomes an employee",
+    });
+    assert.equal(hire.workerPartyId, stranger);
+    assert.deepEqual(await liveVersions(hire.employmentId), [{ no: 1, status: "active" }]);
+    const sameName = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from parties
+       where org_id = ${h.org.orgId} and display_name = 'Vendor Val'
+    `)).rows[0]!.n;
+    assert.equal(sameName, 1, "no duplicate party is minted for the hire");
+    assert.deepEqual(await findEmploymentsByParty({ orgId: h.org.orgId, actorId: h.hrId, workerPartyId: stranger }), [hire.employmentId]);
+  });
+});
+
 test("first hire refusals name the field and write nothing", { skip: !DB }, async () => {
   await withHarness(() => setupHarness(FIRST_EMPLOYMENT_SPEC), async (h) => {
     const hire = (overrides: Record<string, unknown>) =>

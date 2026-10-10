@@ -1403,3 +1403,80 @@ test("removing a mistaken role posts to the remove endpoint and clears the card"
   assert.ok(vendorBox, "the vendor card keeps its enable checkbox");
   assert.equal(vendorBox?.checked, false, "the removed role's checkbox clears without a save round-trip");
 });
+
+test("flipping kind to employee routes into Hire instead of leaving an employment-less employee", async (t) => {
+  const seen: { url: string; method?: string; body?: unknown }[] = [];
+  const fetchHandler = (url: string, init?: RequestInit) => {
+    const method = init?.method ?? "GET";
+    let body: unknown = null;
+    try {
+      body = init?.body ? JSON.parse(String(init.body)) : null;
+    } catch {
+      body = null;
+    }
+    seen.push({ url, method, body });
+    if (url.startsWith("/api/parties/") && method === "PATCH") {
+      return Response.json({ party: { is_active: true } });
+    }
+    if (url.startsWith("/api/hrm/options?source=employer-subsidiaries")) {
+      return Response.json({ options: [{ subsidiaryId: "sub-1", label: "Main Co" }] });
+    }
+    if (url.startsWith("/api/hrm/options")) return Response.json({ options: [] });
+    if (url === "/api/hrm/employments" && method === "POST") {
+      return Response.json(
+        { employment: { id: "emp-9" }, request: { id: "req-9", status: "applied" }, applied: true },
+        { status: 201 },
+      );
+    }
+    return null;
+  };
+  const { done } = await renderDrawer({
+    payload: employeePayload("vendor", { vendor: true, employee: false }),
+    role: "vendor",
+    recordType: "vendor",
+    initialMode: "edit",
+    grants: {
+      hrm: { employmentIds: [], canManageHrm: true, canReadExits: false, canRecordExit: false },
+      canHire: true,
+    },
+    fetchHandler,
+  });
+  t.after(done);
+  // Flip Kind vendor -> employee, then save the record.
+  const kind = kindSelect();
+  assert.ok(kind, "the identity section must offer a kind select");
+  await act(async () => {
+    setSelectValue(kind!, "employee");
+    await tick();
+  });
+  await tick();
+  await clickButton("Save");
+  const patch = seen.find((request) => request.url.startsWith("/api/parties/") && request.method === "PATCH");
+  assert.ok(patch, "the flip persists through the parties PATCH");
+  assert.equal(
+    (patch?.body as { roles?: { employee?: { enabled?: boolean } } })?.roles?.employee?.enabled,
+    true,
+    "the flip carries the employee role in the same save",
+  );
+  // The same drawer continues into Hire instead of stranding the record.
+  assert.ok(
+    document.body.textContent?.includes(en("hrm.employment.hire.title")),
+    "the Hire step opens on the flipped record",
+  );
+  // Record the hire for the same party: no duplicate, the employment lands.
+  const reason = document.getElementById("hire-reason") as HTMLTextAreaElement | null;
+  assert.ok(reason, "the Hire step asks for a reason");
+  await act(async () => {
+    setInputValue(reason!, "Vendor becomes an employee");
+    await tick();
+  });
+  await tick();
+  await clickButton(en("hrm.employment.hire.submit"));
+  const hire = seen.find((request) => request.url === "/api/hrm/employments" && request.method === "POST");
+  assert.ok(hire, "the Hire step posts the first employment");
+  assert.equal(
+    (hire?.body as { workerPartyId?: string })?.workerPartyId,
+    EMPLOYEE_ID,
+    "the employment names the flipped party",
+  );
+});
