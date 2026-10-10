@@ -1567,12 +1567,11 @@ cases.push({name:'tracked low-value output apportions every ledger unit without 
  assert.equal(movements.length,4);assert.equal(add(add(movements[0]!.value,movements[1]!.value),add(movements[2]!.value,movements[3]!.value)),'0.0002');assert(movements.every(row=>cmp(row.value,'0')>=0));
 }});
 
-test("manufacturing completion and reversal case table", { skip: !DB }, async () => {
-  for (const scenario of cases) {
+for (const scenario of cases) {
+  test(`manufacturing completion and reversal: ${scenario.name}`, { skip: !DB, concurrency: false }, async () => {
     const f = await setup();
     try { await scenario.run(f); }
     catch (error) { throw new Error(scenario.name + ": " + (error instanceof Error ? error.message : String(error)), { cause: error }); }
     finally { await withBypassContext(() => dropScratchOrg(f.org.orgId)); }
-  }
-});
-
+  });
+}

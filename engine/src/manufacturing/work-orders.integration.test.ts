@@ -232,11 +232,11 @@ const cases: Case[] = [
 
 ];
 
-test("work-order lifecycle case table", { skip: !DB }, async () => {
-  for (const scenario of cases) {
+for (const scenario of cases) {
+  test(`work-order lifecycle: ${scenario.name}`, { skip: !DB, concurrency: false }, async () => {
     const fixture = await setup();
     try { await scenario.run(fixture); }
     catch (error) { throw new Error(`${scenario.name}: ${error instanceof Error ? error.message : String(error)}`, { cause: error }); }
     finally { await dropScratchOrg(fixture.org.orgId); }
-  }
-});
+  });
+}

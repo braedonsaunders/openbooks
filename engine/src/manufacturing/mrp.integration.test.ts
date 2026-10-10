@@ -282,11 +282,11 @@ const cases: Case[] = [
   } },
 ];
 
-test("MRP case table", { skip: !DB }, async () => {
-  for (const scenario of cases) {
+for (const scenario of cases) {
+  test(`MRP: ${scenario.name}`, { skip: !DB, concurrency: false }, async () => {
     const fixture = await setup();
     try { await scenario.run(fixture); }
     catch (error) { throw new Error(`${scenario.name}: ${error instanceof Error ? error.message : String(error)}`, { cause: error }); }
     finally { await dropScratchOrg(fixture.org.orgId); }
-  }
-});
+  });
+}

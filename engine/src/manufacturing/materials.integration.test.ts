@@ -283,8 +283,8 @@ cases.push(...(["finish", "start"] as const).map(trigger => ({name:`${trigger} b
   assert.deepEqual(result,{quantity:'20.0000',entries:1});
 }})));
 
-test("manufacturing material execution case table", { skip: !DB }, async () => {
-  for (const scenario of cases) {
+for (const scenario of cases) {
+  test(`manufacturing material execution: ${scenario.name}`, { skip: !DB, concurrency: false }, async () => {
     const fixture = await setup();
     let failure: unknown;
     try { await scenario.run(fixture); }
@@ -298,5 +298,5 @@ test("manufacturing material execution case table", { skip: !DB }, async () => {
         throw cleanupError;
       }
     }
-  }
-});
+  });
+}
