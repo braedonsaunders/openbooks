@@ -7252,6 +7252,7 @@
     },
     "statusEnabled": "ativado",
     "statusDisabled": "desativado",
+    "statusIncomplete": "Incompleto: {reason}",
     "neverRan": "nunca",
     "new": {
       "button": "Novo flow",
@@ -7289,6 +7290,8 @@
       "saveFailed": "Não foi possível salvar o flow",
       "unsaved": "Alterações não salvas",
       "enabledToggle": "Ativado",
+      "singleTrigger": "Este flow já tem um gatilho — um flow começa com exatamente um. Remova o gatilho existente para adicionar outro.",
+      "disabledNotice": "Desativado — este flow não será executado enquanto estiver desativado.",
       "namePlaceholder": "Nome do flow",
       "errorsTitle": "Corrija estes itens para salvar o flow",
       "warningsTitle": "Avisos — o flow é salvo, mas pode não ser executado como esperado",

@@ -7252,6 +7252,7 @@
     },
     "statusEnabled": "activé",
     "statusDisabled": "désactivé",
+    "statusIncomplete": "Incomplet : {reason}",
     "neverRan": "jamais",
     "new": {
       "button": "Nouveau flux",
@@ -7289,6 +7290,8 @@
       "saveFailed": "Impossible d'enregistrer le flux",
       "unsaved": "Modifications non enregistrées",
       "enabledToggle": "Activé",
+      "singleTrigger": "Ce flux a déjà un déclencheur — un flux démarre avec exactement un seul. Supprimez le déclencheur existant pour en ajouter un autre.",
+      "disabledNotice": "Désactivé — ce flux ne s'exécutera pas tant qu'il est désactivé.",
       "namePlaceholder": "Nom du flux",
       "errorsTitle": "Corrigez ces points pour enregistrer le flux",
       "warningsTitle": "Avertissements — le flux s'enregistre mais pourrait ne pas s'exécuter comme prévu",

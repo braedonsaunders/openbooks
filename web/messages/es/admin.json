@@ -7252,6 +7252,7 @@
     },
     "statusEnabled": "activado",
     "statusDisabled": "desactivado",
+    "statusIncomplete": "Incompleto: {reason}",
     "neverRan": "nunca",
     "new": {
       "button": "Nuevo flujo",
@@ -7289,6 +7290,8 @@
       "saveFailed": "No se pudo guardar el flujo",
       "unsaved": "Cambios sin guardar",
       "enabledToggle": "Activado",
+      "singleTrigger": "Este flujo ya tiene un disparador — un flujo comienza con exactamente uno. Elimina el disparador existente para agregar otro.",
+      "disabledNotice": "Desactivado — este flujo no se ejecutará mientras esté desactivado.",
       "namePlaceholder": "Nombre del flujo",
       "errorsTitle": "Corrija esto para guardar el flujo",
       "warningsTitle": "Advertencias: el flujo se guarda, pero podría no ejecutarse como se espera",
