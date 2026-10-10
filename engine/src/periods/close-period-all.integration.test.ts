@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
-import { closePeriodAllModules, type CloseModule } from "./period-locks.ts";
+import { closePeriodAllModules, setPeriodLockState, type CloseModule } from "./period-locks.ts";
 import { CLOSE_MODULES } from "./period-policy.ts";
 import { db } from "../platform/db.ts";
 import {
@@ -127,8 +127,18 @@ test("a mid-run failure keeps applied closes and reports every module", { skip: 
   const org = await createScratchOrg();
   try {
     const actorId = await createScratchUser(org.orgId, "Close Partial Controller", "admin");
+    // AP is held soft-closed for review: GL refuses ahead of a subledger
+    // lock that is not closed, after AR has already closed.
+    await setPeriodLockState({
+      orgId: org.orgId,
+      periodId: org.periodId,
+      bookId: org.bookId,
+      module: "ap",
+      state: "soft_closed",
+      actorId,
+      reason: "AP held for vendor statement review",
+    });
 
-    // AP stays open, so GL refuses after AR already closed.
     const { results } = await closePeriodAllModules({
       orgId: org.orgId,
       periodId: org.periodId,
@@ -143,8 +153,10 @@ test("a mid-run failure keeps applied closes and reports every module", { skip: 
     assert.equal(results[1]?.module, "gl");
     assert.equal(results[1]?.ok, false);
     assert.match(results[1]?.error ?? "", /before GL/, "GL names the open subledger remedy");
+    assert.match(results[1]?.error ?? "", /AP/, "GL names the subledger still open");
     assert.deepEqual(await lockStates(org.orgId, org.periodId, org.bookId), {
       ar: "closed",
+      ap: "soft_closed",
     }, "the applied close stays; nothing half-wrote");
   } finally {
     await dropScratchOrg(org.orgId);
