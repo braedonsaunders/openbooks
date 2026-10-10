@@ -30,7 +30,7 @@ export const GET = defineRoute({
           const items = postings
             .map(
               (posting) =>
-                `  <job><id>${escXml(posting.postingId)}</id><requisition>${escXml(posting.requisitionNumber)}</requisition><title>${escXml(posting.title)}</title><published>${escXml(posting.publishedAt ?? "")}</published></job>`,
+                `  <job><id>${escXml(posting.postingId)}</id><requisition>${escXml(posting.requisitionNumber)}</requisition><title>${escXml(posting.title)}</title><employmentKind>${escXml(posting.employmentKind ?? "")}</employmentKind><description>${escXml(posting.description ?? "")}</description><published>${escXml(posting.publishedAt ?? "")}</published></job>`,
             )
             .join("\n");
           return new NextResponse(`<?xml version="1.0" encoding="UTF-8"?>\n<jobs>\n${items}\n</jobs>`, {

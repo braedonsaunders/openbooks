@@ -3560,6 +3560,11 @@
         "title": "Calendários de trabalho",
         "singularTitle": "Calendário de trabalho",
         "description": "Dias úteis e fechamentos da empresa compartilhados pela produção e pelos cronogramas de projetos. Os centros definem suas horas disponíveis. As execuções MRP existentes mantêm os dados de calendário originais."
+      },
+      "hrm-job-descriptions": {
+        "title": "Descrições de cargo",
+        "singularTitle": "Descrição de cargo",
+        "description": "Conteúdo de vaga reutilizável para novas requisições: título, tipo de contratação, faixa salarial e descrição."
       }
     },
     "fields": {
@@ -4169,7 +4174,12 @@
       "schedulePdfColorTreatment": "Tratamento das cores",
       "schedulePdfColorIntensity": "Intensidade da tonalidade (%)",
       "custodianPartyId": "Fornecedor custodiante",
-      "showReadiness": "Guia de trabalho"
+      "showReadiness": "Guia de trabalho",
+      "employmentKind": "Tipo de contratação",
+      "compensationMin": "Salário mínimo",
+      "compensationMax": "Salário máximo",
+      "compensationCurrency": "Moeda do salário",
+      "compensationBasis": "Base salarial"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Dias entre a taxa utilizável mais recente e o fim do período a partir dos quais a reavaliação e a consolidação recusam a taxa. Taxas de fechamento contam a partir da data da taxa à vista de fim de período; taxas médias, a partir da cotação mais recente incluída na média. Padrão sem política: 31 dias.",
@@ -4338,7 +4348,12 @@
       "scheduleBoardDayPolicyKnown": "Desative quando somente as datas forem conhecidas. O histórico continua visível sem horas; configure início, fim e intervalo antes de reservar um dia.",
       "scheduleShowHoursColumn": "Show the right-side sum of booked hours. Source dates without hours remain unknown. Daily footer totals are configured separately.",
       "scheduleDistributionVisibility": "Personal reports contain only the recipient’s own schedule or associated resources. Whole-board reports require an explicit sharing policy and a legal-entity-scoped board. Every send still requires a reviewed audience/version or an authored, enabled native Flow.",
-      "scheduleAutomaticDelivery": "Política opcional: configure seu próprio operador autorizado e o fuso do quadro. Ative separadamente um fluxo de envio com dias e horários explícitos. Remover esta política interrompe envios futuros e preserva o histórico."
+      "scheduleAutomaticDelivery": "Política opcional: configure seu próprio operador autorizado e o fuso do quadro. Ative separadamente um fluxo de envio com dias e horários explícitos. Remover esta política interrompe envios futuros e preserva o histórico.",
+      "hrmJobDescriptionName": "Como a entrada aparece na biblioteca, por exemplo Gerente de projeto – Campo.",
+      "hrmJobDescriptionTitle": "O título do cargo que os candidatos veem na vaga.",
+      "hrmJobDescriptionKind": "Por exemplo integral, meio período, temporário ou por contrato.",
+      "hrmJobDescriptionPay": "Opcional. Informe mínimo, máximo, moeda e base juntos, ou deixe os quatro vazios.",
+      "hrmJobDescriptionBody": "O texto da vaga. Novas requisições o copiam, então editá-lo aqui nunca altera uma vaga existente."
     },
     "options": {
       "withholdingCondominiumPayer": "Pagador: condomínio",

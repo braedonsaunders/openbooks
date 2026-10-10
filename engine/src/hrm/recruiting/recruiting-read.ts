@@ -80,6 +80,11 @@ export interface RequisitionDetail extends RequisitionListRow {
    * covers the scope. Additive: never replaces the typed range. */
   readonly bandRange: string | null;
   readonly description: string | null;
+  readonly employmentKind: string | null;
+  /** Library entry the opening started from; its content was copied at creation. */
+  readonly jobDescriptionName: string | null;
+  /** Optimistic-concurrency revision a posting edit is made against. */
+  readonly revision: number;
   readonly stages: readonly { id: string; key: string; name: string; kind: string }[];
   readonly funnel: readonly { stageKey: string; stageName: string; count: number }[];
   readonly applications: readonly ApplicationFunnelRow[];
@@ -129,6 +134,9 @@ type RequisitionRow = {
   status: string;
   pipelineTemplateId: string | null;
   description: string | null;
+  employmentKind: string | null;
+  jobDescriptionName: string | null;
+  revision: number;
 };
 
 async function loadRequisitionRows(
@@ -150,10 +158,12 @@ async function loadRequisitionRows(
            r.compensation_currency as "compensationCurrency",
            r.compensation_basis as "compensationBasis",
            r.status, r.pipeline_template_id as "pipelineTemplateId",
-           r.description
+           r.description, r.employment_kind as "employmentKind",
+           jd.name as "jobDescriptionName", r.revision
       from hrm_requisitions r
       left join positions p on p.org_id = r.org_id and p.id = r.position_id
       left join departments d on d.org_id = r.org_id and d.id = r.department_id
+      left join hrm_job_descriptions jd on jd.org_id = r.org_id and jd.id = r.job_description_id
      where r.org_id = ${orgId}
        ${status ? sql`and r.status = ${status}` : sql``}
        ${allowed ? sql`and r.employer_subsidiary_id in (${sql.join([...allowed].map((id) => sql`${id}::uuid`), sql`, `)})` : sql``}
@@ -386,6 +396,9 @@ export async function getRequisitionDetail(query: GetRequisitionDetailQuery): Pr
     compensation: compensationLabel(row),
     bandRange: await requisitionBandRange(db, orgId, actorId, row),
     description: row.description,
+    employmentKind: row.employmentKind,
+    jobDescriptionName: row.jobDescriptionName,
+    revision: row.revision,
     stages: stages.map((stage) => ({ id: stage.id, key: stage.key, name: stage.name, kind: stage.kind })),
     funnel,
     applications: funnelRows,

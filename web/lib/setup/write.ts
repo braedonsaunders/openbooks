@@ -31,6 +31,7 @@ import { CANONICAL_RATING_KEYS } from '@openbooks/engine/src/hrm/recruiting/kits
 import { RecruitingError } from '@openbooks/engine/src/hrm/recruiting/errors.ts'
 import { parseClauses } from '@openbooks/engine/src/hrm/recruiting/offers-signing.ts'
 import { validateAvailabilityWindows } from '@openbooks/engine/src/hrm/recruiting/scheduling.ts'
+import { requireCompensation } from '@openbooks/engine/src/hrm/recruiting/requisitions.ts'
 // HR-18 end
 import { SETUP_ENTITY_BY_KEY, resolveSetupEntityGate, setupEntityForFeatureState, setupEntitySubsidiaryField, setupEntitySubsidiaryReferenceFields, toSnake, type SetupEntity } from './registry'
 import { permissionSetCovers } from '../permissions'
@@ -1777,6 +1778,38 @@ export async function validateEntityIntegrity(
     if (values.clauses !== undefined && values.clauses !== null) {
       try {
         parseClauses(values.clauses, String(values.name ?? 'template'))
+      } catch (e) {
+        if (e instanceof RecruitingError) return e.message
+        throw e
+      }
+    }
+  }
+  if (entity.key === 'hrm-job-descriptions') {
+    let values = body
+    if (rowId) {
+      const current = await executor.execute(sql`
+        select compensation_min::text as "compensationMin", compensation_max::text as "compensationMax",
+               compensation_currency as "compensationCurrency", compensation_basis as "compensationBasis"
+          from hrm_job_descriptions where id = ${rowId} and org_id = ${orgId}
+      `)
+      if (!current.rows[0]) return 'Job description not found'
+      values = { ...(current.rows[0] as Record<string, unknown>), ...body }
+    }
+    // The pay range copies into a requisition verbatim, so it is held to
+    // the requisition's own compensation contract: all four or none.
+    const pay = [values.compensationMin, values.compensationMax, values.compensationCurrency, values.compensationBasis]
+    const present = pay.filter((value) => value !== undefined && value !== null && value !== '')
+    if (present.length > 0 && present.length < pay.length) {
+      return 'The pay range needs a minimum, maximum, currency and basis together, or none of them'
+    }
+    if (present.length === pay.length) {
+      try {
+        requireCompensation({
+          min: String(values.compensationMin),
+          max: String(values.compensationMax),
+          currency: String(values.compensationCurrency),
+          basis: values.compensationBasis,
+        })
       } catch (e) {
         if (e instanceof RecruitingError) return e.message
         throw e

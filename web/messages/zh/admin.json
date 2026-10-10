@@ -3560,6 +3560,11 @@
         "title": "工作日历",
         "singularTitle": "工作日历",
         "description": "生产与项目计划共用的公司工作日和停工日期。工作中心各自设置可用工时。现有MRP运行保留运行时使用的日历信息。"
+      },
+      "hrm-job-descriptions": {
+        "title": "职位描述",
+        "singularTitle": "职位描述",
+        "description": "新招聘申请可复用的发布内容：职位名称、雇用类型、薪酬范围和说明。"
       }
     },
     "fields": {
@@ -4169,7 +4174,12 @@
       "schedulePdfColorTreatment": "颜色处理",
       "schedulePdfColorIntensity": "色调强度 (%)",
       "custodianPartyId": "保管供应商",
-      "showReadiness": "工作指南"
+      "showReadiness": "工作指南",
+      "employmentKind": "雇用类型",
+      "compensationMin": "薪酬下限",
+      "compensationMax": "薪酬上限",
+      "compensationCurrency": "薪酬币种",
+      "compensationBasis": "薪酬基准"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "最新可用汇率距期末的天数超过此值时，重估和合并将拒绝该汇率。期末汇率从期末即期汇率的日期起算；平均汇率从计入平均的最新报价日期起算。未设置政策时的默认值：31 天。",
@@ -4338,7 +4348,12 @@
       "scheduleBoardDayPolicyKnown": "仅知道原始日期时关闭。历史记录仍显示但没有工时；整日预约需要配置开始、结束和休息时间。",
       "scheduleShowHoursColumn": "Show the right-side sum of booked hours. Source dates without hours remain unknown. Daily footer totals are configured separately.",
       "scheduleDistributionVisibility": "Personal reports contain only the recipient’s own schedule or associated resources. Whole-board reports require an explicit sharing policy and a legal-entity-scoped board. Every send still requires a reviewed audience/version or an authored, enabled native Flow.",
-      "scheduleAutomaticDelivery": "可选报告策略：设置您自己的授权身份和看板时区。另行启用排班发送流程并明确指定星期和时间。清除此策略将停止后续发送，但保留发送历史。"
+      "scheduleAutomaticDelivery": "可选报告策略：设置您自己的授权身份和看板时区。另行启用排班发送流程并明确指定星期和时间。清除此策略将停止后续发送，但保留发送历史。",
+      "hrmJobDescriptionName": "在库中显示的名称，例如：项目经理（现场）。",
+      "hrmJobDescriptionTitle": "求职者在职位发布中看到的职位名称。",
+      "hrmJobDescriptionKind": "例如：全职、兼职、季节性或合同制。",
+      "hrmJobDescriptionPay": "可选。请同时填写下限、上限、币种和基准，或四项全部留空。",
+      "hrmJobDescriptionBody": "职位发布文本。新招聘申请会复制该文本，因此在此编辑不会更改已有职位。"
     },
     "options": {
       "withholdingCondominiumPayer": "公寓业主共同体付款人",

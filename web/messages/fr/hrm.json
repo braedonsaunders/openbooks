@@ -939,7 +939,11 @@
       "targetStart": "Début visé",
       "submit": "Créer la réquisition",
       "failed": "La réquisition n'a pas pu être créée.",
-      "noEmployer": "Aucune société employeuse disponible — demandez l'accès à une société à un administrateur avant de créer la réquisition."
+      "noEmployer": "Aucune société employeuse disponible — demandez l'accès à une société à un administrateur avant de créer la réquisition.",
+      "jobDescription": "Partir d'une description de poste",
+      "noJobDescription": "Aucune : rédiger l'annonce de zéro",
+      "jobDescriptionNote": "Le type d'emploi et la fourchette de rémunération sont aussi copiés depuis la description de poste.",
+      "description": "Texte de l'annonce"
     },
     "lifecycle": {
       "title": "Cycle de vie",
@@ -1140,7 +1144,7 @@
       "postings": "Annonces d’emploi"
     },
     "workspace": {
-      "openings": "Besoins de recrutement approuvés : demandes, effectifs et candidats.",
+      "openings": "Besoins de recrutement approuvés : demandes, effectifs et candidats. Les descriptions de poste réutilisables se trouvent dans la configuration de l'entreprise.",
       "interviews": "Entretiens planifiés et grilles d’évaluation. Les kits et groupes d’intervieweurs se configurent dans la configuration de l’entreprise.",
       "offers": "Offres aux candidats, approbations et acceptation. Les modèles se configurent dans la configuration de l’entreprise.",
       "postings": "Publiez les postes ouverts approuvés et suivez les candidatures par canal.",
@@ -1148,6 +1152,21 @@
       "configure": "Configurer le recrutement",
       "newPool": "Nouveau vivier de candidats",
       "poolDescription": "Description"
+    },
+    "postingContent": {
+      "copyTitle": "Copier l'intitulé",
+      "copyDescription": "Copier la description",
+      "copied": "Copié dans le presse-papiers.",
+      "copyFailed": "Le navigateur a bloqué le presse-papiers. Sélectionnez le texte et copiez-le manuellement.",
+      "edit": "Modifier l'annonce",
+      "save": "Enregistrer l'annonce",
+      "cancel": "Annuler les modifications",
+      "title": "Intitulé",
+      "employmentKind": "Type d'emploi",
+      "description": "Texte de l'annonce",
+      "empty": "Aucun texte d'annonce pour l'instant.",
+      "source": "Créée à partir de la description de poste {name}",
+      "failed": "L'annonce n'a pas pu être enregistrée."
     }
   },
   "performance": {

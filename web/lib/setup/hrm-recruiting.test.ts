@@ -4,6 +4,7 @@ import test from 'node:test'
 import { SETUP_ENTITY_BY_KEY, SETUP_ENTITIES } from './registry'
 import {
   RECRUITING_INTERVIEWER_POOLS_ENTITY,
+  RECRUITING_JOB_DESCRIPTIONS_ENTITY,
   RECRUITING_KIT_ATTRIBUTES_ENTITY,
   RECRUITING_KIT_QUESTIONS_ENTITY,
   RECRUITING_KITS_ENTITY,
@@ -11,7 +12,7 @@ import {
   RECRUITING_RETENTION_RULES_ENTITY,
 } from './hrm-recruiting'
 
-// Recruiting-depth Setup: six registry entities, four exposed in
+// Recruiting Setup: seven registry entities, five exposed in
 // Company Setup and two nested under their kit, all hidden with the
 // Recruiting module. Pure registry-shape assertions — the write-path
 // refusals are proved against the DB suite.
@@ -23,6 +24,7 @@ const ENTITIES = [
   RECRUITING_INTERVIEWER_POOLS_ENTITY,
   RECRUITING_OFFER_TEMPLATES_ENTITY,
   RECRUITING_RETENTION_RULES_ENTITY,
+  RECRUITING_JOB_DESCRIPTIONS_ENTITY,
 ]
 
 test('recruiting-depth entities register under their documented tables', () => {
@@ -35,6 +37,7 @@ test('recruiting-depth entities register under their documented tables', () => {
       ['hrm-interviewer-pools', 'hrm_interviewer_pools'],
       ['hrm-offer-templates', 'hrm_offer_templates'],
       ['hrm-retention-rules', 'hrm_retention_rules'],
+      ['hrm-job-descriptions', 'hrm_job_descriptions'],
     ],
   )
   for (const entity of ENTITIES) {
@@ -49,6 +52,7 @@ test('recruiting-depth configuration is discoverable in Company Setup, with kit 
     RECRUITING_INTERVIEWER_POOLS_ENTITY,
     RECRUITING_OFFER_TEMPLATES_ENTITY,
     RECRUITING_RETENTION_RULES_ENTITY,
+    RECRUITING_JOB_DESCRIPTIONS_ENTITY,
   ]) {
     assert.notEqual(entity.rehomed, true, `${entity.key} is editable on the setup rail`)
     assert.equal(entity.nestedUnder, undefined, `${entity.key} is top-level`)

@@ -939,7 +939,11 @@
       "targetStart": "Zielstart",
       "submit": "Anfrage erstellen",
       "failed": "Die Anfrage konnte nicht erstellt werden.",
-      "noEmployer": "Keine anstellende Gesellschaft verfügbar — bitten Sie einen Administrator um Zugriff auf eine Gesellschaft, bevor Sie eine Anfrage erstellen."
+      "noEmployer": "Keine anstellende Gesellschaft verfügbar — bitten Sie einen Administrator um Zugriff auf eine Gesellschaft, bevor Sie eine Anfrage erstellen.",
+      "jobDescription": "Von Stellenbeschreibung ausgehen",
+      "noJobDescription": "Keine – Ausschreibung neu verfassen",
+      "jobDescriptionNote": "Beschäftigungsart und Gehaltsspanne werden ebenfalls aus der Stellenbeschreibung übernommen.",
+      "description": "Ausschreibungstext"
     },
     "lifecycle": {
       "title": "Lebenszyklus",
@@ -1140,7 +1144,7 @@
       "postings": "Stellenanzeigen"
     },
     "workspace": {
-      "openings": "Genehmigter Personalbedarf: Stellenanforderungen, Personalplanung und Bewerbungen verwalten.",
+      "openings": "Genehmigter Personalbedarf: Stellenanforderungen, Personalplanung und Bewerbungen verwalten. Wiederverwendbare Stellenbeschreibungen liegen in der Unternehmenseinrichtung.",
       "interviews": "Geplante Interviews und Bewertungen. Interviewvorlagen und Interviewergruppen werden in der Unternehmenseinrichtung verwaltet.",
       "offers": "Angebote, Genehmigungen und Annahmen. Angebotsvorlagen werden in der Unternehmenseinrichtung verwaltet.",
       "postings": "Genehmigte offene Stellen veröffentlichen und Bewerbungen nach Kanal verfolgen.",
@@ -1148,6 +1152,21 @@
       "configure": "Recruiting konfigurieren",
       "newPool": "Neuer Bewerberpool",
       "poolDescription": "Beschreibung"
+    },
+    "postingContent": {
+      "copyTitle": "Titel kopieren",
+      "copyDescription": "Beschreibung kopieren",
+      "copied": "In die Zwischenablage kopiert.",
+      "copyFailed": "Der Browser hat die Zwischenablage blockiert. Text markieren und manuell kopieren.",
+      "edit": "Ausschreibung bearbeiten",
+      "save": "Ausschreibung speichern",
+      "cancel": "Änderungen verwerfen",
+      "title": "Titel",
+      "employmentKind": "Beschäftigungsart",
+      "description": "Ausschreibungstext",
+      "empty": "Noch kein Ausschreibungstext.",
+      "source": "Erstellt aus Stellenbeschreibung {name}",
+      "failed": "Die Ausschreibung konnte nicht gespeichert werden."
     }
   },
   "performance": {

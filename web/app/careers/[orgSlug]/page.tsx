@@ -32,9 +32,17 @@ export default async function CareersPage({
 
   const postings = await withOrgContext(org.orgId, async () => {
     const rows = (
-      await db.execute<{ postingId: string; requisitionNumber: string; title: string; publishedAt: string | null }>(sql`
+      await db.execute<{
+        postingId: string
+        requisitionNumber: string
+        title: string
+        employmentKind: string | null
+        description: string | null
+        publishedAt: string | null
+      }>(sql`
         select p.id as "postingId", r.requisition_number as "requisitionNumber",
-               r.title, p.published_at as "publishedAt"
+               r.title, r.employment_kind as "employmentKind", r.description,
+               p.published_at as "publishedAt"
           from hrm_job_postings p
           join hrm_requisitions r on r.org_id = p.org_id and r.id = p.requisition_id
          where p.org_id = ${org.orgId} and p.status = 'published' and r.status = 'open'
@@ -67,10 +75,16 @@ export default async function CareersPage({
               </a>
               <p className="mt-1 text-xs text-slate-500">
                 {posting.requisitionNumber}
+                {posting.employmentKind ? ` · ${posting.employmentKind}` : ''}
                 {posting.publishedAt ? ` · ${posting.publishedAt.slice(0, 10)}` : ''}
               </p>
               {selected?.postingId === posting.postingId && (
-                <CareersApplyForm postingId={posting.postingId} />
+                <>
+                  {posting.description ? (
+                    <p className="mt-3 whitespace-pre-wrap text-sm text-slate-700">{posting.description}</p>
+                  ) : null}
+                  <CareersApplyForm postingId={posting.postingId} />
+                </>
               )}
             </li>
           ))}

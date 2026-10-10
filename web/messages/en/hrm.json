@@ -939,7 +939,11 @@
       "targetStart": "Target start",
       "submit": "Create requisition",
       "failed": "The requisition could not be created.",
-      "noEmployer": "No employing subsidiary is available — ask an administrator for subsidiary access before creating the requisition."
+      "noEmployer": "No employing subsidiary is available — ask an administrator for subsidiary access before creating the requisition.",
+      "jobDescription": "Start from job description",
+      "noJobDescription": "None — write this posting from scratch",
+      "jobDescriptionNote": "The employment type and pay range are copied from the job description too.",
+      "description": "Posting description"
     },
     "lifecycle": {
       "title": "Lifecycle",
@@ -1140,7 +1144,7 @@
       "postings": "Job postings"
     },
     "workspace": {
-      "openings": "Approved hiring demand: manage requisitions, headcount, and candidates.",
+      "openings": "Approved hiring demand: manage requisitions, headcount, and candidates. Reusable job descriptions live in Company Setup.",
       "interviews": "Scheduled interviews and scorecards. Interview kits and interviewer groups live in Company Setup.",
       "offers": "Candidate offers, approvals, and acceptance. Reusable offer templates live in Company Setup.",
       "postings": "Publish approved openings to job boards and track applications by channel.",
@@ -1148,6 +1152,21 @@
       "configure": "Configure recruiting",
       "newPool": "New candidate pool",
       "poolDescription": "Description"
+    },
+    "postingContent": {
+      "copyTitle": "Copy title",
+      "copyDescription": "Copy description",
+      "copied": "Copied to the clipboard.",
+      "copyFailed": "The browser blocked the clipboard. Select the text and copy it instead.",
+      "edit": "Edit posting",
+      "save": "Save posting",
+      "cancel": "Discard changes",
+      "title": "Title",
+      "employmentKind": "Employment type",
+      "description": "Posting description",
+      "empty": "No posting description yet.",
+      "source": "Started from job description {name}",
+      "failed": "The posting could not be saved."
     }
   },
   "performance": {

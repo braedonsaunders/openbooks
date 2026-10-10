@@ -10,6 +10,7 @@ import { loadVacancyAsOf } from "../positions-read.ts";
 import { RecruitingError } from "./errors.ts";
 import { optionalCivilDate, requireActorId, requireCivilDate, requireId, requireOrgId, requireReason } from "./input.ts";
 import { ensureDefaultPipelineTemplate, loadPipelineTemplate } from "./pipeline.ts";
+import { loadJobDescriptionForRequisition } from "./job-descriptions.ts";
 
 /**
  * Canonical recruiting requisition service (HR-6, 0195): the vacancy to
@@ -53,6 +54,7 @@ export interface RequisitionDTO {
   readonly closeReason: string | null;
   readonly pipelineTemplateId: string | null;
   readonly description: string | null;
+  readonly jobDescriptionId: string | null;
   readonly revision: number;
 }
 
@@ -80,6 +82,7 @@ type RequisitionRow = {
   closeReason: string | null;
   pipelineTemplateId: string | null;
   description: string | null;
+  jobDescriptionId: string | null;
   revision: number;
 };
 
@@ -95,7 +98,8 @@ const REQUISITION_COLUMNS = sql`
   compensation_basis as "compensationBasis", status,
   opened_on as "openedOn", closed_on as "closedOn",
   close_reason as "closeReason",
-  pipeline_template_id as "pipelineTemplateId", description, revision
+  pipeline_template_id as "pipelineTemplateId", description,
+  job_description_id as "jobDescriptionId", revision
 `;
 
 function toDTO(row: RequisitionRow): RequisitionDTO {
@@ -205,7 +209,8 @@ export function requireCompensation(value: unknown): RequisitionCompensation | n
 export interface CreateRequisitionQuery {
   readonly orgId: string;
   readonly actorId: string;
-  readonly title: unknown;
+  /** Optional when a job description supplies it. */
+  readonly title?: unknown;
   readonly positionId?: unknown;
   readonly employerSubsidiaryId: unknown;
   readonly departmentId?: unknown;
@@ -218,20 +223,49 @@ export interface CreateRequisitionQuery {
   readonly compensation?: unknown;
   readonly pipelineTemplateId?: unknown;
   readonly description?: unknown;
+  /**
+   * Library entry the opening starts from. Its title, employment kind, pay
+   * range and description are copied for every field the request leaves
+   * unset; the copy is the requisition's own content from then on.
+   */
+  readonly jobDescriptionId?: unknown;
+}
+
+/** Posting descriptions are long-form text; the bound keeps one opening a reasonable row. */
+export const REQUISITION_DESCRIPTION_MAX_LENGTH = 20_000;
+
+function optionalDescription(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string") {
+    throw new RecruitingError("INVALID_INPUT", "description must be text");
+  }
+  if (value.length > REQUISITION_DESCRIPTION_MAX_LENGTH) {
+    throw new RecruitingError(
+      "INVALID_INPUT",
+      `description is ${value.length} characters — shorten it to at most ${REQUISITION_DESCRIPTION_MAX_LENGTH}`,
+    );
+  }
+  return value.trim().length === 0 ? null : value;
+}
+
+function optionalText(value: unknown, name: string): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new RecruitingError("INVALID_INPUT", `${name} must be non-blank when sent`);
+  }
+  return value.trim();
 }
 
 /** Open a draft requisition (status draft, no number consumed until open). */
 export async function createRequisition(query: CreateRequisitionQuery): Promise<RequisitionDTO> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
-  if (typeof query.title !== "string" || query.title.trim().length === 0) {
-    throw new RecruitingError("INVALID_INPUT", "requisition title must be non-blank");
-  }
+  const requestedTitle = optionalText(query.title, "requisition title");
   if (typeof query.employerSubsidiaryId !== "string" || query.employerSubsidiaryId.length === 0) {
     throw new RecruitingError("INVALID_INPUT", "employerSubsidiaryId must be a non-empty string — a vacancy belongs to a legal entity");
   }
   const headcount = requireHeadcount(query.headcount);
-  const compensation = requireCompensation(query.compensation);
+  const requestedCompensation = requireCompensation(query.compensation);
   const positionId = query.positionId === undefined || query.positionId === null ? null : requireId(query.positionId, "positionId");
   const departmentId = query.departmentId === undefined || query.departmentId === null ? null : requireId(query.departmentId, "departmentId");
   const locationId = query.locationId === undefined || query.locationId === null ? null : requireId(query.locationId, "locationId");
@@ -244,20 +278,19 @@ export async function createRequisition(query: CreateRequisitionQuery): Promise<
       ? null
       : requireId(query.recruiterUserId, "recruiterUserId");
   const targetStartOn = optionalCivilDate(query.targetStartOn, "targetStartOn");
-  const employmentKind =
-    query.employmentKind === undefined || query.employmentKind === null
-      ? null
-      : typeof query.employmentKind === "string" && query.employmentKind.trim().length > 0
-        ? query.employmentKind.trim()
-        : (() => {
-            throw new RecruitingError("INVALID_INPUT", "employmentKind must be non-blank when sent");
-          })();
+  const requestedEmploymentKind = optionalText(query.employmentKind, "employmentKind");
   const pipelineTemplateId =
     query.pipelineTemplateId === undefined || query.pipelineTemplateId === null
       ? null
       : requireId(query.pipelineTemplateId, "pipelineTemplateId");
-  const description =
-    query.description === undefined || query.description === null ? null : String(query.description);
+  const requestedDescription = optionalDescription(query.description);
+  const jobDescriptionId =
+    query.jobDescriptionId === undefined || query.jobDescriptionId === null
+      ? null
+      : requireId(query.jobDescriptionId, "jobDescriptionId");
+  if (requestedTitle === null && jobDescriptionId === null) {
+    throw new RecruitingError("INVALID_INPUT", "requisition title must be non-blank — enter a title or start from a job description");
+  }
 
   return withOrgTransaction(orgId, async () => {
     // Authority first, against the DECLARED employer: no planting vacancies
@@ -276,6 +309,11 @@ export async function createRequisition(query: CreateRequisitionQuery): Promise<
       const template = await loadPipelineTemplate(db, orgId, pipelineTemplateId);
       if (!template) throw new RecruitingError("NOT_FOUND", "pipeline template is not visible in this organization — check the reference");
     }
+    const source = jobDescriptionId ? await loadJobDescriptionForRequisition(db, orgId, jobDescriptionId) : null;
+    const title = requestedTitle ?? source!.title;
+    const employmentKind = requestedEmploymentKind ?? source?.employmentKind ?? null;
+    const compensation = requestedCompensation ?? source?.compensation ?? null;
+    const description = requestedDescription ?? source?.description ?? null;
     const number = await allocateRequisitionNumber(db, orgId);
     const inserted = (await db.execute<RequisitionRow>(sql`
       insert into hrm_requisitions
@@ -283,14 +321,14 @@ export async function createRequisition(query: CreateRequisitionQuery): Promise<
          department_id, location_id, hiring_manager_party_id, recruiter_user_id,
          headcount, employment_kind, target_start_on,
          compensation_min, compensation_max, compensation_currency, compensation_basis,
-         status, pipeline_template_id, description, created_by, updated_by)
-      values (${orgId}, ${number}, ${positionId}, ${(query.title as string).trim()},
+         status, pipeline_template_id, description, job_description_id, created_by, updated_by)
+      values (${orgId}, ${number}, ${positionId}, ${title},
               ${query.employerSubsidiaryId as string}, ${departmentId}, ${locationId},
               ${hiringManagerPartyId}, ${recruiterUserId}, ${headcount},
               ${employmentKind}, ${targetStartOn},
               ${compensation?.min ?? null}, ${compensation?.max ?? null},
               ${compensation?.currency ?? null}, ${compensation?.basis ?? null},
-              'draft', ${pipelineTemplateId}, ${description}, ${actorId}, ${actorId})
+              'draft', ${pipelineTemplateId}, ${description}, ${jobDescriptionId}, ${actorId}, ${actorId})
       returning ${REQUISITION_COLUMNS}
     `)).rows[0];
     if (!inserted) {
@@ -489,6 +527,107 @@ async function transitionRequisition(
         "BAD_STATE",
         `requisition ${subject.requisitionNumber} is ${current.status} — ${action} needs a ${expected} opening`,
       );
+    }
+    return toDTO(updated);
+  });
+}
+
+export interface ReviseRequisitionQuery {
+  readonly orgId: string;
+  readonly actorId: string;
+  readonly requisitionId: string;
+  /** The revision the editor read; a concurrent change refuses instead of being overwritten. */
+  readonly expectedRevision: unknown;
+  /** Omitted fields are unchanged; null clears every field except the title. */
+  readonly title?: unknown;
+  readonly employmentKind?: unknown;
+  readonly compensation?: unknown;
+  readonly description?: unknown;
+}
+
+const REVISABLE_STATUSES: readonly RequisitionStatus[] = ["draft", "open", "on_hold"];
+
+/**
+ * Revise an opening's posting content (title, employment kind, pay range,
+ * description) while it is still recruiting. Filled and cancelled openings
+ * are history and refuse. The write is guarded by the revision the editor
+ * read, bumps it, and records the before/after content in the audit log in
+ * the same transaction.
+ */
+export async function reviseRequisition(query: ReviseRequisitionQuery): Promise<RequisitionDTO> {
+  const orgId = requireOrgId(query.orgId);
+  const actorId = requireActorId(query.actorId);
+  const requisitionId = requireId(query.requisitionId, "requisitionId");
+  if (typeof query.expectedRevision !== "number" || !Number.isInteger(query.expectedRevision) || query.expectedRevision < 1) {
+    throw new RecruitingError("INVALID_INPUT", "expectedRevision is the positive integer revision the edit was made against — reload the opening");
+  }
+  const expectedRevision = query.expectedRevision;
+  if (query.title === null) {
+    throw new RecruitingError("INVALID_INPUT", "requisition title must be non-blank — an opening always has a title");
+  }
+  const title = query.title === undefined ? undefined : optionalText(query.title, "requisition title");
+  const employmentKind = query.employmentKind === undefined ? undefined : optionalText(query.employmentKind, "employmentKind");
+  const compensation = query.compensation === undefined ? undefined : requireCompensation(query.compensation);
+  const description = query.description === undefined ? undefined : optionalDescription(query.description);
+
+  return withOrgTransaction(orgId, async () => {
+    const subject = await requireHrmRecruitingManage(db, orgId, actorId, requisitionId);
+    const current = await loadRequisitionForUpdate(db, orgId, requisitionId);
+    if (!(REVISABLE_STATUSES as readonly string[]).includes(current.status)) {
+      throw new RecruitingError(
+        "BAD_STATE",
+        `requisition ${subject.requisitionNumber} is ${current.status} — only draft, open and on-hold openings take posting edits`,
+      );
+    }
+    if (current.revision !== expectedRevision) {
+      throw new RecruitingError(
+        "STALE_REVISION",
+        `requisition ${subject.requisitionNumber} changed since it was read (revision ${current.revision}, edited against ${expectedRevision}) — reload it and reapply the edit`,
+      );
+    }
+    const before = toDTO(current);
+    const next = {
+      title: title ?? before.title,
+      employmentKind: employmentKind === undefined ? before.employmentKind : employmentKind,
+      compensation: compensation === undefined ? before.compensation : compensation,
+      description: description === undefined ? before.description : description,
+    };
+    const prior = {
+      title: before.title,
+      employmentKind: before.employmentKind,
+      compensation: before.compensation,
+      description: before.description,
+    };
+    if (JSON.stringify(next) === JSON.stringify(prior)) return before;
+    const updated = (await db.execute<RequisitionRow>(sql`
+      update hrm_requisitions
+         set title = ${next.title}, employment_kind = ${next.employmentKind},
+             compensation_min = ${next.compensation?.min ?? null},
+             compensation_max = ${next.compensation?.max ?? null},
+             compensation_currency = ${next.compensation?.currency ?? null},
+             compensation_basis = ${next.compensation?.basis ?? null},
+             description = ${next.description},
+             revision = revision + 1,
+             updated_by = ${actorId}, updated_at = now()
+       where org_id = ${orgId} and id = ${requisitionId}
+         and revision = ${expectedRevision}
+         and status in ('draft', 'open', 'on_hold')
+      returning ${REQUISITION_COLUMNS}
+    `)).rows[0];
+    if (!updated) {
+      throw new RecruitingError(
+        "STALE_REVISION",
+        `requisition ${subject.requisitionNumber} changed while saving — reload it and reapply the edit`,
+      );
+    }
+    const audited = (await db.execute<{ id: string }>(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'hrm_requisitions', ${requisitionId}, 'requisition_posting_revised',
+              ${JSON.stringify({ before: prior, after: next })}::jsonb, ${actorId})
+      returning id
+    `)).rows[0];
+    if (!audited) {
+      throw new RecruitingError("REFUSED", "the posting edit was not audited — no audit row was written; retry the request");
     }
     return toDTO(updated);
   });

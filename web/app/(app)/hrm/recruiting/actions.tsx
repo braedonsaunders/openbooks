@@ -253,6 +253,173 @@ export function RequisitionLifecycleIsland({
   )
 }
 
+export interface PostingContentLabels {
+  heading: string
+  title: string
+  employmentKind: string
+  description: string
+  empty: string
+  source: string
+  copyTitle: string
+  copyDescription: string
+  copied: string
+  copyFailed: string
+  edit: string
+  save: string
+  cancel: string
+  failed: string
+}
+
+/**
+ * The opening's posting content: read, copy to the clipboard for pasting
+ * into a job board, and edit while the opening is still recruiting. Saves
+ * PATCH the requisition's revise action with the revision this drawer read,
+ * so a concurrent edit is refused instead of silently overwritten.
+ */
+export function PostingContentIsland({
+  requisitionId,
+  revision,
+  title,
+  employmentKind,
+  description,
+  sourceName,
+  canEdit,
+  labels,
+}: {
+  requisitionId: string
+  revision: number
+  title: string
+  employmentKind: string | null
+  description: string | null
+  /** Library entry the opening started from, already interpolated into labels.source. */
+  sourceName: string | null
+  /** The hrm.recruiting.manage grant on a draft, open or on-hold opening — display gating only. */
+  canEdit: boolean
+  labels: PostingContentLabels
+}) {
+  const refresh = useRefresh()
+  const fieldId = useId()
+  const [editing, setEditing] = useState(false)
+  const [draftTitle, setDraftTitle] = useState(title)
+  const [draftKind, setDraftKind] = useState(employmentKind ?? '')
+  const [draftDescription, setDraftDescription] = useState(description ?? '')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function copy(text: string) {
+    try {
+      await navigator.clipboard.writeText(text)
+      toast.success(labels.copied)
+    } catch {
+      toast.error(labels.copyFailed)
+    }
+  }
+
+  function startEditing() {
+    setDraftTitle(title)
+    setDraftKind(employmentKind ?? '')
+    setDraftDescription(description ?? '')
+    setError(null)
+    setEditing(true)
+  }
+
+  async function save(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (busy) return
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await postJson(`/api/hrm/recruiting/requisitions/${requisitionId}`, 'PATCH', {
+        action: 'revise',
+        expectedRevision: revision,
+        title: draftTitle.trim(),
+        employmentKind: draftKind.trim() ? draftKind.trim() : null,
+        description: draftDescription.trim() ? draftDescription : null,
+      })
+      if (!res.ok) {
+        setError(await readApiErrorMessage(res, labels.failed))
+        return
+      }
+      setEditing(false)
+      refresh()
+    } catch {
+      setError(labels.failed)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (editing) {
+    return (
+      <form className="space-y-3" onSubmit={save}>
+        <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{labels.heading}</h4>
+        <div>
+          <Label htmlFor={`${fieldId}-title`}>{labels.title}</Label>
+          <Input id={`${fieldId}-title`} value={draftTitle} onChange={(event) => setDraftTitle(event.target.value)} required />
+        </div>
+        <div>
+          <Label htmlFor={`${fieldId}-kind`}>{labels.employmentKind}</Label>
+          <Input id={`${fieldId}-kind`} value={draftKind} onChange={(event) => setDraftKind(event.target.value)} />
+        </div>
+        <div>
+          <Label htmlFor={`${fieldId}-description`}>{labels.description}</Label>
+          <Textarea
+            id={`${fieldId}-description`}
+            rows={14}
+            value={draftDescription}
+            onChange={(event) => setDraftDescription(event.target.value)}
+          />
+        </div>
+        {error ? (
+          <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+            {error}
+          </p>
+        ) : null}
+        <div className="flex flex-wrap gap-2">
+          <Button type="submit" size="sm" disabled={busy || draftTitle.trim().length === 0}>
+            {labels.save}
+          </Button>
+          <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => setEditing(false)}>
+            {labels.cancel}
+          </Button>
+        </div>
+      </form>
+    )
+  }
+
+  return (
+    <div className="space-y-2">
+      <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{labels.heading}</h4>
+      {sourceName ? <p className="text-xs text-slate-500 dark:text-slate-400">{labels.source}</p> : null}
+      {employmentKind ? (
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          {labels.employmentKind}: {employmentKind}
+        </p>
+      ) : null}
+      {description ? (
+        <p className="whitespace-pre-wrap text-sm text-slate-600 dark:text-slate-300">{description}</p>
+      ) : (
+        <p className="text-sm text-slate-500 dark:text-slate-400">{labels.empty}</p>
+      )}
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" size="sm" variant="outline" onClick={() => void copy(title)}>
+          {labels.copyTitle}
+        </Button>
+        {description ? (
+          <Button type="button" size="sm" variant="outline" onClick={() => void copy(description)}>
+            {labels.copyDescription}
+          </Button>
+        ) : null}
+        {canEdit ? (
+          <Button type="button" size="sm" variant="outline" onClick={startEditing}>
+            {labels.edit}
+          </Button>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
 /**
  * Move, reject, or withdraw one application. Move rides the manage grant
  * or the hiring manager's own requisition; reject and withdraw need the

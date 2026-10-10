@@ -1,7 +1,7 @@
 /** Setup-registry currency entities (split from registry.ts; pure moves only). */
 import type { SetupEntity } from '../types'
 import { FX_RATE_TYPES, FX_RATE_AGE_KINDS, CONSOLIDATED_RATE_SOURCES, COMPLIANCE_CATEGORIES, COMPLIANCE_ENFORCEMENT, LIEN_WAIVER_ENFORCEMENT, LIEN_WAIVER_TYPES, INFORMATION_RETURN_FORM_TYPES, INFORMATION_RETURN_FORMS_OPTIONS, INFORMATION_RETURN_BOXES } from '../options'
-import { RECRUITING_INTERVIEWER_POOLS_ENTITY, RECRUITING_KIT_ATTRIBUTES_ENTITY, RECRUITING_KIT_QUESTIONS_ENTITY, RECRUITING_KITS_ENTITY, RECRUITING_OFFER_TEMPLATES_ENTITY, RECRUITING_RETENTION_RULES_ENTITY } from '../hrm-recruiting'
+import { RECRUITING_INTERVIEWER_POOLS_ENTITY, RECRUITING_JOB_DESCRIPTIONS_ENTITY, RECRUITING_KIT_ATTRIBUTES_ENTITY, RECRUITING_KIT_QUESTIONS_ENTITY, RECRUITING_KITS_ENTITY, RECRUITING_OFFER_TEMPLATES_ENTITY, RECRUITING_RETENTION_RULES_ENTITY } from '../hrm-recruiting'
 
 export const CURRENCY_ENTITIES: SetupEntity[] = [
   // --- Currency ------------------------------------------------------------
@@ -263,13 +263,15 @@ export const CURRENCY_ENTITIES: SetupEntity[] = [
     ],
   },
   // HR-18 begin: recruiting-depth configuration (0229), declared in
-  // ./hrm-recruiting.ts; rehomed onto /hrm/recruiting (kits + pools on the
-  // Interviews tab, offer templates on Offers, retention rules on Pools).
+  // ./hrm-recruiting.ts; rehomed onto /hrm/recruiting (job descriptions on
+  // Openings, kits + pools on Interviews, offer templates on Offers,
+  // retention rules on Pools).
   RECRUITING_KITS_ENTITY,
   RECRUITING_KIT_ATTRIBUTES_ENTITY,
   RECRUITING_KIT_QUESTIONS_ENTITY,
   RECRUITING_INTERVIEWER_POOLS_ENTITY,
   RECRUITING_OFFER_TEMPLATES_ENTITY,
   RECRUITING_RETENTION_RULES_ENTITY,
+  RECRUITING_JOB_DESCRIPTIONS_ENTITY,
   // HR-18 end
 ]

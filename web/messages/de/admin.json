@@ -3613,6 +3613,11 @@
         "title": "Arbeitskalender",
         "singularTitle": "Arbeitskalender",
         "description": "Unternehmensweite Arbeitstage und Schließtage für Produktion und Projektplanung. Arbeitsplätze legen ihre verfügbaren Stunden fest. Bestehende MRP-Läufe behalten ihre ursprünglichen Kalenderdaten."
+      },
+      "hrm-job-descriptions": {
+        "title": "Stellenbeschreibungen",
+        "singularTitle": "Stellenbeschreibung",
+        "description": "Wiederverwendbare Ausschreibungsinhalte für neue Stellenanforderungen: Titel, Beschäftigungsart, Gehaltsspanne und Beschreibung."
       }
     },
     "fields": {
@@ -4222,7 +4227,12 @@
       "schedulePdfColorTreatment": "Farbdarstellung",
       "schedulePdfColorIntensity": "Farbtönung (%)",
       "custodianPartyId": "Verwahrender Lieferant",
-      "showReadiness": "Arbeitsleitfaden"
+      "showReadiness": "Arbeitsleitfaden",
+      "employmentKind": "Beschäftigungsart",
+      "compensationMin": "Gehalt Minimum",
+      "compensationMax": "Gehalt Maximum",
+      "compensationCurrency": "Gehaltswährung",
+      "compensationBasis": "Gehaltsbasis"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Tage zwischen dem neuesten verwendbaren Kurs und dem Periodenende, ab denen Bewertung und Konsolidierung den Kurs ablehnen. Stichtagskurse zählen ab dem Datum des Kassakurses zum Periodenende, Durchschnittskurse ab der neuesten einbezogenen Notierung. Standard ohne Richtlinie: 31 Tage.",
@@ -4391,7 +4401,12 @@
       "scheduleBoardDayPolicyKnown": "Deaktivieren, wenn nur Quelldaten bekannt sind. Historie bleibt ohne Stunden sichtbar; Tagesbuchungen benötigen konfigurierte Arbeitszeiten.",
       "scheduleShowHoursColumn": "Show the right-side sum of booked hours. Source dates without hours remain unknown. Daily footer totals are configured separately.",
       "scheduleDistributionVisibility": "Personal reports contain only the recipient’s own schedule or associated resources. Whole-board reports require an explicit sharing policy and a legal-entity-scoped board. Every send still requires a reviewed audience/version or an authored, enabled native Flow.",
-      "scheduleAutomaticDelivery": "Optionale Berichtsrichtlinie: Wählen Sie sich selbst als berechtigten Bediener und die Board-Zeitzone. Aktivieren Sie einen Planversand-Flow separat mit ausdrücklichen Tagen und Uhrzeiten. Das Löschen dieser Richtlinie stoppt künftige Sendungen und erhält den Versandverlauf."
+      "scheduleAutomaticDelivery": "Optionale Berichtsrichtlinie: Wählen Sie sich selbst als berechtigten Bediener und die Board-Zeitzone. Aktivieren Sie einen Planversand-Flow separat mit ausdrücklichen Tagen und Uhrzeiten. Das Löschen dieser Richtlinie stoppt künftige Sendungen und erhält den Versandverlauf.",
+      "hrmJobDescriptionName": "So erscheint der Eintrag in der Bibliothek, zum Beispiel Projektleitung – Außendienst.",
+      "hrmJobDescriptionTitle": "Der Stellentitel, den Bewerbende in der Ausschreibung sehen.",
+      "hrmJobDescriptionKind": "Zum Beispiel Vollzeit, Teilzeit, saisonal oder befristet.",
+      "hrmJobDescriptionPay": "Optional. Minimum, Maximum, Währung und Basis gemeinsam angeben oder alle vier leer lassen.",
+      "hrmJobDescriptionBody": "Der Ausschreibungstext. Neue Stellenanforderungen übernehmen eine Kopie; Änderungen hier wirken nicht auf bestehende Stellen."
     },
     "options": {
       "withholdingCondominiumPayer": "Wohnungseigentümergemeinschaft als Zahler",

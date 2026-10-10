@@ -939,7 +939,11 @@
       "targetStart": "Início previsto",
       "submit": "Criar requisição",
       "failed": "Não foi possível criar a requisição.",
-      "noEmployer": "Nenhuma subsidiária empregadora disponível — peça acesso a uma subsidiária a um administrador antes de criar a requisição."
+      "noEmployer": "Nenhuma subsidiária empregadora disponível — peça acesso a uma subsidiária a um administrador antes de criar a requisição.",
+      "jobDescription": "Partir de uma descrição de cargo",
+      "noJobDescription": "Nenhuma: escrever a vaga do zero",
+      "jobDescriptionNote": "O tipo de contratação e a faixa salarial também são copiados da descrição de cargo.",
+      "description": "Texto da vaga"
     },
     "lifecycle": {
       "title": "Ciclo de vida",
@@ -1140,7 +1144,7 @@
       "postings": "Anúncios de vagas"
     },
     "workspace": {
-      "openings": "Necessidades de contratação aprovadas: requisições, quadro de pessoal e candidatos.",
+      "openings": "Necessidades de contratação aprovadas: requisições, quadro de pessoal e candidatos. Descrições de cargo reutilizáveis ficam na configuração da empresa.",
       "interviews": "Entrevistas agendadas e avaliações. Kits e grupos de entrevistadores ficam na configuração da empresa.",
       "offers": "Ofertas, aprovações e aceite. Modelos de oferta ficam na configuração da empresa.",
       "postings": "Publique vagas aprovadas e acompanhe candidaturas por canal.",
@@ -1148,6 +1152,21 @@
       "configure": "Configurar recrutamento",
       "newPool": "Novo banco de candidatos",
       "poolDescription": "Descrição"
+    },
+    "postingContent": {
+      "copyTitle": "Copiar título",
+      "copyDescription": "Copiar descrição",
+      "copied": "Copiado para a área de transferência.",
+      "copyFailed": "O navegador bloqueou a área de transferência. Selecione o texto e copie manualmente.",
+      "edit": "Editar vaga",
+      "save": "Salvar vaga",
+      "cancel": "Descartar alterações",
+      "title": "Título",
+      "employmentKind": "Tipo de contratação",
+      "description": "Texto da vaga",
+      "empty": "Ainda não há texto da vaga.",
+      "source": "Criada a partir da descrição de cargo {name}",
+      "failed": "Não foi possível salvar a vaga."
     }
   },
   "performance": {

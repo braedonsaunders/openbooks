@@ -7,7 +7,7 @@ export const structuredInterviewsOffersJobBoards: DocArticle = {
   order: 10,
   summary:
     "How interview kits with blind scorecards, candidate self-scheduling, template offers with in-product signing, board publishing with disposition sync, and consent-based retention rules extend the recruiting funnel.",
-  updated: "2026-09-27",
+  updated: "2026-10-10",
   keywords: [
     "interview kit",
     "scorecard",
@@ -16,6 +16,7 @@ export const structuredInterviewsOffersJobBoards: DocArticle = {
     "offer template",
     "e-sign",
     "job board",
+    "job description",
     "career page",
     "disposition",
     "retention rule",
@@ -79,12 +80,32 @@ the letter. Once an offer is sent for signing, hire requires it to be
 accepted AND signed, and refuses an unsigned offer by name; an offer
 that never entered signing hires on its acceptance.
 
+## Job descriptions
+
+Company Setup → Job descriptions (also linked from the Openings tab) is
+the library of reusable posting content: a library name, the job title
+applicants see, an optional employment type and pay range, and the
+posting text. When you open a new requisition, choose a job description
+to fill the title and text for review; the employment type and pay range
+are copied too. The requisition keeps its own copy, so editing or
+deactivating a library entry never changes an opening that already
+exists. An entry used by a requisition cannot be deleted — deactivate it
+instead.
+
+While an opening is a draft, open, or on hold, Edit posting in its drawer
+revises the title, employment type, and text. Saving is refused if
+someone else changed the opening since you loaded it, and every edit is
+recorded in the audit log with the before and after content. Copy title
+and Copy description put the text on the clipboard for pasting into an
+external job board.
+
 ## Job boards and the career page
 
 A posting binds one requisition to one board key: the generic layer
 ships the internal career page and a signed feed, and named boards are
 connectors behind sync connections. The public career page lists
-published postings with an apply form (honeypot plus rate limit) that
+published postings with their description and an apply form (honeypot
+plus rate limit) that
 writes an application carrying the posting source and the captured
 consents. Every application status change on a posting-sourced
 application appends a disposition-sent event with the stage and
