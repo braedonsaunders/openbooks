@@ -38,6 +38,60 @@ test("a release cut applies one baseline and only the later forward migrations",
   assert.throws(() => historicalMigrationPlan(directory, files), /differs from the tenant-policy environment baselines\/alpha29.sql was verified with/);
 });
 
+test("later-delivered schema changes wait for their prerequisite without changing immutable migration identities", (context) => {
+  const { directory, files, publish } = fixture(context);
+  const generated = [...files, "0482_authority.sql", "0483_contract.sql"];
+  for (const file of generated.slice(files.length)) writeFileSync(join(directory, "generated", file), `-- ${file}\n`);
+  writeFileSync(join(directory, "prerequisites.json"), JSON.stringify({ format: 1, dependencies: [
+    { migration: "generated/0481_new.sql", requires: ["generated/0483_contract.sql"] },
+    { migration: "generated/0483_contract.sql", requires: ["generated/0482_authority.sql"] },
+  ] }));
+  const expected = ["generated/0482_authority.sql", "generated/0483_contract.sql", "generated/0481_new.sql"];
+  assert.deepEqual(releaseMigrationPlan(directory, generated).filenames,
+    [...files.slice(0, 2).map(file => `generated/${file}`), ...expected]);
+  publish();
+  assert.deepEqual(releaseMigrationPlan(directory, generated).filenames, ["baselines/alpha29.sql", ...expected]);
+  assert.deepEqual(historicalMigrationPlan(directory, generated).filenames, files.slice(0, 2).map(file => `generated/${file}`));
+});
+
+test("verified baseline coverage satisfies a forward prerequisite without replaying covered SQL", (context) => {
+  const { directory, files, publish } = fixture(context);
+  writeFileSync(join(directory, "prerequisites.json"), JSON.stringify({ format: 1, dependencies: [
+    { migration: "generated/0481_new.sql", requires: ["generated/0480_last.sql"] },
+  ] }));
+  publish();
+  assert.deepEqual(releaseMigrationPlan(directory, files).filenames, ["baselines/alpha29.sql", "generated/0481_new.sql"]);
+});
+
+test("missing prerequisites and cycles refuse the release before any migration is applied", (context) => {
+  const { directory, files } = fixture(context);
+  const publish = dependencies => writeFileSync(join(directory, "prerequisites.json"), JSON.stringify({ format: 1, dependencies }));
+  publish([{ migration: "generated/0481_new.sql", requires: ["generated/0482_missing.sql"] }]);
+  assert.throws(() => releaseMigrationPlan(directory, files), /requires missing migration generated\/0482_missing.sql/);
+  publish([
+    { migration: "generated/0481_new.sql", requires: ["generated/0480_last.sql"] },
+    { migration: "generated/0480_last.sql", requires: ["generated/0481_new.sql"] },
+  ]);
+  assert.throws(() => releaseMigrationPlan(directory, files), /prerequisites contain a cycle/);
+});
+
+test("unselected migration prerequisites do not expand a selected release and malformed declarations refuse", (context) => {
+  const { directory, files } = fixture(context);
+  const publish = dependencies => writeFileSync(join(directory, "prerequisites.json"), JSON.stringify({ format: 1, dependencies }));
+  const entry = { migration: "generated/0998_unselected.sql", requires: ["generated/0999_unselected.sql"] };
+  publish([entry]);
+  assert.deepEqual(releaseMigrationPlan(directory, files).filenames, files.map(file => `generated/${file}`));
+  for (const invalid of [
+    [entry, entry],
+    [{ ...entry, requires: [entry.migration] }],
+    [{ ...entry, requires: [entry.requires[0], entry.requires[0]] }],
+    [{ ...entry, requires: ["../unreviewed.sql"] }],
+  ]) {
+    publish(invalid);
+    assert.throws(() => releaseMigrationPlan(directory, files), /unique exact migration identities/);
+  }
+});
+
 test("a covered write cannot change after the baseline was verified", (context) => {
   const { directory, files, publish } = fixture(context);
   publish();
