@@ -6,7 +6,7 @@ import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { can, requirePermission } from '../../../lib/authz'
+import { can, getAuthz, requirePermission } from '../../../lib/authz'
 import { isFeatureEnabled } from '../../../lib/features'
 import { requireFeatureEnabled } from '../../../lib/feature-gates'
 import { isUuid, pickString } from '../../../lib/list-params'
@@ -75,14 +75,25 @@ export async function loadTimesheets(
 ): Promise<TimesheetsData> {
   const t = await getTranslations('timesheets')
 
-  const authz = await requirePermission('time.read')
+  // Supervisors read everyone's weeks with time.read. A self-service caller
+  // holding only time.self sees, opens, enters and submits the weeks of the
+  // employee linked to their own login — the list, the drawer, the pickers
+  // and every timesheet API (through the shared time authority) agree.
+  const viewer = await getAuthz()
+  const selfOnly = !!viewer && !can(viewer, 'time.read') && can(viewer, 'time.self')
+  const authz = await requirePermission(selfOnly ? 'time.self' : 'time.read')
   await requireFeatureEnabled(authz.user.orgId, workFamily === 'production' ? 'manufacturing' : 'timeTracking')
   if (workFamily === 'production') await requirePermission('manufacturing.read')
   const basePath = workFamily === 'production' ? '/manufacturing/time' : '/timesheets'
-  const productionAvailable = can(authz,'manufacturing.read') && await isFeatureEnabled(authz.user.orgId,'manufacturing')
-  const projectAvailable = can(authz,'projects.read') && await isFeatureEnabled(authz.user.orgId,'timeTracking')
-  const canManage = can(authz, 'time.manage')
   const orgId = authz.user.orgId
+  const ownEmployeeId = await userEmployeeId(orgId, authz.user.id)
+  const productionAvailable = can(authz,'manufacturing.read') && await isFeatureEnabled(authz.user.orgId,'manufacturing')
+  // A person's own week books to the projects in their scope without the
+  // project-read grant; reading other people's project time still needs it.
+  const projectAvailable = (can(authz,'projects.read') || selfOnly) && await isFeatureEnabled(authz.user.orgId,'timeTracking')
+  const supervisesTime = can(authz, 'time.manage')
+  const entersOwnTime = can(authz, 'time.self')
+  const canManage = supervisesTime || entersOwnTime
 
   // Employee filter — the same active-employee set the editor uses.
   const employees = (await db.execute<{ id: string; name: string | null }>(sql`
@@ -90,6 +101,7 @@ export async function loadTimesheets(
          from parties p
          where p.org_id = ${orgId} and p.is_active
            ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds)}
+           ${selfOnly ? sql`and p.id = ${ownEmployeeId}` : sql``}
            and exists (select 1 from employee_roles r where r.party_id = p.id and r.org_id = p.org_id and r.is_active)
          order by p.display_name`))
 
@@ -102,7 +114,7 @@ export async function loadTimesheets(
   const timesheetStart = await resolveNewTimesheetStart({
     canManage,
     managesOthersTime: managesOthersTime((permission) => can(authz, permission)),
-    linkedEmployeeId: canManage ? await userEmployeeId(orgId, authz.user.id) : null,
+    linkedEmployeeId: ownEmployeeId,
     pinInScope: (employeeId) => pinTimesheetEmployee(orgId, employeeId, authz.allowedSubsidiaryIds),
     firstActiveEmployeeId: employees.rows[0]?.id ?? null,
   })
@@ -115,7 +127,10 @@ export async function loadTimesheets(
   const openParam = pickString(sp.timesheet)
   const [openEmployee, openWeekRaw] = openParam ? openParam.split(':') : []
   const requestedEmployeeId = openEmployee && isUuid(openEmployee) ? openEmployee : null
-  const openEmployeeId = requestedEmployeeId
+  // A self-service caller never opens a coworker's week: the drawer stays
+  // closed and the page names the rule instead.
+  const othersWeekRefused = selfOnly && requestedEmployeeId !== null && requestedEmployeeId !== ownEmployeeId
+  const openEmployeeId = requestedEmployeeId && !othersWeekRefused
     ? await pinTimesheetEmployee(orgId, requestedEmployeeId, authz.allowedSubsidiaryIds)
     : null
   const openWeek = openWeekRaw && isIsoDate(openWeekRaw) ? weekStart(openWeekRaw) : null
@@ -125,7 +140,9 @@ export async function loadTimesheets(
   }
   const [pickers, weekPayload, lineFieldDefs] = openEmployeeId && openWeek
     ? await Promise.all([
-        loadPickers(orgId, openEmployeeId, authz.allowedSubsidiaryIds),
+        loadPickers(orgId, openEmployeeId, authz.allowedSubsidiaryIds).then((loaded) => selfOnly
+          ? { ...loaded, employees: loaded.employees.filter((option) => option.value === ownEmployeeId) }
+          : loaded),
         loadWeek(orgId, openEmployeeId, openWeek, authz.allowedSubsidiaryIds),
         loadFieldDefs('time_entries'),
       ])
@@ -168,7 +185,8 @@ export async function loadTimesheets(
           week: openWeek,
           payload: weekPayload,
           pickers: projectAvailable ? pickers : { ...pickers, projects: [] },
-          canManage,
+          // Entering a week: anyone's with time.manage, one's own with time.self.
+          canManage: supervisesTime || (entersOwnTime && openEmployeeId === ownEmployeeId),
           canApprove: can(authz, 'time.approve'),
           canReopen: can(authz, 'time.reopen'),
           requireApproval: timePolicy.requireApproval,
@@ -190,7 +208,7 @@ export async function loadTimesheets(
     description: workFamily === 'production' ? t('list.productionDescription') : t('list.description'),
     canManage,
     canStartTimesheet: timesheetStart.employeeId !== null,
-    newNotice,
+    newNotice: othersWeekRefused ? t('list.selfOnly') : newNotice,
     currentParams: sp,
     newButton: { href: newHref, label: t('list.newButton') },
     showClockLink: fieldTimeOn && can(authz, 'time.clock'),

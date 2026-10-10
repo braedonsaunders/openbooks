@@ -177,7 +177,13 @@ export const PERMISSION_CATALOGUE = [
   // Fixed assets & depreciation
   "assets.read",
   "assets.manage",
-  // Time tracking & timesheets
+  // Time tracking & timesheets. time.self is the employee's own time: list,
+  // read, enter and submit the weeks of the employee linked to the login and
+  // nobody else's (enforced where every timesheet command locks its week).
+  // time.read and time.manage are the supervisory grants over everyone's
+  // time inside the actor's subsidiary scope; approving and reopening stay
+  // their own duties.
+  "time.self",
   "time.read",
   "time.manage",
   "time.approve",
@@ -653,6 +659,7 @@ export const PERMISSION_GROUPS: {
     key: "time",
     labelKey: "permissions.groups.time",
     permissions: [
+      { key: "time.self", labelKey: permissionLabelKey("time.self") },
       { key: "time.read", labelKey: permissionLabelKey("time.read") },
       { key: "time.manage", labelKey: permissionLabelKey("time.manage") },
       { key: "time.approve", labelKey: permissionLabelKey("time.approve") },
@@ -1167,7 +1174,7 @@ export const BUILT_IN_ROLES: Record<
     name: "Production",
     description:
       "Manages manufacturing masters and shop-floor work, and posts inventory movements. Cannot reverse inventory postings or see the ledger.",
-    permissions: ["manufacturing.read", "manufacturing.manage", "items.read", "items.post", "time.clock", "hrm.self.read", "hrm.self.request", "hrm.leave.request"],
+    permissions: ["manufacturing.read", "manufacturing.manage", "items.read", "items.post", "time.self", "time.clock", "hrm.self.read", "hrm.self.request", "hrm.leave.request"],
   },
   approver: {
     name: "Approver",
@@ -1242,6 +1249,7 @@ export const BUILT_IN_ROLES: Record<
       // HR-9 self-service on every built-in role (see controller).
       "hrm.self.read", "hrm.self.request", "hrm.leave.request",
       // HR-20 begin: self clock-in rides every employee role.
+      "time.self",
       "time.clock",
       // HR-20 end
     ],
@@ -1262,6 +1270,7 @@ export const BUILT_IN_ROLES: Record<
       // HR-9 self-service on every built-in role (see controller).
       "hrm.self.read", "hrm.self.request", "hrm.leave.request",
       // HR-20 begin: self clock-in rides every employee role.
+      "time.self",
       "time.clock",
       // HR-20 end
     ],
@@ -1277,7 +1286,7 @@ export const BUILT_IN_ROLES: Record<
       "purchase_orders.read", "purchase_orders.create", "goods_receipts.create",
       "ap.read", "parties.read", "items.read", "reports.read",
       "documents.read", "feedback.use", "assistant.use",
-      "hrm.self.read", "hrm.self.request", "hrm.leave.request", "time.clock",
+      "hrm.self.read", "hrm.self.request", "hrm.leave.request", "time.self", "time.clock",
     ],
   },
   // Till operator: sells and refunds at the counter. Posting a paid-at-sale
@@ -1289,7 +1298,7 @@ export const BUILT_IN_ROLES: Record<
     permissions: [
       "cash_sales.read", "cash_sales.create", "cash_sales.post",
       "stored_value.read", "items.read",
-      "feedback.use", "hrm.self.read", "hrm.self.request", "hrm.leave.request", "time.clock",
+      "feedback.use", "hrm.self.read", "hrm.self.request", "hrm.leave.request", "time.self", "time.clock",
     ],
   },
   // Project billing coordinator: time, project visibility and invoice drafts.
@@ -1298,9 +1307,9 @@ export const BUILT_IN_ROLES: Record<
   project_coordinator: {
     name: "Project Coordinator",
     description:
-      "Logs time, follows projects and drafts customer invoices for approval. Cannot post invoices, take or make payments, or see banking or the ledger.",
+      "Logs their own time, follows projects and drafts customer invoices for approval. Cannot see coworkers' time, post invoices, take or make payments, or see banking or the ledger.",
     permissions: [
-      "projects.read", "time.read", "time.manage", "time.clock",
+      "projects.read", "time.self", "time.clock",
       "ar.read", "ar.create", "usage.read", "usage.manage", "usage.bill",
       "parties.read", "items.read", "reports.read",
       "documents.read", "feedback.use", "assistant.use",

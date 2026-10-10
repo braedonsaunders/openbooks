@@ -471,7 +471,7 @@
       "sales_rep": "Bearbeitet zugewiesene Konten, Aktivitäten, Verkaufschancen und eigene Prognosen und erstellt Entwürfe von Rechnungen und Barverkäufen. Kann nicht buchen, keine Zahlungen vereinnahmen und das Hauptbuch nicht sehen.",
       "buyer": "Erstellt Bestellungen und bucht Wareneingänge dazu, mit Lesezugriff auf Lieferanten, Artikel und Kreditoren. Kann keine Eingangsrechnungen buchen oder bezahlen, keinen Bestand buchen und weder Banking noch Hauptbuch sehen.",
       "cashier": "Kassiert, bucht und erstattet Barverkäufe an der Kasse und prüft Gutscheinguthaben. Kann weder Rechnungen noch Banking oder das Hauptbuch sehen.",
-      "project_coordinator": "Erfasst Zeiten, verfolgt Projekte und erstellt Rechnungsentwürfe zur Genehmigung. Kann keine Rechnungen buchen, keine Zahlungen empfangen oder leisten und weder Banking noch Hauptbuch sehen."
+      "project_coordinator": "Erfasst die eigene Zeit, verfolgt Projekte und erstellt Rechnungsentwürfe zur Genehmigung. Kann weder die Zeit von Kollegen sehen noch Rechnungen buchen, keine Zahlungen empfangen oder leisten und weder Banking noch Hauptbuch sehen."
     }
   },
   "scripts": {
@@ -1299,8 +1299,8 @@
     "resourcing_manage": "Ressourcenzuweisungen und -anfragen verwalten",
     "retainers_read": "Retainer anzeigen",
     "retainers_manage": "Retainer verwalten",
-    "time_read": "Zeiterfassungen anzeigen",
-    "time_manage": "Zeit erfassen und bearbeiten",
+    "time_read": "Zeiterfassungen aller anzeigen",
+    "time_manage": "Zeit aller erfassen und bearbeiten",
     "time_approve": "Zeiterfassungen genehmigen",
     "time_reopen": "Genehmigte Stundenzettel wieder öffnen",
     "records_read": "Benutzerdefinierte Datensätze anzeigen",
@@ -1409,7 +1409,8 @@
     "hrm_org_chart_read": "Organigramm anzeigen",
     "purchase_orders_read": "Bestellungen und Wareneingänge anzeigen",
     "purchase_orders_create": "Bestellungen erstellen, ändern und stornieren",
-    "goods_receipts_create": "Wareneingänge zu Bestellungen buchen"
+    "goods_receipts_create": "Wareneingänge zu Bestellungen buchen",
+    "time_self": "Eigene Zeit erfassen und einreichen"
   },
   "ai": {
     "metaTitle": "KI-Einstellungen",

@@ -153,7 +153,11 @@ export async function EntityListSlot({
   let timeBasePath: string | undefined
   let governingFeature: string | undefined
   if (recordType === 'timesheet_week') {
-    const timeAuthz = await requirePermission('time.read')
+    // Supervisors list everyone's weeks with time.read; a self-service caller
+    // holding only time.self lists the weeks of the employee linked to their
+    // own login and nobody else's.
+    const selfOnly = !can(authz, 'time.read') && can(authz, 'time.self')
+    const timeAuthz = await requirePermission(selfOnly ? 'time.self' : 'time.read')
     const production = timeWorkFamily === 'production'
     // Production time is Manufacturing's workspace: it follows the
     // Manufacturing switch, and weeks carrying project time stay hidden by
@@ -162,9 +166,16 @@ export async function EntityListSlot({
     await requireFeatureEnabled(timeAuthz.user.orgId, governingFeature)
     if (production) await requirePermission('manufacturing.read')
     timeBasePath = production ? '/manufacturing/time' : '/timesheets'
-    const projectVisible = can(authz,'projects.read') && await isFeatureEnabled(authz.user.orgId,'timeTracking')
+    // A person's own weeks show the project time they booked without the
+    // project-read grant; other people's project time still needs it.
+    const projectVisible = (can(authz,'projects.read') || selfOnly) && await isFeatureEnabled(authz.user.orgId,'timeTracking')
     const productionVisible = can(authz,'manufacturing.read') && await isFeatureEnabled(authz.user.orgId,'manufacturing')
-    timeScope = sql`not exists(select 1 from time_entries entry where entry.org_id=tw.org_id and entry.employee_party_id=tw.employee_party_id
+    const ownEmployee = selfOnly
+      ? (await db.execute<{ partyId: string | null }>(sql`
+          select party_id as "partyId" from users where id = ${authz.user.id} and org_id = ${authz.user.orgId}`)).rows[0]?.partyId ?? null
+      : null
+    const ownWeeks = selfOnly ? sql`tw.employee_party_id = ${ownEmployee} and ` : sql``
+    timeScope = sql`${ownWeeks}not exists(select 1 from time_entries entry where entry.org_id=tw.org_id and entry.employee_party_id=tw.employee_party_id
       and entry.worked_on>=tw.week_start and entry.worked_on<tw.week_start+7
       and ((${!projectVisible} and entry.project_id is not null) or (${!productionVisible} and entry.work_order_id is not null)))`
   }

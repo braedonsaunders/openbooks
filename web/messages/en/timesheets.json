@@ -13,7 +13,8 @@
       "unlinked": "Your login isn't linked to an employee record, so there is no timesheet to start. Ask an administrator to link your login to your employee record in Administration → Users.",
       "linkedOutOfScope": "Your employee record is outside the subsidiaries your role covers, so there is no timesheet to start. Ask an administrator to review your role's subsidiary access.",
       "noEmployees": "There are no active employees to enter time for yet. Add an employee in People → Employees, then start a timesheet."
-    }
+    },
+    "selfOnly": "You can only see and change your own timesheet. To work with a coworker's time, ask an administrator for a role that views or enters everyone's time."
   },
   "labels": {
     "totalHours": "Total hours",

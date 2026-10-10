@@ -471,7 +471,7 @@
       "sales_rep": "Gère les comptes, activités, opportunités et prévisions personnelles qui lui sont attribués, et prépare des brouillons de factures et de ventes au comptant. Ne peut pas comptabiliser, encaisser ni voir le grand livre.",
       "buyer": "Émet des bons de commande et réceptionne les marchandises correspondantes, avec un accès en lecture aux fournisseurs, articles et comptes fournisseurs. Ne peut pas comptabiliser ni payer de factures, comptabiliser le stock, ni voir la banque ou le grand livre.",
       "cashier": "Encaisse, comptabilise et rembourse les ventes au comptant à la caisse et consulte les soldes des cartes cadeaux. Ne peut voir ni les factures, ni la banque, ni le grand livre.",
-      "project_coordinator": "Saisit le temps, suit les projets et prépare des brouillons de factures clients pour approbation. Ne peut pas comptabiliser de factures, encaisser ou payer, ni voir la banque ou le grand livre."
+      "project_coordinator": "Saisit son propre temps, suit les projets et prépare des brouillons de factures clients pour approbation. Ne peut pas voir le temps de ses collègues, comptabiliser de factures, encaisser ou payer, ni voir la banque ou le grand livre."
     }
   },
   "scripts": {
@@ -1299,8 +1299,8 @@
     "resourcing_manage": "Gérer les affectations et demandes de ressources",
     "retainers_read": "Consulter les retenues",
     "retainers_manage": "Gérer les retenues",
-    "time_read": "Consulter les feuilles de temps",
-    "time_manage": "Saisir et modifier le temps",
+    "time_read": "Consulter les feuilles de temps de tous",
+    "time_manage": "Saisir et modifier le temps de tous",
     "time_approve": "Approuver les feuilles de temps",
     "time_reopen": "Rouvrir les feuilles de temps approuvées",
     "records_read": "Consulter les enregistrements personnalisés",
@@ -1409,7 +1409,8 @@
     "hrm_org_chart_read": "Consulter l’organigramme",
     "purchase_orders_read": "Consulter les bons de commande et les réceptions",
     "purchase_orders_create": "Créer, modifier et annuler des bons de commande",
-    "goods_receipts_create": "Réceptionner des marchandises sur bons de commande"
+    "goods_receipts_create": "Réceptionner des marchandises sur bons de commande",
+    "time_self": "Saisir et soumettre son propre temps"
   },
   "ai": {
     "metaTitle": "Fournisseurs d'IA",

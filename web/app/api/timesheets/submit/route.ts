@@ -1,4 +1,4 @@
-import { authorizeTimeWorkspace, timeWorkFamily } from "@/lib/time-workspace";
+import { authorizeTimeWorkspace, refuseOthersTime, timeWorkFamily } from "@/lib/time-workspace";
 import { lockSharedTimeAuthority } from "@openbooks/engine/src/projects/time-work-target.ts";
 import { z } from "zod";
 import { isoDate, uuidId } from "@/lib/api/json";
@@ -61,6 +61,9 @@ export const POST = defineRoute({
       gate.allowedSubsidiaryIds,
     );
     if (!ownedEmployee) return bad("Employee not found");
+    // A self-service caller submits only their own week.
+    const othersRefused = await refuseOthersTime(gate, "time.manage", ownedEmployee);
+    if (othersRefused) return othersRefused;
     const week = weekStart(body.week);
     const days = weekWindow(week);
 

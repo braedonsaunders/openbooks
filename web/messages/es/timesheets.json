@@ -13,7 +13,8 @@
       "unlinked": "Tu inicio de sesión no está vinculado a un registro de empleado, así que no hay ninguna hoja de horas que iniciar. Pide a un administrador que vincule tu inicio de sesión con tu registro de empleado en Administración → Usuarios.",
       "linkedOutOfScope": "Tu registro de empleado está fuera de las filiales que cubre tu rol, así que no hay ninguna hoja de horas que iniciar. Pide a un administrador que revise el acceso a filiales de tu rol.",
       "noEmployees": "Todavía no hay empleados activos para los que registrar horas. Añade un empleado en Personas → Empleados y después inicia una hoja de horas."
-    }
+    },
+    "selfOnly": "Solo puedes ver y modificar tu propia hoja de horas. Para trabajar con el tiempo de un compañero, pide a un administrador un rol que vea o registre el tiempo de todos."
   },
   "labels": {
     "totalHours": "Horas totales",

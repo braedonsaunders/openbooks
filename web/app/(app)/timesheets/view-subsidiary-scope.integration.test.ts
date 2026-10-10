@@ -13,6 +13,7 @@ const mockAuthz = `
   export { subsidiaryScopeAllows }
   const state = globalThis[Symbol.for('openbooks.timesheets-view-scope-test')]
   export async function requirePermission() { return state.authz }
+  export async function getAuthz() { return state.authz }
   export function can(authz, permission) { return authz.permissions.has(permission) }
 `
 const mockIntl = `export async function getTranslations() { return key => key }`
@@ -145,7 +146,7 @@ test('a self-service time enterer without a linked employee gets the remedy, nev
     const someoneElse = await withBypassContext(() => addEmployee(org.orgId, `Colleague ${randomUUID()}`, org.subsidiaryId))
     state.authz = {
       user: { id: randomUUID(), orgId: org.orgId },
-      permissions: new Set(['time.read', 'time.manage', 'time.clock']),
+      permissions: new Set(['time.self', 'time.clock']),
       allowedSubsidiaryIds: null,
     }
     await withOrgContext(org.orgId, async () => {
@@ -153,6 +154,9 @@ test('a self-service time enterer without a linked employee gets the remedy, nev
       assert.equal(list.canStartTimesheet, false, 'New timesheet is withdrawn rather than linking to the page itself')
       assert.ok(!list.newButton.href.includes(someoneElse), 'a self-service login is never seeded with a colleague')
       assert.equal(list.newNotice, 'list.newRefusal.unlinked')
+      const coworkerWeek = await loadTimesheets({ timesheet: `${someoneElse}:2026-09-20` })
+      assert.equal(coworkerWeek.drawer, null, "a self-service login never opens a coworker's week")
+      assert.equal(coworkerWeek.newNotice, 'list.selfOnly')
     })
   } finally {
     state.authz = null

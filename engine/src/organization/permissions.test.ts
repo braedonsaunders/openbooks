@@ -376,8 +376,22 @@ test("the cashier and project coordinator roles carry no bank, ledger or payment
     }
   }
   assert.equal(holds("cashier", "cash_sales.create"), true);
-  assert.equal(holds("project_coordinator", "time.manage"), true);
+  assert.equal(holds("project_coordinator", "time.self"), true, "logs their own time");
+  assert.equal(holds("project_coordinator", "time.manage"), false, "never enters a coworker's time");
+  assert.equal(holds("project_coordinator", "time.read"), false, "never reads a coworker's time");
   assert.equal(holds("project_coordinator", "projects.read"), true);
   assert.equal(holds("project_coordinator", "ar.create"), true, "drafts customer invoices");
+});
+
+test("hourly roles enter their own time through time.self, never the supervisory time grants", () => {
+  const holds = (role: string, perm: string) => permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), perm);
+  assert.ok((PERMISSION_CATALOGUE as readonly string[]).includes("time.self"));
+  for (const role of ["production", "sales_manager", "sales_rep", "buyer", "cashier", "project_coordinator"]) {
+    assert.equal(holds(role, "time.self"), true, `${role} enters its own time`);
+    assert.equal(holds(role, "time.manage"), false, `${role} does not enter coworkers' time`);
+  }
+  for (const role of ["controller", "accountant"]) {
+    assert.equal(holds(role, "time.manage"), true, `${role} keeps supervisory time entry`);
+  }
 });
 

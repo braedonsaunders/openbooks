@@ -624,7 +624,7 @@
       "sales_rep": "Trabaja las cuentas, actividades, oportunidades y pronósticos personales asignados, y prepara borradores de facturas y ventas al contado. No puede contabilizar, cobrar pagos ni ver el libro mayor.",
       "buyer": "Emite órdenes de compra y recibe la mercancía contra ellas, con acceso de lectura a proveedores, artículos y cuentas por pagar. No puede contabilizar ni pagar facturas, contabilizar inventario ni ver bancos o el libro mayor.",
       "cashier": "Registra, contabiliza y reembolsa ventas al contado en caja y consulta saldos de tarjetas regalo. No puede ver facturas, bancos ni el libro mayor.",
-      "project_coordinator": "Registra horas, sigue proyectos y prepara borradores de facturas de cliente para aprobación. No puede contabilizar facturas, cobrar ni pagar, ni ver bancos o el libro mayor."
+      "project_coordinator": "Registra su propio tiempo, sigue proyectos y prepara borradores de facturas de cliente para aprobación. No puede ver el tiempo de sus compañeros, contabilizar facturas, cobrar ni pagar, ni ver bancos o el libro mayor."
     }
   },
   "scripts": {
@@ -1299,8 +1299,8 @@
     "resourcing_manage": "Gestionar asignaciones y solicitudes de recursos",
     "retainers_read": "Ver retenciones",
     "retainers_manage": "Gestionar retenciones",
-    "time_read": "Ver hojas de horas",
-    "time_manage": "Registrar y editar tiempo",
+    "time_read": "Ver las hojas de horas de todos",
+    "time_manage": "Registrar y editar el tiempo de todos",
     "time_approve": "Aprobar hojas de horas",
     "time_reopen": "Reabrir hojas de horas aprobadas",
     "records_read": "Ver registros personalizados",
@@ -1409,7 +1409,8 @@
     "hrm_org_chart_read": "Ver organigrama",
     "purchase_orders_read": "Ver órdenes de compra y recepciones",
     "purchase_orders_create": "Crear, modificar y anular órdenes de compra",
-    "goods_receipts_create": "Recibir mercancía contra órdenes de compra"
+    "goods_receipts_create": "Recibir mercancía contra órdenes de compra",
+    "time_self": "Registrar y enviar el propio tiempo"
   },
   "ai": {
     "metaTitle": "Proveedores de IA",
