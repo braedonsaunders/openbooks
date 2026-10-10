@@ -36,7 +36,7 @@ import type { prepareDocumentPosting } from "./posting-prepare.ts";
 
 /** Owns the accounting transaction; every journal, stock effect, audit and outbox write uses its executor. */
 export async function commitDocumentPosting(prepared: Awaited<ReturnType<typeof prepareDocumentPosting>>, options: PostDocumentOptions): Promise<string> {
-  const { documentId, deps, doc, postingLines, effectiveDoc, kernelLines, postContrib, primaryContrib, unionLines, subApplied, scriptLines, postingDate, shipToSnapshot } = prepared;
+  const { documentId, deps, doc, postingLines, effectiveDoc, kernelLines, postContrib, primaryContrib, unionLines, subApplied, scriptLines, postingDate, shipToSnapshot, controlAccountStamp } = prepared;
   return await inDbTransaction(async (tx) => {
     const consolidationRefusal = await consolidationSourceRefusal(tx, doc.orgId, documentId);
     if (consolidationRefusal) throw new PostingError(consolidationRefusal);
@@ -312,6 +312,14 @@ export async function commitDocumentPosting(prepared: Awaited<ReturnType<typeof 
           ? {
               shipToCountry: shipToSnapshot.country,
               shipToRegion: shipToSnapshot.region,
+            }
+          : {}),
+        // The receivable/payable control account resolved in prepare: the
+        // document carries the account its open item posted to, so payments,
+        // applications and any regeneration read the same account forever.
+        ...(controlAccountStamp
+          ? {
+              custom: sql`jsonb_set(coalesce(${schema.documents.custom}, '{}'::jsonb), '{controlAccountId}', to_jsonb(${controlAccountStamp}::text), true)`,
             }
           : {}),
       })
