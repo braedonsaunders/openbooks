@@ -1,3 +1,5 @@
+import { withEntityMappings } from "./entity-mappings.ts";
+import { decodeEntityMappings } from "./entity-mapping-contract.ts";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { unsealJson } from "../platform/secrets.ts";
@@ -18,7 +20,7 @@ import { refusedConnectionBaseCurrency } from "./base-currency.ts";
 export { refusedConnectionBaseCurrency } from "./base-currency.ts";
 import { sealJson } from "../platform/secrets.ts";
 import type { MigrationSource } from "./source.ts";
-import { connectorSettings, resolveSyncSelection, type MappingGroup, type SyncCapabilities } from "./connection-settings.ts";
+import { connectorSettings, connectionSourceOptions, resolveSyncSelection, type MappingGroup, type SyncCapabilities } from "./connection-settings.ts";
 
 /**
  * Connection layer — the seam between a tenant's stored `connections` row and a
@@ -37,7 +39,7 @@ export interface SourceFieldSpec {
   required?: boolean;
   help?: string;
   /** Render as a dropdown instead of a text input. */
-  kind?: "text" | "select" | "textarea" | "mappings" | "sync-options";
+  kind?: "text" | "select" | "textarea" | "mappings" | "sync-options" | "entity-mappings";
   /** Static options for a `select` field. */
   options?: { value: string; label: string }[];
   /** Populate a `select` from a live app list (resolved by the API layer). */
@@ -259,7 +261,7 @@ export const SOURCE_TYPES: SourceTypeManifest[] = ([
 ] satisfies SourceTypeManifest[]).map((manifest) => ({
   ...manifest,
   ...connectorSettings(manifest.source),
-  configFields: [...manifest.configFields, { key: "syncOptions", label: "Sync content", kind: "sync-options" as const }],
+  configFields: [...manifest.configFields, { key: "syncOptions", label: "Sync content", kind: "sync-options" as const }, { key: "entityMappings", label: "Entity mappings", kind: "entity-mappings" as const }],
 }));
 
 export function sourceType(source: string): SourceTypeManifest | undefined {
@@ -272,6 +274,8 @@ export function validateSourceConfig(
   opts?: { today?: string },
 ): string | null {
   try {
+    decodeEntityMappings(config.entityMappings);
+    connectionSourceOptions(config, manifest.mappingGroups ?? connectorSettings(manifest.source).mappingGroups);
     resolveSyncSelection(config.syncOptions, manifest.syncCapabilities ?? connectorSettings(manifest.source).syncCapabilities);
   } catch (error) { return error instanceof Error ? error.message : "Sync content is invalid"; }
   // Truthful refusal before the generic option check below: an AU/NZ (or any
@@ -317,7 +321,7 @@ export function validateSourceConfig(
       return "Accounting book ID must be numeric";
     }
     try {
-      parseNetSuiteMappings(config.mappingJson);
+      parseNetSuiteMappings(connectionSourceOptions(config, connectorSettings(manifest.source).mappingGroups));
     } catch (error) {
       return error instanceof Error ? error.message : "NetSuite field mappings are invalid";
     }
@@ -466,6 +470,11 @@ export async function refreshConnectionTokens<T extends RefreshableTokens>(
 
 /** Build a live adapter from a stored connection (credentials unsealed here). */
 export function buildSource(conn: ConnectionRow): MigrationSource {
+  connectionSourceOptions(conn.config, connectorSettings(conn.source).mappingGroups);
+  return withEntityMappings(buildUnmappedSource(conn), conn.config.entityMappings, conn.orgId);
+}
+
+function buildUnmappedSource(conn: ConnectionRow): MigrationSource {
   if (conn.source === "qbd") {
     const cfg = conn.config as { historyStartDate?: string; baseCurrency?: string };
     if (!cfg.historyStartDate) throw new Error("QuickBooks Desktop connection needs a history start date");
@@ -552,7 +561,7 @@ export function buildSource(conn: ConnectionRow): MigrationSource {
         scriptId: cfg.bridgeScriptId || undefined,
         deploymentId: cfg.bridgeDeploymentId || undefined,
       },
-      mappings: cfg.mappingJson,
+      mappings: connectionSourceOptions(conn.config, connectorSettings(conn.source).mappingGroups),
       soapEndpointVersion: cfg.soapEndpoint,
       accountingBookId: cfg.accountingBookId,
     });

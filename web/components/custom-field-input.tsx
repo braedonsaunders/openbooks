@@ -145,12 +145,14 @@ export function CustomFieldInput({
 }
 
 /** Multi-select with checkboxes — replaces the text-input fallback. */
-function MultiSelectInput({
+export function MultiSelectInput({
+  id,
   label,
   options,
   value,
   onChange,
 }: {
+  id?: string
   label: string
   options: string[]
   value: string[]
@@ -162,7 +164,7 @@ function MultiSelectInput({
     else onChange([...value, opt])
   }
   return (
-    <div role="group" aria-label={label} className="flex flex-wrap gap-2 rounded-md border border-slate-200 p-2 dark:border-slate-800">
+    <div id={id} role="group" aria-label={label} className="flex flex-wrap gap-2 rounded-md border border-slate-200 p-2 dark:border-slate-800">
       {options.length === 0 ? (
         <span className="text-xs text-slate-400">{tFields('noOptions')}</span>
       ) : (

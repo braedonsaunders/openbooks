@@ -94,6 +94,7 @@ const mockSources = new Map<string, string>([
   [
     "mock:connection",
     `
+      export function buildSource() { throw new Error('Unexpected external adapter read for an unconfigured mapping') }
       export function sourceType() {
         return {
           source: "qbo",

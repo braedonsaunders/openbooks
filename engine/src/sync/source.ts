@@ -1,3 +1,4 @@
+import type { EntityMappingMetadata } from "./entity-mapping-contract.ts";
 import type { CrmImportReport } from "./netsuite-crm.ts";
 import type { NetSuiteFixedAssetSyncResult } from "./netsuite-fixed-assets.ts";
 import type { ImportSummary } from "./attachment-contract.ts";
@@ -41,6 +42,10 @@ export interface SourceEntity {
    */
   mergedIntoRef?: string | null;
   fields: Record<string, unknown>;
+  mappedCustom?: Record<string, unknown>;
+  mappingApplied?: boolean;
+  mappedFields?: string[];
+  mappingEntities?: string[];
 }
 
 /**
@@ -294,6 +299,10 @@ export interface MigrationSource {
    * when the row is first landed. Explicitly mapped secondary adapter refs may
    * accumulate without replacing that origin. */
   readonly name: string;
+  /** All exposed entities and their normalized source/native field contracts. */
+  readonly entityMappingMetadata?: readonly EntityMappingMetadata[];
+  mappingSourceFields?(entity: string): Promise<EntityMappingMetadata["sourceFields"]>;
+  mappingSourceValues?(entity: string, fields: readonly string[], refs: readonly string[]): Promise<Map<string, Record<string, unknown>>>;
   /**
    * Unique key under which this adapter's source ids live in each row's
    * `custom` JSON. Party and project identity is resolved only through this

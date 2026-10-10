@@ -1,3 +1,4 @@
+import { entityMappingMetadata } from "./entity-mapping-contract.ts";
 import { odooAttachmentProvider } from "./attachment-providers.ts";
 import { syncTransactionAttachments, type AttachmentSyncOptions } from "./transaction-attachments.ts";
 import { businessToday } from "../platform/business-date.ts";
@@ -73,6 +74,7 @@ const odooTs = (s: string): Date => new Date(s.replace(" ", "T") + "Z");
 
 export class OdooSource implements MigrationSource {
   readonly name = "odoo";
+  readonly entityMappingMetadata = entityMappingMetadata(['accounting_periods', 'accounts', 'tax_codes', 'parties', 'items', 'files'], [], { 'accounts': ['number', 'name', 'type', 'isActive'], 'parties': ['displayName', 'kind', 'isActive', 'email', 'phone'], 'items': ['code', 'name', 'kind', 'isActive'], 'tax_codes': ['code', 'name', 'ratePercent', 'appliesTo'] });
   readonly refKey = "odooId";
   readonly baseCurrency: string;
   private readonly orgId: string;

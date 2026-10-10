@@ -13,6 +13,14 @@ import type { NativeDocument } from "./native.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
+async function createConnection(orgId: string): Promise<string> {
+  const id = randomUUID();
+  const saved = (await db.execute<{ id: string }>(sql`insert into connections(id,org_id,source,display_name) values(${id},${orgId},'netsuite','Fixed assets source') returning id`)).rows[0];
+  if (!saved) throw new Error('The fixed assets connection fixture was not saved');
+  return saved.id;
+}
+
+
 const EMPTY_SNAPSHOT: NetSuiteFixedAssetSnapshot = {
   extractedAt: "2026-07-16T00:00:00.000Z",
   sourceAccount: "stub",
@@ -108,7 +116,7 @@ test(
         await assert.rejects(
           syncNetSuiteFixedAssets(
             stubSource([], { ...EMPTY_SNAPSHOT, extractedAt: "invalid timestamp" }),
-            { orgId: org.orgId, connectionId: randomUUID() },
+            { orgId: org.orgId, connectionId: await createConnection(org.orgId) },
           ),
           /no accounting period for the FAM snapshot 2028-10-01/,
         );
@@ -130,7 +138,7 @@ test("the FAM ledger tie keeps a reversed original beside its mirror", { skip: !
     await db.execute(sql`update subsidiaries set custom = coalesce(custom, '{}'::jsonb) || '{"nsId":"SUB"}'::jsonb where id = ${org.subsidiaryId} and org_id = ${org.orgId}`);
     const accounts = { custrecord_assettypeassetacc: "FA-COST", custrecord_assettypedepracc: "FA-ACCUM", custrecord_assettypedeprchargeacc: "FA-EXP" };
     const assets = [{ id: "A1", custrecord_assettype: "7", custrecord_assetsubsidiary: "SUB", custrecord_assetcost: "0", custrecord_assetmainacc: "FA-COST", custrecord_assetdepracc: "FA-ACCUM", custrecord_assetdeprchargeacc: "FA-EXP" }];
-    const result = await syncNetSuiteFixedAssets(Object.assign(stubSource([], { ...EMPTY_SNAPSHOT, assetTypes: [{ id: "7", name: "Equipment", ...accounts }], assets }), { fixedAssetAccountBalances: async () => new Map() }), { orgId: org.orgId, connectionId: randomUUID() });
+    const result = await syncNetSuiteFixedAssets(Object.assign(stubSource([], { ...EMPTY_SNAPSHOT, assetTypes: [{ id: "7", name: "Equipment", ...accounts }], assets }), { fixedAssetAccountBalances: async () => new Map() }), { orgId: org.orgId, connectionId: await createConnection(org.orgId) });
     assert.equal(result.fixedAssetLedger.balances.find((b) => b.accountRef === "FA-COST")?.target, "0.0000");
   } finally {
     await dropScratchOrg(org.orgId);
@@ -185,7 +193,7 @@ test(
       ];
       for (const { label, documents, message } of cases) {
         await assert.rejects(
-          syncNetSuiteFixedAssets(stubSource(documents), { orgId: org.orgId, connectionId: randomUUID() }),
+          syncNetSuiteFixedAssets(stubSource(documents), { orgId: org.orgId, connectionId: await createConnection(org.orgId) }),
           (error: unknown) => error instanceof Error && message.test(error.message),
           `FAM ${label}`,
         );

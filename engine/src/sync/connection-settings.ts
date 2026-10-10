@@ -1,3 +1,5 @@
+import { decodeEntityMappings, type ConnectionEntityMappings } from './entity-mapping-contract.ts';
+
 /** Serializable connector configuration shared by forms and native commands. */
 export const SYNC_CONTENT_KEYS = ['attachments', 'projectFinancials', 'crm', 'fixedAssets'] as const;
 export type SyncContentKey = typeof SYNC_CONTENT_KEYS[number];
@@ -99,4 +101,62 @@ export function validateConnectionMappings(value: unknown, groups: readonly Mapp
     }
   }
   return raw;
+}
+
+/** Preserve legacy rules until the operator explicitly resolves or removes them. */
+export function migrateConnectionEntityMappings(value: unknown, legacy: unknown, groups: readonly MappingGroup[]): ConnectionEntityMappings {
+  let model: ConnectionEntityMappings;
+  try { model = decodeEntityMappings(value); }
+  catch (cause) { model = { version: 1, entities: {}, unavailableRules: [{ key: 'entityMappings', value, reason: cause instanceof Error ? cause.message : 'Saved entity mappings cannot be read' }] }; }
+  const sourceOptions = { ...model.sourceOptions };
+  const unavailableRules = [...(model.unavailableRules ?? [])];
+  let stored: Record<string, unknown>;
+  try { stored = decodeConnectionMappings(legacy); }
+  catch (cause) {
+    unavailableRules.push({ key: 'savedMapping', value: legacy, reason: cause instanceof Error ? cause.message : 'Saved mappings cannot be read' });
+    return { ...model, unavailableRules };
+  }
+  const candidates = { ...stored, ...sourceOptions };
+  for (const [key, original] of Object.entries(stored)) {
+    if (Object.hasOwn(sourceOptions, key) && JSON.stringify(sourceOptions[key]) !== JSON.stringify(original)) {
+      unavailableRules.push({ key, value: original, reason: 'This saved rule conflicts with the structured source option. Remove the conflicting rule explicitly before saving.' });
+      continue;
+    }
+    try {
+      const field = groups.flatMap(group => group.fields).find(field => field.key === key);
+      const selected = field?.requires ? { [field.requires]: candidates[field.requires], [key]: original } : { [key]: original };
+      validateConnectionMappings(selected, groups);
+      sourceOptions[key] = original;
+    } catch (cause) {
+      unavailableRules.push({ key, value: original, reason: cause instanceof Error ? cause.message : 'This connector cannot apply the saved rule' });
+    }
+  }
+  return { ...model, ...(Object.keys(sourceOptions).length || model.sourceOptions !== undefined ? { sourceOptions } : {}), ...(unavailableRules.length ? { unavailableRules } : {}) };
+}
+
+export function validateStructuredConnectionMappings(value: unknown, groups: readonly MappingGroup[]): ConnectionEntityMappings {
+  const model = decodeEntityMappings(value);
+  if (model.unavailableRules?.length) throw new Error('Remove or resolve the unavailable saved mapping rules before saving or syncing this connection');
+  validateConnectionMappings(model.sourceOptions, groups);
+  return model;
+}
+
+/** Existing connections remain readable; edited connections have one mapping authority. */
+export function connectionSourceOptions(config: Record<string, unknown>, groups: readonly MappingGroup[]): Record<string, unknown> {
+  if (config.entityMappings !== undefined) {
+    const model = validateStructuredConnectionMappings(config.entityMappings, groups);
+    if (model.sourceOptions !== undefined || config.mappingJson === undefined) return model.sourceOptions ?? {};
+  }
+  return validateConnectionMappings(config.mappingJson, groups);
+}
+
+export function canonicalConnectionMappingConfig(config: Record<string, unknown>, groups: readonly MappingGroup[], structuredReplacement = false): Record<string, unknown> {
+  const next = { ...config };
+  if (next.mappingJson !== undefined || next.entityMappings !== undefined) {
+    next.entityMappings = structuredReplacement
+      ? validateStructuredConnectionMappings(next.entityMappings, groups)
+      : validateStructuredConnectionMappings(migrateConnectionEntityMappings(next.entityMappings, next.mappingJson, groups), groups);
+    delete next.mappingJson;
+  }
+  return next;
 }

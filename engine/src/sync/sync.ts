@@ -691,6 +691,11 @@ export function requiresControlledPostingReversal(
 }
 
 /** Canonical content key of a native document (change detection). */
+function mappedCustomKey(value: Record<string, unknown> | null | undefined): unknown[] {
+  if (!value || !Object.keys(value).length) return [];
+  return [Object.fromEntries(Object.keys(value).sort().map(key => [key, value[key]]))];
+}
+
 export function canonicalNativeDocumentKey(d: NativeDocument): string {
   // Line-level source-cleared evidence is deliberately absent: a clear-flip
   // must never amend or re-post the document (see NativeDocLine).
@@ -737,7 +742,9 @@ export function canonicalNativeDocumentKey(d: NativeDocument): string {
       l.billAmount == null
         ? null
         : toUnits(l.billAmount).toString(),
+      ...mappedCustomKey(l.mappedCustom),
     ]),
+    ...mappedCustomKey(d.mappedCustom),
   ]);
 }
 
@@ -788,6 +795,7 @@ function resolveSourceDocumentNumber(
 
 /** The same canonical key computed from the stored document. */
 type StoredDocumentKeyRow = {
+  mapped_custom?: Record<string, unknown> | null;
   id: string;
   kind: string;
   party_id: string | null;
@@ -808,6 +816,7 @@ type StoredDocumentKeyRow = {
   total: string;
 };
 type StoredLineKeyRow = {
+  mapped_custom?: Record<string, unknown> | null;
   document_id: string;
   line_number: number;
   source_line_ref: string | null;
@@ -878,7 +887,9 @@ function storedCanonicalKey(
       l.bill_amount == null
         ? null
         : toUnits(l.bill_amount).toString(),
+      ...mappedCustomKey(l.mapped_custom),
     ]),
+    ...mappedCustomKey(d.mapped_custom),
   ]);
 }
 
@@ -889,13 +900,13 @@ async function storedKey(docId: string, orgId: string): Promise<string> {
              document_date::text, posting_date::text,
              posting_period_id,
              due_date::text as due,
-             memo, reference_number, custom->>'controlAccountId' as ctrl, extra_dims, id,
+             memo, reference_number, custom->>'controlAccountId' as ctrl, (select jsonb_object_agg(k,custom->k) from jsonb_object_keys(coalesce(custom->'connectorMappedValues','{}'::jsonb)) k) as mapped_custom, extra_dims, id,
              posted_entry_id is not null as posted, status, currency, fx_rate, subtotal, total
         from documents where id = ${docId} and org_id = ${orgId}`))
   ).rows;
   const lines = (
     (await db.execute<StoredLineKeyRow>(sql`
-      select line_number, custom->>'sourceLineRef' as source_line_ref,
+      select line_number, custom->>'sourceLineRef' as source_line_ref, (select jsonb_object_agg(k,custom->k) from jsonb_object_keys(coalesce(custom->'connectorMappedValues','{}'::jsonb)) k) as mapped_custom,
              account_id, item_id, quantity, unit, unit_price,
              amount, tax_amount, tax_overridden, tax_code_id,
              party_id, department_id, project_id, subsidiary_id, extra_dims, description,
@@ -916,14 +927,14 @@ async function loadStoredKeys(
            document_date::text, posting_date::text,
            posting_period_id,
            due_date::text as due,
-           memo, reference_number, custom->>'controlAccountId' as ctrl, extra_dims,
+           memo, reference_number, custom->>'controlAccountId' as ctrl, (select jsonb_object_agg(k,custom->k) from jsonb_object_keys(coalesce(custom->'connectorMappedValues','{}'::jsonb)) k) as mapped_custom, extra_dims,
            posted_entry_id is not null as posted, status, currency, fx_rate, subtotal, total
       from documents
      where org_id = ${orgId} and custom->>${refKey} is not null
      order by id`));
   const lineResult = (await db.execute<StoredLineKeyRow>(sql`
     select dl.document_id, dl.line_number,
-           dl.custom->>'sourceLineRef' as source_line_ref,
+           dl.custom->>'sourceLineRef' as source_line_ref, (select jsonb_object_agg(k,dl.custom->k) from jsonb_object_keys(coalesce(dl.custom->'connectorMappedValues','{}'::jsonb)) k) as mapped_custom,
            dl.account_id, dl.item_id, dl.quantity, dl.unit, dl.unit_price,
            dl.amount, dl.tax_amount, dl.tax_overridden,
            dl.tax_code_id, dl.party_id, dl.department_id, dl.project_id, dl.subsidiary_id,
@@ -1357,6 +1368,19 @@ function persistSyncFxRate(value: unknown): string {
   }
 }
 
+/** Custom-field values survive replacement of the same source line, including removal of a mapping rule. */
+async function preservedImportedLineCustom(tx: SyncTx, orgId: string, documentId: string): Promise<Map<string, Record<string, unknown>>> {
+  const rows = (await tx.execute<{ line_number: number; custom: Record<string, unknown> }>(sql`select line_number,custom from document_lines where org_id=${orgId} and document_id=${documentId} for update`)).rows;
+  const output = new Map<string, Record<string, unknown>>();
+  for (const row of rows) {
+    const key = typeof row.custom.sourceLineRef === 'string' ? row.custom.sourceLineRef : `line:${row.line_number}`;
+    if (output.has(key)) throw new Error('Stored source line identity is ambiguous');
+    const { connectorMappedValues: _ownership, ...values } = row.custom;
+    output.set(key, values);
+  }
+  return output;
+}
+
 /** Insert source lines and their tax evidence in the caller's transaction. */
 async function insertImportedLines(
   tx: SyncTx,
@@ -1364,6 +1388,7 @@ async function insertImportedLines(
   documentId: string,
   lines: NativeDocLine[],
   evidence: Map<number, ComputedTaxComponent[]>,
+  preservedCustom = new Map<string, Record<string, unknown>>(),
 ): Promise<void> {
   const inserted = await tx
     .insert(schema.documentLines)
@@ -1392,7 +1417,7 @@ async function insertImportedLines(
         billAmount: line.billAmount == null ? null : persistSyncLineMoney(line.billAmount, "bill amount"),
         // Line identity from the source system, so a migrated document can be
         // reconciled and re-synced line by line rather than only as a whole.
-        custom: line.sourceLineRef ? { sourceLineRef: line.sourceLineRef } : {},
+        custom: { ...preservedCustom.get(line.sourceLineRef ?? `line:${line.lineNumber}`), ...(line.sourceLineRef ? { sourceLineRef: line.sourceLineRef } : {}), ...line.mappedCustom, ...(Object.keys(line.mappedCustom ?? {}).length ? { connectorMappedValues: line.mappedCustom } : {}) },
       })),
     )
     .returning({
@@ -1823,15 +1848,16 @@ export async function runSync(
                 total: persistSyncLineMoney(doc.total ?? "0", "total"),
                 memo: doc.memo,
                 referenceNumber: doc.referenceNumber,
-                custom: doc.controlAccountId
+                custom: { ...doc.mappedCustom, ...(Object.keys(doc.mappedCustom ?? {}).length ? { connectorMappedValues: doc.mappedCustom } : {}), ...(doc.controlAccountId
                   ? {
                       [refKey]: doc.sourceRef,
                       controlAccountId: doc.controlAccountId,
                       connectionId,
                     }
-                  : { [refKey]: doc.sourceRef, connectionId },
+                  : { [refKey]: doc.sourceRef, connectionId }) },
               })
               .returning({ id: schema.documents.id });
+            if (!row) throw new Error('The mapped source document was not saved');
             await insertImportedLines(
               db as unknown as SyncTx,
               org.id,
@@ -1857,7 +1883,14 @@ export async function runSync(
               });
               await refreshDocumentHeaderTotals(row!.id, org.id);
             }
-            return row!.id;
+            if (doc.mappingApplied) {
+              const after = await captureTransactionAuditSnapshot(db, row.id, org.id);
+              if (!after) throw new Error('The mapped source document is not readable after import');
+              const audit = (await db.execute<{ id: string }>(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
+                values(${org.id},'documents',${row.id},'insert',${JSON.stringify({ event: 'connector_entity_mapping_applied', connectionId, sourceRef: doc.sourceRef, before: null, after })}::jsonb,${isUuid(triggeredBy) ? triggeredBy : null}) returning id`)).rows[0];
+              if (!audit) throw new Error('The mapped source document audit was not saved');
+            }
+            return row.id;
           });
           if (doc.posting) {
             // Automation effects observe only a fully committed document.
@@ -1920,9 +1953,12 @@ export async function runSync(
                        posting_date = ${doc.postingDate ?? doc.documentDate},
                        posting_period_id = ${doc.postingPeriodId ?? null},
                        status = 'approved',
+                       memo = ${doc.memo}, reference_number = ${doc.referenceNumber}, due_date = ${doc.dueDate},
+                       custom = (custom - 'connectorMappedValues') || ${JSON.stringify(Object.keys(doc.mappedCustom ?? {}).length ? { ...doc.mappedCustom, connectorMappedValues: doc.mappedCustom } : {})}::jsonb,
                        updated_at = now()
                  where id = ${have.id} and org_id = ${org.id}
               `);
+              const preservedCustom = await preservedImportedLineCustom(tx, org.id, have.id);
               await tx.execute(
                 sql`delete from document_lines where document_id = ${have.id} and org_id = ${org.id}`,
               );
@@ -1932,6 +1968,7 @@ export async function runSync(
                 have.id,
                 doc.lines,
                 taxEvidence,
+                preservedCustom,
               );
             });
             await postDocument(have.id, deps, {
@@ -2078,7 +2115,7 @@ export async function runSync(
             org.id,
           );
           const auditBefore =
-            auditCandidate?.document.status === "posted"
+            (auditCandidate?.document.status === "posted" || doc.mappingApplied)
               ? auditCandidate
               : null;
           await tx.execute(sql`
@@ -2095,17 +2132,11 @@ export async function runSync(
                 else ${doc.lifecycleStatus ?? "approved"}
               end,
               extra_dims = ${JSON.stringify(doc.extraDims ?? {})}::jsonb,
-              custom = case
-                when ${doc.controlAccountId}::text is null
-                  then custom - 'controlAccountId'
-                else custom || ${JSON.stringify(
-                  doc.controlAccountId
-                    ? { controlAccountId: doc.controlAccountId }
-                    : {},
-                )}::jsonb
-              end,
+              custom = (custom - 'connectorMappedValues' - 'controlAccountId')
+                || ${JSON.stringify({ ...(Object.keys(doc.mappedCustom ?? {}).length ? { ...doc.mappedCustom, connectorMappedValues: doc.mappedCustom } : {}), ...(doc.controlAccountId ? { controlAccountId: doc.controlAccountId } : {}) })}::jsonb,
               updated_at = now()
             where id = ${have.id} and org_id = ${org.id}`);
+          const preservedCustom = await preservedImportedLineCustom(tx, org.id, have.id);
           await tx.execute(
             sql`delete from document_lines where document_id = ${have.id} and org_id = ${org.id}`,
           );
@@ -2115,6 +2146,7 @@ export async function runSync(
             have.id,
             doc.lines,
             taxEvidence,
+            preservedCustom,
           );
           if (have.posted) {
             const automaticCorrection = postedChangeAuthorization
@@ -2161,7 +2193,7 @@ export async function runSync(
               orgId: org.id,
               documentId: have.id,
               action: "update",
-              actorId: postedChangeAuthorization?.actorId ?? null,
+              actorId: postedChangeAuthorization?.actorId ?? (doc.mappingApplied && isUuid(triggeredBy) ? triggeredBy : null),
               source: "mirror",
               reason: "source_transaction_changed",
               before: auditBefore,

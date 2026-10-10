@@ -1,4 +1,8 @@
+import { canonicalConnectionMappingConfig } from '@openbooks/engine/src/sync/connection-settings.ts';
 import "server-only";
+import { buildSource } from '@openbooks/engine/src/sync/connection.ts';
+import { decodeEntityMappings } from '@openbooks/engine/src/sync/entity-mapping-contract.ts';
+import { validateConnectionEntityMappings } from '@openbooks/engine/src/sync/entity-mappings.ts';
 import { z } from "zod";
 import { and, eq } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/database";
@@ -91,11 +95,14 @@ export async function updateConnection(
           ? existing.config
           : {};
       if (!manifest) return { refusal: refused(400, { error: "unknown source type" }) };
-      const merged = mergedDeclaredSourceConfig(
+      if (Object.hasOwn(body.config, 'entityMappings') && Object.hasOwn(body.config, 'mappingJson')) return { refusal: refused(400, { error: 'Save mappings through the structured entity controls only' }) };
+      let merged = mergedDeclaredSourceConfig(
         manifest,
         currentConfig as Record<string, unknown>,
         body.config as Record<string, unknown>,
       );
+      try { merged = canonicalConnectionMappingConfig(merged, manifest.mappingGroups ?? [], Object.hasOwn(body.config, 'entityMappings')); }
+      catch (cause) { return { refusal: refused(400, { error: cause instanceof Error ? cause.message : 'Connection mappings are unavailable' }) }; }
       const urlError = await connectionConfigUrlRefusal(merged);
       if (urlError) return { refusal: refused(400, { error: urlError, errorCode: "CONNECTOR_URL_REFUSED" }) };
       const configError = validateSourceConfig(manifest, merged, { today });
@@ -173,6 +180,10 @@ export async function updateConnection(
     }
 
     if (Object.keys(updates).length === 0) return { updated: null };
+    if (updates.config && Object.values(decodeEntityMappings(updates.config.entityMappings).entities).some(rows => rows.length)) {
+      try { await validateConnectionEntityMappings(buildSource({ ...existing, ...updates, config: updates.config }), orgId, updates.config.entityMappings); }
+      catch (cause) { return { refusal: refused(422, { error: cause instanceof Error ? cause.message : 'Connection mappings are unavailable' }) }; }
+    }
     updates.updatedAt = new Date();
     updates.updatedBy = actor.userId;
     const [updated] = await tx

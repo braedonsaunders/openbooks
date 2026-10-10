@@ -21,8 +21,9 @@ import {
 } from "lucide-react";
 import { MIGRATION_WORKSPACE_HREF } from "@/lib/migration/links";
 import Link from "next/link";
-import { ConnectionMappings, ConnectionSyncContent, type MappingDrafts } from "./ConnectionContent";
-import { connectorSettings, resolveSyncSelection, validateConnectionMappings, type MappingGroup, type SyncCapabilities, type SyncContentKey } from "@openbooks/engine/src/sync/connection-settings.ts";
+import { ConnectionMappingWorkspace, ConnectionSyncContent, type MappingDrafts } from "./ConnectionContent";
+import { decodeEntityMappings } from "@openbooks/engine/src/sync/entity-mapping-contract.ts";
+import { connectorSettings, resolveSyncSelection, migrateConnectionEntityMappings, validateStructuredConnectionMappings, type MappingGroup, type SyncCapabilities, type SyncContentKey } from "@openbooks/engine/src/sync/connection-settings.ts";
 import { RecordTabs } from "@/components/module-home/record-tabs";
 import { readApiErrorMessage } from "../../../lib/api-error";
 import { confirmDialog } from "@/lib/confirm";
@@ -64,7 +65,7 @@ interface FieldSpec {
   placeholder?: string;
   required?: boolean;
   help?: string;
-  kind?: "text" | "select" | "textarea" | "mappings" | "sync-options";
+  kind?: "text" | "select" | "textarea" | "mappings" | "sync-options" | "entity-mappings";
   options?: { value: string; label: string }[];
   optionsSource?: "currencies";
 }
@@ -1111,6 +1112,7 @@ export function ConnectionDrawer({
   const [displayName, setDisplayName] = useState("");
   const [config, setConfig] = useState<Record<string, unknown>>({});
   const [mappingDrafts, setMappingDrafts] = useState<MappingDrafts>({});
+  const [entityMappingPending, setEntityMappingPending] = useState(false);
   const [drawerTab, setDrawerTab] = useState<"general" | "content" | "mappings">("general");
   const [secrets, setSecrets] = useState<Record<string, string>>({});
   const [postedChangePolicy, setPostedChangePolicy] = useState<
@@ -1124,22 +1126,23 @@ export function ConnectionDrawer({
   const [prevDrawerKeys, setPrevDrawerKeys] = useState(() => ({ open, editing }));
   if (prevDrawerKeys.open !== open || prevDrawerKeys.editing !== editing) {
     setPrevDrawerKeys({ open, editing });
-    if (open) { setDrawerTab("general"); setMappingDrafts({}); }
+    if (open) { setDrawerTab("general"); setMappingDrafts({}); setEntityMappingPending(false); }
     if (!open) {
       // retain the form while closed
     } else if (editing) {
       setSource(editing.source);
       setDisplayName(editing.displayName);
-      setConfig(
-        Object.fromEntries(
+      const savedConfig = Object.fromEntries(
           Object.entries(editing.config ?? {})
             // Callback-owned OAuth identity (realmId, tenantId, companyId,
             // companyName) is written by the Connect flow and refused on
             // PATCH (OAUTH_IDENTITY_REFUSED) — it never enters the form.
             .filter(([k]) => !CALLBACK_OWNED_CONFIG_KEYS.has(k))
             .map(([k, v]) => [k, v ?? ""]),
-        ),
-      );
+        );
+      savedConfig.entityMappings = migrateConnectionEntityMappings(editing.config?.entityMappings, editing.config?.mappingJson, sourceTypes.find(type => type.source === editing.source)?.mappingGroups ?? connectorSettings(editing.source).mappingGroups);
+      delete savedConfig.mappingJson;
+      setConfig(savedConfig);
       setSecrets({});
       setPostedChangePolicy(editing.postedChangePolicy);
     } else {
@@ -1177,11 +1180,11 @@ export function ConnectionDrawer({
       // Defense in depth beside the prefill filter: callback-owned OAuth
       // identity never leaves this drawer, so an edit of a connected OAuth
       // connection cannot trip OAUTH_IDENTITY_REFUSED.
-      if (Object.values(mappingDrafts).some((draft) => draft.source || draft.target)) {
+      if (entityMappingPending || Object.values(mappingDrafts).some((draft) => draft.source || draft.target)) {
         setDrawerTab("mappings");
         throw new Error(t("drawer.mappings.finishDraft"));
       }
-      validateConnectionMappings(config.mappingJson, mappingGroups);
+      validateStructuredConnectionMappings(config.entityMappings, mappingGroups);
       const selection = resolveSyncSelection(config.syncOptions, syncCapabilities);
       const editableConfig = Object.fromEntries(
         Object.entries({ ...config, syncOptions: selection }).filter(([k]) => !CALLBACK_OWNED_CONFIG_KEYS.has(k)),
@@ -1340,7 +1343,7 @@ export function ConnectionDrawer({
               </div>
             ) : null}
 
-            {def.configFields.filter((f) => f.kind !== "mappings" && f.key !== "mappingJson" && f.kind !== "sync-options").map((f) => (
+            {def.configFields.filter((f) => f.kind !== "mappings" && f.key !== "mappingJson" && f.kind !== "sync-options" && f.kind !== "entity-mappings").map((f) => (
               <div key={f.key}>
                 <Label>
                   {fieldLabel(f)}
@@ -1415,9 +1418,11 @@ export function ConnectionDrawer({
             ) : null}
             </div> : drawerTab === "content" ? <ConnectionSyncContent capabilities={syncCapabilities} value={config.syncOptions} attachmentUnavailableReason={def.attachmentUnavailableReason ?? settings.attachmentUnavailableReason}
               onChange={(value) => setConfig((config) => ({ ...config, syncOptions: value }))} />
-              : <ConnectionMappings key={source} connectionId={editing?.id} groups={mappingGroups} value={config.mappingJson} drafts={mappingDrafts}
+              : null}
+              <div hidden={drawerTab !== "mappings"}><ConnectionMappingWorkspace key={`${source}:${editing?.id ?? 'new'}:${open ? 'open' : 'closed'}`} connectionId={editing?.id} groups={mappingGroups} value={decodeEntityMappings(config.entityMappings).sourceOptions} entityValue={config.entityMappings} drafts={mappingDrafts}
                 onDraftChange={(key, draft) => setMappingDrafts((drafts) => ({ ...drafts, [key]: draft }))}
-                onChange={(value) => setConfig((config) => ({ ...config, mappingJson: value }))} />}
+                onChange={(value) => setConfig((config) => ({ ...config, entityMappings: { ...decodeEntityMappings(config.entityMappings), sourceOptions: value } }))}
+                onEntityChange={(value) => setConfig((config) => ({ ...config, entityMappings: value }))} onPendingChange={setEntityMappingPending} /></div>
             </div>
           </RecordTabs>
         ) : null}

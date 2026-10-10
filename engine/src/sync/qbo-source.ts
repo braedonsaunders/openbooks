@@ -1,3 +1,4 @@
+import { entityMappingMetadata } from "./entity-mapping-contract.ts";
 import { qboAttachmentProvider } from "./attachment-providers.ts";
 import { syncTransactionAttachments, type AttachmentSyncOptions } from "./transaction-attachments.ts";
 import { addCalendarDays, businessToday, parseIsoDate } from "../platform/business-date.ts";
@@ -68,6 +69,7 @@ const MONTH_NUMBER: Record<string, number> = {
 
 export class QboSource implements MigrationSource {
   readonly name = "qbo";
+  readonly entityMappingMetadata = entityMappingMetadata(['accounting_periods', 'accounts', 'tax_codes', 'parties', 'items', 'files'], ['customers', 'vendors', 'employees'], { 'accounts': ['number', 'name', 'type', 'isActive'], 'parties': ['displayName', 'kind', 'isActive'], 'items': ['code', 'name', 'kind', 'isActive'], 'tax_codes': ['code', 'name', 'ratePercent', 'appliesTo'] });
   readonly refKey = "qboId";
   readonly baseCurrency: string;
   private readonly orgId: string;
@@ -177,6 +179,7 @@ export class QboSource implements MigrationSource {
     ];
     const mk = (prefix: string, kind: string) => (p: QboParty): SourceEntity => ({
       sourceRef: `${prefix}:${p.Id}`,
+      mappingEntities: [prefix === "C" ? "customers" : prefix === "V" ? "vendors" : "employees"],
       fields: {
         displayName: String(p.DisplayName ?? `${prefix} ${p.Id}`).slice(0, 500),
         kind,

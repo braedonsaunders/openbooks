@@ -12,6 +12,9 @@ import type { PostingDeps } from "../journal/posting-contracts.ts";
  */
 
 export interface NativeDocLine {
+  /** Validated native custom values supplied by connection mappings. */
+  mappedCustom?: Record<string, unknown>;
+  mappingApplied?: boolean;
   accountId: string | null;
   itemId: string | null;
   /** Commercial line presentation in document direction. Amount remains the
@@ -72,6 +75,9 @@ export interface NativeDocLine {
 }
 
 export interface NativeDocument {
+  /** Validated native custom values supplied by connection mappings. */
+  mappedCustom?: Record<string, unknown>;
+  mappingApplied?: boolean;
   /** Stable id in the source system (idempotency + change detection). */
   sourceRef: string;
   /**
