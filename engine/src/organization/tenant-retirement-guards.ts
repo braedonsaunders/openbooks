@@ -715,20 +715,6 @@ export const TENANT_RETIREMENT_GUARDS = [
     "patch": true
   },
   {
-    "name": "jl_check_balanced",
-    "source": "0038_ledger_tenant_coherent_foreign_keys.sql",
-    "sha256": "944e46af57817a1fd67088e2ba5942d509f293d6bb3477ae4425d4a0d81ae19f",
-    "newSha256": "772482cfb3db9dc31d7094b3006f00c8b3c1c4b3c7188e444f694b55170d4295",
-    "patch": true
-  },
-  {
-    "name": "jl_check_balanced_by_subsidiary",
-    "source": "0038_ledger_tenant_coherent_foreign_keys.sql",
-    "sha256": "1977da626c48345b0541ee3519f18ccafbacc4913ddbbbaa463c56af56cfee4c",
-    "newSha256": "f1bb8b9076f73865762c6c6cc0feb74a569e0aa5e0b8fe6eef7198d0d13cfe6c",
-    "patch": true
-  },
-  {
     "name": "jl_guard",
     "source": "0400_ledger_guard_reversal_and_clone_authority.sql",
     "sha256": "1df5f4f1edb4be73b3ae570859412dfda9d4e0fe25a23ee17ed43fc8551cdca1",
@@ -1408,10 +1394,10 @@ export const TENANT_RETIREMENT_GUARDS = [
     "patch": true
   },
   {
-    "name": "wip_prebill_event_append_only_guard",
-    "source": "0043_sandbox_wip_prebill_wipe_guard.sql",
-    "sha256": "a4df792c483b51dceceb33c1add6519aa33f374dee67d750ea09cab047887b36",
-    "newSha256": "647fc15fc6725db673c69eedbd061410cb015801a3653752c095a4f95be7d198",
+    "name": "prebill_event_append_only_guard",
+    "source": "0589_pre_billing_names.sql",
+    "sha256": "754932f504ca612f612dce0b6a13fe9a0551b251b1469ee84cfe7998feb590e1",
+    "newSha256": "0a43989514038d7da4d58d6b9ed3ec2aee530e3af0f6c6bd75368ad4ed556b2b",
     "patch": true
   },
   {
@@ -1893,14 +1879,6 @@ export const TENANT_RETIREMENT_GUARD_ATTRIBUTES = [
     "config": []
   },
   {
-    "name": "jl_check_balanced",
-    "config": []
-  },
-  {
-    "name": "jl_check_balanced_by_subsidiary",
-    "config": []
-  },
-  {
     "name": "jl_guard",
     "config": []
   },
@@ -2343,7 +2321,7 @@ export const TENANT_RETIREMENT_GUARD_ATTRIBUTES = [
     ]
   },
   {
-    "name": "wip_prebill_event_append_only_guard",
+    "name": "prebill_event_append_only_guard",
     "config": []
   },
   {
@@ -2572,16 +2550,6 @@ export const TENANT_RETIREMENT_TRIGGER_CONTRACTS = [
   },
   {
     "table": "journal_lines",
-    "trigger": "jl_balanced",
-    "function": "jl_check_balanced"
-  },
-  {
-    "table": "journal_lines",
-    "trigger": "jl_balanced_by_subsidiary",
-    "function": "jl_check_balanced_by_subsidiary"
-  },
-  {
-    "table": "journal_lines",
     "trigger": "jl_guard",
     "function": "jl_guard"
   },
@@ -2741,9 +2709,9 @@ export const TENANT_RETIREMENT_TRIGGER_CONTRACTS = [
     "function": "protect_temporary_difference_history"
   },
   {
-    "table": "wip_prebill_events",
-    "trigger": "wip_prebill_event_append_only",
-    "function": "wip_prebill_event_append_only_guard"
+    "table": "prebill_events",
+    "trigger": "prebill_event_append_only",
+    "function": "prebill_event_append_only_guard"
   },
   {
     "table": "recurring_occurrence_documents",
@@ -3321,12 +3289,57 @@ export const TENANT_RETIREMENT_TRIGGER_CONTRACTS = [
     "function": "benefit_recurring_history_guard"
   },
   {
-    "table": "public",
+    "table": "hrm_benefit_contribution_classes",
     "trigger": "benefit_recurring_audit_trigger",
     "function": "benefit_recurring_audit"
   },
   {
-    "table": "public",
+    "table": "hrm_benefit_contribution_tiers",
+    "trigger": "benefit_recurring_audit_trigger",
+    "function": "benefit_recurring_audit"
+  },
+  {
+    "table": "hrm_benefit_contribution_rules",
+    "trigger": "benefit_recurring_audit_trigger",
+    "function": "benefit_recurring_audit"
+  },
+  {
+    "table": "hrm_benefit_recovery_sources",
+    "trigger": "benefit_recurring_audit_trigger",
+    "function": "benefit_recurring_audit"
+  },
+  {
+    "table": "hrm_benefit_enrollment_terms",
+    "trigger": "benefit_recurring_audit_trigger",
+    "function": "benefit_recurring_audit"
+  },
+  {
+    "table": "pay_run_benefit_allocations",
+    "trigger": "benefit_recurring_audit_trigger",
+    "function": "benefit_recurring_audit"
+  },
+  {
+    "table": "hrm_benefit_contribution_classes",
+    "trigger": "benefit_recurring_configuration_lock_trigger",
+    "function": "benefit_recurring_configuration_lock"
+  },
+  {
+    "table": "hrm_benefit_contribution_tiers",
+    "trigger": "benefit_recurring_configuration_lock_trigger",
+    "function": "benefit_recurring_configuration_lock"
+  },
+  {
+    "table": "hrm_benefit_contribution_rules",
+    "trigger": "benefit_recurring_configuration_lock_trigger",
+    "function": "benefit_recurring_configuration_lock"
+  },
+  {
+    "table": "hrm_benefit_recovery_sources",
+    "trigger": "benefit_recurring_configuration_lock_trigger",
+    "function": "benefit_recurring_configuration_lock"
+  },
+  {
+    "table": "hrm_benefit_enrollment_terms",
     "trigger": "benefit_recurring_configuration_lock_trigger",
     "function": "benefit_recurring_configuration_lock"
   },
@@ -3416,17 +3429,102 @@ export const TENANT_RETIREMENT_TRIGGER_CONTRACTS = [
     "function": "payroll_compensation_calculation_guard"
   },
   {
-    "table": "public",
+    "table": "payroll_compensation_packages",
     "trigger": "payroll_compensation_configuration",
     "function": "payroll_compensation_configuration_guard"
   },
   {
-    "table": "public",
+    "table": "payroll_compensation_versions",
+    "trigger": "payroll_compensation_configuration",
+    "function": "payroll_compensation_configuration_guard"
+  },
+  {
+    "table": "payroll_compensation_assignments",
+    "trigger": "payroll_compensation_configuration",
+    "function": "payroll_compensation_configuration_guard"
+  },
+  {
+    "table": "hrm_shift_templates",
     "trigger": "hrm_shift_guard",
     "function": "hrm_shift_guard"
   },
   {
-    "table": "public",
+    "table": "hrm_shift_assignments",
+    "trigger": "hrm_shift_guard",
+    "function": "hrm_shift_guard"
+  },
+  {
+    "table": "hrm_shift_publications",
+    "trigger": "hrm_shift_guard",
+    "function": "hrm_shift_guard"
+  },
+  {
+    "table": "hrm_shifts",
+    "trigger": "hrm_shift_guard",
+    "function": "hrm_shift_guard"
+  },
+  {
+    "table": "hrm_shift_requests",
+    "trigger": "hrm_shift_guard",
+    "function": "hrm_shift_guard"
+  },
+  {
+    "table": "hrm_attendance_devices",
+    "trigger": "hrm_shift_guard",
+    "function": "hrm_shift_guard"
+  },
+  {
+    "table": "hrm_attendance_identities",
+    "trigger": "hrm_shift_guard",
+    "function": "hrm_shift_guard"
+  },
+  {
+    "table": "hrm_attendance_batches",
+    "trigger": "hrm_shift_guard",
+    "function": "hrm_shift_guard"
+  },
+  {
+    "table": "hrm_attendance_events",
+    "trigger": "hrm_shift_guard",
+    "function": "hrm_shift_guard"
+  },
+  {
+    "table": "hrm_attendance_watermarks",
+    "trigger": "hrm_shift_guard",
+    "function": "hrm_shift_guard"
+  },
+  {
+    "table": "hrm_attendance_observations",
+    "trigger": "hrm_shift_guard",
+    "function": "hrm_shift_guard"
+  },
+  {
+    "table": "hrm_attendance_event_claims",
+    "trigger": "hrm_shift_guard",
+    "function": "hrm_shift_guard"
+  },
+  {
+    "table": "hrm_attendance_observation_events",
+    "trigger": "hrm_shift_guard",
+    "function": "hrm_shift_guard"
+  },
+  {
+    "table": "hrm_training_courses",
+    "trigger": "hrm_training_guard",
+    "function": "hrm_training_guard"
+  },
+  {
+    "table": "hrm_training_sessions",
+    "trigger": "hrm_training_guard",
+    "function": "hrm_training_guard"
+  },
+  {
+    "table": "hrm_training_participants",
+    "trigger": "hrm_training_guard",
+    "function": "hrm_training_guard"
+  },
+  {
+    "table": "hrm_training_feedback",
     "trigger": "hrm_training_guard",
     "function": "hrm_training_guard"
   },
@@ -3596,7 +3694,12 @@ export const TENANT_RETIREMENT_TRIGGER_CONTRACTS = [
     "function": "withholding_returns_guard"
   },
   {
-    "table": "public",
+    "table": "payroll_holiday_obligations",
+    "trigger": "payroll_holiday_obligation_guard",
+    "function": "payroll_holiday_obligation_guard"
+  },
+  {
+    "table": "payroll_holiday_occurrences",
     "trigger": "payroll_holiday_obligation_guard",
     "function": "payroll_holiday_obligation_guard"
   },
