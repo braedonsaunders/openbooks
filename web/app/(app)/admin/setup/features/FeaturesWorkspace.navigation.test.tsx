@@ -4,13 +4,14 @@ import { bootJsdomEnvironment } from '../../../../../testing/jsdom-env'
 import { stubModules } from '../../../../../testing/stub-modules'
 
 await bootJsdomEnvironment({ url: 'http://localhost/admin/setup/features?tab=finance&draft=kept#features' })
+const reactUrl = import.meta.resolve('react')
 stubModules({
   navigation: {
     source: "export function usePathname(){return window.location.pathname}export function useSearchParams(){return new URLSearchParams(window.location.search)}export function useRouter(){return{push(){throw new Error('presentation must not request a server route')},replace(){},refresh(){}}}",
   },
   intl: false, authz: false, features: false,
   extra: {
-    'next/link': `import React from 'react';export default function Link({href,onNavigate,onClick,children,prefetch,transitionTypes,...props}){
+    'next/link': `import React from ${JSON.stringify(reactUrl)};export default function Link({href,onNavigate,onClick,children,prefetch,transitionTypes,...props}){
       return React.createElement('a',{...props,href,'data-prefetch':String(prefetch),onClick(e){e.preventDefault();onClick?.(e);let stopped=false;onNavigate?.({preventDefault(){stopped=true}});if(!stopped)globalThis.__featuresRouteStart(String(href))}},children)
     }`,
     sonner: 'export const toast={success(){},error(){}}',
