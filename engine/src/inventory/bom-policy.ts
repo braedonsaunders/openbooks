@@ -12,7 +12,7 @@ import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
 import { assertFinancialChangeApproved, completeFinancialChange, existingFinancialChange, loadFinancialChange, proposeFinancialChange, MANUFACTURING_BOM_APPROVAL_OPERATION } from "../platform/financial-changes.ts";
 
 export class BomPolicyError extends Error {
-  constructor(message: string, readonly status = 422, readonly code = "bom_policy_refused") { super(message); }
+  constructor(message: string, readonly status = 422, readonly code = "bom_policy_refused", readonly details?: Record<string, unknown>) { super(message); }
 }
 
 /**
@@ -67,9 +67,14 @@ function normalize(input: BomPolicyInput): BomPolicyLine[] {
   });
   for (let left = 0; left < lines.length; left++) for (let right = left + 1; right < lines.length; right++) {
     const a = lines[left]!, b = lines[right]!;
+    // The editor names the offending component and windows from the refusal
+    // body, so the overlap carries that structured evidence on the error for
+    // the route boundary to answer with.
+    const window = (line: BomPolicyLine) => `[${line.effectiveFrom ?? 'unbounded start'}, ${line.effectiveTo ?? 'unbounded end'})`;
     if (a.componentItemId === b.componentItemId && a.operationSeq === b.operationSeq && a.isByproduct === b.isByproduct &&
       (a.effectiveTo === null || b.effectiveFrom === null || a.effectiveTo > b.effectiveFrom) &&
-      (b.effectiveTo === null || a.effectiveFrom === null || b.effectiveTo > a.effectiveFrom)) throw new BomPolicyError(`Component ${a.componentItemId} has overlapping effectivity windows; separate its dates for this operation and by-product designation.`, 422, "bom_effectivity_overlap");
+      (b.effectiveTo === null || a.effectiveFrom === null || b.effectiveTo > a.effectiveFrom)) throw new BomPolicyError(`Component ${a.componentItemId} has overlapping effectivity windows ${window(a)} and ${window(b)}; adjust the dates so the same operation and by-product designation do not overlap.`, 422, "bom_effectivity_overlap",
+      { componentItemId: a.componentItemId, windows: [window(a), window(b)] });
   }
   return lines;
 }

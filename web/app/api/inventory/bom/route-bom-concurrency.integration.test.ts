@@ -83,12 +83,17 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
 );
 
 
-function authenticate(orgId: string, actorId: string) {
+async function authenticate(orgId: string, actorId: string) {
   routeState.authz = {
     user: { orgId, id: actorId },
     permissions: new Set(["admin.setup.manage"]),
     allowedSubsidiaryIds: null,
   };
+  // The native BOM command re-locks the actor's grants inside its own
+  // transaction, so the fixture role carries the setup grant in the
+  // database too; the session gate above stays the only mock.
+  await db.execute(sql`update app_roles set permissions = '["admin.setup.manage"]'::jsonb
+    where org_id = ${orgId} and id in (select role_id from role_assignments where org_id = ${orgId} and user_id = ${actorId})`);
 }
 
 function putRequest(body: unknown): Request {
@@ -132,7 +137,7 @@ test("two concurrent empty-BOM replacements serialize: one recipe, one 409", asy
   const org = await createScratchOrg();
   try {
     const actorId = await createScratchUser(org.orgId, "BOM Race Admin", "admin");
-    authenticate(org.orgId, actorId);
+    await authenticate(org.orgId, actorId);
     await emptyBom(org.orgId, org.items.assembly);
 
     const [first, second] = await Promise.all([
@@ -167,7 +172,7 @@ test("disabled Manufacturing refuses operation and by-product fields; disabled I
   const org = await createScratchOrg();
   try {
     const actorId = await createScratchUser(org.orgId, "BOM Fence Admin", "admin");
-    authenticate(org.orgId, actorId);
+    await authenticate(org.orgId, actorId);
     await emptyBom(org.orgId, org.items.assembly);
     for (const fields of [{ operationSeq: 2 }, { isByproduct: true }]) {
       const response = await PUT(putRequest({
@@ -195,7 +200,7 @@ test("BOM replacement accepts adjacent effectivity windows and names overlapping
   const org = await createScratchOrg();
   try {
     const actorId = await createScratchUser(org.orgId, "BOM Effectivity Admin", "admin");
-    authenticate(org.orgId, actorId);
+    await authenticate(org.orgId, actorId);
     await emptyBom(org.orgId, org.items.assembly);
     const base = recipe(org.items.assembly, org.items.component);
     const first = { componentItemId: org.items.component, quantityPer: "1", effectiveFrom: "2026-01-01", effectiveTo: "2026-07-01" };
@@ -255,7 +260,7 @@ test("GET names component lines from catalog identity and keeps inactive lines a
   const org = await createScratchOrg();
   try {
     const actorId = await createScratchUser(org.orgId, "BOM Read Admin", "admin");
-    authenticate(org.orgId, actorId);
+    await authenticate(org.orgId, actorId);
     await emptyBom(org.orgId, org.items.assembly);
     const saved = await PUT(putRequest(recipe(org.items.assembly, org.items.component)));
     assert.equal(saved.status, 200);
@@ -358,7 +363,7 @@ test("a BOM save waits for an in-flight Inventory disable, then refuses it", asy
   let pending: Promise<{ status: number }> | undefined;
   try {
     const actorId = await createScratchUser(org.orgId, "BOM Fence Race Admin", "admin");
-    authenticate(org.orgId, actorId);
+    await authenticate(org.orgId, actorId);
     await emptyBom(org.orgId, org.items.assembly);
 
     await writer.query("begin");
