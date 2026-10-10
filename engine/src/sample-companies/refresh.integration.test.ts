@@ -22,6 +22,7 @@ test("native exploration refresh preserves rebased posted history, member drafts
   let memberOrgId: string | undefined;
   try {
     const memberUserId = await withBypass(() => createScratchUser(home.orgId, "Sample reviewer", "admin"));
+    const sourceReviewerId = await withBypass(() => createScratchUser(home.orgId, "Source-only reviewer", "admin"));
     await installDemoScenarios(master.orgId, "general_business");
     // Model a previously published source version while retaining genuine native history.
     await withOrgContext(master.orgId, () => db.execute(sql`update orgs set settings=jsonb_set(jsonb_set(settings,'{sampleTemplate}',
@@ -30,7 +31,7 @@ test("native exploration refresh preserves rebased posted history, member drafts
     const draftMasterLineId = scenarioRecordId({ orgId: master.orgId }, "document_lines", "expense");
     await withOrgContext(master.orgId, async () => {
       const actor = (await db.execute<{ id: string }>(sql`select id from users where org_id=${master.orgId} and is_active order by created_at,id limit 1`)).rows[0]!;
-      await db.execute(sql`insert into user_org_access(member_user_id,org_id,acting_user_id) values(${memberUserId},${master.orgId},${actor.id})`);
+      await db.execute(sql`insert into user_org_access(member_user_id,org_id,acting_user_id) values(${memberUserId},${master.orgId},${actor.id}),(${sourceReviewerId},${master.orgId},${actor.id})`);
       assert.equal((await db.execute(sql`update documents set memo='Operator revised master expense' where org_id=${master.orgId} and id=${draftMasterId} and status='draft' returning id`)).rows.length, 1);
       assert.equal((await db.execute(sql`update document_lines set description='Operator retained receipt detail' where org_id=${master.orgId} and id=${draftMasterLineId} returning id`)).rows.length, 1);
       await db.execute(sql`update orgs set settings=jsonb_set(settings,'{onboarding}','{"setupComplete":false,"customReview":"retained"}'::jsonb) where id=${master.orgId}`);
@@ -53,6 +54,14 @@ test("native exploration refresh preserves rebased posted history, member drafts
     });
     memberOrgId = company.orgId;
     const orgId = memberOrgId;
+    const accessRows = (tenantId: string) => withOrgContext(tenantId, async () =>
+      (await db.execute<{ member_user_id: string; is_active: boolean }>(sql`
+        select member_user_id,is_active from user_org_access where org_id=${tenantId}
+        order by member_user_id`)).rows);
+    assert.deepEqual(await accessRows(master.orgId), [memberUserId,sourceReviewerId].sort().map(member_user_id => ({ member_user_id,is_active: true })),
+      "refresh preserves the source operator's existing access");
+    assert.deepEqual(await accessRows(orgId), [{ member_user_id: memberUserId, is_active: true }],
+      "only the requested destination owner receives native access, without a rebased source membership");
     const signedOffMatches = (tenantId: string) => withOrgContext(tenantId, async () =>
       (await db.execute<{ matches: number; invalid: number }>(sql`
         select count(*)::int as matches,count(*) filter(where
