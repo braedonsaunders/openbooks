@@ -937,6 +937,10 @@
         "storedValueLiability": {
           "label": "Stored value liability",
           "hint": "Gift card and store credit balances owed to customers"
+        },
+        "receivedNotBilled": {
+          "label": "Received not billed",
+          "hint": "Goods received but not yet billed, used when the item names no clearing account"
         }
       },
       "partylessPolicy": {

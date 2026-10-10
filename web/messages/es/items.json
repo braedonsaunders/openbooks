@@ -335,6 +335,7 @@
     "adjustmentAccount": "Cuenta de ajustes",
     "varianceAccount": "Cuenta de desviaciones",
     "receivedNotBilledAccount": "Cuenta de recibido no facturado",
+    "usesCompanyDefault": "Usa el valor predeterminado de la empresa ({account})",
     "standardCost": "Costo estándar",
     "reorderPoint": "Punto de reorden",
     "preferredStockLevel": "Nivel de stock preferido",

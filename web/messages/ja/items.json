@@ -325,6 +325,7 @@
     "adjustmentAccount": "調整勘定",
     "varianceAccount": "差異勘定",
     "receivedNotBilledAccount": "未請求受入勘定",
+    "usesCompanyDefault": "会社の標準 ({account}) を使用",
     "standardCost": "標準原価",
     "reorderPoint": "発注点",
     "preferredStockLevel": "適正在庫水準",

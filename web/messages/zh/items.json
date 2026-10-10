@@ -325,6 +325,7 @@
     "adjustmentAccount": "调整科目",
     "varianceAccount": "差异科目",
     "receivedNotBilledAccount": "货到未开票科目",
+    "usesCompanyDefault": "使用公司默认值 ({account})",
     "standardCost": "标准成本",
     "reorderPoint": "再订货点",
     "preferredStockLevel": "期望库存水平",

@@ -936,6 +936,10 @@
         "storedValueLiability": {
           "label": "Pasivo por valor almacenado",
           "hint": "Saldos de tarjetas regalo y crédito de tienda adeudados a clientes"
+        },
+        "receivedNotBilled": {
+          "label": "Recibido no facturado",
+          "hint": "Bienes recibidos aún no facturados, cuando el artículo no nombra cuenta de compensación"
         }
       },
       "defaultsNote": "Estos son los valores predeterminados de toda la empresa. Cada filial puede reemplazarlos en su propia ficha; los reemplazos vacíos vuelven a estos.",

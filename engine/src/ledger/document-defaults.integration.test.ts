@@ -162,3 +162,25 @@ test("creating an invoice without a due date derives it from terms; an explicit 
     await dropScratchOrg(s.org.orgId);
   }
 });
+
+test("purchase lines propose the company clearing account when the profile names none", { skip: !DB }, async () => {
+  const s = await seed();
+  try {
+    await withBypass(() => db.execute(sql`
+      update orgs set settings = jsonb_set(settings, '{features,inventory}', 'true'::jsonb, true) where id = ${s.org.orgId}`));
+    await withBypass(() => db.execute(sql`
+      update item_inventory_profiles set received_not_billed_account_id = null
+       where org_id = ${s.org.orgId} and item_id = ${s.org.items.fifo}`));
+    const companyGrni = await withBypass(() => seedPostingAccount(s.org.orgId, "2160", "Company GRNI", "liability_current_other"));
+    await withBypass(() => db.execute(sql`
+      update orgs set settings = jsonb_set(settings, '{controlAccounts,receivedNotBilled}', to_jsonb(${companyGrni}::text), true)
+       where id = ${s.org.orgId}`));
+    const lines = await withBypass(() => resolveDocumentLineDefaults(db, s.org.orgId, {
+      kind: "vendor_bill", partyId: s.org.vendorId, itemIds: [s.org.items.fifo],
+    }));
+    assert.equal(lines[0]!.accountId, companyGrni);
+    assert.equal(lines[0]!.accountSource, "inventory_clearing");
+  } finally {
+    await dropScratchOrg(s.org.orgId);
+  }
+});

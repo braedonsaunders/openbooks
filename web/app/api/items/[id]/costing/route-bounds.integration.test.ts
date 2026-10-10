@@ -125,6 +125,12 @@ test("costing saves the editor's blank optional accounts and decimals as unset",
   const fx = await fixture();
   try {
     const before = await profile(fx);
+    // A blank received-not-billed account stays storable while the company
+    // default stands behind the item — the company control is the fallback
+    // the receipt and bill readers resolve.
+    await withBypassContext(() =>
+      db.execute(sql`update orgs set settings = jsonb_set(settings, '{controlAccounts,receivedNotBilled}', to_jsonb(${fx.clearing}::text), true) where id = ${fx.orgId}`),
+    );
     // The costing editor posts every field; unset choices arrive as "".
     const response = await call(PUT, fx.itemId, {
       ...putBody(fx, before.updated_at, "118"),
@@ -141,6 +147,43 @@ test("costing saves the editor's blank optional accounts and decimals as unset",
     assert.equal(response.status, 200, JSON.stringify(await response.json().catch(() => null)));
     const after = await profile(fx);
     assert.ok(Number(after.standard_cost) === 118, `standard cost not saved: ${after.standard_cost}`);
+    const stored = (await withBypassContext(() => db.execute<{ received_not_billed_account_id: string | null }>(sql`
+      select received_not_billed_account_id from item_inventory_profiles where org_id = ${fx.orgId} and item_id = ${fx.itemId}`))).rows[0];
+    assert.equal(stored?.received_not_billed_account_id, null, "blank RNB persists as unset behind the company default");
+  } finally {
+    await dropScratchOrg(fx.orgId);
+  }
+});
+
+test("costing refuses a blank received-not-billed account with no company default", async () => {
+  const fx = await fixture();
+  try {
+    const before = await profile(fx);
+    const response = await call(PUT, fx.itemId, {
+      ...putBody(fx, before.updated_at, "118"),
+      receivedNotBilledAccountId: "",
+    });
+    const json = (await response.json().catch(() => null)) as { error?: string } | null;
+    assert.equal(response.status, 422, `expected 422, got ${response.status}: ${JSON.stringify(json)}`);
+    assert.match(json?.error ?? "", /costing profile/);
+    assert.match(json?.error ?? "", /Company Settings/);
+    const after = await profile(fx);
+    assert.equal(after.updated_at, before.updated_at, "a refused save writes nothing");
+  } finally {
+    await dropScratchOrg(fx.orgId);
+  }
+});
+
+test("costing read names the company received-not-billed default", async () => {
+  const fx = await fixture();
+  try {
+    await withBypassContext(() =>
+      db.execute(sql`update orgs set settings = jsonb_set(settings, '{controlAccounts,receivedNotBilled}', to_jsonb(${fx.clearing}::text), true) where id = ${fx.orgId}`),
+    );
+    const response = await call(GET, fx.itemId);
+    const json = (await response.json().catch(() => null)) as { companyReceivedNotBilledAccountId?: string | null } | null;
+    assert.equal(response.status, 200, JSON.stringify(json));
+    assert.equal(json?.companyReceivedNotBilledAccountId, fx.clearing);
   } finally {
     await dropScratchOrg(fx.orgId);
   }

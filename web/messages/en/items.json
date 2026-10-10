@@ -323,6 +323,7 @@
     "adjustmentAccount": "Adjustment account",
     "varianceAccount": "Variance account",
     "receivedNotBilledAccount": "Received-not-billed account",
+    "usesCompanyDefault": "Uses company default ({account})",
     "standardCost": "Standard cost",
     "reorderPoint": "Reorder point",
     "preferredStockLevel": "Preferred stock level",

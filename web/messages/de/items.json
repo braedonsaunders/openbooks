@@ -338,6 +338,7 @@
     "adjustmentAccount": "Anpassungskonto",
     "varianceAccount": "Abweichungskonto",
     "receivedNotBilledAccount": "Konto für erhaltene, nicht fakturierte Ware",
+    "usesCompanyDefault": "Nutzt den Unternehmensstandard ({account})",
     "standardCost": "Standardkosten",
     "reorderPoint": "Meldebestand",
     "preferredStockLevel": "Wunschbestand",

@@ -148,3 +148,33 @@ test("a mistyped mapping is refused by the role's name and expected type, never 
   // An accepted type passes for the same role.
   assertValidControlAccountMappings({ laborClearing: clearing.id }, [clearing]);
 });
+
+test("received-not-billed control mapping only accepts payable-family accounts", () => {
+  const payable: ControlAccountRecord = {
+    id: "44444444-4444-4444-8444-444444444444",
+    type: "liability_payable",
+    isActive: true,
+    isSummary: false,
+  };
+  assertValidControlAccountMappings({ receivedNotBilled: payable.id }, [payable]);
+  const currentOther: ControlAccountRecord = {
+    ...payable,
+    id: "55555555-5555-4555-8555-555555555555",
+    type: "liability_current_other",
+  };
+  assertValidControlAccountMappings({ receivedNotBilled: currentOther.id }, [currentOther]);
+  const asset: ControlAccountRecord = {
+    ...payable,
+    id: "66666666-6666-4666-8666-666666666666",
+    type: "asset_current_other",
+  };
+  assert.throws(
+    () => assertValidControlAccountMappings({ receivedNotBilled: asset.id }, [asset]),
+    (error: unknown) =>
+      error instanceof ControlAccountsIncompleteError &&
+      error.message ===
+        "Received not billed control account must be Accounts payable or Other current liability; the selected account is Other current asset" &&
+      error.role === "receivedNotBilled" &&
+      error.reason === "type",
+  );
+});

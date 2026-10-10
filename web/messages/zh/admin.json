@@ -937,6 +937,10 @@
         "storedValueLiability": {
           "label": "储值负债",
           "hint": "欠客户的礼品卡和商店积分余额"
+        },
+        "receivedNotBilled": {
+          "label": "货到未开票",
+          "hint": "已收货但尚未开票的货物，适用于物料未指定结算科目时"
         }
       },
       "partylessPolicy": {

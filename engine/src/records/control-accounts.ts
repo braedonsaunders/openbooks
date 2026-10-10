@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
+import { db, type SqlExecutor } from "../platform/db.ts";
 import { isUuid } from "../platform/uuid.ts";
 
 /**
@@ -88,6 +88,12 @@ export const CONTROL_ACCOUNT_TYPE_POLICY = {
   // or refunds, never in cash beyond escheat. Gift card money parked in
   // revenue or payables misstates both, so only liability types qualify.
   storedValueLiability: ["liability_payable", "liability_current_other"],
+  // Goods received but not yet billed (GRNI): the clearing account receipts
+  // credit and vendor bills debit. A current liability by nature — it holds
+  // what is owed for stock already in hand — so a newly mapped company
+  // control must be payable-family. Profile accounts keep their own
+  // save-time offset validation and are only required live and postable.
+  receivedNotBilled: ["liability_payable", "liability_current_other"],
 } as const;
 
 export type ControlAccountRole = keyof typeof CONTROL_ACCOUNT_TYPE_POLICY;
@@ -131,6 +137,7 @@ export const CONTROL_ACCOUNT_ROLE_LABELS: Record<ControlAccountRole, string> = {
   deferredTaxLiability: "Deferred tax liability",
   valuationAllowance: "Valuation allowance",
   storedValueLiability: "Stored value liability",
+  receivedNotBilled: "Received not billed",
 };
 
 /** Operator-facing chart account-type names for control-account refusals. */
@@ -311,6 +318,118 @@ export async function loadControlAccounts(
        )})`);
   assertValidControlAccountMappings(mappings, records.rows);
   return mappings;
+}
+
+/**
+ * One authoritative received-not-billed (GRNI) clearing policy for every
+ * reader that posts or promises receipt accounting: the item costing
+ * profile's account wins when set; otherwise the company-level
+ * receivedNotBilled control account applies. Returns the account with its
+ * source, or null when neither is configured — callers refuse with
+ * receivedNotBilledMissingMessage, which names both places. The profile
+ * account must be a live posting account; the company account is validated
+ * against the type policy on read, so a mistyped control mapping fails
+ * closed here instead of reaching the posting kernel.
+ */
+export async function resolveReceivedNotBilledAccount(
+  executor: SqlExecutor,
+  orgId: string,
+  itemId: string,
+): Promise<{ accountId: string; source: "profile" | "company" } | null> {
+  const profile = (await executor.execute<{ accountId: string | null }>(sql`
+    select received_not_billed_account_id as "accountId"
+      from item_inventory_profiles
+     where org_id = ${orgId} and item_id = ${itemId}`)).rows[0]?.accountId;
+  if (profile) {
+    const account = (await executor.execute<ControlAccountRecord>(sql`
+      select id, type, is_active as "isActive", is_summary as "isSummary"
+        from accounts
+       where org_id = ${orgId} and id = ${profile}`)).rows[0];
+    if (account?.isActive && !account.isSummary) {
+      return { accountId: account.id, source: "profile" };
+    }
+  }
+  const company = await loadControlAccountsForRoles(executor, orgId, [
+    "receivedNotBilled",
+  ]);
+  if (company.receivedNotBilled) {
+    return { accountId: company.receivedNotBilled, source: "company" };
+  }
+  return null;
+}
+
+/**
+ * Validated read of selected control-account roles without re-checking the
+ * whole registry: a caller that only needs one role must not inherit
+ * another role's legacy-invalid mapping as a posting blocker.
+ */
+export async function loadControlAccountsForRoles(
+  executor: SqlExecutor,
+  orgId: string,
+  roles: readonly ControlAccountRole[],
+): Promise<OrgControlAccounts> {
+  const stored = (await executor.execute<{ control: unknown }>(sql`
+    select settings->'controlAccounts' as control
+      from orgs
+     where id = ${orgId}`)).rows[0]?.control;
+  const raw =
+    stored && typeof stored === "object"
+      ? (stored as Record<string, unknown>)
+      : {};
+  const mappings: OrgControlAccounts = {};
+  for (const role of roles) {
+    const accountId = raw[role];
+    if (typeof accountId !== "string" || accountId === "") continue;
+    mappings[role] = accountId;
+  }
+  const ids = [...new Set(Object.values(mappings))];
+  if (ids.length === 0) return mappings;
+  const records = await executor.execute<ControlAccountRecord>(sql`
+    select id, type, is_active as "isActive", is_summary as "isSummary"
+      from accounts
+     where org_id = ${orgId}
+       and id in (${sql.join(
+         ids.map((id) => sql`${id}`),
+         sql`, `,
+       )})`);
+  assertValidControlAccountMappings(mappings, records.rows);
+  return mappings;
+}
+
+/**
+ * Company-level received-not-billed account id for non-posting readers
+ * (drawer proposals): null when unconfigured or invalid. Posting paths use
+ * resolveReceivedNotBilledAccount and fail closed instead — a proposal must
+ * never block data entry, while the posting refusal names the misconfigured
+ * control explicitly.
+ */
+export async function loadCompanyReceivedNotBilledAccount(
+  executor: SqlExecutor,
+  orgId: string,
+): Promise<string | null> {
+  try {
+    const controls = await loadControlAccountsForRoles(executor, orgId, [
+      "receivedNotBilled",
+    ]);
+    return controls.receivedNotBilled ?? null;
+  } catch (error) {
+    if (error instanceof ControlAccountsIncompleteError) return null;
+    throw error;
+  }
+}
+
+/**
+ * Fail-closed refusal shared by every received-not-billed reader: names the
+ * item and both places that configure the account — the item's costing
+ * profile and the company control account — so the operator never has to
+ * guess which blank to fill.
+ */
+export function receivedNotBilledMissingMessage(itemLabel: string): string {
+  return (
+    `${itemLabel} has no received-not-billed account — set it on the item's ` +
+    `costing profile, or set the company Received not billed control account ` +
+    `under Company Settings, then retry`
+  );
 }
 
 /** Control accounts shaped for PostingDeps: ar/ap/bank are mandatory before
