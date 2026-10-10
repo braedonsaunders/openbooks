@@ -7,7 +7,7 @@ import type { Dispatch, SetStateAction } from 'react'
 import { useId, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { CheckCheck, Link2, Pencil, Trash2, Wand2 } from 'lucide-react'
+import { Ban, CheckCheck, Link2, Pencil, Trash2, Wand2 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   Alert,
@@ -28,6 +28,7 @@ import { SearchInput } from '../../../../../../components/search-input'
 import { Pagination } from '../../../../../../components/pagination'
 import { SortTh } from '../../../../../../components/sortable-th'
 import { confirmDialog } from '../../../../../../lib/confirm'
+import { promptDialog } from '../../../../../../lib/prompt'
 import { isZeroAmount } from './DifferenceBadge'
 import { canonicalDecimal } from '../../../../../../lib/exact-decimal'
 import { useDirtyClose } from '../../../../../../lib/use-dirty-close'
@@ -70,12 +71,32 @@ interface MatchedRow {
   gl_amount: string
   gl_memo: string | null
 }
+
+interface GlClearing {
+  group_id: string
+  lines: number
+  entries: string | null
+  total: string
+}
 interface ReconciliationActionResult {
   error?: string
   matched?: number
   highConfidence?: number
   mediumConfidence?: number
   journalLinesReconciled?: number
+}
+
+interface SignOffBlocker {
+  id: string
+  postedOn: string
+  amount: string
+  description: string | null
+}
+
+// The blockers endpoint returns the engine's camelCase SignOffBlocker;
+// normalize once so the list below never renders a blank date.
+function blockerPostedOn(line: SignOffBlocker & { posted_on?: string }): string {
+  return line.postedOn ?? line.posted_on ?? ''
 }
 
 const selectedRow = 'bg-teal-50 dark:bg-teal-950/40'
@@ -116,6 +137,7 @@ type ReconcileWorkspaceProps = {
   matchedRows: MatchedRow[]
   matchedTotal: number
   mParams: PaneParams
+  glClearings?: GlClearing[]
 }
 
 export function ReconcileWorkspace(props: ReconcileWorkspaceProps) {
@@ -140,14 +162,21 @@ function ReconcileWorkspaceForId({
   matchedRows,
   matchedTotal,
   mParams,
+  glClearings = [],
 }: ReconcileWorkspaceProps) {
   const { money: formatMoney } = useMoney(reconciliation.currency)
   const money = (value: MoneyValue) => formatMoney(value, { maximumFractionDigits: 4 })
   const t = useTranslations('banking.workspace')
+  const tMatch = useTranslations('banking.match')
   const tBanking = useTranslations('banking')
   const tCommon = useTranslations('common')
   const router = useRouter()
   const [busy, setBusy] = useState(false)
+  // A refused sign-off that only fires a transient toast reads as "nothing
+  // happened" once it dismisses: the typed refusal persists as a workspace
+  // alert with the blocking lines beside it, cleared by the next success.
+  const [signOffError, setSignOffError] = useState<string | null>(null)
+  const [blockers, setBlockers] = useState<{ lines: SignOffBlocker[]; total: number } | null>(null)
   const subjectKey = reconciliation.id
   const selectionKey = JSON.stringify([
     subjectKey,
@@ -187,7 +216,7 @@ function ReconcileWorkspaceForId({
     [glRows, selectedGl],
   )
 
-  async function call(method: string, url: string, body?: unknown): Promise<ReconciliationActionResult | null> {
+  async function call(method: string, url: string, body?: unknown, onError?: (message: string) => void): Promise<ReconciliationActionResult | null> {
     setBusy(true)
     try {
       const res = await fetch(url, {
@@ -200,15 +229,34 @@ function ReconcileWorkspaceForId({
       // unhandled rejection.
       const data = await res.json().catch(() => null) as ReconciliationActionResult | null
       if (!res.ok) {
-        toast.error(data?.error ?? tBanking('errors.requestFailed'))
+        const message = data?.error ?? tBanking('errors.requestFailed')
+        if (onError) onError(message); else toast.error(message)
         return null
       }
+      // A success moves the session: any persisted refusal is stale.
+      setSignOffError(null)
+      setBlockers(null)
       return data
     } catch {
-      toast.error(tBanking('errors.requestFailed'))
+      const message = tBanking('errors.requestFailed')
+      if (onError) onError(message); else toast.error(message)
       return null
     } finally {
       setBusy(false)
+    }
+  }
+
+  async function loadBlockers() {
+    // Supplementary read beside the persisted refusal: its own failure must
+    // never toast or wedge — the refusal already shows without the list.
+    try {
+      const res = await fetch(`/api/banking/reconciliations/${reconciliation.id}/blockers`)
+      const data = await res.json().catch(() => null) as { lines?: SignOffBlocker[]; total?: number } | null
+      if (res.ok && Array.isArray(data?.lines)) {
+        setBlockers({ lines: data.lines, total: typeof data.total === 'number' ? data.total : data.lines.length })
+      }
+    } catch {
+      // ignore: the refusal alert stands on its own
     }
   }
 
@@ -240,6 +288,26 @@ function ReconcileWorkspaceForId({
     router.refresh()
   }
 
+  async function clearSelected() {
+    // GL-only offsetting lines with no bank counterpart clear as a zero-sum
+    // group — no statement selection required.
+    if (selectedStmts.size > 0 || selectedGl.size === 0) return
+    const data = await call('POST', `/api/banking/reconciliations/${reconciliation.id}/gl-clearing`, {
+      journalLineIds: [...selectedGl],
+    })
+    if (!data) return
+    toast.success(t('clearedToast'))
+    setSelectedGl(new Set())
+    router.refresh()
+  }
+
+  async function unmatchClearing(groupId: string) {
+    const data = await call('DELETE', `/api/banking/reconciliations/${reconciliation.id}/gl-clearing?groupId=${groupId}`)
+    if (!data) return
+    toast.success(t('unmatchedToast'))
+    router.refresh()
+  }
+
   async function unmatch(statementLineId: string) {
     const data = await call(
       'DELETE',
@@ -255,9 +323,33 @@ function ReconcileWorkspaceForId({
       message: t('signOffConfirm'),
     })
     if (!ok) return
-    const data = await call('POST', `/api/banking/reconciliations/${reconciliation.id}/sign-off`)
-    if (!data) return
+    setSignOffError(null)
+    setBlockers(null)
+    const data = await call('POST', `/api/banking/reconciliations/${reconciliation.id}/sign-off`, undefined, (message) => {
+      setSignOffError(message)
+      toast.error(message)
+    })
+    if (!data) {
+      // List the lines the refusal counts, with dates, amounts and links —
+      // a bare "N line(s) remain unmatched" names no actionable row.
+      await loadBlockers()
+      return
+    }
     toast.success(t('signedOffToast', { count: data.journalLinesReconciled ?? 0 }))
+    router.refresh()
+  }
+
+  async function excludeStatementLine(id: string) {
+    const reason = await promptDialog({
+      title: tMatch('excludeReasonTitle'),
+      label: tMatch('excludeReasonLabel'),
+      placeholder: tMatch('excludeReasonPlaceholder'),
+      confirmLabel: tMatch('exclude'),
+    })
+    if (!reason) return
+    const data = await call('PATCH', `/api/banking/statement-lines/${id}`, { action: 'exclude', reason })
+    if (!data) return
+    toast.success(tMatch('excludedToast'))
     router.refresh()
   }
 
@@ -312,12 +404,46 @@ function ReconcileWorkspaceForId({
             <Button disabled={busy || selectedStmts.size === 0 || selectedGl.size === 0} onClick={matchSelected}>
               <Link2 size={15} /> {t('matchSelected')}
             </Button>
+            <Button
+              variant="outline"
+              disabled={busy || selectedStmts.size > 0 || selectedGl.size === 0}
+              onClick={clearSelected}
+              title={t('clearSelectedTitle')}
+            >
+              {t('clearSelected')}
+            </Button>
             <Button disabled={busy || !zero} onClick={signOff} title={zero ? undefined : t('signOffDisabledTitle')}>
               <CheckCheck size={15} /> {t('signOff')}
             </Button>
           </div>
         )
       )}
+
+      {signOffError ? (
+        <div
+          role="alert"
+          className="space-y-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300"
+        >
+          <p>{signOffError}</p>
+          {blockers && blockers.lines.length > 0 ? (
+            <div className="space-y-1">
+              <p className="font-medium">{t('blockingLines')}</p>
+              <ul className="list-disc pl-5">
+                {blockers.lines.map((line) => (
+                  <li key={line.id}>
+                    <a className="underline" href={`#stmt-line-${line.id}`}>
+                      {blockerPostedOn(line)} · {money(line.amount)} · {line.description ?? '—'}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+              {blockers.total > blockers.lines.length ? (
+                <p>{t('moreBlockingLines', { shown: blockers.lines.length, total: blockers.total })}</p>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="grid gap-6 xl:grid-cols-2">
         {/* -------- left: unmatched statement lines -------- */}
@@ -339,12 +465,13 @@ function ReconcileWorkspaceForId({
                   <SortTh basePath={basePath} currentParams={currentParams} column="date" sort={stmtParams.sort} dir={stmtParams.dir} sortParamKey="stmtSort" dirParamKey="stmtDir" pageParamKey="stmtPage">{tCommon('labels.date')}</SortTh>
                   <SortTh basePath={basePath} currentParams={currentParams} column="description" sort={stmtParams.sort} dir={stmtParams.dir} sortParamKey="stmtSort" dirParamKey="stmtDir" pageParamKey="stmtPage">{tCommon('labels.description')}</SortTh>
                   <SortTh basePath={basePath} currentParams={currentParams} column="amount" sort={stmtParams.sort} dir={stmtParams.dir} sortParamKey="stmtSort" dirParamKey="stmtDir" pageParamKey="stmtPage" align="right">{tCommon('labels.amount')}</SortTh>
+                  {!readOnly ? <TableHead><span className="sr-only">{tMatch('exclude')}</span></TableHead> : null}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {stmtRows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={readOnly ? 3 : 4} className="text-center text-slate-500 dark:text-slate-400">
+                    <TableCell colSpan={readOnly ? 3 : 5} className="text-center text-slate-500 dark:text-slate-400">
                       {stmtParams.q ? t('noBankLinesSearch') : t('allBankLinesMatched')}
                     </TableCell>
                   </TableRow>
@@ -359,8 +486,9 @@ function ReconcileWorkspaceForId({
                     return (
                       <InteractiveTableRow
                         key={l.id}
+                        id={`stmt-line-${l.id}`}
                         aria-label={t('selectBankLineAria', { date: l.posted_on, amount: money(l.amount) })}
-                        className={cn(!readOnly && 'cursor-pointer', selected && selectedRow)}
+                        className={cn(!readOnly && 'cursor-pointer', selected && selectedRow, 'scroll-mt-24')}
                         onClick={readOnly ? undefined : toggleStmt}
                       >
                         {!readOnly ? (
@@ -383,6 +511,13 @@ function ReconcileWorkspaceForId({
                           ) : null}
                         </TableCell>
                         <TableCell className="text-right tabular-nums">{money(l.amount)}</TableCell>
+                        {!readOnly ? (
+                          <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                            <Button variant="ghost" size="sm" disabled={busy} title={tMatch('exclude')} onClick={() => excludeStatementLine(l.id)}>
+                              <Ban size={14} />
+                            </Button>
+                          </TableCell>
+                        ) : null}
                       </InteractiveTableRow>
                     )
                   })
@@ -520,6 +655,41 @@ function ReconcileWorkspaceForId({
         </Table>
         <Pagination basePath={basePath} currentParams={currentParams} total={matchedTotal} page={mParams.page} perPage={mParams.perPage} pageParamKey="mPage" />
       </section>
+
+      {/* -------- GL-only clearing groups (no bank counterpart) -------- */}
+      {glClearings.length > 0 ? (
+        <section className="space-y-2">
+          <h2 className={cn(paneTitle, 'mr-auto')}>
+            {t('clearingsTitle')} <span className="font-normal text-slate-500 dark:text-slate-400">{t('clearingsCount', { count: glClearings.length })}</span>
+          </h2>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{tBanking('labels.entry')}</TableHead>
+                <TableHead className="text-right">{tCommon('labels.lines')}</TableHead>
+                <TableHead className="text-right">{tCommon('labels.amount')}</TableHead>
+                {!readOnly ? <TableHead /> : null}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {glClearings.map((g) => (
+                <TableRow key={g.group_id}>
+                  <TableCell className="font-mono text-[13px]">{g.entries ?? '—'}</TableCell>
+                  <TableCell className="text-right tabular-nums">{g.lines}</TableCell>
+                  <TableCell className="text-right tabular-nums">{money(g.total)}</TableCell>
+                  {!readOnly ? (
+                    <TableCell className="text-right">
+                      <Button variant="ghost" size="sm" disabled={busy} onClick={() => unmatchClearing(g.group_id)}>
+                        {t('unmatch')}
+                      </Button>
+                    </TableCell>
+                  ) : null}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </section>
+      ) : null}
 
       {/* -------- adjust drawer -------- */}
       <Drawer
