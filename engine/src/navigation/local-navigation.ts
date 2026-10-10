@@ -146,7 +146,7 @@ export const LOCAL_NAVIGATION: LocalNavigationSet[] = [
   { id: 'time', label: 'Time', feature: 'timeTracking', tabs: [
     { href: '/timesheets', ns: 'timesheets', key: 'field.timesheetsTab', label: 'Timesheets', permission: 'time.read' },
     { href: '/time/clock', ns: 'timesheets', key: 'field.clockTab', label: 'Time Clock', permission: 'time.clock', feature: 'fieldTime' },
-    { href: '/time/crew', ns: 'timesheets', key: 'field.crewTab', label: 'Crew Time', permissionsAny: ['time.read', 'time.enter'], feature: 'fieldTime' },
+    { href: '/time/crew', ns: 'timesheets', key: 'field.crewTab', label: 'Crew Time', permissionsAny: ['time.read', 'time.crew.enter'], feature: 'fieldTime' },
   ] },
   { id: 'tax-views', label: 'Tax', inline: true, tabs: [
     { href: '/tax', ns: 'tax', key: 'tabs.prepare' },

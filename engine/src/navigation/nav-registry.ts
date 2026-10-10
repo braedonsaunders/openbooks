@@ -1151,6 +1151,10 @@ NAV_MODULES.push(
   { key: 'hrm-change-requests', href: '/hrm/change-requests', label: 'Employment Changes', iconKey: 'user-cog', group: 'hrm', subgroup: 'workforce', requiredPermission: 'hrm.employment.read', featureKey: 'hrm' },
   { key: 'hrm-compliance', href: '/hrm/compliance', label: 'Workforce Compliance', iconKey: 'hard-hat', group: 'hrm', subgroup: 'workforce', requiredPermission: 'hrm.construction.read', featureKey: 'hrmConstructionCompliance' },
   { key: 'admin-navigation', href: '/admin/navigation', label: 'Navigation', iconKey: 'panel-left', group: 'settings', subgroup: 'customize', requiredPermissionsAny: ['admin.nav.manage', 'admin.customization.manage'] },
+  // Clocking in is a person's own daily action, so the clock lives in My
+  // Work beside Me rather than inside the Operations time workspace. It
+  // stays a Time tab too; time.clock grants it without time.read.
+  { key: 'time-clock', href: '/time/clock', label: 'Clock', iconKey: 'timer', group: 'my-work', requiredPermission: 'time.clock', featureKey: 'fieldTime', exact: true },
 )
 
 /** Native local destinations are also discoverable and editable in the main menu. */
@@ -1211,7 +1215,7 @@ export function resolveStoredHref(stored: unknown): string | null {
 export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
   // HR-15: one My Work entry (Inbox); /notifications stays a route and a
   // Notices filter inside the inbox, but no longer a nav entry.
-  'my-work': ['dashboard', 'approvals', 'me', 'assistant', 'continuous-close', 'documents', 'apps'],
+  'my-work': ['dashboard', 'approvals', 'me', 'time-clock', 'assistant', 'continuous-close', 'documents', 'apps'],
   customers: [
     'customers',
     'crm-activities',

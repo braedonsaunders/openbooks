@@ -7,7 +7,7 @@ export const crewTimeEntry: DocArticle = {
   order: 12,
   summary:
     "How foremen enter a day's crew time in one batch: lines per worker, equipment hours, sign-and-submit, Flows approval, and posting.",
-  updated: "2026-09-27",
+  updated: "2026-10-10",
   keywords: [
     "crew time",
     "foreman",
@@ -30,7 +30,7 @@ equipment charges in one transaction.
 
 ## The batch page
 
-Open Time entry, then Crew. Each batch is a project and a day: crew
+Open Timesheets, then the Crew tab. Each batch is a project and a day: crew
 rows with hours, time type, task, cost code, and equipment inputs,
 editable inline while the batch is a draft. Copy-yesterday starts a
 day from the last one; the phone renders each worker as a card.

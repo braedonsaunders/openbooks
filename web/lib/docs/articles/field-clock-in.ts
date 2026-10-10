@@ -7,7 +7,7 @@ export const fieldClockIn: DocArticle = {
   order: 11,
   summary:
     "How crews clock in from a phone or a site kiosk: projects and cost codes at clock-in, geofence flags, photos, breaks, switches, and the offline queue.",
-  updated: "2026-09-27",
+  updated: "2026-10-10",
   keywords: [
     "clock in",
     "clock out",
@@ -37,7 +37,10 @@ Timesheets setup and per kiosk.
 
 ## The clock page
 
-Open Time entry, then Clock. One state card tells the truth (clocked
+Open Clock under My Work (it is also a tab beside Timesheets). The
+clock needs the "Clock in from the field" permission on your role and
+Field time capture turned on in Company Settings → Features; when either
+is missing the entry is not shown, so ask an administrator. One state card tells the truth (clocked
 out, or clocked in since 07:02 on Project X, cost code Y), one primary
 button clocks in or out, and a picker sheet chooses the project, task,
 and cost code — recent first, searchable. The break button opens a

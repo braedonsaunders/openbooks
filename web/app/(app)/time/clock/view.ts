@@ -79,6 +79,8 @@ export async function loadClockPage(): Promise<ClockPageData> {
   const t = await getTranslations('timesheets')
   return loadClockPageData(authz.user.orgId, authz.user.id, t as unknown as ClockText, {
     canManageSetup: can(authz, 'time.manage'),
+    canReadTimesheets: can(authz, 'time.read'),
+    canEnterCrew: can(authz, 'time.read') || can(authz, 'time.crew.enter'),
   })
 }
 
@@ -94,12 +96,14 @@ export async function loadClockPageData(
   orgId: string,
   userId: string,
   t: ClockText,
-  opts: { canManageSetup?: boolean } = {},
+  opts: { canManageSetup?: boolean; canReadTimesheets?: boolean; canEnterCrew?: boolean } = {},
 ): Promise<ClockPageData> {
+  // A worker who may only clock sees no tab into pages that would refuse
+  // them; the sibling tabs follow the same grants as their own pages.
   const tabs = [
-    { href: '/timesheets', label: t('field.timesheetsTab'), active: false },
+    ...(opts.canReadTimesheets ? [{ href: '/timesheets', label: t('field.timesheetsTab'), active: false }] : []),
     { href: '/time/clock', label: t('field.clockTab'), active: true },
-    { href: '/time/crew', label: t('field.crewTab'), active: false },
+    ...(opts.canEnterCrew ? [{ href: '/time/crew', label: t('field.crewTab'), active: false }] : []),
   ]
   const base = {
     title: t('field.title'),
