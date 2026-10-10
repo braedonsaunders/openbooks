@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { numberSequenceReadColumn, storedSequencePosition } from './number-sequence-position'
+import { numberSequenceReadColumn, numberSequenceStoredCols, storedSequencePosition } from './number-sequence-position'
 
 test('the configured next number is stored as the position just before it', () => {
   assert.deepEqual(storedSequencePosition(1, 0), { value: 0 })
@@ -25,4 +25,14 @@ test('next numbers that are not whole numbers of at least 1 are refused', () => 
 test('setup reads present the next number to issue and leave other columns untouched', () => {
   assert.equal(numberSequenceReadColumn('next_number'), '(next_number + 1) as next_number')
   assert.equal(numberSequenceReadColumn('allocated_through'), 'allocated_through')
+})
+
+test('setup and import writes store the position just before the configured next number', () => {
+  assert.deepEqual(numberSequenceStoredCols([
+    { column: 'prefix', value: 'INV-' },
+    { column: 'next_number', value: 2089 },
+  ]), [
+    { column: 'prefix', value: 'INV-' },
+    { column: 'next_number', value: 2088 },
+  ])
 })
