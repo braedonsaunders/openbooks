@@ -795,6 +795,7 @@ DECLARE tenant uuid;
 BEGIN
  IF p_row ? 'org_id' THEN RETURN (p_row->>'org_id')::uuid; END IF;
  IF p_table='orgs' THEN RETURN (p_row->>'id')::uuid; END IF;
+ IF p_table='app_listings' THEN RETURN (p_row->>'publisher_org_id')::uuid; END IF;
  IF p_table='file_versions' THEN
   SELECT org_id INTO tenant FROM public.files WHERE id=(p_row->>'file_id')::uuid;
  ELSIF p_table='file_blobs' THEN
@@ -857,7 +858,7 @@ BEGIN
  FOR target IN SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
  WHERE n.nspname='public' AND c.relkind='r' AND (
   EXISTS(SELECT 1 FROM pg_attribute a WHERE a.attrelid=c.oid AND a.attname='org_id' AND NOT a.attisdropped)
-  OR c.relname IN ('file_versions','file_blobs','tax_group_members','auth_login_challenges','auth_login_events','auth_login_state','auth_mfa_factors','auth_oidc_identities','auth_password_resets','auth_sessions'))
+  OR c.relname IN ('app_listings','file_versions','file_blobs','tax_group_members','auth_login_challenges','auth_login_events','auth_login_state','auth_mfa_factors','auth_oidc_identities','auth_password_resets','auth_sessions'))
  ORDER BY c.relname LOOP
   EXECUTE format('CREATE TRIGGER tenant_retirement_fence BEFORE INSERT OR UPDATE OR DELETE ON public.%I FOR EACH ROW EXECUTE FUNCTION tenant_retirement.openbooks_tenant_retirement_fence()',target.relname);
  END LOOP;
@@ -919,6 +920,7 @@ BEGIN
  FOR target IN SELECT unnest(p_targets) ORDER BY 1 LOOP
   UPDATE tenant_retirement.fences SET run_id=p_id,state='quarantined',updated_at=clock_timestamp() WHERE tenant_id=target AND state='active';
   IF NOT FOUND THEN RAISE EXCEPTION 'Company % already belongs to another retirement or lacks a fence',target; END IF;
+  IF EXISTS(SELECT 1 FROM public.app_listings WHERE publisher_org_id=target) THEN RAISE EXCEPTION 'Shared marketplace snapshots retain their publisher; preserve the company' USING ERRCODE='55000'; END IF;
  END LOOP;
  INSERT INTO tenant_retirement.events(run_id,kind,login_name,detail) VALUES(p_id,'admitted',session_user,jsonb_build_object('actorId',p_actor,'planDigest',p_plan));
  RETURN p_id;
@@ -943,6 +945,7 @@ BEGIN
   RETURN false;
  END IF;
  IF fence.state<>'quarantined' THEN RAISE EXCEPTION 'Retirement target is not quarantined'; END IF;
+ IF EXISTS(SELECT 1 FROM public.app_listings WHERE publisher_org_id=p_tenant) THEN RAISE EXCEPTION 'Shared marketplace snapshots retain their publisher; preserve the company' USING ERRCODE='55000'; END IF;
  INSERT INTO tenant_retirement.delete_authorities(transaction_id,backend_pid,tenant_id,run_id,login_name)
  VALUES(txid_current(),pg_backend_pid(),p_tenant,p_run,session_user);
  RETURN true;

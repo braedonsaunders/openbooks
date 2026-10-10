@@ -14,8 +14,9 @@ import { loadCatalog } from "../sandbox/catalog.ts";
 import { beginTenantRetirement, recordTenantRetirementFailure, releaseTenantRetirement, tenantRetirementStatus } from "../organization/tenant-retirement.ts";
 import { sampleRetirementPlan } from "./retirement-plan.ts";
 import { admitSampleRetirement, executeSampleRetirement } from "./retirement.ts";
-import { deleteRetiredTenantRows, retirementFingerprint } from "./retirement-data.ts";
-import type { RetirementDatabaseIdentity } from "./retirement-contract.ts";
+import { deleteRetiredTenantRows, retirementFingerprint, retirementPredicate, RETIREMENT_AUTH_TABLES, retirementSharedDependencies, retirementOutstandingWork } from "./retirement-data.ts";
+import { retirementDigest, type RetirementDatabaseIdentity } from "./retirement-contract.ts";
+import { drainSampleFixtureFlowEmails, retireSampleFixtureCompanies } from "./retirement-test-fixtures.ts";
 
 installEngineSeams();
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL };
@@ -60,6 +61,10 @@ async function createEvidence(org: ScratchOrg): Promise<Evidence> {
   // user-linked authentication row, without issuing a token or importing web code.
   await withBypass(() => db.execute(sql`insert into auth_sessions(id,user_id,token_hash,auth_method,expires_at)
     values(${sessionId},${actorId},${hash(randomUUID())},'password',now()+interval '1 hour')`));
+  const outstanding = await withMaintenanceTransaction(null, () => retirementOutstandingWork([org.orgId]));
+  assert.equal(outstanding.find(row => row.table === "scheduler_outbox")?.count, "2", "native pending notices block retirement before their delivery lifecycle settles");
+  assert.equal(await drainSampleFixtureFlowEmails(org.orgId), 2, "native gate and decision notices settle through the mocked queue boundary");
+  assert.equal((await withMaintenanceTransaction(null, () => retirementOutstandingWork([org.orgId]))).some(row => row.table === "scheduler_outbox"), false);
   return { org, actorId, postedId: posted.id, draftId: draft.id, gateId, sessionId };
 }
 async function planFor(retireIds: string[]): Promise<Plan> {
@@ -80,8 +85,30 @@ async function assertInitializedFence(orgId: string) {
     from tenant_retirement.fences f where f.tenant_id=${orgId}`);
   assert.deepEqual(result.rows, [{ state: "active", initialized: 1 }], "the new company fence permits its native AFTER INSERT child initializer");
 }
-async function fingerprint(orgId: string) {
-  return withMaintenanceTransaction(null, async () => retirementFingerprint(await loadCatalog(), orgId));
+async function fingerprint(orgId: string, assertSequentialParity = false) {
+  return withMaintenanceTransaction(null, async () => {
+    const catalog = await loadCatalog();
+    const actual = await retirementFingerprint(catalog, orgId);
+    if (assertSequentialParity) {
+      // Compare complete native evidence against the original one-table query
+      // in the same snapshot, including empty tables and global auth children.
+      const owned = [...catalog.tenantTables.filter(table => table.name !== "orgs"), { name: "orgs", hasOrgId: false },
+        ...RETIREMENT_AUTH_TABLES.map(name => ({ name, hasOrgId: false }))].sort((a, b) => a.name.localeCompare(b.name));
+      assert.ok(owned.length > 64, "the native catalog exercises several bounded query groups");
+      const tables: typeof actual.tables = [];
+      for (const table of owned) {
+        const result = await db.execute<{ count: string; digest: string }>(sql`
+          select count(*)::text as count,encode(digest(coalesce(string_agg(row_hash,E'\n' order by row_hash),''),'sha256'),'hex') as digest
+          from (select encode(digest(to_jsonb(owned_row)::text,'sha256'),'hex') as row_hash
+            from public.${sql.identifier(table.name)} owned_row where ${retirementPredicate(table, orgId)}) owned_rows`);
+        assert.equal(result.rows.length, 1);
+        tables.push({ table: table.name, ...result.rows[0]! });
+      }
+      assert.ok(tables.some(row => row.count === "0"), "empty native tables remain part of the preservation digest");
+      assert.deepEqual(actual, { digest: retirementDigest(tables), tables }, "batching preserves every table count, full-content hash, output position and aggregate digest");
+    }
+    return actual;
+  }, { isolationLevel: "REPEATABLE READ" });
 }
 function nativeMessage(error: unknown): string {
   const value = error as { message?: string; cause?: unknown };
@@ -144,8 +171,18 @@ test("native tenant retirement rejects forged authority and preserves posted, dr
     await runtime.connect(); connected = true;
     const retained = await createEvidence(retainedOrg);
     const target = await createEvidence(targetOrg);
+    await assert.rejects(withMaintenanceTransaction(null, async () => {
+      await db.execute(sql`insert into app_listings(publisher_org_id,key,name,version,created_by,updated_by)
+        values(${retainedOrg.orgId},${`retained-${randomUUID()}`},'Retained publisher fixture','1.0.0',${retained.actorId},${retained.actorId})`);
+      assert.deepEqual(await retirementSharedDependencies([targetOrg.orgId]), [], "unrelated shared publications do not block a different company");
+      for (const active of [true, false]) await db.execute(sql`
+        insert into app_listings(publisher_org_id,key,name,version,is_active,created_by,updated_by)
+        values(${targetOrg.orgId},${`target-${randomUUID()}`},'Publisher dependency fixture','1.0.0',${active},${target.actorId},${target.actorId})`);
+      assert.deepEqual(await retirementSharedDependencies([targetOrg.orgId]), [{ table: "app_listings", orgId: targetOrg.orgId, count: "2" }], "active and withdrawn publications both retain their publisher");
+      throw new Error("Roll back shared publication fixtures without deleting shared history");
+    }), /Roll back shared publication fixtures/);
     const beforeRetained = await fingerprint(retainedOrg.orgId);
-    const beforeTarget = await fingerprint(targetOrg.orgId);
+    const beforeTarget = await fingerprint(targetOrg.orgId, true);
     for (const evidence of [beforeRetained, beforeTarget]) {
       for (const table of ["documents", "document_lines", "journal_entries", "journal_lines", "flow_gates", "audit_log", "auth_sessions", "role_assignments"])
         assert.ok(BigInt(evidence.tables.find(row => row.table === table)!.count) > 0n, `the preservation proof includes real ${table} evidence`);
@@ -179,6 +216,8 @@ test("native tenant retirement rejects forged authority and preserves posted, dr
       assert.equal(await beginTenantRetirement(runId, targetOrg.orgId, plan.digest), true);
       await refusedStatement(() => db.execute(sql`update documents set memo='DELETE authority is not UPDATE authority' where org_id=${targetOrg.orgId} and id=${target.draftId}`), /retirement fence/);
       await refusedStatement(() => db.execute(sql`insert into parties(org_id,kind,display_name) values(${targetOrg.orgId},'person','Forbidden insert')`), /retirement fence/);
+      await refusedStatement(() => db.execute(sql`insert into app_listings(publisher_org_id,key,name,version,created_by,updated_by)
+        values(${targetOrg.orgId},${`quarantined-${randomUUID()}`},'Forbidden publication','1.0.0',${target.actorId},${target.actorId})`), /retirement fence/);
       await refusedStatement(() => db.execute(sql`delete from documents where org_id=${retainedOrg.orgId} and id=${retained.postedId}`), /posted|immutable|delete/i);
       await db.execute(sql`set constraints all deferred`);
       await deleteRetiredTenantRows(await loadCatalog(), targetOrg.orgId);
@@ -217,10 +256,7 @@ test("native tenant retirement rejects forged authority and preserves posted, dr
     const remaining = await withMaintenanceTransaction(null, async () => (await db.execute<{ id: string }>(sql`
       select id from orgs where id in (${targetOrg.orgId}::uuid,${retainedOrg.orgId}::uuid) order by id`)).rows.map(row => row.id));
     if (remaining.length) {
-      const cleanup = await planFor(remaining);
-      const cleanupRun = randomUUID();
-      await admitSampleRetirement({ plan: cleanup, runId: cleanupRun, actorId: anchorActor, recovery: recovery() });
-      for (const orgId of remaining) await executeSampleRetirement({ runId: cleanupRun, orgId, planDigest: cleanup.digest });
+      assert.equal(await retireSampleFixtureCompanies(anchor.orgId, remaining), true);
     }
     await withBypass(() => dropScratchOrg(anchor.orgId));
   }

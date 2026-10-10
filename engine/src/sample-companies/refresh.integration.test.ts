@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createHash, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, withBypass, withOrgContext, withMaintenanceTransaction } from "../platform/db.ts";
+import { db, withBypass, withOrgContext } from "../platform/db.ts";
 import { installEngineSeams } from "../composition/install.ts";
 import { provisionOrg, wipeSimOrg } from "../sim/world.ts";
 import { getProfile } from "../sim/profiles/index.ts";
@@ -10,12 +9,11 @@ import { createScratchOrg, createScratchUser, dropSampleCloneOrg, dropScratchOrg
 import { createSampleCompany } from "./service.ts";
 import { installDemoScenarios, DEMO_DATA_VERSION, verifyDemoScenarios } from "./install-scenarios.ts";
 import { refreshAllSampleCompanies, refreshSampleCompany, sampleRefreshPlan } from "./refresh.ts";
-import { admitSampleRetirement, executeSampleRetirement } from "./retirement.ts";
-import { sampleRetirementPlan } from "./retirement-plan.ts";
-import type { RetirementDatabaseIdentity } from "./retirement-contract.ts";
+import { retireSampleFixtureCompanies } from "./retirement-test-fixtures.ts";
 import { SampleLocalAuthorRequiredError } from "./operator.ts";
 import { scenarioRecordId } from "./scenarios.ts";
 import { sampleCompanyFeatures } from "./features.ts";
+import { createScriptJournal } from "../ledger/journal-writes.ts";
 
 installEngineSeams();
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL };
@@ -125,31 +123,49 @@ test("native exploration refresh preserves rebased posted history, member drafts
     assert.deepEqual(await snapshot(), before, "revoked operator refuses without touching existing records");
     await assert.rejects(refreshAllSampleCompanies({ industryKey: "general_business", digest: "stale" }), /sample population changed/i);
   } finally {
-    const retirementInstalled = await withBypass(async () => (await db.execute<{ installed: boolean }>(sql`
-      select to_regprocedure('tenant_retirement.openbooks_retirement_register(uuid,text,text,jsonb,uuid[],uuid[],uuid,text,jsonb,jsonb)') is not null as installed`)).rows[0]!.installed);
-    if (retirementInstalled) {
-      const retireOrgIds = [...(memberOrgId ? [memberOrgId] : []), master.orgId];
-      const state = await withMaintenanceTransaction(null, async () => ({
-        database: (await db.execute<RetirementDatabaseIdentity>(sql`select current_database() as database,inet_server_addr()::text as "serverAddress",
-          inet_server_port() as "serverPort",current_setting('cluster_name') as "clusterName"`)).rows[0]!,
-        live: (await db.execute<{ id: string }>(sql`select id from orgs order by id`)).rows.map(row => row.id),
-      }));
-      const actorId = await withBypass(() => createScratchUser(home.orgId, "Sample fixture recovery administrator", "admin"));
-      const plan = await sampleRetirementPlan({ version: 1, database: state.database, retainOrgIds: state.live.filter(id => !retireOrgIds.includes(id)),
-        retireOrgIds, reason: "Retire the exact rich sample fixtures after native preservation verification" });
-      assert.deepEqual(plan.blockers, []);
-      // Disposable-fixture attestations exercise native cleanup authority;
-      // operational retirement requires independently verified recovery artifacts.
-      const fixtureHash = createHash("sha256").update("Rich sample fixture recovery contract").digest("hex");
-      const runId = randomUUID();
-      await admitSampleRetirement({ plan, runId, actorId, recovery: { backupSha256: fixtureHash, restoreReceiptSha256: fixtureHash,
-        preservationReceiptSha256: fixtureHash, objectRetentionReceiptSha256: fixtureHash, verifiedAt: new Date().toISOString(), verifier: "Disposable sample fixture" } });
-      for (const orgId of retireOrgIds) await executeSampleRetirement({ runId, orgId, planDigest: plan.digest });
-      await withBypass(() => dropScratchOrg(home.orgId));
-    } else {
+    const retired = await retireSampleFixtureCompanies(home.orgId, [...(memberOrgId ? [memberOrgId] : []), master.orgId]);
+    if (!retired) {
       if (memberOrgId) await withBypass(() => dropSampleCloneOrg(memberOrgId!));
-      await withBypass(() => dropScratchOrg(home.orgId));
       await wipeSimOrg(master.orgId);
     }
+    await withBypass(() => dropScratchOrg(home.orgId));
+  }
+});
+
+
+test("construction refresh requires local field-ticket authors before changing existing drafts or configuration", enabled, async () => {
+  const world = await provisionOrg(getProfile("general-contractor"), { startDate: "2026-01-01", endDate: "2027-12-31" });
+  const home = await withBypass(() => createScratchOrg());
+  try {
+    const actorId = await withBypass(() => createScratchUser(home.orgId, "Explicit construction platform operator", "operator"));
+    await withBypass(() => db.execute(sql`update users set is_super_admin=true where org_id=${home.orgId} and id=${actorId}`));
+    await withOrgContext(world.orgId, () => db.execute(sql`update orgs set settings=jsonb_set(settings,'{sampleTemplate}',
+      '{"enabled":true,"profileId":"general-contractor","version":1}'::jsonb) where id=${world.orgId}`));
+    const snapshot = () => withOrgContext(world.orgId, async () => (await db.execute(sql`
+      select o.settings,
+        (select coalesce(jsonb_agg(to_jsonb(d) order by d.id),'[]') from documents d where d.org_id=o.id) as documents,
+        (select coalesce(jsonb_agg(to_jsonb(l) order by l.id),'[]') from document_lines l where l.org_id=o.id) as lines,
+        (select count(*)::int from audit_log where org_id=o.id) as audits,
+        (select count(*)::int from field_ticket_labor_snapshots where org_id=o.id) as labor_snapshots
+      from orgs o where o.id=${world.orgId}`)).rows);
+    const accounts = await withOrgContext(world.orgId, async () => (await db.execute<{ id: string }>(sql`
+      select id from accounts where org_id=${world.orgId} and is_active and not is_summary order by number limit 2`)).rows);
+    assert.equal(accounts.length, 2);
+    await withOrgContext(world.orgId, () => createScriptJournal(world.orgId, world.actors.admin, {
+      documentDate: "2026-07-15", subsidiaryId: world.subsidiaryId, memo: "Preserve the operator's construction draft",
+      lines: [{ accountId: accounts[0]!.id, amount: "125.25" }, { accountId: accounts[1]!.id, amount: "-125.25" }],
+    }, { post: false, allowedSubsidiaryIds: null }));
+    const before = await snapshot();
+    const plan = await sampleRefreshPlan("construction_contractor", { actorId: world.actors.admin });
+    assert.ok(plan.targets.some(target => target.orgId === world.orgId));
+    assert.deepEqual(plan.operatorRequirements[0]!.authorship, [{ table: "field_ticket_labor_snapshots", actorColumns: ["captured_by", "superseded_by"], requiresPerson: false }]);
+    const refusal = (error: unknown) => error instanceof SampleLocalAuthorRequiredError && error.industryKey === "construction_contractor"
+      && error.requiredRecords.some(record => record.table === "field_ticket_labor_snapshots" && record.actorColumns.includes("captured_by"));
+    await assert.rejects(sampleRefreshPlan("construction_contractor", { actorId }), refusal);
+    await assert.rejects(refreshSampleCompany(world.orgId, "construction_contractor", { actorId }), refusal);
+    assert.deepEqual(await snapshot(), before, "foreign author refuses before draft lines, settings, audit or labor evidence changes");
+  } finally {
+    if (!await retireSampleFixtureCompanies(home.orgId, [world.orgId])) await wipeSimOrg(world.orgId);
+    await withBypass(() => dropScratchOrg(home.orgId));
   }
 });

@@ -3,7 +3,7 @@ import { db, withMaintenanceTransaction } from "../platform/db.ts";
 import { TENANT_TABLE_POLICIES } from "../sandbox/tenant-table-policies.ts";
 import { retirementCatalogDigest } from "../organization/tenant-retirement.ts";
 import { TENANT_RETIREMENT_GUARDS, TENANT_RETIREMENT_GUARD_ATTRIBUTES, TENANT_RETIREMENT_TRIGGER_CONTRACTS, TENANT_RETIREMENT_AUTHORITY_FUNCTIONS } from "../organization/tenant-retirement-guards.ts";
-import { retirementFingerprint, unclassifiedRetirementChildren, retirementOutstandingWork, RETIREMENT_AUTH_TABLES, type RetirementFingerprint } from "./retirement-data.ts";
+import { retirementFingerprint, unclassifiedRetirementChildren, retirementOutstandingWork, retirementSharedDependencies, RETIREMENT_AUTH_TABLES, type RetirementFingerprint } from "./retirement-data.ts";
 import { EXTRA_REBASE, loadCatalog } from "../sandbox/catalog.ts";
 import { readSampleTenantInventory } from "./tenant-inventory.ts";
 import { parseRetirementSelection, assertRetirementDatabase, assertRetirementPartition, retirementDigest } from "./retirement-contract.ts";
@@ -94,7 +94,7 @@ export async function sampleRetirementPlan(input: unknown) {
       if (!ownership?.isolated) guardDrift.push("tenant_retirement.owner_not_isolated_from_business_schema");
       const missingFences = (await db.execute<{ table: string }>(sql`
         select c.relname as table from pg_class c join pg_namespace n on n.oid=c.relnamespace
-        where n.nspname='public' and c.relkind in ('r','p') and (c.relname in ('orgs','file_versions','file_blobs','tax_group_members')
+        where n.nspname='public' and c.relkind in ('r','p') and (c.relname in ('orgs','app_listings','file_versions','file_blobs','tax_group_members')
           or c.relname=any(${sql.param([...RETIREMENT_AUTH_TABLES])}::text[]) or exists(select 1 from pg_attribute a where a.attrelid=c.oid and a.attname='org_id' and not a.attisdropped))
         and not exists(select 1 from pg_trigger t join pg_proc p on p.oid=t.tgfoid join pg_namespace pn on pn.oid=p.pronamespace
           where t.tgrelid=c.oid and t.tgenabled in ('O','A') and t.tgtype::integer=case when c.relname='orgs' then 27 else 31 end and pn.nspname='tenant_retirement' and p.proname='openbooks_tenant_retirement_fence')`)).rows;
@@ -125,7 +125,9 @@ export async function sampleRetirementPlan(input: unknown) {
     }
     const unclassifiedChildren = await unclassifiedRetirementChildren(tenantTables.map(table => table.table));
     const outstandingWork = await retirementOutstandingWork(selection.retireOrgIds);
+    const sharedDependencies = await retirementSharedDependencies(selection.retireOrgIds);
     const blockers = [
+      ...(sharedDependencies.length ? [{ code: "shared_publisher_dependency", remedy: "Preserve the publisher company while its marketplace snapshots exist. Withdrawing a listing retains its shared history and does not discharge this dependency; native ownership transfer is not available." }] : []),
       ...(outstandingWork.length ? [{ code: "retirement_work_not_quiescent", remedy: "Resolve queued, retrying or leased work through its native cancellation/drain controls, verify retained storage recovery evidence, then review a fresh retirement plan." }] : []),
       ...(unclassifiedChildren.length ? [{ code: "unclassified_tenant_children", remedy: "Classify the listed global child tables in the native tenant ownership catalog before retirement." }] : []),
       ...(!installed ? [{ code: "retirement_schema_unavailable", remedy: "Qualify and install the reserved native retirement migration through the coordinated migration lane before admission." }] : []),
@@ -138,7 +140,7 @@ export async function sampleRetirementPlan(input: unknown) {
       const catalog = await loadCatalog();
       for (const target of targets) targetFingerprints[target.orgId] = await retirementFingerprint(catalog, target.orgId);
     }
-    const plan = { version: 1, selection, database: identity, schemaDigest, catalogDigest, inventoryDigest, targets, retained, targetFingerprints, guardDrift, unclassifiedChildren, outstandingWork,
+    const plan = { version: 1, selection, database: identity, schemaDigest, catalogDigest, inventoryDigest, targets, retained, targetFingerprints, guardDrift, unclassifiedChildren, outstandingWork, sharedDependencies,
       dependencies, retainedDependencies, retainedAccessDependencies, immutableEvidence, policyDrift,
       nativeCandidates: targets.map(target => ({ orgId: target.orgId, sandboxId: target.sandboxId,
         lifecycle: "native-tenant-retirement" })), blockers };
