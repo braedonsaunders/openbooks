@@ -319,7 +319,7 @@ BEGIN
  SELECT * INTO task FROM public.warehouse_execution_tasks WHERE org_id=NEW.org_id AND id=NEW.confirmation_task_id;
  subject=(to_jsonb(NEW)->>CASE TG_TABLE_NAME WHEN 'pick_execution_lines' THEN 'line_id' ELSE 'shipment_line_id' END)::uuid;
  IF NOT FOUND OR task.status<>'done' OR task.document_line_id<>subject
-    OR task.stage<>CASE TG_TABLE_NAME WHEN 'pick_execution_lines' THEN 'pick' ELSE 'pack' END
+    OR task.stage<>(CASE TG_TABLE_NAME WHEN 'pick_execution_lines' THEN 'pick' ELSE 'pack' END)
     OR NOT EXISTS(SELECT 1 FROM public.warehouse_scan_events event WHERE event.org_id=task.org_id AND event.task_id=task.id
       AND event.outcome='confirmed' AND event.xmin=(txid_current()%4294967296)::text::xid) THEN
   RAISE EXCEPTION 'Physical confirmation requires its exact current native execution evidence'; END IF;
