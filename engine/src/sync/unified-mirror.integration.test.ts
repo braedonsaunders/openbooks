@@ -23,6 +23,7 @@ test("one mirror includes supplemental populations and advances only after every
     await db.execute(sql`insert into connections (id, org_id, source, display_name)
       values (${connectionId}, ${org.orgId}, 'qbo', 'Unified mirror')`);
     const phases: string[] = [];
+    const populations: Array<{ crm: boolean; fixedAssets: boolean } | undefined> = [];
     let failAttachments = false;
     let failProjectInputs = false;
     let watermark = new Date("2026-10-01T00:00:00Z");
@@ -44,9 +45,10 @@ test("one mirror includes supplemental populations and advances only after every
         if (failProjectInputs) throw new Error("Project billing snapshot unavailable");
         return { projects: [], timeEntryBillingStates: [] };
       },
-      syncOperationalRecords: async () => {
+      syncOperationalRecords: async (options) => {
+        populations.push(options.populations);
         phases.push("operational-records");
-        return { disabledFeatures: ["crm", "fixedAssets"] };
+        return { disabledFeatures: (["crm", "fixedAssets"] as const).filter((key) => options.populations?.[key] !== false) };
       },
     };
     const options = { orgId: org.orgId, connectionId, since: null };
@@ -55,6 +57,8 @@ test("one mirror includes supplemental populations and advances only after every
     assert.deepEqual(ok.attachments, attachmentSummary);
     assert.equal(ok.projectFinancials?.sourceProjects, 0);
     assert.deepEqual(ok.operationalRecords?.disabledFeatures, ["crm", "fixedAssets"]);
+    assert.deepEqual(ok.excludedPopulations, []);
+    assert.deepEqual(populations.at(-1), { crm: true, fixedAssets: true });
     const cursor = async () => (await db.execute<{ cursor: string }>(sql`select cursor::text from connections where org_id=${org.orgId} and id=${connectionId}`)).rows[0]!.cursor;
     const originalCursor = await cursor();
     failAttachments = true;
@@ -70,5 +74,27 @@ test("one mirror includes supplemental populations and advances only after every
       order by started_at desc limit 1`)).rows[0]!;
     assert.equal(row.status, "failed");
     assert.deepEqual(row.stats.attachments, attachmentSummary, "successful attachment evidence survives a later refusal");
+    failProjectInputs = false;
+    phases.length = 0;
+    await db.execute(sql`update connections set config=${JSON.stringify({ syncOptions: { crm: false } })}::jsonb where org_id=${org.orgId} and id=${connectionId}`);
+    const partial = await runSync(source, "scheduler", options);
+    assert.deepEqual(populations.at(-1), { crm: false, fixedAssets: true });
+    assert.deepEqual(partial.operationalRecords?.disabledFeatures, ["fixedAssets"]);
+    assert.deepEqual(partial.excludedPopulations, ["crm"]);
+    assert.deepEqual(phases, ["operational-records", "attachments", "project-financials"]);
+    // Optional content choices never turn off the mandatory financial proof.
+    failProjectInputs = false;
+    phases.length = 0;
+    await db.execute(sql`update connections set config=${JSON.stringify({ syncOptions: { attachments: false, projectFinancials: false, crm: false, fixedAssets: false } })}::jsonb where org_id=${org.orgId} and id=${connectionId}`);
+    const selected = await runSync(source, "scheduler", options);
+    assert.deepEqual(phases, []);
+    assert.deepEqual(selected.excludedPopulations, ["attachments", "projectFinancials", "crm", "fixedAssets"]);
+    assert.equal(selected.tb.matches, selected.tb.accounts);
+    assert.equal(selected.attachments, undefined);
+    assert.equal(selected.projectFinancials, undefined);
+    phases.length = 0;
+    await db.execute(sql`update connections set config='{}'::jsonb where org_id=${org.orgId} and id=${connectionId}`);
+    await runSync(source, "scheduler", options);
+    assert.deepEqual(phases, ["operational-records", "attachments", "project-financials"], "restoring supported defaults catches up complete supplemental snapshots");
   } finally { await dropScratchOrg(org.orgId); }
 });

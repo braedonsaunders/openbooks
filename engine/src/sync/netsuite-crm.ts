@@ -1,3 +1,4 @@
+import { NETSUITE_MAPPING_GROUPS, validateConnectionMappings } from "./connection-settings.ts";
 import { isUuid } from '../platform/uuid.ts'
 import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
@@ -147,7 +148,7 @@ async function credentials(orgId: string, connectionId?: string): Promise<NetSui
   if (!secret?.consumerKey || !secret.consumerSecret || !secret.tokenKey || !secret.tokenSecret || !connection.config.account || !connection.config.host) {
     throw new Error('The tenant NetSuite connection is missing credentials')
   }
-  const mappings = (connection.config.mappingJson ?? {}) as Record<string, unknown>
+  const mappings = validateConnectionMappings(connection.config.mappingJson, NETSUITE_MAPPING_GROUPS)
   return { account: String(connection.config.account), host: String(connection.config.host), consumerKey: secret.consumerKey, consumerSecret: secret.consumerSecret, tokenKey: secret.tokenKey, tokenSecret: secret.tokenSecret,
     probabilityField: typeof mappings.crmProbabilityField === "string" ? mappings.crmProbabilityField : undefined }
 }

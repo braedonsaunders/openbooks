@@ -342,7 +342,7 @@ export interface MigrationSource {
   syncAttachments?(options: { orgId: string; connectionId: string; actorId: string | null }): Promise<ImportSummary>;
 
   /** Native operational registers exposed by this connector, with explicit feature exclusions. */
-  syncOperationalRecords?(options: { orgId: string; connectionId: string; actorId: string | null }): Promise<SourceOperationalSyncResult>;
+  syncOperationalRecords?(options: { orgId: string; connectionId: string; actorId: string | null; populations?: { crm: boolean; fixedAssets: boolean } }): Promise<SourceOperationalSyncResult>;
 
   /** Bounded employee identity/role refresh through the normal source projection. */
   employeeEntities?(refs: readonly string[]): Promise<EntityStream[]>;

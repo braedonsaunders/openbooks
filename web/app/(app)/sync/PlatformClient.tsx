@@ -21,6 +21,8 @@ import {
 } from "lucide-react";
 import { MIGRATION_WORKSPACE_HREF } from "@/lib/migration/links";
 import Link from "next/link";
+import { ConnectionMappings, ConnectionSyncContent, type MappingDrafts } from "./ConnectionContent";
+import { connectorSettings, resolveSyncSelection, validateConnectionMappings, type MappingGroup, type SyncCapabilities, type SyncContentKey } from "@openbooks/engine/src/sync/connection-settings.ts";
 import { RecordTabs } from "@/components/module-home/record-tabs";
 import { readApiErrorMessage } from "../../../lib/api-error";
 import { confirmDialog } from "@/lib/confirm";
@@ -63,7 +65,7 @@ interface FieldSpec {
   placeholder?: string;
   required?: boolean;
   help?: string;
-  kind?: "text" | "select" | "textarea";
+  kind?: "text" | "select" | "textarea" | "mappings" | "sync-options";
   options?: { value: string; label: string }[];
   optionsSource?: "currencies";
 }
@@ -78,6 +80,8 @@ interface SourceTypeDef {
   blurb: string;
   configFields: FieldSpec[];
   secretFields: FieldSpec[];
+  mappingGroups?: readonly MappingGroup[];
+  syncCapabilities?: SyncCapabilities;
   oauthSetup?: {
     portalUrl: string;
     portalLabel: string;
@@ -157,6 +161,7 @@ interface Run {
       periods?: { checked?: number; matches?: number };
       projectPeriods?: { checked?: number; matches?: number } | null;
     };
+    excludedPopulations?: SyncContentKey[];
     attachments?: { sourceFiles: number; sourceLinks: number; createdFiles: number; newVersions: number; skippedUnchanged: number; failures: number };
     operationalRecords?: { disabledFeatures: string[]; crm?: { accounts: number; opportunities: number }; fixedAssets?: { target: { assets: number } } };
     projectFinancials?: { sourceProjects: number; changedProjects: number; sourceTimeEntries: number; exactTimeEntries: number; changedTimeEntries: number };
@@ -471,6 +476,10 @@ export function PlatformClient() {
       source: s.projectFinancials.sourceTimeEntries, exact: s.projectFinancials.exactTimeEntries,
       changed: s.projectFinancials.changedTimeEntries,
     }));
+    if (s.operationalRecords?.crm) parts.push(t("runs.stats.crm", { accounts: s.operationalRecords.crm.accounts, opportunities: s.operationalRecords.crm.opportunities }));
+    if (s.operationalRecords?.fixedAssets) parts.push(t("runs.stats.fixedAssets", { count: s.operationalRecords.fixedAssets.target.assets }));
+    for (const feature of s.operationalRecords?.disabledFeatures ?? []) parts.push(t("runs.stats.featureDisabled", { feature: t(`drawer.syncContent.labels.${feature}`) }));
+    for (const key of s.excludedPopulations ?? []) parts.push(t("runs.stats.contentExcluded", { content: t(`drawer.syncContent.labels.${key}`) }));
     return parts.join(" · ");
   }
 
@@ -1078,7 +1087,7 @@ function configOptions(
   return f.options ?? [];
 }
 
-function ConnectionDrawer({
+export function ConnectionDrawer({
   open,
   onClose,
   sourceTypes,
@@ -1100,7 +1109,9 @@ function ConnectionDrawer({
   const t = useTranslations("sync");
   const [source, setSource] = useState("");
   const [displayName, setDisplayName] = useState("");
-  const [config, setConfig] = useState<Record<string, string>>({});
+  const [config, setConfig] = useState<Record<string, unknown>>({});
+  const [mappingDrafts, setMappingDrafts] = useState<MappingDrafts>({});
+  const [drawerTab, setDrawerTab] = useState<"general" | "content" | "mappings">("general");
   const [secrets, setSecrets] = useState<Record<string, string>>({});
   const [postedChangePolicy, setPostedChangePolicy] = useState<
     "review_required" | "append_only_automatic"
@@ -1113,6 +1124,7 @@ function ConnectionDrawer({
   const [prevDrawerKeys, setPrevDrawerKeys] = useState(() => ({ open, editing }));
   if (prevDrawerKeys.open !== open || prevDrawerKeys.editing !== editing) {
     setPrevDrawerKeys({ open, editing });
+    if (open) { setDrawerTab("general"); setMappingDrafts({}); }
     if (!open) {
       // retain the form while closed
     } else if (editing) {
@@ -1125,7 +1137,7 @@ function ConnectionDrawer({
             // companyName) is written by the Connect flow and refused on
             // PATCH (OAUTH_IDENTITY_REFUSED) — it never enters the form.
             .filter(([k]) => !CALLBACK_OWNED_CONFIG_KEYS.has(k))
-            .map(([k, v]) => [k, String(v ?? "")]),
+            .map(([k, v]) => [k, v ?? ""]),
         ),
       );
       setSecrets({});
@@ -1139,6 +1151,9 @@ function ConnectionDrawer({
     }
   }
   const def = sourceTypes.find((s) => s.source === source);
+  const settings = connectorSettings(source);
+  const mappingGroups = def?.mappingGroups ?? settings.mappingGroups;
+  const syncCapabilities = def?.syncCapabilities ?? settings.syncCapabilities;
   // Blurbs are keyed by manifest source; the manifest's English text is the
   // fallback for a source that has no message entry yet.
   const blurbKey = def ? `sources.${def.source}.blurb` : "";
@@ -1162,8 +1177,14 @@ function ConnectionDrawer({
       // Defense in depth beside the prefill filter: callback-owned OAuth
       // identity never leaves this drawer, so an edit of a connected OAuth
       // connection cannot trip OAUTH_IDENTITY_REFUSED.
+      if (Object.values(mappingDrafts).some((draft) => draft.source || draft.target)) {
+        setDrawerTab("mappings");
+        throw new Error(t("drawer.mappings.finishDraft"));
+      }
+      validateConnectionMappings(config.mappingJson, mappingGroups);
+      const selection = resolveSyncSelection(config.syncOptions, syncCapabilities);
       const editableConfig = Object.fromEntries(
-        Object.entries(config).filter(([k]) => !CALLBACK_OWNED_CONFIG_KEYS.has(k)),
+        Object.entries({ ...config, syncOptions: selection }).filter(([k]) => !CALLBACK_OWNED_CONFIG_KEYS.has(k)),
       );
       const res = editing
         ? await fetch(`/api/platform/connections/${editing.id}`, {
@@ -1182,7 +1203,7 @@ function ConnectionDrawer({
             body: JSON.stringify({
               source,
               displayName,
-              config,
+              config: editableConfig,
               secrets: provided,
             }),
           });
@@ -1231,6 +1252,8 @@ function ConnectionDrawer({
               value={source}
               onChange={(e) => {
                 setSource(e.target.value);
+                setDrawerTab("general");
+                setMappingDrafts({});
                 setConfig({});
                 setSecrets({});
               }}
@@ -1246,7 +1269,14 @@ function ConnectionDrawer({
         </div>
 
         {def ? (
-          <>
+          <RecordTabs label={t("drawer.tabsLabel")} active={drawerTab} onChange={setDrawerTab}
+            tabs={[
+              { key: "general", label: t("drawer.tabs.general") },
+              { key: "content", label: t("drawer.tabs.content") },
+              { key: "mappings", label: t("drawer.tabs.mappings") },
+            ]}>
+            <div className="pt-4">
+            {drawerTab === "general" ? <div className="space-y-4">
             {!editing ? (
               <p className="text-xs text-slate-500">{blurb}</p>
             ) : null}
@@ -1310,7 +1340,7 @@ function ConnectionDrawer({
               </div>
             ) : null}
 
-            {def.configFields.map((f) => (
+            {def.configFields.filter((f) => f.kind !== "mappings" && f.key !== "mappingJson" && f.kind !== "sync-options").map((f) => (
               <div key={f.key}>
                 <Label>
                   {fieldLabel(f)}
@@ -1318,7 +1348,7 @@ function ConnectionDrawer({
                 </Label>
                 {f.kind === "select" ? (
                   <Select
-                    value={config[f.key] ?? ""}
+                    value={String(config[f.key] ?? "")}
                     onChange={(e) =>
                       setConfig((c) => ({ ...c, [f.key]: e.target.value }))
                     }
@@ -1335,7 +1365,7 @@ function ConnectionDrawer({
                   </Select>
                 ) : f.kind === "textarea" ? (
                   <Textarea
-                    value={config[f.key] ?? ""}
+                    value={String(config[f.key] ?? "")}
                     placeholder={f.placeholder}
                     rows={10}
                     className="font-mono text-xs"
@@ -1345,7 +1375,7 @@ function ConnectionDrawer({
                   />
                 ) : (
                   <Input
-                    value={config[f.key] ?? ""}
+                    value={String(config[f.key] ?? "")}
                     placeholder={f.placeholder}
                     onChange={(e) =>
                       setConfig((c) => ({ ...c, [f.key]: e.target.value }))
@@ -1391,7 +1421,13 @@ function ConnectionDrawer({
                 </div>
               </div>
             ) : null}
-          </>
+            </div> : drawerTab === "content" ? <ConnectionSyncContent capabilities={syncCapabilities} value={config.syncOptions}
+              onChange={(value) => setConfig((config) => ({ ...config, syncOptions: value }))} />
+              : <ConnectionMappings key={source} groups={mappingGroups} value={config.mappingJson} drafts={mappingDrafts}
+                onDraftChange={(key, draft) => setMappingDrafts((drafts) => ({ ...drafts, [key]: draft }))}
+                onChange={(value) => setConfig((config) => ({ ...config, mappingJson: value }))} />}
+            </div>
+          </RecordTabs>
         ) : null}
       </div>
     </Drawer>

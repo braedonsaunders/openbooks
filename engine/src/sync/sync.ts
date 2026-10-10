@@ -1,3 +1,4 @@
+import { resolveSyncSelection, SYNC_CONTENT_KEYS, type SyncContentKey } from "./connection-settings.ts";
 import { desc, sql } from "drizzle-orm";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { db, schema, withOrg } from "../platform/db.ts";
@@ -100,6 +101,7 @@ export interface SyncResult {
    * Null for targeted repairs, which stay side-effect-minimal.
    * Optional: runs persisted before this contract lack the key. */
   sourceEvidence?: SourceEvidenceOutcome | null;
+  excludedPopulations?: SyncContentKey[];
   attachments?: ImportSummary;
   projectFinancials?: ProjectFinancialInputSyncResult;
   operationalRecords?: SourceOperationalSyncResult;
@@ -1443,7 +1445,7 @@ export async function runSync(
     throw new Error("posted-change authorization is invalid");
   }
 
-  const supplemental: Pick<SyncResult, "attachments" | "projectFinancials" | "operationalRecords"> = {};
+  const supplemental: Pick<SyncResult, "attachments" | "projectFinancials" | "operationalRecords" | "excludedPopulations"> = {};
 
   const [run] = await claimSyncRun({
     orgId: org.id,
@@ -1458,6 +1460,16 @@ export async function runSync(
     //    data: the loaders merge by adapter refKey org-wide, so a live
     //    sibling same-source connection corrupts long before documents.
     await assertNoSiblingConnection(org.id, connectionId, source.name);
+    const connection = (await db.execute<{ source: string; config: Record<string, unknown> }>(sql`
+      select source, config from connections where org_id=${org.id} and id=${connectionId}`)).rows[0];
+    if (!connection || connection.source !== source.name) throw new Error("Sync connection identity does not match the source");
+    const capabilities = {
+      attachments: Boolean(source.syncAttachments), projectFinancials: Boolean(source.projectFinancialInputs),
+      crm: Boolean(source.syncOperationalRecords), fixedAssets: Boolean(source.syncOperationalRecords),
+    };
+    const selection = resolveSyncSelection(connection.config?.syncOptions, capabilities);
+    if (!targetedRefs) supplemental.excludedPopulations = SYNC_CONTENT_KEYS.filter((key) => capabilities[key] && !selection[key]);
+
 
     // -- 1. watermark (computed first so high-volume master-data streams — e.g.
     //    time entries — can pull incrementally on a mirror instead of full).
@@ -2395,17 +2407,18 @@ export async function runSync(
 
     // Supplemental populations share the run claim and completion gate. A
     // failed attachment or commercial-state import cannot advance the cursor.
-    if (!targetedRefs && source.syncOperationalRecords) {
+    if (!targetedRefs && (selection.crm || selection.fixedAssets) && source.syncOperationalRecords) {
       await setProgress(org.id, run!.id, {
         phase: "operational-records", message: "Synchronizing enabled operational registers…",
         docsNew, docsAmended, docsUnchanged, docsFailed, ordersNew,
       }, true);
       supplemental.operationalRecords = await source.syncOperationalRecords({
         orgId: org.id, connectionId, actorId: isUuid(triggeredBy) ? triggeredBy : null,
+        populations: { crm: selection.crm, fixedAssets: selection.fixedAssets },
       });
     }
 
-    if (!targetedRefs && source.syncAttachments) {
+    if (!targetedRefs && selection.attachments && source.syncAttachments) {
       await setProgress(org.id, run!.id, {
         phase: "attachments", message: "Checking attachments and importing missing or changed files…",
         docsNew, docsAmended, docsUnchanged, docsFailed, ordersNew,
@@ -2419,7 +2432,7 @@ export async function runSync(
         throw error;
       }
     }
-    if (!targetedRefs && source.projectFinancialInputs) {
+    if (!targetedRefs && selection.projectFinancials && source.projectFinancialInputs) {
       await setProgress(org.id, run!.id, {
         phase: "project-financials", message: "Reconciling project financial inputs…",
         docsNew, docsAmended, docsUnchanged, docsFailed, ordersNew,

@@ -160,6 +160,8 @@ async function listConnectionRoutes() {
       authKind: s.authKind,
       blurb: s.blurb,
       configFields: s.configFields,
+      mappingGroups: s.mappingGroups ?? [],
+      syncCapabilities: s.syncCapabilities,
       secretFields: s.secretFields.map((f) => ({ ...f })),
       oauthSetup: s.oauthSetup ?? null,
     })),
