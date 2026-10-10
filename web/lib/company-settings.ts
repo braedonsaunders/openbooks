@@ -141,9 +141,6 @@ export async function readCompanySettings(orgId: string): Promise<CompanySetting
       requireStockCountReview:
         (settings.approvals as Record<string, unknown> | undefined)
           ?.requireStockCountReview === true,
-      partylessControlPolicy: parsePartylessControlPolicy(
-        (settings.ledger as Record<string, unknown> | undefined)?.partylessControlPolicy,
-      ),
       // A gated feature's settings stay hidden while the gate is off; the
       // stored values are kept and reappear with the switch.
       ...((await isFeatureEnabled(orgId, "cashSales"))

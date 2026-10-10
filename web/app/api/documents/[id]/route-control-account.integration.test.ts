@@ -19,6 +19,9 @@ registerHooks({
         const s = globalThis.__controlAccountRoundTripState;
         return { user: { orgId: s.orgId, id: s.actorId, isSuperAdmin: false }, permissions: new Set(['*']), allowedSubsidiaryIds: null };
       }
+      // The picker route guards by permission directly; the test session
+      // holds every grant, so the guard admits it with the same session.
+      export async function guardPermission() { return getAuthz() }
       export { can, guardSubsidiaryScope, subsidiariesInScope } from '${root}web/lib/authz.ts'
     `)
     if (specifier.startsWith('@openbooks/engine/')) return next(root + specifier.slice('@openbooks/'.length), context)

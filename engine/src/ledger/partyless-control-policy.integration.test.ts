@@ -25,7 +25,15 @@ async function journal(
   org: Org,
   actorId: string,
   number: string,
-  lines: { debitAccount: string; creditAccount: string; creditPartyId?: string | null; amount: string },
+  lines: {
+    debitAccount: string;
+    creditAccount: string;
+    creditPartyId?: string | null;
+    /** Debit-line dimensions, written while the journal is still a draft. */
+    debitPartyId?: string | null;
+    debitProjectId?: string | null;
+    amount: string;
+  },
   kind: "journal" | "deposit" = "journal",
 ): Promise<string> {
   const id = randomUUID();
@@ -38,10 +46,11 @@ async function journal(
   if (kind === "journal") {
     await db.execute(sql`
       insert into document_lines (org_id, document_id, line_number, account_id, quantity, unit_price, amount,
-                                  tax_input_amount, tax_amount, party_id, created_by, updated_by)
-      values (${org.orgId}, ${id}, 1, ${lines.debitAccount}, '1', ${lines.amount}, ${lines.amount}, ${lines.amount}, '0', null, ${actorId}, ${actorId}),
+                                  tax_input_amount, tax_amount, party_id, project_id, created_by, updated_by)
+      values (${org.orgId}, ${id}, 1, ${lines.debitAccount}, '1', ${lines.amount}, ${lines.amount}, ${lines.amount}, '0',
+              ${lines.debitPartyId ?? null}, ${lines.debitProjectId ?? null}, ${actorId}, ${actorId}),
              (${org.orgId}, ${id}, 2, ${lines.creditAccount}, '1', ${`-${lines.amount}`}, ${`-${lines.amount}`}, ${`-${lines.amount}`}, '0',
-              ${lines.creditPartyId ?? null}, ${actorId}, ${actorId})`);
+              ${lines.creditPartyId ?? null}, null, ${actorId}, ${actorId})`);
   } else {
     // A deposit line names the source account it credits; the bank leg is the header.
     await db.execute(sql`
@@ -137,8 +146,9 @@ test(
           insert into projects (id, org_id, subsidiary_id, code, name, status, is_active, custom)
           values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'OPEN-RET', 'Opening retainage', 'active', true, '{}'::jsonb)`);
         await setPolicy(org, "refuse");
-        const opening = await journal(org, actorId, "JE-RET-OPEN", { debitAccount: retainage, creditAccount: org.accounts.revenue, amount: "500" });
-        await db.execute(sql`update document_lines set project_id = ${projectId} where document_id = ${opening} and line_number = 1`);
+        const opening = await journal(org, actorId, "JE-RET-OPEN", {
+          debitAccount: retainage, creditAccount: org.accounts.revenue, debitProjectId: projectId, amount: "500",
+        });
         await post(org, opening);
         assert.equal(await entries(opening), 1);
         const held = async () => String((await db.execute<{ held: string }>(
@@ -147,10 +157,10 @@ test(
 
         // Naming the customer makes the line a receivable open item, which is
         // collectible AR rather than retainage awaiting release.
-        const named = await journal(org, actorId, "JE-RET-NAMED", { debitAccount: retainage, creditAccount: org.accounts.revenue, amount: "70" });
-        await db.execute(sql`
-          update document_lines set project_id = ${projectId}, party_id = ${org.customerId}
-           where document_id = ${named} and line_number = 1`);
+        const named = await journal(org, actorId, "JE-RET-NAMED", {
+          debitAccount: retainage, creditAccount: org.accounts.revenue,
+          debitProjectId: projectId, debitPartyId: org.customerId, amount: "70",
+        });
         await post(org, named);
         assert.equal(await held(), "500.0000");
       });
