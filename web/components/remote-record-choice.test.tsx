@@ -41,7 +41,10 @@ function stubFetch(rows: unknown, ok = true, status = 200) {
   })) as typeof fetch
 }
 
-async function renderChoice(emptyHint: React.ReactNode) {
+async function renderChoice(
+  emptyHint: React.ReactNode,
+  options: { value: string; label: string }[] = [],
+) {
   const host = document.createElement('div')
   document.body.appendChild(host)
   const root = createRoot(host)
@@ -50,7 +53,7 @@ async function renderChoice(emptyHint: React.ReactNode) {
       <RemoteRecordChoice
         id="produced-item"
         value=""
-        options={[]}
+        options={options}
         endpoint="/api/manufacturing/options?kind=items"
         onChange={() => {}}
         labels={labels}
@@ -117,8 +120,11 @@ test('a filtered search that matches nothing keeps the generic no-matches note',
 })
 
 test('options on offer never show the empty-collection hint', async () => {
-  stubFetch([{ value: 'item-1', label: 'WIDGET · Finished widget' }])
-  const { host, root } = await renderChoice(<span>prerequisite hint</span>)
+  // The offered option rides the initial options (not the debounced fetch),
+  // so the assertion holds however the lookup timing behaves.
+  const offered = [{ value: 'item-1', label: 'WIDGET · Finished widget' }]
+  stubFetch(offered)
+  const { host, root } = await renderChoice(<span>prerequisite hint</span>, offered)
   try {
     const body = host.textContent ?? ''
     assert.ok(!body.includes('prerequisite hint'), 'offered options must not carry the empty hint')
