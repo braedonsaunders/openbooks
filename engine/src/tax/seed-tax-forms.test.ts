@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { assembleReturn, type TaxReturnBoxDef } from "../tax-returns/return.ts";
-import { TAX_RETURN_PACKS } from "./seed-tax-forms.ts";
+import { TAX_RETURN_PACKS, taxRegistrationFormProblem } from "./seed-tax-forms.ts";
 
 function defs(code: string): TaxReturnBoxDef[] {
   const pack = TAX_RETURN_PACKS.find((candidate) => candidate.code === code);
@@ -58,6 +58,58 @@ test("Australia BAS maps ledger tax while preserving filer-entered reporting lab
   assert.equal(value("G10"), "3300.0000");
   assert.equal(value("1A"), "1100.0000");
   assert.equal(value("1B"), "450.0000");
+});
+
+test("Washington combined return totals B&O, state, local, and use tax less the small business credit", () => {
+  const pack = TAX_RETURN_PACKS.find((candidate) => candidate.code === "US_WA_CET");
+  assert.ok(pack);
+  assert.equal(pack.jurisdiction.code, "US-WA");
+  const empty = assembleReturn(defs("US_WA_CET"), new Map(), new Map());
+  assert.equal(empty.find((box) => box.lineCode === "TOTAL_DUE")?.value, "0.0000");
+  const result = assembleReturn(
+    defs("US_WA_CET"),
+    new Map([["WA_GROSS", "20000.0000"], ["WA_TAX", "-737.1000"]]),
+    new Map([
+      ["ST_TAX", "650.0000"],
+      ["USE_TAX", "0.0000"],
+      ["LOCAL_TAX", "40.0000"],
+      ["BO_RET", "47.1000"],
+      ["BO_WHO", "0.0000"],
+      ["BO_MFG", "0.0000"],
+      ["BO_SVC", "0.0000"],
+      ["BO_SVC1M", "0.0000"],
+      ["BO_SVC5M", "0.0000"],
+      ["SBC_CREDIT", "10.0000"],
+    ]),
+  );
+  assert.equal(result.find((box) => box.lineCode === "TOTAL_DUE")?.value, "727.1000");
+});
+
+test("a Washington registration files the Washington return, not the national workpaper", () => {
+  assert.equal(
+    taxRegistrationFormProblem({
+      registrationLabel: "WA Excise",
+      registrationJurisdictionCode: "US-WA",
+      formCode: "US_WA_CET",
+    }),
+    null,
+  );
+  assert.match(
+    taxRegistrationFormProblem({
+      registrationLabel: "WA Excise",
+      registrationJurisdictionCode: "US-WA",
+      formCode: "US_SALES_TAX_WORKPAPER",
+    }) ?? "",
+    /US-WA.*US_SALES_TAX_WORKPAPER.*choose a form for "US-WA"/,
+  );
+  assert.equal(
+    taxRegistrationFormProblem({
+      registrationLabel: "CA Seller",
+      registrationJurisdictionCode: "US-CA",
+      formCode: "US_CA_CDTFA401",
+    }),
+    null,
+  );
 });
 
 test("United States pack is an adaptable workpaper, not a fake federal return", () => {
