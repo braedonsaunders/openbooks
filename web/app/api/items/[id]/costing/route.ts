@@ -10,7 +10,7 @@ import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/
 import { normalizeMoney, wholeDigits } from '@openbooks/engine/money'
 import { InventoryError, CostingPolicyChangeBlockedError } from "@openbooks/engine/src/inventory/contracts.ts";
 import { inventoryOffsetAccountProblem } from "@openbooks/engine/src/inventory/journal.ts";
-import { assertCostingPolicyChangeAllowed, lockItemInventoryProfile, parseCostingMethod, parseTrackingMode, parseUnitConversions } from "@openbooks/engine/src/inventory/profile-policy.ts";
+import { assertCostingAccountChangeAllowed, assertCostingPolicyChangeAllowed, lockItemInventoryProfile, parseCostingMethod, parseTrackingMode, parseUnitConversions } from "@openbooks/engine/src/inventory/profile-policy.ts";
 import { revalueOpenLayersToStandardCost } from "@openbooks/engine/src/inventory/revaluation.ts";
 import { loadCompanyReceivedNotBilledAccount } from "@openbooks/engine/src/records/control-accounts.ts";
 import { lineRequiresReceipt } from "@openbooks/engine/src/records/stock-receipt.ts";
@@ -236,6 +236,19 @@ export const PUT = defineRoute({
         { costingMethod, tracking },
         recostingAuthorization,
       )
+      // Account moves ride the same native service and audit as policy
+      // moves. Only the asset account re-points open valuation, so only it
+      // is fenced while stock is on hand; the rest price future postings.
+      const itemLabel = (await tx.execute<{ label: string }>(sql`
+        select coalesce(nullif(btrim(code), ''), btrim(name), ${id}) as label
+          from items where id = ${id} and org_id = ${orgId}`)).rows[0]?.label ?? id
+      await assertCostingAccountChangeAllowed(tx, orgId, id, itemLabel, before, {
+        assetAccountId,
+        cogsAccountId,
+        adjustmentAccountId,
+        varianceAccountId,
+        receivedNotBilledAccountId,
+      })
       const authorizedFlip = assessment.changed && assessment.historyExisted
       // A standard-cost change on an item already costing standard is the
       // same versioned policy event as a controlled switch onto standard:
@@ -357,7 +370,15 @@ export const PUT = defineRoute({
           values (${orgId}, 'item_inventory_profiles', ${id}, 'update',
                   ${JSON.stringify({
                     refused: true,
-                    requested: { costingMethod, tracking },
+                    requested: {
+                      costingMethod,
+                      tracking,
+                      assetAccountId: body.assetAccountId ?? null,
+                      cogsAccountId: body.cogsAccountId ?? null,
+                      adjustmentAccountId: body.adjustmentAccountId ?? null,
+                      varianceAccountId: body.varianceAccountId ?? null,
+                      receivedNotBilledAccountId: body.receivedNotBilledAccountId ?? null,
+                    },
                     reason: e.message,
                   })}, ${actorId})`)
       } catch (auditError) {

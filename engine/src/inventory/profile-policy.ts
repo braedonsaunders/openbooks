@@ -244,6 +244,63 @@ export interface CostingPolicyAssessment {
   historyExisted: boolean;
 }
 
+export interface CostingAccountSelection {
+  assetAccountId: string | null;
+  cogsAccountId: string | null;
+  adjustmentAccountId: string | null;
+  varianceAccountId: string | null;
+  receivedNotBilledAccountId: string | null;
+}
+
+/**
+ * Whether the item holds open quantity whose value is booked to the profile's
+ * asset account: remaining cost layers or unsettled provisional (negative
+ * stock) costs. Mirrors the inventory-off guard's read so both fences agree
+ * on what "on hand" means.
+ */
+export async function itemHoldsOpenStock(
+  tx: Runner,
+  orgId: string,
+  itemId: string,
+): Promise<boolean> {
+  const held = (await tx.execute(sql`
+    select 1
+      where exists (select 1 from cost_layers layer where layer.org_id = ${orgId}
+                    and layer.item_id = ${itemId} and layer.remaining_quantity > 0)
+         or exists (select 1 from inventory_provisional_costs provisional where provisional.org_id = ${orgId}
+                    and provisional.item_id = ${itemId} and provisional.remaining_quantity > 0)`));
+  return held.rows.length > 0;
+}
+
+/**
+ * Costing-profile account changes through the native profile service. Only
+ * the inventory asset account re-points open valuation: every issue relieves
+ * the profile's CURRENT asset account, so moving it while layers are open
+ * strands the old account's debit and misstates both accounts. Profiles
+ * carry no effective dates, so unlike a standard-cost revision (which
+ * revalues open layers atomically) an asset-account move cannot be applied
+ * to history — it is refused while the item holds open stock, naming the
+ * remedy. COGS, adjustment, variance and received-not-billed accounts price
+ * future postings only and change freely; every change, like every policy
+ * change, commits with its before/after audit row.
+ */
+export async function assertCostingAccountChangeAllowed(
+  tx: Runner,
+  orgId: string,
+  itemId: string,
+  itemLabel: string,
+  current: ItemInventoryProfileRow | null,
+  next: CostingAccountSelection,
+): Promise<void> {
+  if (!current || current.asset_account_id === next.assetAccountId) return;
+  if (!(await itemHoldsOpenStock(tx, orgId, itemId))) return;
+  throw new CostingPolicyChangeBlockedError(
+    `${itemLabel} still has on-hand stock booked to its current inventory asset account — ` +
+      `issue or sell the remaining quantity to zero before changing the inventory asset account, ` +
+      `so no open layer is left pointing at the old account`,
+  );
+}
+
 /**
  * A costing method or tracking mode is accounting policy (ASC 250 / IAS 8):
  * once an item carries cost layers or posted movements, changing either needs
