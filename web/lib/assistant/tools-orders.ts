@@ -55,7 +55,7 @@ const searchOrders: AssistantToolDef = {
   description:
     "Search quotes, sales and purchase orders by kind, status, party, date: fulfilment/billing state per order plus backlog totals. For generic search use find_documents. Read-only.",
   category: "search",
-  gate: { mode: "anyOf", perms: ["ar.read", "ap.read"] },
+  gate: { mode: "anyOf", perms: ["ar.read", "purchase_orders.read"] },
   feature: "orders",
   inputSchema: z.object({
     kind: z.enum(ORDER_KINDS).optional().describe("Default all kinds the caller may see"),
@@ -172,7 +172,7 @@ const getOrder: AssistantToolDef = {
   description:
     "One quote/order by id: header, line quantities (ordered/fulfilled/billed/cancelled/remaining), links graph. Same payload as the order drawer. Read-only.",
   category: "read",
-  gate: { mode: "anyOf", perms: ["ar.read", "ap.read"] },
+  gate: { mode: "anyOf", perms: ["ar.read", "purchase_orders.read"] },
   feature: "orders",
   inputSchema: z.object({
     kind: z.enum(ORDER_KINDS).describe("quote, sales_order, or purchase_order"),
