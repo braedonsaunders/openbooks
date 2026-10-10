@@ -34,6 +34,7 @@ import '@xyflow/react/dist/style.css'
 import './_flow-canvas.css'
 import { Alert, AlertDescription, AlertTitle, Button, EmptyState, Label, Select, cn } from '@openbooks/ui'
 import {
+  flowReadiness,
   lintAutomationGraph,
   profileFieldIds,
   type AutomationGraph,
@@ -42,6 +43,7 @@ import {
 import {
   CANVAS_CONNECTION_MODE,
   buildConnectEdge,
+  canAddTrigger,
   defaultNodeData,
   fromFlow,
   newId,
@@ -111,11 +113,27 @@ export default function FlowBuilder({
   const [tab, setTab] = useState<'canvas' | 'runs'>('canvas')
   const [dirty, setDirty] = useState(false)
   const [revision, setRevision] = useState(flow.updatedAt)
-  const editVersion = useRef(0)
-  const saving = useRef(false)
-  const markDirty = useCallback(() => { editVersion.current += 1; setDirty(true) }, [])
   const [busy, setBusy] = useState(false)
   const [saveErrors, setSaveErrors] = useState<string[]>([])
+  // The server is the single source for enablement: when a toggle response
+  // or a refresh delivers a new persisted flag, the switch follows it
+  // instead of the stale local copy. Tracked across renders (never synced
+  // in an effect) so the adjustment cannot cascade.
+  const [lastServerEnabled, setLastServerEnabled] = useState(flow.enabled)
+  if (flow.enabled !== lastServerEnabled) {
+    setLastServerEnabled(flow.enabled)
+    setEnabled(flow.enabled)
+  }
+  const editVersion = useRef(0)
+  const saving = useRef(false)
+  // A canvas edit supersedes the last save response: its errors name the
+  // graph as submitted, so they clear and the live lint — recomputed from
+  // the current nodes below — takes over. Stale node ids can never linger.
+  const markDirty = useCallback(() => {
+    editVersion.current += 1
+    setDirty(true)
+    setSaveErrors([])
+  }, [])
   // Follow the app's dark theme so the canvas / minimap / controls match.
   const [isDark, setIsDark] = useState(false)
   useEffect(() => {
@@ -174,6 +192,12 @@ export default function FlowBuilder({
   )
 
   const addNode = (kind: NodeKind) => {
+    // One flow, one entry point: the validator refuses a second trigger, so
+    // the palette refuses to add one (with the remedy, not a silent no-op).
+    if (kind === 'trigger' && !canAddTrigger(nodes)) {
+      toast.error(t('builder.singleTrigger'))
+      return
+    }
     const id = newId(kind)
     setNodes((ns) => [
       ...ns.map((n) => ({ ...n, selected: false })),
@@ -254,15 +278,17 @@ export default function FlowBuilder({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ expectedUpdatedAt: revision, enabled: next }),
       })
-      const data = await res.json().catch(() => ({}))
+      const data = (await res.json().catch(() => ({}))) as { updatedAt?: string; enabled?: unknown; errors?: unknown }
       if (!res.ok) {
-        setSaveErrors(Array.isArray(data.errors) ? data.errors : [String(data.error ?? res.status)])
+        setSaveErrors(Array.isArray(data.errors) ? data.errors.map(String) : [String((data as { error?: unknown }).error ?? res.status)])
         toast.error(t('actions.updateFailed'))
         return
       }
-      setEnabled(next)
+      // Render the persisted flag the server returns — the switch shows the
+      // stored state even if it differs from the optimistic next.
+      setEnabled(typeof data.enabled === 'boolean' ? data.enabled : next)
       setSaveErrors([])
-      setRevision(data.updatedAt)
+      if (typeof data.updatedAt === 'string') setRevision(data.updatedAt)
       router.refresh()
     } catch {
       toast.error(t('actions.updateFailed'))
@@ -291,6 +317,17 @@ export default function FlowBuilder({
   )
   const namedWarnings = useMemo(() => nameFlowWarnings(warnings, nodeNames), [warnings, nodeNames])
   const namedSaveErrors = useMemo(() => nameFlowWarnings(saveErrors, nodeNames), [saveErrors, nodeNames])
+
+  // Whether this flow can fire, in the one shared vocabulary the flows list
+  // uses for its status column: disabled never runs, an enabled flow with
+  // lint errors cannot be trusted to run. Rendered as a banner so a flow
+  // that reads "enabled, no warnings" while unable to fire is impossible.
+  const readiness = useMemo(() => flowReadiness(enabled, warnings), [enabled, warnings])
+  const readinessDetail = useMemo(
+    () => (readiness.state === 'incomplete' ? nameFlowWarnings([readiness.reasons[0] ?? ''], nodeNames)[0] : null),
+    [readiness, nodeNames],
+  )
+  const triggerExists = useMemo(() => !canAddTrigger(nodes), [nodes])
 
   return (
     <div className="flex h-[calc(100vh-6.5rem)] min-h-[560px] flex-col gap-3">
@@ -349,6 +386,18 @@ export default function FlowBuilder({
           <Save size={15} /> {t('builder.save')}
         </Button>
       </div>
+
+      {/* Fire-readiness: a flow that cannot run says so up front, in the same
+          words as the flows list status column. */}
+      {readiness.state === 'disabled' ? (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
+          {t('builder.disabledNotice')}
+        </div>
+      ) : readiness.state === 'incomplete' ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50/70 px-3 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300">
+          {t('statusIncomplete', { reason: readinessDetail ?? '' })}
+        </div>
+      ) : null}
 
       {/* Blocking save errors / non-blocking lint warnings */}
       {namedSaveErrors.length > 0 ? (
@@ -417,18 +466,23 @@ export default function FlowBuilder({
               <span className="px-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
                 {t('builder.palette.title')}
               </span>
-              {PALETTE.map(({ kind, icon: Icon, labelKey }) => (
-                <button
-                  key={kind}
-                  type="button"
-                  onClick={() => addNode(kind)}
-                  className="flex items-center gap-1.5 rounded-md px-2 py-1 text-left text-xs font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
-                >
-                  <Plus size={11} className="text-slate-400" />
-                  <Icon size={13} />
-                  {t(labelKey)}
-                </button>
-              ))}
+              {PALETTE.map(({ kind, icon: Icon, labelKey }) => {
+                const blocked = kind === 'trigger' && triggerExists
+                return (
+                  <button
+                    key={kind}
+                    type="button"
+                    onClick={() => addNode(kind)}
+                    disabled={blocked}
+                    title={blocked ? t('builder.singleTrigger') : undefined}
+                    className="flex items-center gap-1.5 rounded-md px-2 py-1 text-left text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent dark:text-slate-300 dark:hover:bg-slate-800"
+                  >
+                    <Plus size={11} className="text-slate-400" />
+                    <Icon size={13} />
+                    {t(labelKey)}
+                  </button>
+                )
+              })}
             </div>
 
             <ReactFlow

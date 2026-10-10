@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl'
 import { Button, Input, SearchSelect, Select } from '@openbooks/ui'
 import type { FlowSubjectProfile, LogicRule } from '@openbooks/forms-core'
 import type { OrgUser } from './graph'
-import { withRuleValueType } from './logic-rule-builder'
+import { fieldPickerOptions, withRuleValueType } from './logic-rule-builder'
 
 /**
  * Recursive LogicRule editor — the one condition language shared with the
@@ -198,7 +198,7 @@ function LeafEditor({
     <div className="min-w-0 flex-1 space-y-1.5">
       <SearchSelect
         value={rule.field}
-        options={profile.fields.map((f) => ({ value: f.key, label: f.label, hint: f.key }))}
+        options={fieldPickerOptions(profile)}
         onChange={(field) => onChange(withRuleValueType({ ...rule, field } as LogicRule, profile.fields.find(item => item.key === field)?.type ?? 'text'))}
       />
       <div className="grid grid-cols-2 gap-1.5">

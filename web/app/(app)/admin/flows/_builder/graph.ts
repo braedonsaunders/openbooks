@@ -102,13 +102,40 @@ export function buildConnectEdge(
   }
 }
 
+/**
+ * A flow starts from exactly one trigger — the validator refuses more, and
+ * the palette offers the trigger button only while none exists. Checked
+ * before every add so a second trigger can never accumulate on the canvas.
+ */
+export function canAddTrigger(nodes: FlowNode[]): boolean {
+  return !nodes.some((n) => n.data.kind === 'trigger')
+}
+
+/**
+ * Loading is idempotent: a stored graph that somehow carries two nodes with
+ * the same storage id (a duplicated card persisted before the single-trigger
+ * and duplicate guards) loads as one. The first occurrence wins so canvas
+ * order is stable, and a load→save round trip converges instead of growing.
+ */
+export function dedupeGraphNodes(graph: AutomationGraph): AutomationGraph {
+  const seen = new Set<string>()
+  const nodes = graph.nodes.filter((n) => {
+    if (seen.has(n.id)) return false
+    seen.add(n.id)
+    return true
+  })
+  if (nodes.length === graph.nodes.length) return graph
+  return { ...graph, nodes }
+}
+
 /** Stored graph → React Flow state (labels re-derived from handles). */
 export function toFlow(
   graph: AutomationGraph,
   labels: Record<string, string>,
 ): { nodes: FlowNode[]; edges: Edge[] } {
+  const loaded = dedupeGraphNodes(graph)
   return {
-    nodes: graph.nodes.map((n) => ({
+    nodes: loaded.nodes.map((n) => ({
       id: n.id,
       type: n.data.kind,
       position: n.position,
@@ -126,10 +153,18 @@ export function toFlow(
 
 /** React Flow state → the persisted AutomationGraph (positions rounded). */
 export function fromFlow(nodes: FlowNode[], edges: Edge[], ungatedOutcome?: 'apply'): AutomationGraph {
+  // Saving converges too: canvas state that somehow holds two nodes with one
+  // id persists as one (first wins), so re-open → save can never grow nodes.
+  const seen = new Set<string>()
+  const unique = nodes.filter((n) => {
+    if (seen.has(n.id)) return false
+    seen.add(n.id)
+    return true
+  })
   return {
     schemaVersion: 1,
     ...(ungatedOutcome ? { ungatedOutcome } : {}),
-    nodes: nodes.map((n) => ({
+    nodes: unique.map((n) => ({
       id: n.id,
       position: { x: Math.round(n.position.x), y: Math.round(n.position.y) },
       data: n.data,

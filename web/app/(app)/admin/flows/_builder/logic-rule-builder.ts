@@ -1,6 +1,21 @@
-import type { LogicRule } from '@openbooks/forms-core'
+import type { FlowSubjectProfile, LogicRule } from '@openbooks/forms-core'
 
 export type GroupOp = 'and' | 'or' | 'not'
+
+export interface FieldPickerOption {
+  value: string
+  label: string
+}
+
+/**
+ * Condition field picker options: the field's display label once. The
+ * storage key used to ride along as a hint ("Total total"), which reads as
+ * a stutter and duplicates the key authors never type — the key stays the
+ * option value, so selection still stores exactly what the engine matches.
+ */
+export function fieldPickerOptions(profile: FlowSubjectProfile): FieldPickerOption[] {
+  return profile.fields.map((f) => ({ value: f.key, label: f.label }))
+}
 type SourceGroupOp = Exclude<GroupOp, 'not'>
 
 export const defaultLeaf = (field: string): LogicRule => ({ op: 'isSet', field })
