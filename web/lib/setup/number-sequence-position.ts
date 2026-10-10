@@ -41,3 +41,14 @@ export function storedSequencePosition(
   }
   return { value: next - 1 }
 }
+
+/**
+ * Setup columns as stored: the operator's next number becomes the position
+ * just before it. Callers run validateEntityIntegrity first, which refuses
+ * anything that is not a whole number beyond the issued watermark.
+ */
+export function numberSequenceStoredCols<T extends { column: string; value: unknown }>(cols: readonly T[]): T[] {
+  return cols.map((column) => column.column === 'next_number' && typeof column.value === 'number'
+    ? { ...column, value: column.value - 1 }
+    : column)
+}

@@ -79,7 +79,7 @@ import { setupEntityWithValidationHook } from './entities/customer-item-refs'
 import { auditSetupChange as audit, loadSetupAuditRow } from './audit'
 import { featureGateLockKey, isFeatureEnabled, resolvedFeatureState, subsidiaryFeatureEnabled } from '../features'
 import { loadNumberSequenceKindOptions } from './number-sequence-kinds'
-import { storedSequencePosition } from './number-sequence-position'
+import { numberSequenceStoredCols, storedSequencePosition } from './number-sequence-position'
 
 // Drizzle expands bare JS arrays inside sql templates into SQL expressions.
 // A PostgreSQL array column instead needs one bound driver array parameter.
@@ -324,17 +324,6 @@ const uuidArrayParam = (ids: string[]) => sql.param(ids)
  * shared uuidId schema before SQL sees it, so a malformed or hostile id is the
  * route's documented client error instead of PostgreSQL raising 22P02 outside
  * this handler's validation catch. */
-/**
- * Setup accepts the number the next document receives; storage keeps the
- * number issued most recently. validateEntityIntegrity has already refused
- * anything that is not a whole number beyond the issued watermark.
- */
-function numberSequenceStoredCols<T extends { column: string; value: unknown }>(cols: T[]): T[] {
-  return cols.map((column) => column.column === 'next_number' && typeof column.value === 'number'
-    ? { ...column, value: column.value - 1 }
-    : column)
-}
-
 function hasNonUuidEntry(ids: unknown[]): boolean {
   return !ids.every((id) => uuidId.safeParse(id).success)
 }

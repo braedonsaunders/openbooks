@@ -18,6 +18,7 @@ import { permissionSetCovers } from '../permissions'
 import { payPeriodsPerYearProblem } from '@openbooks/engine/src/payroll/run-calendar.ts'
 import { isSetupBookEntity, saveSetupBook } from '../setup/books'
 import { auditSetupChange as audit, loadSetupAuditRow } from '../setup/audit'
+import { numberSequenceStoredCols } from '../setup/number-sequence-position'
 import {
   createUsageMeter,
   deactivateUsageMeter,
@@ -730,7 +731,10 @@ async function writeSetup(
           ? built.cols.filter((column) => column.column !== 'supplemental_wage_category'
             && column.column !== 'statutory_reporting_category'
             && column.column !== 'statutory_exemption_category')
-          : built.cols
+          : entity.key === 'number-sequences'
+            // Imports carry the operator's next number, exactly as exports present it.
+            ? numberSequenceStoredCols(built.cols)
+            : built.cols
         if (!ctx.dryRun) {
           await db.transaction(async (tx) => {
             // The import route owns an outer org transaction. A nested
@@ -822,7 +826,10 @@ async function writeSetup(
           ? built.cols.filter((column) => column.column !== 'supplemental_wage_category'
             && column.column !== 'statutory_reporting_category'
             && column.column !== 'statutory_exemption_category')
-          : built.cols
+          : entity.key === 'number-sequences'
+            // Imports carry the operator's next number, exactly as exports present it.
+            ? numberSequenceStoredCols(built.cols)
+            : built.cols
         if (!ctx.dryRun) {
           await db.transaction(async (tx) => {
             // See the update branch: this savepoint is required when the
