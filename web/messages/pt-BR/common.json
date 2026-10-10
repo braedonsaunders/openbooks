@@ -295,7 +295,13 @@
     "voidPlaceholder": "Descreva por que a transação deve ser revertida",
     "voidReversalPeriodTitle": "Reverter em qual período?",
     "voidReversalPeriodLabel": "Período de reversão",
-    "voidReversalPeriodRegular": "Período normal (padrão)"
+    "voidReversalPeriodRegular": "Período normal (padrão)",
+    "voidReversalDateLabel": "Data da reversão",
+    "voidReversalSummaryOriginal": "Lançamento original",
+    "voidReversalSummaryReversal": "Reversão",
+    "voidReversalFiscalYear": "EF",
+    "voidReversalFallbackNotice": "O período original está fechado, portanto a reversão assume o primeiro período aberto seguinte.",
+    "voidReversalClosedNotice": "Nenhum período aberto segue o original. Gere um período posterior ou reabra um antes de anular."
   },
   "approvalFlow": {
     "pendingWith": "Pendente com {names}",

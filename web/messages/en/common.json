@@ -295,7 +295,13 @@
     "voidPlaceholder": "Describe why the transaction must be reversed",
     "voidReversalPeriodTitle": "Reverse into which period?",
     "voidReversalPeriodLabel": "Reversal period",
-    "voidReversalPeriodRegular": "Regular period (default)"
+    "voidReversalPeriodRegular": "Regular period (default)",
+    "voidReversalDateLabel": "Reversal date",
+    "voidReversalSummaryOriginal": "Original entry",
+    "voidReversalSummaryReversal": "Reversal",
+    "voidReversalFiscalYear": "FY",
+    "voidReversalFallbackNotice": "The original period is closed, so the reversal defaults to the first open period after it.",
+    "voidReversalClosedNotice": "No open period follows the original. Generate a later period or reopen one before voiding."
   },
   "approvalFlow": {
     "pendingWith": "Pending with {names}",

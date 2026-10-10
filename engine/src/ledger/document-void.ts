@@ -3,8 +3,9 @@ import { and, eq, getTableColumns, sql } from "drizzle-orm";
 import type { FlowEventSource } from "@openbooks/forms-core";
 import { db, schema, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { documentRevisionCounterSql, isDocumentRevisionToken } from "../records/revision.ts";
-import { businessToday, isIsoCalendarDate } from "../platform/business-date.ts";
-import { assertPeriodModulesOpen, CloseError, closeModuleForDocument } from "../periods/period-policy.ts";
+import { isIsoCalendarDate } from "../platform/business-date.ts";
+import { activePostingPrimaryBookId } from "../platform/accounting-books.ts";
+import { arePeriodModulesOpen, assertPeriodModulesOpen, CloseError, closeModuleForDocument } from "../periods/period-policy.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { nextFreeEntryNumber } from "../records/entry-number.ts";
 import { reversalJournalLines } from "../records/reversal-journal-lines.ts";
@@ -322,6 +323,114 @@ async function refuseBilledCostSourceVoid(runner: SqlExecutor, orgId: string, do
 }
 
 /**
+ * Where a void reversal belongs when the operator names no date. The entry's
+ * own date keeps both sides of the reversal in the entry's fiscal year; only
+ * a closed entry period moves the default forward, to the first open period
+ * after it. Advisory only — completion re-asserts openness authoritatively,
+ * so a period that closes between suggestion and approval still refuses with
+ * its remedy instead of posting into a lock.
+ */
+export interface VoidReversalSuggestion {
+  originalDate: string;
+  suggestedDate: string;
+  fallbackToOpenPeriod: boolean;
+  originalFiscalYear: number | null;
+  originalPeriodName: string | null;
+  suggestedFiscalYear: number | null;
+  suggestedPeriodName: string | null;
+  suggestedOpen: boolean;
+}
+
+export async function suggestVoidReversalDate(
+  runner: SqlExecutor,
+  orgId: string,
+  doc: { id: string; kind: string; documentDate: string; subsidiaryId: string | null },
+): Promise<VoidReversalSuggestion> {
+  const originalDate = doc.documentDate;
+  const covering = await resolveCoveringPeriod(runner, orgId, originalDate);
+  const uncovered: VoidReversalSuggestion = {
+    originalDate,
+    suggestedDate: originalDate,
+    fallbackToOpenPeriod: false,
+    originalFiscalYear: null,
+    originalPeriodName: null,
+    suggestedFiscalYear: null,
+    suggestedPeriodName: null,
+    suggestedOpen: false,
+  };
+  if (!covering) return uncovered;
+  const modules = [closeModuleForDocument(doc.kind)];
+  const books = (await runner.execute<{ bookId: string }>(sql`
+    select distinct e.book_id as "bookId" from journal_entries e
+     where e.org_id = ${orgId} and e.source_document_id = ${doc.id} and e.status = 'posted'`)).rows;
+  const lines = (await runner.execute<{ subsidiaryId: string | null }>(sql`
+    select distinct l.subsidiary_id as "subsidiaryId" from journal_lines l
+     join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+     where e.org_id = ${orgId} and e.source_document_id = ${doc.id} and e.status = 'posted'`)).rows;
+  const postedBookIds = [...new Set(books.rows.map((row) => row.bookId))];
+  const primaryBookId = postedBookIds.length > 0 ? null : await activePostingPrimaryBookId(orgId, runner);
+  const bookIds = postedBookIds.length > 0 ? postedBookIds : (primaryBookId ? [primaryBookId] : []);
+  const subsidiaryIds = [
+    ...new Set(
+      (lines.rows.length > 0 ? lines.rows.map((row) => row.subsidiaryId) : [doc.subsidiaryId])
+        .filter((value): value is string => value != null),
+    ),
+  ];
+  const openIn = async (periodId: string): Promise<boolean> => {
+    for (const bookId of bookIds) {
+      if (!(await arePeriodModulesOpen(runner, { orgId, periodId, bookId, subsidiaryIds, modules }))) return false;
+    }
+    return true;
+  };
+  if (await openIn(covering.id)) {
+    return {
+      originalDate,
+      suggestedDate: originalDate,
+      fallbackToOpenPeriod: false,
+      originalFiscalYear: covering.fiscal_year,
+      originalPeriodName: covering.name,
+      suggestedFiscalYear: covering.fiscal_year,
+      suggestedPeriodName: covering.name,
+      suggestedOpen: true,
+    };
+  }
+  const later = (await runner.execute<{ id: string; fiscal_year: number; name: string; starts_on: string }>(sql`
+    select p.id, p.fiscal_year, p.name, p.starts_on::text as starts_on
+      from accounting_periods p
+      join fiscal_calendars fc
+        on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
+       and fc.is_default and fc.is_active
+     where p.org_id = ${orgId} and not p.is_adjustment
+       and p.starts_on > ${covering.ends_on}
+     order by p.starts_on, p.ends_on, p.id
+     limit 25`)).rows;
+  for (const candidate of later.rows) {
+    if (await openIn(candidate.id)) {
+      return {
+        originalDate,
+        suggestedDate: candidate.starts_on,
+        fallbackToOpenPeriod: true,
+        originalFiscalYear: covering.fiscal_year,
+        originalPeriodName: covering.name,
+        suggestedFiscalYear: candidate.fiscal_year,
+        suggestedPeriodName: candidate.name,
+        suggestedOpen: true,
+      };
+    }
+  }
+  return {
+    originalDate,
+    suggestedDate: originalDate,
+    fallbackToOpenPeriod: false,
+    originalFiscalYear: covering.fiscal_year,
+    originalPeriodName: covering.name,
+    suggestedFiscalYear: covering.fiscal_year,
+    suggestedPeriodName: covering.name,
+    suggestedOpen: false,
+  };
+}
+
+/**
  * Request a controlled cancellation/void. `before_void` flow gates are the
  * approval authority. The document remains posted while gates wait; the final
  * aggregate approval invokes completeRequestedDocumentVoid through the
@@ -331,12 +440,6 @@ export async function requestDocumentVoid(
   input: DocumentVoidInput,
 ): Promise<DocumentVoidResult> {
   const reason = validateReason(input.reason);
-  // Business-meaningful default date — the org's business day via a sim-clock-
-  // aware instant, not the server's UTC day.
-  const reversalDate = validateDate(input.reversalDate ?? (await businessToday(input.orgId)));
-  const reversalPeriodId = input.reversalPeriodId != null && input.reversalPeriodId !== ""
-    ? await resolveVoidReversalPeriod(db, input.orgId, input.reversalPeriodId, reversalDate)
-    : null;
   return withOrgTransaction(input.orgId, async () => {
     const current = await loadDocument(input.documentId, input.orgId);
     // Keep the scope decision on the locked source row and hold that lock
@@ -354,6 +457,17 @@ export async function requestDocumentVoid(
         "stale-revision",
       );
     }
+    // An explicit reversal date is honored as given. Otherwise the reversal
+    // belongs to the entry's own date — same period, same fiscal year — and
+    // only a closed entry period moves it forward to the first open period
+    // after it. Posting today by default once pushed prior-year voids into
+    // the wrong fiscal year on both sides.
+    const reversalDate = validateDate(
+      input.reversalDate ?? (await suggestVoidReversalDate(db, input.orgId, current)).suggestedDate,
+    );
+    const reversalPeriodId = input.reversalPeriodId != null && input.reversalPeriodId !== ""
+      ? await resolveVoidReversalPeriod(db, input.orgId, input.reversalPeriodId, reversalDate)
+      : null;
     // A released payroll bank file refuses here, before the reservation:
     // the pay-run document sits in draft while committed, so the zero-row
     // reservation below would otherwise answer with the generic draft/status

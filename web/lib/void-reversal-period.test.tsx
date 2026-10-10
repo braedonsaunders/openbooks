@@ -2,11 +2,14 @@ import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
 import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
 
-// The void-reversal choice is the only client surface for the A-S11
-// adjustment-period override: it offers no choice when the org uses no
-// adjustment periods, offers the regular default plus each named period
-// otherwise, and never blocks the void on a failed lookup. These tests
-// mount the real PromptRoot under jsdom with scripted fetches.
+// The void-reversal confirmation always shows the entry's date beside the
+// reversal date with both fiscal years, so a prior-period void can never
+// slip into the wrong year unseen. The date arrives prefilled with the
+// server suggestion (the entry's date, or the first open period after a
+// closed entry period, with its notice) and the operator may change it; an
+// adjustment-period override keeps its second choice when the org uses
+// adjustment periods. These tests mount the real PromptRoot under jsdom
+// with scripted fetches.
 await bootJsdomEnvironment({ url: "http://localhost:4800/journal", matchMediaMatches: false });
 
 const React = await import('react')
@@ -22,10 +25,27 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
 
 const COPY = {
   title: 'Reverse into which period?',
+  dateLabel: 'Reversal date',
+  summaryOriginal: 'Original entry',
+  summaryReversal: 'Reversal',
+  fiscalYear: 'FY',
+  fallbackNotice: 'The original period is closed, so the reversal defaults to the first open period after it.',
+  closedNotice: 'No open period follows the original. Generate a later period or reopen one before voiding.',
   label: 'Reversal period',
   regularOption: 'Regular period (default)',
   confirm: 'Void',
   cancel: 'Cancel',
+}
+
+const SUGGESTION = {
+  originalDate: '2025-10-31',
+  suggestedDate: '2025-10-31',
+  fallbackToOpenPeriod: false,
+  originalFiscalYear: 2026,
+  originalPeriodName: '2025-10',
+  suggestedFiscalYear: 2026,
+  suggestedPeriodName: '2025-10',
+  suggestedOpen: true,
 }
 
 async function mountPromptRoot(t: TestContext): Promise<void> {
@@ -61,6 +81,31 @@ function dialog(): HTMLElement | null {
   return document.querySelector('[role="dialog"]')
 }
 
+function dialogText(): string {
+  return (dialog()?.textContent ?? '').replace(/\s+/g, ' ').trim()
+}
+
+function dateInput(): HTMLInputElement | null {
+  return document.querySelector('input#prompt-input') as HTMLInputElement | null
+}
+
+async function submitDate(value: string): Promise<void> {
+  const input = dateInput()
+  assert.ok(input, 'the reversal confirmation must render a date input')
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
+  await act(async () => {
+    setter.call(input, value)
+    input.dispatchEvent(new window.Event('input', { bubbles: true }))
+    await tick()
+  })
+  const form = input.closest('form')
+  assert.ok(form, 'the date must live in a form')
+  await act(async () => {
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }))
+    await tick()
+  })
+}
+
 async function chooseOption(value: string): Promise<void> {
   const select = document.querySelector('select#prompt-input') as HTMLSelectElement | null
   assert.ok(select, 'the period choice must render a select')
@@ -88,30 +133,103 @@ async function clickCancel(): Promise<void> {
   })
 }
 
-test('no adjustment periods means no choice and the regular default', async (t) => {
+async function settle(): Promise<void> {
+  await act(async () => {
+    await tick()
+    await tick()
+  })
+}
+
+test('the confirmation shows both dates with fiscal years and keeps the suggestion', async (t) => {
   await mountPromptRoot(t)
   scriptFetch(t, (url) => {
     assert.match(url, /\/api\/documents\/.+\/void/)
-    return Response.json({ adjustmentPeriods: [] })
+    return Response.json({ adjustmentPeriods: [], ...SUGGESTION })
   })
-  const choice = await promptVoidReversalPeriod('doc-1', COPY)
-  assert.deepEqual(choice, { cancelled: false, reversalPeriodId: null })
-  assert.equal(dialog(), null)
+  const pending = promptVoidReversalPeriod('doc-1', COPY)
+  await settle()
+  assert.ok(dialog(), 'the date confirmation always shows, even with no adjustment periods')
+  assert.ok(dialogText().includes('Original entry: 2025-10-31 (FY 2026)'), 'the entry date and fiscal year show')
+  assert.ok(dialogText().includes('Reversal: 2025-10-31 (FY 2026)'), 'the suggested date and fiscal year show')
+  assert.equal(dateInput()?.value, '2025-10-31', 'the input arrives prefilled with the suggestion')
+  await submitDate('2025-10-31')
+  assert.deepEqual(await pending, { cancelled: false, reversalDate: '2025-10-31', reversalPeriodId: null })
 })
 
-test('adjustment periods are offered after the regular default', async (t) => {
+test('a closed entry period names the fallback in the confirmation', async (t) => {
+  await mountPromptRoot(t)
+  scriptFetch(t, () => Response.json({
+    adjustmentPeriods: [],
+    ...SUGGESTION,
+    suggestedDate: '2025-11-01',
+    fallbackToOpenPeriod: true,
+    suggestedFiscalYear: 2026,
+    suggestedPeriodName: '2025-11',
+  }))
+  const pending = promptVoidReversalPeriod('doc-1', COPY)
+  await settle()
+  assert.ok(dialogText().includes(COPY.fallbackNotice), 'the fallback notice is explicit')
+  assert.ok(dialogText().includes('Reversal: 2025-11-01 (FY 2026)'), 'the moved default shows')
+  await submitDate('2025-11-01')
+  assert.deepEqual(await pending, { cancelled: false, reversalDate: '2025-11-01', reversalPeriodId: null })
+})
+
+test('no open period after the entry warns instead of silently defaulting', async (t) => {
+  await mountPromptRoot(t)
+  scriptFetch(t, () => Response.json({
+    adjustmentPeriods: [],
+    ...SUGGESTION,
+    suggestedOpen: false,
+  }))
+  const pending = promptVoidReversalPeriod('doc-1', COPY)
+  await settle()
+  assert.ok(dialogText().includes(COPY.closedNotice), 'the closed warning is explicit')
+  await submitDate('2025-10-31')
+  assert.deepEqual(await pending, { cancelled: false, reversalDate: '2025-10-31', reversalPeriodId: null })
+})
+
+test('the operator may pick another reversal date', async (t) => {
+  await mountPromptRoot(t)
+  scriptFetch(t, () => Response.json({ adjustmentPeriods: [], ...SUGGESTION }))
+  const pending = promptVoidReversalPeriod('doc-1', COPY)
+  await settle()
+  await submitDate('2025-11-15')
+  assert.deepEqual(await pending, { cancelled: false, reversalDate: '2025-11-15', reversalPeriodId: null })
+})
+
+test('a non-date is re-prompted instead of sent to the server', async (t) => {
+  await mountPromptRoot(t)
+  scriptFetch(t, () => Response.json({ adjustmentPeriods: [], ...SUGGESTION }))
+  const pending = promptVoidReversalPeriod('doc-1', COPY)
+  await settle()
+  await submitDate('next Friday')
+  assert.ok(dialog(), 'junk stays in the dialog for correction')
+  await submitDate('2025-11-01')
+  assert.deepEqual(await pending, { cancelled: false, reversalDate: '2025-11-01', reversalPeriodId: null })
+})
+
+test('dismissing the date confirmation cancels the void', async (t) => {
+  await mountPromptRoot(t)
+  scriptFetch(t, () => Response.json({ adjustmentPeriods: [], ...SUGGESTION }))
+  const pending = promptVoidReversalPeriod('doc-1', COPY)
+  await settle()
+  await clickCancel()
+  assert.deepEqual(await pending, { cancelled: true, reversalDate: null, reversalPeriodId: null })
+})
+
+test('adjustment periods are offered after the date confirmation', async (t) => {
   await mountPromptRoot(t)
   scriptFetch(t, () => Response.json({
     adjustmentPeriods: [
       { id: 'period-a', name: 'FY26 Adjustment', startsOn: '2026-07-01', endsOn: '2026-07-31' },
       { id: 'period-b', name: 'FY25 Adjustment', startsOn: '2025-07-01', endsOn: '2025-07-31' },
     ],
+    ...SUGGESTION,
   }))
   const pending = promptVoidReversalPeriod('doc-1', COPY)
-  await act(async () => {
-    await tick()
-    await tick()
-  })
+  await settle()
+  await submitDate('2025-10-31')
+  await settle()
   const options = [...document.querySelectorAll('select#prompt-input option')]
   assert.deepEqual(
     options.map((o) => [(o as HTMLOptionElement).value, (o.textContent ?? '').trim()]),
@@ -122,7 +240,7 @@ test('adjustment periods are offered after the regular default', async (t) => {
     ],
   )
   await chooseOption('period-b')
-  assert.deepEqual(await pending, { cancelled: false, reversalPeriodId: 'period-b' })
+  assert.deepEqual(await pending, { cancelled: false, reversalDate: '2025-10-31', reversalPeriodId: 'period-b' })
 })
 
 test('choosing the regular default resolves a null override', async (t) => {
@@ -131,36 +249,36 @@ test('choosing the regular default resolves a null override', async (t) => {
     adjustmentPeriods: [
       { id: 'period-a', name: 'FY26 Adjustment', startsOn: '2026-07-01', endsOn: '2026-07-31' },
     ],
+    ...SUGGESTION,
   }))
   const pending = promptVoidReversalPeriod('doc-1', COPY)
-  await act(async () => {
-    await tick()
-    await tick()
-  })
+  await settle()
+  await submitDate('2025-10-31')
+  await settle()
   await chooseOption('')
-  assert.deepEqual(await pending, { cancelled: false, reversalPeriodId: null })
+  assert.deepEqual(await pending, { cancelled: false, reversalDate: '2025-10-31', reversalPeriodId: null })
 })
 
-test('dismissing the choice cancels the void', async (t) => {
+test('dismissing the period choice cancels the void', async (t) => {
   await mountPromptRoot(t)
   scriptFetch(t, () => Response.json({
     adjustmentPeriods: [
       { id: 'period-a', name: 'FY26 Adjustment', startsOn: '2026-07-01', endsOn: '2026-07-31' },
     ],
+    ...SUGGESTION,
   }))
   const pending = promptVoidReversalPeriod('doc-1', COPY)
-  await act(async () => {
-    await tick()
-    await tick()
-  })
+  await settle()
+  await submitDate('2025-10-31')
+  await settle()
   await clickCancel()
-  assert.deepEqual(await pending, { cancelled: true, reversalPeriodId: null })
+  assert.deepEqual(await pending, { cancelled: true, reversalDate: null, reversalPeriodId: null })
 })
 
-test('a failed period lookup falls back to the default without prompting', async (t) => {
+test('a failed lookup falls back to the server default without prompting', async (t) => {
   await mountPromptRoot(t)
   scriptFetch(t, () => new Response('proxy error', { status: 502 }))
   const choice = await promptVoidReversalPeriod('doc-1', COPY)
-  assert.deepEqual(choice, { cancelled: false, reversalPeriodId: null })
+  assert.deepEqual(choice, { cancelled: false, reversalDate: null, reversalPeriodId: null })
   assert.equal(dialog(), null)
 })

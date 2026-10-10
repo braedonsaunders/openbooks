@@ -514,6 +514,12 @@ export function RunWizard(props: {
     if (!reason) return
     const reversal = await promptVoidReversalPeriod(run.document_id, {
       title: tc('amendment.voidReversalPeriodTitle'),
+      dateLabel: tc('amendment.voidReversalDateLabel'),
+      summaryOriginal: tc('amendment.voidReversalSummaryOriginal'),
+      summaryReversal: tc('amendment.voidReversalSummaryReversal'),
+      fiscalYear: tc('amendment.voidReversalFiscalYear'),
+      fallbackNotice: tc('amendment.voidReversalFallbackNotice'),
+      closedNotice: tc('amendment.voidReversalClosedNotice'),
       label: tc('amendment.voidReversalPeriodLabel'),
       regularOption: tc('amendment.voidReversalPeriodRegular'),
       confirm: tc('actions.void'),
@@ -528,6 +534,7 @@ export function RunWizard(props: {
         body: JSON.stringify({
           reason,
           expectedUpdatedAt: run.document_revision,
+          ...(reversal.reversalDate ? { reversalDate: reversal.reversalDate } : {}),
           ...(reversal.reversalPeriodId ? { reversalPeriodId: reversal.reversalPeriodId } : {}),
         }),
       })

@@ -295,7 +295,13 @@
     "voidPlaceholder": "Expliquez pourquoi la transaction doit être contrepassée",
     "voidReversalPeriodTitle": "Contrepasser dans quelle période ?",
     "voidReversalPeriodLabel": "Période de contrepassation",
-    "voidReversalPeriodRegular": "Période courante (par défaut)"
+    "voidReversalPeriodRegular": "Période courante (par défaut)",
+    "voidReversalDateLabel": "Date de contre-passation",
+    "voidReversalSummaryOriginal": "Écriture d’origine",
+    "voidReversalSummaryReversal": "Contre-passation",
+    "voidReversalFiscalYear": "EF",
+    "voidReversalFallbackNotice": "La période d’origine est clôturée, la contre-passation est donc affectée par défaut à la première période ouverte suivante.",
+    "voidReversalClosedNotice": "Aucune période ouverte ne suit la période d’origine. Générez une période ultérieure ou rouvrez-en une avant d’annuler."
   },
   "approvalFlow": {
     "pendingWith": "En attente de {names}",

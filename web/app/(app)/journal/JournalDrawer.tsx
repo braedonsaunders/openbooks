@@ -853,14 +853,29 @@ function JournalDrawerBody({
       }))
     )
       return
-    await execute(() => fetchAction(`/api/journals/${doc.id}`, { method: 'DELETE' }), {
-      fallbackMessage: t('deleteFailed'),
-      successMessage: t('deleted'),
-      onOk: () => {
-        router.push('/journal')
-        router.refresh()
+    await execute(
+      async () => {
+        // The delete API fences on the exact revision like every other
+        // document write: without it the delete is refused and the button is
+        // dead. The token is the editor's canonical revision.
+        if (documentRevisionRef.current == null) await refreshFromServer(false).catch(() => {})
+        const deleteRevision = documentRevisionRef.current
+        if (deleteRevision == null) return { ok: false, error: new ActionError({ kind: 'refused' }) }
+        return fetchAction(`/api/journals/${doc.id}`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ expectedUpdatedAt: deleteRevision }),
+        })
       },
-    })
+      {
+        fallbackMessage: t('deleteFailed'),
+        successMessage: t('deleted'),
+        onOk: () => {
+          router.push('/journal')
+          router.refresh()
+        },
+      },
+    )
   }
 
   async function voidJournal() {
@@ -873,6 +888,12 @@ function JournalDrawerBody({
     if (!reason) return
     const reversal = await promptVoidReversalPeriod(doc.id, {
       title: tc('amendment.voidReversalPeriodTitle'),
+      dateLabel: tc('amendment.voidReversalDateLabel'),
+      summaryOriginal: tc('amendment.voidReversalSummaryOriginal'),
+      summaryReversal: tc('amendment.voidReversalSummaryReversal'),
+      fiscalYear: tc('amendment.voidReversalFiscalYear'),
+      fallbackNotice: tc('amendment.voidReversalFallbackNotice'),
+      closedNotice: tc('amendment.voidReversalClosedNotice'),
       label: tc('amendment.voidReversalPeriodLabel'),
       regularOption: tc('amendment.voidReversalPeriodRegular'),
       confirm: tc('actions.void'),
@@ -893,6 +914,7 @@ function JournalDrawerBody({
           body: JSON.stringify({
             reason,
             expectedUpdatedAt: voidRevision,
+            ...(reversal.reversalDate ? { reversalDate: reversal.reversalDate } : {}),
             ...(reversal.reversalPeriodId ? { reversalPeriodId: reversal.reversalPeriodId } : {}),
           }),
         })
