@@ -668,3 +668,24 @@ test(
     }
   },
 );
+
+test(
+  "cash-sale till defaults persist through the route and undeclared fields are refused",
+  async () => {
+    const fixture = await seed();
+    try {
+      authorize(fixture);
+      const saved = await put(fixture, { cashSales: { defaultCashAccountId: fixture.accounts.bank, walkInCustomerId: "" } });
+      assert.equal(saved.status, 200, await saved.clone().text());
+      const after = await settingsState(fixture.orgId);
+      assert.deepEqual(after.settings.cashSales, { defaultCashAccountId: fixture.accounts.bank });
+
+      const undeclared = await put(fixture, { name: "Scratch Undeclared Field", tillDefaults: { cash: fixture.accounts.bank } });
+      assert.equal(undeclared.status, 400);
+      assert.deepEqual(await settingsState(fixture.orgId), after, "a refused save changes nothing");
+    } finally {
+      routeState.authz = null;
+      await dropScratchOrg(fixture.orgId);
+    }
+  },
+);

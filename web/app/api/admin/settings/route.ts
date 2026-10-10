@@ -34,7 +34,12 @@ const requestBodySchema = z.object({
   }).optional(),
   requireVendorBillApproval: z.boolean().optional(),
   requireStockCountReview: z.boolean().optional(),
-}).refine((body) => Object.keys(body).length > 0, { message: "At least one field must be provided." });
+  // Cash-sale till defaults; blank or null clears a default and the settings
+  // command validates each one by name.
+  cashSales: z.record(z.string(), z.union([z.string(), z.null()])).optional(),
+  // Strict: a field this route does not declare is refused rather than
+  // silently dropped while the save reports success.
+}).strict().refine((body) => Object.keys(body).length > 0, { message: "At least one field must be provided." });
 
 
 export const runtime = "nodejs";
