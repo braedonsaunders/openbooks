@@ -112,14 +112,15 @@ async function collectionSource(orgId: string, from: string, asOf: string, scope
     ), orders as (select party_id, sum(value) as value from unbilled group by party_id), rates as (${rates}),
     closing as materialized (
       select c.*, ${translated(sql`c.remaining`, sql`coalesce(c.func, ${currency})`)} as amount,
-             greatest(${asOf}::date - c.due_date::date, 0) as late_days
+             coalesce(c.due_date, c.tran_date)::date as aging_date,
+             greatest(${asOf}::date - coalesce(c.due_date, c.tran_date)::date, 0) as late_days
       from closing_raw c left join rates r on r.from_currency = coalesce(c.func, ${currency})
     ),
     opening as materialized (
       select c.*, ${translated(sql`c.remaining`, sql`coalesce(c.func, ${currency})`)} as amount,
-             case when ${from}::date - c.due_date::date <= 30 then 0 when ${from}::date - c.due_date::date <= 60 then 1 when ${from}::date - c.due_date::date < 90 then 2 else 3 end as cohort
+             case when ${from}::date - coalesce(c.due_date, c.tran_date)::date <= 30 then 0 when ${from}::date - coalesce(c.due_date, c.tran_date)::date <= 60 then 1 when ${from}::date - coalesce(c.due_date, c.tran_date)::date < 90 then 2 else 3 end as cohort
       from opening_raw c left join rates r on r.from_currency = coalesce(c.func, ${currency})
-      where c.remaining > 0 and c.due_date < ${from}::date
+      where c.remaining > 0 and coalesce(c.due_date, c.tran_date)::date < ${from}::date
     ),
     cash as materialized (
       select c.*, ${translated(sql`c.amount`, sql`coalesce(c.func, ${currency})`)} as value
@@ -141,17 +142,17 @@ async function collectionSource(orgId: string, from: string, asOf: string, scope
     ), exposure as (
       select c.party_id, max(c.party_name) as name, sum(greatest(c.amount, 0)) as gross,
              sum(greatest(-c.amount, 0)) as credits, sum(c.amount) as net,
-             coalesce(sum(greatest(c.amount, 0)) filter (where c.due_date < ${asOf}::date), 0) as overdue,
-             coalesce(sum(greatest(c.amount, 0)) filter (where c.due_date <= ${addCalendarDays(asOf, -cfg.severeDays)}::date), 0) as severe,
+             coalesce(sum(greatest(c.amount, 0)) filter (where c.aging_date < ${asOf}::date), 0) as overdue,
+             coalesce(sum(greatest(c.amount, 0)) filter (where c.aging_date <= ${addCalendarDays(asOf, -cfg.severeDays)}::date), 0) as severe,
              count(distinct c.doc_id)::int as documents,
-             count(distinct c.doc_id) filter (where c.amount > 0 and c.due_date < ${asOf}::date)::int as overdue_documents,
-             coalesce(max(c.late_days) filter (where c.amount > 0 and c.due_date is not null), 0)::int as oldest_days,
+             count(distinct c.doc_id) filter (where c.amount > 0 and c.aging_date < ${asOf}::date)::int as overdue_documents,
+             coalesce(max(c.late_days) filter (where c.amount > 0), 0)::int as oldest_days,
              coalesce(sum(greatest(c.amount, 0)) filter (where c.due_date is null), 0) as missing_terms,
-             count(distinct c.doc_id) filter (where n.delivered and c.amount > 0 and c.due_date < ${asOf}::date)::int as delivered,
+             count(distinct c.doc_id) filter (where n.delivered and c.amount > 0 and c.aging_date < ${asOf}::date)::int as delivered,
              count(distinct c.doc_id) filter (where n.failed and not n.delivered and c.amount > 0)::int as failed,
              count(distinct c.doc_id) filter (where n.suppressed and not n.delivered and c.amount > 0)::int as suppressed,
              max(n.last_notice) as last_notice,
-             coalesce(sum(greatest(c.amount, 0)) filter (where (n.failed or n.suppressed) and not n.delivered and c.due_date < ${asOf}::date), 0) as failed_exposure
+             coalesce(sum(greatest(c.amount, 0)) filter (where (n.failed or n.suppressed) and not n.delivered and c.aging_date < ${asOf}::date), 0) as failed_exposure
       from closing c left join document_notices n on n.document_id = c.doc_id group by c.party_id
     ), payment_behavior as (
       select party_id,
@@ -185,7 +186,7 @@ async function collectionSource(orgId: string, from: string, asOf: string, scope
     ), missing as (
       select distinct ccy as currency, ${asOf}::date as date from (
         select coalesce(func, ${currency}) as ccy from closing_raw
-        union select coalesce(func, ${currency}) from opening_raw where remaining > 0 and due_date < ${from}::date
+        union select coalesce(func, ${currency}) from opening_raw where remaining > 0 and coalesce(due_date, tran_date)::date < ${from}::date
         union select coalesce(func, ${currency}) from cash_raw
         union select credit_currency from credit_raw where credit_limit is not null
       ) cc left join rates r on r.from_currency = cc.ccy
