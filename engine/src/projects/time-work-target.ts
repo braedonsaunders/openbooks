@@ -66,7 +66,7 @@ export function selfServiceTimeRefusal(): TimeWorkTargetError {
     "You can only see and change your own timesheet.",
     403,
     'time_self_only',
-    "To work with a coworker's time, ask an administrator for a role that views or enters everyone's time; your own week stays under My timesheet.",
+    "To work with a coworker's time, ask an administrator for a role that views or enters everyone's time; your own weeks stay available under Timesheets.",
   )
 }
 /** Pin a shared week and every actual target before its lifecycle changes. A workspace selector never grants access to another family's records. */
