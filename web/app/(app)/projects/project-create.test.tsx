@@ -103,6 +103,7 @@ async function renderDrawer() {
           <ProjectDrawer
             payload={NEW_PAYLOAD as never}
             parties={[]}
+            managerParties={[]}
             subsidiaries={[]}
             canManage
             canViewGl={false}

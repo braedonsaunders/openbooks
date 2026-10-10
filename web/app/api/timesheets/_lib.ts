@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { businessToday, isIsoCalendarDate, parseIsoDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { pinInternalPerson } from '@openbooks/engine/src/organization/internal-person.ts'
 import { add } from '@openbooks/engine/src/money/money.ts'
 import { subsidiaryScopeAllows } from '../../../lib/authz'
 import { isFeatureEnabled } from '../../../lib/features'
@@ -120,47 +121,22 @@ export interface WeekRow {
 }
 
 /**
- * Pin a timekeeper to the known tenant. Returns the owned id, or null. A
- * `parties` row alone proves nothing — vendors, customers and contacts all
- * live there — so the pin admits only an active person party, or an active
- * employee party holding an active `employee_roles` row. Partners and
- * contractors log billable time as people; payroll admits only employments,
- * so their hours never reach a pay run. Reads fail closed the same way — a
- * former employee's stored entries remain in the ledger and reports, but no
- * week can be opened for them until the employment is restored.
+ * Pin a timekeeper to the known tenant. Returns the owned id, or null.
+ * Delegates to the shared internal-person pin: a week belongs to an active
+ * person party, or an active employee party holding an active
+ * `employee_roles` row. Partners and contractors log billable time as
+ * people; payroll admits only employments, so their hours never reach a
+ * pay run. Reads fail closed the same way — a former employee's stored
+ * entries remain in the ledger and reports, but no week can be opened for
+ * them until the employment is restored.
  */
 export async function pinTimekeeper(
   orgId: string,
   employeeId: string,
   allowedSubsidiaryIds?: ReadonlySet<string> | null,
 ): Promise<string | null> {
-  const owned = (await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
-    select id, subsidiary_id from parties
-     where org_id = ${orgId} and id = ${employeeId}
-       and is_active
-       and kind in ('person', 'employee')
-       and (
-         kind = 'person'
-         or exists (
-           select 1 from employee_roles r
-            where r.org_id = parties.org_id
-              and r.party_id = parties.id
-              and r.is_active
-         )
-       )
-     limit 1`))
-  const row = owned.rows[0]
-  if (!row) return null
-  // Employee parties are single-subsidiary records. A restricted caller must
-  // not be able to reach a week by guessing its employee UUID; null also
-  // fails closed because it cannot be resolved to a legal entity here.
-  if (
-    allowedSubsidiaryIds !== undefined &&
-    !subsidiaryScopeAllows(allowedSubsidiaryIds, row.subsidiary_id)
-  ) {
-    return null
-  }
-  return row.id
+  const pinned = await pinInternalPerson(db, orgId, employeeId, allowedSubsidiaryIds)
+  return pinned?.id ?? null
 }
 
 /**

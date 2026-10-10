@@ -14,6 +14,7 @@ import { moneyRefusal } from '../../../../lib/payroll-decimal-refusal'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { normalizeSubdivisionCode } from '@openbooks/engine/src/compliance/lien-jurisdictions.ts'
 import { listScopedPartyOptions } from '../../../../lib/scoped-options'
+import { pinInternalPerson } from '@openbooks/engine/src/organization/internal-person.ts'
 import { acquireFeatureGateLock, isFeatureEnabled } from '../../../../lib/features'
 import { notFound } from "@/lib/api/responses";
 import { getTranslations } from 'next-intl/server'
@@ -199,6 +200,12 @@ export const PATCH = defineRoute({
     const v = uuidOrNull(body.managerId)
     if (v === 'invalid') return bad('Invalid manager')
     if (v !== null && !(await partyExists(v, user.orgId))) return bad('Manager not found')
+    // Same rule as create: a manager is an active employee or internal
+    // person, never a customer, vendor, or company party. Scope stays with
+    // the visibility check below so it keeps naming the legal entity.
+    if (v !== null && !(await pinInternalPerson(db, user.orgId, v))) {
+      return bad(`project manager "${v}" must be an active employee or internal person in this organization — choose the manager from the organization's people`)
+    }
     managerId = v
   }
   // Same agreement as create: the picker only offers subsidiary-visible
