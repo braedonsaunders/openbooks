@@ -201,7 +201,7 @@ export async function loadRelatedTransactionDrawerData({
 
   if (ORDER_KINDS.has(kind)) {
     const orderKind = kind as OrderKind
-    const permission = orderKind === 'purchase_order' ? 'ap.read' : 'ar.read'
+    const permission = orderKind === 'purchase_order' ? 'purchase_orders.read' : 'ar.read'
     if (!can(authz, permission)) return null
     const order = await loadOrder(id, authz.user.orgId, orderKind, authz.allowedSubsidiaryIds)
     if (!order || !canSeeDocument((order.doc), partyId, authz)) return null
@@ -252,7 +252,7 @@ export async function loadRelatedTransactionDrawerData({
           id: subsidiary.id,
           name: `${'  '.repeat(subsidiary.depth)}${subsidiary.name}`,
         })),
-        canManage: can(authz, orderKind === 'purchase_order' ? 'ap.create' : 'ar.create'),
+        canManage: can(authz, orderKind === 'purchase_order' ? 'purchase_orders.create' : 'ar.create'),
         layout: resolvedForm.layout,
         quoteToCashEnabled:
           orderKind === 'quote' ? await isFeatureEnabled(authz.user.orgId, 'quoteToCash') : false,
