@@ -287,6 +287,28 @@ const STATUS_LABEL_KEYS = new Set([
 const toStatusKey = (status: string) => status.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase())
 
 /** Where a freshly-created document opens (drawer deep-link per kind). */
+/** The convert endpoint's answer: the created document, plus every open
+ *  line a receipt- or shipment-governed billing conversion did not carry. */
+interface ConvertedDocument {
+  kind: string
+  id: string
+  documentNumber: string
+  withheldTotal?: string
+  withheldLines?: Array<{
+    lineNumber: number
+    itemName: string | null
+    description: string | null
+    orderedQuantity: string
+    fulfilledQuantity: string
+    withheldQuantity: string
+  }>
+}
+
+/** An exact decimal quantity string without trailing fractional zeros. */
+function plainQuantity(value: string): string {
+  return value.includes('.') ? value.replace(/0+$/, '').replace(/\.$/, '') : value
+}
+
 function targetHref(kind: string, id: string): string {
   switch (kind) {
     case 'customer_invoice':
@@ -1269,11 +1291,7 @@ export function OrderDrawer({
     label: string,
     creditOverrideReason?: string,
   ) {
-    await execute<{
-      kind: string
-      id: string
-      documentNumber: string
-    } | { creditOverrideNeeded: true }>(async () => {
+    await execute<ConvertedDocument | { creditOverrideNeeded: true }>(async () => {
       const res = await fetch(`${apiBase}/${doc.id}/convert`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1283,11 +1301,7 @@ export function OrderDrawer({
           expectedUpdatedAt: revisionRef.current,
         }),
       })
-      const result = await readActionResult<{
-        kind: string
-        id: string
-        documentNumber: string
-      }>(res)
+      const result = await readActionResult<ConvertedDocument>(res)
       if (
         !result.ok
         && result.error.code === 'CUSTOMER_CREDIT_LIMIT_EXCEEDED'
@@ -1313,7 +1327,29 @@ export function OrderDrawer({
           if (overrideReason) await convert(targetKind, label, overrideReason)
           return
         }
-        toast.success(t('convertCreated', { target: label, number: data.documentNumber }))
+        const withheld = data.withheldLines ?? []
+        if (withheld.length > 0) {
+          // A partial bill or invoice is never a plain success: name every
+          // open line it left on the order, with its quantities and amount.
+          toast.warning(t('convertCreatedWithShortfall', {
+            target: label,
+            number: data.documentNumber,
+            amount: money(data.withheldTotal ?? '0', { currency: doc.currency }),
+          }), {
+            description: withheld.map((line) => t('convertWithheldLine', {
+              kind,
+              line: line.lineNumber,
+              item: line.itemName ?? line.description ?? '',
+              withheld: plainQuantity(line.withheldQuantity),
+              fulfilled: plainQuantity(line.fulfilledQuantity),
+              ordered: plainQuantity(line.orderedQuantity),
+            })).join('\n'),
+            duration: Infinity,
+            closeButton: true,
+          })
+        } else {
+          toast.success(t('convertCreated', { target: label, number: data.documentNumber }))
+        }
         router.push(targetHref(data.kind, data.id))
         router.refresh()
       },

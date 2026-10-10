@@ -133,3 +133,54 @@ test('a convert refusal pins as an alert, not only a toast', async (t) => {
 // The shared alert region itself (ActionAlert renders null when clean) is
 // proven by the pinning test above: the refusal surfaces as role="alert"
 // carrying the server's reason.
+
+test('a partial conversion warns with every withheld line instead of a plain success', async (t) => {
+  const BILL_ID = '44444444-4444-4444-8444-444444444444'
+  const restoreFetch = scriptFetch((url, init) => {
+    if (url === `/api/purchase-orders/${PO_ID}/convert` && init?.method === 'POST') {
+      return Response.json({
+        kind: 'vendor_bill',
+        id: BILL_ID,
+        documentNumber: 'BILL-00001',
+        withheldTotal: '17692.8000',
+        withheldLines: [{
+          lineNumber: 1,
+          itemName: 'Steel rod',
+          description: 'Steel rod',
+          orderedQuantity: '3648.0000',
+          fulfilledQuantity: '0.0000',
+          withheldQuantity: '3648.0000',
+        }],
+      })
+    }
+    if (url.startsWith('/api/flows/')) {
+      return Response.json({ error: 'no flow state' }, { status: 404 })
+    }
+    return null
+  })
+  t.after(restoreFetch)
+  const { unmount } = await mountPo()
+  t.after(unmount)
+  const menu = buttonsNamed('Actions')[0]
+  assert.ok(menu)
+  await click(menu)
+  const convert = buttonsContaining('Convert to Bill')[0]
+  assert.ok(convert, 'an approved PO must offer Convert to Bill')
+  await click(convert)
+  await tick()
+  const toasts = globalThis.__dashToasts ?? []
+  assert.equal(
+    toasts.filter((toast) => toast.kind === 'success').length,
+    0,
+    'a bill that leaves order lines open must never toast a plain success',
+  )
+  const warning = toasts.find((toast) => toast.kind === 'warning')
+  assert.ok(warning, 'the partial conversion must warn')
+  assert.match(warning.message, /BILL-00001 created for part of the order/)
+  assert.match(
+    warning.description ?? '',
+    /Line 1 \(Steel rod\): 3648 not billed — ordered 3648, received 0/,
+    'the warning names the withheld line with its quantities',
+  )
+  assert.deepEqual(globalThis.__dashRouter.pushes, [`/ap/bills?doc=${BILL_ID}&mode=edit`])
+})

@@ -6,7 +6,7 @@ export const salesWorkflow: DocArticle = {
   category: 'transactions',
   order: 1,
   summary: 'A practical tour of estimates, sales orders, invoices, credits, receipts, and customer balances.',
-  updated: '2026-07-20',
+  updated: '2026-10-10',
   keywords: ['sales', 'estimate', 'quote', 'sales order', 'invoice', 'credit memo', 'receipt', 'accounts receivable', 'collections worklist', 'dso'],
   related: ['payments-and-applications', 'transaction-lifecycle', 'financial-reports', 'electronic-invoicing'],
   body: `# Sales: Estimate to Cash
@@ -37,6 +37,14 @@ other workflow verbs.
 An invoice records the customer's obligation. Create it directly or convert an
 eligible upstream record. Review quantities, rates, taxes, dimensions, due date,
 and attachments, then follow your approval and posting policy.
+
+An invoice converted from a sales order carries stock lines only up to the
+quantity shipped and not yet invoiced; service and account lines convert in
+full. Any quantity left on the order is named in a warning when the invoice is
+created and recorded on the invoice, and stays open on the order for a later
+invoice. When nothing has shipped yet the conversion is refused with the line
+to fulfill first, and an inventory item without a costing profile is refused
+until a costing profile is added to the item.
 
 Posting normally debits accounts receivable and credits revenue, tax, or other
 configured accounts. Inspect the generated ledger entry when validating a new
@@ -103,7 +111,7 @@ export const purchasingWorkflow: DocArticle = {
   category: 'transactions',
   order: 2,
   summary: 'A practical tour of purchase orders, bills, credits, approvals, payments, and vendor balances.',
-  updated: '2026-08-26',
+  updated: '2026-10-10',
   keywords: ['purchase', 'purchase order', 'vendor bill', 'vendor credit', 'accounts payable', 'payment', 'approval'],
   related: ['payments-and-applications', 'transaction-lifecycle', 'file-cabinet', 'electronic-invoicing', 'contractor-withholding'],
   body: `# Purchases: Order to Payment
@@ -143,7 +151,12 @@ A bill records the obligation to the vendor. It may be entered manually, created
 from capture, or converted from a purchase order. A bill converted from an
 order only covers stock that has been received; it clears the received-not-billed
 balance instead of receiving the stock again, and any difference between the
-vendor's price and the order price posts to the item's variance account. Validate the vendor invoice
+vendor's price and the order price posts to the item's variance account. Any
+ordered stock not yet received is named in a warning when the bill is created,
+recorded on the bill, and stays open on the purchase order for a later bill.
+When nothing has been received yet the conversion is refused with the line to
+receive first, and an inventory item without a costing profile is refused until
+a costing profile is added to the item. Validate the vendor invoice
 number, dates, quantities, accounts, dimensions, tax, and duplicate risk before
 approval and posting.
 

@@ -27,6 +27,8 @@
     "convertTo": "{target} に変換",
     "convertCreated": "{target} {number} を作成しました",
     "convertFailed": "変換に失敗しました",
+    "convertCreatedWithShortfall": "{target} {number} を注文の一部について作成しました。{amount} は変換されず、注文に未処理のまま残っています。",
+    "convertWithheldLine": "{kind, select, purchase_order {明細 {line}（{item}）：{withheld} が未請求 — 発注 {ordered}、入荷 {fulfilled}} other {明細 {line}（{item}）：{withheld} が未請求 — 受注 {ordered}、出荷 {fulfilled}}}",
     "actionFailed": "アクションに失敗しました",
     "pricingResolving": "販売価格を取得中です。完了を待つか、明細価格を修正してから保存または発行してください。",
     "invalidLineSave": "{row}行目の{field}が無効です。有効な値を入力するか、保存前にこの行を削除してください。",

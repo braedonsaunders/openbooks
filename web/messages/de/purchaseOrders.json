@@ -27,6 +27,8 @@
     "convertTo": "Umwandeln in {target}",
     "convertCreated": "{target} {number} erstellt",
     "convertFailed": "Umwandlung fehlgeschlagen",
+    "convertCreatedWithShortfall": "{target} {number} für einen Teil des Auftrags erstellt: {amount} wurde nicht übernommen und bleibt im Auftrag offen.",
+    "convertWithheldLine": "{kind, select, purchase_order {Position {line} ({item}): {withheld} nicht abgerechnet — bestellt {ordered}, eingegangen {fulfilled}} other {Position {line} ({item}): {withheld} nicht fakturiert — bestellt {ordered}, versandt {fulfilled}}}",
     "actionFailed": "Aktion fehlgeschlagen",
     "pricingResolving": "Die Ermittlung des Verkaufspreises läuft. Warten Sie, bis sie abgeschlossen ist, oder korrigieren Sie den Zeilenpreis, bevor Sie speichern oder ausstellen.",
     "invalidLineSave": "Zeile {row}, {field}: Geben Sie einen gültigen Wert ein oder entfernen Sie diese Zeile vor dem Speichern.",

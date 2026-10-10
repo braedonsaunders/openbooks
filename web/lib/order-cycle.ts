@@ -90,6 +90,8 @@ type OrderConvertLineRow = Record<string, unknown> & {
   price_basis: unknown
   item_kind: string | null
   item_income_account_id: string | null
+  item_name: string | null
+  has_inventory_profile: boolean
 }
 
 /**
@@ -361,11 +363,61 @@ export async function conversionWouldCopyInventoryKinds(orgId: string, sourceId:
   })
 }
 
+/**
+ * One open order line that a receipt- or shipment-governed billing
+ * conversion could not carry in full. A purchase order bills stock only up to
+ * its received-and-unbilled quantity and a sales order only up to its
+ * shipped-and-unbilled quantity; the rest stays open on the order and is
+ * reported here, never dropped silently. Quantities are exact decimal
+ * strings; amounts are ledger money in the order currency.
+ */
+export interface ConversionWithheldLine {
+  lineNumber: number
+  sourceLineId: string
+  itemId: string | null
+  itemName: string | null
+  description: string | null
+  unit: string | null
+  orderedQuantity: string
+  cancelledQuantity: string
+  /** Received on a purchase order, shipped on a sales order. */
+  fulfilledQuantity: string
+  /** Billed by earlier conversions or captures, before this one. */
+  previouslyBilledQuantity: string
+  convertedQuantity: string
+  withheldQuantity: string
+  withheldAmount: string
+  withheldTaxAmount: string
+  reason: 'awaiting_receipt' | 'awaiting_shipment'
+}
+
 interface ConvertResult {
   id: string
   documentNumber: string
   kind: string
   replayed?: boolean
+  /** Open lines this conversion did not carry in full; absent when every
+   *  open line converted completely. */
+  withheldLines?: ConversionWithheldLine[]
+  /** Amount plus tax of the withheld quantities: the exact difference between
+   *  the order's open total and the new document's total. */
+  withheldTotal?: string
+}
+
+/** Machine-readable code: a billing conversion would carry an inventory item
+ *  that has no costing profile, so it can never be received, shipped or
+ *  posted. Details name the line and item. */
+export const ORDER_LINE_ITEM_WITHOUT_COSTING_PROFILE = 'ORDER_LINE_ITEM_WITHOUT_COSTING_PROFILE'
+
+/** Machine-readable code: receipt- or shipment-governed billing found no
+ *  received/shipped-and-unbilled quantity on any open line. Details carry the
+ *  withheld lines. */
+export const ORDER_CONVERSION_NOTHING_BILLABLE = 'ORDER_CONVERSION_NOTHING_BILLABLE'
+
+/** Display a quantity for an operator message: exact, without trailing zeros. */
+function displayQuantity(units: bigint): string {
+  const text = fromQuantityUnits(units)
+  return text.includes('.') ? text.replace(/0+$/, '').replace(/\.$/, '') : text
 }
 
 export interface KitComponentFulfillmentInput {
@@ -1621,7 +1673,11 @@ export async function convertOrder(
              dl.stock_location_id, dl.is_billable, dl.quantity_billed, dl.quantity_fulfilled,
              dl.quantity_cancelled, dl.price_basis,
              dl.work_from::text as work_from, dl.work_to::text as work_to,
-             i.kind as item_kind, i.income_account_id as item_income_account_id
+             i.kind as item_kind, i.income_account_id as item_income_account_id, i.name as item_name,
+             exists (
+               select 1 from item_inventory_profiles profile
+                where profile.item_id = dl.item_id and profile.org_id = dl.org_id
+             ) as has_inventory_profile
         from document_lines dl left join items i on i.id = dl.item_id and i.org_id = dl.org_id
        where dl.document_id = ${sourceId} and dl.org_id = ${orgId}
        order by dl.line_number
@@ -1654,40 +1710,107 @@ export async function convertOrder(
       }))
       .filter((row): row is { line: OrderConvertLineRow; remainder: NonNullable<ReturnType<typeof remainingOrderLine>> } => row.remainder !== null)
     if (remaining.length === 0) throw new ConversionError('Every line is already fully converted')
+    const lineLabel = doc.kind === 'purchase_order' ? 'Purchase-order line' : doc.kind === 'sales_order' ? 'Sales-order line' : 'Estimate line'
+    const itemLabelOf = (line: OrderConvertLineRow) => (line.item_name ? ` (${line.item_name})` : '')
+    const isInventoryKind = (line: OrderConvertLineRow) =>
+      line.item_id != null && INVENTORY_ITEM_KINDS.has(String(line.item_kind))
+    // Source lines stay. Turning Inventory off must refuse a conversion of an
+    // order that still carries open inventory / assembly / kit lines: they
+    // could neither be copied nor ever be received or shipped to bill later.
+    const openInventoryLine = remaining.find((row) => isInventoryKind(row.line))
+    if (openInventoryLine && !(await isFeatureEnabled(orgId, 'inventory'))) {
+      throw new ConversionError(
+        `Inventory is disabled: ${lineLabel.toLowerCase()} ${openInventoryLine.line.line_number}${itemLabelOf(openInventoryLine.line)} is an open inventory line — enable Inventory under Company Settings → Features, then convert again`,
+      )
+    }
+    // A billing document carrying an inventory item with no costing profile
+    // can never post (posting refuses it), and on a purchase or sales order
+    // the line can never be received or shipped, so receipt-governed billing
+    // could never reach it. Refuse by line, the way the goods receipt and
+    // fulfillment do, instead of converting the other lines without it.
+    const billingTarget = target.kind === 'vendor_bill' || target.kind === 'customer_invoice'
+    const uncosted = billingTarget
+      ? remaining.find((row) => isInventoryKind(row.line) && !row.line.has_inventory_profile)
+      : undefined
+    if (uncosted) {
+      const movement = doc.kind === 'purchase_order'
+        ? 'received or billed'
+        : doc.kind === 'sales_order' ? 'shipped or invoiced' : 'invoiced'
+      const nextStep = doc.kind === 'purchase_order'
+        ? 'receive the line, then convert to a bill again'
+        : doc.kind === 'sales_order'
+          ? 'fulfill the line, then convert to an invoice again'
+          : 'then convert again'
+      throw new ConversionError(
+        `${lineLabel} ${uncosted.line.line_number}${itemLabelOf(uncosted.line)} is an inventory item without a costing profile, so it cannot be ${movement} — add a costing profile to the item, ${nextStep}`,
+        422,
+        ORDER_LINE_ITEM_WITHOUT_COSTING_PROFILE,
+        { lineNumber: uncosted.line.line_number, itemId: uncosted.line.item_id, itemName: uncosted.line.item_name },
+      )
+    }
     // One shared physical-quantity ceiling for both billing legs. A purchase
     // order bills received-and-unbilled stock; a sales order bills shipped-and-
-    // unbilled stock. Service/non-stock lines remain two-way matched.
+    // unbilled stock. Service/non-stock lines remain two-way matched. Every
+    // open line is classified: carried (in full or in part) or withheld, and
+    // every withheld quantity is reported with its amount — a conversion
+    // never reduces a payable or receivable without saying so.
     const fulfillmentGovernedBilling =
       (doc.kind === 'purchase_order' && target.kind === 'vendor_bill') ||
       (doc.kind === 'sales_order' && target.kind === 'customer_invoice')
-    const covered = (
-      fulfillmentGovernedBilling
-        ? remaining.flatMap((row) => {
-            const units = billableRemainderQuantityUnits({
-              orderedQuantity: String(row.line.quantity),
-              billedQuantity: String(row.line.quantity_billed),
-              cancelledQuantity: String(row.line.quantity_cancelled),
-              fulfilledQuantity: String(row.line.quantity_fulfilled),
-              requiresReceipt: row.line.item_id != null && lineRequiresReceipt(row.line.item_kind ?? null),
-            })
-            return units > 0n ? [{ ...row, units }] : []
+    const covered: Array<{
+      line: OrderConvertLineRow
+      remainder: NonNullable<ReturnType<typeof remainingOrderLine>>
+      units: bigint
+      amount: string
+      taxAmount: string
+    }> = []
+    const withheld: ConversionWithheldLine[] = []
+    for (const row of remaining) {
+      const remainderUnits = toQuantityUnits(row.remainder.quantity)
+      const units = fulfillmentGovernedBilling
+        ? billableRemainderQuantityUnits({
+            orderedQuantity: String(row.line.quantity),
+            billedQuantity: String(row.line.quantity_billed),
+            cancelledQuantity: String(row.line.quantity_cancelled),
+            fulfilledQuantity: String(row.line.quantity_fulfilled),
+            requiresReceipt: row.line.item_id != null && lineRequiresReceipt(row.line.item_kind ?? null),
           })
-        : remaining.map((row) => ({ ...row, units: toQuantityUnits(row.remainder.quantity) }))
-    )
-    if (covered.length === 0) throw new ConversionError('Fulfilled quantities do not cover any line yet')
-    // Source lines stay. Turning Inventory off must refuse a conversion that
-    // would copy inventory / assembly / kit onto the new document.
-    if (!(await isFeatureEnabled(orgId, 'inventory'))) {
-      const itemIds = [...new Set(
-        covered.map((row) => row.line.item_id as string | null).filter((itemId): itemId is string => Boolean(itemId)),
-      )]
-      for (const itemId of itemIds) {
-        const item = (await tx.execute<{ kind: string }>(sql`
-          select kind from items where id = ${itemId} and org_id = ${orgId}`))
-        if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
-          throw new ConversionError('Inventory is disabled')
-        }
+        : remainderUnits
+      const amount = units > 0n ? mulRatio(row.remainder.amount, units, remainderUnits) : '0.0000'
+      const taxAmount = units > 0n ? mulRatio(row.remainder.taxAmount, units, remainderUnits) : '0.0000'
+      if (units > 0n) covered.push({ ...row, units, amount, taxAmount })
+      if (units < remainderUnits) {
+        withheld.push({
+          lineNumber: row.line.line_number,
+          sourceLineId: row.line.id,
+          itemId: row.line.item_id,
+          itemName: row.line.item_name,
+          description: row.line.description,
+          unit: row.line.unit,
+          orderedQuantity: fromQuantityUnits(toQuantityUnits(String(row.line.quantity))),
+          cancelledQuantity: fromQuantityUnits(toQuantityUnits(String(row.line.quantity_cancelled))),
+          fulfilledQuantity: fromQuantityUnits(toQuantityUnits(String(row.line.quantity_fulfilled))),
+          previouslyBilledQuantity: fromQuantityUnits(toQuantityUnits(String(row.line.quantity_billed))),
+          convertedQuantity: fromQuantityUnits(units),
+          withheldQuantity: fromQuantityUnits(remainderUnits - units),
+          withheldAmount: add(row.remainder.amount, neg(amount)),
+          withheldTaxAmount: add(row.remainder.taxAmount, neg(taxAmount)),
+          reason: doc.kind === 'purchase_order' ? 'awaiting_receipt' : 'awaiting_shipment',
+        })
       }
+    }
+    if (covered.length === 0) {
+      const first = withheld[0]!
+      const purchase = doc.kind === 'purchase_order'
+      const others = withheld.length > 1 ? `, and ${withheld.length - 1} more open line${withheld.length > 2 ? 's' : ''}` : ''
+      throw new ConversionError(
+        `${purchase ? 'Received' : 'Shipped'} quantities do not cover any line yet: ${lineLabel.toLowerCase()} ${first.lineNumber}${first.itemName ? ` (${first.itemName})` : ''} has ${displayQuantity(toQuantityUnits(first.withheldQuantity))} open to bill and ${displayQuantity(toQuantityUnits(first.fulfilledQuantity))} ${purchase ? 'received' : 'shipped'}${others} — ${purchase
+          ? 'record the goods receipt (Convert to Goods receipt), then convert to a bill'
+          : 'fulfill the order (Convert to Fulfillment), then convert to an invoice'}`,
+        422,
+        ORDER_CONVERSION_NOTHING_BILLABLE,
+        { withheldLines: withheld },
+      )
     }
     // Source lines stay. Turning Equipment off must refuse a conversion that
     // would copy equipment_charge onto the new document.
@@ -1721,15 +1844,21 @@ export async function convertOrder(
     const convertedTaxes: string[] = []
     // Work dates follow the order onto a document that also bills work.
     const carriesWorkDates = WORK_PERIOD_DOCUMENT_KINDS.has(target.kind)
+    const withheldTotal = sum(withheld.flatMap((line) => [line.withheldAmount, line.withheldTaxAmount]))
+    // The new document records what it does not carry, so the shortfall is
+    // visible on the document itself as well as on the order's open remainder.
+    const targetCustom = withheld.length > 0
+      ? { conversionShortfall: { sourceDocumentId: sourceId, withheldTotal, withheldLines: withheld } }
+      : {}
     const created = (await tx.execute<{ id: string }>(sql`
       insert into documents (org_id, kind, document_number, party_id, document_date, due_date,
                              currency, fx_rate, status, subsidiary_id, department_id, project_id, location_id,
-                             class_id, extra_dims, billing_method, memo, subtotal, tax_total, total, work_completed_on, created_by)
+                             class_id, extra_dims, billing_method, memo, subtotal, tax_total, total, work_completed_on, custom, created_by)
       values (${orgId}, ${target.kind}, ${documentNumber}, ${doc.party_id},
               ${documentDate}, ${doc.due_date}, ${doc.currency},
               ${doc.fx_rate}, ${targetStatus}, ${doc.subsidiary_id}, ${doc.department_id}, ${doc.project_id},
               ${doc.location_id}, ${doc.class_id}, ${JSON.stringify(doc.extra_dims ?? {})}::jsonb, ${doc.billing_method}, ${doc.memo},
-              '0', '0', '0', ${carriesWorkDates ? doc.work_completed_on ?? null : null}, ${userId})
+              '0', '0', '0', ${carriesWorkDates ? doc.work_completed_on ?? null : null}, ${JSON.stringify(targetCustom)}::jsonb, ${userId})
       returning id
     `)).rows[0]!
     const newId = created.id
@@ -1755,9 +1884,7 @@ export async function convertOrder(
     let lineNo = 1
     for (const r of covered) {
       const l = r.line
-      const remainderUnits = toQuantityUnits(r.remainder.quantity)
-      const amount = mulRatio(r.remainder.amount, r.units, remainderUnits)
-      const taxAmount = mulRatio(r.remainder.taxAmount, r.units, remainderUnits)
+      const { amount, taxAmount } = r
       convertedAmounts.push(amount)
       convertedTaxes.push(taxAmount)
       // The exact billed-quantity advance for this line (see the guarded
@@ -1873,10 +2000,40 @@ export async function convertOrder(
       if (!restored) throw new ConversionError('Order changed while it was being converted', 409)
     }
 
-    await tx.execute(sql`
+    const totalsWritten = (await tx.execute<{ id: string }>(sql`
       update documents set subtotal = ${sum(convertedAmounts)}, tax_total = ${sum(convertedTaxes)},
              total = ${add(sum(convertedAmounts), sum(convertedTaxes))}, updated_by = ${userId}
       where id = ${newId} and org_id = ${orgId}
+      returning id
+    `)).rows[0]
+    if (!totalsWritten) throw new ConversionError('The converted document could not be totalled', 409)
+
+    // Every conversion is audited with what it carried and what it withheld,
+    // so the difference between the order's open total and the new
+    // document's total is always explained by the evidence.
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (
+        ${orgId}, 'documents', ${newId}, 'insert',
+        ${JSON.stringify({
+          mode: 'order_converted',
+          sourceDocumentId: sourceId,
+          sourceKind: doc.kind,
+          targetKind: target.kind,
+          convertedSubtotal: sum(convertedAmounts),
+          convertedTaxTotal: sum(convertedTaxes),
+          convertedLines: covered.map((row) => ({
+            lineNumber: row.line.line_number,
+            sourceLineId: row.line.id,
+            quantity: fromQuantityUnits(row.units),
+            amount: row.amount,
+            taxAmount: row.taxAmount,
+          })),
+          withheldTotal,
+          withheldLines: withheld,
+        })}::jsonb,
+        ${userId}
+      )
     `)
 
     await tx.execute(sql`
@@ -1931,6 +2088,11 @@ export async function convertOrder(
       }
     }
 
-    return { id: newId, documentNumber, kind: target.kind }
+    return {
+      id: newId,
+      documentNumber,
+      kind: target.kind,
+      ...(withheld.length > 0 ? { withheldLines: withheld, withheldTotal } : {}),
+    }
   }))
 }

@@ -27,6 +27,8 @@
     "convertTo": "Convertir en {target}",
     "convertCreated": "Création de {target} {number}",
     "convertFailed": "Échec de la conversion",
+    "convertCreatedWithShortfall": "{target} {number} créé pour une partie de la commande : {amount} n’a pas été converti et reste ouvert sur la commande.",
+    "convertWithheldLine": "{kind, select, purchase_order {Ligne {line} ({item}) : {withheld} non facturé — commandé {ordered}, reçu {fulfilled}} other {Ligne {line} ({item}) : {withheld} non facturé — commandé {ordered}, expédié {fulfilled}}}",
     "actionFailed": "Échec de l’action",
     "pricingResolving": "La recherche du prix de vente est en cours. Attendez la fin ou corrigez le prix de la ligne avant d’enregistrer ou d’émettre.",
     "invalidLineSave": "Ligne {row}, {field} : saisissez une valeur valide ou supprimez cette ligne avant d’enregistrer.",

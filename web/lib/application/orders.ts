@@ -136,7 +136,7 @@ export async function convertApplicationOrder(
      * sibling kind reached by id. */
     expectedKind?: OrderKind;
   },
-): Promise<{ replayed: boolean; result: { id: string; documentNumber: string; kind: string } }> {
+): Promise<{ replayed: boolean; result: Awaited<ReturnType<typeof convertOrder>> }> {
   const source = await sourceOrder(context.authz.user.orgId, input.documentId);
   // The route converts one order kind: a quote id on the purchase-orders
   // route (or any sibling-kind id) is not this route's order — refuse it as

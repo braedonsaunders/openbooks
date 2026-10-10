@@ -433,7 +433,7 @@ export function buildOpenApiSpec(
       post: {
         ...idempotentPost(
           `Convert a ${kind}`,
-          `Same writer as the order-cycle convert action. ${convertFrom} targets are listed in the 422 refusal.`,
+          `Same writer as the order-cycle convert action. ${convertFrom} targets are listed in the 422 refusal. Billing a purchase or sales order carries stock lines only up to their received or shipped, unbilled quantity: any open quantity left on the order is returned in withheldLines (per line: ordered, received or shipped, previously billed, converted and withheld quantities, withheld amount and tax) with withheldTotal, and is recorded on the new document. When nothing can be billed yet the conversion refuses with code ORDER_CONVERSION_NOTHING_BILLABLE; an open inventory line whose item has no costing profile refuses with ORDER_LINE_ITEM_WITHOUT_COSTING_PROFILE.`,
           "Orders",
         ),
         parameters: [
