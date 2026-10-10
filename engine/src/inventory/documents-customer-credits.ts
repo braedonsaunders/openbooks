@@ -25,6 +25,8 @@ import {
   loadDocumentInventoryLines,
   inventoryPostingEffectKey,
   isJsonRecord,
+  isAllowanceLine,
+  loadItemLabels,
   type DocumentInventoryLine,
 } from "./document-lines.ts";
 import { postedReturnQuantity } from "./return-quantities.ts";
@@ -67,7 +69,8 @@ export function parseCustomerCreditInventoryReturnSelection(
   const evidence = isJsonRecord(custom) ? custom.inventoryReturn : null;
   if (!isJsonRecord(evidence)) {
     throw new InventoryError(
-      `${lineLabel} requires custom.inventoryReturn evidence`,
+      `${lineLabel} is a stocked item: choose the shipment the goods are returned from, ` +
+        `or post the credit with no goods returned`,
     );
   }
   const sourceIssueMovementId = evidence.sourceIssueMovementId;
@@ -101,6 +104,14 @@ interface CustomerCreditInventoryReturnLine extends DocumentInventoryLine {
   kitItemId: string | null;
 }
 
+/** Operator label for a credit line: line number plus the item's catalog code. */
+function customerCreditLineLabel(
+  line: DocumentInventoryLine,
+  labels: Map<string, string>,
+): string {
+  return `Line ${line.lineNumber} (${labels.get(line.itemId) ?? line.itemId})`;
+}
+
 async function loadCustomerCreditInventoryReturnLines(
   runner: Runner,
   orgId: string,
@@ -109,16 +120,31 @@ async function loadCustomerCreditInventoryReturnLines(
 ): Promise<CustomerCreditInventoryReturnLine[]> {
   if (!(await inventoryFeatureEnabled(runner, orgId))) return [];
   const lines = await loadDocumentInventoryLines(runner, orgId, documentId);
+  const labels = await loadItemLabels(runner, orgId, lines.map((line) => line.itemId));
   const returns: CustomerCreditInventoryReturnLine[] = [];
   for (const line of lines) {
+    const label = customerCreditLineLabel(line, labels);
     const custom = isJsonRecord(line.custom) ? line.custom : null;
+    // An explicit no-goods-returned choice settles commercially, exactly
+    // like a line that never chose a return: revenue reverses and no stock
+    // moves. The flag only records that the operator made the choice.
+    if (isAllowanceLine(line.custom)) {
+      if (custom && "inventoryReturn" in custom) {
+        throw new InventoryError(
+          `${label} cannot both return goods and have no goods returned — ` +
+            `keep the shipment the goods are returned from, or keep no goods returned, not both`,
+        );
+      }
+      continue;
+    }
     if (!custom || !("inventoryReturn" in custom)) {
       // A credit memo may legitimately carry no stock at all (a price
       // concession, a goodwill credit). Only lines that CLAIM a return are
       // held to the evidence contract at posting time.
       if (!requireEvidence) continue;
       throw new InventoryError(
-        `document line ${line.lineNumber} (item ${line.itemId}) requires custom.inventoryReturn evidence`,
+        `${label} is a stocked item: choose the shipment the goods are returned from, ` +
+          `or post the credit with no goods returned`,
       );
     }
     // Kit lines never return themselves: they expand into one pseudo-line
@@ -129,7 +155,7 @@ async function loadCustomerCreditInventoryReturnLines(
       kitItemId: null,
       selection: parseCustomerCreditInventoryReturnSelection(
         line.custom,
-        `document line ${line.lineNumber} (item ${line.itemId})`,
+        label,
       ),
     });
   }
@@ -162,6 +188,12 @@ async function expandKitCustomerCreditReturnLines(
     // A kit line without return evidence is a commercial-only credit, like
     // any other evidence-less line: it reverses revenue and restores nothing.
     if (!custom || !("inventoryReturn" in custom)) continue;
+    if (isAllowanceLine(line.custom)) {
+      throw new InventoryError(
+        `document line ${line.lineNumber} (kit ${await kitLabel(runner, orgId, line.itemId)}) ` +
+          `cannot both return goods and have no goods returned — keep one or the other, not both`,
+      );
+    }
     const lineLabel = `document line ${line.lineNumber} (kit ${await kitLabel(runner, orgId, line.itemId)})`;
     const topEvidence = custom.inventoryReturn;
     if (isJsonRecord(topEvidence) && (topEvidence.lotId != null || topEvidence.serialId != null)) {

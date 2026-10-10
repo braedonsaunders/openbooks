@@ -178,7 +178,7 @@ test("vendor-return evidence is strict", () => {
   );
   assert.throws(
     () => parseVendorCreditInventoryReturnSelection({}),
-    /requires custom\.inventoryReturn evidence/,
+    /is a stocked item: choose the receipt the goods are returned from/,
   );
 });
 

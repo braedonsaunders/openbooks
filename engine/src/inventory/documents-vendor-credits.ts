@@ -11,7 +11,7 @@ import { stockLocationDim, postInventoryEntry, type JournalLineInput } from "./j
 import { primaryBookId, periodForDate, subsidiaryCurrency, getOnHandWith, lockInventoryPosition, persistReceiptMoney } from "./position.ts";
 import { consumeLayers, recordConsumptions } from "./cost-layers.ts";
 import { type MovementResult } from "./movements.ts";
-import { loadDocumentInventoryLines, inventoryPostingEffectKey, isJsonRecord, type DocumentInventoryLine } from "./document-lines.ts";
+import { loadDocumentInventoryLines, inventoryPostingEffectKey, isJsonRecord, isAllowanceLine, loadItemLabels, type DocumentInventoryLine } from "./document-lines.ts";
 import { liveReceiptQuantity, postedReturnQuantity } from "./return-quantities.ts";
 import { PURCHASE_RECEIPT_DOCUMENT_KIND } from "./documents-purchasing.ts";
 import { isUuid } from "../platform/uuid.ts";
@@ -39,7 +39,8 @@ export function parseVendorCreditInventoryReturnSelection(
   const evidence = isJsonRecord(custom) ? custom.inventoryReturn : null;
   if (!isJsonRecord(evidence)) {
     throw new InventoryError(
-      `${lineLabel} requires custom.inventoryReturn evidence`,
+      `${lineLabel} is a stocked item: choose the receipt the goods are returned from, ` +
+        `or post the credit as an allowance (no goods returned)`,
     );
   }
   const sourceReceiptMovementId = evidence.sourceReceiptMovementId;
@@ -74,40 +75,99 @@ interface VendorCreditInventoryReturnLine extends DocumentInventoryLine {
   selection: VendorCreditInventoryReturnSelection;
 }
 
+interface VendorCreditInventoryAllowanceLine extends DocumentInventoryLine {
+  offsetAccountId: string;
+}
+
+/**
+ * A vendor-credit line's stock disposition: goods going back (return
+ * evidence naming the source receipt) or a commercial-only allowance that
+ * moves no stock. Lines with neither carry no choice yet; posting requires
+ * one, while the post-commit applier tolerates them for historical credits
+ * that predate the choice.
+ */
+export interface VendorCreditInventoryDisposition {
+  returns: VendorCreditInventoryReturnLine[];
+  allowances: VendorCreditInventoryAllowanceLine[];
+}
+
+/** Operator label for a credit line: line number plus the item's catalog code. */
+function vendorCreditLineLabel(
+  line: DocumentInventoryLine,
+  labels: Map<string, string>,
+): string {
+  return `Line ${line.lineNumber} (${labels.get(line.itemId) ?? line.itemId})`;
+}
+
+/** The commercial account for a return or allowance line: purchase price
+ * variance first, else the inventory adjustment account. */
+function vendorCreditOffsetAccount(
+  line: DocumentInventoryLine,
+  label: string,
+): string {
+  const offsetAccountId =
+    line.varianceAccountId ?? line.adjustmentAccountId;
+  if (!offsetAccountId) {
+    throw new InventoryError(
+      `${label} is a stocked-item line but the item has no purchase price variance account — ` +
+        `set the Variance account on the item's inventory costing (Items) before posting`,
+    );
+  }
+  return offsetAccountId;
+}
+
+async function loadVendorCreditInventoryDisposition(
+  runner: Runner,
+  orgId: string,
+  documentId: string,
+  requireEvidence: boolean,
+): Promise<VendorCreditInventoryDisposition> {
+  if (!(await inventoryFeatureEnabled(runner, orgId))) {
+    return { returns: [], allowances: [] };
+  }
+  const lines = await loadDocumentInventoryLines(runner, orgId, documentId);
+  const labels = await loadItemLabels(runner, orgId, lines.map((line) => line.itemId));
+  const returns: VendorCreditInventoryReturnLine[] = [];
+  const allowances: VendorCreditInventoryAllowanceLine[] = [];
+  for (const line of lines) {
+    const label = vendorCreditLineLabel(line, labels);
+    const custom = isJsonRecord(line.custom) ? line.custom : null;
+    if (isAllowanceLine(line.custom)) {
+      if (custom && "inventoryReturn" in custom) {
+        throw new InventoryError(
+          `${label} cannot both return goods and be an allowance — ` +
+            `keep the receipt the goods are returned from, or keep the allowance (no goods returned), not both`,
+        );
+      }
+      allowances.push({ ...line, offsetAccountId: vendorCreditOffsetAccount(line, label) });
+      continue;
+    }
+    if (!custom || !("inventoryReturn" in custom)) {
+      if (!requireEvidence) continue;
+      throw new InventoryError(
+        `${label} is a stocked item: choose the receipt the goods are returned from, ` +
+          `or post the credit as an allowance (no goods returned)`,
+      );
+    }
+    returns.push({
+      ...line,
+      offsetAccountId: vendorCreditOffsetAccount(line, label),
+      selection: parseVendorCreditInventoryReturnSelection(
+        line.custom,
+        label,
+      ),
+    });
+  }
+  return { returns, allowances };
+}
+
 async function loadVendorCreditInventoryReturnLines(
   runner: Runner,
   orgId: string,
   documentId: string,
   requireEvidence: boolean,
 ): Promise<VendorCreditInventoryReturnLine[]> {
-  if (!(await inventoryFeatureEnabled(runner, orgId))) return [];
-  const lines = await loadDocumentInventoryLines(runner, orgId, documentId);
-  const returns: VendorCreditInventoryReturnLine[] = [];
-  for (const line of lines) {
-    const custom = isJsonRecord(line.custom) ? line.custom : null;
-    if (!custom || !("inventoryReturn" in custom)) {
-      if (!requireEvidence) continue;
-      throw new InventoryError(
-        `document line ${line.lineNumber} (item ${line.itemId}) requires custom.inventoryReturn evidence`,
-      );
-    }
-    const offsetAccountId =
-      line.varianceAccountId ?? line.adjustmentAccountId;
-    if (!offsetAccountId) {
-      throw new InventoryError(
-        `document line ${line.lineNumber} (item ${line.itemId}) has no inventory variance or adjustment account`,
-      );
-    }
-    returns.push({
-      ...line,
-      offsetAccountId,
-      selection: parseVendorCreditInventoryReturnSelection(
-        line.custom,
-        `document line ${line.lineNumber} (item ${line.itemId})`,
-      ),
-    });
-  }
-  return returns;
+  return (await loadVendorCreditInventoryDisposition(runner, orgId, documentId, requireEvidence)).returns;
 }
 
 interface SourceReceiptEvidence extends Record<string, unknown> {
@@ -238,19 +298,26 @@ async function validateVendorReturnSource(
 
 /** Route an inventory return's commercial amount through the item's policy
  * account. The return journal debits that same account at carried cost, leaving
- * only purchase-price variance there while AP reflects the vendor credit. */
+ * only purchase-price variance there while AP reflects the vendor credit. An
+ * allowance moves no stock, so it has no return journal — but its commercial
+ * amount still settles to the same policy account, exactly like a bill price
+ * difference settles to purchase price variance without touching cost layers.
+ * Carried cost is never adjusted for an allowance: the stock that stayed kept
+ * the cost it arrived at, and the credit is purely commercial. */
 export async function resolveVendorCreditInventoryAccounts(
   runner: Runner,
   orgId: string,
   documentId: string,
 ): Promise<Map<string, string>> {
-  const lines = await loadVendorCreditInventoryReturnLines(
+  const disposition = await loadVendorCreditInventoryDisposition(
     runner,
     orgId,
     documentId,
     true,
   );
-  return new Map(lines.map((line) => [line.lineId, line.offsetAccountId]));
+  return new Map(
+    [...disposition.returns, ...disposition.allowances].map((line) => [line.lineId, line.offsetAccountId]),
+  );
 }
 
 /** Fail before the document transaction when return evidence is incomplete.

@@ -334,7 +334,10 @@ export function parseKitComponentReturnSources(
 ): KitComponentReturnSource[] {
   const evidence = isJsonRecord(custom) ? custom.inventoryReturn : null;
   if (!isJsonRecord(evidence)) {
-    throw new InventoryError(`${lineLabel} requires custom.inventoryReturn evidence`);
+    throw new InventoryError(
+      `${lineLabel} is a kit: choose the source shipment for every stocked component, ` +
+        `or post the credit with no goods returned`,
+    );
   }
   const sources = evidence.kitComponents;
   if (!Array.isArray(sources) || sources.length === 0) {
