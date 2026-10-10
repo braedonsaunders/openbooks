@@ -79,6 +79,7 @@ import { setupEntityWithValidationHook } from './entities/customer-item-refs'
 import { auditSetupChange as audit, loadSetupAuditRow } from './audit'
 import { featureGateLockKey, isFeatureEnabled, resolvedFeatureState, subsidiaryFeatureEnabled } from '../features'
 import { loadNumberSequenceKindOptions } from './number-sequence-kinds'
+import { storedSequencePosition } from './number-sequence-position'
 
 // Drizzle expands bare JS arrays inside sql templates into SQL expressions.
 // A PostgreSQL array column instead needs one bound driver array parameter.
@@ -323,6 +324,17 @@ const uuidArrayParam = (ids: string[]) => sql.param(ids)
  * shared uuidId schema before SQL sees it, so a malformed or hostile id is the
  * route's documented client error instead of PostgreSQL raising 22P02 outside
  * this handler's validation catch. */
+/**
+ * Setup accepts the number the next document receives; storage keeps the
+ * number issued most recently. validateEntityIntegrity has already refused
+ * anything that is not a whole number beyond the issued watermark.
+ */
+function numberSequenceStoredCols<T extends { column: string; value: unknown }>(cols: T[]): T[] {
+  return cols.map((column) => column.column === 'next_number' && typeof column.value === 'number'
+    ? { ...column, value: column.value - 1 }
+    : column)
+}
+
 function hasNonUuidEntry(ids: unknown[]): boolean {
   return !ids.every((id) => uuidId.safeParse(id).success)
 }
@@ -566,10 +578,19 @@ export async function validateEntityIntegrity(
   if (entity.key === 'number-sequences') {
     const current = rowId
       ? (((await executor.execute(sql`
-          select document_kind, subsidiary_id from number_sequences
+          select document_kind, subsidiary_id, allocated_through from number_sequences
            where id = ${rowId} and org_id = ${orgId}`)))).rows[0]
       : null
     if (rowId && !current) return 'not found'
+    if (body.nextNumber !== undefined) {
+      // The storage guard refuses a backward move too; this names the
+      // smallest next number the operator may choose.
+      const position = storedSequencePosition(
+        typeof body.nextNumber === 'string' && body.nextNumber.trim() !== '' ? Number(body.nextNumber) : body.nextNumber,
+        Number(current?.allocated_through ?? 0),
+      )
+      if ('error' in position) return position.error
+    }
     const documentKind = String(body.documentKind ?? current?.document_kind ?? '')
     const allowedKinds = new Set((await loadNumberSequenceKindOptions(orgId, executor)).map((option) => option.value))
     if (!allowedKinds.has(documentKind)) return 'Choose a valid document or custom record type'
@@ -2241,6 +2262,7 @@ export async function createSetupRecord(
       } }
     }
   }
+  if (entity.key === 'number-sequences') cols = numberSequenceStoredCols(cols)
   if (entity.key === 'fx-rates') cols.push({ column: 'source', value: 'manual' })
   if (entity.orgScoped) cols.push({ column: 'org_id', value: orgId })
   if (entity.actorCols) {
@@ -3027,6 +3049,7 @@ export async function updateSetupRecord(
       } }
     }
   }
+  if (entity.key === 'number-sequences') updateCols = numberSequenceStoredCols(updateCols)
   const setParts = updateCols.map((c) => sql`${sql.raw(c.column)} = ${bindSetupValue(c.value)}`)
   if (entity.key === 'fx-rates') {
     // Any human edit is an explicit override. Provider synchronization never

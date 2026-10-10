@@ -19,9 +19,13 @@ import type { SqlExecutor } from "../platform/db.ts";
  * The single upsert is also the concurrency boundary: ON CONFLICT DO UPDATE
  * takes the row lock, so concurrent writers — any subsidiary, any entry point
  * — serialize on one counter and receive distinct, strictly increasing
- * numbers. `allocated_through` (maintained by the storage watermark trigger)
- * records the highest number ever issued so no edit can reset the counter
- * backward into reproducing an existing document number.
+ * numbers. `next_number` holds the number issued most recently (0 before the
+ * first), so each allocation issues `next_number + 1`; Setup presents and
+ * accepts the operator's "next number" by translating at its boundary
+ * (web/lib/setup/number-sequence-position.ts). `allocated_through`
+ * (maintained by the storage watermark trigger) records the highest number
+ * ever issued so no edit can reset the counter backward into reproducing an
+ * existing document number.
  */
 /**
  * Canonical live prefixes per document kind — the exact prefixes the live

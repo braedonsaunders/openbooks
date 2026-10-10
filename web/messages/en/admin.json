@@ -4200,6 +4200,7 @@
       "carrierActive": "Clear Active for a carrier you no longer use. An inactive carrier cannot be chosen on a shipment; shipments that already name it keep it.",
       "recognitionRulePolicy": "Changing the method, term, dates, offsets, percent, or accounts on a rule already used by revenue creates a new version; existing obligations keep the old version.",
       "gapless": "Gapless means every number in the sequence must be accounted for, with no skipped numbers. Enable it only when your legal or audit requirements require uninterrupted numbering.",
+      "nextNumber": "The number the next record of this type receives. Once numbers have been issued, it can only move forward.",
       "lienWaiverEnforcement": "Block means a bill for this class cannot be paid until a signed waiver covers it.",
       "defaultLienWaiverType": "Pre-selected when you create a waiver for one of these counterparties.",
       "defaultInformationReturn": "Used when a vendor of this class does not name a form itself.",

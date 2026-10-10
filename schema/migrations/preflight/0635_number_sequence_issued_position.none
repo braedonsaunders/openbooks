@@ -1,0 +1,1 @@
+Relaxes the counter check from 1 to 0 and documents the column. Every existing row already satisfies the wider check and no stored value changes meaning.
