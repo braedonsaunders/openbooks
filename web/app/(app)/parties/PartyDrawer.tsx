@@ -1244,6 +1244,14 @@ export function PartyDrawer({
       <ActionAlert error={refusal} fallbackMessage={t('autosaveFailed')} title={t('saveFailedRetry')} className="mb-4" />
       <TabContent tabKey={tab}>
       <div className="space-y-7 p-1" inert={busy}>
+        {tab === 'overview' && showEmploymentTab && hrm && hrm.employmentIds.length === 0 && !createMode ? (
+          // An employee without an employment has no self-service, leave or
+          // HR records yet; say so where the record opens, not only on the tab.
+          <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+            <span>{th('employment.noRecord.notice')}</span>
+            <Button size="sm" variant="outline" onClick={() => showTab('employment')}>{th('employment.noRecord.openTab')}</Button>
+          </div>
+        ) : null}
         {tab === 'overview' ? (
           effectiveLayout && role ? (
             <>

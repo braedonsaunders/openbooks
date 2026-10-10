@@ -252,7 +252,9 @@
     },
     "noRecord": {
       "title": "No employment record",
-      "description": "This person has no employment record yet. Record the first employment with Hire — headcount, leave, and payroll attach once it exists."
+      "description": "This person has no employment record yet. Record the first employment with Hire — headcount, leave, and payroll attach once it exists.",
+      "notice": "This employee has no employment yet, so self-service, leave and HR records are not available for them. Hire them from the Employment tab to create it.",
+      "openTab": "Open Employment"
     },
     "hire": {
       "title": "Hire employee",
@@ -871,7 +873,7 @@
     "fileEmploymentLabel": "Employment",
     "fileEmploymentPlaceholder": "Pick an employment",
     "fileEmploymentRequired": "Pick the employment this request is filed for.",
-    "fileNoEmployment": "None of your employments can take leave requests — ask an HR administrator.",
+    "fileNoEmployment": "None of your employments can take leave requests. If you have no employment on record yet, ask HR or an administrator to hire you from your employee record's Employment tab (People → Employees).",
     "fileTypeLabel": "Leave type",
     "fileTypePlaceholder": "Pick a leave type",
     "fileHoursLabel": "Hours",

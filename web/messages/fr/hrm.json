@@ -252,7 +252,9 @@
     },
     "noRecord": {
       "title": "Aucun dossier d'emploi",
-      "description": "Cette personne n'a pas encore de dossier d'emploi. Enregistrez le premier emploi avec Embaucher — effectifs, congés et paie s'y rattachent une fois qu'il existe."
+      "description": "Cette personne n'a pas encore de dossier d'emploi. Enregistrez le premier emploi avec Embaucher — effectifs, congés et paie s'y rattachent une fois qu'il existe.",
+      "notice": "Cet employé n'a pas encore d'emploi : le libre-service, les congés et les dossiers RH ne sont donc pas disponibles pour lui. Embauchez-le depuis l'onglet Emploi pour le créer.",
+      "openTab": "Ouvrir Emploi"
     },
     "hire": {
       "title": "Embaucher un employé",
@@ -871,7 +873,7 @@
     "fileEmploymentLabel": "Emploi",
     "fileEmploymentPlaceholder": "Choisir un emploi",
     "fileEmploymentRequired": "Choisissez l'emploi pour lequel cette demande est déposée.",
-    "fileNoEmployment": "Aucun de vos emplois ne peut recevoir de demandes de congé — demandez à un administrateur RH.",
+    "fileNoEmployment": "Aucun de vos emplois ne peut recevoir de demandes de congé. Si aucun emploi n'est encore enregistré pour vous, demandez aux RH ou à un administrateur de vous embaucher depuis l'onglet Emploi de votre fiche employé (Personnel → Employés).",
     "fileTypeLabel": "Type de congé",
     "fileTypePlaceholder": "Choisir un type",
     "fileHoursLabel": "Heures",

@@ -252,7 +252,9 @@
     },
     "noRecord": {
       "title": "Kein Beschäftigungsdatensatz",
-      "description": "Für diese Person ist noch kein Beschäftigungsdatensatz vorhanden. Erfassen Sie die erste Beschäftigung mit Einstellen — Kopfzahl, Urlaub und Lohnabrechnung knüpfen ab dann daran an."
+      "description": "Für diese Person ist noch kein Beschäftigungsdatensatz vorhanden. Erfassen Sie die erste Beschäftigung mit Einstellen — Kopfzahl, Urlaub und Lohnabrechnung knüpfen ab dann daran an.",
+      "notice": "Für diesen Mitarbeiter gibt es noch keine Beschäftigung, daher stehen Self-Service, Abwesenheiten und HR-Datensätze nicht zur Verfügung. Stellen Sie ihn auf der Registerkarte Beschäftigung ein, um sie anzulegen.",
+      "openTab": "Beschäftigung öffnen"
     },
     "hire": {
       "title": "Mitarbeiter einstellen",
@@ -871,7 +873,7 @@
     "fileEmploymentLabel": "Beschäftigung",
     "fileEmploymentPlaceholder": "Beschäftigung wählen",
     "fileEmploymentRequired": "Wählen Sie die Beschäftigung, für die dieser Antrag gestellt wird.",
-    "fileNoEmployment": "Keine Ihrer Beschäftigungen kann Urlaubsanträge annehmen — wenden Sie sich an einen HR-Administrator.",
+    "fileNoEmployment": "Keine Ihrer Beschäftigungen kann Abwesenheitsanträge annehmen. Wenn noch keine Beschäftigung erfasst ist, bitten Sie die Personalabteilung oder einen Administrator, Sie auf der Registerkarte Beschäftigung Ihres Mitarbeiterdatensatzes einzustellen (Personal → Mitarbeiter).",
     "fileTypeLabel": "Urlaubsart",
     "fileTypePlaceholder": "Urlaubsart wählen",
     "fileHoursLabel": "Stunden",

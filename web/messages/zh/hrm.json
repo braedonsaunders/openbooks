@@ -252,7 +252,9 @@
     },
     "noRecord": {
       "title": "没有雇用记录",
-      "description": "此人尚无雇用记录。请使用「聘用」记录首次雇用 — 记录存在后，人头数、休假和薪酬即可关联。"
+      "description": "此人尚无雇用记录。请使用「聘用」记录首次雇用 — 记录存在后，人头数、休假和薪酬即可关联。",
+      "notice": "该员工尚无雇佣记录，因此无法使用自助服务、休假和人事记录。请在“雇用”标签页中为其办理入职以创建雇佣记录。",
+      "openTab": "打开雇用"
     },
     "hire": {
       "title": "聘用员工",
@@ -871,7 +873,7 @@
     "fileEmploymentLabel": "雇佣",
     "fileEmploymentPlaceholder": "选择雇佣关系",
     "fileEmploymentRequired": "请选择此申请对应的雇佣关系。",
-    "fileNoEmployment": "您的雇佣关系均无法提交休假申请——请联系 HR 管理员。",
+    "fileNoEmployment": "您的雇佣关系均无法提交休假申请。如果您尚无雇佣记录，请联系人事部或管理员在您员工记录的“雇用”标签页中为您办理入职（人员 → 员工）。",
     "fileTypeLabel": "休假类型",
     "fileTypePlaceholder": "选择休假类型",
     "fileHoursLabel": "小时",
