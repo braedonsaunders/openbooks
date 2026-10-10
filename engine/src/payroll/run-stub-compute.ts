@@ -369,6 +369,10 @@ export async function calculateStub(
   let vacationPercent: string | null = null;
   let vacationAccrued = "0";
   const terminationRun = runType === "termination";
+  // Final settlement uses the entitlement terms at employment's end.
+  // A later payment date cannot grant additional service or replace those terms.
+  const entitlementPolicyDate = terminationRun && emp.terminated_on && emp.terminated_on < run.period_end!
+    ? emp.terminated_on : run.period_end!;
   const plans = await entitlementPlans(orgId, tx);
   // Resolved on the plan's ENGINE BINDING, never on its operator-typed code.
   const vacationPlan = vacationPlanOf(plans);
@@ -392,7 +396,7 @@ export async function calculateStub(
   };
   await appendRecurringBenefitLines(tx, { ...recurringBenefitInput, stage: "vacationable_earnings" });
 
-  const vacationElection = emp.employment_id ? await resolveVacationTerms(tx, orgId, emp.employment_id, run.period_end!) : null;
+  const vacationElection = emp.employment_id ? await resolveVacationTerms(tx, orgId, emp.employment_id, entitlementPolicyDate) : null;
   const vacationableEarnings = lines.some(line => line.kind === 'earning' && !line.accrualOnly &&
     (line.vacationable ?? true) && line.componentId !== vacationPlan?.payoutComponentId && cmp(line.amount, '0') !== 0);
   // No method or rate is needed to accrue zero on earnings explicitly excluded
@@ -403,7 +407,7 @@ export async function calculateStub(
   vacationPercent = vacationElection?.percentFloor ?? (vacationElection ? vacationPlan?.accrualValue ?? null : null);
   const vacationMethod = vacationElection?.method ?? null;
   assertVacationPlanResolved({ ...emp, vacation_percent: vacationPercent, vacation_method: vacationMethod }, vacationPlan, terminationRun);
-  const vacationTerms = vacationPlan && vacationElection ? await resolveServiceTier(tx, orgId, employeePartyId, run.period_end!, emp.employment_id ?? undefined) : null;
+  const vacationTerms = vacationPlan && vacationElection ? await resolveServiceTier(tx, orgId, employeePartyId, entitlementPolicyDate, emp.employment_id ?? undefined) : null;
   const vacationTier = vacationPlan ? vacationTerms?.planAccrualValues.get(vacationPlan.id) : null;
   const paidLeave = vacationMethod === "paid_leave";
   const personalDays = vacationElection?.annualDaysFloor;
@@ -454,7 +458,7 @@ export async function calculateStub(
   vacationAccrued = await applyEntitlementPlanMovements(tx, {
     orgId, documentId, employeePartyId, payDate: run.pay_date!,
     employeeName: emp.display_name ?? employeePartyId,
-    employmentId: emp.employment_id ?? undefined, policyDate: run.period_end!, vacationPercent, payVacationInCash, excludeVacationAccrual: paidLeave || vacationElection === null, vacationPlan, plans,
+    employmentId: emp.employment_id ?? undefined, policyDate: entitlementPolicyDate, vacationPercent, payVacationInCash, excludeVacationAccrual: paidLeave || vacationElection === null, vacationPlan, plans,
     lines, entitlementMovements, entitlementWarnings,
   });
 
@@ -481,7 +485,7 @@ export async function calculateStub(
     components: ctx.components, lines, wageExpenseAccountId: ctx.wageExpenseAccountId,
   });
 
-  await assertComponentServiceEligibility(tx, { orgId, employmentId, policyDate: run.period_end!,
+  await assertComponentServiceEligibility(tx, { orgId, employmentId, policyDate: entitlementPolicyDate,
     componentIds: lines.filter((line) => cmp(line.amount, "0") !== 0).map((line) => line.componentId).filter((id): id is string => id !== null) });
 
   // ---- Statutory lines: one helper, one declared recomputation class -------
