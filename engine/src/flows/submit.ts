@@ -447,3 +447,160 @@ export async function returnDocumentToDraft(
     return { status: "draft" as const, supersededRunIds, cancelledRunIds: liveRunIds };
   });
 }
+
+/**
+ * A submission-withdrawal refusal: the target is not pending approval, the
+ * caller is neither the submitter nor an approver of the kind, or the
+ * request was already decided. Callers map this to a 4xx with the message
+ * intact — a recall the operator cannot take is request state, never a
+ * server defect.
+ */
+export class WithdrawSubmissionError extends Error {
+  readonly name = "WithdrawSubmissionError";
+  constructor(
+    message: string,
+    readonly status: number = 422,
+    readonly code: "invalid_status" | "forbidden" | "stale-revision" | "not-found" = "invalid_status",
+  ) {
+    super(message);
+  }
+}
+
+export interface WithdrawSubmissionInput {
+  readonly documentId: string;
+  readonly orgId: string;
+  readonly actorId: string | null;
+  /** True when the caller holds the kind's approve grant (route-checked). */
+  readonly actorIsApprover: boolean;
+  /** Why the submission is recalled — required; the audit trail records it. */
+  readonly reason: unknown;
+  /** Optimistic concurrency token from the opened drawer; checked under lock. */
+  readonly expectedUpdatedAt?: string | null;
+  readonly allowedSubsidiaryIds?: ReadonlySet<string> | null;
+}
+
+export interface WithdrawSubmissionResult {
+  readonly status: "draft";
+  /** In-flight runs and gates cancelled by the withdrawal. */
+  readonly cancelledRunIds: string[];
+}
+
+/**
+ * Withdraw a pending-approval submission back to draft: the submitter
+ * recalling their own request, or an approver of the kind unwinding it.
+ * Open runs and gates cancel through the native cancellation and the flip
+ * is audited with the reason and the cancelled runs, so a resubmission
+ * starts a new run. Decided documents refuse by name (approved returns
+ * through return-to-draft, posted and voided are terminal).
+ */
+export async function withdrawDocumentSubmission(
+  input: WithdrawSubmissionInput,
+): Promise<WithdrawSubmissionResult> {
+  const reason = requireReturnReason(input.reason);
+  return withOrgTransaction(input.orgId, async () => {
+    const locked = (await db.execute<{
+      id: string;
+      kind: string;
+      status: string;
+      number: string | null;
+      subsidiaryId: string | null;
+      submittedBy: string | null;
+      revision: string;
+    }>(sql`
+      select id, kind, status,
+             document_number as number,
+             subsidiary_id as "subsidiaryId",
+             submitted_by as "submittedBy",
+             ${documentRevisionCounterSql(sql.raw("revision_seq"))} as revision
+        from documents
+       where id = ${input.documentId} and org_id = ${input.orgId}
+       for update
+    `)).rows[0];
+    if (!locked) {
+      throw new WithdrawSubmissionError("document not found in this organization", 404, "not-found");
+    }
+    if (
+      input.allowedSubsidiaryIds !== undefined &&
+      !subsidiaryScopeAllows(input.allowedSubsidiaryIds, locked.subsidiaryId)
+    ) {
+      throw new ScopeNotFoundError();
+    }
+    if (
+      input.expectedUpdatedAt != null &&
+      (!isDocumentRevisionToken(input.expectedUpdatedAt) || input.expectedUpdatedAt !== locked.revision)
+    ) {
+      throw new WithdrawSubmissionError(
+        "this document changed after you opened it; reload and review the latest revision",
+        409,
+        "stale-revision",
+      );
+    }
+    const name = locked.number ?? "this document";
+    if (locked.status === "draft") {
+      throw new WithdrawSubmissionError(`${name} is already a draft — nothing to withdraw`);
+    }
+    if (locked.status === "approved") {
+      throw new WithdrawSubmissionError(
+        `${name} is already approved — return it to draft instead of withdrawing the submission`,
+      );
+    }
+    if (locked.status === "posted") {
+      throw new WithdrawSubmissionError(
+        `${name} is already posted — void it or post a correction instead of withdrawing`,
+      );
+    }
+    if (locked.status === "voided") {
+      throw new WithdrawSubmissionError(`${name} is voided — voided documents are terminal`);
+    }
+    if (locked.status !== "pending_approval") {
+      throw new WithdrawSubmissionError(`${name} is ${locked.status} — only a pending submission withdraws`);
+    }
+    if (!input.actorIsApprover && (input.actorId == null || locked.submittedBy !== input.actorId)) {
+      throw new WithdrawSubmissionError(
+        `only the submitter or an approver withdraws ${name}`,
+        403,
+        "forbidden",
+      );
+    }
+    const runs = (await db.execute<{ id: string; status: string }>(sql`
+      select id::text as id, status from flow_runs
+       where org_id = ${input.orgId} and subject_id = ${input.documentId}
+    `)).rows;
+    const liveRunIds = runs.filter((run) => run.status === "running" || run.status === "waiting").map((run) => run.id);
+    await cancelDispatchRuns(input.orgId, liveRunIds, { actorId: input.actorId });
+    const before = await captureTransactionAuditSnapshot(db, input.documentId, input.orgId);
+    if (!before) {
+      throw new WithdrawSubmissionError("document not found in this organization", 404, "not-found");
+    }
+    const flipped = (await db.execute<{ id: string }>(sql`
+      update documents
+         set status = 'draft',
+             submitted_by = null, submitted_at = null,
+             updated_at = now(), updated_by = ${input.actorId}
+       where id = ${input.documentId} and org_id = ${input.orgId} and status = 'pending_approval'
+      returning id
+    `)).rows[0];
+    if (!flipped) {
+      throw new WithdrawSubmissionError(
+        `${name} changed while its submission was being withdrawn; reload and try again`,
+      );
+    }
+    const after = await captureTransactionAuditSnapshot(db, input.documentId, input.orgId);
+    if (!after) {
+      throw new WithdrawSubmissionError(
+        `${name} changed while its submission was being withdrawn; reload and try again`,
+      );
+    }
+    await recordTransactionAudit(db, {
+      orgId: input.orgId,
+      documentId: input.documentId,
+      action: "update",
+      actorId: input.actorId,
+      source: "documents.actions.withdraw",
+      reason,
+      before,
+      after,
+    });
+    return { status: "draft" as const, cancelledRunIds: liveRunIds };
+  });
+}

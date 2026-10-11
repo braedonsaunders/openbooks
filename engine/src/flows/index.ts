@@ -24,12 +24,16 @@ export {
   submitForApproval,
   submitAndReleaseIfUngated,
   returnDocumentToDraft,
+  withdrawDocumentSubmission,
   SubmitError,
   ReturnToDraftError,
+  WithdrawSubmissionError,
   type SubmitResult,
   type SubmissionReleaseResult,
   type ReturnToDraftInput,
   type ReturnToDraftResult,
+  type WithdrawSubmissionInput,
+  type WithdrawSubmissionResult,
 } from "./submit.ts";
 export {
   hasVendorBillApprovalFlow,

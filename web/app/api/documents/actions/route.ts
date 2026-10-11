@@ -4,7 +4,7 @@ import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { and, eq, sql } from 'drizzle-orm'
 import { db, schema, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { returnDocumentToDraft, ReturnToDraftError, submitAndReleaseIfUngated, VENDOR_BILL_APPROVAL_REQUIRED_MESSAGE } from '@openbooks/engine/src/flows/index.ts'
+import { returnDocumentToDraft, ReturnToDraftError, submitAndReleaseIfUngated, withdrawDocumentSubmission, WithdrawSubmissionError, VENDOR_BILL_APPROVAL_REQUIRED_MESSAGE } from '@openbooks/engine/src/flows/index.ts'
 import { documentKindPermissions } from '@openbooks/engine/src/records/document-kind-permissions.ts'
 import { ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { postDocument } from "@openbooks/engine/src/ledger/posting-document.ts";
@@ -26,6 +26,12 @@ const POSTBodySchema = z.discriminatedUnion('action', [
     action: z.literal('return_to_draft'),
     documentId: z.string().uuid(),
     reason: z.string().trim().min(5, 'a return reason between 5 and 500 characters is required').max(500),
+    expectedUpdatedAt: z.string().min(1).optional(),
+  }),
+  z.object({
+    action: z.literal('withdraw'),
+    documentId: z.string().uuid(),
+    reason: z.string().trim().min(5, 'a withdrawal reason between 5 and 500 characters is required').max(500),
     expectedUpdatedAt: z.string().min(1).optional(),
   }),
   z.object({
@@ -107,14 +113,25 @@ export const POST = defineRoute({
       }
     // Return-to-draft undoes an approval, so it requires the same
     // authority as approving the kind — never just the edit grant.
-    const perm = action === 'submit'
-      ? createPermission(doc.kind)
-      : action === 'return_to_draft'
-        ? (documentKindPermissions(doc.kind)?.approve ?? postPermission(doc.kind))
-        : postPermission(doc.kind)
-    if (!can(authz, perm)) {
-        return NextResponse.json({ error: `missing permission: ${perm}` }, { status: 403 })
+    // Withdraw recalls the submitter's own pending request, so the submit
+    // grant suffices — but the service still demands the caller be the
+    // submitter unless they hold the approve grant.
+    const approvePerm = documentKindPermissions(doc.kind)?.approve ?? postPermission(doc.kind)
+    const submitPerm = createPermission(doc.kind)
+    if (action === 'withdraw') {
+      if (!can(authz, submitPerm) && !can(authz, approvePerm)) {
+        return NextResponse.json({ error: `missing permission: ${submitPerm}` }, { status: 403 })
       }
+    } else {
+      const perm = action === 'submit'
+        ? submitPerm
+        : action === 'return_to_draft'
+          ? approvePerm
+          : postPermission(doc.kind)
+      if (!can(authz, perm)) {
+          return NextResponse.json({ error: `missing permission: ${perm}` }, { status: 403 })
+        }
+    }
     try {
         if (action === 'submit') {
           if (doc.status !== 'draft') {
@@ -238,7 +255,36 @@ export const POST = defineRoute({
             throw e
           }
         }
-        if (action === 'retry-effects') {
+        if (action === 'withdraw') {
+      const data = (await db.execute(sql`
+        select id, kind, status, document_number as number, subsidiary_id as "subsidiaryId",
+               ${documentRevisionSql(sql`updated_at`)} as "updatedAt"
+          from documents where id = ${documentId} and org_id = ${session.orgId}`)).rows[0] as unknown as
+        { id: string; kind: string; status: string; subsidiaryId: string | null; updatedAt: string } | undefined
+      if (!data) return NextResponse.json({ error: 'document not found' }, { status: 404 })
+      const restricted = guardSubsidiaryScope(authz, data.subsidiaryId)
+      if (restricted) return restricted
+      try {
+        const result = await withdrawDocumentSubmission({
+          documentId,
+          orgId: session.orgId,
+          actorId: session.user.id,
+          actorIsApprover: can(authz, approvePerm),
+          reason: body.reason,
+          expectedUpdatedAt: body.expectedUpdatedAt,
+          allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+        })
+        return NextResponse.json(result)
+      } catch (error) {
+        if (error instanceof ScopeNotFoundError) return NextResponse.json({ error: 'document not found' }, { status: 404 })
+        if (error instanceof WithdrawSubmissionError) {
+          return NextResponse.json({ error: error.message, code: error.code }, { status: error.status })
+        }
+        throw error
+      }
+    }
+
+    if (action === 'retry-effects') {
           const reason = body.reason
           const gate = await withOrgTransaction(user.orgId, async () => {
             const locked = (await db.execute<{ status: string; subsidiaryId: string | null }>(sql`
