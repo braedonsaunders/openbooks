@@ -296,10 +296,7 @@ test(
   },
 );
 
-test(
-  "Alberta: a committed stub straddling the lookback prorates by calendar-day overlap instead of refusing",
-  { skip: !DB },
-  async () => {
+async function straddlingStubCase(datedSpan: boolean): Promise<void> {
     // The Remembrance Day wall: a November 8–21 2025 run looks back over
     // October 14–November 10 ("the 4 weeks immediately preceding the general
     // holiday", Code Part 2 Div. 5), which straddles the committed October
@@ -379,7 +376,7 @@ test(
     // The legacy stub: no dated earning evidence, so its $1,680 spreads over
     // its 14-day period and only the 6 days inside the window count.
     await committed("2025-10-06", "2025-10-19",
-      [{ componentId: wageComponentId, amount: "1680.00", from: null, to: null }]);
+      [{ componentId: wageComponentId, amount: "1680.00", from: datedSpan ? "2025-10-06" : null, to: datedSpan ? "2025-10-19" : null }]);
     // A dated stub prices exactly: October 20 sits inside the window.
     await committed("2025-10-20", "2025-10-26",
       [{ componentId: wageComponentId, amount: "200.00", from: "2025-10-20", to: "2025-10-20" }]);
@@ -425,5 +422,19 @@ test(
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }
-  },
+}
+
+test(
+  "Alberta: a committed stub straddling the lookback prorates by calendar-day overlap instead of refusing",
+  { skip: !DB },
+  () => straddlingStubCase(false),
+);
+
+// A salary is dated across its whole pay period. Crossing the window, it is
+// earned evenly over those dates rather than refused for want of day lines
+// that committed history cannot be given.
+test(
+  "Alberta: a dated salary earning straddling the lookback prorates over its own dates",
+  { skip: !DB },
+  () => straddlingStubCase(true),
 );

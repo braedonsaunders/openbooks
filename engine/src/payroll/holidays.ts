@@ -2037,11 +2037,17 @@ async function lookbackEarnings(
       const earningOverlaps = earnedFrom <= window.to && earnedTo >= window.from;
       if (!earningOverlaps) continue;
       if (earnedFrom < window.from || earnedTo > window.to) {
-        throw new PayrollHolidayError(
-          `${input.employeePartyId}: a pay-stub earning dated ${earnedFrom} through ${earnedTo} crosses the statutory holiday lookback boundary; split the earning into day-resolved pay-stub lines before calculating holiday pay`,
-        );
+        // An earning dated across the boundary (a salary earned over its
+        // whole pay period) is earned evenly over its own dates: the window
+        // takes its calendar-day share, recorded as a proration, the same
+        // attribution an undated stub receives over its pay period.
+        const attributed = attributeStubEarningsToWindow(row.amount, earnedFrom, earnedTo, window);
+        if (attributed.overlapDays <= 0) continue;
+        proratedPeriods.push(`${earnedFrom} through ${earnedTo}`);
+        amount = attributed.attributed;
+      } else {
+        amount = roundMoney(row.amount, 4);
       }
-      amount = roundMoney(row.amount, 4);
     }
 
     const bucket: keyof HolidayLookbackEarnings =
