@@ -7275,7 +7275,7 @@
       "subjectPlaceholder": "レコードタイプを選択…",
       "create": "フローを作成",
       "failed": "フローを作成できませんでした",
-      "scheduleWeekdayPreset": "平日06:00と14:30（任意の下書き設定。有効化前に確認）",
+      "scheduleWeekdayPreset": "平日06:00と14:30（任意のプリセット。作成時に有効化 — 時刻を確認）",
       "groups": {
         "documents": "ドキュメント",
         "payroll": "給与",

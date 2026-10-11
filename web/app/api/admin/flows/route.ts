@@ -11,7 +11,7 @@ import {
 } from "@openbooks/engine/src/schedule-boards/boards.ts";
 import { scheduleBoardTimerGraph } from "@openbooks/engine/src/flows/schedule-board-adapter.ts";
 import { emptyAutomationGraph } from '@openbooks/forms-core'
-import { listFlowSubjectProfiles } from '@openbooks/engine/src/flows/index.ts'
+import { flowSubjectProfileForOrg, lintFlowGraphForSubject, listFlowSubjectProfiles } from '@openbooks/engine/src/flows/index.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 
 import { filterFlowRunSubjectsToScope } from '../../flows/_lib'
@@ -181,10 +181,17 @@ export const POST = defineRoute({
             edges: [],
           }
         : emptyAutomationGraph();
+    // A new flow starts enabled exactly when its initial graph validates:
+    // the save path refuses to leave an enabled flow warning-bearing, so
+    // create-time enablement must apply the same lint or a fresh flow could
+    // never be enabled without edits. An empty draft graph stays disabled
+    // (it cannot fire), and the designer banner says so.
+    const profile = await flowSubjectProfileForOrg(user.orgId, subjectKind);
+    const lint = lintFlowGraphForSubject(subjectKind, graph, profile ?? undefined);
     const id = await db.transaction(async (tx) => {
       const r = await tx.execute<{ id: string }>(sql`
         insert into flows (org_id, name, subject_kind, enabled, graph, created_by, updated_by)
-        values (${user.orgId}, ${name}, ${subjectKind}, false,
+        values (${user.orgId}, ${name}, ${subjectKind}, ${lint.ok},
                 ${JSON.stringify(graph)}::jsonb, ${user.id}, ${user.id})
         returning *
       `);

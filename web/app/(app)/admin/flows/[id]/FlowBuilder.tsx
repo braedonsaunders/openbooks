@@ -354,11 +354,15 @@ export default function FlowBuilder({
             {t('builder.unsaved')}
           </span>
         ) : null}
+        {/* The state is text, not color alone: a static "Enabled" caption
+            next to an off switch reads as on. The switch carries the state
+            as its accessible name, in the same words as the flows list. */}
         <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
           <button
             type="button"
             role="switch"
             aria-checked={enabled}
+            aria-label={enabled ? t('statusEnabled') : t('statusDisabled')}
             disabled={busy}
             onClick={toggleEnabled}
             className={cn(
@@ -373,7 +377,7 @@ export default function FlowBuilder({
               )}
             />
           </button>
-          {t('builder.enabledToggle')}
+          {enabled ? t('statusEnabled') : t('statusDisabled')}
         </label>
         {profile.supportsUngatedSubmission && <div className="flex items-center gap-2">
           <Label htmlFor="flow-ungated-outcome">{t('builder.ungatedOutcomeLabel')}</Label>
