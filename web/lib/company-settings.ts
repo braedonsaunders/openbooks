@@ -70,6 +70,7 @@ export const CASH_SALES_SETTING_KEYS = [
   "defaultCashAccountId",
   "defaultCardAccountId",
   "defaultBankAccountId",
+  "depositAccountIds",
 ] as const;
 
 export type CashSalesSettings = {
@@ -77,6 +78,8 @@ export type CashSalesSettings = {
   defaultCashAccountId: string | null;
   defaultCardAccountId: string | null;
   defaultBankAccountId: string | null;
+  /** Bank accounts a cashier's till drop may move cash into. Empty disables drops. */
+  depositAccountIds: string[];
 };
 
 /** Normalize the stored till defaults: unknown keys and non-id values drop. */
@@ -84,11 +87,13 @@ export function readCashSalesSettings(raw: unknown): CashSalesSettings {
   const bag = (raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>;
   const pick = (key: string): string | null =>
     typeof bag[key] === "string" && isUuid(bag[key] as string) ? (bag[key] as string) : null;
+  const rawDeposit = Array.isArray(bag.depositAccountIds) ? bag.depositAccountIds : [];
   return {
     walkInCustomerId: pick("walkInCustomerId"),
     defaultCashAccountId: pick("defaultCashAccountId"),
     defaultCardAccountId: pick("defaultCardAccountId"),
     defaultBankAccountId: pick("defaultBankAccountId"),
+    depositAccountIds: [...new Set(rawDeposit.filter((id): id is string => typeof id === "string" && isUuid(id)))],
   };
 }
 
@@ -485,6 +490,7 @@ export async function updateCompanySettings(
           : {};
       const collected: Record<string, unknown> = { ...currentCashSales };
       for (const key of CASH_SALES_SETTING_KEYS) {
+        if (key === "depositAccountIds") continue;
         const v = input[key];
         if (v === undefined) continue;
         if (v === null || v === "") {
@@ -495,6 +501,25 @@ export async function updateCompanySettings(
           return { status: 400, body: { error: `${key} must be an id` } };
         }
         collected[key] = v;
+      }
+      // Till-drop destinations: the bank accounts a cashier may move till
+      // cash into. An empty list (or clearing the key) disables drops.
+      if (input.depositAccountIds !== undefined) {
+        const v = input.depositAccountIds;
+        if (v === null || (Array.isArray(v) && v.length === 0)) {
+          delete collected.depositAccountIds;
+        } else {
+          if (!Array.isArray(v)) {
+            return { status: 400, body: { error: "depositAccountIds must be a list of account ids" } };
+          }
+          const ids = [...new Set(v)];
+          for (const id of ids) {
+            if (typeof id !== "string" || !isUuid(id)) {
+              return { status: 400, body: { error: "depositAccountIds must be a list of account ids" } };
+            }
+          }
+          collected.depositAccountIds = ids;
+        }
       }
       if (typeof collected.walkInCustomerId === "string") {
         const party = await tx.execute(sql`
@@ -509,7 +534,7 @@ export async function updateCompanySettings(
           } };
         }
       }
-      const tenderAccountIds = CASH_SALES_SETTING_KEYS.filter((key) => key !== "walkInCustomerId")
+      const tenderAccountIds = CASH_SALES_SETTING_KEYS.filter((key) => key !== "walkInCustomerId" && key !== "depositAccountIds")
         .map((key) => collected[key])
         .filter((id): id is string => typeof id === "string");
       if (tenderAccountIds.length > 0) {
@@ -519,7 +544,7 @@ export async function updateCompanySettings(
              and is_active and not is_summary`);
         const byId = new Map(found.rows.map((row) => [row.id, row.type]));
         for (const key of CASH_SALES_SETTING_KEYS) {
-          if (key === "walkInCustomerId") continue;
+          if (key === "walkInCustomerId" || key === "depositAccountIds") continue;
           const accountId = collected[key];
           if (typeof accountId !== "string") continue;
           const type = byId.get(accountId);
@@ -530,6 +555,28 @@ export async function updateCompanySettings(
             return { status: 400, body: {
               error: `${key} cannot be a receivable or payable control account — tenders settle into clearing or bank accounts`,
             } };
+          }
+        }
+      }
+      // Till-drop destinations take money to the bank: bank or asset
+      // clearing only, active and postable — never receivables, payables,
+      // or P&L accounts.
+      const depositIds = Array.isArray(collected.depositAccountIds)
+        ? (collected.depositAccountIds as unknown[]).filter((id): id is string => typeof id === "string")
+        : [];
+      if (depositIds.length > 0) {
+        const found = await tx.execute<{ id: string; type: string }>(sql`
+          select id, type from accounts
+           where org_id = ${orgId} and id in (select jsonb_array_elements_text(${JSON.stringify(depositIds)}::jsonb)::uuid)
+             and is_active and not is_summary`);
+        const byId = new Map(found.rows.map((row) => [row.id, row.type]));
+        for (const accountId of depositIds) {
+          const type = byId.get(accountId);
+          if (!type) {
+            return { status: 400, body: { error: "depositAccountIds must be active, non-summary accounts of this organization" } };
+          }
+          if (type !== "asset_bank" && type !== "asset_current_other") {
+            return { status: 400, body: { error: "depositAccountIds must be bank or asset clearing accounts — till drops move cash to the bank" } };
           }
         }
       }

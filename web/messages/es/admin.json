@@ -940,6 +940,18 @@
         "receivedNotBilled": {
           "label": "Recibido no facturado",
           "hint": "Bienes recibidos aún no facturados, cuando el artículo no nombra cuenta de compensación"
+        },
+        "tipsPayable": {
+          "label": "Propinas por pagar",
+          "hint": "Propinas con tarjeta cobradas en caja y adeudadas al personal hasta que la nómina las pague"
+        },
+        "processorFees": {
+          "label": "Comisiones de procesamiento",
+          "hint": "Comisiones del procesador de tarjetas retenidas en la liquidación de ventas en efectivo"
+        },
+        "cashOverShort": {
+          "label": "Diferencia de caja",
+          "hint": "Efectivo contado de más o de menos respecto al total esperado"
         }
       },
       "defaultsNote": "Estos son los valores predeterminados de toda la empresa. Cada filial puede reemplazarlos en su propia ficha; los reemplazos vacíos vuelven a estos.",
@@ -1273,6 +1285,7 @@
     "cash_sales_read": "Ver ventas en efectivo y reembolsos",
     "cash_sales_create": "Crear y enviar ventas en efectivo y reembolsos",
     "cash_sales_post": "Contabilizar ventas en efectivo y reembolsos en el libro mayor",
+    "cash_sales_deposit": "Depositar el efectivo de caja en el banco",
     "usage_read": "Ver el uso medido",
     "usage_manage": "Gestionar medidores, planes de tarifas y registros de uso importados",
     "usage_bill": "Tarifar el uso y facturar cargos de suscripción",

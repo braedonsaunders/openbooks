@@ -411,6 +411,8 @@ test("the cashier and project coordinator roles carry no bank, ledger or payment
     }
   }
   assert.equal(holds("cashier", "cash_sales.create"), true);
+  assert.equal(holds("cashier", "cash_sales.deposit"), true, "drops till cash to the bank");
+  assert.equal(holds("project_coordinator", "cash_sales.deposit"), false, "never touches the till");
   assert.equal(holds("project_coordinator", "time.self"), true, "logs their own time");
   assert.equal(holds("project_coordinator", "time.manage"), false, "never enters a coworker's time");
   assert.equal(holds("project_coordinator", "time.read"), false, "never reads a coworker's time");

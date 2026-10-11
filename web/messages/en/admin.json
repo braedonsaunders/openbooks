@@ -941,6 +941,18 @@
         "receivedNotBilled": {
           "label": "Received not billed",
           "hint": "Goods received but not yet billed, used when the item names no clearing account"
+        },
+        "tipsPayable": {
+          "label": "Tips payable",
+          "hint": "Card tips collected at the till and owed to staff until payroll pays them out"
+        },
+        "processorFees": {
+          "label": "Processor fees",
+          "hint": "Card processor fees withheld at settlement on cash sales"
+        },
+        "cashOverShort": {
+          "label": "Cash over/short",
+          "hint": "Counted till cash over or short against the expected total"
         }
       },
       "partylessPolicy": {
@@ -1262,6 +1274,7 @@
     "cash_sales_read": "View cash sales and refunds",
     "cash_sales_create": "Create and submit cash sales and refunds",
     "cash_sales_post": "Post cash sales and refunds to the ledger",
+    "cash_sales_deposit": "Deposit till cash to the bank",
     "usage_read": "View metered usage",
     "usage_manage": "Manage usage meters, rating plans, and imported usage records",
     "usage_bill": "Rate usage and bill subscription charges",

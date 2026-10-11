@@ -941,6 +941,18 @@
         "receivedNotBilled": {
           "label": "Recebido não faturado",
           "hint": "Bens recebidos ainda não faturados, quando o item não nomeia conta de compensação"
+        },
+        "tipsPayable": {
+          "label": "Gorjetas a pagar",
+          "hint": "Gorjetas de cartão recebidas no caixa e devidas à equipe até o pagamento pela folha"
+        },
+        "processorFees": {
+          "label": "Taxas de processamento",
+          "hint": "Taxas da processadora de cartões retidas na liquidação das vendas em dinheiro"
+        },
+        "cashOverShort": {
+          "label": "Diferença de caixa",
+          "hint": "Dinheiro contado a maior ou a menor em relação ao total esperado"
         }
       },
       "partylessPolicy": {
@@ -1273,6 +1285,7 @@
     "cash_sales_read": "Ver vendas à vista e reembolsos",
     "cash_sales_create": "Criar e enviar vendas à vista e reembolsos",
     "cash_sales_post": "Lançar vendas à vista e reembolsos no razão",
+    "cash_sales_deposit": "Depositar o dinheiro do caixa no banco",
     "usage_read": "Ver o uso medido",
     "usage_manage": "Gerenciar medidores, planos de tarifas e registros de uso importados",
     "usage_bill": "Tarifar o uso e faturar cobranças de assinatura",

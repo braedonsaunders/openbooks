@@ -1431,6 +1431,33 @@ export async function applyDocumentEdit(
     }
   }
 
+  // Till-drop linkage (transfer only): the cashier's bank drop records
+  // which posted cash sale it moves till cash from, plus the bank slip
+  // number as control evidence. Not a registered custom field, so it is
+  // carried explicitly like the funding override: uuid-shaped sale plus a
+  // short slip reference. Absent leaves the stored link untouched; an
+  // explicit null clears it.
+  if (body.custom !== undefined && current.kind === 'transfer' && headerCustom) {
+    const link = (body.custom as Record<string, unknown>).cashSaleDeposit
+    if (link !== undefined) {
+      if (link === null) {
+        delete headerCustom.cashSaleDeposit
+      } else {
+        if (!link || typeof link !== 'object' || Array.isArray(link)) {
+          throw new DocumentEditError(422, 'bank drop linkage must be an object — record the drop from the cash sale')
+        }
+        const { saleId, slipNumber } = link as Record<string, unknown>
+        if (typeof saleId !== 'string' || !isUuid(saleId)) {
+          throw new DocumentEditError(422, 'bank drop linkage must name the cash sale — record the drop from the cash sale')
+        }
+        if (typeof slipNumber !== 'string' || slipNumber.trim().length === 0 || slipNumber.trim().length > 120) {
+          throw new DocumentEditError(422, 'bank drop needs the bank slip number — enter it from the deposit slip')
+        }
+        headerCustom.cashSaleDeposit = { saleId, slipNumber: slipNumber.trim() }
+      }
+    }
+  }
+
   // Daily close-out (cash_sale only): tips, processor fees and the counted
   // over/short. The drawer submits per-tender tip/fee amounts inside the
   // tender entries above plus overShort/serverPartyId inside custom.closeout

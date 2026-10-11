@@ -63,6 +63,7 @@ export const PERMISSION_CATALOGUE = [
   "cash_sales.read",
   "cash_sales.create",
   "cash_sales.post",
+  "cash_sales.deposit",
   // Usage billing: see metered usage and the charges rated from it.
   "usage.read",
   "usage.manage",
@@ -508,6 +509,7 @@ export const PERMISSION_GROUPS: {
       { key: "cash_sales.read", labelKey: permissionLabelKey("cash_sales.read") },
       { key: "cash_sales.create", labelKey: permissionLabelKey("cash_sales.create") },
       { key: "cash_sales.post", labelKey: permissionLabelKey("cash_sales.post") },
+      { key: "cash_sales.deposit", labelKey: permissionLabelKey("cash_sales.deposit") },
     ],
   },
   {
@@ -1372,9 +1374,9 @@ export const BUILT_IN_ROLES: Record<
   cashier: {
     name: "Cashier",
     description:
-      "Rings up, posts and refunds cash sales at the till and looks up gift card balances. Cannot see invoices, banking or the ledger.",
+      "Rings up, posts and refunds cash sales at the till, drops till cash to the bank, and looks up gift card balances. Cannot see invoices, banking or the ledger.",
     permissions: [
-      "cash_sales.read", "cash_sales.create", "cash_sales.post",
+      "cash_sales.read", "cash_sales.create", "cash_sales.post", "cash_sales.deposit",
       "stored_value.read", "items.read",
       "feedback.use", "hrm.self.read", "hrm.self.request", "hrm.leave.request", "time.self", "time.clock",
     ],

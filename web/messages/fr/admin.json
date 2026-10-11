@@ -940,6 +940,18 @@
         "receivedNotBilled": {
           "label": "Réception non facturée",
           "hint": "Biens reçus mais non encore facturés, quand l’article ne nomme aucun compte de compensation"
+        },
+        "tipsPayable": {
+          "label": "Pourboires à payer",
+          "hint": "Pourboires par carte perçus en caisse et dus au personnel jusqu’à leur versement par la paie"
+        },
+        "processorFees": {
+          "label": "Frais de traitement",
+          "hint": "Frais du processeur de cartes retenus lors du règlement des ventes au comptant"
+        },
+        "cashOverShort": {
+          "label": "Écarts de caisse",
+          "hint": "Espèces comptées en trop ou en moins par rapport au total attendu"
         }
       },
       "defaultsNote": "Ce sont les valeurs par défaut de toute l’entreprise. Chaque filiale peut les remplacer sur sa propre fiche ; les remplacements vides reprennent celles-ci.",
@@ -1273,6 +1285,7 @@
     "cash_sales_read": "Consulter les ventes au comptant et les remboursements",
     "cash_sales_create": "Créer et soumettre des ventes au comptant et des remboursements",
     "cash_sales_post": "Comptabiliser les ventes au comptant et les remboursements au grand livre",
+    "cash_sales_deposit": "Déposer les espèces de la caisse à la banque",
     "usage_read": "Consulter la consommation mesurée",
     "usage_manage": "Gérer les compteurs, les plans tarifaires et les enregistrements d'usage importés",
     "usage_bill": "Tarifer l'usage et facturer les frais d'abonnement",

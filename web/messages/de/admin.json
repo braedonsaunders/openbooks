@@ -940,6 +940,18 @@
         "receivedNotBilled": {
           "label": "Erhalten, nicht fakturiert",
           "hint": "Erhaltene, aber noch nicht fakturierte Ware, wenn der Artikel kein Verrechnungskonto nennt"
+        },
+        "tipsPayable": {
+          "label": "Trinkgeldverbindlichkeiten",
+          "hint": "An der Kasse gesammeltes Kartentrinkgeld, das dem Personal bis zur Lohnauszahlung geschuldet wird"
+        },
+        "processorFees": {
+          "label": "Zahlungsgebühren",
+          "hint": "Bei der Abrechnung einbehaltene Kartenzahlungsgebühren aus Barverkäufen"
+        },
+        "cashOverShort": {
+          "label": "Kassendifferenz",
+          "hint": "Gezähltes Kassenbargeld über oder unter dem erwarteten Betrag"
         }
       },
       "defaultsNote": "Dies sind die unternehmensweiten Standards. Jede Tochtergesellschaft kann sie in ihrem eigenen Datensatz überschreiben; leere Überschreibungen fallen auf diese zurück.",
@@ -1273,6 +1285,7 @@
     "cash_sales_read": "Barverkäufe und Erstattungen anzeigen",
     "cash_sales_create": "Barverkäufe und Erstattungen erstellen und übermitteln",
     "cash_sales_post": "Barverkäufe und Erstattungen im Hauptbuch buchen",
+    "cash_sales_deposit": "Kassenbargeld bei der Bank einzahlen",
     "usage_read": "Gemessene Nutzung anzeigen",
     "usage_manage": "Nutzungsmesser, Tarifpläne und importierte Nutzungsdatensätze verwalten",
     "usage_bill": "Nutzung tarifieren und Abonnementgebühren abrechnen",

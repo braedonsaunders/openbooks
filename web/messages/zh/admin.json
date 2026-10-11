@@ -941,6 +941,18 @@
         "receivedNotBilled": {
           "label": "货到未开票",
           "hint": "已收货但尚未开票的货物，适用于物料未指定结算科目时"
+        },
+        "tipsPayable": {
+          "label": "应付小费",
+          "hint": "在收银台收取的卡小费，在工资发放前欠付员工"
+        },
+        "processorFees": {
+          "label": "处理器费用",
+          "hint": "现金销售结算时扣留的卡处理器费用"
+        },
+        "cashOverShort": {
+          "label": "现金长短款",
+          "hint": "实际清点现金与预期合计之间的多余或短缺"
         }
       },
       "partylessPolicy": {
@@ -1273,6 +1285,7 @@
     "cash_sales_read": "查看现金销售与退款",
     "cash_sales_create": "创建并提交现金销售与退款",
     "cash_sales_post": "将现金销售与退款过账至总账",
+    "cash_sales_deposit": "将收银现金存入银行",
     "usage_read": "查看计量用量",
     "usage_manage": "管理用量计量器、费率计划和导入的用量记录",
     "usage_bill": "为用量定价并开具订阅费用账单",
