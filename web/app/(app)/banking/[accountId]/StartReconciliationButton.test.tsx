@@ -50,13 +50,13 @@ const { StartReconciliationButton } = await import('./StartReconciliationButton'
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
 
-async function mount(t: TestContext, responder: () => Response): Promise<void> {
+async function mount(t: TestContext, responder: (init?: RequestInit) => Response): Promise<void> {
   script.errors = []
   script.pushed = []
   ;(globalThis as Record<string, unknown>).__reconErrorToasts = script.errors
   const prior = globalThis.fetch
   globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
-    if ((init?.method ?? 'GET') === 'POST') return responder()
+    if ((init?.method ?? 'GET') === 'POST') return responder(init)
     throw new Error(`unexpected fetch ${String(input)}`)
   }) as typeof fetch
   t.after(() => {
@@ -140,6 +140,21 @@ test('statement balance input keeps large decimal spelling exact until the API b
   assert.ok(start && !start.disabled, 'plain decimals with up to four places are accepted')
   await click(start)
   assert.deepEqual(script.pushed, ['/banking/acc-1/reconcile/rec-9'])
+})
+
+test('a single Start click after typing a negative card balance starts the session', async (t) => {
+  const bodies: string[] = []
+  await mount(t, (init) => {
+    bodies.push(String(init?.body ?? ''))
+    return Response.json({ id: 'rec-10' })
+  })
+  await openAndFill('-1250.00')
+  const start = findButton('Start')
+  assert.ok(start && !start.disabled, 'a signed statement balance is an exact decimal and enables Start')
+  await click(start)
+  assert.deepEqual(script.pushed, ['/banking/acc-1/reconcile/rec-10'], 'one click reaches the session')
+  assert.equal(bodies.length, 1, 'one click sends one start request')
+  assert.equal(JSON.parse(bodies[0]!).statementBalance, '-1250.00', 'the negative balance is sent as typed')
 })
 
 test('a non-JSON 502 toasts the translated fallback with the status and releases Start', async (t) => {

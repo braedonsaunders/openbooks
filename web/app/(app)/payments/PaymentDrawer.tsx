@@ -155,6 +155,13 @@ function docText(value: unknown): string | null {
   return typeof value === 'string' ? value : null
 }
 
+/** The revision token a save response reports for the row it wrote, or null
+ *  when the response carries none. */
+function committedRevisionOf(data: unknown): string | null {
+  const token = docText((data as { doc?: { updated_at?: unknown } } | null)?.doc?.updated_at)
+  return token === null || token === '' ? null : token
+}
+
 /** Narrow the engine loader's untyped document row to the header fields
  *  this drawer reads. Non-string values fall back to null (or '' for the
  *  NOT NULL columns); loader rows always carry strings here, so valid
@@ -359,16 +366,18 @@ export function PaymentDrawer({
   }>({ key: '', rates: [] })
   const settlementRates = settlementRateResult.key === settlementRateKey ? settlementRateResult.rates : []
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
-  // The revision token the last successful save was fenced on. The saved
-  // row's new token arrives with the refreshed record seconds later; until
-  // the prop catches up, posting would fire with the pre-save token and
-  // 409 against the row the save just wrote. Post stays disabled across
-  // that settling window with the reason visible, instead of silently
-  // doing nothing on a stale revision.
-  const [saveFromRevision, setSaveFromRevision] = useState<string | null>(null)
-  const saveSettling = saveFromRevision !== null && doc.updated_at === saveFromRevision
+  // The last successful save: the revision it was fenced on and the revision
+  // the row holds after it. The save response carries the committed token, so
+  // Post chains directly on it; the refreshed record arriving later changes
+  // doc.updated_at and retires this receipt. A save response without a token
+  // keeps Post settling (disabled, with the reason shown) until the refreshed
+  // record arrives, so Post never fires on the pre-save revision.
+  const [saveReceipt, setSaveReceipt] = useState<{ fencedRevision: string; committedRevision: string | null } | null>(null)
+  const pendingCommit = saveReceipt !== null && doc.updated_at === saveReceipt.fencedRevision ? saveReceipt : null
+  const postRevision = pendingCommit?.committedRevision ?? doc.updated_at
+  const saveSettling = pendingCommit !== null && pendingCommit.committedRevision === null
   useEffect(() => {
-    setSaveFromRevision(null)
+    setSaveReceipt(null)
   }, [doc.id])
   // A refused save/post must stay visible past its toast: the
   // typed refusal pins as a record-level alert until the next action, and
@@ -619,8 +628,8 @@ export function PaymentDrawer({
       await saveNew()
       return
     }
-    // The fence token this save carries: on success the refreshed record
-    // must show a newer token before Post runs again (see saveFromRevision).
+    // The fence token this save carries; the save response reports the
+    // revision the row now holds (see saveReceipt).
     const fencedRevision = payload.expectedUpdatedAt
     setSaveState('saving')
     const ok = await execute(
@@ -632,15 +641,15 @@ export function PaymentDrawer({
         }),
       {
         fallbackMessage: t('toasts.postFailed'),
-        onOk: () => {
+        onOk: (data) => {
           setSaveState('saved')
           setDirty(false)
-          setSaveFromRevision(fencedRevision)
+          setSaveReceipt({ fencedRevision, committedRevision: committedRevisionOf(data) })
           setMode('view')
         },
         onRefused: () => {
           setSaveState('error')
-          setSaveFromRevision(null)
+          setSaveReceipt(null)
         },
       },
     )
@@ -660,7 +669,7 @@ export function PaymentDrawer({
     setSaveState('saved')
     // Cancelling restores the loaded record, so its token is current again:
     // a save followed by Cancel must not hold Post disabled.
-    setSaveFromRevision(null)
+    setSaveReceipt(null)
     clearRefusal()
     setMode('view')
   }
@@ -677,7 +686,7 @@ export function PaymentDrawer({
           headers: { 'Content-Type': 'application/json' },
           // Same revision evidence as the draft save: the route fences its
           // final allocation write on this token and 409s a stale drawer.
-          body: JSON.stringify({ documentId: doc.id, expectedUpdatedAt: doc.updated_at, allocations: validAllocations, ...(showWithholding ? { withholdingAuthorisation: withholdingAuthorisation || null, withholdingAuthorisedAmount: withholdingAuthorisedAmount.trim() || null } : {}) }),
+          body: JSON.stringify({ documentId: doc.id, expectedUpdatedAt: postRevision, allocations: validAllocations, ...(showWithholding ? { withholdingAuthorisation: withholdingAuthorisation || null, withholdingAuthorisedAmount: withholdingAuthorisedAmount.trim() || null } : {}) }),
         }),
       {
         fallbackMessage: t('toasts.postFailed'),
@@ -864,9 +873,9 @@ export function PaymentDrawer({
   // Why Post cannot proceed, first blocker first. A disabled button alone
   // never explains itself (in the Actions menu it renders near-invisible),
   // so the primary action carries its reason as visible text beside it.
-  // The settling state leads: the save just landed and the refreshed
-  // record has not arrived yet, so firing now would refuse on a stale
-  // revision instead of posting.
+  // The settling state leads only when the save reported no committed
+  // revision: Post then has no token it can prove, so it waits for the
+  // refreshed record instead of firing on the pre-save revision.
   const postBlocker =
     saveSettling ? tCommon('actions.saving')
     : !partyId ? t('postBlocked.noParty', { side })

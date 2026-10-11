@@ -161,12 +161,14 @@ async function renderDrawer(doc: ReturnType<typeof draftDoc>, mode: "view" | "ed
   };
 }
 
-test("post stays disabled while the save settles, then fires with the fresh revision", async () => {
+test("one Post click right after Save posts on the revision the save committed", async () => {
   const posts: { body: Record<string, unknown> }[] = [];
+  const saves: { url: string; body: Record<string, unknown> }[] = [];
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (url.startsWith("/api/payments/") && init?.method === "PATCH") {
+      saves.push({ url, body: JSON.parse(String(init.body)) });
       // The save commits revision 42; the drawer still shows 41 until refresh.
       return Response.json({ doc: { updated_at: "42" } });
     }
@@ -176,19 +178,66 @@ test("post stays disabled while the save settles, then fires with the fresh revi
     }
     return Response.json({ rates: [] });
   }) as typeof fetch;
-  const { render, done } = await renderDrawer(draftDoc("41"), "edit");
+  const { done } = await renderDrawer(draftDoc("41"), "edit");
   try {
-    const saves = buttonsNamed("Save");
-    assert.equal(saves.length, 1, "edit mode offers Save");
+    const save = buttonsNamed("Save");
+    assert.equal(save.length, 1, "edit mode offers Save");
     await act(async () => {
-      saves[0]!.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+      save[0]!.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
       await tick();
       await tick();
     });
     await tick();
-    // Save landed; the refreshed record (revision 42) has not arrived, so
-    // Post must be disabled with the settling reason — never enabled on a
-    // token the server already moved past.
+    // The refreshed record has not arrived yet, but the save response named
+    // the committed revision: Post is live and the single click is not lost.
+    const post = buttonsNamed("Receive & post");
+    assert.equal(post.length, 1, "view mode offers the primary Post after save");
+    assert.equal(post[0]!.disabled, false, "a save that reported its revision leaves Post live");
+    assert.ok(!(document.body.textContent ?? "").includes("Saving…"), "no settling reason shows once the save committed");
+    await act(async () => {
+      post[0]!.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+      await tick();
+      await tick();
+    });
+    assert.equal(saves.length, 1, "the save reached the update endpoint once");
+    assert.equal(saves[0]!.body.expectedUpdatedAt, "41", "the save is fenced on the loaded revision");
+    assert.equal(posts.length, 1, "the single Post click posts exactly once");
+    assert.equal(
+      (posts[0]!.body as { expectedUpdatedAt?: string }).expectedUpdatedAt,
+      "42",
+      "post carries the committed revision, not the pre-save token",
+    );
+  } finally {
+    globalThis.fetch = prior;
+    await done();
+  }
+});
+
+test("a save without a committed revision holds Post until the refreshed record arrives", async () => {
+  const posts: { body: Record<string, unknown> }[] = [];
+  const prior = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url.startsWith("/api/payments/") && init?.method === "PATCH") {
+      return Response.json({});
+    }
+    if (url === "/api/payments/post-with-applications") {
+      posts.push({ body: JSON.parse(String(init?.body)) });
+      return Response.json({ ok: true });
+    }
+    return Response.json({ rates: [] });
+  }) as typeof fetch;
+  const { render, done } = await renderDrawer(draftDoc("41"), "edit");
+  try {
+    const save = buttonsNamed("Save");
+    await act(async () => {
+      save[0]!.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+      await tick();
+      await tick();
+    });
+    await tick();
+    // Without a token the drawer cannot prove which revision to post on, so
+    // Post stays disabled with the reason visible.
     const settling = buttonsNamed("Receive & post");
     assert.equal(settling.length, 1, "view mode offers the primary Post after save");
     assert.equal(settling[0]!.disabled, true, "post waits for the refreshed record");
@@ -217,6 +266,51 @@ test("post stays disabled while the save settles, then fires with the fresh revi
       "42",
       "post carries the refreshed revision, not the pre-save token",
     );
+  } finally {
+    globalThis.fetch = prior;
+    await done();
+  }
+});
+
+test("a Post refused right after Save pins the server reason and toasts it", async () => {
+  const prior = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url.startsWith("/api/payments/") && init?.method === "PATCH") {
+      return Response.json({ doc: { updated_at: "42" } });
+    }
+    if (url === "/api/payments/post-with-applications") {
+      return Response.json(
+        { error: "this payment changed after you opened it; reload and review the latest revision" },
+        { status: 409 },
+      );
+    }
+    return Response.json({ rates: [] });
+  }) as typeof fetch;
+  const { done } = await renderDrawer(draftDoc("41"), "edit");
+  try {
+    const save = buttonsNamed("Save");
+    await act(async () => {
+      save[0]!.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+      await tick();
+      await tick();
+    });
+    await tick();
+    const post = buttonsNamed("Receive & post");
+    assert.equal(post.length, 1);
+    await act(async () => {
+      post[0]!.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+      await tick();
+      await tick();
+    });
+    await tick();
+    const errors = (globalThis.__settleToasts ?? []).filter((toast) => toast.kind === "error");
+    assert.ok(errors.length >= 1, "the refused post toasts instead of going silent");
+    assert.ok(
+      (document.body.textContent ?? "").includes("changed after you opened it"),
+      "the refusal pins inline beside the record",
+    );
+    assert.equal(buttonsNamed("Receive & post")[0]?.disabled, false, "Post is available again after the refusal");
   } finally {
     globalThis.fetch = prior;
     await done();
