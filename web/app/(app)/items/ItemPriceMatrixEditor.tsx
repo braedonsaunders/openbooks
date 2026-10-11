@@ -11,6 +11,7 @@ import { PagedTable } from '@/components/paged-table'
 import { useSublistRows } from '@/components/drawer-sublist'
 import { confirmDialog } from '@/lib/confirm'
 import { promptDialog } from '@/lib/prompt'
+import { refusalMessageFromBody } from '@/lib/api-error'
 
 interface PriceBreak extends Record<string, unknown> { id?: string; minimumQuantity: string; unitPrice: string }
 interface Level { id: string; code: string; name: string; pricing_method: string; percentage: string | null; cost_basis: string | null; is_base: boolean }
@@ -25,7 +26,9 @@ interface Schedule {
 interface PricingData { levels: Level[]; customers: Customer[]; currencies: { code: string; name: string }[]; baseCurrency: string | null; schedules: Schedule[]; inherited?: Schedule[] }
 
 function responseError(payload: unknown, fallback: string) {
-  return payload && typeof payload === 'object' && 'error' in payload && typeof payload.error === 'string' ? payload.error : fallback
+  // The refusal reads through the shared helper so message, remedy and code
+  // render instead of the bare `error` field.
+  return refusalMessageFromBody(payload, { fallback }) ?? fallback
 }
 
 /**

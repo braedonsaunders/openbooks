@@ -8,6 +8,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
+import { refusalMessageFromBody } from '@/lib/api-error'
 import { Plus } from 'lucide-react'
 import { Badge, Button, Input, Label, SearchSelect, UrlDrawer } from '@openbooks/ui'
 import { PagedTable, type PagedColumn } from '../../../../components/paged-table'
@@ -126,11 +127,11 @@ export function CountsList({
     setListError(null)
     try {
       const res = await fetch(`/api/inventory/counts?limit=500&cursor=${encodeURIComponent(cursor)}`)
+      // The refusal reads through the shared helper so message, remedy and
+      // code render instead of the bare `error` field.
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
-        setListError(
-          typeof data.error === 'string' && data.error.trim() ? data.error.trim() : t('counts.failed'),
-        )
+        setListError(refusalMessageFromBody(data, { fallback: t('counts.failed') }) ?? t('counts.failed'))
         return
       }
       const data = (await res.json()) as { counts: StockCountSummary[]; totalCount: number; nextCursor: string | null }
@@ -163,11 +164,11 @@ export function CountsList({
     const ticket = ++activeDetailFetch.current
     const res = await fetch(`/api/inventory/counts?id=${encodeURIComponent(id)}`)
     if (activeDetailFetch.current !== ticket) return
+    // The refusal reads through the shared helper so message, remedy and
+    // code render instead of the bare `error` field.
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
-      setDetailError(
-        typeof data.error === 'string' && data.error.trim() ? data.error.trim() : t('counts.failed'),
-      )
+      setDetailError(refusalMessageFromBody(data, { fallback: t('counts.failed') }) ?? t('counts.failed'))
       return
     }
     const data = await res.json()
@@ -183,11 +184,11 @@ export function CountsList({
     ;(async () => {
       const res = await fetch(`/api/inventory/counts?id=${encodeURIComponent(id)}`)
       if (activeDetailFetch.current !== ticket) return
+      // The refusal reads through the shared helper so message, remedy and
+      // code render instead of the bare `error` field.
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
-        setDetailError(
-          typeof data.error === 'string' && data.error.trim() ? data.error.trim() : t('counts.failed'),
-        )
+        setDetailError(refusalMessageFromBody(data, { fallback: t('counts.failed') }) ?? t('counts.failed'))
         return
       }
       const data = await res.json()

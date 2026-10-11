@@ -8,6 +8,7 @@ import { Badge, Button, Input, Label, SearchSelect, Select, Textarea, UrlDrawer 
 import { CustomFieldInputs, type CustomFieldDefClient } from '../../../components/custom-field-inputs'
 import type { AccountPayload } from '../../api/accounts/_lib'
 import { ReadOnlyValue } from '../../../components/read-only-value'
+import { refusalMessageFromBody } from '../../../lib/api-error'
 import { useDirtyClose } from '../../../lib/use-dirty-close'
 
 type Option = { value: string; label: string; type?: string }
@@ -179,10 +180,10 @@ export function AccountDrawer({
   // off. Otherwise single-currency orgs have no UI path to set reconcilable.
   const showCurrencyField = multiCurrency || form.reconcilable
 
-  function errorMessage(code: unknown, remedy?: unknown) {
-    const key = typeof code === 'string' ? code : 'save_failed'
-    if (key === 'idempotency-conflict' && typeof remedy === 'string' && remedy.trim()) {
-      return remedy
+  function errorMessage(body: { error?: unknown; remedy?: unknown }) {
+    const key = typeof body.error === 'string' ? body.error : 'save_failed'
+    if (key === 'idempotency-conflict' && typeof body.remedy === 'string' && body.remedy.trim()) {
+      return body.remedy
     }
     const known = new Set([
       'name_required', 'invalid_type', 'type_has_transactions', 'invalid_parent', 'parent_must_be_summary',
@@ -190,7 +191,12 @@ export function AccountDrawer({
       'inactive_has_children', 'invalid_currency', 'invalid_subsidiary', 'invalid_dimensions',
       'invalid_custom_fields', 'number_in_use', 'account_changed', 'invalid_idempotency_key', 'save_failed',
     ])
-    return t(`drawer.errors.${known.has(key) ? key : 'save_failed'}`)
+    if (!known.has(key)) {
+      // Unmapped refusals read through the shared helper so the server's
+      // message, remedy and code render instead of the generic fallback.
+      return refusalMessageFromBody(body, { fallback: t('drawer.errors.save_failed') }) ?? t('drawer.errors.save_failed')
+    }
+    return t(`drawer.errors.${key}`)
   }
 
   type DuplicateDetails = {
@@ -210,7 +216,7 @@ export function AccountDrawer({
     const details = (body.details && typeof body.details === 'object' && !Array.isArray(body.details)
       ? body.details as DuplicateDetails : null)
     const href = details ? duplicateAccountHref(details) : null
-    if (!href) return errorMessage(body.error)
+    if (!href) return errorMessage(body)
     const number = typeof details!.existingAccountNumber === 'string' && details!.existingAccountNumber.trim()
       ? details!.existingAccountNumber.trim() : form.number
     const name = typeof details!.existingAccountName === 'string' && details!.existingAccountName.trim()
@@ -270,7 +276,7 @@ export function AccountDrawer({
       })
       if (!response.ok) {
         const data = await response.json().catch(() => ({})) as { error?: unknown; remedy?: unknown; details?: unknown }
-        const message = errorMessage(data.error, data.remedy)
+        const message = errorMessage(data)
         // A duplicate number names the account holding it: the pinned alert
         // links it so the operator can open it instead of guessing, while
         // the toast keeps the plain localized string.

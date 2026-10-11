@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import { Button, Input, Label, SearchSelect, Select, UrlDrawer } from '@openbooks/ui'
 import { useBusinessToday } from '@/components/business-date-provider'
 import { useDirtyClose } from '@/lib/use-dirty-close'
+import { refusalMessageFromBody } from '@/lib/api-error'
 import { readApiErrorMessage } from '@/lib/api-error'
 import type { InventoryOperationOption } from '@openbooks/engine/inventory'
 
@@ -178,11 +179,11 @@ export function InventoryActionDrawer({
           idempotencyKey,
         }),
       })
+      // The refusal reads through the shared helper so message, remedy and
+      // code render instead of the bare `error` field.
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
-        throw new Error(
-          typeof data.error === 'string' && data.error.trim() ? data.error.trim() : t('drawer.failed'),
-        )
+        throw new Error(refusalMessageFromBody(data, { fallback: t('drawer.failed') }) ?? t('drawer.failed'))
       }
       const data = await res.json()
       toast.success(action === 'reverse' ? t('drawer.reversed') : t('drawer.posted', { value: data.value }))
