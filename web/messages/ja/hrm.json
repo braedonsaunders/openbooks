@@ -3364,6 +3364,11 @@
     "eligibility": {
       "all_employees": "雇用主の全従業員",
       "members": "選択したメンバー"
+    },
+    "lifecycleFilter": {
+      "current": "現行",
+      "closed": "終了",
+      "all": "すべて"
     }
   },
   "talentWorkspace": {

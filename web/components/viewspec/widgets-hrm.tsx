@@ -474,6 +474,7 @@ export const HRM_WIDGETS = {
       rows={(props.rows as ComponentProps<typeof ProgramPortfolioTable>['rows']) ?? []}
       text={(props.text as ComponentProps<typeof ProgramPortfolioTable>['text']) ?? null}
       typeFilter={props.typeFilter as ComponentProps<typeof ProgramPortfolioTable>['typeFilter']}
+      statusFilter={props.statusFilter as ComponentProps<typeof ProgramPortfolioTable>['statusFilter']}
       total={typeof props.total === 'number' ? props.total : 0}
       truncated={props.truncated === true}
     />

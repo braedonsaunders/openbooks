@@ -453,6 +453,8 @@ export interface UnifiedProgramRow {
   statusLabel: string
   statusVariant: 'default' | 'secondary' | 'outline' | 'destructive' | 'warning' | 'success'
   programHref: string
+  /** Active and draft programs are current; closed and inactive ones are history. */
+  lifecycle?: 'current' | 'closed'
 }
 
 export interface ProgramTableText {

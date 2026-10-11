@@ -284,13 +284,19 @@ test('Programs combines insured plans and employer programs in one filterable po
     { id: 'retired', code: 'OLD', name: 'Retired plan', kind: 'dental', currency: 'USD', isActive: false, effectiveFrom: '2025-01-01', effectiveTo: '2025-12-31' },
   ] }
   gap.__portfolioReads = { programs: [{ id: 'reward', code: 'RECOG', name: 'Recognition', family: 'reward', currency: 'USD', status: 'active', valuation: 'fixed', fixedAmount: '25.0000', effectiveFrom: '2026-01-01', effectiveTo: null }], awards: [] }
+  // Current programs by default; closed and inactive history on request.
   const data = await loadBenefits(HR_BENEFITS, { view: 'programs' })
-  assert.deepEqual(data.unifiedProgramRows.map((row) => row.id), ['health', 'reward', 'retired'])
-  assert.equal(data.unifiedProgramRows[2]?.statusLabel, 'Inactive')
+  assert.deepEqual(data.unifiedProgramRows.map((row) => row.id), ['health', 'reward'])
   assert.equal(data.unifiedProgramRows[0]?.programHref, '/hrm/benefits?view=programs&program=health')
-  const filtered = await loadBenefits(HR_BENEFITS, { view: 'programs', type: 'health' })
+  const everything = await loadBenefits(HR_BENEFITS, { view: 'programs', status: 'all' })
+  assert.deepEqual(everything.unifiedProgramRows.map((row) => row.id), ['health', 'reward', 'retired'])
+  assert.equal(everything.unifiedProgramRows[2]?.statusLabel, 'Inactive')
+  const history = await loadBenefits(HR_BENEFITS, { view: 'programs', status: 'closed' })
+  assert.deepEqual(history.unifiedProgramRows.map((row) => row.id), ['retired'])
+  const filtered = await loadBenefits(HR_BENEFITS, { view: 'programs', type: 'health', status: 'all' })
   assert.equal(filtered.unifiedProgramRows.length, 2)
   assert.equal(filtered.programTypeFilter.currentParams.type, 'health')
+  assert.equal(filtered.programStatusFilter.currentParams.status, 'all')
   const body = JSON.stringify(benefitsSpec(data).body)
   assert.equal((body.match(/"widget":"hrm-program-table"/g) ?? []).length, 1)
   assert.ok(body.includes('typeFilter'))
@@ -298,7 +304,8 @@ test('Programs combines insured plans and employer programs in one filterable po
   const overview = await loadBenefits(HR_BENEFITS, {})
   assert.equal(overview.tiles.activePrograms, '2')
   const overviewBody = JSON.stringify(benefitsSpec(overview).body)
-  for (const name of ['Health coverage', 'Recognition', 'Retired plan']) assert.ok(overviewBody.includes(name))
+  for (const name of ['Health coverage', 'Recognition']) assert.ok(overviewBody.includes(name))
+  assert.ok(!overviewBody.includes('Retired plan'))
   const unknown = await loadBenefits(HR_BENEFITS, { view: 'programs', type: 'typo' })
   assert.match(unknown.programsRefusal?.message ?? '', /typo.*filter/)
 })

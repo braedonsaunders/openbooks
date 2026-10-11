@@ -156,6 +156,7 @@ export interface BenefitsData {
   programRows: PortfolioProgramRow[]
   unifiedProgramRows: UnifiedProgramRow[]
   programTypeFilter: { label: string; allLabel: string; options: { value: string; label: string }[]; currentParams: Record<string, string | undefined> }
+  programStatusFilter: { label: string; allLabel: string; options: { value: string; label: string }[]; currentParams: Record<string, string | undefined> }
   programTypePickerOpen: boolean
   programTypePickerTitle: string
   canConfigureApprovalPolicies: boolean
@@ -428,7 +429,10 @@ export async function loadBenefits(authz: Authz, sp: Record<string, string | und
       statusLabel: t.has(`portfolio.programStatus.${program.status}`) ? t(`portfolio.programStatus.${program.status}`) : t(`benefits.statusNames.${program.status}`),
       statusVariant: program.status === 'active' ? 'success' : program.status === 'draft' ? 'warning' : 'outline',
       programHref: `${basePath}?view=programs&program=${encodeURIComponent(program.id)}`,
+      lifecycle: program.status === 'active' || program.status === 'draft' ? 'current' : 'closed',
     })).filter(row => !type || row.family === type)
+      // Current programs (active and draft) by default; closed history on request.
+      .filter(row => sp.status === 'all' || (sp.status === 'closed' ? row.lifecycle === 'closed' : row.lifecycle === 'current'))
     const { money } = await getMoneyFormatter(orgId)
     const activity = []
     if (portfolioView === 'delivery') {
@@ -551,6 +555,7 @@ function emptyPortfolioFields(
   | 'awardTableText'
   | 'unifiedProgramRows'
   | 'programTypeFilter'
+  | 'programStatusFilter'
   | 'programTypePickerOpen'
   | 'canConfigureApprovalPolicies'
   | 'programTypePickerTitle'
@@ -643,6 +648,7 @@ function emptyPortfolioFields(
     programRows: [],
     unifiedProgramRows: [],
     programTypeFilter: { label: t('portfolio.columns.family'), allLabel: t('benefits.allLabel'), options: [], currentParams: {} },
+    programStatusFilter: { label: t('portfolio.columns.status'), allLabel: t('portfolio.lifecycleFilter.current'), options: [], currentParams: {} },
     programTypePickerOpen: false,
     programTypePickerTitle: t('portfolio.newProgram'),
     canConfigureApprovalPolicies: false,
@@ -872,7 +878,12 @@ function toPortfolioFields(
     programTypeFilter: {
       label: t('portfolio.columns.family'), allLabel: t('benefits.allLabel'),
       options: ['health', 'retirement', 'time_off', 'allowance', 'reward', 'incentive', 'custom', 'recovery'].map((value) => ({ value, label: t(`programIdentity.types.${value}`) })),
-      currentParams: { view: 'programs', ...(sp.type ? { type: sp.type } : {}) },
+      currentParams: { view: 'programs', ...(sp.type ? { type: sp.type } : {}), ...(sp.status ? { status: sp.status } : {}) },
+    },
+    programStatusFilter: {
+      label: t('portfolio.columns.status'), allLabel: t('portfolio.lifecycleFilter.current'),
+      options: [{ value: 'closed', label: t('portfolio.lifecycleFilter.closed') }, { value: 'all', label: t('portfolio.lifecycleFilter.all') }],
+      currentParams: { view: 'programs', ...(sp.type ? { type: sp.type } : {}), ...(sp.status ? { status: sp.status } : {}) },
     },
     programTypePickerOpen: sp.program === 'new' && sp.kind !== 'time_off' && !requestedFamily && canManage && portfolio.optionsRefusal === null,
     programTypePickerTitle: t('portfolio.newProgram'),

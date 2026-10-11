@@ -3364,6 +3364,11 @@
     "eligibility": {
       "all_employees": "雇主的全体员工",
       "members": "选定成员"
+    },
+    "lifecycleFilter": {
+      "current": "当前",
+      "closed": "已关闭",
+      "all": "全部"
     }
   },
   "talentWorkspace": {

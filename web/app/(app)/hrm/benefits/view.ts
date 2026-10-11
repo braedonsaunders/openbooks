@@ -81,7 +81,7 @@ export function benefitsSpec(data: BenefitsData): PageSpec {
           ...(showingPrograms && !data.programsRefusal
             ? [
                 widgetBlock('hrm-program-table', {
-                  rows: data.unifiedProgramRows, typeFilter: data.programTypeFilter,
+                  rows: data.unifiedProgramRows, typeFilter: data.programTypeFilter, statusFilter: data.programStatusFilter,
                   text: data.programTableText,
                   total: data.unifiedProgramRows.length,
                   truncated: false,

@@ -3364,6 +3364,11 @@
     "eligibility": {
       "all_employees": "Alle Beschäftigten des Arbeitgebers",
       "members": "Ausgewählte Mitglieder"
+    },
+    "lifecycleFilter": {
+      "current": "Aktuell",
+      "closed": "Geschlossen",
+      "all": "Alle"
     }
   },
   "talentWorkspace": {

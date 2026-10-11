@@ -103,19 +103,24 @@ export function ProgramPortfolioTable({
   total,
   truncated,
   typeFilter,
+  statusFilter,
 }: {
   rows: UnifiedProgramRow[]
   text: ProgramTableText
   total: number
   truncated: boolean
   typeFilter?: { label: string; allLabel: string; options: { value: string; label: string }[]; currentParams: Record<string, string | undefined> }
+  statusFilter?: { label: string; allLabel: string; options: { value: string; label: string }[]; currentParams: Record<string, string | undefined> }
 }) {
   const effectiveRange = useEffectiveRangeLabel()
   return (
     <PreparedPagedTable
       source="hrm_benefit_programs"
       rows={rows.map((row) => programCells(row, effectiveRange))}
-      toolbarAfter={typeFilter ? <ListFilterSelect basePath="/hrm/benefits" currentParams={typeFilter.currentParams} paramKey="type" label={typeFilter.label} allLabel={typeFilter.allLabel} options={typeFilter.options} /> : undefined}
+      toolbarAfter={typeFilter || statusFilter ? <>
+        {typeFilter ? <ListFilterSelect basePath="/hrm/benefits" currentParams={typeFilter.currentParams} paramKey="type" label={typeFilter.label} allLabel={typeFilter.allLabel} options={typeFilter.options} /> : null}
+        {statusFilter ? <ListFilterSelect basePath="/hrm/benefits" currentParams={statusFilter.currentParams} paramKey="status" label={statusFilter.label} allLabel={statusFilter.allLabel} options={statusFilter.options} /> : null}
+      </> : undefined}
       columns={[
         { key: 'program', header: text.program },
         { key: 'family', header: text.family },
