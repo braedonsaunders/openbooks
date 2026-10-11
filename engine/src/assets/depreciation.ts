@@ -21,6 +21,8 @@
 export { DepreciationRefusalError, POSTABLE_DEPRECIATION_STATUSES, assertPostableDepreciationStatus } from "./depreciation-errors.ts";
 export { recordDepreciationInput } from "./depreciation-inputs.ts";
 export type { RecordDepreciationInputArgs, RecordDepreciationInputResult } from "./depreciation-inputs.ts";
+export { linkManualDepreciationEntry } from "./depreciation-manual-link.ts";
+export type { LinkManualDepreciationEntryResult } from "./depreciation-manual-link.ts";
 export { previewDepreciation } from "./depreciation-preview.ts";
 export type { DepreciationPreview, DepreciationPreviewInput, DepreciationPreviewRow } from "./depreciation-preview.ts";
 export { ClosedBatchError, StalePreviewError, assertConfirmSetCurrent, previewDepreciationFingerprint, previewLineDrift, reconcileAssetDepreciationStatusWithRunner } from "./depreciation-run-scope.ts";

@@ -72,6 +72,17 @@ interface DepreciationPreview {
   totalCredits: string
   balanced: boolean
   staleAssets: { assetId: string; assetNumber: string; assetName: string }[]
+  manualEntryCandidates?: {
+    lineId: string
+    assetId: string
+    assetNumber: string
+    periodId: string
+    periodName: string
+    entryId: string
+    entryNumber: string
+    postedOn: string
+    amount: string
+  }[]
   warnings: string[]
   fingerprint: string
 }
@@ -309,6 +320,45 @@ export function RunDepreciationDrawer({
       toast.success(t('review.rebuilt', { count: rebuilt }))
       // Re-preview over the rebuilt schedules so Confirm fingerprints the
       // new projection instead of the stale one.
+      await runPreview()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function linkManualEntry(candidate: NonNullable<DepreciationPreview['manualEntryCandidates']>[number]) {
+    if (busy) return
+    setBusy(true)
+    setPreviewError(null)
+    try {
+      let linked: { entryNumber?: string } | null = null
+      try {
+        const res = await fetch(`/api/assets/${candidate.assetId}/link-manual-entry`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ lineId: candidate.lineId, entryId: candidate.entryId }),
+        })
+        if (!res.ok) {
+          const message = await refusalText(res, t('review.linkFailed'))
+          setPreviewError(message)
+          toast.error(message)
+          return
+        }
+        linked = (await res.json()) as { entryNumber?: string }
+      } catch {
+        setPreviewError(t('review.linkFailed'))
+        toast.error(t('review.linkFailed'))
+        return
+      }
+      toast.success(
+        t('review.linkedManual', {
+          entry: linked?.entryNumber ?? candidate.entryNumber,
+          asset: candidate.assetNumber,
+          period: candidate.periodName,
+        }),
+      )
+      // Re-preview over the linked line so Confirm fingerprints the
+      // remaining due set instead of the double-posted one.
       await runPreview()
     } finally {
       setBusy(false)
@@ -561,12 +611,26 @@ export function RunDepreciationDrawer({
               </p>
             ) : null}
             {staleBlocked ? (
-              <p role="alert" className="text-sm text-amber-700 dark:text-amber-300">
-                {t('review.staleRefusal', {
-                  count: preview.staleAssets.length,
-                  assets: preview.staleAssets.map((asset) => asset.assetNumber).join(', '),
-                })}
-              </p>
+              <>
+                <p role="alert" className="text-sm text-amber-700 dark:text-amber-300">
+                  {t('review.staleRefusal', {
+                    count: preview.staleAssets.length,
+                    assets: preview.staleAssets.map((asset) => asset.assetNumber).join(', '),
+                  })}
+                </p>
+                <ul className="space-y-1 text-sm">
+                  {preview.staleAssets.map((asset) => (
+                    <li key={asset.assetId}>
+                      <Link
+                        href={`/assets?asset=${asset.assetId}&assetTab=schedule` as never}
+                        className="font-mono underline decoration-dotted underline-offset-2"
+                      >
+                        {asset.assetNumber}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </>
             ) : null}
             {preview.rows.length === 0 ? (
               <p className="text-sm text-slate-600 dark:text-slate-300">
@@ -660,6 +724,33 @@ export function RunDepreciationDrawer({
                   assets: preview.staleAssets.map((asset) => asset.assetNumber).join(', '),
                 })}
               </p>
+            ) : null}
+            {(preview.manualEntryCandidates ?? []).length > 0 ? (
+              <section className="space-y-1.5">
+                <h3 className="text-sm font-semibold">{t('review.manualEntries')}</h3>
+                <ul className="space-y-1 text-sm">
+                  {(preview.manualEntryCandidates ?? []).map((candidate) => (
+                    <li key={candidate.lineId} className="flex flex-wrap items-baseline gap-x-2">
+                      <span className="font-mono">{candidate.assetNumber}</span>
+                      <span>{candidate.periodName}</span>
+                      <JournalEntryLink entryId={candidate.entryId}>
+                        <span className="font-mono underline decoration-dotted underline-offset-2">
+                          {candidate.entryNumber}
+                        </span>
+                      </JournalEntryLink>
+                      <span className="tabular-nums">{money(candidate.amount)}</span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={busy}
+                        onClick={() => linkManualEntry(candidate)}
+                      >
+                        {t('review.linkManual')}
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              </section>
             ) : null}
             {preview.warnings.map((warning) => (
               <p key={warning} className="text-sm text-amber-700 dark:text-amber-300">

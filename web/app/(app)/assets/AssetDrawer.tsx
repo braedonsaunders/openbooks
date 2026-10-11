@@ -175,7 +175,13 @@ export function AssetDrawer({
   const canEditStatus = a.status === 'draft' || a.status === 'in_service'
   const [mode, setMode] = useState<'view' | 'edit'>(createMode ? 'edit' : 'view')
   const requestIdRef = useRef<string | null>(null)
-  const [tab, setTab] = useState<AssetTab>('details')
+  // Deep-link target for blockers elsewhere (the depreciation run links
+  // stale assets here): ?asset=<id>&assetTab=schedule opens on the schedule.
+  const [tab, setTab] = useState<AssetTab>(() => {
+    if (createMode) return 'details'
+    const requested = searchParams.get('assetTab')
+    return requested === 'schedule' || requested === 'tax' || requested === 'files' ? requested : 'details'
+  })
   const [actionsOpen, setActionsOpen] = useState(false)
   const editable = mode === 'edit' && canEditStatus && canManage
   const isPlaceholderName = a.name === 'New asset'
@@ -216,6 +222,34 @@ export function AssetDrawer({
   })
   const [status, setStatus] = useState(a.status)
   const [busy, setBusy] = useState(false)
+  const [rebuilding, setRebuilding] = useState(false)
+
+  async function rebuildSchedule() {
+    if (rebuilding) return
+    setRebuilding(true)
+    try {
+      const res = await fetch('/api/assets/rebuild-schedules', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ assetIds: [a.id] }),
+      })
+      if (!res.ok) {
+        toast.error(await readApiErrorMessage(res, t('review.rebuildFailed')))
+        return
+      }
+      const data = (await res.json()) as { rebuilt?: unknown[]; problems?: string[] }
+      if (data.problems?.length) {
+        toast.error(data.problems[0] ?? t('review.rebuildFailed'))
+        return
+      }
+      toast.success(t('review.rebuilt', { count: data.rebuilt?.length ?? 0 }))
+      router.refresh()
+    } catch {
+      toast.error(t('review.rebuildFailed'))
+    } finally {
+      setRebuilding(false)
+    }
+  }
   const deleteAction = useAppAction()
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
   const [dirty, setDirty] = useState(false)
@@ -596,6 +630,11 @@ export function AssetDrawer({
       <div className="flex flex-wrap items-center gap-2">
         <SearchInput paramKey="deprq" pageParamKey="deprpage" placeholder={t('drawer.searchSchedule')} />
         <FilterChips basePath={pathname} currentParams={currentParams} paramKey="deprbook" pageParamKey="deprpage" label={t('run.book')} options={payload.books.map((book) => ({ value: book.id, label: book.name }))} />
+        {canManage && !createMode && a.status !== 'draft' ? (
+          <Button size="sm" variant="outline" disabled={rebuilding} onClick={rebuildSchedule}>
+            {rebuilding ? t('review.rebuilding') : t('review.rebuild')}
+          </Button>
+        ) : null}
       </div>
       {payload.schedule.length === 0 ? <p className="text-sm text-slate-500 dark:text-slate-400">{t('drawer.scheduleEmpty')}</p> : <Table>
       <TableHeader><TableRow><TableHead>{t('run.book')}</TableHead><TableHead>{t('drawer.period')}</TableHead><TableHead className="text-right">{t('drawer.planned')}</TableHead><TableHead className="text-right">{t('drawer.postedAmount')}</TableHead><TableHead>{t('drawer.evidence')}</TableHead><TableHead className="text-right">{t('labels.accumulated')}</TableHead><TableHead className="text-right">{t('labels.nbv')}</TableHead></TableRow></TableHeader>

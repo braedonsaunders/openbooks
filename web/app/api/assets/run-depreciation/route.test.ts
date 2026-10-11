@@ -294,6 +294,10 @@ const mockDb = `
         period_ends_text: row.period_ends_text ?? row.period_ends_on,
       })) }
     }
+    // Manual-duplicate scan: no hand entries in this fixture.
+    if (text.includes('journal_entries e')) {
+      return { rows: [] }
+    }
     if (text.includes('from depreciation_schedule_lines')) {
       return { rows: state.due }
     }

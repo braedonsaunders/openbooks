@@ -50,6 +50,22 @@ export interface DepreciationPreview {
   /** Schedules that need extension: Confirm extends them first, but newly
    *  projected lines stay for the next run — only previewed lines post. */
   staleAssets: { assetId: string; assetNumber: string; assetName: string }[];
+  /**
+   * Posted hand entries whose legs exactly match a due line's debit/credit
+   * pair. Confirming over one depreciates twice: link the entry as the
+   * line's evidence, or reverse it, first.
+   */
+  manualEntryCandidates: {
+    lineId: string;
+    assetId: string;
+    assetNumber: string;
+    periodId: string;
+    periodName: string;
+    entryId: string;
+    entryNumber: string;
+    postedOn: string;
+    amount: string;
+  }[];
   warnings: string[];
   /**
    * Stale-input fence: sha256 over the inputs plus every previewed line id,
@@ -208,7 +224,11 @@ export async function previewDepreciation(
   });
 
   // Stale-schedule detection is the run's extension query minus the
-  // extension: reported here, never executed.
+  // extension: reported here, never executed. Only periods the builder could
+  // still project count — its own fiscal calendar, inside the depreciable
+  // life. A period past the last depreciable month (or from another calendar)
+  // can never receive a line, so flagging it would block Confirm behind a
+  // rebuild that changes nothing.
   const stale = (await db.execute<{
     asset_id: string;
     asset_number: string;
@@ -227,6 +247,19 @@ export async function previewDepreciation(
        and exists (
          select 1 from accounting_periods p
           where p.org_id = s.org_id and not p.is_adjustment
+            and (p.fiscal_calendar_id in (
+              select pp.fiscal_calendar_id
+                from depreciation_schedule_lines ll
+                join accounting_periods pp on pp.id = ll.period_id and pp.org_id = ll.org_id
+               where ll.org_id = s.org_id and ll.schedule_id = s.id)
+              or (not exists (
+                select 1 from depreciation_schedule_lines ll
+                 where ll.org_id = s.org_id and ll.schedule_id = s.id)
+                  and p.fiscal_calendar_id = (
+                    select c.id from fiscal_calendars c
+                     where c.org_id = s.org_id and c.is_default and c.is_active limit 1)))
+            and (s.life_months is null or s.life_months <= 0 or a.in_service_on is null
+                 or p.starts_on <= (date_trunc('month', a.in_service_on) + (s.life_months - 1) * interval '1 month')::date)
             and p.ends_on > coalesce((
               select max(pp.ends_on)
                 from depreciation_schedule_lines l
@@ -267,6 +300,62 @@ export async function previewDepreciation(
     }
   }
 
+  // Manual-journal duplicates: a posted non-depreciation entry in the same
+  // book, period, and subsidiary whose legs exactly match a due line's
+  // debit/credit pair is that period's depreciation posted by hand. It is
+  // reported (never auto-skipped: the accounts are shared across assets, so
+  // only the operator can attest which asset a hand entry was for), and the
+  // link action consumes the entry as the line's evidence.
+  const manualEntryCandidates: DepreciationPreview["manualEntryCandidates"] = [];
+  if (rows.length > 0) {
+    const dueTuples = rows.map(
+      (row) =>
+        sql`(${row.lineId}::uuid, ${row.bookId}::uuid, ${row.periodId}::uuid, ${row.subsidiaryId}::uuid, ${row.debitAccountId}::uuid, ${row.creditAccountId}::uuid, ${row.amount}::numeric)`,
+    );
+    const matched = await db.execute<{
+      line_id: string;
+      entry_id: string;
+      entry_number: string;
+      posted_on: string;
+      amount: string;
+    }>(sql`
+      select due.line_id::text as line_id, e.id::text as entry_id,
+             e.entry_number, e.posting_date::text as posted_on, due.amount::text as amount
+        from (values ${sql.join(dueTuples, sql`, `)}) as due(line_id, book_id, period_id, subsidiary_id, expense_id, accum_id, amount)
+        join journal_entries e on e.org_id = ${orgId} and e.book_id = due.book_id and e.period_id = due.period_id
+         and e.subsidiary_id = due.subsidiary_id and e.status = 'posted'
+         and e.origin <> 'depreciation' and e.reverses_entry_id is null
+       where (select coalesce(sum(jl.amount), 0) from journal_lines jl
+               where jl.org_id = ${orgId} and jl.entry_id = e.id
+                 and jl.account_id = due.expense_id and jl.subsidiary_id = due.subsidiary_id) = due.amount
+         and (select coalesce(sum(jl.amount), 0) from journal_lines jl
+               where jl.org_id = ${orgId} and jl.entry_id = e.id
+                 and jl.account_id = due.accum_id and jl.subsidiary_id = due.subsidiary_id) = -due.amount
+         and not exists (
+               select 1 from depreciation_schedule_lines linked
+                where linked.org_id = ${orgId} and linked.journal_entry_id = e.id)
+    `);
+    const rowById = new Map(rows.map((row) => [row.lineId, row]));
+    for (const match of matched.rows) {
+      const line = rowById.get(String(match.line_id));
+      if (!line) continue;
+      manualEntryCandidates.push({
+        lineId: String(match.line_id),
+        assetId: line.assetId,
+        assetNumber: line.assetNumber,
+        periodId: line.periodId,
+        periodName: line.periodName,
+        entryId: String(match.entry_id),
+        entryNumber: String(match.entry_number),
+        postedOn: String(match.posted_on),
+        amount: String(match.amount),
+      });
+      warnings.push(
+        `${line.assetNumber} ${line.periodName}: manual entry ${match.entry_number} already posts ${match.amount} to the depreciation accounts — link it as this period's depreciation or reverse it before confirming, or Confirm will depreciate twice.`,
+      );
+    }
+  }
+
   const balanced = totalDebits === totalCredits;
   if (!balanced) {
     throw new Error("depreciation preview is out of balance; refusing to fingerprint");
@@ -293,6 +382,7 @@ export async function previewDepreciation(
     totalCredits,
     balanced,
     staleAssets,
+    manualEntryCandidates,
     warnings,
     fingerprint,
   };

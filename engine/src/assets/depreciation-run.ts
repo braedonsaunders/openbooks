@@ -429,8 +429,10 @@ export async function runDepreciation(
   // periods are created" — but no other path rebuilds them, so a run after
   // month-end rollover would find no line and report "nothing due" while an
   // open period accrues. Extend each stale in-scope formula schedule first.
-  // Extension is best-effort: a schedule that cannot extend keeps its lines
-  // and the reason lands in problems, never a fatal error.
+  // Stale uses the preview's scoped definition (own fiscal calendar, inside
+  // the depreciable life): extension is best-effort, and a schedule that
+  // cannot extend keeps its lines and the reason lands in problems, never a
+  // fatal error.
   const stale = (await db.execute<{
     asset_id: string;
     book_id: string;
@@ -449,6 +451,19 @@ export async function runDepreciation(
        and exists (
          select 1 from accounting_periods p
           where p.org_id = s.org_id and not p.is_adjustment
+            and (p.fiscal_calendar_id in (
+              select pp.fiscal_calendar_id
+                from depreciation_schedule_lines ll
+                join accounting_periods pp on pp.id = ll.period_id and pp.org_id = ll.org_id
+               where ll.org_id = s.org_id and ll.schedule_id = s.id)
+              or (not exists (
+                select 1 from depreciation_schedule_lines ll
+                 where ll.org_id = s.org_id and ll.schedule_id = s.id)
+                  and p.fiscal_calendar_id = (
+                    select c.id from fiscal_calendars c
+                     where c.org_id = s.org_id and c.is_default and c.is_active limit 1)))
+            and (s.life_months is null or s.life_months <= 0 or a.in_service_on is null
+                 or p.starts_on <= (date_trunc('month', a.in_service_on) + (s.life_months - 1) * interval '1 month')::date)
             and p.ends_on > coalesce((
               select max(pp.ends_on)
                 from depreciation_schedule_lines l
