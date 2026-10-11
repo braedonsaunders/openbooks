@@ -1452,6 +1452,13 @@ const COGNATES = new Set<string>([
   'pt-BR:reports.catalog.entities.hrm_headcount.label|Headcount',
   // Property-management identicals: ordinary nouns spelled the same (Status/Code/Name in de, Code/Type/Charge/Description/Transaction/Date/Actions and Consolidation in fr, Status in pt-BR) plus the placeholder-only detail.description template, identical by construction in every locale.
   'de:accounting.lifecycle.status|Status',
+  // Proposal-field identicals: the same ordinary nouns on evidence labels.
+  'de:accounting.lifecycle.evidence.fields.code|Code',
+  'de:accounting.lifecycle.evidence.fields.status|Status',
+  'de:accounting.lifecycle.evidence.fields.version|Version',
+  'fr:accounting.lifecycle.evidence.fields.code|Code',
+  'fr:accounting.lifecycle.evidence.fields.version|Version',
+  'pt-BR:accounting.lifecycle.evidence.fields.status|Status',
   'de:entities.propertyManagement.detail.description|{subsidiary} · {location}',
   'de:entities.propertyManagement.detail.fields.name|Name',
   'de:entities.propertyManagement.detail.fields.status|Status',

@@ -15,7 +15,7 @@ import { can, getAuthz } from "@/lib/authz";
 import { isUuid } from "@/lib/list-params";
 import { subsidiaryVisibleFilter } from "@/lib/subsidiaries";
 import { financialChangeSubjectExpr,manufacturingChangeResourcesVisible } from "@/lib/customization/entity-list-query/accounting-lifecycles";
-import { ChangeEvidence, ChangeFacts } from "./ChangeEvidence";
+import { BomRevisionEvidence, ChangeEvidence, ChangeFacts, RoutingRevisionEvidence } from "./ChangeEvidence";
 import { ReverseAssetChange } from "./ReverseAssetChange";
 import { ChangeActions } from "./ChangeActions";
 import { ChangeGateDecision } from "./ChangeGateDecision";
@@ -88,6 +88,12 @@ export default async function AccountingEvents({
     union all select id,name from recognition_rules where org_id=${orgId} and id in(select jsonb_array_elements_text(${JSON.stringify([...referenceIds])}::jsonb)::uuid)
     union all select id,description from performance_obligations where org_id=${orgId} and id in(select jsonb_array_elements_text(${JSON.stringify([...referenceIds])}::jsonb)::uuid)
     union all select id,name from subsidiaries where org_id=${orgId} and id in(select jsonb_array_elements_text(${JSON.stringify([...referenceIds])}::jsonb)::uuid)
+    union all select id,code||' — '||name as label from items where org_id=${orgId} and id in(select jsonb_array_elements_text(${JSON.stringify([...referenceIds])}::jsonb)::uuid)
+    union all select id,code||' — '||name as label from mfg_work_centers where org_id=${orgId} and id in(select jsonb_array_elements_text(${JSON.stringify([...referenceIds])}::jsonb)::uuid)
+    union all select id,code||' — '||name as label from mfg_routings where org_id=${orgId} and id in(select jsonb_array_elements_text(${JSON.stringify([...referenceIds])}::jsonb)::uuid)
+    union all select id,number as label from mfg_work_orders where org_id=${orgId} and id in(select jsonb_array_elements_text(${JSON.stringify([...referenceIds])}::jsonb)::uuid)
+    union all select id,name from provision_obligations where org_id=${orgId} and id in(select jsonb_array_elements_text(${JSON.stringify([...referenceIds])}::jsonb)::uuid)
+    union all select id,name from users where org_id=${orgId} and id in(select jsonb_array_elements_text(${JSON.stringify([...referenceIds])}::jsonb)::uuid)
   `)
       ).rows
     : [];
@@ -214,7 +220,13 @@ export default async function AccountingEvents({
                   <h3 className="font-semibold">
                     {t("lifecycle.proposedTerms")}
                   </h3>
-                  <ChangeEvidence value={row.payload} names={referenceNames} />
+                  {row.operation === "bom_revision_activation" ? (
+                    <BomRevisionEvidence before={row.before_state} after={row.payload} names={referenceNames} />
+                  ) : row.operation === "routing_revision_activation" ? (
+                    <RoutingRevisionEvidence evidence={row.before_state} names={referenceNames} />
+                  ) : (
+                    <ChangeEvidence value={row.payload} names={referenceNames} />
+                  )}
                 </section>
                 {["revenue", "asset", "consolidation"].includes(row.domain) ? (
                   <section className="space-y-2">
