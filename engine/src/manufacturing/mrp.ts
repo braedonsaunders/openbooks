@@ -2,10 +2,10 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { add, cmp, div, fromUnits, mul, mulPercent, neg, toUnits } from "../money/money.ts";
 import { getAvailableToPromise, stockedItems } from "../inventory/availability.ts";
-import { toBaseQuantity } from "../inventory/costing.ts";
+import { toExactStockQuantity } from "../inventory/costing.ts";
 import { bomRequiredQuantity, type BomQuantityBasis } from "../inventory/bom-scrap.ts";
 import { createTransferOrder } from "../inventory/transfer-orders.ts";
-import type { Runner } from "../inventory/contracts.ts";
+import { UnitConversionError, type Runner } from "../inventory/contracts.ts";
 import type { SqlExecutor } from "../platform/db.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { openQuantitySql } from "../records/order-line-remainders.ts";
@@ -52,6 +52,45 @@ const itemLabel = (code: string | null | undefined, name: string) => code?.trim(
 
 function refuse(message: string, code: string, remedy: string, status = 409): never {
   throw new ManufacturingError(message, { status, code, remedy });
+}
+
+export type MrpStockQuantityResult =
+  | { ok: true; quantity: string }
+  | { ok: false; code: "mrp_unit_not_convertible" | "mrp_quantity_not_representable"; message: string; remedy: string };
+
+/**
+ * Convert a document line (up to eight decimal places) into stock base units
+ * for MRP. The conversion itself is exact, and only the converted base
+ * quantity must fit the stored four-place stock scale. An unknown or invalid
+ * unit refuses as not convertible; a result that would need rounding refuses
+ * as not representable, so the operator is never told a valid conversion is
+ * missing.
+ */
+export function mrpStockQuantity(
+  quantity: string,
+  unit: string | null | undefined,
+  conversions: Record<string, number>,
+  baseUnit: string,
+  description: string,
+): MrpStockQuantityResult {
+  try {
+    return { ok: true, quantity: toExactStockQuantity(quantity, unit, conversions, baseUnit, description) };
+  } catch (error) {
+    if (error instanceof UnitConversionError) {
+      return {
+        ok: false,
+        code: "mrp_unit_not_convertible",
+        message: error.message,
+        remedy: "add a valid unit conversion to the item's inventory profile",
+      };
+    }
+    return {
+      ok: false,
+      code: "mrp_quantity_not_representable",
+      message: error instanceof Error ? error.message : String(error),
+      remedy: "enter a quantity whose converted base units fit four decimal places, or correct the item's unit conversion",
+    };
+  }
 }
 
 function roundToMultiple(quantity: string, multiple: string): string {
@@ -211,8 +250,9 @@ async function demandAndSupply(tx: SqlExecutor, orgId: string, subsidiaryId: str
   const base = (itemId: string, quantity: string, unit: string | null, description: string) => {
     const profile = profiles.get(itemId);
     if (!profile) refuse(`${description} refers to an item without an inventory profile.`, "mrp_item_not_stocked", "add an inventory costing profile to the item");
-    try { return toBaseQuantity(quantity, unit, profile.conversions, profile.baseUnit, description); }
-    catch (error) { refuse(`${description}: ${error instanceof Error ? error.message : String(error)}`, "mrp_unit_not_convertible", "add a valid unit conversion to the item's inventory profile"); }
+    const converted = mrpStockQuantity(quantity, unit, profile.conversions, profile.baseUnit, description);
+    if (!converted.ok) refuse(converted.message, converted.code, converted.remedy);
+    return converted.quantity;
   };
   const demands: Demand[] = demandRows.map((row) => ({
     itemId: row.item_id, itemCode: itemLabel(row.item_code, row.item_name),
