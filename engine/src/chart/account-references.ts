@@ -25,7 +25,7 @@ export interface AccountReferenceRule {
   /** Only rows matching this predicate (row alias `r`) move; the rest stay as history. */
   redirectWhere?: SQL;
   /** Rows matching this predicate (row alias `r`) block the merge with this remedy. */
-  blockWhere?: { predicate: SQL; remedy: string };
+  blockWhere?: { predicate: SQL | ((effectiveDate: string) => SQL); remedy: string };
 }
 
 const documentStatus = (statuses: string[], via: "document_id" | "document_line_id") =>
@@ -47,6 +47,31 @@ const draftDocumentRule = (label: string, via: "document_id" | "document_line_id
 const config = (label: string): AccountReferenceRule => ({ label, disposition: "redirect" });
 const history = (label: string): AccountReferenceRule => ({ label, disposition: "history" });
 
+const retained = (
+  label: string,
+  predicate: SQL | ((effectiveDate: string) => SQL),
+  remedy: string,
+): AccountReferenceRule => ({ label, disposition: "history", blockWhere: { predicate, remedy } });
+
+const bookMapping = (label: string) => retained(label,
+  (effectiveDate) => sql`r.effective_to is null or r.effective_to >= ${effectiveDate}::date`,
+  "End the book account mapping before the merge date and add a new dated mapping using the surviving account. Existing mappings keep their recorded accounts.");
+
+const periodEndPolicy = (label: string) => retained(label,
+  (effectiveDate) => sql`not exists (select 1 from period_end_journal_policies p
+    where p.org_id = r.org_id and p.effective_from > r.effective_from and p.effective_from <= ${effectiveDate}::date)`,
+  "Add a period-end journal policy using the surviving account, effective on or before the merge date. Earlier policy versions remain unchanged.");
+
+const activeAmortization = (label: string) => retained(label, sql`r.status in ('draft', 'active', 'on_hold')`,
+  "Complete or cancel the amortization schedules before merging their accounts. Schedules and release plans keep their recorded accounts.");
+
+const capitalizedAsset = sql`exists (select 1 from asset_proposal_allocations a
+  join asset_proposal_acceptances p on p.org_id = a.org_id and p.id = a.acceptance_id
+  where a.org_id = r.org_id and a.asset_id = r.id and a.cip_cost_id is null and p.status = 'posted')
+  or exists (select 1 from asset_cip_capitalization_lines l
+  join asset_cip_capitalizations c on c.org_id = l.org_id and c.id = l.capitalization_id
+  where l.org_id = r.org_id and l.asset_id = r.id and c.status = 'posted')`;
+
 const allocationVersionStatus = (statuses: string[], direct: boolean) =>
   direct
     ? sql`r.status in ${statuses}`
@@ -57,6 +82,41 @@ const ALLOCATION_PUBLISHED_REMEDY =
 
 /** Rules for every known `table.column` foreign key to accounts. */
 export const ACCOUNT_REFERENCE_RULES: Readonly<Record<string, AccountReferenceRule>> = {
+  // Dated policies and source evidence retain their original account identity.
+  "accounting_book_account_maps.source_account_id": bookMapping("Book account mappings (source)"),
+  "accounting_book_account_maps.target_account_id": bookMapping("Book account mappings (target)"),
+  "accounting_books.currency_difference_account_id": retained("Book currency difference accounts", sql`true`,
+    "Change the book currency difference account through its replication settings before merging the account."),
+  "period_end_journal_policies.retained_earnings_account_id": periodEndPolicy("Period-end retained earnings policies"),
+  "period_end_journal_policies.income_summary_account_id": periodEndPolicy("Period-end income summary policies"),
+  "intercompany_transfer_pricing_policies.revenue_account_id": retained("Transfer pricing revenue policies",
+    sql`r.is_active`, "End and deactivate the transfer pricing policy and create a new dated policy using the surviving account before merging."),
+  "intercompany_transfer_pricing_policies.cost_account_id": retained("Transfer pricing cost policies",
+    sql`r.is_active`, "End and deactivate the transfer pricing policy and create a new dated policy using the surviving account before merging."),
+  "expense_amortization_templates.deferral_account_id": retained("Amortization template deferrals", sql`r.is_active`,
+    "Deactivate the amortization template and add a new dated version using the surviving account before merging."),
+  "expense_amortization_templates.destination_account_id": retained("Amortization template expenses", sql`r.is_active`,
+    "Deactivate the amortization template and add a new dated version using the surviving account before merging."),
+  "expense_amortization_schedules.deferral_account_id": activeAmortization("Amortization schedule deferrals"),
+  "expense_amortization_schedules.destination_account_id": activeAmortization("Amortization schedule expenses"),
+  "expense_amortization_schedule_lines.destination_account_id": retained("Amortization release plans",
+    sql`r.status = 'planned' and exists (select 1 from expense_amortization_schedules s
+      where s.org_id = r.org_id and s.id = r.schedule_id and s.status in ('draft', 'active', 'on_hold'))`,
+    "Complete or cancel the amortization schedules before merging their release accounts. Existing release plans remain unchanged."),
+  "asset_capitalization_rules.account_id": retained("Asset capitalization rules", sql`r.is_active`,
+    "End and deactivate the capitalization rule and add a new dated rule using the surviving account before merging."),
+  "asset_proposals.account_id": retained("Asset proposal source accounts", sql`r.status = 'pending'`,
+    "Accept or reject the pending asset proposals before merging their source account."),
+  "asset_cip_costs.account_id": history("Construction source costs"),
+  "asset_cip_capitalization_lines.target_account_id": history("Construction capitalization accounts"),
+  "asset_proposal_allocations.target_account_id": history("Asset proposal allocation accounts"),
+  "intercompany_netting_lines.account_id": retained("Intercompany netting accounts",
+    sql`exists (select 1 from intercompany_netting_runs n where n.org_id = r.org_id and n.id = r.run_id
+      and n.status in ('proposed', 'pending_approval', 'approved'))`,
+    "Post or cancel the intercompany netting run before merging the account. To change its accounts, cancel it and propose a new run."),
+  "intercompany_fund_transfers.from_bank_account_id": history("Intercompany fund transfers (source bank)"),
+  "intercompany_fund_transfers.to_bank_account_id": history("Intercompany fund transfers (destination bank)"),
+
   // Documents: drafts move; in-flight approvals block; posted and voided documents are history.
   "document_lines.account_id": draftDocumentRule("Document lines", "document_id"),
   "document_lines.recovery_account_id": draftDocumentRule("Document line recovery accounts", "document_id"),
@@ -81,7 +141,15 @@ export const ACCOUNT_REFERENCE_RULES: Readonly<Record<string, AccountReferenceRu
 
   // Open subledger records move; settled ones are history.
   "encumbrances.account_id": { label: "Encumbrances", disposition: "redirect", redirectWhere: sql`r.status = 'open'` },
-  "fixed_assets.asset_account_id": { label: "Fixed assets (asset)", disposition: "redirect", redirectWhere: sql`r.status in ('draft', 'in_service', 'fully_depreciated')` },
+  "fixed_assets.asset_account_id": {
+    label: "Fixed assets (asset)", disposition: "redirect",
+    redirectWhere: sql`r.status in ('draft', 'in_service', 'fully_depreciated') and not (${capitalizedAsset})`,
+    blockWhere: {
+      predicate: sql`(r.status = 'construction' and r.acquisition_cost <> 0)
+        or (r.status in ('draft', 'in_service', 'fully_depreciated') and (${capitalizedAsset}))`,
+      remedy: "Capitalize or unlink outstanding construction costs first. For assets created from posted costs, reverse the acceptance or capitalization while still in draft, or complete their native disposal before merging the asset account.",
+    },
+  },
   "fixed_assets.accumulated_depreciation_account_id": { label: "Fixed assets (accumulated depreciation)", disposition: "redirect", redirectWhere: sql`r.status in ('draft', 'in_service', 'fully_depreciated')` },
   "fixed_assets.depreciation_expense_account_id": { label: "Fixed assets (depreciation expense)", disposition: "redirect", redirectWhere: sql`r.status in ('draft', 'in_service', 'fully_depreciated')` },
   "lease_agreements.cost_clearing_account_id": { label: "Lease agreements", disposition: "redirect", redirectWhere: sql`r.status in ('draft', 'active')` },
@@ -140,6 +208,10 @@ export const ACCOUNT_REFERENCE_RULES: Readonly<Record<string, AccountReferenceRu
   "fund_pairs.due_to_account_id": config("Interfund pairs (due to)"),
   "intercompany_pairs.due_from_account_id": config("Intercompany pairs (due from)"),
   "intercompany_pairs.due_to_account_id": config("Intercompany pairs (due to)"),
+  "intercompany_pairs.from_receivable_account_id": config("Intercompany pairs (source receivable)"),
+  "intercompany_pairs.from_payable_account_id": config("Intercompany pairs (source payable)"),
+  "intercompany_pairs.to_receivable_account_id": config("Intercompany pairs (destination receivable)"),
+  "intercompany_pairs.to_payable_account_id": config("Intercompany pairs (destination payable)"),
   "hrm_benefit_program_sources.account_id": config("Benefit program source accounts"),
   "information_return_box_rules.account_id": config("Information return box rules"),
   "item_inventory_profiles.adjustment_account_id": config("Item inventory profiles (adjustment)"),

@@ -20,9 +20,11 @@ function publishedAccountForeignKeys(): Set<string> {
   const found = new Set<string>();
   for (const file of readdirSync(MIGRATIONS).filter((name) => name.endsWith(".sql")).sort()) {
     const source = readFileSync(new URL(file, MIGRATIONS), "utf8");
-    for (const statement of source.matchAll(/ALTER TABLE (?:ONLY )?(?:public\.)?([a-z_0-9]+)\s+ADD CONSTRAINT [a-z_0-9]+\s+FOREIGN KEY \(([^)]*)\)\s+REFERENCES (?:public\.)?accounts\s*\(/gi)) {
-      for (const column of statement[2]!.split(",").map((part) => part.trim())) {
-        if (column !== "org_id") found.add(`${statement[1]}.${column}`);
+    for (const statement of source.matchAll(/ALTER TABLE (?:ONLY )?(?:public\.)?([a-z_0-9]+)\s+([\s\S]*?);/gi)) {
+      for (const fk of statement[2]!.matchAll(/FOREIGN KEY\s*\(([^)]*)\)\s*REFERENCES (?:public\.)?accounts\s*\(/gi)) {
+        for (const column of fk[1]!.split(",").map((part) => part.trim())) {
+          if (column !== "org_id") found.add(`${statement[1]}.${column}`);
+        }
       }
     }
     for (const table of source.matchAll(/CREATE TABLE (?:IF NOT EXISTS )?(?:public\.)?([a-z_0-9]+)\s*\(([\s\S]*?)\n\);/gi)) {

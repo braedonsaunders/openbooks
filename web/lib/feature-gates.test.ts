@@ -59,7 +59,17 @@ function routeGateState(href: string): 'gated' | 'ungated' | 'missing' {
   candidates.push(`${dir}page.tsx`)
   // An ancestor layout gate covers everything beneath it.
   for (const file of candidates) {
-    if (exists(file) && GATE.test(read(file))) return 'gated'
+    if (!exists(file)) continue
+    const source = read(file)
+    if (GATE.test(source)) return 'gated'
+    // Native record workspaces await their gated data loader before rendering.
+    // Count only a loader imported and invoked by this page, not an unrelated sibling.
+    if (file.endsWith('page.tsx')) {
+      const loaderFile = file.replace(/page\.tsx$/, '_data.ts')
+      const imports = [...source.matchAll(/import\s*\{\s*(load\w+)\s*\}\s*from\s*['"]\.\/_data['"]/g)]
+      if (imports.some((match) => new RegExp(`\\b${match[1]}\\s*\\(`).test(source))
+        && exists(loaderFile) && GATE.test(read(loaderFile))) return 'gated'
+    }
   }
   return exists(`${dir}page.tsx`) ? 'ungated' : 'missing'
 }

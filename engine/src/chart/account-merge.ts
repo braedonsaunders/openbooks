@@ -536,10 +536,12 @@ async function planAccountMerge(
   for (const column of [...columns.values()].sort((a, b) => `${a.table}.${a.column}`.localeCompare(`${b.table}.${b.column}`))) {
     const classification = classifyAccountReference(column);
     if (classification === "owned") continue;
+    const blockedPredicate = classification?.blockWhere?.predicate;
+    const blockedWhere = typeof blockedPredicate === "function" ? blockedPredicate(request.effectiveDate) : blockedPredicate;
     const counts = (await tx.execute<{ total: number; redirect: number; blocked: number }>(sql`
       select count(*)::int as total,
              count(*) filter (where ${classification?.disposition === "redirect" ? (classification.redirectWhere ?? sql`true`) : sql`false`})::int as redirect,
-             count(*) filter (where ${classification?.blockWhere?.predicate ?? sql`false`})::int as blocked
+             count(*) filter (where ${blockedWhere ?? sql`false`})::int as blocked
         from ${sql.identifier(column.table)} r
        where r.org_id = ${orgId} and r.${sql.identifier(column.column)} = ${source.id}`)).rows[0];
     const total = Number(counts?.total ?? 0);

@@ -2835,7 +2835,7 @@ const COGNATES = new Set<string>([
   'ja:insights.cardStudio.filterPlaceholderDate|YYYY-MM-DD',
   'ja:insights.cardStudio.filterPlaceholderList|a, b, c',
   'ja:insights.cardStudio.filterPlaceholderNumber|30',
-  'ja:tax.adjustmentPlaceholder|0.00',
+  'ja:tax.adjustments.amountPlaceholder|0.00',
   'ja:tax.history.export.csv|CSV',
   'ja:tax.history.export.pdf|PDF',
   'ja:tax.history.export.xlsx|Excel',
@@ -2865,7 +2865,7 @@ const COGNATES = new Set<string>([
   'zh:insights.cardStudio.filterPlaceholderDate|YYYY-MM-DD',
   'zh:insights.cardStudio.filterPlaceholderList|a, b, c',
   'zh:insights.cardStudio.filterPlaceholderNumber|30',
-  'zh:tax.adjustmentPlaceholder|0.00',
+  'zh:tax.adjustments.amountPlaceholder|0.00',
   'zh:tax.history.export.csv|CSV',
   'zh:tax.history.export.pdf|PDF',
   'zh:tax.history.export.xlsx|Excel',
@@ -3529,6 +3529,8 @@ const COGNATES = new Set<string>([
   'de:fulfillment.shipping.modeTest|Test',
   'de:fulfillment.shipping.modeLive|Live',
   'fr:fulfillment.shipping.modeTest|Test',
+  // Tax amounts use the API's decimal-point input format in every locale.
+  'fr:tax.adjustments.amountPlaceholder|0.00',
   // Item shipping placeholders are storable-format examples, identical in
   // every locale on purpose: decimals always use the point the API stores,
   // the HS code is a worldwide goods code, and US is the example country.

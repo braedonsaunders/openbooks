@@ -5,7 +5,7 @@ import { REPORT_PATH_FEATURE_GATES, savedReportPathVisible } from './report-feat
 // F1T-16: the hub's saved-views filter derives from the route-gate registry,
 // never a hand list. The reported hole was a saved /reports/true-cost view
 // showing with Projects off; lot-recall/inventory was missing the same way.
-const ALL_ON = { projects: true, projectProgress: true, budgets: true, orders: true, inventory: true, warehousing: true, resourcing: true, payroll: true, multiBookAccounting: true }
+const ALL_ON = { projects: true, projectProgress: true, budgets: true, orders: true, inventory: true, warehousing: true, resourcing: true, payroll: true, multiBookAccounting: true, multiSubsidiary: true }
 
 test('a saved true-cost view hides with Projects off and shows with it on', () => {
   assert.equal(savedReportPathVisible('/reports/true-cost', { ...ALL_ON, projects: false }), false)

@@ -21,7 +21,7 @@ import {
   requestAccountMerge,
 } from "./account-merge.ts";
 import { classifyAccountReference, discoverAccountReferenceColumns } from "./account-references.ts";
-import { createBookCurrencyVersion } from "../multibook/settings.ts";
+import { closeBookAccountMap, createBookAccountMap, createBookCurrencyVersion } from "../multibook/settings.ts";
 import { changeBookReplication } from "../multibook/replication-runs.ts";
 
 // Merging a duplicate account into its survivor: the preview names every
@@ -154,6 +154,61 @@ test("a merge moves the balance by a balanced reclass, moves configuration, and 
   } finally {
     await dropScratchOrg(s.org.orgId);
   }
+});
+
+test("a merge preserves dated book mappings and refuses until their window ends before its effective date", { skip: !DB }, async () => {
+  const s = await scenario();
+  try {
+    const bookId = randomUUID();
+    await withOrgContext(s.org.orgId, async () => {
+      await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,multiBookAccounting}', 'true'::jsonb) where id = ${s.org.orgId}`);
+      await db.execute(sql`insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl)
+        values (${bookId}, ${s.org.orgId}, 'LOCAL', 'Local reporting', false, true, true)`);
+    });
+    const mapping = await createBookAccountMap({ orgId: s.org.orgId, actorId: s.actorId, allowedSubsidiaryIds: null,
+      input: { bookId, sourceAccountId: s.source, targetAccountId: s.target, effectiveFrom: "2026-07-01", effectiveTo: EFFECTIVE },
+      reason: "Map expenses for local reporting" });
+    const input = { sourceAccountId: s.source, targetAccountId: s.target, effectiveDate: EFFECTIVE };
+    const blocked = await previewAccountMerge(s.org.orgId, input, null);
+    assert.ok(blocked.refusals.some(row => row.code === "reference_in_flight" && /mapping/.test(row.message)));
+    assert.ok(blocked.references.some(row => row.key === "accounting_book_account_maps.source_account_id" && row.blocked === 1 && row.redirect === 0));
+    await closeBookAccountMap({ orgId: s.org.orgId, actorId: s.actorId, allowedSubsidiaryIds: null,
+      id: mapping.id, effectiveTo: "2026-07-30", reason: "End mapping before the account merge" });
+    const preview = await previewAccountMerge(s.org.orgId, input, null);
+    assert.deepEqual(preview.refusals, []);
+    assert.ok(preview.references.some(row => row.key === "accounting_book_account_maps.source_account_id" && row.history === 1));
+    assert.equal((await requestAccountMerge(s.org.orgId, request(s, { expectedDigest: preview.digest }))).status, "completed");
+    await withOrgContext(s.org.orgId, async () => {
+      const saved = (await db.execute<{ source_account_id: string; target_account_id: string; effective_to: string }>(sql`
+        select source_account_id, target_account_id, effective_to::text as effective_to
+        from accounting_book_account_maps where org_id = ${s.org.orgId} and id = ${mapping.id}`)).rows[0];
+      assert.deepEqual(saved, { source_account_id: s.source, target_account_id: s.target, effective_to: "2026-07-30" });
+    });
+  } finally { await dropScratchOrg(s.org.orgId); }
+});
+
+test("active capitalization rules block a merge and inactive rules retain their source account", { skip: !DB }, async () => {
+  const s = await scenario();
+  try {
+    const ruleId = randomUUID();
+    await withOrgContext(s.org.orgId, () => db.execute(sql`
+      insert into asset_capitalization_rules (id, org_id, name, match_kind, account_id, effective_from)
+      values (${ruleId}, ${s.org.orgId}, 'Capital purchases', 'account', ${s.source}, '2026-07-01')`));
+    const input = { sourceAccountId: s.source, targetAccountId: s.target, effectiveDate: EFFECTIVE };
+    const blocked = await previewAccountMerge(s.org.orgId, input, null);
+    assert.ok(blocked.refusals.some(row => row.code === "reference_in_flight" && /capitalization/.test(row.message)));
+    await withOrgContext(s.org.orgId, () => db.execute(sql`
+      update asset_capitalization_rules set is_active = false, effective_to = '2026-07-30'
+      where org_id = ${s.org.orgId} and id = ${ruleId}`));
+    const preview = await previewAccountMerge(s.org.orgId, input, null);
+    assert.deepEqual(preview.refusals, []);
+    assert.equal((await requestAccountMerge(s.org.orgId, request(s, { expectedDigest: preview.digest }))).status, "completed");
+    await withOrgContext(s.org.orgId, async () => {
+      const saved = (await db.execute<{ account_id: string }>(sql`
+        select account_id from asset_capitalization_rules where org_id = ${s.org.orgId} and id = ${ruleId}`)).rows[0];
+      assert.equal(saved?.account_id, s.source);
+    });
+  } finally { await dropScratchOrg(s.org.orgId); }
 });
 
 test("a merge reclasses each book's recorded balance once at its recorded exchange rate", { skip: !DB }, async () => {
