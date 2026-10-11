@@ -1,4 +1,4 @@
-import { ModuleView } from '../../../../components/viewspec/module-view'
+import { ModuleView } from '../../../../../components/viewspec/module-view'
 import { loadStatementBatchComposer, statementBatchComposerSpec } from './view'
 
 export const dynamic = 'force-dynamic'
