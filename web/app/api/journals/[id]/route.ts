@@ -1,3 +1,7 @@
+import { journalHeaderInstructionFields, journalLineInstructionFields } from '@/lib/journal-instructions'
+import { validateJournalInstructions } from '@openbooks/engine/ledger/journal-instructions'
+import { lookupExchangeRate } from '@openbooks/engine/fx/spot-rate'
+import { accountingPreferences } from '@openbooks/engine/organization/accounting-preferences'
 import { validateSavedAmortizationLines } from "@openbooks/engine/amortization";
 import { journalAmortizationFields } from "@/lib/journal-amortization";
 import { assertWithholdingDepositEdit, assertWithholdingRemittanceEdit, ContractorWithholdingError } from "@openbooks/engine/contractor-withholding";
@@ -89,6 +93,7 @@ const journalLineInput = z
     // the line nor the remedy).
     accountId: z.string().nullable().optional(),
     ...journalAmortizationFields,
+    ...journalLineInstructionFields,
     description: z.string().nullable().optional(),
     amount: exactMoney(),
     partyId: nullableUuidId.optional(),
@@ -100,9 +105,10 @@ const journalLineInput = z
   })
   // A zero leg carries no financial meaning; reject it instead of silently
   // dropping a submitted line at the posting boundary.
-  .refine((line) => toUnits(line.amount) !== 0n, 'journal line amounts cannot be zero')
+  .refine((line) => toUnits(line.amount) !== 0n || (line.quantity !== undefined && toUnits(line.quantity) !== 0n), 'Enter a nonzero amount or statistical quantity.')
 
 const journalPatchBody = z.object({
+  ...journalHeaderInstructionFields,
   /** Optimistic concurrency token from documents.revision_seq (exact form). */
   expectedUpdatedAt: z.string().min(1).optional(),
   partyId: nullableUuidId.optional(),
@@ -272,7 +278,7 @@ export const PATCH = defineRoute({
     // fields and segments are org-configured and validated against live defs.
     // journal totals = sum of debits (positive line amounts); tax never applies
     let totalDebits: string | null = null
-    let preparedLines: { amortizationTemplateId: string | null; amortizationStartOn: string | null; amortizationEndOn: string | null; accountId: string; description: string | null; amount: string; partyId: string | null; departmentId: string | null; projectId: string | null; subsidiaryId: string | null; extraDims: Record<string, string | null>; custom: Record<string, unknown> }[] | null = null
+    let preparedLines: { currency: string | null; fxRate: string | null; quantity: string; unit: string | null; eliminate: boolean; amortizationTemplateId: string | null; amortizationStartOn: string | null; amortizationEndOn: string | null; accountId: string; description: string | null; amount: string; partyId: string | null; departmentId: string | null; projectId: string | null; subsidiaryId: string | null; extraDims: Record<string, string | null>; custom: Record<string, unknown> }[] | null = null
     if (body.lines) {
       const submitted = body.lines
       totalDebits = sum(submitted.map((line) => (toUnits(line.amount) > 0n ? line.amount : '0')))
@@ -312,6 +318,7 @@ export const PATCH = defineRoute({
         const lineDims = validateExtraDims(l.extraDims, segments)
         if (!lineDims.ok) return NextResponse.json({ error: `Line ${i + 1}: ${lineDims.error}` }, { status: 422 })
         preparedLines.push({
+          currency: l.currency ?? null, fxRate: l.fxRate ?? null, quantity: l.quantity ?? "1", unit: l.unit ?? null, eliminate: l.eliminate ?? false,
           accountId,
           description: l.description ?? null,
           amount: l.amount,
@@ -349,7 +356,7 @@ export const PATCH = defineRoute({
     try {
       await runDocumentVersionedTransaction<
         RouteTransaction,
-        { status: string; updatedAt: string; subsidiaryId: string | null; extraDims: unknown; accountingBookId: string | null },
+        { status: string; updatedAt: string; subsidiaryId: string | null; extraDims: unknown; accountingBookId: string | null; currency: string; fxRate: string; documentDate: string },
         void
       >({
         expectedRevision,
@@ -357,11 +364,11 @@ export const PATCH = defineRoute({
         // The row lock and exact revision comparison are the first operations in
         // the write transaction: a concurrent writer cannot slip between the
         // check and the header/line replacement.
-        lock: async (tx) => (await tx.execute<{ status: string; updatedAt: string; subsidiaryId: string | null; extraDims: unknown; accountingBookId: string | null }>(sql`
+        lock: async (tx) => (await tx.execute<{ status: string; updatedAt: string; subsidiaryId: string | null; extraDims: unknown; accountingBookId: string | null; currency: string; fxRate: string; documentDate: string }>(sql`
           select status,
                  ${documentRevisionCounterSql(sql.raw('revision_seq'))} as "updatedAt",
                  subsidiary_id as "subsidiaryId", extra_dims as "extraDims",
-                 accounting_book_id as "accountingBookId"
+                 accounting_book_id as "accountingBookId", currency, fx_rate::text as "fxRate", document_date::text as "documentDate"
             from documents
            where id = ${id} and kind = 'journal' and org_id = ${user.orgId}
            for update
@@ -436,11 +443,10 @@ export const PATCH = defineRoute({
             totalDebits = null
           }
 
-          // A book target (or a rehomed book-specific journal) restates the
-          // journal's entry currency as the book's currency for its subsidiary.
+          // Book targeting resolves the denomination of posted amounts; the journal retains its transaction currency.
           let bookTarget: Awaited<ReturnType<typeof resolveJournalBookTarget>> | null = null
           const requestedBook = body.accountingBookId !== undefined ? body.accountingBookId : locked.accountingBookId
-          if (body.accountingBookId !== undefined || (locked.accountingBookId && body.subsidiaryId !== undefined)) {
+          if (body.accountingBookId !== undefined || body.subsidiaryId !== undefined || body.currency !== undefined || body.fxRate !== undefined || body.documentDate !== undefined) {
             const bookSubsidiaryId = targetSubsidiaryId ?? (await tx.execute<{ id: string }>(sql`
               select id from subsidiaries where org_id = ${user.orgId} and parent_id is null`)).rows[0]?.id
             if (!bookSubsidiaryId) throw new DocumentEditError(422, 'journal requires a subsidiary')
@@ -458,6 +464,14 @@ export const PATCH = defineRoute({
             }
           }
 
+          const journalCurrency = body.currency ?? locked.currency
+          let journalRate = body.fxRate ?? locked.fxRate
+          if (bookTarget && body.fxRate === undefined && (body.currency !== undefined || body.documentDate !== undefined || body.subsidiaryId !== undefined || body.accountingBookId !== undefined)) {
+            const date = body.documentDate ?? locked.documentDate
+            const preferences = await accountingPreferences(tx,user.orgId,targetSubsidiaryId!,date)
+            journalRate = journalCurrency === bookTarget.currency ? '1' : (await lookupExchangeRate(tx,user.orgId,journalCurrency,bookTarget.currency,date,preferences.postingRateType)) ?? ''
+            if (!journalRate) throw new DocumentEditError(422,'No exchange rate covers this journal currency and date. Enter a rate or record the entity’s configured rate series in Setup.')
+          }
           const auditBefore = await captureTransactionAuditSnapshot(tx, id, user.orgId)
           if (!auditBefore) throw new Error(`journal ${id} disappeared before update`)
 
@@ -467,10 +481,10 @@ export const PATCH = defineRoute({
               const l = preparedLines[i]!
               const savedLine = await tx.execute<{ id: string }>(sql`
                 insert into document_lines (org_id, document_id, line_number, account_id, description,
-                                            quantity, unit_price, amount, party_id, department_id, project_id,
+                                            quantity, unit, journal_currency, journal_fx_rate, journal_eliminate, unit_price, amount, party_id, department_id, project_id,
                                             subsidiary_id, extra_dims, custom, amortization_template_id, amortization_start_on, amortization_end_on)
                 values (${user.orgId}, ${id}, ${i + 1}, ${l.accountId}, ${l.description},
-                        '1', ${l.amount}, ${l.amount}, ${l.partyId}, ${l.departmentId}, ${l.projectId},
+                        ${l.quantity}, ${l.unit}, ${l.currency}, ${l.fxRate}, ${l.eliminate}, ${l.amount}, ${l.amount}, ${l.partyId}, ${l.departmentId}, ${l.projectId},
                         ${l.subsidiaryId}, ${JSON.stringify(l.extraDims)}::jsonb, ${JSON.stringify(l.custom)}, ${l.amortizationTemplateId}, ${l.amortizationStartOn}, ${l.amortizationEndOn}) returning id
               `)
               if (savedLine.rows.length !== 1) throw new DocumentEditError(409, `Line ${i + 1} could not be saved`)
@@ -485,7 +499,11 @@ export const PATCH = defineRoute({
               memo = ${body.memo !== undefined ? body.memo : sql`memo`},
               subsidiary_id = ${body.subsidiaryId !== undefined ? body.subsidiaryId : sql`subsidiary_id`},
               accounting_book_id = ${bookTarget ? bookTarget.accountingBookId : sql`accounting_book_id`},
-              currency = ${bookTarget ? bookTarget.currency : sql`currency`},
+              currency = ${journalCurrency},
+              fx_rate = ${journalRate},
+              journal_fx_rate_explicit = ${body.fxRate !== undefined || bookTarget !== null ? true : sql`journal_fx_rate_explicit`},
+              journal_mode = ${body.journalMode ?? sql`journal_mode`},
+              journal_reverse_on = ${body.journalReverseOn !== undefined ? body.journalReverseOn : sql`journal_reverse_on`},
               extra_dims = ${headerDims ? JSON.stringify(headerDims.cleaned) : sql`extra_dims`}::jsonb,
               custom = coalesce(${headerCustom ? JSON.stringify(headerCustom) : null}::jsonb, custom),
               subtotal = coalesce(${totalDebits}, subtotal),
@@ -503,6 +521,7 @@ export const PATCH = defineRoute({
           // Segment value dependencies on the saved lines, as posting will read them.
           await assertDocumentSegmentDependencies(tx, user.orgId, id)
           await validateSavedAmortizationLines(tx, user.orgId, id)
+          await validateJournalInstructions(tx,user.orgId,id)
 
           const auditAfter = await captureTransactionAuditSnapshot(tx, id, user.orgId)
           if (!auditAfter) throw new Error(`journal ${id} disappeared during update`)

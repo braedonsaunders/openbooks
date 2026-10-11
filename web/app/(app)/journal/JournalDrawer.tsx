@@ -206,6 +206,7 @@ export function isBlankJournalLine(row: Record<string, unknown>): boolean {
     'amortizationTemplateId',
     'amortizationStartOn',
     'amortizationEndOn',
+    'journalCurrency', 'journalFxRate', 'statisticalQuantity', 'unit', 'eliminate',
   ]) {
     if (!isBlankJournalCell(row[key])) return false
   }
@@ -265,6 +266,8 @@ function toRow(l: Record<string, unknown>, lineDefs: CustomFieldDefClient[], seg
     amortizationStartOn: lineText(l.amortization_start_on),
     amortizationEndOn: lineText(l.amortization_end_on),
     functionalCurrency: lineText(l.functional_currency),
+    journalCurrency: lineText(l.journal_currency), journalFxRate: lineText(l.journal_fx_rate),
+    statisticalQuantity: l.unit ? lineText(l.quantity) : '', unit: lineText(l.unit), eliminate: l.journal_eliminate ? 'true' : '',
     debit: units > 0n ? formatJournalAmount(units) : '',
     credit: units < 0n ? formatJournalAmount(-units) : '',
   }
@@ -428,6 +431,10 @@ function JournalDrawerBody({
   const returnHref = closeHref ?? '/journal'
   const requestIdRef = useRef<string | null>(null)
 
+  const [journalMode, setJournalMode] = useState<string>(String(doc.journal_mode ?? 'monetary'))
+  const [currency, setCurrency] = useState<string>(doc.currency)
+  const [fxRate, setFxRate] = useState<string>(String(doc.fx_rate ?? '1'))
+  const [reverseOn, setReverseOn] = useState<string>(String(doc.journal_reverse_on ?? ''))
   const [partyId, setPartyId] = useState<string>(doc.party_id ?? '')
   const [documentDate, setDocumentDate] = useState<string>(doc.document_date ?? '')
   const [referenceNumber, setReferenceNumber] = useState<string>(doc.reference_number ?? '')
@@ -494,11 +501,16 @@ function JournalDrawerBody({
     }
     return { debits: d, credits: c, diff: d - c, hasInvalidAmounts: invalid }
   }, [rows])
-  const balanced = !hasInvalidAmounts && diff === 0n && debits > 0n
+  const statistical = journalMode === 'statistical'
+  const mixedCurrencies = rows.some(row => row.journalCurrency && row.journalCurrency !== currency)
+  const statisticalReady = rows.some(row => !isBlankJournalLine(row)) && rows.filter(row => !isBlankJournalLine(row)).every(row =>
+    !!row.accountId && !!String(row.unit ?? '').trim() && (journalAmountUnits(row.statisticalQuantity) ?? 0n) !== 0n)
+  const balanced = statistical ? statisticalReady : !hasInvalidAmounts && debits > 0n && (mixedCurrencies || diff === 0n)
 
   // -- explicit save (no autosave) -----------------------------------------
   const payload = useMemo(
     () => ({
+      journalMode, currency, fxRate: fxRate || undefined, journalReverseOn: reverseOn || null,
       partyId: partyId || null,
       documentDate: documentDate || undefined,
       referenceNumber,
@@ -525,7 +537,11 @@ function JournalDrawerBody({
             amortizationStartOn: r.amortizationTemplateId ? r.amortizationStartOn || null : null,
             amortizationEndOn: r.amortizationTemplateId ? r.amortizationEndOn || null : null,
             description: r.description,
-            amount: formatJournalAmount(signed), // signed: + debit / − credit
+            currency: r.journalCurrency || null,
+            fxRate: r.journalFxRate || null,
+            quantity: statistical ? String(r.statisticalQuantity ?? '') : '1', unit: statistical ? String(r.unit ?? '') : null,
+            eliminate: r.eliminate === 'true',
+            amount: statistical ? '0' : formatJournalAmount(signed), // signed: + debit / − credit
             partyId: r.partyId || null,
             departmentId: r.departmentId || null,
             projectId: r.projectId || null,
@@ -538,7 +554,7 @@ function JournalDrawerBody({
           }]
         }),
     }),
-    [partyId, documentDate, referenceNumber, memo, subsidiaryId, multiSub, accountingBookId, bookUi, canPostBookSpecific, customValues, extraDims, rows, lineDefs, segments],
+    [journalMode, currency, fxRate, reverseOn, statistical, partyId, documentDate, referenceNumber, memo, subsidiaryId, multiSub, accountingBookId, bookUi, canPostBookSpecific, customValues, extraDims, rows, lineDefs, segments],
   )
   // Track unsaved edits (no autosave — Save is an explicit button). Adjusted
   // during render (same committed value, no extra render). `editable` is read
@@ -599,6 +615,11 @@ function JournalDrawerBody({
     setResetVersion((version) => version + 1)
     setDirty(false)
     const sourceDoc = asJournalDoc(source.doc)
+    setJournalMode(String(sourceDoc.journal_mode ?? 'monetary'))
+    setCurrency(sourceDoc.currency)
+    setFxRate(String(sourceDoc.fx_rate ?? '1'))
+    setReverseOn(String(sourceDoc.journal_reverse_on ?? ''))
+    setAccountingBookId(String(sourceDoc.accounting_book_id ?? ''))
     setPartyId(sourceDoc.party_id ?? '')
     setDocumentDate(sourceDoc.document_date ?? '')
     setReferenceNumber(sourceDoc.reference_number ?? '')
@@ -1131,17 +1152,26 @@ function JournalDrawerBody({
         options: [{ value: INHERIT_SEGMENT, label: tc('labels.inheritHeader') }, { value: CLEAR_SEGMENT, label: tc('labels.noDimensionValue') }, ...segment.values.map((value) => ({ value: value.id, label: `${value.code ? `${value.code} · ` : ''}${value.name}` }))],
         placeholder: '—',
       }))
-      const prepaidColumns = ledgerSnapshot ? [] : amortizationLineColumns<LineRow>(amortizationTemplates, tAmortization)
-      if (!layout) return [...Object.values(builtIn), ...segmentColumns, ...prepaidColumns, ...custom.values()]
+      const instructionColumns: LineGridColumn<LineRow>[] = statistical ? [
+        { key: 'statisticalQuantity', label: t('instructions.quantity'), width: '120px', type: 'decimal', decimalScale: 4, required: true },
+        { key: 'unit', label: t('instructions.unit'), width: '120px', type: 'text', required: true },
+      ] : [
+        { key: 'journalCurrency', label: t('instructions.lineCurrency'), width: '110px', type: 'text', secondary: true },
+        { key: 'journalFxRate', label: t('instructions.lineRate'), width: '130px', type: 'decimal', decimalScale: 10, secondary: true },
+        ...(multiSub ? [{ key: 'eliminate', label: t('instructions.eliminate'), width: '110px', type: 'select' as const, secondary: true, options: [{value: '', label: t('instructions.keep')}, {value: 'true', label: t('instructions.eliminate')}] }] : []),
+      ]
+      if (statistical) { delete builtIn.debit; delete builtIn.credit }
+      const prepaidColumns = ledgerSnapshot || statistical ? [] : amortizationLineColumns<LineRow>(amortizationTemplates, tAmortization)
+      if (!layout) return [...Object.values(builtIn), ...instructionColumns, ...segmentColumns, ...prepaidColumns, ...custom.values()]
       const configured = layout.lines.columns.flatMap((placement) => {
         if (!placement.visible) return []
         const base = isCustomFieldKey(placement.key) ? custom.get(placement.key) : builtIn[placement.key]
         if (!base) return []
         return [{ ...base, width: placement.width ?? base.width, label: placement.labelOverride?.trim() || base.label }]
       })
-      return [...configured, ...segmentColumns, ...prepaidColumns]
+      return [...configured, ...instructionColumns, ...segmentColumns, ...prepaidColumns]
     },
-    [accounts, departments, projects, parties, multiSub, subsidiaryOpts, lineDefs, segments, layout, t, tc, ledgerSnapshot, money, amortizationTemplates, tAmortization],
+    [statistical, accounts, departments, projects, parties, multiSub, subsidiaryOpts, lineDefs, segments, layout, t, tc, ledgerSnapshot, money, amortizationTemplates, tAmortization],
   )
 
   const field = 'space-y-1.5'
@@ -1268,7 +1298,7 @@ function JournalDrawerBody({
           </span>
           <span className="flex-1" />
           <span className="text-sm text-slate-600 tabular-nums dark:text-slate-300">
-            {ledgerTotals ? ledgerTotals.map((total) => <span key={total.currency} className="block">{total.currency} · {t.rich('totals', {
+            {statistical ? t('instructions.statistical') : ledgerTotals ? ledgerTotals.map((total) => <span key={total.currency} className="block">{total.currency} · {t.rich('totals', {
               debits: money(total.debit, { currency: total.currency }),
               credits: money(total.credit, { currency: total.currency }),
               strong: (chunks) => <strong>{chunks}</strong>,
@@ -1281,9 +1311,9 @@ function JournalDrawerBody({
             })}
           </span>
           {isDraft ? (
-            diff !== 0n ? (
+            !statistical && !mixedCurrencies && diff !== 0n ? (
               <Badge variant="destructive">{t('outOfBalance', { amount: money(formatJournalAmount(diff < 0n ? -diff : diff)) })}</Badge>
-            ) : debits > 0n ? (
+            ) : balanced && !mixedCurrencies ? (
               <Badge variant="success">{t('balanced')}</Badge>
             ) : null
           ) : null}
@@ -1298,6 +1328,15 @@ function JournalDrawerBody({
         ) : null}
         <ActionAlert error={refusal} fallbackMessage={t('postFailed')} />
         <PeriodClosedRefusal error={refusal} />
+        {doc.reversal_instruction_status ? <div className="rounded-md border p-3 text-sm space-y-2">
+          <p>{t('instructions.reversalStatus',{status:String(doc.reversal_instruction_status),date:reverseOn})}</p>
+          {doc.reversal_instruction_error ? <p role="alert">{String(doc.reversal_instruction_error)}</p> : null}
+          {doc.automatic_reversal_entry_id ? <JournalEntryLink entryId={String(doc.automatic_reversal_entry_id)}>{t('instructions.viewReversal')}</JournalEntryLink> : null}
+          {canPost && doc.reversal_instruction_status === 'blocked' ? <Button variant="outline" size="sm" onClick={async () => {
+            try { await fetchAppAction('/api/journals/reversals',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}); router.refresh() }
+            catch(error) { toast.error(error instanceof Error ? error.message : t('postFailed')) }
+          }}>{t('instructions.retryReversals')}</Button> : null}
+        </div> : null}
         {postWarnings.map((warning, index) => (
           <p key={index} role="alert" className="rounded-md border border-amber-200 bg-amber-50 p-2.5 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
             {warning}
@@ -1306,6 +1345,13 @@ function JournalDrawerBody({
         {bookUi ? (
           <JournalBookField books={books!} value={accountingBookId} onChange={setAccountingBookId} editable={editable && canPostBookSpecific} />
         ) : null}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className={field}><Label>{t('instructions.mode')}</Label>{editable ? <SearchSelect value={journalMode} onChange={setJournalMode} options={['monetary','statistical','currency_adjustment'].map(value => ({value,label:t(`instructions.${value}`)}))} /> : <p className="text-sm">{t(`instructions.${journalMode}`)}</p>}</div>
+          {!statistical ? <><div className={field}><Label>{t('instructions.currency')}</Label>{editable ? <Input value={currency} maxLength={3} onChange={event => setCurrency(event.target.value.toUpperCase())} /> : <p className="text-sm">{currency}</p>}</div>
+          <div className={field}><Label>{t('instructions.rate')}</Label>{editable ? <Input value={fxRate} inputMode="decimal" onChange={event => setFxRate(event.target.value)} /> : <p className="text-sm">{fxRate}</p>}</div></> : null}
+          <div className={field}><Label>{t('instructions.reverseOn')}</Label>{editable ? <Input type="date" value={reverseOn} onChange={event => setReverseOn(event.target.value)} /> : <p className="text-sm">{reverseOn || '—'}</p>}</div>
+        </div>
+        {mixedCurrencies ? <p className="text-xs text-slate-500">{t('instructions.serverBalance')}</p> : null}
         {layout ? <HeaderFields layout={layout} editable={editable} renderField={renderHeaderField} /> : <><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className={field}>
             <Label>{tc('labels.date')}{editable ? <span className="text-red-500"> *</span> : null}</Label>

@@ -1,5 +1,6 @@
+import { accounts } from "./coa";
 import { sql } from "drizzle-orm";
-import { bigint, check, date, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { bigint, boolean, check, foreignKey, date, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { auditColumns, currencyCode, id, orgRef } from "./helpers";
 
 /**
@@ -10,6 +11,16 @@ import { auditColumns, currencyCode, id, orgRef } from "./helpers";
 
 export const BOOK_REPLICATION_MODES = ["adjustment_only", "full"] as const;
 export type BookReplicationMode = (typeof BOOK_REPLICATION_MODES)[number];
+
+/** The physical posting book and its retained replication basis. */
+export const accountingBooks=pgTable("accounting_books",{
+ id:id(),orgId:orgRef(),code:text("code").notNull(),name:text("name").notNull(),
+ isPrimary:boolean("is_primary").notNull().default(false),isActive:boolean("is_active").notNull().default(true),postsGl:boolean("posts_gl").notNull().default(true),
+ replicationMode:text("replication_mode",{enum:BOOK_REPLICATION_MODES}).notNull().default("adjustment_only"),
+ replicationFrom:date("replication_from"),currencyDifferenceAccountId:uuid("currency_difference_account_id"),...auditColumns,
+},t=>[uniqueIndex("accounting_books_org_id_id_unique").on(t.orgId,t.id),uniqueIndex("books_org_code").on(t.orgId,t.code),
+ foreignKey({columns:[t.orgId,t.currencyDifferenceAccountId],foreignColumns:[accounts.orgId,accounts.id]})]);
+
 export const BOOK_OPENING_STRATEGIES = ["full_history", "opening_balances"] as const;
 export type BookOpeningStrategy = (typeof BOOK_OPENING_STRATEGIES)[number];
 export const BOOK_REPLICATION_RUN_KINDS = ["activation", "catch_up", "deactivation", "settings"] as const;

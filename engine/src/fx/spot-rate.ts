@@ -36,6 +36,8 @@ export interface FxObservationEvidence {
 }
 
 interface FxEvidenceBase {
+  /** Selected named series; omitted on legacy spot evidence. */
+  rateType?: string;
   from: string;
   to: string;
   /** Rating doctrine that selected the observations. */
@@ -92,20 +94,20 @@ export interface FxMonthAverageEvidence extends FxEvidenceBase {
  * winner is unchanged: direct (priority 0) beats inverse (priority 1), and
  * the unique index on (org, pair, as_of, rate_type) leaves no further tie.
  */
-function spotEvidenceCandidates(orgId: string, from: string, to: string, dateCond: SQL): SQL {
+function spotEvidenceCandidates(orgId: string, from: string, to: string, dateCond: SQL, rateType = "spot"): SQL {
   return sql`
     select id::text as id, as_of, source, rate::text as stored_rate,
            to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as updated_at,
            0 as priority, rate::text as derived_rate from fx_rates
      where org_id = ${orgId} and from_currency = ${from}
-       and to_currency = ${to} and rate_type = 'spot'
+       and to_currency = ${to} and rate_type = ${rateType}
        and ${dateCond}
     union all
     select id::text as id, as_of, source, rate::text as stored_rate,
            to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as updated_at,
            1 as priority, (1 / rate)::numeric(19,10)::text as derived_rate from fx_rates
      where org_id = ${orgId} and from_currency = ${to}
-       and to_currency = ${from} and rate_type = 'spot'
+       and to_currency = ${from} and rate_type = ${rateType}
        and ${dateCond}`;
 }
 
@@ -206,8 +208,11 @@ export async function lookupSpotRateWithEvidence(
   from: string,
   to: string,
   asOf: string,
+  rateType = "spot",
 ): Promise<FxAsOfEvidence> {
+  const scope = rateType === "spot" ? { asOf } : { asOf, rateType };
   const base = {
+    ...(rateType === "spot" ? {} : { rateType }),
     from,
     to,
     policy: SPOT_EVIDENCE_POLICY,
@@ -222,10 +227,10 @@ export async function lookupSpotRateWithEvidence(
       asOf,
       rate: "1",
       observations: [],
-      digest: sameCurrencyDigest("as-of", { asOf }, from),
+      digest: sameCurrencyDigest("as-of", scope, from),
     };
   }
-  const candidates = spotEvidenceCandidates(orgId, from, to, sql`as_of <= ${asOf}`);
+  const candidates = spotEvidenceCandidates(orgId, from, to, sql`as_of <= ${asOf}`, rateType);
   const r = await runner.execute<EvidenceRow>(sql`
     select id, as_of::text as as_of, source, stored_rate, updated_at, priority, derived_rate
       from (${candidates}) candidates
@@ -238,7 +243,7 @@ export async function lookupSpotRateWithEvidence(
       asOf,
       rate: null,
       observations: [],
-      digest: digestObservations("as-of", { asOf }, from, to, null, []),
+      digest: digestObservations("as-of", scope, from, to, null, []),
     };
   }
   const observations = [toObservation(row)];
@@ -249,7 +254,7 @@ export async function lookupSpotRateWithEvidence(
     asOf,
     rate,
     observations,
-    digest: digestObservations("as-of", { asOf }, from, to, rate, observations),
+    digest: digestObservations("as-of", scope, from, to, rate, observations),
   };
 }
 
@@ -396,4 +401,9 @@ export async function averageSpotRate(
 ): Promise<string | null> {
   if (from === to) return "1";
   return (await selectWindowObservations(runner, orgId, from, to, fromDate, toDate)).average;
+}
+
+/** Named series shares the spot reader's direct/inverse precedence and exact evidence. */
+export async function lookupExchangeRate(runner: Runner, orgId: string, from: string, to: string, asOf: string, rateType = "spot"): Promise<string | null> {
+  return (await lookupSpotRateWithEvidence(runner, orgId, from, to, asOf, rateType)).rate;
 }

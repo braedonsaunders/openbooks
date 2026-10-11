@@ -1,3 +1,4 @@
+import { accountingPreferences } from "@openbooks/engine/organization/accounting-preferences";
 import { sourceAmortizationOptions } from "@/lib/amortization-options";
 import 'server-only'
 
@@ -115,6 +116,9 @@ export async function loadJournal(
         headerDefs: (pickers[4]),
         lineDefs: (pickers[5]),
         explicitLayoutId: pickString(sp.form),
+        subsidiaryDefaultLayoutId: openJournal?.doc.subsidiary_id && typeof openJournal.doc.subsidiary_id === "string"
+          ? (await accountingPreferences(db,authz.user.orgId,openJournal.doc.subsidiary_id,String(openJournal.doc.document_date))).defaultJournalFormId
+          : pickers[6]?.[0]?.id ? (await accountingPreferences(db,authz.user.orgId,pickers[6][0].id,await businessToday(authz.user.orgId))).defaultJournalFormId : null,
       })
     : null
 

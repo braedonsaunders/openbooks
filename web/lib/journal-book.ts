@@ -7,8 +7,8 @@ import { isUuid } from './list-params'
  * The book target of a manual journal. Null is the standard journal: it posts
  * to the primary book and replicates into every full book. A book id makes the
  * journal book-specific: it posts to that book only, needs Multi-book
- * accounting and the "Post book-specific journals" permission, and is entered
- * in the currency that book carries the journal's subsidiary in.
+ * accounting and the "Post book-specific journals" permission, and measures amounts
+ * in the currency that book carries the journal's subsidiary in. The journal may use a registered transaction currency with an explicit exchange rate.
  */
 export class JournalBookError extends Error {
   readonly name = 'JournalBookError'
@@ -19,7 +19,7 @@ export class JournalBookError extends Error {
 
 export interface JournalBookTarget {
   accountingBookId: string | null
-  /** The currency the journal is entered in (the book's for its subsidiary). */
+  /** The book's measurement currency for the journal's subsidiary. */
   currency: string
 }
 

@@ -235,6 +235,8 @@ export async function reportsHubFor(
       cards: [
         card('generalLedger', '/reports/general-ledger', 'BookOpen', 'ledger'),
         card('journal', '/reports/journal', 'NotebookPen', 'ledger'),
+        card('statisticalJournal', '/reports/statistical-journal', 'ClipboardList', 'ledger'),
+        card('glAuditNumbers', '/reports/gl-audit-numbers', 'BookOpen', 'ledger'),
         ...(intercompanyReportVisible ? [card('intercompanyReconciliation', '/reports/intercompany-reconciliation', 'Scale', 'ledger')] : []),
         ...definitionCards(ledgerDefinitions, 'BookOpen', t('hub.cards.builtInDescription')),
       ],

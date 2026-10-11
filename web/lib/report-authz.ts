@@ -83,6 +83,8 @@ const STATEMENT_KIND_PERMISSION: Partial<Record<string, string>> = {
   'trial-balance': 'gl.read',
   'general-ledger': 'gl.read',
   journal: 'gl.read',
+  'statistical-journal': 'gl.read',
+  'gl-audit-numbers': 'gl.read',
   'book-differences': 'gl.read',
   budget: 'budgets.read',
   'payroll-support': 'payroll.read',

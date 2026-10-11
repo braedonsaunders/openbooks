@@ -54,7 +54,11 @@
       "intercompanyReconciliationTitle": "法人間残高照合",
       "intercompanyReconciliationDescription": "各法人の帳簿における法人間残高を通貨別に表示し、照合が必要な差額を確認します。",
       "bookDifferencesTitle": "帳簿間差異",
-      "bookDifferencesDescription": "主帳簿の各勘定科目を副帳簿と並べ、差異を表示"
+      "bookDifferencesDescription": "主帳簿の各勘定科目を副帳簿と並べ、差異を表示",
+      "statisticalJournalTitle": "統計仕訳",
+      "statisticalJournalDescription": "この期間の記録はありません。",
+      "glAuditNumbersTitle": "総勘定元帳監査番号",
+      "glAuditNumbersDescription": "法人の総勘定元帳期間を締める必要があります。既存の番号と転記済み仕訳は保持されます。"
     },
     "groups": {
       "financial": "財務諸表",
@@ -3564,5 +3568,26 @@
     "base": "基本勘定科目表",
     "legend": "会計コンテキスト：{context}。{marker} は基本勘定科目表の番号と名称で表示された勘定を示します",
     "blockedTitle": "この会計コンテキストでは勘定を表示できません"
+  },
+  "journalMeasurements": {
+    "auditTitle": "総勘定元帳監査番号",
+    "statisticalTitle": "統計仕訳",
+    "number": "監査番号",
+    "entry": "仕訳",
+    "date": "日付",
+    "entity": "法人",
+    "period": "期間",
+    "book": "帳簿",
+    "account": "勘定科目",
+    "quantity": "数量",
+    "unit": "単位",
+    "department": "部門",
+    "empty": "この期間の記録はありません。",
+    "allocate": "監査番号を割り当て",
+    "allocateTitle": "総勘定元帳の監査番号を割り当て",
+    "allocateDescription": "法人の総勘定元帳期間を締める必要があります。既存の番号と転記済み仕訳は保持されます。",
+    "reason": "理由",
+    "allocated": "監査番号を割り当てました",
+    "failed": "監査番号の割り当てに失敗しました"
   }
 }

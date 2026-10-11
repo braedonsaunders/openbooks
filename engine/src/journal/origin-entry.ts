@@ -140,7 +140,7 @@ export async function postProjectGlEntryWithinTransaction(
   const currency = opts.currency ?? functionalCurrency;
   // Project journals are ordinary postings: the shared covering-period
   // resolver (default calendar, regular periods, deterministic).
-  const covering = await resolveCoveringPeriod(tx, orgId, postingDate);
+  const covering = await resolveCoveringPeriod(tx, orgId, postingDate, subId);
   if (!covering) throw new Error(`no accounting period covers ${postingDate}`);
   const periodId = covering.id;
   // One period gate: the shared GL check replaces the raw
@@ -317,7 +317,7 @@ export async function reverseProjectGlEntryWithinTransaction(
     throw new Error(`project GL entry ${entryId} is ${h.status} and cannot be reversed`);
   }
   // Reversals are ordinary corrections: shared covering-period resolver.
-  const period = await resolveCoveringPeriod(tx, orgId, reversalDate);
+  const period = await resolveCoveringPeriod(tx, orgId, reversalDate, h.subsidiary_id);
   if (!period) {
     throw new Error(`no accounting period covers ${reversalDate}`);
   }

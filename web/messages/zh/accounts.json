@@ -32,14 +32,16 @@
     "cogs": "销售成本",
     "expense": "费用",
     "expenseOther": "其他费用",
-    "expenseDeferred": "递延费用"
+    "expenseDeferred": "递延费用",
+    "statistical": "统计分录"
   },
   "classes": {
     "asset": "资产",
     "liability": "负债",
     "equity": "权益",
     "income": "收入",
-    "expense": "费用"
+    "expense": "费用",
+    "statistical": "统计分录"
   },
   "hygiene": {
     "assetBankUncorroborated": "“{name}”被归类为银行科目，但没有银行类名称且不可对账，因此将在所有地方被计入现金。请确认科目类型（清算、准备金和授信科目经常被误分类），或启用对账。",

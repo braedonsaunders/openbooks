@@ -43,6 +43,7 @@ export const BOOK_MEASURED_ORIGINS = [
   "revenue_recognition",
   "allocation",
   "fx_revaluation",
+  "currency_adjustment",
   "translation",
   "provision",
   "closing",
@@ -106,6 +107,8 @@ interface SourceHeader {
 }
 
 interface SourceLine {
+  eliminate: boolean;
+  is_currency_adjustment: boolean;
   line_number: number;
   account_id: string;
   subsidiary_id: string;
@@ -176,7 +179,7 @@ async function lockFullBooks(executor: SqlExecutor, orgId: string, onlyBookId?: 
 
 async function loadEntryLines(executor: SqlExecutor, orgId: string, entryId: string): Promise<SourceLine[]> {
   return (await executor.execute<SourceLine & Record<string, unknown>>(sql`
-    select line_number, account_id, subsidiary_id, amount::text as amount, currency,
+    select line_number, eliminate, is_currency_adjustment, account_id, subsidiary_id, amount::text as amount, currency,
            txn_amount::text as txn_amount, fx_rate::text as fx_rate, memo, party_id, department_id,
            project_id, location_id, class_id, equipment_unit_id, payment_card_id, tax_code_id,
            extra_dims, quantity::text as quantity, unit, due_date::text as due_date, custom,
@@ -258,6 +261,8 @@ export async function replicateEntryToBooks(
     const bookLines: PostEntryLineInput[] = (mirrored ?? carried).map((line) => ({
       lineNumber: line.line_number,
       accountId: line.account_id,
+      eliminate: line.eliminate,
+      isCurrencyAdjustment: line.is_currency_adjustment,
       subsidiaryId: line.subsidiary_id,
       amount: mirrored ? neg(line.amount) : line.amount,
       currency: line.currency,

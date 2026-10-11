@@ -93,7 +93,26 @@
     "budgetaryControlWarning": "予算{scenario}は{account}、基金{fund}、{subsidiary}{dimensions}で割当超過です。利用可能額{available}、超過額{amountOver}。",
     "budgetaryControlRemedy": "予算を承認フローで改定してください。承認済み予算を下書きとしてコピーし、ワークシートでこのファンドの勘定金額を増やし、コピーを承認して置き換えられた予算をアーカイブします。または、この実績を予約した未決の負担行為に紐付けてください。",
     "voidAwaitingApproval": "この仕訳の取消は承認待ちです。承認が決定するまで仕訳は転記済みのままです。",
-    "createUnconfirmed": "サーバーが新しい仕訳の作成を確認できませんでした。もう一度保存してください。再試行はこの下書きのキーを再利用するため、仕訳が2件作成されることはありません。"
+    "createUnconfirmed": "サーバーが新しい仕訳の作成を確認できませんでした。もう一度保存してください。再試行はこの下書きのキーを再利用するため、仕訳が2件作成されることはありません。",
+    "instructions": {
+      "mode": "仕訳モード",
+      "monetary": "金額仕訳",
+      "statistical": "統計仕訳",
+      "currency_adjustment": "通貨調整",
+      "currency": "取引通貨",
+      "rate": "為替レート",
+      "reverseOn": "自動反転日",
+      "lineCurrency": "明細通貨",
+      "lineRate": "明細為替レート",
+      "quantity": "数量",
+      "unit": "単位",
+      "eliminate": "消去",
+      "keep": "保持",
+      "serverBalance": "異なる通貨の金額は、保存時に仕訳通貨への換算額で貸借を確認します。",
+      "reversalStatus": "自動反転：{status} · {date}",
+      "retryReversals": "期日到来の反転を再試行",
+      "viewReversal": "反転仕訳を表示"
+    }
   },
   "book": {
     "label": "会計帳簿",

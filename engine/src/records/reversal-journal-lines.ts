@@ -25,6 +25,8 @@ export type ReversalSourceJournalLine = Pick<
   | "custom"
 > & {
   /** Allocation/script contributor stamps ride the mirror (null = kernel). */
+  eliminate?: boolean;
+  isCurrencyAdjustment?: boolean;
   contributorKind?: string | null;
   contributorRef?: string | null;
 };
@@ -54,6 +56,8 @@ export function reversalJournalLines(
     paymentCardId: line.paymentCardId,
     taxCodeId: line.taxCodeId,
     memo: line.memo,
+    eliminate: line.eliminate ?? false,
+    isCurrencyAdjustment: line.isCurrencyAdjustment ?? false,
     quantity: line.quantity == null ? null : neg(line.quantity),
     unit: line.unit,
     dueDate: null,

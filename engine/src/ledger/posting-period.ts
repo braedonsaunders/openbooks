@@ -46,9 +46,12 @@ export async function resolvePostingPeriod(
           : `accounting period ${doc.postingPeriodId} does not cover posting date ${postingDate} — import the document on a date inside its period`,
       );
     }
+    const calendar=(await runner.execute<{matches:boolean}>(sql`select fiscal_calendar_id=public.subsidiary_posting_calendar(${doc.orgId},${doc.subsidiaryId},${postingDate}::date) as matches
+      from accounting_periods where org_id=${doc.orgId} and id=${doc.postingPeriodId}`)).rows[0];
+    if (!calendar?.matches) throw new PostingError("The explicit posting period does not belong to the entity's effective fiscal calendar. Select that entity's period.");
     return { id: doc.postingPeriodId };
   }
-  const period = await resolveCoveringPeriod(runner, doc.orgId, postingDate);
+  const period = await resolveCoveringPeriod(runner, doc.orgId, postingDate, doc.subsidiaryId);
   if (!period) {
     throw new PostingError(
       `no accounting period covers ${postingDate} — generate the period covering that date, then post again`,
@@ -121,7 +124,7 @@ export async function assertPayRunConsolidatedRateCoverage(
   // regular period's rates, exactly as the statement engine resolves them.
   // With no regular period covering the date the kernel's own period logic
   // governs, and statements still refuse at report time.
-  const period = await resolveCoveringPeriod(runner, args.orgId, args.postingDate);
+  const period = await resolveCoveringPeriod(runner, args.orgId, args.postingDate, args.docSubsidiaryId);
   if (!period) return;
   for (const pair of pairs) {
     const covered = (await runner.execute<{ one: number }>(sql`

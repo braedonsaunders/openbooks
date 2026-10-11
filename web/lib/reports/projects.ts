@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
 import { functionalReportReader } from "./currency-basis";
 import { excludePeriodEndJournals } from "@openbooks/engine/records/period-end-origins";
-import { statementBookExpr } from "../gl-summary";
+import { statementBookIdsExpr } from "../gl-summary";
 import { resolveOrgId } from "../org-scope";
 import { decimalCmp, decimalSum, type ExactDecimal } from "../statement-format";
 import { decimalRatio, decimalSubtract } from "./decimals";
@@ -129,7 +129,7 @@ export async function projectProfitability(
 ): Promise<ProjectProfitResult> {
   const orgId = await resolveOrgId(opts.orgId)
   const reportDb = functionalReportReader(orgId, sql`e.posting_date >= ${from} and e.posting_date <= ${to}
-    and e.book_id = ${statementBookExpr(orgId, opts.bookId)} and ${dimWhere(opts.dims)}
+    and e.book_id in ${statementBookIdsExpr(orgId, opts.bookId)} and ${dimWhere(opts.dims)}
     and a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
     and exists (select 1 from projects prj left join parties customer on customer.id = prj.customer_id and customer.org_id = prj.org_id
       where prj.id = l.project_id and prj.org_id = ${orgId}
@@ -147,7 +147,7 @@ export async function projectProfitability(
              coalesce(sum(l.amount) filter (where a.type in ('expense','expense_other','expense_deferred')), 0) as expenses
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
-          and e.book_id = ${statementBookExpr(orgId, opts.bookId)}
+          and e.book_id in ${statementBookIdsExpr(orgId, opts.bookId)}
           and ${excludePeriodEndJournals(sql`e.origin`)}
         join accounts a on a.id = l.account_id and a.org_id = l.org_id
        where l.project_id is not null
@@ -176,7 +176,7 @@ export async function projectProfitability(
              coalesce(sum(l.amount) filter (where a.type in ('expense','expense_other','expense_deferred')), 0) as expenses
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
-          and e.book_id = ${statementBookExpr(orgId, opts.bookId)}
+          and e.book_id in ${statementBookIdsExpr(orgId, opts.bookId)}
           and ${excludePeriodEndJournals(sql`e.origin`)}
         join accounts a on a.id = l.account_id and a.org_id = l.org_id
        where l.project_id is null

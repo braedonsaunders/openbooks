@@ -1,4 +1,5 @@
 import { accrueRebatesForDocument, rebateSettlementVoidContext, releaseVoidedRebateSettlement } from '../revenue/rebates.ts';
+import { assertJournalVoidNotAutomaticallyReversed, cancelScheduledJournalReversal } from "./journal-reversals.ts";
 import { releaseWithholdingDeposit } from "../contractor-withholding/deposits.ts";
 import { and, eq, getTableColumns, sql } from "drizzle-orm";
 import type { FlowEventSource } from "@openbooks/forms-core";
@@ -370,7 +371,7 @@ export async function suggestVoidReversalDate(
   doc: { id: string; kind: string; documentDate: string; subsidiaryId: string | null },
 ): Promise<VoidReversalSuggestion> {
   const originalDate = doc.documentDate;
-  const covering = await resolveCoveringPeriod(runner, orgId, originalDate);
+  const covering = await resolveCoveringPeriod(runner, orgId, originalDate, doc.subsidiaryId);
   const uncovered: VoidReversalSuggestion = {
     originalDate,
     suggestedDate: originalDate,
@@ -468,6 +469,7 @@ export async function requestDocumentVoid(
   return withOrgTransaction(input.orgId, async () => {
     await lockLedgerSetupFence(db, input.orgId, "shared");
     const current = await loadDocument(input.documentId, input.orgId);
+    if (current.kind === "journal") await assertJournalVoidNotAutomaticallyReversed(db,input.orgId,input.documentId);
     // Keep the scope decision on the locked source row and hold that lock
     // through reservation, gate creation, and any immediate reversal.
     if (input.allowedSubsidiaryIds !== undefined &&
@@ -1330,6 +1332,9 @@ export async function completeRequestedDocumentVoid(
     } = await db.transaction(async (tx) => {
       // Completion-time backstop for the request-path check above: a release
       // landing between request and completion is refused here instead.
+      const reversalDocument = (await tx.execute<{ void_requested_by: string | null }>(sql`select void_requested_by from documents where org_id=${orgId} and id=${documentId} for update`)).rows[0];
+      await assertJournalVoidNotAutomaticallyReversed(tx,orgId,documentId);
+      await cancelScheduledJournalReversal(tx,orgId,documentId,reversalDocument?.void_requested_by ?? null);
       await refuseUnavailablePayRunVoid(tx, orgId, documentId);
       // The document stays posted while void approvals wait, so an invoice
       // may have billed its cost in the meantime.
@@ -1734,7 +1739,7 @@ export async function completeRequestedDocumentVoid(
           : null;
         const period = overridePeriodId
           ? { id: await resolveVoidReversalPeriod(tx, orgId, overridePeriodId, reversalDate) }
-          : await resolveCoveringPeriod(tx, orgId, reversalDate);
+          : await resolveCoveringPeriod(tx, orgId, reversalDate, String(entry.subsidiary_id));
         if (!period) {
           throw new DocumentVoidError(
             `no accounting period covers ${reversalDate} — generate the period covering that date, then void again`,

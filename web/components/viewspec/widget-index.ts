@@ -519,6 +519,7 @@ export const WIDGET_FAMILY: Readonly<Record<string, WidgetFamily>> = {
   'reconcile-supporting-statements': 'banking',
   'reconcile-workspace': 'banking',
   'reconciliation-note': 'reporting',
+  'gl-audit-number-command': 'reporting',
   'record-count-cell': 'records',
   'record-drawer': 'records',
   'record-list-view': 'core',

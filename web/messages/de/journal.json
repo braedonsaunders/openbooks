@@ -93,7 +93,26 @@
     "budgetaryControlWarning": "Budget {scenario} überschreitet die Zuweisung für {account}, Fonds {fund}, {subsidiary}{dimensions}: verfügbar {available}, überschritten um {amountOver}.",
     "budgetaryControlRemedy": "Das Budget über seinen Genehmigungsablauf anpassen: das genehmigte Budget als Entwurf kopieren, den Betrag dieses Kontos für den Fonds im Arbeitsblatt erhöhen, die Kopie genehmigen und das ersetzte Budget archivieren. Oder den Ist-Betrag mit der offenen Verpflichtung verknüpfen, die ihn reserviert hat.",
     "voidAwaitingApproval": "Eine Stornierung dieses Journals wartet auf Genehmigung. Das Journal bleibt gebucht, bis über die Genehmigung entschieden ist.",
-    "createUnconfirmed": "Der Server hat das neue Journal nicht bestätigt. Speichern Sie erneut: Der Wiederholungsversuch verwendet den Schlüssel dieses Entwurfs und kann daher kein zweites Journal erzeugen."
+    "createUnconfirmed": "Der Server hat das neue Journal nicht bestätigt. Speichern Sie erneut: Der Wiederholungsversuch verwendet den Schlüssel dieses Entwurfs und kann daher kein zweites Journal erzeugen.",
+    "instructions": {
+      "mode": "Journalmodus",
+      "monetary": "Monetär",
+      "statistical": "Statistisch",
+      "currency_adjustment": "Währungsanpassung",
+      "currency": "Transaktionswährung",
+      "rate": "Wechselkurs",
+      "reverseOn": "Automatisch stornieren am",
+      "lineCurrency": "Zeilenwährung",
+      "lineRate": "Zeilenwechselkurs",
+      "quantity": "Menge",
+      "unit": "Einheit",
+      "eliminate": "Eliminieren",
+      "keep": "Beibehalten",
+      "serverBalance": "Beträge in verschiedenen Währungen werden beim Speichern anhand ihrer Gegenwerte in der Journalwährung ausgeglichen.",
+      "reversalStatus": "Automatische Stornierung: {status} · {date}",
+      "retryReversals": "Fällige Stornierungen erneut ausführen",
+      "viewReversal": "Stornierung anzeigen"
+    }
   },
   "book": {
     "label": "Buch",

@@ -77,6 +77,10 @@ export const documents = pgTable(
      */
     subsidiaryId: uuid("subsidiary_id"),
     documentDate: date("document_date").notNull(),
+    /** Journal instructions enter approval with the original document. */
+    journalMode: text("journal_mode", { enum: ["monetary", "statistical", "currency_adjustment"] }).notNull().default("monetary"),
+    journalReverseOn: date("journal_reverse_on"),
+    journalFxRateExplicit: boolean("journal_fx_rate_explicit").notNull().default(false),
     postingDate: date("posting_date"),
     /** Explicit accounting-period override. This is first-class because an
      * accounting period is not always derivable from the transaction date
@@ -319,6 +323,9 @@ export const documentLines = pgTable(
     description: text("description"),
     /** Quantities and rates preserve commercial precision independently from
      * the four-decimal posted amount. */
+    journalCurrency: currencyCode("journal_currency"),
+    journalFxRate: fxRate("journal_fx_rate"),
+    journalEliminate: boolean("journal_eliminate").notNull().default(false),
     quantity: numeric("quantity", { precision: 28, scale: 8 }).notNull().default("1"),
     unit: text("unit"),
     unitPrice: numeric("unit_price", { precision: 28, scale: 8 }).notNull().default("0"),

@@ -236,6 +236,10 @@
     "prepaid-amortization-unposted": {
       "title": "Auflösung der Rechnungsabgrenzung ist nicht gebucht",
       "message": "{count, plural, one {# fällige Auflösungsperiode ist nicht gebucht.} other {# fällige Auflösungsperioden sind nicht gebucht.}}"
+    },
+    "balancing-segment-residual": {
+      "title": "Restbeträge ausgleichspflichtiger Segmente",
+      "message": "{count} Segmentwerte weisen einen Restbetrag auf. Prüfen Sie Zuordnungen und Verrechnungsrichtlinien vor dem Abschluss."
     }
   },
   "severity": {

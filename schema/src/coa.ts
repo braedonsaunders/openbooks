@@ -14,13 +14,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { auditColumns, currencyCode, id, orgRef } from "./helpers";
 
-/**
- * Account types carry their normal balance and statement placement — no
- * separate lookup, no source platform 18-way stringly-typed enum leaking into
- * report logic. `Stat` (statistical/non-monetary) and `NonPosting` are
- * intentionally NOT account types here: statistical tracking uses
- * quantity fields on journal lines; non-posting documents simply don't post.
- */
+/** Monetary account types define statement placement; statistical accounts retain only quantities and units. */
 export const ACCOUNT_TYPES = [
   "asset_bank",
   "asset_receivable",
@@ -38,6 +32,7 @@ export const ACCOUNT_TYPES = [
   "expense",
   "expense_other",
   "expense_deferred",
+  "statistical",
 ] as const;
 
 export const accounts = pgTable(

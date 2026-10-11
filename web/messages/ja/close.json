@@ -236,6 +236,10 @@
     "prepaid-amortization-unposted": {
       "title": "前払費用の配分が未記帳です",
       "message": "{count, plural, one {期日到来の配分期間 # 件が未記帳です。} other {期日到来の配分期間 # 件が未記帳です。}}"
+    },
+    "balancing-segment-residual": {
+      "title": "貸借均衡セグメントの残額",
+      "message": "{count} 件のセグメント値に元帳残額があります。締め処理の前に割り当てと有効な相殺方針を確認してください。"
     }
   },
   "severity": {

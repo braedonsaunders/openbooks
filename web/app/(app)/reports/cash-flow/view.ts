@@ -92,7 +92,7 @@ export async function loadCashFlow(sp: Record<string, string | undefined>): Prom
   let currencyBasisBlocked: CurrencyBasisNotice | null = null
   try {
     subView = await reportSubsidiaryView(q.subsidiaryId, period.to, selectedBook.id)
-    cf = await cashFlow(from, to, { ...q.dims, subsidiaryIds: subView.subsidiary?.ids }, undefined, selectedBook.id)
+    cf = await cashFlow(from, to, { ...q.dims, subsidiaryIds: subView.subsidiary?.ids }, undefined, selectedBook.id, subView.subsidiary)
   } catch (e) {
     // A multi-currency viewed set is a NAMED refusal, not a defect: the
     // banner carries the remedy (choose a single-currency subsidiary view)

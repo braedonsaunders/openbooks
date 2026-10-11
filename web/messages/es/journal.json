@@ -93,7 +93,26 @@
     "budgetaryControlWarning": "El presupuesto {scenario} supera la asignación para {account}, fondo {fund}, {subsidiary}{dimensions}: disponible {available}, exceso de {amountOver}.",
     "budgetaryControlRemedy": "Revise el presupuesto mediante su flujo de aprobación: copie el presupuesto aprobado como borrador, aumente el importe de esta cuenta para el fondo en la hoja de trabajo, apruebe la copia y archive el presupuesto sustituido. O vincule este importe al compromiso abierto que lo reservó.",
     "voidAwaitingApproval": "La anulación de este asiento espera aprobación. El asiento permanece contabilizado hasta que se decida la aprobación.",
-    "createUnconfirmed": "El servidor no confirmó el nuevo asiento. Guarde de nuevo: el reintento usa la clave de este borrador, así que no puede crear un segundo asiento."
+    "createUnconfirmed": "El servidor no confirmó el nuevo asiento. Guarde de nuevo: el reintento usa la clave de este borrador, así que no puede crear un segundo asiento.",
+    "instructions": {
+      "mode": "Modo de asiento",
+      "monetary": "Monetario",
+      "statistical": "Estadístico",
+      "currency_adjustment": "Ajuste de moneda",
+      "currency": "Moneda de transacción",
+      "rate": "Tipo de cambio",
+      "reverseOn": "Revertir automáticamente el",
+      "lineCurrency": "Moneda de línea",
+      "lineRate": "Tipo de cambio de línea",
+      "quantity": "Cantidad",
+      "unit": "Unidad",
+      "eliminate": "Eliminar",
+      "keep": "Conservar",
+      "serverBalance": "Los importes en distintas monedas se equilibran por sus equivalentes en la moneda del asiento al guardar.",
+      "reversalStatus": "Reversión automática: {status} · {date}",
+      "retryReversals": "Reintentar reversiones vencidas",
+      "viewReversal": "Ver reversión"
+    }
   },
   "book": {
     "label": "Libro contable",

@@ -93,7 +93,26 @@
     "budgetaryControlWarning": "Budget {scenario} is over appropriation for {account}, fund {fund}, {subsidiary}{dimensions}: available {available}, over by {amountOver}.",
     "budgetaryControlRemedy": "Revise the budget through its approval flow: copy the approved budget to a draft, raise this account's amount for the fund in the worksheet, approve the copy and archive the superseded budget. Or link this actual to the open encumbrance that reserved it.",
     "voidAwaitingApproval": "A void of this journal is awaiting approval. The journal stays posted until the approval is decided.",
-    "createUnconfirmed": "The server did not confirm the new journal. Save again: the retry reuses this draft's key, so it cannot create a second journal."
+    "createUnconfirmed": "The server did not confirm the new journal. Save again: the retry reuses this draft's key, so it cannot create a second journal.",
+    "instructions": {
+      "mode": "Journal mode",
+      "monetary": "Monetary",
+      "statistical": "Statistical",
+      "currency_adjustment": "Currency adjustment",
+      "currency": "Transaction currency",
+      "rate": "Exchange rate",
+      "reverseOn": "Automatically reverse on",
+      "lineCurrency": "Line currency",
+      "lineRate": "Line exchange rate",
+      "quantity": "Quantity",
+      "unit": "Unit",
+      "eliminate": "Eliminate",
+      "keep": "Keep",
+      "serverBalance": "Amounts in different currencies are balanced by their header-currency equivalents when saved.",
+      "reversalStatus": "Automatic reversal: {status} · {date}",
+      "retryReversals": "Retry due reversals",
+      "viewReversal": "View reversal"
+    }
   },
   "book": {
     "label": "Accounting book",

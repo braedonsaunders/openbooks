@@ -16,8 +16,8 @@ export class ReportBookSelectionError extends Error {
  * explicit selection must never silently change the accounting basis. */
 export async function reportBookSelection(orgId: string, requested?: string | null) {
   if (requested != null && !isReportUuidParam(requested)) throw new ReportBookSelectionError()
-  const { rows: books } = await db.execute<{ id: string; code: string; name: string; is_primary: boolean }>(sql`
-    select id, code, name, is_primary from accounting_books
+  const { rows: books } = await db.execute<{ id: string; code: string; name: string; is_primary: boolean; replication_mode: string; posts_gl: boolean }>(sql`
+    select id, code, name, is_primary, replication_mode, posts_gl from accounting_books
      where org_id = ${orgId} and is_active
      order by is_primary desc, code, id
   `)
@@ -25,5 +25,6 @@ export async function reportBookSelection(orgId: string, requested?: string | nu
     ? books.find(book => book.is_primary)
     : books.find(book => book.id === requested.toLowerCase())
   if (!selectedBook) throw new ReportBookSelectionError()
-  return { books, selectedBook }
+  const basisBookIds = (await db.execute<{ id: string }>(sql`select public.reporting_book_ids(${orgId}::uuid, ${selectedBook.id}::uuid) as id`)).rows.map(row => row.id)
+  return { books, selectedBook, basisBookIds }
 }

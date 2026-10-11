@@ -54,7 +54,11 @@
       "intercompanyReconciliationTitle": "Intercompany reconciliation",
       "intercompanyReconciliationDescription": "Each intercompany pair's balances by currency in both entities' ledgers and the difference left to reconcile.",
       "bookDifferencesTitle": "Book Differences",
-      "bookDifferencesDescription": "Each account in the primary book beside a secondary book, with the difference"
+      "bookDifferencesDescription": "Each account in the primary book beside a secondary book, with the difference",
+      "statisticalJournalTitle": "Statistical Journal",
+      "statisticalJournalDescription": "No records for this period.",
+      "glAuditNumbersTitle": "GL Audit Numbers",
+      "glAuditNumbersDescription": "The entity’s GL period must be closed. Existing numbers and posted entries are preserved."
     },
     "groups": {
       "financial": "Financial Statements",
@@ -3564,5 +3568,26 @@
     "base": "Base chart",
     "legend": "Accounting context: {context}; {marker} marks an account shown under its base chart number and name",
     "blockedTitle": "This accounting context cannot label the accounts"
+  },
+  "journalMeasurements": {
+    "auditTitle": "GL Audit Numbers",
+    "statisticalTitle": "Statistical Journal",
+    "number": "Audit number",
+    "entry": "Entry",
+    "date": "Date",
+    "entity": "Legal entity",
+    "period": "Period",
+    "book": "Book",
+    "account": "Account",
+    "quantity": "Quantity",
+    "unit": "Unit",
+    "department": "Department",
+    "empty": "No records for this period.",
+    "allocate": "Assign audit numbers",
+    "allocateTitle": "Assign GL audit numbers",
+    "allocateDescription": "The entity’s GL period must be closed. Existing numbers and posted entries are preserved.",
+    "reason": "Reason",
+    "allocated": "Audit numbers assigned",
+    "failed": "Audit number allocation failed"
   }
 }

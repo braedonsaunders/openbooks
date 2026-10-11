@@ -1,3 +1,4 @@
+import { toUnits } from "../money/money.ts";
 /**
  * The measurement basis of an accounting book: which currency it carries
  * each subsidiary in, at which rate type, and the exact rates a posting
@@ -116,13 +117,14 @@ export async function resolveBookRates(
     bookCode: string;
     postingDate: string;
     bases: ReadonlyMap<string, BookSubsidiaryBasis>;
-    lines: readonly { subsidiaryId: string; currency: string }[];
+    lines: readonly { subsidiaryId: string; currency: string; amount?: string; txnAmount?: string }[];
   },
 ): Promise<{ rates: Map<string, string>; evidence: BookRateEvidence[] }> {
   const rates = new Map<string, string>();
   const evidence: BookRateEvidence[] = [];
   const needed = new Map<string, { subsidiaryId: string; currency: string }>();
   for (const line of args.lines) {
+    if (line.amount !== undefined && line.txnAmount !== undefined && toUnits(line.amount)===0n && toUnits(line.txnAmount)===0n) continue;
     const basis = args.bases.get(line.subsidiaryId);
     if (!basis || isIdentityBasis(basis) || line.currency === basis.bookCurrency) continue;
     needed.set(rateKey(line.subsidiaryId, line.currency), line);

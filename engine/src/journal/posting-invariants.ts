@@ -1,3 +1,4 @@
+import { canonicalDecimal } from "../money/exact-decimal.ts";
 /** Pure document-to-ledger projection rules. Transaction orchestration remains in posting.ts. */
 import { isZero, toUnits } from "../money/money.ts";
 import { sumMoney } from "../money/brands.ts";
@@ -9,9 +10,11 @@ import { type Doc, PostingError } from "./posting-contracts.ts";
  * error before any journal row is inserted.
  */
 export function assertFinalKernelBalance(
-  lines: readonly { amount: string; subsidiaryId: string }[],
+  lines: readonly { amount: string; subsidiaryId: string; quantity?: string | null; unit?: string | null }[],
 ): void {
-  if (lines.length < 2)
+  const measurement=lines.length===1 && isZero(lines[0]!.amount) && !!lines[0]!.unit?.trim() &&
+    canonicalDecimal(lines[0]!.quantity,4)!==null && toUnits(lines[0]!.quantity!)!==0n;
+  if (lines.length < 2 && !measurement)
     throw new PostingError("posting produced fewer than 2 lines");
   const total = sumMoney(lines.map((line) => line.amount));
   if (!isZero(total))

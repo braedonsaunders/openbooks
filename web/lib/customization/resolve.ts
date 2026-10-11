@@ -178,6 +178,7 @@ export const resolveFormLayout = cache(
     lineDefs: CustomFieldDef[];
     /** Explicit layout (?form=<id>) — e.g. the per-record "Custom Form" picker. */
     explicitLayoutId?: string | null;
+    subsidiaryDefaultLayoutId?: string | null;
   }): Promise<ResolvedFormLayout> => {
     const { orgId, userId, recordType, userRoles, headerDefs, lineDefs, explicitLayoutId } = args;
 
@@ -230,9 +231,11 @@ export const resolveFormLayout = cache(
       chosen = rows.rows.find((r) => r.id === prefId);
       if (chosen && !accessible.includes(chosen)) chosen = undefined;
     }
-    // 2. org default
+    // 2. an accessible entity default, preserving explicit and user choices
+    if (!chosen && args.subsidiaryDefaultLayoutId) chosen = accessible.find(row => row.id === args.subsidiaryDefaultLayoutId);
+    // 3. org default
     if (!chosen) chosen = rows.rows.find((r) => r.isDefault && accessible.includes(r));
-    // 3. first accessible — never leave a user formless
+    // 4. first accessible — never leave a user formless
     if (!chosen) chosen = accessible[0];
 
     if (!chosen) {

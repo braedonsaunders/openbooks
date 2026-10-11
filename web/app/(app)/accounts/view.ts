@@ -71,8 +71,10 @@ const TYPE_KEYS: Record<string, string> = {
   income_other: 'incomeOther',
   cogs: 'cogs',
   expense: 'expense',
+  statistical: 'statistical',
   expense_other: 'expenseOther',
   expense_deferred: 'expenseDeferred',
+  statistical: 'statistical',
 }
 // Group the detailed types into the 5 statement classes for the filter.
 const CLASS_OF: Record<string, string> = Object.fromEntries(
@@ -80,6 +82,7 @@ const CLASS_OF: Record<string, string> = Object.fromEntries(
     types.map((type) => [type, classKey]),
   ),
 )
+CLASS_OF.statistical='statistical'
 // statement class → message key under accounts.classes.* (unknown values render verbatim).
 const CLASS_KEYS: Record<string, string> = {
   asset: 'asset',
@@ -87,8 +90,9 @@ const CLASS_KEYS: Record<string, string> = {
   equity: 'equity',
   income: 'income',
   expense: 'expense',
+  statistical: 'statistical',
 }
-const CLASS_ORDER = ['asset', 'liability', 'equity', 'income', 'expense'] as const
+const CLASS_ORDER = ['asset', 'liability', 'equity', 'income', 'expense','statistical'] as const
 
 type AccountDrawerProps = Parameters<typeof AccountDrawer>[0]
 

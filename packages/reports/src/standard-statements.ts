@@ -21,6 +21,8 @@ export type StandardStatementDefinition = {
 }
 
 export const STANDARD_STATEMENT_DEFINITIONS: StandardStatementDefinition[] = [
+  { slug: 'statistical-journal', name: 'Statistical Journal', description: 'Exact non-monetary quantities by account, unit and legal entity, including governed corrections.', statementKind: 'statistical-journal' },
+  { slug: 'gl-audit-numbers', name: 'GL Audit Numbers', description: 'Retained gapless audit numbers for posted physical entries by book, entity and closed accounting period.', statementKind: 'gl-audit-numbers' },
   {
     slug: 'payroll-support',
     name: 'Payroll country capabilities',

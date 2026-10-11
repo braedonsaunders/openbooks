@@ -3830,6 +3830,34 @@
       "subscription-renewal-policies": {
         "title": "Subscription renewal policies",
         "description": "Effective-dated terms with native approval and audit evidence."
+      },
+      "fiscal-calendars": {
+        "title": "Fiscal Calendars",
+        "description": "Fiscal Calendars"
+      },
+      "form-layouts": {
+        "title": "Journal Forms",
+        "description": "Journal Forms"
+      },
+      "fx-rate-types": {
+        "title": "Exchange Rate Types",
+        "description": "Exchange Rate Types"
+      },
+      "account-translation-policies": {
+        "title": "Account Translation Policies",
+        "description": "Account Translation Policies"
+      },
+      "subsidiary-accounting-preferences": {
+        "title": "Subsidiary Accounting Preferences",
+        "description": "Subsidiary Accounting Preferences"
+      },
+      "segment-balancing-policies": {
+        "title": "Segment Balancing Policies",
+        "description": "Segment Balancing Policies"
+      },
+      "gl-audit-number-policies": {
+        "title": "GL Audit Number Policies",
+        "description": "GL Audit Number Policies"
       }
     },
     "fields": {
@@ -4520,7 +4548,18 @@
       "generationLeadDays": "Generate document days before expiry",
       "upliftPercent": "Renewal uplift percentage",
       "termMonths": "Renewal term months",
-      "settlementTaxCodeId": "Settlement tax code"
+      "settlementTaxCodeId": "Settlement tax code",
+      "generalRateType": "General translation method",
+      "cashFlowRateType": "Cash-flow translation method",
+      "fiscalCalendarId": "Fiscal calendar",
+      "postingRateType": "Posting rate type",
+      "requireJournalApproval": "Require journal approval",
+      "allowBackdatedPosting": "Allow backdated posting",
+      "allowFuturePosting": "Allow future posting",
+      "defaultJournalFormId": "Default journal form",
+      "priority": "Priority",
+      "resetRule": "Reset rule",
+      "segmentKey": "Segment key"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Days between the newest usable rate and the period end beyond which revaluation and consolidation refuse the rate. Closing rates count from the date of the period-end spot rate; average rates from the newest quote averaged. Default when no policy is set: 31 days.",
@@ -5561,6 +5600,16 @@
         "account": "Account",
         "item": "Item",
         "itemCategory": "Item category"
+      },
+      "accountRateMethod": {
+        "current": "Current",
+        "average": "Average",
+        "historical": "Historical"
+      },
+      "auditNumberReset": {
+        "period": "Per period",
+        "fiscal_year": "Per fiscal year",
+        "never": "Never"
       }
     },
     "payroll": {

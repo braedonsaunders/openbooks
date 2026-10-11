@@ -132,3 +132,10 @@ test("projection scope changes only on period or posting date", () => {
     false,
   );
 });
+
+test('elimination flags and exact statistical measurements affect projection identity',()=>{
+ assert.notEqual(glLineKey(keyLine()),glLineKey(keyLine({eliminate:true})));
+ const stat={accountId:'statistical',amount:'0',quantity:'12.1234',unit:'sqm'};
+ assert.notEqual(glLineKey(stat),glLineKey({...stat,quantity:'12.1235'}));
+ assert.equal(glLineKey(stat),glLineKey({...stat,quantity:'12.12340000'}));
+});

@@ -3747,6 +3747,34 @@
         "title": "Reglas de capitalización",
         "singularTitle": "Regla de capitalización",
         "description": "Qué líneas de compra contabilizadas se convierten en propuestas de activos: una cuenta, un artículo o una categoría de artículos con un importe mínimo, con fecha de vigencia."
+      },
+      "fiscal-calendars": {
+        "title": "Calendarios fiscales",
+        "description": "Calendarios fiscales"
+      },
+      "form-layouts": {
+        "title": "Formularios de asiento",
+        "description": "Formularios de asiento"
+      },
+      "fx-rate-types": {
+        "title": "Tipos de cambio",
+        "description": "Tipos de cambio"
+      },
+      "account-translation-policies": {
+        "title": "Políticas de conversión de cuentas",
+        "description": "Políticas de conversión de cuentas"
+      },
+      "subsidiary-accounting-preferences": {
+        "title": "Preferencias contables de filiales",
+        "description": "Preferencias contables de filiales"
+      },
+      "segment-balancing-policies": {
+        "title": "Políticas de equilibrio de segmentos",
+        "description": "Políticas de equilibrio de segmentos"
+      },
+      "gl-audit-number-policies": {
+        "title": "Políticas de numeración de auditoría",
+        "description": "Políticas de numeración de auditoría"
       }
     },
     "fields": {
@@ -4413,7 +4441,18 @@
       "allowedValueId": "Permitido con",
       "matchKind": "Coincide por",
       "minimumAmount": "Importe mínimo para capitalizar",
-      "assetCategoryId": "Categoría de activo sugerida"
+      "assetCategoryId": "Categoría de activo sugerida",
+      "generalRateType": "Método de conversión general",
+      "cashFlowRateType": "Método de conversión de flujo de efectivo",
+      "fiscalCalendarId": "Calendario fiscal",
+      "postingRateType": "Tipo de cambio de contabilización",
+      "requireJournalApproval": "Exigir aprobación de asientos",
+      "allowBackdatedPosting": "Permitir contabilización retroactiva",
+      "allowFuturePosting": "Permitir contabilización futura",
+      "defaultJournalFormId": "Formulario de asiento predeterminado",
+      "priority": "Prioridad",
+      "resetRule": "Regla de reinicio",
+      "segmentKey": "Clave de segmento"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Días entre el tipo utilizable más reciente y el cierre del período a partir de los cuales la revaluación y la consolidación rechazan el tipo. Los tipos de cierre se cuentan desde la fecha del tipo al contado de cierre; los promedio, desde la cotización más reciente promediada. Valor predeterminado sin política: 31 días.",
@@ -5454,6 +5493,16 @@
         "account": "Cuenta",
         "item": "Artículo",
         "itemCategory": "Categoría de artículos"
+      },
+      "accountRateMethod": {
+        "current": "Actual",
+        "average": "Promedio",
+        "historical": "Histórico"
+      },
+      "auditNumberReset": {
+        "period": "Por período",
+        "fiscal_year": "Por ejercicio",
+        "never": "Nunca"
       }
     },
     "laborCosting": {

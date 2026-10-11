@@ -54,7 +54,11 @@
       "intercompanyReconciliationTitle": "公司间对账",
       "intercompanyReconciliationDescription": "按币种显示每对法人双方账簿中的公司间余额，以及待核对的差额。",
       "bookDifferencesTitle": "账簿差异",
-      "bookDifferencesDescription": "主账簿各科目与辅助账簿并列，并显示差异"
+      "bookDifferencesDescription": "主账簿各科目与辅助账簿并列，并显示差异",
+      "statisticalJournalTitle": "统计分录",
+      "statisticalJournalDescription": "本期间没有记录。",
+      "glAuditNumbersTitle": "总账审计编号",
+      "glAuditNumbersDescription": "必须先关闭该实体的总账期间。现有编号和已过账分录将保留。"
     },
     "groups": {
       "financial": "财务报表",
@@ -3564,5 +3568,26 @@
     "base": "基础科目表",
     "legend": "会计上下文：{context}；{marker} 表示按基础科目表编号和名称显示的科目",
     "blockedTitle": "此会计上下文无法标注科目"
+  },
+  "journalMeasurements": {
+    "auditTitle": "总账审计编号",
+    "statisticalTitle": "统计分录",
+    "number": "审计编号",
+    "entry": "分录",
+    "date": "日期",
+    "entity": "法人实体",
+    "period": "期间",
+    "book": "账簿",
+    "account": "科目",
+    "quantity": "数量",
+    "unit": "单位",
+    "department": "部门",
+    "empty": "本期间没有记录。",
+    "allocate": "分配审计编号",
+    "allocateTitle": "分配总账审计编号",
+    "allocateDescription": "必须先关闭该实体的总账期间。现有编号和已过账分录将保留。",
+    "reason": "原因",
+    "allocated": "已分配审计编号",
+    "failed": "审计编号分配失败"
   }
 }

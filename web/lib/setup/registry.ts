@@ -20,6 +20,7 @@ import { AI_CAPABILITIES_ENTITY } from './hrm-ai-rails'
 import { BENEFIT_TRANSACTION_POLICY_ENTITY } from './benefit-transaction-policy'
 import { SETUP_GROUPS } from './types'
 import { CONTRACTOR_WITHHOLDING_ENTITIES } from './entities/contractor-withholding'
+import { FINANCIAL_POLICY_ENTITIES } from './entities/financial-policies'
 import { COMPANY_ENTITIES } from './entities/company'
 import { CALENDAR_ENTITIES } from './entities/calendars'
 import { WORK_CALENDARS_ENTITY } from './entities/work-calendars'
@@ -65,6 +66,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
   AI_CAPABILITIES_ENTITY,
   ...COMPANY_ENTITIES,
   ...ACCOUNTING_ENTITIES,
+  ...FINANCIAL_POLICY_ENTITIES,
   ...AMORTIZATION_ENTITIES,
   INTERNAL_BILLING_RULES_ENTITY,
   ...MULTI_BOOK_ENTITIES,

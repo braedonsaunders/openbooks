@@ -54,7 +54,11 @@
       "intercompanyReconciliationTitle": "Conciliación intercompañía",
       "intercompanyReconciliationDescription": "Los saldos de cada par intercompañía por moneda en los libros de ambas entidades y la diferencia pendiente de conciliar.",
       "bookDifferencesTitle": "Diferencias entre libros",
-      "bookDifferencesDescription": "Cada cuenta del libro principal junto a un libro secundario, con la diferencia"
+      "bookDifferencesDescription": "Cada cuenta del libro principal junto a un libro secundario, con la diferencia",
+      "statisticalJournalTitle": "Asiento estadístico",
+      "statisticalJournalDescription": "No hay registros para este período.",
+      "glAuditNumbersTitle": "Números de auditoría del libro mayor",
+      "glAuditNumbersDescription": "El período del libro mayor de la entidad debe estar cerrado. Se conservan los números y asientos existentes."
     },
     "groups": {
       "financial": "Estados financieros",
@@ -3564,5 +3568,26 @@
     "base": "Plan de cuentas base",
     "legend": "Contexto contable: {context}; {marker} indica una cuenta mostrada con el número y nombre del plan base",
     "blockedTitle": "Este contexto contable no puede rotular las cuentas"
+  },
+  "journalMeasurements": {
+    "auditTitle": "Números de auditoría del libro mayor",
+    "statisticalTitle": "Asiento estadístico",
+    "number": "Número de auditoría",
+    "entry": "Asiento",
+    "date": "Fecha",
+    "entity": "Entidad legal",
+    "period": "Período",
+    "book": "Libro",
+    "account": "Cuenta",
+    "quantity": "Cantidad",
+    "unit": "Unidad",
+    "department": "Departamento",
+    "empty": "No hay registros para este período.",
+    "allocate": "Asignar números de auditoría",
+    "allocateTitle": "Asignar números de auditoría del libro mayor",
+    "allocateDescription": "El período del libro mayor de la entidad debe estar cerrado. Se conservan los números y asientos existentes.",
+    "reason": "Motivo",
+    "allocated": "Números de auditoría asignados",
+    "failed": "Error al asignar números de auditoría"
   }
 }

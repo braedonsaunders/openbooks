@@ -487,13 +487,19 @@ export const RULES: Record<string, RuleFn> = {
         ...amortizationSource(l, deps),
         accountId,
         amount: parseMoney(l.amount),
+        currency: doc.journalMode === "currency_adjustment" ? l.journalCurrency ?? doc.currency : l.journalCurrency ?? undefined,
+        fxRate: doc.journalMode === "currency_adjustment" ? "1" : l.journalFxRate ?? undefined,
+        txnAmount: doc.journalMode === "currency_adjustment" && l.journalCurrency ? "0" : l.amount,
+        isCurrencyAdjustment: doc.journalMode === "currency_adjustment" && !!l.journalCurrency,
+        eliminate: l.journalEliminate ?? false,
+        ...(doc.journalMode === "statistical" ? { quantity: l.quantity, unit: l.unit } : {}),
         subsidiaryId: l.subsidiaryId,
         memo: l.description,
         partyId,
         // Entity-bearing AR/AP journal legs are open items. A party-less leg is
         // a direct GL control-account posting and intentionally stays outside
         // aging; manufacturing an anonymous subledger balance would be false.
-        isOpenItem: controlLineIsOpenItem(
+        isOpenItem: doc.journalMode === "currency_adjustment" || doc.journalMode === "statistical" ? false : controlLineIsOpenItem(
           accountId,
           partyId,
           deps.openItemAccountIds,

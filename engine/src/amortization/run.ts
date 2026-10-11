@@ -136,7 +136,7 @@ async function postDueLine(
     message,
     remedy,
   });
-  const period = await resolveCoveringPeriod(runner, orgId, due.period_end);
+  const period = await resolveCoveringPeriod(runner, orgId, due.period_end, schedule.subsidiaryId);
   if (!period) {
     return problem(
       "amortization_period_missing",

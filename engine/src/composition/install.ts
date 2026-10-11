@@ -50,6 +50,7 @@ import { registerCrossSubsidiaryFulfillmentHandler } from "../inventory/cross-su
 import { releaseAllocationRunApproval } from "../allocations/flow-release.ts";
 import { releaseFundReleaseFlowApproval } from "../nonprofit/flow-release.ts";
 import { releaseCloseRunApproval } from "../close/flow-release.ts";
+import { genericSegmentBalancingProvider } from "../journal/generic-balancing.ts";
 import { registerBalancingLegProvider } from "../journal/balancing-hooks.ts";
 import { fundBalancingLegProvider } from "../nonprofit/fund-posting.ts";
 import { budgetaryControlProvider } from "../nonprofit/encumbrances.ts";
@@ -141,6 +142,7 @@ export function installEngineSeams(): void {
   registerBalancingLegProvider("budgetary-control", budgetaryControlProvider);
   registerBalancingLegProvider("merged-accounts", mergedAccountPostingProvider);
   registerBalancingLegProvider("segment-dependencies", segmentDependencyPostingProvider);
+  registerBalancingLegProvider("generic-segments", genericSegmentBalancingProvider);
   registerReturnInputProvider("form990", form990ReturnInputProvider);
   // Engine-owned approval releases: the adapters delegate through
   // releaseFlowApproval; the handlers run inside decideGate's transaction.

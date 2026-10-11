@@ -1,3 +1,7 @@
+import { normalizeJournalCurrencyLines } from "./journal-currency.ts";
+import { assertJournalVoidNotAutomaticallyReversed, cancelScheduledJournalReversal, queueJournalReversal } from "./journal-reversals.ts";
+import { sumMoney } from "../money/brands.ts";
+import { isZero } from "../money/money.ts";
 import { resolveAgencyPosting } from '../inventory/drop-ship-agency.ts';
 import { and, asc, eq, sql } from "drizzle-orm";
 import { toUnits } from "../money/money.ts";
@@ -232,7 +236,8 @@ export async function regenerateGlImpactTx(
     );
   }
 
-  const projection = buildProjection(doc, lines, deps);
+  const projection=await normalizeJournalCurrencyLines(tx,doc,buildProjection(doc,lines,deps,{deferCurrencyBalance:doc.kind==='journal'}));
+  if(!isZero(sumMoney(projection.map(line=>line.balanceTxnAmount ?? line.amount))))throw new PostingError("The corrected journal does not balance in its header currency.");
   const subApplied = await applySubsidiaries(
     tx,
     doc,
@@ -270,6 +275,7 @@ export async function regenerateGlImpactTx(
     );
   }
 
+  await assertJournalVoidNotAutomaticallyReversed(tx, doc.orgId, doc.id);
   const reason = correction.reason.trim();
   if (reason.length < 10 || reason.length > 500) {
     throw new PostingError(
@@ -539,7 +545,7 @@ export async function regenerateGlImpactTx(
     periodId: entry.periodId,
     memo: `Source correction reversal: ${reason}`,
     sourceDocumentId: doc.id,
-    origin: "migration",
+    origin: doc.journalMode === "currency_adjustment" ? "currency_adjustment" : "migration",
     reversesEntryId: entry.id,
     custom: evidence,
     actorId: correction.actorId,
@@ -554,6 +560,8 @@ export async function regenerateGlImpactTx(
       txnAmount: line.txnAmount,
       fxRate: line.fxRate,
       memo: line.memo,
+      eliminate: line.eliminate,
+      isCurrencyAdjustment: line.isCurrencyAdjustment,
       partyId: line.partyId,
       departmentId: line.departmentId,
       projectId: line.projectId,
@@ -604,7 +612,7 @@ export async function regenerateGlImpactTx(
     periodId: period.id,
     memo: doc.memo,
     sourceDocumentId: doc.id,
-    origin: subApplied.multi ? "intercompany" : "migration",
+    origin: doc.journalMode === "currency_adjustment" ? "currency_adjustment" : subApplied.multi ? "intercompany" : "migration",
     custom: {
       ...evidence,
       reversalEntryId: reversal.id,
@@ -632,6 +640,10 @@ export async function regenerateGlImpactTx(
       taxCodeId: line.taxCodeId,
       dueDate: line.dueDate,
       isOpenItem: line.isOpenItem,
+      quantity: line.quantity,
+      unit: line.unit,
+      eliminate: line.eliminate,
+      isCurrencyAdjustment: line.isCurrencyAdjustment,
     })),
   });
   const replacement = { id: postedReplacement.entryId };
@@ -700,6 +712,11 @@ export async function regenerateGlImpactTx(
         set_config('openbooks.connector_replay_request', '', true),
         set_config('openbooks.connector_replay_actor', '', true)
     `);
+  }
+  if(doc.kind==='journal' && doc.journalReverseOn){
+    if(doc.journalReverseOn<=postingDate)throw new PostingError("The corrected journal's automatic reversal must remain after its posting date. Use a separate correcting journal when that approved date has passed.");
+    await cancelScheduledJournalReversal(tx,doc.orgId,doc.id,correction.actorId,"A governed source correction replaced the approved source entry; the replacement retains its automatic reversal date.");
+    await queueJournalReversal(tx,{orgId:doc.orgId,documentId:doc.id,sourceEntryId:replacement.id,reverseOn:doc.journalReverseOn,actorId:correction.actorId});
   }
   return { entryId: replacement.id, changed: true };
 }

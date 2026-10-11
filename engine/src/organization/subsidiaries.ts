@@ -109,6 +109,7 @@ export interface SubLine {
   accountId: string;
   amount: string;
   /** Original transaction-currency amount before functional-currency translation. */
+  balanceTxnAmount?: string;
   txnAmount?: string;
   currency?: string;
   fxRate?: string;
@@ -340,6 +341,7 @@ export function absorbFxRoundingResidual<
     amount: string;
     subsidiaryId: string;
     txnAmount?: string | null;
+    balanceTxnAmount?: string | null;
     /** Present on tax control legs: the statutory charge is untouchable. */
     taxCodeId?: string | null;
     /** Present on AR/AP settlement legs: the open item settles at this amount. */
@@ -354,7 +356,7 @@ export function absorbFxRoundingResidual<
   }
   for (const [subId, group] of groups) {
     let transactional = 0n;
-    for (const l of group) transactional += toUnits(l.txnAmount ?? l.amount);
+    for (const l of group) transactional += toUnits(l.balanceTxnAmount ?? l.txnAmount ?? l.amount);
     if (transactional !== 0n) continue;
     const total = group.reduce((acc, l) => acc + toUnits(l.amount), 0n);
     if (total === 0n) continue;
@@ -406,6 +408,7 @@ export async function intercompanyBalancingLegs(
     ctx: SubsidiaryContext;
     originSubId: string;
     originFxRate: string;
+    balanceCurrency?: string;
     lines: SubLine[];
   },
 ): Promise<IntercompanyLeg[]> {
@@ -414,7 +417,7 @@ export async function intercompanyBalancingLegs(
   const txnBySub = new Map<string, Money>();
   for (const l of lines) {
     bySub.set(l.subsidiaryId, addMoney(bySub.get(l.subsidiaryId) ?? "0", l.amount));
-    txnBySub.set(l.subsidiaryId, addMoney(txnBySub.get(l.subsidiaryId) ?? "0", l.txnAmount ?? l.amount));
+    txnBySub.set(l.subsidiaryId, addMoney(txnBySub.get(l.subsidiaryId) ?? "0", l.balanceTxnAmount ?? l.txnAmount ?? l.amount));
   }
   if (bySub.size <= 1) return [];
 
@@ -452,7 +455,7 @@ export async function intercompanyBalancingLegs(
     const originAccount = pair.fromId === originSubId ? pair.dueFrom : pair.dueTo;
     const transactionTotal = txnBySub.get(subId) ?? total;
     const subLines = lines.filter((line) => line.subsidiaryId === subId);
-    const transactionCurrency = subLines[0]?.currency;
+    const transactionCurrency = opts.balanceCurrency ?? subLines[0]?.currency;
     if (!transactionCurrency) {
       throw new SubsidiaryError(`transaction currency is missing for "${subName}"`);
     }
@@ -462,7 +465,7 @@ export async function intercompanyBalancingLegs(
     // line rounding made the source rate unable to represent the net leg.
     const firstFxRate = subLines[0]?.fxRate ?? "1";
     const normalizedFirstFxRate = normalizeDecimal(firstFxRate, 10);
-    const oneFxRate = subLines.every(
+    const oneFxRate = subLines.every(line => line.currency === transactionCurrency) && subLines.every(
       (line) => normalizeDecimal(line.fxRate ?? "1", 10) === normalizedFirstFxRate,
     );
     const subFxRate =

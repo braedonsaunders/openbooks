@@ -332,7 +332,7 @@ export async function postScheduleEntry(
   },
 ): Promise<string> {
   const { schedule } = input;
-  const period = await resolveCoveringPeriod(runner, schedule.orgId, input.postingDate);
+  const period = await resolveCoveringPeriod(runner, schedule.orgId, input.postingDate, schedule.subsidiaryId);
   if (!period) {
     throw new AmortizationError(`No accounting period covers ${input.postingDate}.`, {
       code: "amortization_period_missing",

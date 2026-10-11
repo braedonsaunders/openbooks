@@ -17,7 +17,7 @@ export interface CoveringPeriod {
  * THE period covering a date for ordinary postings — the single shared
  * resolver every module resolves a posting period through.
  *
- * It reads the org's posting calendar (the default active fiscal calendar;
+ * It reads the entity's effective posting calendar, or the default active calendar;
  * the admin close screen guarantees at most one default) and returns the
  * regular period covering the date, deterministic under overlaps
  * (`order by starts_on, ends_on, id`). Ordinary postings NEVER resolve
@@ -38,7 +38,7 @@ export interface CoveringPeriod {
  * Every regular period of the posting calendar overlapping [from, to] — the
  * window twin of {@link resolveCoveringPeriod} for fences that certify a
  * range (the tax filing close fence). Same calendar, same exclusions:
- * default active fiscal calendar only, never adjustment periods, so an
+ * effective entity calendar or organization default, never adjustment periods, so an
  * alternate planning calendar can never hold a posting fence hostage.
  */
 export async function resolveCoveringPeriodsInWindow(
@@ -46,6 +46,7 @@ export async function resolveCoveringPeriodsInWindow(
   orgId: string,
   from: string,
   to: string,
+  subsidiaryId?: string | null,
 ): Promise<CoveringPeriod[]> {
   const r = await runner.execute<{
     id: string;
@@ -61,7 +62,8 @@ export async function resolveCoveringPeriodsInWindow(
       from accounting_periods p
       join fiscal_calendars fc
         on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
-       and fc.is_default and fc.is_active
+       and fc.is_active
+       and fc.id = public.subsidiary_posting_calendar(${orgId}::uuid, ${subsidiaryId ?? null}::uuid, greatest(p.starts_on,${from}::date))
      where p.org_id = ${orgId} and not p.is_adjustment
        and p.starts_on <= ${to} and p.ends_on >= ${from}
      order by p.starts_on, p.ends_on, p.id`);
@@ -72,6 +74,7 @@ export async function resolveCoveringPeriod(
   runner: Runner,
   orgId: string,
   date: string,
+  subsidiaryId?: string | null,
 ): Promise<CoveringPeriod | null> {
   const r = await runner.execute<{
     id: string;
@@ -87,7 +90,8 @@ export async function resolveCoveringPeriod(
       from accounting_periods p
       join fiscal_calendars fc
         on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
-       and fc.is_default and fc.is_active
+       and fc.is_active
+       and fc.id = public.subsidiary_posting_calendar(${orgId}::uuid, ${subsidiaryId ?? null}::uuid, ${date}::date)
      where p.org_id = ${orgId} and not p.is_adjustment
        and p.starts_on <= ${date} and p.ends_on >= ${date}
      order by p.starts_on, p.ends_on, p.id

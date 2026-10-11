@@ -3909,6 +3909,34 @@
         "title": "資産計上ルール",
         "singularTitle": "資産計上ルール",
         "description": "どの転記済み購買明細を資産計上候補とするかを定めます。勘定、品目、または品目カテゴリと最低金額を、適用日付きで指定します。"
+      },
+      "fiscal-calendars": {
+        "title": "会計年度カレンダー",
+        "description": "会計年度カレンダー"
+      },
+      "form-layouts": {
+        "title": "仕訳フォーム",
+        "description": "仕訳フォーム"
+      },
+      "fx-rate-types": {
+        "title": "為替レート種別",
+        "description": "為替レート種別"
+      },
+      "account-translation-policies": {
+        "title": "勘定科目換算方針",
+        "description": "勘定科目換算方針"
+      },
+      "subsidiary-accounting-preferences": {
+        "title": "子会社の会計設定",
+        "description": "子会社の会計設定"
+      },
+      "segment-balancing-policies": {
+        "title": "セグメント貸借均衡方針",
+        "description": "セグメント貸借均衡方針"
+      },
+      "gl-audit-number-policies": {
+        "title": "総勘定元帳監査番号方針",
+        "description": "総勘定元帳監査番号方針"
       }
     },
     "fields": {
@@ -3999,7 +4027,7 @@
       "discountDays": "割引日数",
       "discountPercent": "割引 %",
       "documentKind": "ドキュメント",
-      "prefix": "プレフィックス",
+      "prefix": "接頭辞",
       "nextNumber": "次の番号",
       "padding": "桁埋め",
       "gapless": "連番（欠番なし）",
@@ -4416,7 +4444,7 @@
       "waitingPeriodMonths": "待機期間（暦月）",
       "approvalMode": "承認方針",
       "legalEmployer": "雇用主（法人）",
-      "clearingAccountId": "清算勘定",
+      "clearingAccountId": "相殺勘定",
       "collectionMode": "徴収方式",
       "states": "州",
       "practicalExpedient": "実務上の簡便法（12か月以下）",
@@ -4575,7 +4603,18 @@
       "allowedValueId": "許可する組み合わせ",
       "matchKind": "一致条件",
       "minimumAmount": "資産計上の最低金額",
-      "assetCategoryId": "推奨資産カテゴリ"
+      "assetCategoryId": "推奨資産カテゴリ",
+      "generalRateType": "一般換算方法",
+      "cashFlowRateType": "キャッシュフロー換算方法",
+      "fiscalCalendarId": "会計年度カレンダー",
+      "postingRateType": "転記レート種別",
+      "requireJournalApproval": "仕訳承認を必須にする",
+      "allowBackdatedPosting": "過去日付の転記を許可",
+      "allowFuturePosting": "将来日付の転記を許可",
+      "defaultJournalFormId": "既定の仕訳フォーム",
+      "priority": "優先順位",
+      "resetRule": "番号リセット規則",
+      "segmentKey": "セグメントキー"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "使用可能な最新レートから期末までの日数がこれを超えると、再評価と連結はそのレートを拒否します。期末レートは期末スポットレートの日付から、平均レートは平均に含まれる最新の相場の日付から数えます。ポリシー未設定時の既定値: 31日。",
@@ -5616,6 +5655,16 @@
         "account": "勘定",
         "item": "品目",
         "itemCategory": "品目カテゴリ"
+      },
+      "accountRateMethod": {
+        "current": "期末",
+        "average": "平均",
+        "historical": "履歴"
+      },
+      "auditNumberReset": {
+        "period": "期間ごと",
+        "fiscal_year": "会計年度ごと",
+        "never": "リセットなし"
       }
     },
     "invoicing": {

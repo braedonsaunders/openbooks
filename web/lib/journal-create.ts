@@ -1,3 +1,7 @@
+import { journalHeaderInstructionFields, journalLineInstructionFields } from "./journal-instructions";
+import { validateJournalInstructions } from "@openbooks/engine/ledger/journal-instructions";
+import { lookupExchangeRate } from "@openbooks/engine/fx/spot-rate";
+import { accountingPreferences } from "@openbooks/engine/organization/accounting-preferences";
 import { validateSavedAmortizationLines } from "@openbooks/engine/amortization";
 import { journalAmortizationFields } from "@/lib/journal-amortization";
 import "server-only";
@@ -45,6 +49,7 @@ const journalLineInput = z
     // the line nor the remedy).
     accountId: z.string().nullable().optional(),
     ...journalAmortizationFields,
+    ...journalLineInstructionFields,
     description: z.string().nullable().optional(),
     amount: exactMoney(),
     partyId: nullableUuidId.optional(),
@@ -54,9 +59,10 @@ const journalLineInput = z
     extraDims: z.record(z.string(), z.string().nullable()).optional(),
     custom: z.record(z.string(), z.unknown()).optional(),
   })
-  .refine((line) => toUnits(line.amount) !== 0n, "journal line amounts cannot be zero");
+  .refine((line) => toUnits(line.amount) !== 0n || (line.quantity !== undefined && toUnits(line.quantity) !== 0n), "journal line amounts cannot be zero");
 
 export const journalCreateBody = z.object({
+  ...journalHeaderInstructionFields,
   partyId: nullableUuidId.optional(),
   documentDate: isoDate().optional(),
   referenceNumber: z.string().nullable().optional(),
@@ -106,7 +112,9 @@ export async function createManualJournal(input: {
   if (lines.length === 0) fail("add at least one journal line", "lines");
   const totalDebits = sum(lines.map((line) => (toUnits(line.amount) > 0n ? line.amount : "0")));
   const net = sum(lines.map((line) => line.amount));
-  if (toUnits(totalDebits) <= 0n || toUnits(net) !== 0n) {
+  const mode = body.journalMode ?? "monetary";
+  const mixed = lines.some(line => line.currency && line.currency !== body.currency);
+  if (mode !== "statistical" && (toUnits(totalDebits) <= 0n || (!mixed && toUnits(net) !== 0n))) {
     fail("journal lines must balance with a non-zero total", "lines");
   }
 
@@ -151,6 +159,12 @@ export async function createManualJournal(input: {
     if (error instanceof JournalBookError) fail(error.message, "accountingBookId", error.status);
     throw error;
   }
+
+  const documentDate = body.documentDate ?? (await businessToday(orgId));
+  const currency = body.currency ?? bookTarget.currency;
+  const preference = await accountingPreferences(db,orgId,subsidiary.id,documentDate);
+  const fxRate = body.fxRate ?? (currency === bookTarget.currency ? "1" : await lookupExchangeRate(db,orgId,currency,bookTarget.currency,documentDate,preference.postingRateType));
+  if (!fxRate) fail(`No ${preference.postingRateType} rate converts ${currency} to ${bookTarget.currency}. Enter the dated exchange rate or supply its exact rate.`,"fxRate");
 
   const [headerDefs, lineDefs, segments] = await Promise.all([
     loadFieldDefs("documents", "journal"),
@@ -228,6 +242,7 @@ export async function createManualJournal(input: {
   }
 
   const preparedLines: {
+    currency: string | null; fxRate: string | null; quantity: string; unit: string | null; eliminate: boolean;
     amortizationTemplateId: string | null;
     amortizationStartOn: string | null;
     amortizationEndOn: string | null;
@@ -259,6 +274,7 @@ export async function createManualJournal(input: {
     const lineDims = validateExtraDims(line.extraDims, segments);
     if (!lineDims.ok) fail(`Line ${i + 1}: ${lineDims.error}`, "lines");
     preparedLines.push({
+      currency: line.currency ?? null, fxRate: line.fxRate ?? null, quantity: line.quantity ?? "1", unit: line.unit ?? null, eliminate: line.eliminate ?? false,
       accountId: checkedAccountIds[i]!,
       description: line.description ?? null,
       amount: line.amount,
@@ -274,11 +290,14 @@ export async function createManualJournal(input: {
     });
   }
 
-  const documentDate = body.documentDate ?? (await businessToday(orgId));
   const referenceNumber = trimOrNull(body.referenceNumber);
   const memo = trimOrNull(body.memo);
   const match = {
     kind: "journal",
+    ...(body.journalMode !== undefined ? { journalMode: body.journalMode } : {}),
+    ...(body.journalReverseOn !== undefined ? { journalReverseOn: body.journalReverseOn } : {}),
+    ...(body.currency !== undefined ? { currency: body.currency } : {}),
+    ...(body.fxRate !== undefined ? { fxRate: body.fxRate } : {}),
     partyId: body.partyId ?? null,
     documentDate: body.documentDate ?? null,
     referenceNumber: body.referenceNumber ?? null,
@@ -296,7 +315,7 @@ export async function createManualJournal(input: {
     kind: "journal",
     subsidiary_id: subsidiary.id,
     document_date: documentDate,
-    currency: bookTarget.currency,
+    currency, fx_rate: fxRate, journal_fx_rate_explicit: body.fxRate !== undefined || currency !== bookTarget.currency, journal_mode: mode, journal_reverse_on: body.journalReverseOn ?? null,
     accounting_book_id: bookTarget.accountingBookId,
     party_id: partyId,
     reference_number: referenceNumber,
@@ -308,6 +327,7 @@ export async function createManualJournal(input: {
     lines: preparedLines.map((line, index) => ({
       line_number: index + 1,
       account_id: line.accountId,
+      journal_currency: line.currency, journal_fx_rate: line.fxRate, journal_eliminate: line.eliminate, quantity: line.quantity, unit: line.unit,
       amortization_template_id: line.amortizationTemplateId,
       amortization_start_on: line.amortizationStartOn,
       amortization_end_on: line.amortizationEndOn,
@@ -339,11 +359,11 @@ export async function createManualJournal(input: {
       const inserted = (await tx.execute<{ id: string }>(sql`
         insert into documents
           (id, org_id, kind, status, subsidiary_id, document_number, document_date,
-           currency, accounting_book_id, party_id, reference_number, memo, extra_dims, custom,
+           currency, fx_rate, journal_fx_rate_explicit, journal_mode, journal_reverse_on, accounting_book_id, party_id, reference_number, memo, extra_dims, custom,
            subtotal, tax_total, total, created_by, updated_by)
         values
           (${requestId}, ${orgId}, 'journal', 'draft', ${subsidiary.id}, ${documentNumber},
-           ${documentDate}, ${bookTarget.currency}, ${bookTarget.accountingBookId}, ${partyId}, ${referenceNumber}, ${memo},
+           ${documentDate}, ${currency}, ${fxRate}, ${body.fxRate !== undefined || currency !== bookTarget.currency}, ${mode}, ${body.journalReverseOn ?? null}, ${bookTarget.accountingBookId}, ${partyId}, ${referenceNumber}, ${memo},
            ${JSON.stringify(headerDims.cleaned)}::jsonb, ${JSON.stringify(headerCustomResult.cleaned)}::jsonb,
            ${totalDebits}, '0', ${totalDebits}, ${userId}, ${userId})
         -- Lost insert race or a foreign/global UUID collision: the re-read
@@ -361,16 +381,17 @@ export async function createManualJournal(input: {
         const line = preparedLines[i]!;
         const savedLine = await tx.execute<{ id: string }>(sql`
           insert into document_lines (org_id, document_id, line_number, account_id, description,
-                                      quantity, unit_price, amount, party_id, department_id, project_id,
+                                      quantity, unit, journal_currency, journal_fx_rate, journal_eliminate, unit_price, amount, party_id, department_id, project_id,
                                       subsidiary_id, extra_dims, custom, amortization_template_id, amortization_start_on, amortization_end_on)
           values (${orgId}, ${requestId}, ${i + 1}, ${line.accountId}, ${line.description},
-                  '1', ${line.amount}, ${line.amount}, ${line.partyId}, ${line.departmentId}, ${line.projectId},
+                  ${line.quantity}, ${line.unit}, ${line.currency}, ${line.fxRate}, ${line.eliminate}, ${line.amount}, ${line.amount}, ${line.partyId}, ${line.departmentId}, ${line.projectId},
                   ${line.subsidiaryId}, ${JSON.stringify(line.extraDims)}::jsonb, ${JSON.stringify(line.custom)}::jsonb, ${line.amortizationTemplateId}, ${line.amortizationStartOn}, ${line.amortizationEndOn}) returning id`);
         if (savedLine.rows.length !== 1) throw new JournalCreateError(`Line ${i + 1} could not be saved`, 409);
       }
       // Segment value dependencies on the saved lines, as posting will read them.
       await assertDocumentSegmentDependencies(tx, orgId, requestId);
       await validateSavedAmortizationLines(tx, orgId, requestId);
+      await validateJournalInstructions(tx,orgId,requestId);
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
         values (${orgId}, 'documents', ${requestId}, 'insert',

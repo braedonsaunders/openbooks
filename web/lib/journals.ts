@@ -131,21 +131,23 @@ export async function loadJournalDoc(
     // reads in the same transaction so a concurrent rehome cannot move the
     // header between authorization and the line read.
     const doc = await db.execute<Record<string, unknown>>(sql`
-      select d.*, d.document_date::text as document_date,
+      select d.*, d.document_date::text as document_date, d.journal_reverse_on::text as journal_reverse_on,
              ${documentRevisionCounterSql(sql`d.revision_seq`)} as updated_at,
              p.display_name as party_name, e.id as entry_id,
-             pe.status as posting_effect_status
+             pe.status as posting_effect_status, ri.status as reversal_instruction_status, ri.last_error as reversal_instruction_error, ri.reversal_entry_id as automatic_reversal_entry_id
         from documents d
         left join parties p on p.id = d.party_id and p.org_id = d.org_id
         left join journal_entries e on e.id = d.posted_entry_id and e.org_id = d.org_id
         left join posting_effects pe on pe.document_id = d.id and pe.org_id = d.org_id
+        left join journal_reversal_instructions ri on ri.document_id=d.id and ri.org_id=d.org_id and ri.source_entry_id=d.posted_entry_id
        where d.id = ${id} and d.org_id = ${resolvedOrgId} and d.kind = 'journal'
          ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
        for share of d
     `)
     if (!doc.rows[0]) return null
     const lines = await db.execute<Record<string, unknown>>(sql`
-      select l.id, l.line_number, l.account_id, l.description, l.amount,
+      select l.id, l.line_number, l.account_id, l.description, l.amount, l.quantity::text as quantity, l.unit,
+             l.journal_currency, l.journal_fx_rate::text as journal_fx_rate, l.journal_eliminate,
              l.party_id, l.department_id, l.project_id, l.subsidiary_id, l.extra_dims, l.custom,
              l.amortization_template_id, l.amortization_start_on::text as amortization_start_on,
              l.amortization_end_on::text as amortization_end_on

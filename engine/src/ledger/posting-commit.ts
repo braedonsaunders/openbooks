@@ -1,3 +1,5 @@
+import { assertEntityPostingDate } from "../organization/accounting-preferences.ts";
+import { validateJournalInstructions } from "./journal-instructions.ts";
 import { assertWithholdingRemittanceCurrent, ContractorWithholdingError } from "../contractor-withholding/service.ts";
 import { assertWithholdingDepositCurrent } from "../contractor-withholding/deposits.ts";
 import { PlaceOfSupplyError } from '../tax/place-of-supply.ts';
@@ -44,7 +46,9 @@ export async function commitDocumentPosting(prepared: Awaited<ReturnType<typeof 
     // Share the ledger-setup fence: setup writers exclude posting, while
     // independent documents can post concurrently. The primary-book and
     // period fences below remain narrower and protect their own state.
-    await lockLedgerSetupFence(tx, doc.orgId, "shared");
+    await lockLedgerSetupFence(tx, doc.orgId, doc.journalMode === "currency_adjustment" ? "exclusive" : "shared");
+    if (doc.kind === "journal") await validateJournalInstructions(tx,doc.orgId,doc.id,true);
+    if (!deps.migration) for (const subsidiaryId of new Set(subApplied.lines.map(line => line.subsidiaryId))) await assertEntityPostingDate(tx,doc.orgId,subsidiaryId,postingDate);
     try {await assertCanadianGoodsTaxEvidence(tx,doc.orgId,documentId)} catch(error) {if(error instanceof PlaceOfSupplyError)throw new PostingError(error.message);throw error}
     try {await assertCrossBorderSupplyEvidence(tx,doc.orgId,documentId,{persist:true})} catch(error) {if(error instanceof CrossBorderTaxError)throw new PostingError(error.message);throw error}
     if (doc.kind === "vendor_bill" || doc.kind === "vendor_credit") {
@@ -168,7 +172,7 @@ export async function commitDocumentPosting(prepared: Awaited<ReturnType<typeof 
             memo: effectiveDoc.memo,
             status: "draft",
             sourceDocumentId: doc.id,
-            origin:
+            origin: effectiveDoc.journalMode === "currency_adjustment" ? "currency_adjustment" :
               subApplied.multi ||
               scriptLines.some((l) => l.subsidiaryId !== subApplied.docSubId)
                 ? "intercompany"
@@ -232,6 +236,10 @@ export async function commitDocumentPosting(prepared: Awaited<ReturnType<typeof 
         paymentCardId: l.paymentCardId ?? null,
         taxCodeId: l.taxCodeId ?? null,
         memo: l.memo ?? null,
+        quantity: l.quantity ?? null,
+        unit: l.unit ?? null,
+        eliminate: l.eliminate ?? false,
+        isCurrencyAdjustment: l.isCurrencyAdjustment ?? false,
         custom: unionLines[i]?.amortizationSourceLineId ? { amortizationSourceLineId: unionLines[i]!.amortizationSourceLineId } : {},
         dueDate: l.dueDate ?? null,
         isOpenItem: l.isOpenItem ?? false,
@@ -534,6 +542,8 @@ export async function commitDocumentPosting(prepared: Awaited<ReturnType<typeof 
               paymentCardId: l.paymentCardId ?? null,
               taxCodeId: l.taxCodeId ?? null,
               memo: l.memo ?? null,
+              quantity: l.quantity ?? null, unit: l.unit ?? null,
+              eliminate: l.eliminate ?? false, isCurrencyAdjustment: l.isCurrencyAdjustment ?? false,
               dueDate: l.dueDate ?? null,
               isOpenItem: l.isOpenItem ?? false,
               contributorKind: bookLines[i]?.contributorKind ?? null,

@@ -1,3 +1,7 @@
+import { captureTransactionAuditSnapshot,recordTransactionAudit } from "@openbooks/engine/records/transaction-audit"
+import { z } from "zod"
+import { journalHeaderInstructionFields,journalLineInstructionFields } from "../journal-instructions"
+import { validateJournalInstructionLines,JournalInstructionError } from "@openbooks/engine/ledger/journal-instruction-validation"
 import { readExportWindow, transferId, transferWhere, transferOrder, transferLimit, finishExportPage } from './export-page'
 import { TRANSFER_BATCH_BYTES, TRANSFER_MAX_ROW_BYTES, TransferRefusal } from './transfer-contract'
 import { importRowError } from './row-error'
@@ -47,6 +51,8 @@ import {
  * permission — routes through postDocument. Synchronous callers retain a
  * refused draft for review; durable transfers roll back the current batch.
  */
+const journalLineSchema=()=>z.object(journalLineInstructionFields)
+
 function transactionFields(cfg: DocKindConfig): ResourceField[] {
   const fields: ResourceField[] = [
     { key: 'documentNumber', label: 'documentNumber', kind: 'text' },
@@ -72,6 +78,10 @@ function transactionFields(cfg: DocKindConfig): ResourceField[] {
   })
   if (cfg.hasReference) fields.push({ key: 'reference', label: 'reference', kind: 'text' })
   fields.push({ key: 'currency', label: 'currency', kind: 'text' })
+  if(cfg.kind==='journal')fields.push(
+    {key:'journalMode',label:'journalMode',kind:'text'}, {key:'journalReverseOn',label:'journalReverseOn',kind:'date'},
+    {key:'fxRate',label:'fxRate',kind:'text'}, {key:'quantity',label:'quantity',kind:'text'}, {key:'unit',label:'unit',kind:'text'},
+  )
   fields.push({ key: 'memo', label: 'memo', kind: 'long_text' })
   // Single-line convenience columns (flat CSV): one line per document.
   fields.push({ key: 'account', label: 'account', kind: 'reference', ref: { resource: 'accounts', by: 'number' } })
@@ -117,6 +127,10 @@ interface TxnLineInput {
    * avoid rounding in JS numbers; callers must provide literal amounts.
    */
   quantity?: unknown
+  unit?: unknown
+  currency?: unknown
+  fxRate?: unknown
+  eliminate?: unknown
   unitPrice?: unknown
 }
 
@@ -212,7 +226,7 @@ export function transactionResource(
       const subsidiaryScope = readCtx ? readCtx.allowedSubsidiaryIds : allowedSubsidiaryIds
       const docs = (await readExportWindow(db, sql`
         select d.id, d.document_number, d.document_date, d.due_date, d.currency, d.memo,
-               d.reference_number, d.status, s.name as subsidiary${transferId(readCtx, sql`d.id`)},
+               d.reference_number,d.journal_mode,d.journal_reverse_on::text,d.fx_rate::text, d.status, s.name as subsidiary${transferId(readCtx, sql`d.id`)},
                -- The importer resolves parties by short code with a display-name
                -- fallback (see PARTY_ID_LOOKUP); export that same key or rows
                -- for parties without a short code come back unresolvable.
@@ -230,6 +244,7 @@ export function transactionResource(
           document_date: string
           due_date: string | null
           currency: string
+          journal_mode: string; journal_reverse_on: string|null; fx_rate: string
           memo: string | null
           reference_number: string | null
           status: string
@@ -243,7 +258,7 @@ export function transactionResource(
       if (includeLines && readCtx?.page && docs.rows.length) {
         const sizes = (await db.execute<{ document_id: string; bytes: string }>(sql`
           select l.document_id,sum(octet_length(jsonb_build_object('amount',l.amount::text,'description',l.description,
-            'account',a.number,'taxCode',t.code,'distributionKey',ar.key)::text)+1)::text as bytes
+            'account',a.number,'taxCode',t.code,'distributionKey',ar.key,'quantity',l.quantity::text,'unit',l.unit,'currency',l.journal_currency,'fxRate',l.journal_fx_rate::text,'eliminate',l.journal_eliminate)::text)+1)::text as bytes
           from document_lines l left join accounts a on a.org_id=l.org_id and a.id=l.account_id
           left join tax_codes t on t.org_id=l.org_id and t.id=l.tax_code_id
           left join allocation_rules ar on ar.org_id=l.org_id and ar.id=l.distribution_rule_id
@@ -263,9 +278,9 @@ export function transactionResource(
       } else finishExportPage(docs.rows, transactionDescriptor(cfg).label, readCtx)
       const rows: Record<string, CellValue>[] = []
       const batchLines = !includeLines ? [] : readCtx?.page && docs.rows.length ? (await db.execute<{
-        document_id: string; amount: string; description: string | null; account: string | null; tax_code: string | null; distribution_key: string | null
+        document_id: string;quantity:string;unit:string|null;journal_currency:string|null;journal_fx_rate:string|null;journal_eliminate:boolean; amount: string; description: string | null; account: string | null; tax_code: string | null; distribution_key: string | null
       }>(sql`
-        select l.document_id,l.amount::text as amount,l.description,a.number as account,t.code as tax_code,ar.key as distribution_key
+        select l.document_id,l.amount::text as amount,l.quantity::text,l.unit,l.journal_currency,l.journal_fx_rate::text,l.journal_eliminate,l.description,a.number as account,t.code as tax_code,ar.key as distribution_key
         from document_lines l left join accounts a on a.id=l.account_id and a.org_id=l.org_id
         left join tax_codes t on t.id=l.tax_code_id and t.org_id=l.org_id
         left join allocation_rules ar on ar.id=l.distribution_rule_id and ar.org_id=l.org_id
@@ -277,7 +292,7 @@ export function transactionResource(
       }
       for (const d of docs.rows) {
         const lineRows = batchLines ? { rows: linesByDocument.get(d.id) ?? [] } : (await db.execute(sql`
-          select l.amount, l.description, a.number as account, t.code as tax_code,
+          select l.amount,l.quantity::text,l.unit,l.journal_currency,l.journal_fx_rate::text,l.journal_eliminate, l.description, a.number as account, t.code as tax_code,
                  ar.key as distribution_key
             from document_lines l
             left join accounts a on a.id = l.account_id and a.org_id = l.org_id
@@ -286,6 +301,7 @@ export function transactionResource(
            where l.document_id = ${d.id} and l.org_id = ${orgId} order by l.line_number`)) as {
           rows: {
             amount: string
+            quantity:string;unit:string|null;journal_currency:string|null;journal_fx_rate:string|null;journal_eliminate:boolean
             description: string | null
             account: string | null
             tax_code: string | null
@@ -300,12 +316,14 @@ export function transactionResource(
           subsidiary: d.subsidiary,
           reference: d.reference_number,
           currency: d.currency,
+          ...(cfg.kind==='journal' ? {journalMode:d.journal_mode,journalReverseOn:d.journal_reverse_on,fxRate:d.fx_rate} : {}),
           memo: d.memo,
           status: d.status,
           lines: JSON.stringify(
             lineRows.rows.map((l) => ({
               account: l.account,
               amount: l.amount,
+              ...(cfg.kind==='journal' ? {quantity:l.quantity,unit:l.unit,currency:l.journal_currency,fxRate:l.journal_fx_rate,eliminate:l.journal_eliminate} : {}),
               description: l.description,
               taxCode: l.tax_code,
               distributionKey: l.distribution_key,
@@ -442,9 +460,13 @@ async function writeTransactions(
         outcome.errors.push({ row: rowNo, message: 'at least one line (account + amount) is required' })
         continue
       }
+      const journalHeader=cfg.kind==='journal' ? z.object(journalHeaderInstructionFields).parse({
+        journalMode:src.journalMode || undefined,journalReverseOn:src.journalReverseOn || undefined,
+        currency:src.currency || undefined,fxRate:src.fxRate || undefined,
+      }) : null
       const hasQuantity = rawLines.some((l) => l.quantity !== undefined)
       const hasUnitPrice = rawLines.some((l) => l.unitPrice !== undefined)
-      if (hasQuantity || hasUnitPrice) {
+      if ((hasQuantity && cfg.kind!=='journal') || hasUnitPrice) {
         outcome.failed++
         outcome.errors.push({
           row: rowNo,
@@ -458,6 +480,7 @@ async function writeTransactions(
         description: string | null
         taxCodeId: string | null
         distributionRuleId: string | null
+        accountType:string; instructions: z.infer<ReturnType<typeof journalLineSchema>> | null
       }[] = []
       let lineErr: string | null = null
       for (const l of rawLines) {
@@ -466,7 +489,7 @@ async function writeTransactions(
           lineErr = `account "${String(l.account ?? '')}" not found`
           break
         }
-        const amount = exactLineAmount(l.amount)
+        const amount = exactLineAmount(l.amount ?? (journalHeader?.journalMode==='statistical' ? '0' : undefined))
         if (amount === null) {
           lineErr = typeof l.amount === 'number'
             ? `line amount ${String(l.amount)} arrived as a spreadsheet number, which cannot preserve exact decimals — format the amount cell as text and provide a literal decimal string`
@@ -506,7 +529,9 @@ async function writeTransactions(
           }
           distributionRuleId = lookup.rule.rule.id
         }
-        built.push({ accountId: acctId, amount, description: l.description ? String(l.description) : null, taxCodeId, distributionRuleId })
+        const instructions=cfg.kind==='journal' ? journalLineSchema().parse({quantity:l.quantity,unit:l.unit,currency:l.currency,fxRate:l.fxRate,eliminate:l.eliminate}) : null
+        const accountType=cfg.kind==='journal' ? (await db.execute<{type:string}>(sql`select type from accounts where org_id=${ctx.orgId} and id=${acctId}`)).rows[0]?.type ?? '' : ''
+        built.push({ accountType,instructions, accountId: acctId, amount, description: l.description ? String(l.description) : null, taxCodeId, distributionRuleId })
       }
       if (lineErr) {
         outcome.failed++
@@ -514,6 +539,10 @@ async function writeTransactions(
         continue
       }
 
+      if(journalHeader)validateJournalInstructionLines(journalHeader.journalMode ?? 'monetary',journalHeader.journalReverseOn ?? null,built.map((line,index)=>({
+        line_number:index+1,type:line.accountType,amount:line.amount,quantity:line.instructions?.quantity ?? '1',unit:line.instructions?.unit ?? null,
+        journal_currency:line.instructions?.currency ?? null,journal_fx_rate:line.instructions?.fxRate ?? null,journal_eliminate:line.instructions?.eliminate ?? false,template:null,
+      })))
       // Duplicate document number? The storage check comes first so a clash
       // with an already-posted document keeps its existing refusal; the
       // intra-file check then anticipates the clash a duplicate row would hit
@@ -557,6 +586,7 @@ async function writeTransactions(
         amount: l.amount,
         description: l.description,
         taxCodeId: l.taxCodeId,
+        ...(l.instructions ? {quantity:l.instructions.quantity ?? "1",unit:l.instructions.unit} : {}),
       }))
       const precomputedTotals = await precomputeDocumentTotalsForCreate(ctx.orgId, cfg.kind, {
         lines: lineInputs,
@@ -594,6 +624,7 @@ async function writeTransactions(
               currency,
               referenceNumber: cfg.hasReference && src.reference ? String(src.reference) : null,
               memo: src.memo ? String(src.memo) : null,
+              ...(journalHeader ? {journalMode:journalHeader.journalMode ?? 'monetary',journalReverseOn:journalHeader.journalReverseOn ?? null,fxRate:journalHeader.fxRate ?? '1',journalFxRateExplicit:journalHeader.fxRate!==undefined} : {}),
               status: 'draft',
               createdBy: ctx.actorId,
             })
@@ -622,6 +653,20 @@ async function writeTransactions(
               update document_lines set distribution_rule_id = ${ruleId}
                where org_id = ${ctx.orgId} and document_id = ${doc.id} and line_number = ${idx + 1}`)
           }
+          if(journalHeader){
+            const before=await captureTransactionAuditSnapshot(tx,doc.id,ctx.orgId)
+            for(const [index,line] of built.entries()){
+              const instruction=line.instructions!
+              const changed=await tx.execute(sql`update document_lines set journal_currency=${instruction.currency ?? null},journal_fx_rate=${instruction.fxRate ?? null},journal_eliminate=${instruction.eliminate ?? false}
+                where org_id=${ctx.orgId} and document_id=${doc.id} and line_number=${index+1} returning id`)
+              if(changed.rows.length!==1)throw new Error('Journal import instruction did not match its saved line.')
+            }
+            const { validateJournalInstructions } = await import("@openbooks/engine/ledger/journal-instructions")
+            await validateJournalInstructions(tx,ctx.orgId,doc.id)
+            const after=await captureTransactionAuditSnapshot(tx,doc.id,ctx.orgId)
+            if(!before || !after)throw new Error('The imported journal disappeared before its instructions were audited.')
+            await recordTransactionAudit(tx,{orgId:ctx.orgId,documentId:doc.id,action:'update',actorId:ctx.actorId,source:'import',before,after})
+          }
           await tx.execute(sql`release savepoint document_import_row`)
           return doc.id
         } catch (e) {
@@ -639,7 +684,12 @@ async function writeTransactions(
 
       if (ctx.post && deps) {
         try {
-          await postDocument(documentId, deps)
+          if(cfg.kind==='journal'){
+            const { submitAndReleaseIfUngated } = await import('@openbooks/engine/flows/submit')
+            const submitted=await submitAndReleaseIfUngated('journal',documentId,ctx.actorId)
+            if(!submitted.autoApproved)throw new Error(submitted.gated ? 'The journal requires its native Flow approval before posting.' : submitted.flowError ?? 'This entity requires an approved journal Flow.')
+          }
+          await postDocument(documentId, deps,{audit:{actorId:ctx.actorId,source:'import'}})
         } catch (error) {
           // Legacy synchronous callers preserve a draft for review. Durable
           // callers roll the complete batch back, including this draft.
@@ -654,7 +704,7 @@ async function writeTransactions(
       outcome.created++
     } catch (error) {
       outcome.failed++
-      outcome.errors.push({ row: rowNo, message: ctx.recordKeys ? importRowError(error) : 'could not save this row; check its values and try again' })
+      outcome.errors.push({ row: rowNo, message: ctx.recordKeys || error instanceof JournalInstructionError ? importRowError(error) : 'could not save this row; check its values and try again' })
     }
   }
   return outcome
@@ -702,7 +752,7 @@ function parseLines(src: Record<string, unknown>): { lines: TxnLineInput[]; erro
       /* fall through to single-line */
     }
   }
-  if (src.account && src.amount !== undefined && src.amount !== '') {
+  if (src.account && ((src.amount !== undefined && src.amount !== '') || (src.journalMode==='statistical' && src.quantity!==undefined))) {
     if (formulaDerivedField(src, 'amount')) {
       return {
         lines: [],
@@ -712,7 +762,8 @@ function parseLines(src: Record<string, unknown>): { lines: TxnLineInput[]; erro
     return {
       lines: [{
         account: src.account,
-        amount: src.amount,
+        amount: src.amount ?? (src.journalMode==='statistical' ? '0' : undefined),
+        quantity:src.quantity,unit:src.unit,
         description: src.description,
         taxCode: src.taxCode,
         distributionKey: src.distributionKey,

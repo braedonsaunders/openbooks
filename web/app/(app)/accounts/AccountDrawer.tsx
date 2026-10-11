@@ -63,6 +63,7 @@ const TYPE_VALUES = [
   'expense',
   'expense_other',
   'expense_deferred',
+  'statistical',
 ] as const
 
 const TYPE_KEYS: Record<string, string> = {
@@ -70,7 +71,7 @@ const TYPE_KEYS: Record<string, string> = {
   asset_fixed: 'assetFixed', asset_other: 'assetOther', liability_payable: 'liabilityPayable',
   liability_card: 'liabilityCard', liability_current_other: 'liabilityCurrentOther',
   liability_long_term: 'liabilityLongTerm', equity: 'equity', income: 'income', income_other: 'incomeOther',
-  cogs: 'cogs', expense: 'expense', expense_other: 'expenseOther', expense_deferred: 'expenseDeferred',
+  cogs: 'cogs', expense: 'expense', expense_other: 'expenseOther', expense_deferred: 'expenseDeferred', statistical: 'statistical',
 }
 
 const checkboxClass = 'h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-600 dark:bg-slate-950'

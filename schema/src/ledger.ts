@@ -95,6 +95,7 @@ export const journalEntries = pgTable(
         "intercompany",
         "fx_settlement",
         "fx_revaluation",
+        "currency_adjustment",
         "translation",
         "closing",
         "opening",
@@ -195,6 +196,9 @@ export const journalLines = pgTable(
 
     /** Statistical quantity (hours, tonnes) — replaces source platform Stat accounts. */
     quantity: money("quantity"),
+    periodId: uuid("period_id"),
+    eliminate: boolean("eliminate").notNull().default(false),
+    isCurrencyAdjustment: boolean("is_currency_adjustment").notNull().default(false),
     unit: text("unit"),
 
     /** Open-item tracking for receivable/payable lines. */
@@ -229,6 +233,10 @@ export const journalLines = pgTable(
     custom: jsonb("custom").notNull().default({}),
   },
   (t) => [
+    foreignKey({
+      name: "journal_lines_entity_period_fkey",
+      columns: [t.orgId,t.periodId], foreignColumns:[accountingPeriods.orgId,accountingPeriods.id],
+    }),
     foreignKey({
       name: "journal_lines_entry_id_fkey",
       columns: [t.orgId, t.entryId],

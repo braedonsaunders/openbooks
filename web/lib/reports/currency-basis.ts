@@ -14,7 +14,7 @@ export class ReportCurrencyBasisError extends Error {
  * Probe subsidiaries with EXISTS rather than scan every historical line just
  * to rediscover its currency. An unused subsidiary cannot block a report.
  */
-export function functionalReportReader(orgId: string, where: SQL) {
+export function functionalReportReader(orgId: string, where: SQL, translated = false) {
   // Each subsidiary counts in the currency the read's book carries it in:
   // its functional currency, or a secondary book's own currency for it.
   const census = sql`(
@@ -36,7 +36,7 @@ export function functionalReportReader(orgId: string, where: SQL) {
     ) currencies
   )`
   return {
-    censusColumn: sql`${census} as __functional_currency_count`,
+    censusColumn: translated ? sql`1 as __functional_currency_count` : sql`${census} as __functional_currency_count`,
     async execute<Row extends Record<string, unknown> = Record<string, unknown>>(query: SQL) {
       const result = await db.execute<Row & { __functional_currency_count: string }>(query)
       for (const row of result.rows) {

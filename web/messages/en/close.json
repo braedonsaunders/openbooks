@@ -236,6 +236,10 @@
     "prepaid-amortization-unposted": {
       "title": "Prepaid amortization remains unposted",
       "message": "{count, plural, one {# amortization period is due and unposted.} other {# amortization periods are due and unposted.}}"
+    },
+    "balancing-segment-residual": {
+      "title": "Balancing segment residuals",
+      "message": "{count} balancing segment values retain a ledger residual. Review the segment assignment and effective clearing policy before closing."
     }
   },
   "severity": {

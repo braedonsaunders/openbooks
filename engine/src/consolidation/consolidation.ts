@@ -499,8 +499,8 @@ export async function runOwnershipConsolidationIn(
         cross join lateral (
           select case
             when source_sub.base_currency=${elimination.baseCurrency} then 1::numeric
-            when a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
-              then consolidated.average_rate
+            when coalesce(public.account_translation_rate_type(e.org_id,a.id,e.posting_date,false),case when a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred') then 'average' else 'current' end)='average' then consolidated.average_rate
+            when public.account_translation_rate_type(e.org_id,a.id,e.posting_date,false)='historical' then consolidated.historical_rate
             else consolidated.current_rate
           end as rate
         ) translation
@@ -1151,7 +1151,7 @@ async function runAutoEliminationIn(
     select l.account_id from journal_lines l join journal_entries e on e.org_id=l.org_id and e.id=l.entry_id
     join accounts a on a.org_id=l.org_id and a.id=l.account_id
     join consolidation_control_losses loss on loss.org_id=e.org_id and loss.reversed_by_change_id is null and e.posting_date>loss.effective_on
-    where e.org_id=${orgId} and e.book_id=${book.id} and e.period_id=${periodId} and e.status in('posted','reversed') and a.eliminate
+    where e.org_id=${orgId} and e.book_id=${book.id} and e.period_id=${periodId} and e.status in('posted','reversed') and (a.eliminate or l.eliminate)
     and exists(select 1 from pair_accounts p where p.subsidiary_id=l.subsidiary_id and p.account_id=l.account_id and loss.excluded_subsidiary_ids ? p.counterparty::text)
     and exists(select 1 from pair_accounts p where p.subsidiary_id=l.subsidiary_id and p.account_id=l.account_id and not(loss.excluded_subsidiary_ids ? p.counterparty::text)) limit 1`)
   ).rows[0];
@@ -1234,17 +1234,20 @@ async function runAutoEliminationIn(
            -- translated once rather than rounding line by line.
            round(sum(l.amount) * max(case
              when source_sub.base_currency = ${elim.baseCurrency} then 1
-             when a.type in ${flowTypes} then consolidated.average_rate
+             when coalesce(public.account_translation_rate_type(e.org_id,a.id,${period.ends_on}::date,false),case when a.type in ${flowTypes} then 'average' else 'current' end)='average' then consolidated.average_rate
+             when coalesce(public.account_translation_rate_type(e.org_id,a.id,${period.ends_on}::date,false),'current')='historical' then consolidated.historical_rate
              else consolidated.current_rate
            end), 4)::text as total,
            round(coalesce(sum(l.amount) filter (where e.period_id = ${periodId} and e.origin <> 'fx_revaluation'), 0) * max(case
              when source_sub.base_currency = ${elim.baseCurrency} then 1
-             when a.type in ${flowTypes} then consolidated.average_rate
+             when coalesce(public.account_translation_rate_type(e.org_id,a.id,${period.ends_on}::date,false),case when a.type in ${flowTypes} then 'average' else 'current' end)='average' then consolidated.average_rate
+             when coalesce(public.account_translation_rate_type(e.org_id,a.id,${period.ends_on}::date,false),'current')='historical' then consolidated.historical_rate
              else consolidated.current_rate
            end), 4)::text as "periodActivity",
            bool_or(source_sub.base_currency <> ${elim.baseCurrency}
                    and (case
-                     when a.type in ${flowTypes} then consolidated.average_rate
+                     when coalesce(public.account_translation_rate_type(e.org_id,a.id,${period.ends_on}::date,false),case when a.type in ${flowTypes} then 'average' else 'current' end)='average' then consolidated.average_rate
+                     when coalesce(public.account_translation_rate_type(e.org_id,a.id,${period.ends_on}::date,false),'current')='historical' then consolidated.historical_rate
                      else consolidated.current_rate
                    end) is null) as "missingRate"
       from journal_lines l
@@ -1262,7 +1265,7 @@ async function runAutoEliminationIn(
             or (a.type not in ${flowTypes} and source_period.ends_on < ${period.ends_on}::date))
        and e.status in ('posted', 'reversed')
        and ${excludePeriodEndJournals(sql`e.origin`)}
-       and a.eliminate and l.subsidiary_id <> ${elim.id}
+       and (a.eliminate or l.eliminate) and l.subsidiary_id <> ${elim.id}
        and not exists (
          select 1 from consolidation_control_losses loss
           where loss.org_id = e.org_id and loss.reversed_by_change_id is null
@@ -1328,7 +1331,7 @@ async function runAutoEliminationIn(
        where e.org_id = ${orgId} and e.book_id = ${book.id}
          and e.status in ('posted', 'reversed')
          and ${excludePeriodEndJournals(sql`e.origin`)}
-         and l.subsidiary_id = ${elim.id} and a.eliminate
+         and l.subsidiary_id = ${elim.id} and (a.eliminate or l.eliminate)
          and a.type not in ${flowTypes}
          and p.ends_on < ${period.ends_on}::date and e.period_id <> ${periodId}
        group by l.account_id

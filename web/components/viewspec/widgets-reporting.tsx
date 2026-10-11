@@ -1,3 +1,4 @@
+import { GlAuditNumberCommand } from '../gl-audit-number-command'
 import { type ComponentProps } from 'react'
 import {
   ExportMenu,
@@ -41,6 +42,7 @@ import { str, num, stringRecord, type WidgetRenderer } from './widget-props'
 
 /** Reporting adapters. Compose native components without changing their props or boundaries. */
 export const REPORTING_WIDGETS = {
+  'gl-audit-number-command': props => <GlAuditNumberCommand bookId={str(props,'bookId') ?? ''} periods={props.periods as {value:string;label:string}[]} entities={props.entities as {value:string;label:string}[]} />,
   /**
    * The statement matrix. Placed whole rather than decomposed into `table`
    * blocks: it owns variance percentages, scale divisors, hierarchical line

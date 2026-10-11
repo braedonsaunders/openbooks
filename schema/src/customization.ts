@@ -26,6 +26,7 @@ export const formLayouts = pgTable(
     ...auditColumns,
   },
   (t) => [
+    uniqueIndex("form_layouts_org_id_id_unique").on(t.orgId,t.id),
     uniqueIndex("form_layouts_org_type_name").on(t.orgId, t.recordType, t.name),
     index("form_layouts_org_type").on(t.orgId, t.recordType, t.isDefault),
   ],

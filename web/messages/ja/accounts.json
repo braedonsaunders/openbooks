@@ -32,14 +32,16 @@
     "cogs": "売上原価",
     "expense": "費用",
     "expenseOther": "その他の費用",
-    "expenseDeferred": "繰延費用"
+    "expenseDeferred": "繰延費用",
+    "statistical": "統計仕訳"
   },
   "classes": {
     "asset": "資産",
     "liability": "負債",
     "equity": "純資産",
     "income": "収益",
-    "expense": "費用"
+    "expense": "費用",
+    "statistical": "統計仕訳"
   },
   "hygiene": {
     "assetBankUncorroborated": "「{name}」は銀行口座として設定されていますが、銀行らしい名称がなく、明細照合もできないため、すべての場所で現金として集計されます。種別を確認してください（清算・引当・与信口座は誤設定が多くあります）。または明細照合を有効にしてください。",

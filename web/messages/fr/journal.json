@@ -93,7 +93,26 @@
     "budgetaryControlWarning": "Le budget {scenario} dépasse la dotation pour {account}, fonds {fund}, {subsidiary}{dimensions} : disponible {available}, dépassement de {amountOver}.",
     "budgetaryControlRemedy": "Révisez le budget par son circuit d''approbation : copiez le budget approuvé en brouillon, augmentez le montant de ce compte pour le fonds dans la feuille de calcul, approuvez la copie et archivez le budget remplacé. Ou liez ce montant à l''engagement ouvert qui l''a réservé.",
     "voidAwaitingApproval": "L'annulation de ce journal attend une approbation. Le journal reste comptabilisé jusqu'à la décision d'approbation.",
-    "createUnconfirmed": "Le serveur n'a pas confirmé la nouvelle écriture. Enregistrez à nouveau : la nouvelle tentative réutilise la clé de ce brouillon et ne peut pas créer une seconde écriture."
+    "createUnconfirmed": "Le serveur n'a pas confirmé la nouvelle écriture. Enregistrez à nouveau : la nouvelle tentative réutilise la clé de ce brouillon et ne peut pas créer une seconde écriture.",
+    "instructions": {
+      "mode": "Mode du journal",
+      "monetary": "Monétaire",
+      "statistical": "Statistique",
+      "currency_adjustment": "Ajustement de devise",
+      "currency": "Devise de transaction",
+      "rate": "Taux de change",
+      "reverseOn": "Contrepassation automatique le",
+      "lineCurrency": "Devise de la ligne",
+      "lineRate": "Taux de change de la ligne",
+      "quantity": "Quantité",
+      "unit": "Unité",
+      "eliminate": "Éliminer",
+      "keep": "Conserver",
+      "serverBalance": "Les montants de devises différentes sont équilibrés selon leur équivalent dans la devise du journal lors de l’enregistrement.",
+      "reversalStatus": "Contrepassation automatique : {status} · {date}",
+      "retryReversals": "Réessayer les contrepassations échues",
+      "viewReversal": "Voir la contrepassation"
+    }
   },
   "book": {
     "label": "Livre comptable",

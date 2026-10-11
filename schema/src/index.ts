@@ -130,3 +130,5 @@ export * from "./asset-capitalization";
 export * from "./asset-maintenance";
 export * from './rebates';
 export * from './renewals';
+export * from "./financial-policies";
+export * from "./journal-instructions";

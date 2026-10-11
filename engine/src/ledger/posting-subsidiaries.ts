@@ -1,8 +1,11 @@
+import { parseMoney } from "../money/brands.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { accountingPreferences } from "../organization/accounting-preferences.ts";
+import { applyBookAccountMaps } from "../journal/book-account-maps.ts";
+import { lookupExchangeRate } from "../fx/spot-rate.ts";
 import { normalizeDecimal } from "../money/money.ts";
 import { mulMoneyRate, type Money } from "../money/brands.ts";
-import { lookupSpotRate } from "../fx/spot-rate.ts";
 import { absorbFxRoundingResidual, intercompanyBalancingLegs, loadSubsidiaryContext, SubsidiaryError, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
 import { type Doc, type KernelLine, PostingError, effectivePostingDate } from "../journal/posting-contracts.ts";
 import { collectBalancingLegs } from "../journal/balancing-hooks.ts";
@@ -90,11 +93,13 @@ export async function applySubsidiaries(
     const bookBases = await documentBookBases(runner, doc, options.bookId, [docSubId, ...kernelLines.map((line) => line.subsidiaryId ?? docSubId)], postingDate);
     const measurementCurrency = (subsidiaryId: string, baseCurrency: string): string =>
       bookBases?.get(subsidiaryId)?.bookCurrency ?? baseCurrency;
-    const bookRate = async (subsidiaryId: string): Promise<string | null> => {
+    const bookRate = async (subsidiaryId: string, transactionCurrency = doc.currency, statedRate?: string): Promise<string | null> => {
       const basis = bookBases?.get(subsidiaryId);
       if (!basis || isIdentityBasis(basis)) return null;
-      if (doc.currency === basis.bookCurrency) return "1";
-      const key = rateKey(subsidiaryId, doc.currency);
+      if (transactionCurrency === basis.bookCurrency) return "1";
+      if (statedRate) return statedRate;
+      if (doc.kind === "journal" && doc.journalFxRateExplicit && transactionCurrency === doc.currency && subsidiaryId === docSubId) return doc.fxRate;
+      const key = rateKey(subsidiaryId, transactionCurrency);
       const cached = rateCache.get(`book:${key}`);
       if (cached) return cached;
       const { rates } = await resolveBookRates(runner, {
@@ -102,15 +107,16 @@ export async function applySubsidiaries(
         bookCode: bookBases!.code,
         postingDate,
         bases: new Map([[subsidiaryId, basis]]),
-        lines: [{ subsidiaryId, currency: doc.currency }],
+        lines: [{ subsidiaryId, currency: transactionCurrency }],
       });
       const rate = rates.get(key)!;
       rateCache.set(`book:${key}`, rate);
       return rate;
     };
 
-    const functionalRate = async (targetCurrency: string): Promise<string> => {
-      if (doc.currency === targetCurrency) return "1";
+    const functionalRate = async (targetCurrency: string, transactionCurrency = doc.currency, statedRate?: string, subsidiaryId = docSubId): Promise<string> => {
+      if (transactionCurrency === targetCurrency) return "1";
+      if (statedRate) return statedRate;
       // Honour a user-supplied header rate. The schema default is '1', which
       // on a foreign-currency document is "unset", not a 1:1 peg — look the
       // spot up so dunning, payment runs and the stamp are not all 1. The
@@ -119,25 +125,26 @@ export async function applySubsidiaries(
       // rather than by string inequality, so every default-rate document
       // resolves its spot rate.
       if (
-        targetCurrency === origin.baseCurrency &&
+        transactionCurrency === doc.currency && targetCurrency === origin.baseCurrency &&
         doc.fxRate &&
-        (normalizeDecimal(doc.fxRate, 10) !== "1.0000000000" || !!(doc.custom as {withholdingDeposit?:unknown;withholdingRemittance?:unknown} | null)?.withholdingDeposit || !!(doc.custom as {withholdingRemittance?:unknown}|null)?.withholdingRemittance)
+        (doc.journalFxRateExplicit || normalizeDecimal(doc.fxRate, 10) !== "1.0000000000" || !!(doc.custom as {withholdingDeposit?:unknown;withholdingRemittance?:unknown} | null)?.withholdingDeposit || !!(doc.custom as {withholdingRemittance?:unknown}|null)?.withholdingRemittance)
       ) {
         return doc.fxRate;
       }
-      const cached = rateCache.get(targetCurrency);
+      const cached = rateCache.get(`${subsidiaryId}:${transactionCurrency}:${targetCurrency}`);
       if (cached) return cached;
       // Direct-or-inverse through the shared FX lookup (direct wins
       // same-date ties) — the same conversion consolidation derivation and
       // statement translation apply, so one pair/date converts alike
       // everywhere.
-      const rate = await lookupSpotRate(runner, doc.orgId, doc.currency, targetCurrency, postingDate);
+      const policy = await accountingPreferences(runner,doc.orgId,subsidiaryId,postingDate);
+      const rate = await lookupExchangeRate(runner, doc.orgId, transactionCurrency, targetCurrency, postingDate, policy.postingRateType);
       if (!rate) {
         throw new SubsidiaryError(
-          `no spot rate for ${doc.currency}→${targetCurrency} on or before ${postingDate}`,
+          `no ${policy.postingRateType} rate for ${transactionCurrency}→${targetCurrency} on or before ${postingDate}`,
         );
       }
-      rateCache.set(targetCurrency, rate);
+      rateCache.set(`${subsidiaryId}:${transactionCurrency}:${targetCurrency}`, rate);
       return rate;
     };
 
@@ -163,13 +170,14 @@ export async function applySubsidiaries(
       const subsidiary = ctx.byId.get(subsidiaryId);
       if (!subsidiary)
         throw new SubsidiaryError(`subsidiary ${subsidiaryId} does not exist`);
-      const fxRate = (await bookRate(subsidiaryId)) ?? await functionalRate(subsidiary.baseCurrency);
+      const transactionCurrency = doc.journalMode === "statistical" ? measurementCurrency(subsidiaryId,subsidiary.baseCurrency) : line.currency ?? doc.currency;
+      const fxRate = line.isCurrencyAdjustment || doc.journalMode === "statistical" ? "1" : (await bookRate(subsidiaryId,transactionCurrency,line.fxRate)) ?? await functionalRate(subsidiary.baseCurrency,transactionCurrency,line.fxRate,subsidiaryId);
       stamped.push({
         ...line,
         subsidiaryId,
-        amount: mulMoneyRate(line.amount, fxRate),
-        currency: doc.currency,
-        txnAmount: line.amount,
+        amount: line.isCurrencyAdjustment ? line.amount : mulMoneyRate(line.amount, fxRate),
+        currency: transactionCurrency,
+        txnAmount: line.isCurrencyAdjustment ? parseMoney("0") : line.amount,
         fxRate,
       });
     }
@@ -179,13 +187,14 @@ export async function applySubsidiaries(
     // rounding onto each group's final line before balancing: single-entity
     // documents get no intercompany legs at all, and the kernel asserts
     // exact balance.
-    absorbFxRoundingResidual(stamped);
+    if (doc.journalMode !== "currency_adjustment") absorbFxRoundingResidual(stamped);
     const originFxRate = (await bookRate(docSubId)) ?? await functionalRate(origin.baseCurrency);
     const legs = await intercompanyBalancingLegs(runner, {
       orgId: doc.orgId,
       ctx,
       originSubId: docSubId,
       originFxRate,
+      balanceCurrency: doc.kind === "journal" ? doc.currency : undefined,
       lines: stamped,
     });
     const nativeTranslated = [
@@ -208,7 +217,14 @@ export async function applySubsidiaries(
       const existing=(await runner.execute<{accountId:string;currency:string}>(sql`select l.account_id as "accountId",l.currency from journal_lines l join journal_entries e on e.org_id=l.org_id and e.id=l.entry_id where l.org_id=${doc.orgId} and e.source_document_id=${doc.id} and e.status='posted' and ${options.bookId ? sql`e.book_id=${options.bookId}` : sql`e.id=${doc.postedEntryId}`} and l.memo='Contractor withholding' and l.contributor_kind is null`)).rows;
       translated=translated.map((line,index)=>existing.some(row=>row.accountId===line.accountId && row.currency===doc.currency && row.currency!==line.currency) ? nativeTranslated[index]! : line);
     }
-    const all = options.withholdingCarrying===false ? translated : await applyWithholdingCarrying(runner,doc,translated,docSubId,origin.baseCurrency,options.bookId);
+    let all = options.withholdingCarrying===false ? translated : await applyWithholdingCarrying(runner,doc,translated,docSubId,origin.baseCurrency,options.bookId);
+    if (options.bookId && doc.kind === "journal" && doc.journalMode !== "currency_adjustment") {
+      const profile = await loadBookProfile(runner,doc.orgId,options.bookId);
+      if (profile && !profile.isPrimary) all = (await applyBookAccountMaps(runner, {
+        orgId: doc.orgId, bookId: profile.id, bookLabel: profile.code, postingDate,
+        entryLabel: doc.documentNumber ?? doc.id, lines: all,
+      })).lines;
+    }
     // Balancing-segment legs (interfund due-to/due-from for a balancing fund
     // segment, for example) come from registered providers. They are
     // appended before the restriction checks below so every leg is
@@ -230,6 +246,7 @@ export async function applySubsidiaries(
         subsidiaryId: leg.subsidiaryId,
         memo: leg.memo,
         extraDims: leg.extraDims,
+        departmentId: leg.departmentId, projectId: leg.projectId, locationId: leg.locationId, classId: leg.classId,
       });
     }
     await validateSubsidiaryRestrictions(runner, {

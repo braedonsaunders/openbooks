@@ -93,7 +93,26 @@
     "budgetaryControlWarning": "O orçamento {scenario} excede a dotação para {account}, fundo {fund}, {subsidiary}{dimensions}: disponível {available}, excesso de {amountOver}.",
     "budgetaryControlRemedy": "Revise o orçamento pelo seu fluxo de aprovação: copie o orçamento aprovado como rascunho, aumente o valor desta conta para o fundo na planilha, aprove a cópia e arquive o orçamento substituído. Ou vincule este valor ao empenho aberto que o reservou.",
     "voidAwaitingApproval": "A anulação deste lançamento aguarda aprovação. O lançamento permanece contabilizado até que a aprovação seja decidida.",
-    "createUnconfirmed": "O servidor não confirmou o novo lançamento. Salve novamente: a nova tentativa reutiliza a chave deste rascunho, então não pode criar um segundo lançamento."
+    "createUnconfirmed": "O servidor não confirmou o novo lançamento. Salve novamente: a nova tentativa reutiliza a chave deste rascunho, então não pode criar um segundo lançamento.",
+    "instructions": {
+      "mode": "Modo do lançamento",
+      "monetary": "Monetário",
+      "statistical": "Estatístico",
+      "currency_adjustment": "Ajuste de moeda",
+      "currency": "Moeda da transação",
+      "rate": "Taxa de câmbio",
+      "reverseOn": "Reverter automaticamente em",
+      "lineCurrency": "Moeda da linha",
+      "lineRate": "Taxa de câmbio da linha",
+      "quantity": "Quantidade",
+      "unit": "Unidade",
+      "eliminate": "Eliminar",
+      "keep": "Manter",
+      "serverBalance": "Os valores em moedas diferentes são balanceados pelos equivalentes na moeda do lançamento ao salvar.",
+      "reversalStatus": "Reversão automática: {status} · {date}",
+      "retryReversals": "Repetir reversões vencidas",
+      "viewReversal": "Ver reversão"
+    }
   },
   "book": {
     "label": "Livro contábil",

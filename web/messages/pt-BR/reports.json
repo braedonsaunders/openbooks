@@ -54,7 +54,11 @@
       "intercompanyReconciliationTitle": "Conciliação entre empresas",
       "intercompanyReconciliationDescription": "Saldos de cada par de empresas por moeda nos livros das duas entidades e diferença a conciliar.",
       "bookDifferencesTitle": "Diferenças entre livros",
-      "bookDifferencesDescription": "Cada conta do livro principal ao lado de um livro secundário, com a diferença"
+      "bookDifferencesDescription": "Cada conta do livro principal ao lado de um livro secundário, com a diferença",
+      "statisticalJournalTitle": "Lançamento estatístico",
+      "statisticalJournalDescription": "Nenhum registro neste período.",
+      "glAuditNumbersTitle": "Números de auditoria do razão",
+      "glAuditNumbersDescription": "O período do razão da entidade deve estar fechado. Os números e lançamentos existentes são preservados."
     },
     "groups": {
       "financial": "Demonstrações Financeiras",
@@ -3564,5 +3568,26 @@
     "base": "Plano de contas base",
     "legend": "Contexto contábil: {context}; {marker} indica uma conta exibida com o número e nome do plano base",
     "blockedTitle": "Este contexto contábil não pode rotular as contas"
+  },
+  "journalMeasurements": {
+    "auditTitle": "Números de auditoria do razão",
+    "statisticalTitle": "Lançamento estatístico",
+    "number": "Número de auditoria",
+    "entry": "Lançamento",
+    "date": "Data",
+    "entity": "Entidade legal",
+    "period": "Período",
+    "book": "Livro",
+    "account": "Conta",
+    "quantity": "Quantidade",
+    "unit": "Unidade",
+    "department": "Departamento",
+    "empty": "Nenhum registro neste período.",
+    "allocate": "Atribuir números de auditoria",
+    "allocateTitle": "Atribuir números de auditoria do razão",
+    "allocateDescription": "O período do razão da entidade deve estar fechado. Os números e lançamentos existentes são preservados.",
+    "reason": "Motivo",
+    "allocated": "Números de auditoria atribuídos",
+    "failed": "Falha ao atribuir números de auditoria"
   }
 }

@@ -56,6 +56,17 @@ export const currencies = pgTable("currencies", {
   minorUnits: integer("minor_units").notNull().default(2),
 });
 
+/** Fiscal calendar identity and cadence used by effective legal-entity posting preferences. */
+export const fiscalCalendars=pgTable("fiscal_calendars",{
+ id:id(),orgId:orgRef(),name:text("name").notNull(),cadence:text("cadence").notNull().default("monthly"),
+ yearStartMonth:integer("year_start_month").notNull().default(1),weekStartsOn:integer("week_starts_on").notNull().default(1),
+ anchorDate:date("anchor_date"),timeZone:text("time_zone").notNull().default("UTC"),
+ adjustmentPeriodEnabled:boolean("adjustment_period_enabled").notNull().default(false),
+ isDefault:boolean("is_default").notNull().default(false),isActive:boolean("is_active").notNull().default(true),
+ config:jsonb("config").notNull().default({}),...auditColumns,
+},t=>[uniqueIndex("fiscal_calendars_org_id_id_unique").on(t.orgId,t.id),uniqueIndex("fiscal_calendars_org_name").on(t.orgId,t.name),
+ uniqueIndex("fiscal_calendars_one_default").on(t.orgId).where(sql`${t.isDefault}`)]);
+
 /**
  * Accounting periods with per-module close — closing AP doesn't block GL
  * adjustments. Periods derive from a fiscal calendar; adjustment periods

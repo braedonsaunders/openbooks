@@ -187,6 +187,11 @@ export const ACCOUNT_REFERENCE_RULES: Readonly<Record<string, AccountReferenceRu
       remedy:'Generate and settle the remaining rebate claims, or reverse their settlements, before merging the agreement account. Create future agreements using the surviving account.',
     }},
   ])),
+  "account_translation_policies.account_id": history("Account translation policy history"),
+  "segment_balancing_policies.clearing_account_id": {
+    label: "Segment balancing policies", disposition: "history",
+    blockWhere: { predicate: sql`not exists(select 1 from segment_balancing_policies successor where successor.org_id=r.org_id and successor.segment_key=r.segment_key and successor.effective_from>r.effective_from and successor.effective_from<=current_date)`, remedy: "Record a successor balancing policy on another clearing account and let it take effect before merging this account." },
+  },
 
   // Posted and imported facts.
   "pay_stub_lines.expense_account_id": history("Pay stub lines (expense)"),

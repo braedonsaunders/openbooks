@@ -266,7 +266,7 @@ async function loadExposures(
            where ap.from_line_id=l.id or ap.to_line_id=l.id
         ) applied on l.is_open_item
        where l.org_id=${orgId} and l.subsidiary_id=${subsidiaryId}
-         and e.origin not in ('fx_revaluation', 'fx_settlement')
+         and e.origin not in ('fx_revaluation', 'currency_adjustment', 'fx_settlement')
          and l.currency<>${functionalCurrency} and ${MONETARY_ACCOUNT_SQL}
     )
     select account_id, currency, sum(carrying_base)::text as carrying_base,
@@ -322,7 +322,7 @@ async function loadEffectiveAdjustments(
       join accounts a on a.id=l.account_id and a.org_id=l.org_id
      where l.org_id=${orgId} and l.subsidiary_id=${subsidiaryId}
        and e.book_id=${bookId} and e.status in ('posted', 'reversed')
-       and e.origin='fx_revaluation' and ${scope}
+       and e.origin in ('fx_revaluation','currency_adjustment') and ${scope}
        and a.type not in
          ('income', 'income_other', 'cogs', 'expense', 'expense_other', 'expense_deferred', 'equity')
      group by l.account_id having sum(l.amount) <> 0`);

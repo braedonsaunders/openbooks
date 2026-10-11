@@ -1,3 +1,4 @@
+import { journalMeasurementExportData } from './journal-measurement-reports'
 import { reportEntityCatalog, validateCatalogReportQuery } from './custom-record-report-catalog'
 import 'server-only'
 import { payrollSupportReportData } from './payroll-support-report'
@@ -114,6 +115,8 @@ export const REPORT_KINDS = [
   'resourcing-capacity-demand',
   'resourcing-engagement',
   'intercompany-reconciliation',
+  'statistical-journal',
+  'gl-audit-numbers',
 ] as const
 export type ReportKind = (typeof REPORT_KINDS)[number]
 
@@ -162,6 +165,8 @@ export function statementPageHref(statement: { kind?: string; params?: Record<st
       return '/reports/book-differences'
     case 'true-cost':
       return '/reports/true-cost'
+    case 'statistical-journal': return '/reports/statistical-journal'
+    case 'gl-audit-numbers': return '/reports/gl-audit-numbers'
     case 'intercompany-reconciliation':
       return '/reports/intercompany-reconciliation'
     case 'availability':
@@ -490,6 +495,9 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
     }
     case 'true-cost':
       return { render: 'data', data: await trueCostExportData(orgId, period) }
+    case 'statistical-journal':
+    case 'gl-audit-numbers':
+      return { render: 'data', data: await journalMeasurementExportData(kind, { orgId, allowedSubsidiaryIds: authz.allowedSubsidiaryIds, from: period.from, to: period.to, label: period.label, bookId: detailBookId }), requiredPermissions: ['gl.read'] }
     case 'intercompany-reconciliation':
       // Balances as of the window end, within the reader's legal entities.
       return {
@@ -582,9 +590,9 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
       }
     }
     case 'cash-flow':
-      return { render: 'data', data: cashFlowExportData(await cashFlow(from, to, dims, orgId, detailBookId), from, to, t) }
+      return { render: 'data', data: cashFlowExportData(await cashFlow(from, to, dims, orgId, detailBookId, subView.subsidiary), from, to, t) }
     case 'cash-flow-indirect':
-      return { render: 'data', data: cashFlowIndirectExportData(await cashFlowIndirect(from, to, dims, orgId, detailBookId), from, to, t) }
+      return { render: 'data', data: cashFlowIndirectExportData(await cashFlowIndirect(from, to, dims, orgId, detailBookId, subView.subsidiary), from, to, t) }
   }
 
   throw new ReportResolutionError('unknown statement')

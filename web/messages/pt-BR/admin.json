@@ -3822,6 +3822,34 @@
         "title": "Regras de capitalização",
         "singularTitle": "Regra de capitalização",
         "description": "Quais linhas de compra contabilizadas se tornam propostas de ativos: uma conta, item ou categoria de item com valor mínimo, com data de vigência."
+      },
+      "fiscal-calendars": {
+        "title": "Calendários fiscais",
+        "description": "Calendários fiscais"
+      },
+      "form-layouts": {
+        "title": "Formulários de lançamento",
+        "description": "Formulários de lançamento"
+      },
+      "fx-rate-types": {
+        "title": "Tipos de taxa de câmbio",
+        "description": "Tipos de taxa de câmbio"
+      },
+      "account-translation-policies": {
+        "title": "Políticas de conversão de contas",
+        "description": "Políticas de conversão de contas"
+      },
+      "subsidiary-accounting-preferences": {
+        "title": "Preferências contábeis de subsidiárias",
+        "description": "Preferências contábeis de subsidiárias"
+      },
+      "segment-balancing-policies": {
+        "title": "Políticas de balanceamento de segmentos",
+        "description": "Políticas de balanceamento de segmentos"
+      },
+      "gl-audit-number-policies": {
+        "title": "Políticas de numeração de auditoria",
+        "description": "Políticas de numeração de auditoria"
       }
     },
     "fields": {
@@ -4488,7 +4516,18 @@
       "allowedValueId": "Permitido com",
       "matchKind": "Corresponde a",
       "minimumAmount": "Valor mínimo para capitalizar",
-      "assetCategoryId": "Categoria de ativo sugerida"
+      "assetCategoryId": "Categoria de ativo sugerida",
+      "generalRateType": "Método de conversão geral",
+      "cashFlowRateType": "Método de conversão do fluxo de caixa",
+      "fiscalCalendarId": "Calendário fiscal",
+      "postingRateType": "Tipo de câmbio para contabilização",
+      "requireJournalApproval": "Exigir aprovação de lançamentos",
+      "allowBackdatedPosting": "Permitir contabilização retroativa",
+      "allowFuturePosting": "Permitir contabilização futura",
+      "defaultJournalFormId": "Formulário padrão de lançamento",
+      "priority": "Prioridade",
+      "resetRule": "Regra de reinício",
+      "segmentKey": "Chave do segmento"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Dias entre a taxa utilizável mais recente e o fim do período a partir dos quais a reavaliação e a consolidação recusam a taxa. Taxas de fechamento contam a partir da data da taxa à vista de fim de período; taxas médias, a partir da cotação mais recente incluída na média. Padrão sem política: 31 dias.",
@@ -5529,6 +5568,16 @@
         "account": "Conta",
         "item": "Item",
         "itemCategory": "Categoria de item"
+      },
+      "accountRateMethod": {
+        "current": "Atual",
+        "average": "Médio",
+        "historical": "Histórico"
+      },
+      "auditNumberReset": {
+        "period": "Por período",
+        "fiscal_year": "Por exercício",
+        "never": "Nunca"
       }
     },
     "payroll": {

@@ -5,7 +5,7 @@ import { addCalendarDays, addMonthsClamped, calendarDaysBetween } from '@openboo
 import { declaredPeriodColumns, declaredPeriodsCover, declaredQuarterColumns, fiscalMonthsBetween, fiscalQuartersBetween } from '@openbooks/reports'
 import { resolveOrgId } from './org-scope'
 import { excludePeriodEndJournals } from '@openbooks/engine/records/period-end-origins'
-import { glActivityBuckets, glSummaryEligibleDims, bucketSubsidiaryFilter, statementBookExpr, type ActivityBoundary } from './gl-summary'
+import { glActivityBuckets, glSummaryEligibleDims, bucketSubsidiaryFilter, statementBookIdsExpr, type ActivityBoundary } from './gl-summary'
 import { MissingRatesError } from './consolidation'
 import { ASSET_TYPES, EQUITY_TYPES, LIABILITY_TYPES, PNL_TYPES } from './account-types'
 import { localizeAccountRows, type AccountLabels } from './reports/accounting-context'
@@ -228,7 +228,7 @@ function rateSetsBySubsidiary(
  * multi-period columns (YTD, equal-length comparatives) legitimate while any
  * true calendar gap fails loudly.
  */
-function assertRateCoverage(
+export function assertRateCoverage(
   subsidiary: StatementSubsidiaryContext,
   required: { from: string; to: string }[],
   mode: StatementMode,
@@ -303,7 +303,7 @@ async function assertNoUntranslatedHistory(
       from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
      where l.org_id = ${orgId} and e.status in ('posted', 'reversed')
        and l.subsidiary_id = any(${`{${ids.join(',')}}`}::uuid[])
-       and e.book_id = ${statementBookExpr(orgId, bookId)}
+       and e.book_id in ${statementBookIdsExpr(orgId, bookId)}
        and e.posting_date < ${earliest}`));
   const date = oldest.rows[0]?.d;
   if (date) {
@@ -323,10 +323,11 @@ async function assertNoUntranslatedHistory(
  * Subsidiaries not listed in `rates` (functional currency already equals the
  * target) multiply by 1. Shared by every basis.
  */
-function translationMultiplier(
+export function translationMultiplier(
   mode: StatementMode,
   subsidiary?: StatementSubsidiaryContext,
   asOf?: string,
+  cashFlow = false,
 ): SQL {
   const rates = subsidiary?.rates;
   const weights = subsidiary?.weights;
@@ -336,10 +337,9 @@ function translationMultiplier(
     // flows, the column's as-of date for balances.
     const reference =
       mode === "flow" ? sql`e.posting_date` : sql`${asOf!}::date`;
-    const pick =
-      mode === "flow"
-        ? sql`w.average_rate`
-        : sql`case when a.type = 'equity' then w.historical_rate else w.current_rate end`;
+    const fallback = mode === "flow" ? sql`'average'` : sql`case when a.type='equity' then 'historical' else 'current' end`;
+    const method = sql`coalesce(public.account_translation_rate_type(e.org_id,a.id,${reference},${cashFlow}),${fallback})`;
+    const pick = sql`case ${method} when 'average' then w.average_rate when 'historical' then w.historical_rate else w.current_rate end`;
     rateExpr = sql`case l.subsidiary_id`;
     for (const [subsidiaryId, sets] of rateSetsBySubsidiary(rates)) {
       const loss = subsidiary?.controlLosses?.find(
@@ -425,7 +425,7 @@ async function buildAmountColumns(opts: {
   bookId?: string | null
 }): Promise<{ cols: AmountColumn[]; truncated: boolean }> {
   const { orgId, mode, period, breakout, compare, dims, subsidiary, periodLabel } = opts
-  const bookProbe = sql`and e.book_id = ${statementBookExpr(orgId, opts.bookId)}`
+  const bookProbe = sql`and e.book_id in ${statementBookIdsExpr(orgId, opts.bookId)}`
 
   if (breakout === 'month' || breakout === 'quarter') {
     // Retail/custom calendars declare week-based periods whose boundaries
@@ -789,7 +789,7 @@ export async function statementMatrix(opts: {
     : opts.period.to;
   // Every report answers for exactly one accounting book — journal entries are
   // book-mandatory and an unscoped read would fuse parallel books.
-  const baseBook = sql`and e.book_id = ${statementBookExpr(orgId, opts.bookId)}`;
+  const baseBook = sql`and e.book_id in ${statementBookIdsExpr(orgId, opts.bookId)}`;
   const baseDate =
     opts.mode === "balance"
       ? sql`e.posting_date <= ${overallTo}`

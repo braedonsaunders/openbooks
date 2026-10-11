@@ -3822,6 +3822,34 @@
         "title": "资本化规则",
         "singularTitle": "资本化规则",
         "description": "确定哪些已过账采购明细行生成资产建议：按科目、物料或物料类别设定最低金额，并按生效日期管理。"
+      },
+      "fiscal-calendars": {
+        "title": "会计日历",
+        "description": "会计日历"
+      },
+      "form-layouts": {
+        "title": "分录表单",
+        "description": "分录表单"
+      },
+      "fx-rate-types": {
+        "title": "汇率类型",
+        "description": "汇率类型"
+      },
+      "account-translation-policies": {
+        "title": "科目折算政策",
+        "description": "科目折算政策"
+      },
+      "subsidiary-accounting-preferences": {
+        "title": "子公司会计设置",
+        "description": "子公司会计设置"
+      },
+      "segment-balancing-policies": {
+        "title": "分段平衡政策",
+        "description": "分段平衡政策"
+      },
+      "gl-audit-number-policies": {
+        "title": "总账审计编号政策",
+        "description": "总账审计编号政策"
       }
     },
     "fields": {
@@ -4329,7 +4357,7 @@
       "waitingPeriodMonths": "等待期（日历月）",
       "approvalMode": "审批政策",
       "legalEmployer": "法定雇主",
-      "clearingAccountId": "清算账户",
+      "clearingAccountId": "清算科目",
       "collectionMode": "代收方式",
       "states": "州",
       "practicalExpedient": "实务简化方法（12个月或更短）",
@@ -4488,7 +4516,18 @@
       "allowedValueId": "允许搭配",
       "matchKind": "匹配依据",
       "minimumAmount": "资本化最低金额",
-      "assetCategoryId": "建议资产类别"
+      "assetCategoryId": "建议资产类别",
+      "generalRateType": "常规折算方法",
+      "cashFlowRateType": "现金流量折算方法",
+      "fiscalCalendarId": "会计日历",
+      "postingRateType": "过账汇率类型",
+      "requireJournalApproval": "要求分录审批",
+      "allowBackdatedPosting": "允许追溯过账",
+      "allowFuturePosting": "允许未来日期过账",
+      "defaultJournalFormId": "默认分录表单",
+      "priority": "优先级",
+      "resetRule": "重置规则",
+      "segmentKey": "分段键"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "最新可用汇率距期末的天数超过此值时，重估和合并将拒绝该汇率。期末汇率从期末即期汇率的日期起算；平均汇率从计入平均的最新报价日期起算。未设置政策时的默认值：31 天。",
@@ -5529,6 +5568,16 @@
         "account": "科目",
         "item": "物料",
         "itemCategory": "物料类别"
+      },
+      "accountRateMethod": {
+        "current": "当前",
+        "average": "平均",
+        "historical": "历史"
+      },
+      "auditNumberReset": {
+        "period": "按期间",
+        "fiscal_year": "按会计年度",
+        "never": "不重置"
       }
     },
     "payroll": {

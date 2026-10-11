@@ -2,7 +2,7 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { PAYROLL_RESTRICTED_PARTY_LABEL, collapseRestrictedPayrollLines } from "../payroll-confidentiality";
 import { functionalReportReader } from "./currency-basis";
-import { bucketSubsidiaryFilter, glSummaryEligibleDims, statementBookExpr } from "../gl-summary";
+import { bucketSubsidiaryFilter, glSummaryEligibleDims, statementBookIdsExpr } from "../gl-summary";
 import { resolveOrgId } from "../org-scope";
 import { fiscalYearStartOn } from "@openbooks/reports";
 import { decimalAdd, decimalCmp, decimalNeg, type ExactDecimal } from "../statement-format";
@@ -72,7 +72,7 @@ export async function generalLedger(
   const acctFilter = opts.accountId ? sql` and l.account_id = ${opts.accountId}` : sql``
   const pnlInYear = sql`a.type not in ${PNL_TYPES} or`
   const reportDb = functionalReportReader(orgId, sql`e.posting_date <= ${to}
-    and e.book_id = ${statementBookExpr(orgId, opts.bookId)} and ${dimWhere(opts.dims)} ${acctFilter}`)
+    and e.book_id in ${statementBookIdsExpr(orgId, opts.bookId)} and ${dimWhere(opts.dims)} ${acctFilter}`)
 
   // Opening balances (debit-signed) per account before the period. Balance-
   // sheet accounts are inception-to-date; P&L accounts start at the fiscal
@@ -85,7 +85,7 @@ export async function generalLedger(
               from gl_month_activity g
               join accounts a on a.id = g.account_id and a.org_id = g.org_id
            where g.org_id = ${orgId}
-             and g.book_id = ${statementBookExpr(orgId, opts.bookId)}
+             and g.book_id in ${statementBookIdsExpr(orgId, opts.bookId)}
              and g.month < date_trunc('month', ${from}::date)::date
              and (${pnlInYear} g.month >= ${fyStart}::date)
              ${bucketSubsidiaryFilter(opts.dims?.subsidiaryIds, sql`g`)}
@@ -95,7 +95,7 @@ export async function generalLedger(
             from journal_lines l
             join journal_entries e on e.id = l.entry_id and e.org_id = ${orgId}
              and e.status in ('posted', 'reversed')
-             and e.book_id = ${statementBookExpr(orgId, opts.bookId)}
+             and e.book_id in ${statementBookIdsExpr(orgId, opts.bookId)}
              and e.posting_date >= date_trunc('month', ${from}::date)::date
              and e.posting_date < ${from}
             join accounts a on a.id = l.account_id and a.org_id = l.org_id
@@ -106,7 +106,7 @@ export async function generalLedger(
         select ${reportDb.censusColumn}, l.account_id, coalesce(sum(l.amount), 0) as bal
           from journal_lines l
           join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
-          and e.book_id = ${statementBookExpr(orgId, opts.bookId)}
+          and e.book_id in ${statementBookIdsExpr(orgId, opts.bookId)}
           join accounts a on a.id = l.account_id and a.org_id = l.org_id
          where l.org_id = ${orgId} and e.posting_date < ${from}
            and (${pnlInYear} e.posting_date >= ${fyStart}::date)
@@ -121,7 +121,7 @@ export async function generalLedger(
     select ${reportDb.censusColumn}, l.account_id, coalesce(sum(l.amount), 0) as activity
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
-       and e.book_id = ${statementBookExpr(orgId, opts.bookId)}
+       and e.book_id in ${statementBookIdsExpr(orgId, opts.bookId)}
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
      where l.org_id = ${orgId} and e.posting_date >= ${from} and e.posting_date <= ${to}
        and ${dimWhere(opts.dims)}${acctFilter}
@@ -138,7 +138,7 @@ export async function generalLedger(
   const lineJoins = sql`
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
-       and e.book_id = ${statementBookExpr(orgId, opts.bookId)}
+       and e.book_id in ${statementBookIdsExpr(orgId, opts.bookId)}
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       left join parties p on p.id = l.party_id and p.org_id = l.org_id
       left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
@@ -277,7 +277,7 @@ export async function journalReport(
   const orgId = await resolveOrgId(opts.orgId)
   const maxLines = opts.maxLines ?? 4000
   const reportDb = functionalReportReader(orgId, sql`e.posting_date >= ${from} and e.posting_date <= ${to}
-    and e.book_id = ${statementBookExpr(orgId, opts.bookId)} and ${dimWhere(opts.dims)}`)
+    and e.book_id in ${statementBookIdsExpr(orgId, opts.bookId)} and ${dimWhere(opts.dims)}`)
   // Without a line-level dimension slice, every entry in the window
   // contributes at least one line, so the first `maxLines` lines can only come
   // from the first `maxLines` entries in the same order. Narrowing to those
@@ -288,7 +288,7 @@ export async function journalReport(
         select id, entry_number, posting_date, memo, origin, source_document_id, org_id
           from journal_entries
          where org_id = ${orgId} and status in ('posted', 'reversed')
-           and book_id = ${statementBookExpr(orgId, opts.bookId)}
+           and book_id in ${statementBookIdsExpr(orgId, opts.bookId)}
            and posting_date >= ${from} and posting_date <= ${to}
          -- Same key as the outer sort, id tie-break included, so the window is
          -- exactly the first entries the full ordering would have reached.
@@ -299,7 +299,7 @@ export async function journalReport(
         select id, entry_number, posting_date, memo, origin, source_document_id, org_id
           from journal_entries
          where org_id = ${orgId} and status in ('posted', 'reversed')
-           and book_id = ${statementBookExpr(orgId, opts.bookId)}
+           and book_id in ${statementBookIdsExpr(orgId, opts.bookId)}
            and posting_date >= ${from} and posting_date <= ${to}
       )`
   // Payroll legs collapse per (entry, account) in a UNION arm BEFORE the

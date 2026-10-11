@@ -3909,6 +3909,34 @@
         "title": "Aktivierungsregeln",
         "singularTitle": "Aktivierungsregel",
         "description": "Welche gebuchten Einkaufszeilen zu Anlagenvorschlägen werden: ein Konto, Artikel oder eine Artikelkategorie mit einem Mindestbetrag, mit Gültigkeitsdatum."
+      },
+      "fiscal-calendars": {
+        "title": "Geschäftsjahrkalender",
+        "description": "Geschäftsjahrkalender"
+      },
+      "form-layouts": {
+        "title": "Journalformulare",
+        "description": "Journalformulare"
+      },
+      "fx-rate-types": {
+        "title": "Wechselkursarten",
+        "description": "Wechselkursarten"
+      },
+      "account-translation-policies": {
+        "title": "Kontenumrechnungspolicies",
+        "description": "Kontenumrechnungspolicies"
+      },
+      "subsidiary-accounting-preferences": {
+        "title": "Buchhaltungseinstellungen der Tochtergesellschaften",
+        "description": "Buchhaltungseinstellungen der Tochtergesellschaften"
+      },
+      "segment-balancing-policies": {
+        "title": "Segmentausgleichsrichtlinien",
+        "description": "Segmentausgleichsrichtlinien"
+      },
+      "gl-audit-number-policies": {
+        "title": "Hauptbuch-Prüfnummernrichtlinien",
+        "description": "Hauptbuch-Prüfnummernrichtlinien"
       }
     },
     "fields": {
@@ -4575,7 +4603,18 @@
       "allowedValueId": "Zulässig mit",
       "matchKind": "Abgleich nach",
       "minimumAmount": "Mindestbetrag für die Aktivierung",
-      "assetCategoryId": "Vorgeschlagene Anlagenkategorie"
+      "assetCategoryId": "Vorgeschlagene Anlagenkategorie",
+      "generalRateType": "Allgemeine Umrechnungsmethode",
+      "cashFlowRateType": "Cashflow-Umrechnungsmethode",
+      "fiscalCalendarId": "Geschäftsjahrkalender",
+      "postingRateType": "Wechselkursart für Buchungen",
+      "requireJournalApproval": "Journalgenehmigung erforderlich",
+      "allowBackdatedPosting": "Rückdatierte Buchungen zulassen",
+      "allowFuturePosting": "Zukünftige Buchungen zulassen",
+      "defaultJournalFormId": "Standardjournalformular",
+      "priority": "Priorität",
+      "resetRule": "Rücksetzungsregel",
+      "segmentKey": "Segmentschlüssel"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Tage zwischen dem neuesten verwendbaren Kurs und dem Periodenende, ab denen Bewertung und Konsolidierung den Kurs ablehnen. Stichtagskurse zählen ab dem Datum des Kassakurses zum Periodenende, Durchschnittskurse ab der neuesten einbezogenen Notierung. Standard ohne Richtlinie: 31 Tage.",
@@ -5616,6 +5655,16 @@
         "account": "Konto",
         "item": "Artikel",
         "itemCategory": "Artikelkategorie"
+      },
+      "accountRateMethod": {
+        "current": "Aktuell",
+        "average": "Durchschnitt",
+        "historical": "Historisch"
+      },
+      "auditNumberReset": {
+        "period": "Je Periode",
+        "fiscal_year": "Je Geschäftsjahr",
+        "never": "Nie"
       }
     },
     "bankFeeds": {

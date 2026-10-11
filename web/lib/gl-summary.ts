@@ -8,10 +8,10 @@ import { excludePeriodEndJournals, statementMonthActivity } from '@openbooks/eng
  * openbooks_gl_activity_* journal triggers — see 0001_baseline.sql and
  * 0016_gl_month_activity_book_id.sql).
  *
- * Every read is scoped to exactly ONE accounting book: journal entries carry a
+ * Every read resolves one selected reporting basis: journal entries carry a
  * mandatory book_id and the summary keys it, so an unscoped read would fuse
  * parallel books (primary + tax + IFRS…) into one silently double-counted
- * total. Callers pass an explicit book; when none is given the org's primary
+ * total. An adjustment-only book adds its primary book; a full book remains its own basis. Callers pass an explicit book; when none is given the org's primary
  * book is substituted in-query, so a forgotten filter degrades to "primary
  * book only", never to merged books.
  *
@@ -70,6 +70,11 @@ export function statementBookExpr(orgId: string | SQL, bookId?: string | null): 
     : sql`(select b.id from accounting_books b where b.org_id = ${orgId} and b.is_primary order by b.created_at limit 1)`
 }
 
+/** Physical books of one native reporting basis; full books remain independent. */
+export function statementBookIdsExpr(orgId: string | SQL, bookId?: string | null): SQL {
+  return sql`(select public.reporting_book_ids(${orgId}::uuid, ${statementBookExpr(orgId, bookId)}))`;
+}
+
 /**
  * The union relation described above. `minDate` null means inception
  * (balance-mode statements). Callers pass every column boundary; boundaries
@@ -97,7 +102,7 @@ export function glActivityBuckets(
   const splitFilter = splitMonths.length
     ? sql`and g.month <> all(${`{${splitMonths.join(',')}}`}::date[])`
     : sql``
-  const book = sql`and g.book_id = ${statementBookExpr(orgId, opts.bookId)}`
+  const book = sql`and g.book_id in ${statementBookIdsExpr(orgId, opts.bookId)}`
 
   if (!splitMonths.length) {
     return sql`(
@@ -127,7 +132,7 @@ export function glActivityBuckets(
        and e.posting_date <= ${opts.maxDate}
        ${opts.minDate ? sql`and e.posting_date >= ${opts.minDate}` : sql``}
        and (${ranges})
-       and e.book_id = ${statementBookExpr(orgId, opts.bookId)}
+       and e.book_id in ${statementBookIdsExpr(orgId, opts.bookId)}
      where l.org_id = ${orgId}
   )`
 }

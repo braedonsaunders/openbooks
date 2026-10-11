@@ -51,6 +51,10 @@ export interface BalancingLineView {
 
 /** One leg a provider appends. */
 export interface BalancingLeg {
+  departmentId?: string | null;
+  projectId?: string | null;
+  locationId?: string | null;
+  classId?: string | null;
   accountId: string;
   amount: Money;
   subsidiaryId: string;

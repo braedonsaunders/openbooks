@@ -236,6 +236,10 @@
     "prepaid-amortization-unposted": {
       "title": "A apropriação de despesas antecipadas não foi lançada",
       "message": "{count, plural, one {# período de apropriação vencido não foi lançado.} other {# períodos de apropriação vencidos não foram lançados.}}"
+    },
+    "balancing-segment-residual": {
+      "title": "Saldos residuais de segmentos",
+      "message": "{count} valores de segmentos mantêm saldo residual. Revise as atribuições e a política de compensação antes do fechamento."
     }
   },
   "severity": {

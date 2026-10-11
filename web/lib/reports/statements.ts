@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import { functionalReportReader } from "./currency-basis";
 import { payrollOriginSql } from "../payroll-confidentiality";
-import { glActivityBuckets, glSummaryEligibleDims, bucketSubsidiaryFilter, statementBookExpr } from "../gl-summary";
+import { glActivityBuckets, glSummaryEligibleDims, bucketSubsidiaryFilter, statementBookIdsExpr } from "../gl-summary";
 import { resolveOrgId } from "../org-scope";
 import { decimalAdd, decimalCmp, decimalIsMaterial, decimalNeg, decimalSum, type ExactDecimal } from "../statement-format";
 import { ZERO, decimalSubtract } from "./decimals";
@@ -48,7 +48,7 @@ export const CREDIT_NORMAL = new Set([
 
 async function accountBalances(where: ReturnType<typeof sql>, dims?: DimFilter, orgId?: string, bookId?: string | null) {
   const resolvedOrgId = await resolveOrgId(orgId);
-  const reportDb = functionalReportReader(resolvedOrgId, sql`${where} and a.type in ${PNL_TYPES} and e.book_id = ${statementBookExpr(resolvedOrgId, bookId)} and ${dimWhere(dims)}`);
+  const reportDb = functionalReportReader(resolvedOrgId, sql`${where} and a.type in ${PNL_TYPES} and e.book_id in ${statementBookIdsExpr(resolvedOrgId, bookId)} and ${dimWhere(dims)}`);
   // The qualifying entry set (org + status + the caller's e.* predicates,
   // which reference only e.posting_date / e.org_id) materializes once via an
   // index-only scan and hash-joins to the lines. The predicates MUST live
@@ -62,7 +62,7 @@ async function accountBalances(where: ReturnType<typeof sql>, dims?: DimFilter, 
       select e.id from journal_entries e
        where e.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed') and ${where}
          and ${excludePeriodEndJournals(sql`e.origin`)}
-         and e.book_id = ${statementBookExpr(resolvedOrgId, bookId)}
+         and e.book_id in ${statementBookIdsExpr(resolvedOrgId, bookId)}
     )
     select ${reportDb.censusColumn}, a.id, a.parent_id, a.number, a.name, a.type, a.is_summary,
            coalesce(sum(l.amount), 0) as raw
@@ -145,7 +145,7 @@ function treeify(rows: Awaited<ReturnType<typeof accountBalances>>, types: strin
  */
 async function summaryAccountBalances(orgId: string, from: string | null, to: string, subsidiaryIds?: string[], bookId?: string | null, accountTypes?: string[]) {
   const reportDb = functionalReportReader(orgId, sql`e.posting_date <= ${to} ${from === null ? sql`` : sql`and e.posting_date >= ${from}`}
-    and e.book_id = ${statementBookExpr(orgId, bookId)} and ${dimWhere({ subsidiaryIds })} ${accountTypes ? sql`and a.type in ${accountTypes}` : sql``}`);
+    and e.book_id in ${statementBookIdsExpr(orgId, bookId)} and ${dimWhere({ subsidiaryIds })} ${accountTypes ? sql`and a.type in ${accountTypes}` : sql``}`);
   const buckets = glActivityBuckets(orgId, {
     minDate: from,
     maxDate: to,
@@ -280,7 +280,7 @@ export async function trialBalance(asOf: string, dims?: DimFilter, orgId?: strin
   // Same declared-calendar year start as the balance sheet, so the FYTD
   // P&L window agrees with the earnings split.
   const fyStart = await fiscalYearStartOnDate(asOf, resolvedOrgId);
-  const reportDb = functionalReportReader(resolvedOrgId, sql`e.posting_date <= ${asOf} and e.book_id = ${statementBookExpr(resolvedOrgId, bookId)} and ${dimWhere(dims)}`);
+  const reportDb = functionalReportReader(resolvedOrgId, sql`e.posting_date <= ${asOf} and e.book_id in ${statementBookIdsExpr(resolvedOrgId, bookId)} and ${dimWhere(dims)}`);
   const pnl = sql`acct.type in ${PNL_TYPES}`;
   const inYear = sql`not (${pnl}) or b.d >= ${fyStart}`;
   if (glSummaryEligibleDims(dims)) {
@@ -328,7 +328,7 @@ export async function trialBalance(asOf: string, dims?: DimFilter, orgId?: strin
        where org_id = ${resolvedOrgId} and status in ('posted', 'reversed')
          and ${excludePeriodEndJournals(sql`origin`)}
          and posting_date <= ${asOf}
-         and book_id = ${statementBookExpr(resolvedOrgId, bookId)}
+         and book_id in ${statementBookIdsExpr(resolvedOrgId, bookId)}
     )
     select ${reportDb.censusColumn}, a.id, a.number, a.name, a.type,
            sum(case when l.amount > 0 and (${lineInYear}) then l.amount else 0 end) as debits,
@@ -351,7 +351,7 @@ export async function trialBalance(asOf: string, dims?: DimFilter, orgId?: strin
        where org_id = ${resolvedOrgId} and status in ('posted', 'reversed')
          and ${excludePeriodEndJournals(sql`origin`)}
          and posting_date < ${fyStart}
-         and book_id = ${statementBookExpr(resolvedOrgId, bookId)}
+         and book_id in ${statementBookIdsExpr(resolvedOrgId, bookId)}
     )
     select ${reportDb.censusColumn}, coalesce(sum(l.amount), 0) as prior
       from journal_lines l
@@ -384,7 +384,7 @@ export async function partnerBalances(kind: "receivable" | "payable", orgId?: st
   const resolvedOrgId = orgId ?? (await resolveOrgId());
   const resolvedAsOf = asOf ?? (await businessToday(resolvedOrgId));
   const type = kind === "receivable" ? "asset_receivable" : "liability_payable";
-  const reportDb = functionalReportReader(resolvedOrgId, sql`e.posting_date <= ${resolvedAsOf} and a.type = ${type} and e.book_id = ${statementBookExpr(resolvedOrgId, bookId)} and ${dimWhere(dims)}`);
+  const reportDb = functionalReportReader(resolvedOrgId, sql`e.posting_date <= ${resolvedAsOf} and a.type = ${type} and e.book_id in ${statementBookIdsExpr(resolvedOrgId, bookId)} and ${dimWhere(dims)}`);
   const masked = canSeePayroll === true;
   const payrollParty = sql`${payrollOriginSql(sql`dd.kind`, sql`e.origin`)} and l.party_id is not null`;
   const partyIdExpr = masked ? sql`p.id` : sql`case when ${payrollParty} then null else p.id end`;
@@ -395,7 +395,7 @@ export async function partnerBalances(kind: "receivable" | "payable", orgId?: st
        where org_id = ${resolvedOrgId} and status in ('posted', 'reversed')
          and ${excludePeriodEndJournals(sql`origin`)}
          and posting_date <= ${resolvedAsOf}
-         and book_id = ${statementBookExpr(resolvedOrgId, bookId)}
+         and book_id in ${statementBookIdsExpr(resolvedOrgId, bookId)}
     )
     select ${reportDb.censusColumn}, ${partyIdExpr} as id, ${partyNameExpr} as display_name,
            sum(l.amount) as balance, count(*) as line_count,

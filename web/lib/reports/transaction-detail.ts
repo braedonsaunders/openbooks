@@ -5,7 +5,7 @@ import { PAYROLL_RESTRICTED_PARTY_LABEL, collapseRestrictedPayrollLines } from "
 import { resolveOrgId } from "../org-scope";
 import { decimalNeg, type ExactDecimal } from "../statement-format";
 import { excludePeriodEndJournals } from "@openbooks/engine/records/period-end-origins";
-import { statementBookExpr } from "../gl-summary";
+import { statementBookIdsExpr } from "../gl-summary";
 import { CREDIT_NORMAL } from "./statements";
 import { type DimFilter, dimWhere } from "./filters";
 
@@ -169,7 +169,7 @@ export async function transactionDetail(opts: {
       )`
     : sql``
 
-  const bookFilter = sql`e.book_id = ${statementBookExpr(orgId, opts.bookId)}`
+  const bookFilter = sql`e.book_id in ${statementBookIdsExpr(orgId, opts.bookId)}`
   // Cash-basis statements recognize accrual documents at their settled share
   // (see statementMatrix): bank-backed and settlement-FX entries count in
   // full, a settled document counts at min(settled share, 1), everything else
@@ -263,7 +263,7 @@ export async function transactionDetail(opts: {
       from journal_lines pl
       join journal_entries pe on pe.id = pl.entry_id and pe.org_id = pl.org_id
      where pl.org_id = l.org_id
-       and pe.book_id = ${statementBookExpr(orgId, opts.bookId)}
+       and pe.book_id in ${statementBookIdsExpr(orgId, opts.bookId)}
        and ${partnerWindow}
        and pe.status in ('posted', 'reversed')
        and ((e.reverses_entry_id is not null and pe.id = e.reverses_entry_id)

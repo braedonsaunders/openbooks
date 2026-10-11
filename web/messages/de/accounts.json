@@ -32,14 +32,16 @@
     "cogs": "Herstellungskosten des Umsatzes",
     "expense": "Aufwendungen",
     "expenseOther": "Sonstige Aufwendungen",
-    "expenseDeferred": "Abgegrenzte Aufwendungen"
+    "expenseDeferred": "Abgegrenzte Aufwendungen",
+    "statistical": "Statistisch"
   },
   "classes": {
     "asset": "Vermögenswerte",
     "liability": "Verbindlichkeiten",
     "equity": "Eigenkapital",
     "income": "Erträge",
-    "expense": "Aufwendungen"
+    "expense": "Aufwendungen",
+    "statistical": "Statistisch"
   },
   "hygiene": {
     "assetBankUncorroborated": "„{name}“ ist als Bankkonto typisiert, hat aber keinen bankähnlichen Namen und ist nicht abstimmfähig, daher wird es überall als Bargeld gezählt. Prüfen Sie die Typisierung (Verrechnungs-, Rückstellungs- und Kreditkonten werden häufig falsch typisiert) oder aktivieren Sie die Kontoauszugsabstimmung.",

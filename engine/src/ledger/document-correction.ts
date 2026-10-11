@@ -620,6 +620,10 @@ interface ReclassPostedLeg {
   currency: string;
   txnAmount: string;
   fxRate: string;
+  quantity: string | null;
+  unit: string | null;
+  eliminate: boolean;
+  isCurrencyAdjustment: boolean;
   partyId: string | null;
   departmentId: string | null;
   projectId: string | null;
@@ -699,7 +703,7 @@ async function applyDimensionReclass(
   ctx: CorrectionContext,
 ): Promise<{ reclassEntryIds: string[] }> {
   const module = closeModuleForDocument(plan.source.kind);
-  const covering = await resolveCoveringPeriod(tx, ctx.orgId, plan.source.documentDate);
+  const covering = await resolveCoveringPeriod(tx, ctx.orgId, plan.source.documentDate, plan.source.subsidiaryId);
   if (!covering) {
     throw new PostedCorrectionError(
       422,
@@ -713,6 +717,8 @@ async function applyDimensionReclass(
            line.subsidiary_id as "subsidiaryId",
            line.amount::text as amount, line.currency,
            line.txn_amount::text as "txnAmount", line.fx_rate::text as "fxRate",
+           line.quantity::text as quantity, line.unit, line.eliminate,
+           line.is_currency_adjustment as "isCurrencyAdjustment",
            line.party_id as "partyId", line.department_id as "departmentId",
            line.project_id as "projectId", line.location_id as "locationId",
            line.class_id as "classId", line.memo,
@@ -729,6 +735,9 @@ async function applyDimensionReclass(
                         where replica.org_id = entry.org_id and replica.replica_entry_id = entry.id)
      order by entry.book_id, line.line_number, line.id
   `)).rows;
+  if (legs.some((leg) => leg.isCurrencyAdjustment)) {
+    throw new DocumentEditError(422, "Currency adjustment dimensions are retained with the cleared residual. Void the adjustment through its native workflow and create the replacement with the required dimensions.");
+  }
   const subsidiaryId = plan.source.subsidiaryId ??
     legs.find((leg) => leg.subsidiaryId != null)?.subsidiaryId ?? null;
   if (!subsidiaryId) {
@@ -747,6 +756,8 @@ async function applyDimensionReclass(
           subsidiaryId: leg.subsidiaryId ?? subsidiaryId,
           currency: leg.currency,
           fxRate: leg.fxRate,
+          unit: leg.unit,
+          eliminate: leg.eliminate,
           partyId: leg.partyId,
           departmentId: leg.departmentId,
           projectId: leg.projectId,
@@ -759,10 +770,12 @@ async function applyDimensionReclass(
         };
         const outLeg: PostEntryLineInput = {
           ...carried, amount: neg(leg.amount), txnAmount: neg(leg.txnAmount),
+          quantity: leg.quantity == null ? null : neg(leg.quantity),
         };
         outLeg[dim.field] = dim.before;
         const inLeg: PostEntryLineInput = {
           ...carried, amount: leg.amount, txnAmount: leg.txnAmount,
+          quantity: leg.quantity,
         };
         inLeg[dim.field] = dim.after;
         mirrors.push(outLeg, inLeg);

@@ -1,7 +1,7 @@
 import "server-only";
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
-import { statementBookExpr } from "../gl-summary";
+import { statementBookIdsExpr } from "../gl-summary";
 import { mulDecimal } from "@openbooks/engine/money/money";
 // Relative (not the bare workspace specifier): worktree node_modules resolves
 // bare @openbooks/* to the main checkout, so a new engine module would not
@@ -281,7 +281,7 @@ function openDocumentsSql(
          and (d.status = 'posted' or (d.voided_at is not null and d.voided_at::date > ${asOf}::date))
          and d.kind in (${sql.join(kinds.map((kind) => sql`${kind}`), sql`, `)})
          and ${accountScope}
-         and e.book_id = ${statementBookExpr(orgId, scope?.bookId)}
+         and e.book_id in ${statementBookIdsExpr(orgId, scope?.bookId)}
          and coalesce(d.posting_date, d.document_date) <= ${asOf}
          and ${dimWhere(dims, sql`d`)}
          ${scope?.partyId ? sql`and d.party_id = ${scope.partyId}` : scope?.partyIsNull ? sql`and d.party_id is null` : sql``}
@@ -551,7 +551,7 @@ async function controlResiduals(
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
      where l.org_id = ${orgId} and ${controlScope} and e.posting_date <= ${asOf}
-       and e.book_id = ${statementBookExpr(orgId, bookId)}
+       and e.book_id in ${statementBookIdsExpr(orgId, bookId)}
        and ${dimWhere(dims)}
      -- Ordinal, not a repeated expression: the SELECT's coalesce carries a
      -- different bind parameter per occurrence, which GROUP BY will not match.
@@ -599,7 +599,7 @@ async function unopenedControlLines(
         join accounts a on a.id = l.account_id and a.org_id = l.org_id
         left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
        where l.org_id = ${orgId} and ${controlScope} and e.posting_date <= ${asOf}
-         and e.book_id = ${statementBookExpr(orgId, bookId)}
+         and e.book_id in ${statementBookIdsExpr(orgId, bookId)}
          and ${dimWhere(dims)}
          and not exists (
            select 1 from documents d
@@ -1002,7 +1002,7 @@ export async function agingCurrenciesInScope(
        and (d.status = 'posted' or (d.voided_at is not null and d.voided_at::date > ${asOf}::date))
        and d.kind in (${sql.join(kinds.map((kind) => sql`${kind}`), sql`, `)})
        and coalesce(d.posting_date, d.document_date) <= ${asOf}
-       and je.book_id = ${statementBookExpr(resolvedOrgId)}
+       and je.book_id in ${statementBookIdsExpr(resolvedOrgId)}
        and ${dimWhere(dims, sql`d`)}
   `);
   const inScope = [...new Set(r.rows.map((x) => x.ccy))].sort();

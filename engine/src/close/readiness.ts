@@ -88,7 +88,8 @@ export async function periodFingerprintEvidence(
   // Closing balances include prior posted activity. A controlled reopening of
   // an earlier period must invalidate evidence even without a current-period
   // entry. Use the FX engine's exact regular/adjustment period ordering.
-  const ledgerPeriodScope = sql`(e.period_id=${periodId} or
+  const ledgerPeriodScope = sql`(e.period_id=${periodId} or exists(select 1 from journal_lines actual
+    where actual.org_id=e.org_id and actual.entry_id=e.id and actual.period_id=${periodId}) or
     (e.status in ('posted','reversed') and ${financialClosePeriodScope(period)}))`;
   const inScope = (entity: SQL) => closeEntityScope(subsidiaryIds, entity);
   const entryScope = sql`(exists(select 1 from journal_lines l where l.org_id=e.org_id and l.entry_id=e.id and ${inScope(sql`l.subsidiary_id`)})
@@ -289,14 +290,14 @@ export async function readinessChecks(
              )
              or exists (
                select 1 from journal_lines jl join journal_entries je on je.id=jl.entry_id and je.org_id=jl.org_id
-                where jl.org_id=${orgId} and jl.account_id=a.id and je.period_id=${ctx.period_id}
+                where jl.org_id=${orgId} and jl.account_id=a.id and coalesce(jl.period_id,je.period_id)=${ctx.period_id}
                   and je.book_id=${ctx.book_id} and je.status in ('posted','reversed') and ${inScope(sql`jl.subsidiary_id`)}
                   and ${excludePeriodEndJournals(sql`je.origin`)}
              )
              or exists (
                select 1 from journal_lines jl
                join journal_entries je on je.id=jl.entry_id and je.org_id=jl.org_id
-               join accounting_periods jp on jp.id=je.period_id and jp.org_id=je.org_id
+               join accounting_periods jp on jp.id=coalesce(jl.period_id,je.period_id) and jp.org_id=je.org_id
                 where jl.org_id=${orgId} and jl.account_id=a.id and je.book_id=${ctx.book_id}
                   and je.status in ('posted','reversed') and jp.ends_on <= ${ctx.ends_on}
                   and ${excludePeriodEndJournals(sql`je.origin`)}
@@ -570,7 +571,20 @@ export async function readinessChecks(
        and abs(v.current_amount-v.prior_amount) >= ${threshold.amount}::numeric
        and (v.prior_amount=0 or abs((v.current_amount-v.prior_amount)/nullif(abs(v.prior_amount),0)*100) >= ${threshold.percent}::numeric)`));
 
+  const segmentResiduals=(await db.execute<{count:string}>(sql`select count(*)::text as count from (
+    select d.key,l.subsidiary_id from journal_lines l join journal_entries e on e.org_id=l.org_id and e.id=l.entry_id
+    join segment_definitions d on d.org_id=l.org_id and d.is_active and d.is_balancing
+    where l.org_id=${orgId} and e.book_id=${ctx.book_id} and e.status in ('posted','reversed') and e.posting_date<=${ctx.ends_on}
+      and ${inScope(sql`l.subsidiary_id`)}
+    group by d.key,l.subsidiary_id,case d.storage_column when 'subsidiary_id' then l.subsidiary_id::text
+      when 'department_id' then l.department_id::text when 'project_id' then l.project_id::text
+      when 'location_id' then l.location_id::text when 'class_id' then l.class_id::text else l.extra_dims->>d.key end
+    having sum(l.amount)<>0
+  ) residuals`)).rows[0]?.count ?? '0';
+
   return [
+    {code:'balancing-segment-residual',taskKey:'drafts-cleared',category:'readiness',severity:'critical',
+      title:'close.diagnostics.balancing-segment-residual.title',message:'close.diagnostics.balancing-segment-residual.message',count:Number(segmentResiduals)},
     {
       code: "posting-effects-incomplete",
       taskKey: "drafts-cleared",

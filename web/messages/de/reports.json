@@ -54,7 +54,11 @@
       "intercompanyReconciliationTitle": "Konzernabstimmung",
       "intercompanyReconciliationDescription": "Die Salden jedes konzerninternen Paars nach Währung in den Hauptbüchern beider Gesellschaften und die noch abzustimmende Differenz.",
       "bookDifferencesTitle": "Buchdifferenzen",
-      "bookDifferencesDescription": "Jedes Konto im Hauptbuch neben einem Nebenbuch, mit der Differenz"
+      "bookDifferencesDescription": "Jedes Konto im Hauptbuch neben einem Nebenbuch, mit der Differenz",
+      "statisticalJournalTitle": "Statistisches Journal",
+      "statisticalJournalDescription": "Keine Datensätze für diese Periode.",
+      "glAuditNumbersTitle": "Hauptbuch-Prüfnummern",
+      "glAuditNumbersDescription": "Die Hauptbuchperiode des Rechtsträgers muss geschlossen sein. Bestehende Nummern und Buchungen bleiben erhalten."
     },
     "groups": {
       "financial": "Finanzberichte",
@@ -3564,5 +3568,26 @@
     "base": "Basis-Kontenplan",
     "legend": "Rechnungslegungskontext: {context}; {marker} kennzeichnet ein Konto mit Nummer und Name aus dem Basis-Kontenplan",
     "blockedTitle": "Dieser Rechnungslegungskontext kann die Konten nicht beschriften"
+  },
+  "journalMeasurements": {
+    "auditTitle": "Hauptbuch-Prüfnummern",
+    "statisticalTitle": "Statistisches Journal",
+    "number": "Prüfnummer",
+    "entry": "Buchung",
+    "date": "Datum",
+    "entity": "Rechtsträger",
+    "period": "Periode",
+    "book": "Buch",
+    "account": "Konto",
+    "quantity": "Menge",
+    "unit": "Einheit",
+    "department": "Abteilung",
+    "empty": "Keine Datensätze für diese Periode.",
+    "allocate": "Prüfnummern zuweisen",
+    "allocateTitle": "Hauptbuch-Prüfnummern zuweisen",
+    "allocateDescription": "Die Hauptbuchperiode des Rechtsträgers muss geschlossen sein. Bestehende Nummern und Buchungen bleiben erhalten.",
+    "reason": "Begründung",
+    "allocated": "Prüfnummern zugewiesen",
+    "failed": "Zuweisung der Prüfnummern fehlgeschlagen"
   }
 }

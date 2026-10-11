@@ -236,6 +236,10 @@
     "prepaid-amortization-unposted": {
       "title": "La amortización de gastos anticipados no está contabilizada",
       "message": "{count, plural, one {# período de amortización vencido no está contabilizado.} other {# períodos de amortización vencidos no están contabilizados.}}"
+    },
+    "balancing-segment-residual": {
+      "title": "Saldos residuales de segmentos",
+      "message": "{count} valores de segmentos conservan un saldo residual. Revise las asignaciones y la política de compensación antes del cierre."
     }
   },
   "severity": {

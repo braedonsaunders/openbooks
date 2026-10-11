@@ -236,6 +236,10 @@
     "prepaid-amortization-unposted": {
       "title": "L’étalement des charges constatées d’avance n’est pas comptabilisé",
       "message": "{count, plural, one {# période d’étalement échue n’est pas comptabilisée.} other {# périodes d’étalement échues ne sont pas comptabilisées.}}"
+    },
+    "balancing-segment-residual": {
+      "title": "Soldes résiduels des segments équilibrés",
+      "message": "{count} valeurs de segments équilibrés conservent un solde résiduel. Vérifiez les affectations et la politique de compensation avant la clôture."
     }
   },
   "severity": {

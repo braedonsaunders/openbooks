@@ -1,6 +1,6 @@
 /** Setup-registry currency entities (split from registry.ts; pure moves only). */
 import type { SetupEntity } from '../types'
-import { FX_RATE_TYPES, FX_RATE_AGE_KINDS, CONSOLIDATED_RATE_SOURCES, COMPLIANCE_CATEGORIES, COMPLIANCE_ENFORCEMENT, LIEN_WAIVER_ENFORCEMENT, LIEN_WAIVER_TYPES, INFORMATION_RETURN_FORM_TYPES, INFORMATION_RETURN_FORMS_OPTIONS, INFORMATION_RETURN_BOXES } from '../options'
+import { FX_RATE_AGE_KINDS, CONSOLIDATED_RATE_SOURCES, COMPLIANCE_CATEGORIES, COMPLIANCE_ENFORCEMENT, LIEN_WAIVER_ENFORCEMENT, LIEN_WAIVER_TYPES, INFORMATION_RETURN_FORM_TYPES, INFORMATION_RETURN_FORMS_OPTIONS, INFORMATION_RETURN_BOXES } from '../options'
 import { RECRUITING_INTERVIEWER_POOLS_ENTITY, RECRUITING_JOB_DESCRIPTIONS_ENTITY, RECRUITING_KIT_ATTRIBUTES_ENTITY, RECRUITING_KIT_QUESTIONS_ENTITY, RECRUITING_KITS_ENTITY, RECRUITING_OFFER_TEMPLATES_ENTITY, RECRUITING_RETENTION_RULES_ENTITY } from '../hrm-recruiting'
 
 export const CURRENCY_ENTITIES: SetupEntity[] = [
@@ -27,7 +27,7 @@ export const CURRENCY_ENTITIES: SetupEntity[] = [
       { key: 'asOf', kind: 'date', required: true, lockedOnEdit: true },
       { key: 'fromCurrency', kind: 'text', required: true, lockedOnEdit: true },
       { key: 'toCurrency', kind: 'text', required: true, lockedOnEdit: true },
-      { key: 'rateType', kind: 'select', required: true, options: FX_RATE_TYPES, lockedOnEdit: true },
+      { key: 'rateType', kind: 'ref', ref: 'fx-rate-types', required: true, lockedOnEdit: true },
       { key: 'rate', kind: 'decimal', required: true },
       { key: 'source', kind: 'text', lockedOnEdit: true, keepDefault: true },
     ],

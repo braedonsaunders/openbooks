@@ -93,7 +93,26 @@
     "budgetaryControlWarning": "预算{scenario}超出拨款：{account}、基金{fund}、{subsidiary}{dimensions}，可用额度{available}，超支{amountOver}。",
     "budgetaryControlRemedy": "请通过预算审批流程修改预算：将已批准的预算复制为草稿，在工作表中提高该基金下此科目的金额，批准副本并归档被取代的预算。或将该实际数关联至预留它的未结预留款。",
     "voidAwaitingApproval": "此日记账的作废申请正在等待审批。审批结束前，该日记账保持已过账状态。",
-    "createUnconfirmed": "服务器未确认新日记账分录。请再次保存：重试会复用此草稿的键，因此不会再创建第二条分录。"
+    "createUnconfirmed": "服务器未确认新日记账分录。请再次保存：重试会复用此草稿的键，因此不会再创建第二条分录。",
+    "instructions": {
+      "mode": "分录模式",
+      "monetary": "货币分录",
+      "statistical": "统计分录",
+      "currency_adjustment": "货币调整",
+      "currency": "交易币种",
+      "rate": "汇率",
+      "reverseOn": "自动冲回日期",
+      "lineCurrency": "行币种",
+      "lineRate": "行汇率",
+      "quantity": "数量",
+      "unit": "单位",
+      "eliminate": "抵销",
+      "keep": "保留",
+      "serverBalance": "保存时，将不同币种的金额换算为分录币种以核对借贷平衡。",
+      "reversalStatus": "自动冲回：{status} · {date}",
+      "retryReversals": "重试到期冲回",
+      "viewReversal": "查看冲回分录"
+    }
   },
   "book": {
     "label": "会计账簿",

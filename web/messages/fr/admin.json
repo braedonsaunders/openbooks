@@ -3747,6 +3747,34 @@
         "title": "Règles d’immobilisation",
         "singularTitle": "Règle d’immobilisation",
         "description": "Lignes d’achat comptabilisées qui deviennent des propositions d’immobilisation : un compte, un article ou une catégorie d’articles avec un montant minimal, avec date d’effet."
+      },
+      "fiscal-calendars": {
+        "title": "Calendriers fiscaux",
+        "description": "Calendriers fiscaux"
+      },
+      "form-layouts": {
+        "title": "Formulaires de journal",
+        "description": "Formulaires de journal"
+      },
+      "fx-rate-types": {
+        "title": "Types de taux de change",
+        "description": "Types de taux de change"
+      },
+      "account-translation-policies": {
+        "title": "Politiques de conversion des comptes",
+        "description": "Politiques de conversion des comptes"
+      },
+      "subsidiary-accounting-preferences": {
+        "title": "Préférences comptables des filiales",
+        "description": "Préférences comptables des filiales"
+      },
+      "segment-balancing-policies": {
+        "title": "Politiques d’équilibrage des segments",
+        "description": "Politiques d’équilibrage des segments"
+      },
+      "gl-audit-number-policies": {
+        "title": "Politiques de numérotation d’audit du grand livre",
+        "description": "Politiques de numérotation d’audit du grand livre"
       }
     },
     "fields": {
@@ -4413,7 +4441,18 @@
       "allowedValueId": "Autorisé avec",
       "matchKind": "Critère de correspondance",
       "minimumAmount": "Montant minimal à immobiliser",
-      "assetCategoryId": "Catégorie d’immobilisations suggérée"
+      "assetCategoryId": "Catégorie d’immobilisations suggérée",
+      "generalRateType": "Méthode de conversion générale",
+      "cashFlowRateType": "Méthode de conversion des flux de trésorerie",
+      "fiscalCalendarId": "Calendrier fiscal",
+      "postingRateType": "Type de taux de comptabilisation",
+      "requireJournalApproval": "Exiger l’approbation des journaux",
+      "allowBackdatedPosting": "Autoriser les écritures antidatées",
+      "allowFuturePosting": "Autoriser les écritures futures",
+      "defaultJournalFormId": "Formulaire de journal par défaut",
+      "priority": "Priorité",
+      "resetRule": "Règle de réinitialisation",
+      "segmentKey": "Clé du segment"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Nombre de jours entre le taux utilisable le plus récent et la fin de période au-delà duquel la réévaluation et la consolidation refusent le taux. Les taux de clôture se comptent depuis la date du taux comptant de fin de période ; les taux moyens depuis la cotation la plus récente incluse dans la moyenne. Valeur par défaut sans politique : 31 jours.",
@@ -5454,6 +5493,16 @@
         "account": "Compte",
         "item": "Article",
         "itemCategory": "Catégorie d’articles"
+      },
+      "accountRateMethod": {
+        "current": "Courant",
+        "average": "Moyen",
+        "historical": "Historique"
+      },
+      "auditNumberReset": {
+        "period": "Par période",
+        "fiscal_year": "Par exercice",
+        "never": "Jamais"
       }
     },
     "laborCosting": {

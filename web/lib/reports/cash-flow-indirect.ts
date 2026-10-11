@@ -1,8 +1,9 @@
+import { translationMultiplier, assertRateCoverage, type StatementSubsidiaryContext } from '../statement-matrix'
 import "server-only";
 import { sql } from "drizzle-orm";
 import { functionalReportReader } from "./currency-basis";
 import { excludePeriodEndJournals } from "@openbooks/engine/records/period-end-origins";
-import { bucketSubsidiaryFilter, glActivityBuckets, glSummaryEligibleDims, statementBookExpr } from "../gl-summary";
+import { bucketSubsidiaryFilter, glActivityBuckets, glSummaryEligibleDims, statementBookIdsExpr } from "../gl-summary";
 import { resolveOrgId } from "../org-scope";
 import { decimalAdd, decimalIsMaterial, decimalNeg, decimalSum, type ExactDecimal } from "../statement-format";
 import { ZERO, compareAbsoluteDescending, decimalSubtract } from "./decimals";
@@ -69,7 +70,7 @@ export interface CashFlowIndirectResult {
  * stripped here: they are handled by the entry-level I/F classification below,
  * which is robust to disposals that write off working-capital balances.
  */
-const CF_REMEASURE_ORIGINS = ["revaluation", "fx_revaluation", "translation"];
+const CF_REMEASURE_ORIGINS = ["revaluation", "fx_revaluation", "currency_adjustment", "translation"];
 /**
  * Remeasurement origins whose P&L legs need an operating add-back: asset
  * remeasurement and unrealized FX revaluation (the FX engine posts
@@ -120,9 +121,21 @@ export async function cashFlowIndirect(
   dims?: DimFilter,
   orgId?: string,
   bookId?: string | null,
+  subsidiary?: StatementSubsidiaryContext,
 ): Promise<CashFlowIndirectResult> {
   const resolvedOrgId = await resolveOrgId(orgId);
-  const reportDb = functionalReportReader(resolvedOrgId, sql`e.posting_date <= ${to} and e.book_id = ${statementBookExpr(resolvedOrgId, bookId)} and ${dimWhere(dims)}`);
+  const translated = !!(subsidiary?.rates?.length || subsidiary?.weights?.length || subsidiary?.controlLosses?.length)
+  const openingDate = new Date(`${from}T00:00:00Z`)
+  openingDate.setUTCDate(openingDate.getUTCDate()-1)
+  const openingAsOf = openingDate.toISOString().slice(0,10)
+  if (subsidiary?.rates?.length) {
+    assertRateCoverage(subsidiary!,[{from,to}], 'flow')
+    assertRateCoverage(subsidiary!,[{from:openingAsOf,to:openingAsOf},{from:to,to}], 'balance')
+  }
+  const flowAmount = sql`l.amount * ${translationMultiplier('flow',subsidiary,undefined,true)}`
+  const openingAmount = sql`l.amount * ${translationMultiplier('balance',subsidiary,openingAsOf,true)}`
+  const closingAmount = sql`l.amount * ${translationMultiplier('balance',subsidiary,to,true)}`
+  const reportDb = functionalReportReader(resolvedOrgId, sql`e.posting_date <= ${to} and e.book_id in ${statementBookIdsExpr(resolvedOrgId, bookId)} and ${dimWhere(dims)}`,translated);
   const dim = dimWhere(dims);
   const IF_TYPES = [...CF_INVESTING_TYPES, ...CF_FINANCING_TYPES];
 
@@ -142,7 +155,7 @@ export async function cashFlowIndirect(
         join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
        where e.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed')
          and e.posting_date >= ${from} and e.posting_date <= ${to}
-         and e.book_id = ${statementBookExpr(resolvedOrgId, bookId)}
+         and e.book_id in ${statementBookIdsExpr(resolvedOrgId, bookId)}
          and ${excludePeriodEndJournals(sql`e.origin`)}
        group by l.entry_id
       having not bool_or(l.account_id in (
@@ -152,7 +165,7 @@ export async function cashFlowIndirect(
     )`;
 
   // Net income for the window (credit-normal positive), posted only.
-  const niBuckets = glSummaryEligibleDims(dims)
+  const niBuckets = !translated && glSummaryEligibleDims(dims)
     ? glActivityBuckets(resolvedOrgId, { minDate: from, maxDate: to, boundaries: [], bookId })
     : null;
   const ni = (await reportDb.execute<{ ni: string }>(
@@ -166,13 +179,13 @@ export async function cashFlowIndirect(
            where a.type in ${PNL_TYPES}
              ${bucketSubsidiaryFilter(dims?.subsidiaryIds)}`
       : sql`
-          select ${reportDb.censusColumn}, -coalesce(sum(l.amount), 0) as ni
+          select ${reportDb.censusColumn}, -coalesce(round(sum(${flowAmount}),4), 0) as ni
             from journal_lines l
             join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
             join accounts a on a.id = l.account_id and a.org_id = l.org_id
            where l.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed')
              and e.posting_date >= ${from} and e.posting_date <= ${to}
-             and e.book_id = ${statementBookExpr(resolvedOrgId, bookId)}
+             and e.book_id in ${statementBookIdsExpr(resolvedOrgId, bookId)}
              and ${excludePeriodEndJournals(sql`e.origin`)}
              and a.type in ${PNL_TYPES} and ${dim}`,
   ));
@@ -184,13 +197,13 @@ export async function cashFlowIndirect(
   {
     // (a) Unrealized FX revaluation (paired with the WC origin strip below).
     const a = (await reportDb.execute<{ impact: string }>(sql`
-      select ${reportDb.censusColumn}, coalesce(sum(l.amount), 0) as impact
+      select ${reportDb.censusColumn}, coalesce(round(sum(${flowAmount}),4), 0) as impact
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
         join accounts a on a.id = l.account_id and a.org_id = l.org_id
        where l.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed')
          and e.posting_date >= ${from} and e.posting_date <= ${to}
-         and e.book_id = ${statementBookExpr(resolvedOrgId, bookId)}
+         and e.book_id in ${statementBookIdsExpr(resolvedOrgId, bookId)}
          and e.origin in ${CF_REMEASURE_PNL_ORIGINS} and a.type in ${PNL_TYPES} and ${dim}
     `));
     const impact = a.rows[0]?.impact ?? ZERO;
@@ -201,7 +214,7 @@ export async function cashFlowIndirect(
     // account for detail; revaluation origin is excluded (handled at (a)).
     const b = (await reportDb.execute<{ account_id: string; number: string | null; name: string; impact: string }>(sql`
       with ${flaggedCte}
-      select ${reportDb.censusColumn}, l.account_id, a.number, a.name, sum(l.amount) as impact
+      select ${reportDb.censusColumn}, l.account_id, a.number, a.name, round(sum(${flowAmount}),4) as impact
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
         join accounts a on a.id = l.account_id and a.org_id = l.org_id
@@ -213,7 +226,7 @@ export async function cashFlowIndirect(
          -- per line (minutes at scale) instead of driving from the entry
          -- date index. Result-identical, plan-decisive.
          and e.posting_date >= ${from} and e.posting_date <= ${to}
-         and e.book_id = ${statementBookExpr(resolvedOrgId, bookId)}
+         and e.book_id in ${statementBookIdsExpr(resolvedOrgId, bookId)}
          and e.origin not in ${CF_REMEASURE_PNL_ORIGINS}
          and a.type in ${PNL_TYPES} and ${dim}
        group by l.account_id, a.number, a.name
@@ -237,16 +250,16 @@ export async function cashFlowIndirect(
   const wc = (await reportDb.execute<{ account_id: string; number: string | null; name: string; type: string; bal_to: string; bal_from: string; stripped: string }>(sql`
     with ${flaggedCte}
     select ${reportDb.censusColumn}, l.account_id, a.number, a.name, a.type,
-           coalesce(sum(l.amount) filter (where e.posting_date <= ${to}), 0) as bal_to,
-           coalesce(sum(l.amount) filter (where e.posting_date < ${from}), 0) as bal_from,
-           coalesce(sum(l.amount) filter (where e.posting_date >= ${from} and e.posting_date <= ${to}
+           coalesce(round(sum(${translated ? flowAmount : closingAmount}) filter (where e.posting_date <= ${to} and (${!translated} or e.posting_date>=${from})),4), 0) as bal_to,
+           coalesce(round(sum(${openingAmount}) filter (where e.posting_date < ${from} and ${!translated}),4), 0) as bal_from,
+           coalesce(round(sum(${flowAmount}) filter (where e.posting_date >= ${from} and e.posting_date <= ${to}
                                             and (e.origin in ${CF_REMEASURE_ORIGINS}
-                                                 or e.id in (select id from flagged))), 0) as stripped
+                                                 or e.id in (select id from flagged))),4), 0) as stripped
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
      where l.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed') and e.posting_date <= ${to}
-       and e.book_id = ${statementBookExpr(resolvedOrgId, bookId)}
+       and e.book_id in ${statementBookIdsExpr(resolvedOrgId, bookId)}
        and ${excludePeriodEndJournals(sql`e.origin`)}
        and a.type in ${[...CF_WC_ASSET_TYPES, ...CF_WC_LIABILITY_TYPES]} and ${dim}
      group by l.account_id, a.number, a.name, a.type
@@ -282,13 +295,13 @@ export async function cashFlowIndirect(
         join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
        where e.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed')
          and e.posting_date >= ${from} and e.posting_date <= ${to}
-         and e.book_id = ${statementBookExpr(resolvedOrgId, bookId)}
+         and e.book_id in ${statementBookIdsExpr(resolvedOrgId, bookId)}
          and l.account_id in (
            select id from accounts where org_id = ${resolvedOrgId} and type = 'asset_bank')
          and e.origin <> 'translation'
          and ${excludePeriodEndJournals(sql`e.origin`)}
     )
-    select ${reportDb.censusColumn}, l.account_id, a.number, a.name, a.type, e.origin, -sum(l.amount) as cash_effect
+    select ${reportDb.censusColumn}, l.account_id, a.number, a.name, a.type, e.origin, -round(sum(${flowAmount}),4) as cash_effect
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
@@ -298,7 +311,7 @@ export async function cashFlowIndirect(
        -- planner bound the outer scan by the entry date index instead of
        -- walking all history and probing the entry pk per line.
        and e.posting_date >= ${from} and e.posting_date <= ${to}
-       and e.book_id = ${statementBookExpr(resolvedOrgId, bookId)}
+       and e.book_id in ${statementBookIdsExpr(resolvedOrgId, bookId)}
        and (
          a.type in ${IF_TYPES}
          or (a.type in ${PNL_TYPES} and e.origin = 'disposal')
@@ -326,16 +339,16 @@ export async function cashFlowIndirect(
 
   // FX translation effect on foreign-currency cash balances.
   const fx = (await reportDb.execute<{ effect: string }>(sql`
-    select ${reportDb.censusColumn}, coalesce(sum(l.amount), 0) as effect
+    select ${reportDb.censusColumn}, coalesce(round(sum(${flowAmount}),4), 0) as effect
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
      where l.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed')
        and e.posting_date >= ${from} and e.posting_date <= ${to}
-       and e.book_id = ${statementBookExpr(resolvedOrgId, bookId)}
+       and e.book_id in ${statementBookIdsExpr(resolvedOrgId, bookId)}
        and e.origin in ${CF_FX_CASH_ORIGINS} and a.type = 'asset_bank' and ${dim}
   `));
-  const fxEffectOnCash = fx.rows[0]?.effect ?? ZERO;
+  let fxEffectOnCash = fx.rows[0]?.effect ?? ZERO;
 
   const operating = decimalSum([
     netIncome,
@@ -344,9 +357,9 @@ export async function cashFlowIndirect(
   ]);
   const investingTotal = decimalSum(investing.map((line) => line.amount));
   const financingTotal = decimalSum(financing.map((line) => line.amount));
-  const netChange = decimalSum([operating, investingTotal, financingTotal, fxEffectOnCash]);
+  let netChange = decimalSum([operating, investingTotal, financingTotal, fxEffectOnCash]);
 
-  const cashBuckets = glSummaryEligibleDims(dims)
+  const cashBuckets = !translated && glSummaryEligibleDims(dims)
     ? glActivityBuckets(resolvedOrgId, {
         minDate: null,
         maxDate: to,
@@ -366,17 +379,33 @@ export async function cashFlowIndirect(
            where a.type = 'asset_bank'
              ${bucketSubsidiaryFilter(dims?.subsidiaryIds)}`
       : sql`
-          select ${reportDb.censusColumn}, coalesce(sum(l.amount) filter (where e.posting_date < ${from}), 0) as opening,
-                 coalesce(sum(l.amount) filter (where e.posting_date <= ${to}), 0) as closing
+          select ${reportDb.censusColumn}, coalesce(round(sum(${openingAmount}) filter (where e.posting_date < ${from}),4), 0) as opening,
+                 coalesce(round(sum(${closingAmount}) filter (where e.posting_date <= ${to}),4), 0) as closing
             from journal_lines l
             join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
-              and e.book_id = ${statementBookExpr(resolvedOrgId, bookId)}
+              and e.book_id in ${statementBookIdsExpr(resolvedOrgId, bookId)}
               and ${excludePeriodEndJournals(sql`e.origin`)}
             join accounts a on a.id = l.account_id and a.org_id = l.org_id
            where l.org_id = ${resolvedOrgId} and a.type = 'asset_bank' and ${dimWhere(dims)}`,
   ));
   const openingCash = cash.rows[0]?.opening ?? ZERO;
   const closingCash = cash.rows[0]?.closing ?? ZERO;
+  if (translated) {
+    const movement = (await reportDb.execute<{ amount: string }>(sql`
+      select ${reportDb.censusColumn},coalesce(round(sum(${flowAmount}),4),0)::text as amount
+      from journal_lines l join journal_entries e on e.org_id=l.org_id and e.id=l.entry_id
+      join accounts a on a.org_id=l.org_id and a.id=l.account_id
+      where l.org_id=${resolvedOrgId} and e.status in ('posted','reversed') and a.type='asset_bank'
+        and e.posting_date between ${from}::date and ${to}::date
+        and e.book_id in ${statementBookIdsExpr(resolvedOrgId,bookId)} and ${dimWhere(dims)}
+        and ${excludePeriodEndJournals(sql`e.origin`)}
+    `)).rows[0]?.amount ?? ZERO
+    const currencyEffect = decimalSubtract(decimalSubtract(closingCash,openingCash),movement)
+    netChange = decimalSubtract(netChange,fxEffectOnCash)
+    fxEffectOnCash = decimalSum([fxEffectOnCash,currencyEffect])
+    netChange = decimalSum([netChange,fxEffectOnCash])
+  }
+
 
   return {
     netIncome,

@@ -282,6 +282,10 @@ export async function runReminderDuty(): Promise<void> {
 }
 
 export function registerWorkerDuties(): void {
+  registerWorkerDuty({ key: "journal-auto-reversals", run: async () => {
+    const { runDueJournalReversals } = await import("@openbooks/engine/ledger/journal-reversals");
+    await runDueJournalReversals();
+  } });
   console.log("[worker] duty registered: storage-cleanup");
   registerWorkerDuty({
     key: "storage-cleanup",

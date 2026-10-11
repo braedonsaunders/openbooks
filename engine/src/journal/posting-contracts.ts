@@ -24,8 +24,8 @@ export interface CustomGlLineRunEvidence {
 
 export type PostingDocument = typeof schema.documents.$inferSelect;
 export type PostingDocumentLine = typeof schema.documentLines.$inferSelect;
-export type Doc = PostingDocument;
-export type DocLine = PostingDocumentLine;
+export type Doc = Omit<PostingDocument, "journalMode" | "journalReverseOn" | "journalFxRateExplicit"> & Partial<Pick<PostingDocument, "journalMode" | "journalReverseOn" | "journalFxRateExplicit">>;
+export type DocLine = Omit<PostingDocumentLine, "journalCurrency" | "journalFxRate" | "journalEliminate"> & Partial<Pick<PostingDocumentLine, "journalCurrency" | "journalFxRate" | "journalEliminate">>;
 
 /**
  * The date a posting belongs to, for every kind and every creation path: an
@@ -44,6 +44,11 @@ export interface KernelLine {
   /** Expense-only payroll source identity, preserved through aggregation for rule matching. */
   payrollExpense?: boolean;
   payComponentId?: string | null;
+  quantity?: string | null;
+  unit?: string | null;
+  eliminate?: boolean;
+  isCurrencyAdjustment?: boolean;
+  balanceTxnAmount?: Money;
   accountId: string;
   /** Signed transaction-currency amount, canonical ledger money by the time
    * a rule emits it (parsed at the DocLine boundary, brand-closed after);

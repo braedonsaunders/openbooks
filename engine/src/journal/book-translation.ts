@@ -103,6 +103,8 @@ export function translateLinesIntoBook<T extends TranslatableLine>(
     }
     const txn = toUnits(line.txnAmount);
     const functional = toUnits(line.amount);
+    // A zero monetary value carries no foreign exposure, including statistical measurements.
+    if (txn===0n && functional===0n) { out.push(line); continue; }
     let translated: T;
     if (line.currency === basis.bookCurrency) {
       translated = { ...line, amount: fromUnits(txn) as Money, fxRate: "1" };

@@ -209,7 +209,7 @@ async function setupWriteTransaction<T>(
   return db.transaction(async (tx) => {
     // Keep a policy change ordered with revaluation and consolidation pricing.
     // Ledger setup is locked before feature and organization state.
-    if (entity.key === 'fx-rate-age-policies') await lockLedgerSetupFence(tx, orgId, 'exclusive')
+    if (['fx-rate-age-policies','fx-rate-types','account-translation-policies','subsidiary-accounting-preferences','segment-balancing-policies','gl-audit-number-policies','segment-definitions'].includes(entity.key)) await lockLedgerSetupFence(tx, orgId, 'exclusive')
     // Same-key retries serialize here, before any create effect: the second
     // claimant blocks until the first commits, then replays off its audit.
     if (options.idempotencyKey) {

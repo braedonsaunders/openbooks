@@ -7,7 +7,7 @@ import { PAYROLL_RESTRICTED_PARTY_LABEL, collapseRestrictedPayrollLines } from "
 // without the react-server condition) — same rule as payroll-confidentiality.
 import { subsidiaryScopeAllows, subsidiaryVisibleFilter } from "@openbooks/engine/organization/scope";
 import { functionalReportReader } from "./currency-basis";
-import { statementBookExpr } from "../gl-summary";
+import { statementBookIdsExpr } from "../gl-summary";
 import { resolveOrgId } from "../org-scope";
 import { decimalAdd, decimalCmp, decimalNeg, type ExactDecimal } from "../statement-format";
 import { ZERO } from "./decimals";
@@ -104,7 +104,7 @@ export async function accountRegister(
       ? sql` and l.subsidiary_id in ${[...allowedSubsidiaryIds]}`
       : sql` and false`
     : sql``;
-  const bookFilter = sql` and e.book_id = ${statementBookExpr(orgId, bookId)}`;
+  const bookFilter = sql` and e.book_id in ${statementBookIdsExpr(orgId, bookId)}`;
   const reportDb = functionalReportReader(orgId, sql`l.account_id in (
     with recursive account_scope as (
       select id from accounts where id = ${accountId} and org_id = ${orgId}
@@ -282,7 +282,7 @@ export async function partyRegister(
   // One accounting book per read (primary when omitted) — without this a
   // parallel book's mirror entries fuse into the register while the sibling
   // statement readers stay primary-only.
-  const bookFilter = sql` and e.book_id = ${statementBookExpr(resolvedOrgId, opts.bookId)}`
+  const bookFilter = sql` and e.book_id in ${statementBookIdsExpr(resolvedOrgId, opts.bookId)}`
   // Source documents mask exactly where the lines do.
   const sourceDocumentScope = documentSubsidiaryScope(opts.dims)
   const reportDb = functionalReportReader(resolvedOrgId, sql`e.posting_date <= ${opts.to} and a.type = ${acctType} and ${dimWhere(opts.dims)} ${partyFilter} ${bookFilter}`)
@@ -513,7 +513,7 @@ async function preWindowBalance(
      where l.org_id = ${orgId} and e.org_id = ${orgId} and a.org_id = ${orgId}
        and e.status in ('posted', 'reversed') and a.type = ${acctType}
        and e.posting_date < ${from}
-       and e.book_id = ${statementBookExpr(orgId, bookId)}
+       and e.book_id in ${statementBookIdsExpr(orgId, bookId)}
        and l.party_id = ${partyId}
        ${payrollExclusion}
        and ${dimWhere(dims, sql`l`)}

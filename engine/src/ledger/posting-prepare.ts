@@ -1,4 +1,5 @@
 import { lockLedgerSetupFence } from '../organization/ledger-setup-fence.ts';
+import { normalizeJournalCurrencyLines } from "./journal-currency.ts";
 import { assertWithholdingDepositCurrent } from "../contractor-withholding/deposits.ts";
 import { assertWithholdingRemittanceCurrent, ContractorWithholdingError } from "../contractor-withholding/service.ts";
 import { PlaceOfSupplyError } from '../tax/place-of-supply.ts';
@@ -594,12 +595,12 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
     try { await assertReceiptFundingPosting(db, effectiveDoc, options.audit?.actorId ?? null, postingLines.map(line => line.accountId)); }
     catch (error) { if (error instanceof PaymentError) throw new PostingError(error.message); throw error; }
   }
-  const kernelLines = rule(effectiveDoc, postingLines, deps).filter(
-    (l) => !isZero(l.amount),
+  const kernelLines = (await normalizeJournalCurrencyLines(db,effectiveDoc,rule(effectiveDoc, postingLines, deps))).filter(
+    (l) => !isZero(l.amount) || (effectiveDoc.journalMode === "statistical" && !!l.quantity),
   );
-  if (kernelLines.length < 2)
+  if (kernelLines.length < (effectiveDoc.journalMode === "statistical" ? 1 : 2))
     throw new PostingError("posting produced fewer than 2 lines");
-  const total = sumMoney(kernelLines.map((l) => l.amount));
+  const total = sumMoney(kernelLines.map((l) => l.balanceTxnAmount ?? l.amount));
   if (!isZero(total)) {
     throw new PostingError(
       `posting rule for ${doc.kind} does not balance (sum=${total})`,

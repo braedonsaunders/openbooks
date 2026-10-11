@@ -1,3 +1,4 @@
+import { accountingPreferences } from "../organization/accounting-preferences.ts";
 import { and, eq, sql } from "drizzle-orm";
 import type { FlowEventSource } from "@openbooks/forms-core";
 import { db, schema, withOrgTransaction } from "../platform/db.ts";
@@ -10,7 +11,7 @@ import { captureTransactionAuditSnapshot, recordTransactionAudit } from "../reco
 import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 import { cancelDispatchRuns, dispatchFailureReason, findGatingRun } from "./dispatch-result.ts";
 import { runRecordFlows } from "./run.ts";
-import { isVendorBillApprovalRequired, VENDOR_BILL_KIND } from "./vendor-bill-approval.ts";
+import { isVendorBillApprovalRequired, VENDOR_BILL_KIND, VENDOR_BILL_APPROVAL_REQUIRED_MESSAGE } from "./vendor-bill-approval.ts";
 
 /**
  * Submit a draft record for approval — the sole approval-routing entry point.
@@ -61,6 +62,7 @@ export interface SubmissionReleaseResult extends SubmitResult {
    * the caller must surface VENDOR_BILL_APPROVAL_REQUIRED_MESSAGE.
    */
   approvalRequired: boolean;
+  approvalRequiredMessage?: string;
 }
 
 export async function submitForApproval(
@@ -244,11 +246,14 @@ export async function submitAndReleaseIfUngated(
     if (result.gated || result.flowError) {
       return { ...result, autoApproved: false, approvalRequired: false };
     }
-    if (targetKind === VENDOR_BILL_KIND && (await isVendorBillApprovalRequired(candidate.orgId))) {
-      // Fail closed: the submit stamps above stand (the bill stays
-      // submitted), but the release to approved never happens. The caller
-      // answers with VENDOR_BILL_APPROVAL_REQUIRED_MESSAGE.
-      return { ...result, autoApproved: false, approvalRequired: true };
+    const approvalDocument = (await db.select({ subsidiaryId:schema.documents.subsidiaryId, postingDate:schema.documents.postingDate, documentDate:schema.documents.documentDate })
+      .from(schema.documents).where(and(eq(schema.documents.orgId,candidate.orgId),eq(schema.documents.id,targetId))))[0];
+    if ((targetKind === VENDOR_BILL_KIND && (await isVendorBillApprovalRequired(candidate.orgId))) ||
+        (targetKind === 'journal' && approvalDocument?.subsidiaryId && (await accountingPreferences(db,candidate.orgId,approvalDocument.subsidiaryId,approvalDocument.postingDate ?? approvalDocument.documentDate)).requireJournalApproval)) {
+      // A required approval cannot be replaced by an ungated release; submission evidence and the actionable policy refusal remain visible.
+      return { ...result, autoApproved: false, approvalRequired: true, approvalRequiredMessage: targetKind==='journal'
+        ? "This entity requires journal approval. Configure an on-submit journal approval Flow, then submit the journal again."
+        : VENDOR_BILL_APPROVAL_REQUIRED_MESSAGE };
     }
     const released = await db
       .update(schema.documents)

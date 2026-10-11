@@ -236,6 +236,10 @@
     "prepaid-amortization-unposted": {
       "title": "预付费用摊销尚未过账",
       "message": "{count, plural, one {有 # 个到期摊销期间尚未过账。} other {有 # 个到期摊销期间尚未过账。}}"
+    },
+    "balancing-segment-residual": {
+      "title": "平衡分段残额",
+      "message": "{count} 个分段值存在总账残额。关闭期间前请检查分段分配和有效清算政策。"
     }
   },
   "severity": {

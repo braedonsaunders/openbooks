@@ -32,14 +32,16 @@
     "cogs": "Coût des marchandises vendues",
     "expense": "Charges",
     "expenseOther": "Autres charges",
-    "expenseDeferred": "Charges reportées"
+    "expenseDeferred": "Charges reportées",
+    "statistical": "Statistique"
   },
   "classes": {
     "asset": "Actifs",
     "liability": "Passifs",
     "equity": "Capitaux propres",
     "income": "Produits",
-    "expense": "Charges"
+    "expense": "Charges",
+    "statistical": "Statistique"
   },
   "hygiene": {
     "assetBankUncorroborated": "« {name} » est typé comme compte bancaire mais n’a ni nom bancaire ni rapprochement possible ; il sera donc compté comme trésorerie partout. Vérifiez le type (les comptes de compensation, de provision et de crédit sont souvent mal typés) ou activez le rapprochement.",

@@ -54,7 +54,11 @@
       "intercompanyReconciliationTitle": "Rapprochement intercompagnies",
       "intercompanyReconciliationDescription": "Soldes de chaque paire intercompagnies par devise dans les livres des deux entités et écart restant à rapprocher.",
       "bookDifferencesTitle": "Écarts entre livres",
-      "bookDifferencesDescription": "Chaque compte du livre principal à côté d’un livre secondaire, avec l’écart"
+      "bookDifferencesDescription": "Chaque compte du livre principal à côté d’un livre secondaire, avec l’écart",
+      "statisticalJournalTitle": "Journal statistique",
+      "statisticalJournalDescription": "Aucun enregistrement pour cette période.",
+      "glAuditNumbersTitle": "Numéros d’audit du grand livre",
+      "glAuditNumbersDescription": "La période du grand livre de l’entité doit être fermée. Les numéros et écritures existants sont conservés."
     },
     "groups": {
       "financial": "États financiers",
@@ -3564,5 +3568,26 @@
     "base": "Plan comptable de base",
     "legend": "Contexte comptable : {context} ; {marker} signale un compte affiché avec le numéro et le nom du plan de base",
     "blockedTitle": "Ce contexte comptable ne peut pas libeller les comptes"
+  },
+  "journalMeasurements": {
+    "auditTitle": "Numéros d’audit du grand livre",
+    "statisticalTitle": "Journal statistique",
+    "number": "Numéro d’audit",
+    "entry": "Écriture",
+    "date": "Date",
+    "entity": "Entité juridique",
+    "period": "Période",
+    "book": "Livre",
+    "account": "Compte",
+    "quantity": "Quantité",
+    "unit": "Unité",
+    "department": "Service",
+    "empty": "Aucun enregistrement pour cette période.",
+    "allocate": "Attribuer les numéros d’audit",
+    "allocateTitle": "Attribuer les numéros d’audit du grand livre",
+    "allocateDescription": "La période du grand livre de l’entité doit être fermée. Les numéros et écritures existants sont conservés.",
+    "reason": "Motif",
+    "allocated": "Numéros d’audit attribués",
+    "failed": "Échec de l’attribution des numéros d’audit"
   }
 }

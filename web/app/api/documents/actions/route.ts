@@ -196,7 +196,7 @@ export const POST = defineRoute({
             // approver — no approval flow was configured for the kind.
             if (result.approvalRequired) {
               await db.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-                values (${user.orgId}, 'documents', ${doc.id}, 'submit', ${JSON.stringify({ from: 'draft', to: 'draft', approval_required: true, reason: VENDOR_BILL_APPROVAL_REQUIRED_MESSAGE })}::jsonb, ${user.id})`)
+                values (${user.orgId}, 'documents', ${doc.id}, 'submit', ${JSON.stringify({ from: 'draft', to: 'draft', approval_required: true, reason: result.approvalRequiredMessage ?? VENDOR_BILL_APPROVAL_REQUIRED_MESSAGE })}::jsonb, ${user.id})`)
             } else if (!result.gated && !result.flowError) {
               await db.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
                 values (${user.orgId}, 'documents', ${doc.id}, 'submit', ${JSON.stringify({ from: 'draft', to: 'approved', auto_approved: true })}::jsonb, ${user.id}),
@@ -216,7 +216,7 @@ export const POST = defineRoute({
           // A policy-refused release is answered by name: the bill stays
           // submitted (the refusal audit above stands), never released.
           if (submission.approvalRequired) {
-            return NextResponse.json({ error: VENDOR_BILL_APPROVAL_REQUIRED_MESSAGE }, { status: 422 })
+            return NextResponse.json({ error: submission.approvalRequiredMessage ?? VENDOR_BILL_APPROVAL_REQUIRED_MESSAGE }, { status: 422 })
           }
           if (submission.gated) {
             return NextResponse.json({ ok: true, requestId: submission.runId })
@@ -385,8 +385,8 @@ export const POST = defineRoute({
             // trail shows why the bill never moved.
             if (submission.approvalRequired) {
               await db.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-                values (${user.orgId}, 'documents', ${doc.id}, 'submit', ${JSON.stringify({ from: 'draft', to: 'draft', approval_required: true, reason: VENDOR_BILL_APPROVAL_REQUIRED_MESSAGE })}::jsonb, ${user.id})`)
-              return { kind: 'refused' as const }
+                values (${user.orgId}, 'documents', ${doc.id}, 'submit', ${JSON.stringify({ from: 'draft', to: 'draft', approval_required: true, reason: submission.approvalRequiredMessage ?? VENDOR_BILL_APPROVAL_REQUIRED_MESSAGE })}::jsonb, ${user.id})`)
+              return { kind: 'refused' as const, message:submission.approvalRequiredMessage ?? VENDOR_BILL_APPROVAL_REQUIRED_MESSAGE }
             }
             // Same lifecycle evidence as the submit branch: the auto-release the
             // direct post performs must show in the audit trail (postDocument
@@ -432,7 +432,7 @@ export const POST = defineRoute({
           )
         }
         if (outcome.kind === 'refused') {
-          return NextResponse.json({ error: VENDOR_BILL_APPROVAL_REQUIRED_MESSAGE }, { status: 422 })
+          return NextResponse.json({ error: outcome.message }, { status: 422 })
         }
         if (outcome.kind === 'invalid_status') {
           return NextResponse.json(

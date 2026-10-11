@@ -31,6 +31,9 @@ export async function registerNodeInstrumentation() {
   const decision = resolveWebSchedulerMode(process.env)
   if (decision.enabled) {
     const { ensureScheduler } = await import('@openbooks/engine/scheduling/scheduler')
+    const { registerWorkerDuty } = await import('@openbooks/engine/scheduling/duties')
+    const { runDueJournalReversals } = await import('@openbooks/engine/ledger/journal-reversals')
+    registerWorkerDuty({ key: 'journal-auto-reversals', run: async () => runDueJournalReversals() })
     ensureScheduler()
     // HR-16 automation scan on the same 60-second topology (own advisory
     // claim key, same mode decision) — web-composed because no engine

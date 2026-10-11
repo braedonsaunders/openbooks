@@ -16,14 +16,15 @@ export function buildProjection(
   doc: Doc,
   lines: DocLine[],
   deps: PostingDeps,
+  options: { deferCurrencyBalance?: boolean } = {},
 ): KernelLine[] {
   const rule = RULES[doc.kind];
   if (!rule)
     throw new PostingError(`no posting rule for document kind "${doc.kind}"`);
-  const kl = rule(doc, lines, deps).filter((l) => !isZero(l.amount));
-  if (kl.length < 2)
+  const kl = rule(doc, lines, deps).filter((l) => !isZero(l.amount) || (doc.journalMode==="statistical" && !!l.quantity));
+  if (kl.length < (doc.journalMode==="statistical" ? 1 : 2))
     throw new PostingError("posting produced fewer than 2 lines");
-  if (!isZero(sum(kl.map((l) => l.amount)))) {
+  if (!options.deferCurrencyBalance && !isZero(sum(kl.map((l) => l.amount)))) {
     throw new PostingError(`posting rule for ${doc.kind} does not balance`);
   }
   // Same AR/AP faithfulness guard as postDocument (this path runs on amend /
@@ -56,6 +57,7 @@ export function glLineKey(line: {
   currency?: string | null;
   txnAmount?: string | null;
   fxRate?: string | null;
+  quantity?:string|null;unit?:string|null;eliminate?:boolean;isCurrencyAdjustment?:boolean;
 }): string {
   return JSON.stringify([
     line.accountId,
@@ -81,6 +83,9 @@ export function glLineKey(line: {
     line.currency ?? null,
     line.txnAmount == null ? null : toUnits(line.txnAmount).toString(),
     line.fxRate == null ? null : normalizeDecimal(line.fxRate, 10),
+    ...(line.eliminate ? ['eliminate'] : []),
+    ...(line.isCurrencyAdjustment ? ['currency_adjustment'] : []),
+    ...(isZero(line.amount) && line.quantity!=null && line.unit ? ['measurement',normalizeDecimal(line.quantity,4),line.unit] : []),
   ]);
 }
 

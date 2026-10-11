@@ -1,3 +1,6 @@
+import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
+import { assertEntityPostingDate } from "../organization/accounting-preferences.ts";
+import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { canonicalJson } from "../platform/canonical-json.ts";
@@ -65,6 +68,8 @@ export interface PostEntryLineInput {
   paymentCardId?: string | null;
   taxCodeId?: string | null;
   extraDims?: Record<string, unknown> | null;
+  eliminate?: boolean;
+  isCurrencyAdjustment?: boolean;
   quantity?: string | null;
   unit?: string | null;
   dueDate?: string | null;
@@ -167,6 +172,8 @@ function postingRequestHash(header: PostingHeader, lines: readonly PostEntryLine
       quantity: line.quantity == null ? null : normalizeDecimal(line.quantity, 8),
       unit: line.unit ?? null, dueDate: line.dueDate ?? null,
       isOpenItem: line.isOpenItem ?? false, custom: line.custom ?? {},
+      ...(line.eliminate ? { eliminate: true } : {}),
+      ...(line.isCurrencyAdjustment ? { isCurrencyAdjustment: true } : {}),
       contributorKind: line.contributorKind ?? null, contributorRef: line.contributorRef ?? null,
     })).sort((a, b) => a.lineNumber - b.lineNumber),
   };
@@ -283,7 +290,7 @@ async function writeEntry(
                'classId', jl.class_id, 'equipmentUnitId', jl.equipment_unit_id, 'paymentCardId', jl.payment_card_id,
                'taxCodeId', jl.tax_code_id, 'extraDims', jl.extra_dims, 'quantity', jl.quantity::text,
                'unit', jl.unit, 'dueDate', jl.due_date::text, 'isOpenItem', jl.is_open_item,
-               'custom', jl.custom, 'contributorKind', jl.contributor_kind, 'contributorRef', jl.contributor_ref) end as line
+               'custom', jl.custom, 'eliminate', jl.eliminate, 'isCurrencyAdjustment', jl.is_currency_adjustment, 'contributorKind', jl.contributor_kind, 'contributorRef', jl.contributor_ref) end as line
         from journal_entries je
         left join journal_lines jl
           on jl.org_id = je.org_id and jl.entry_id = je.id
@@ -311,6 +318,8 @@ async function writeEntry(
       return prior;
     }
   }
+
+  await lockLedgerSetupFence(executor,orgId,"shared");
 
   // Book guard: the book belongs to this org and is an active posting book.
   const bookRow = (await executor.execute<{
@@ -356,6 +365,17 @@ async function writeEntry(
     fail(
       `journal entry ${input.entryNumber}: adjustment period "${period!.period_name}" takes postings dated inside fiscal year ${period!.fiscal_year} (${period!.window_start} to ${period!.window_end}), not ${input.postingDate} — date the entry inside that year or post it to the period that covers ${input.postingDate}`,
     );
+
+  const calendarBasis=(await executor.execute<{calendar:string|null;provided:string;historical:boolean}>(sql`
+    select public.subsidiary_posting_calendar(${orgId},${input.subsidiaryId},${input.postingDate}::date) as calendar,
+      p.fiscal_calendar_id as provided,public.connector_historical_replay_authorized(${orgId}) as historical
+    from accounting_periods p where p.org_id=${orgId} and p.id=${input.periodId}`)).rows[0];
+  if(!calendarBasis?.historical && calendarBasis?.calendar!==calendarBasis?.provided){
+    if(period!.is_adjustment)fail("An adjustment period must belong to the entity's effective fiscal calendar. Choose its own adjustment period.");
+    const entityPeriod=await resolveCoveringPeriod(executor,orgId,input.postingDate,input.subsidiaryId);
+    if(!entityPeriod)fail("No entity accounting period covers this posting date. Generate that calendar's periods before posting.");
+    input={...input,periodId:entityPeriod.id,auditChanges:{...input.auditChanges,entityCalendarResolution:{requestedPeriodId:input.periodId,periodId:entityPeriod.id}}};
+  }
 
   if (input.reversesEntryId) {
     const target = (await executor.execute<{ id: string; status: string; book_id: string }>(sql`
@@ -454,6 +474,10 @@ async function writeEntry(
       fxRate: leg.fxRate,
       memo: leg.memo,
       extraDims: leg.extraDims,
+      departmentId: leg.departmentId,
+      projectId: leg.projectId,
+      locationId: leg.locationId,
+      classId: leg.classId,
       lineNumber: nextLineNumber,
       fxStated: true,
     });
@@ -461,7 +485,7 @@ async function writeEntry(
 
   // Balance validation before any write: whole entry and per subsidiary.
   try {
-    assertFinalKernelBalance(lines.map((line) => ({ amount: line.amount, subsidiaryId: line.subsidiaryId! })));
+    assertFinalKernelBalance(lines.map((line) => ({ amount: line.amount, subsidiaryId: line.subsidiaryId!,quantity:line.quantity,unit:line.unit })));
   } catch (error) {
     if (error instanceof PostingError)
       throw new LedgerPostError(`journal entry ${input.entryNumber}: ${error.message}`);
@@ -503,8 +527,9 @@ async function writeEntry(
     is_active: boolean;
     is_summary: boolean;
     currency_restriction: string | null;
+    type: string;
   }>(sql`
-    select id, is_active, is_summary, currency_restriction from accounts
+    select id, is_active, is_summary, currency_restriction, type from accounts
      where org_id = ${orgId} and id = any(${`{${accountIds.join(",")}}`}::uuid[])
      for share`)).rows;
   const byAccount = new Map(accounts.map((row) => [row.id, row]));
@@ -516,6 +541,14 @@ async function writeEntry(
       fail(`journal entry ${input.entryNumber}: account ${line.accountId} is a summary account and cannot be posted to`);
     if (!account!.is_active && !input.allowInactiveAccounts)
       fail(`journal entry ${input.entryNumber}: account ${line.accountId} is inactive`);
+    if (account.type === "statistical") {
+      const quantity = line.quantity?.replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
+      if (normalizeMoney(line.amount) !== "0.0000" || normalizeMoney(line.txnAmount) !== "0.0000" ||
+          !quantity || !/^-?\d+(?:\.\d{1,4})?$/.test(quantity) || normalizeDecimal(quantity, 4) === "0.0000" ||
+          !line.unit?.trim() || line.isOpenItem || line.isCurrencyAdjustment) {
+        fail(`journal entry ${input.entryNumber}: statistical account ${line.accountId} requires a nonzero quantity with at most four decimal places, a unit, zero money and no open item`);
+      }
+    }
     if (account!.currency_restriction && line.currency !== account!.currency_restriction)
       fail(`journal entry ${input.entryNumber}: account ${line.accountId} only accepts ${account!.currency_restriction} postings`);
   }
@@ -524,6 +557,7 @@ async function writeEntry(
   // the replaying sync run, and a controller-recorded authorization row for
   // that run's connector must cover the posting period.
   let replayEvidence: { authorizationId: string; connectionId: string } | null = null;
+  if (!replayAuthorized && !input.reversesEntryId) for (const subsidiaryId of subsidiaryIds) await assertEntityPostingDate(executor,orgId,subsidiaryId,input.postingDate);
   if (!replayAuthorized) {
     try {
       await assertPeriodModulesOpen(executor, {
@@ -641,7 +675,7 @@ async function writeEntry(
       ${line.projectId ?? null}, ${line.locationId ?? null}, ${line.classId ?? null},
       ${line.equipmentUnitId ?? null}, ${line.paymentCardId ?? null},
       ${JSON.stringify(line.extraDims ?? {})}::jsonb,
-      ${line.quantity ?? null}, ${line.unit ?? null}, ${line.dueDate ?? null},
+      ${line.quantity ?? null}, ${line.unit ?? null}, ${line.eliminate ?? false}, ${line.isCurrencyAdjustment ?? false}, ${line.dueDate ?? null},
       ${line.isOpenItem ?? false}, ${line.taxCodeId ?? null},
       ${line.custom === undefined ? "{}" : JSON.stringify(line.custom)}::jsonb,
       ${line.contributorKind ?? null}, ${line.contributorRef ?? null})`,
@@ -650,7 +684,7 @@ async function writeEntry(
     insert into journal_lines
       (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate,
        memo, party_id, department_id, project_id, location_id, class_id, equipment_unit_id, payment_card_id,
-       extra_dims, quantity, unit, due_date, is_open_item, tax_code_id, custom, contributor_kind, contributor_ref)
+       extra_dims, quantity, unit, eliminate, is_currency_adjustment, due_date, is_open_item, tax_code_id, custom, contributor_kind, contributor_ref)
     values ${sql.join(tuples, sql`, `)}
     returning id, line_number`)).rows;
   if (insertedLines.length !== lines.length)
