@@ -14,6 +14,7 @@ import { writeFile, unlink } from "node:fs/promises";
 import { createEmailWorker } from "./email-worker.ts";
 import { createReportsWorker } from "./reports-worker.ts";
 import { createCloseDeliveryWorker } from "./close-delivery-worker.ts";
+import { createStatementBatchWorker } from "./statement-batch-worker.ts";
 import { createMigrationWorker, startMirrorScheduler } from "./migration-worker.ts";
 import { createSandboxWorker } from "./sandbox-worker.ts";
 import { createScriptsWorker } from "./scripts-worker.ts";
@@ -70,6 +71,7 @@ async function main(): Promise<void> {
     createEmailWorker(),
     createReportsWorker(),
     createCloseDeliveryWorker(),
+    createStatementBatchWorker(),
     createMigrationWorker(),
     createSandboxWorker(),
     createScriptsWorker(),
