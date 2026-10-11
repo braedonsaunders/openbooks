@@ -193,6 +193,22 @@ const mockDb = `
     if (text.includes('from accounting_periods') && !text.includes('depreciation_')) {
       return { rows: state.periods.filter((row) => mentions(row.id)) }
     }
+    // postEntry's period guard reads through the native posting-window
+    // helper: resolve the named period with a real window shape so the
+    // guard exercises its live path (unknown periods still read empty
+    // and keep the named refusal).
+    if (text.includes('accounting_period_posting_window')) {
+      const period = state.periods.find((row) => mentions(row.id))
+      if (!period) return { rows: [] }
+      const due = state.due.find((row) => row.period_id === period.id)
+      return { rows: [{
+        is_adjustment: false,
+        period_name: due?.period_name ?? '2026-09',
+        fiscal_year: 2026,
+        window_start: due?.period_starts_on ?? '2026-09-01',
+        window_end: due?.period_ends_text ?? due?.period_ends_on ?? '2026-09-30',
+      }] }
+    }
     if (text.includes('from fixed_assets') && !text.includes('depreciation_')) {
       return { rows: state.assets.filter((row) => mentions(row.id)) }
     }
