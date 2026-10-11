@@ -493,3 +493,67 @@ test('each account remembers its own last used format', async (t) => {
     'choosing a format remembers it for the account',
   )
 })
+
+async function openCsvWithHeader(t: { after: (fn: () => unknown) => void }, header: string[]) {
+  const { host, root } = await mountDialog()
+  dialogCleanup(t, host, root)
+  await openDialog()
+  // Past this point the columns call serves this test's header, not the
+  // shared ['Date', 'Amount', 'Description'] fixture.
+  globalThis.fetch = (async (url: unknown, init?: { body?: unknown }) => {
+    const target = String(url)
+    const raw = String((init?.body as string) ?? '{}')
+    if (target === '/api/banking/accounts') return Response.json({ ok: true, accounts: dialogScript.accounts })
+    const parsed = JSON.parse(raw) as { mode?: string }
+    if (parsed.mode === 'columns') return Response.json({ header })
+    if (parsed.mode === 'preview') return Response.json(dialogScript.previewImpl(parsed))
+    if (parsed.mode === 'import') return Response.json({ imported: 1, duplicates: 0, possibleDuplicates: 0 })
+    throw new Error(`unexpected fetch ${target} ${parsed.mode}`)
+  }) as typeof fetch
+  await act(async () => {
+    const format = formatSelect()
+    setNativeValue(format, 'csv')
+    format.dispatchEvent(new window.Event('change', { bubbles: true }))
+    await tick()
+  })
+  await pasteText(`${header.join(',')}\n2026-11-02,Store purchase,500.00,,2414.90,1234`)
+  await act(async () => {
+    clickButton('Detect columns').click()
+    await tick()
+    await tick()
+  })
+  return { host, root }
+}
+
+// A Visa export in the same six-column layout as the chequing file names
+// its money columns Charges/Payments: Detect columns must map those without
+// manual picks, or Preview stays disabled with no reason given.
+test('a card-style Charges/Payments header maps without manual columns', async (t) => {
+  await openCsvWithHeader(t, ['Posted Date', 'Description', 'Charges', 'Payments', 'Balance', 'Reference'])
+  const preview = clickButton('Preview')
+  assert.equal(preview.disabled, false, 'a mapped card header must enable Preview')
+  assert.ok(
+    !((document.body.textContent ?? '').includes('Column mapping still needs')),
+    'a mapped card header must not report missing columns',
+  )
+})
+
+test('an unmappable header names the missing roles instead of stranding Preview', async (t) => {
+  await openCsvWithHeader(t, ['Foo', 'Bar', 'Baz', 'Qux', 'Quux', 'Corge'])
+  assert.ok(
+    (document.body.textContent ?? '').includes('Column mapping still needs Date, Amount, Description'),
+    'an unmapped header must name the missing roles',
+  )
+  const preview = clickButton('Preview')
+  assert.equal(preview.disabled, true, 'Preview must stay disabled until the mapping names its columns')
+})
+
+test('import says preview is required before the first preview', async (t) => {
+  const { host, root } = await mountDialog()
+  dialogCleanup(t, host, root)
+  await openDialog()
+  assert.ok(
+    (document.body.textContent ?? '').includes('Run Preview before Import.'),
+    'the dialog must say Preview comes first',
+  )
+})

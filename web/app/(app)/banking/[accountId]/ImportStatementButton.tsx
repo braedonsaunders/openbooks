@@ -310,13 +310,36 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
   const currencyMismatch = statementCurrency !== null
     && selectedAccount?.currency != null
     && statementCurrency !== selectedAccount.currency
+  // Required roles still unmapped — or two guessed onto the same column, in
+  // which case Preview would parse nonsense. Either way the dialog names
+  // the missing roles instead of leaving Preview silently disabled.
+  const requiredMappingKeys = ['date', 'amount', 'description'] as const
+  const requiredMappingValues = requiredMappingKeys.map((key) => mapping[key])
+  const missingMapping = [
+    ...new Set([
+      ...requiredMappingKeys.filter((key) => mapping[key] === ''),
+      ...requiredMappingKeys.filter(
+        (key, index) => mapping[key] !== '' && requiredMappingValues.indexOf(mapping[key]) !== index,
+      ),
+    ]),
+  ]
+  const mappingRoleLabel = (key: (typeof requiredMappingKeys)[number]) =>
+    key === 'date'
+      ? tCommon('labels.date')
+      : key === 'amount'
+        ? tCommon('labels.amount')
+        : tCommon('labels.description')
+  const csvReady = source !== 'csv' || missingMapping.length === 0
+  const missingMappingColumns = missingMapping.map(mappingRoleLabel).join(', ')
   const nextStep = !hasSource
     ? t('nextStepSource')
     : source === 'csv' && header === null
       ? t('nextStepDetect')
-      : visiblePreview === null || previewStale
-        ? t('nextStepPreview')
-        : t('nextStepImport')
+      : source === 'csv' && missingMapping.length > 0
+        ? t('mappingMissing', { columns: missingMappingColumns })
+        : visiblePreview === null || previewStale
+          ? t('nextStepPreview')
+          : t('nextStepImport')
 
   function openDialog() {
     setSelectedAccountId(accountId)
@@ -373,10 +396,22 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
       setPreview(null)
       setMapping({
         date: guessColumn(data.header, [/^date$/i, /date/i]),
-        amount: guessColumn(data.header, [/^amount$/i, /amount|value|credit/i]),
-        debitAmount: guessColumn(data.header, [/^debit$/i, /withdraw/i]),
-        description: guessColumn(data.header, [/^desc/i, /desc|memo|narrat|detail|payee/i]),
-        counterpartyRef: guessColumn(data.header, [/ref|cheque|check ?no/i]),
+        // Card exports name the same money columns differently (Charges /
+        // Payments instead of Debit / Credit): credit-side synonyms win so a
+        // Payments column is never mistaken for the amount, and a lone
+        // Charges column still maps as the amount rather than nothing.
+        amount: guessColumn(data.header, [
+          /^amount$/i,
+          /amount|credit|deposit|payment|refund|incoming|inflow|paid.?in|money.?in/i,
+          /value/i,
+          /charges?|debits?|withdraw|outgoing|outflow|paid.?out|money.?out/i,
+        ]),
+        debitAmount: guessColumn(data.header, [
+          /^debit$/i,
+          /debit|charge|withdraw|outgoing|outflow|paid.?out|money.?out/i,
+        ]),
+        description: guessColumn(data.header, [/^desc/i, /desc|memo|merchant|vendor|narrat|detail|payee/i]),
+        counterpartyRef: guessColumn(data.header, [/ref|cheque|check ?no|auth|approval/i]),
         bankTransactionId: guessColumn(data.header, [/transaction ?id|fitid/i]),
       })
     } catch (e) {
@@ -385,8 +420,6 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
       setBusy(false)
     }
   }
-
-  const csvReady = source !== 'csv' || (mapping.date !== '' && mapping.amount !== '' && mapping.description !== '')
 
   async function runPreview() {
     const requestRevision = sourceRevision.current
@@ -505,6 +538,9 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
             <Button variant="outline" disabled={busy || !hasSource || !csvReady} onClick={runPreview}>
               {t('preview')}
             </Button>
+            {!visiblePreview || visiblePreview.sourceRevision !== sourceRevisionView ? (
+              <span className="text-xs text-slate-500 dark:text-slate-400">{t('previewRequired')}</span>
+            ) : null}
             <Button disabled={busy || !visiblePreview || visiblePreview.sourceRevision !== sourceRevisionView || visiblePreview.imported === 0} onClick={runImport}>
               <Upload size={15} />{' '}
               {visiblePreview && visiblePreview.imported > 0 ? t('importCount', { count: visiblePreview.imported }) : t('importAction')}
@@ -655,6 +691,11 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
                   {mappingSelect('bankTransactionId', t('bankTransactionId'), false)}
                 </div>
                 <p className="text-xs text-slate-500 dark:text-slate-400">{t('mappingHelp')}</p>
+                {missingMapping.length > 0 ? (
+                  <p role="note" className="text-xs text-slate-500 dark:text-slate-400">
+                    {t('mappingMissing', { columns: missingMappingColumns })}
+                  </p>
+                ) : null}
               </div>
             ) : (
               <div className="space-y-1.5">
@@ -784,7 +825,11 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
                   </ul>
                 </div>
               ) : null}
-              {visiblePreview.imported === 0 ? (
+              {visiblePreview.lines.length === 0 ? (
+                <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-300">
+                  {t('previewEmpty')}
+                </p>
+              ) : visiblePreview.imported === 0 ? (
                 <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-300">
                   {t('nothingNew')}
                 </p>
