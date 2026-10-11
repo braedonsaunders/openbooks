@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
+import { db, withBypassContext, type SqlExecutor } from "../platform/db.ts";
+import { businessTodayInTx } from "../platform/business-date.ts";
+import { readBomPolicyVersion, saveBomPolicy } from "../inventory/bom-policy.ts";
+import { submitBomRevision } from "./financial-changes-adapter.ts";
+import { createManufacturingOperator } from "../testing/manufacturing.ts";
 import { worklistApprovals, worklistApprovalsCount, worklistApprovalsPage, type WorklistPageScope } from "./approval-worklist.ts";
 import { createDelegation, revokeDelegation } from "./delegations.ts";
 import { submitForApproval } from "./submit.ts";
@@ -260,6 +264,69 @@ test("unified worklist shows gateless pending budgets", { skip: !DB }, async () 
     assert.equal(await assertCountMatchesWorklist(org.orgId, actors.approver1Id, {
       roles: ["approver"], allowedSubsidiaryIds: null, includeBudgets: true,
     }), 1, "a routed budget is counted only through its live gate");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("inbox text search matches non-document subject labels", { skip: !DB }, async () => {
+  await assertDedicatedFixtureDatabase();
+  const org = await createScratchOrg();
+  function run<T>(work: (tx: SqlExecutor) => Promise<T>): Promise<T> { return withBypassContext(() => db.transaction(work)); }
+  try {
+    const actors = await seedFlowActors(org.orgId);
+    await seedApprovalFlow(org.orgId, {
+      subjectKind: "vendor_bill",
+      assignees: [{ type: "user", userId: actors.approver1Id }],
+      mode: "any",
+    });
+    const gatedId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId, number: "VB-SEARCH-1" });
+    const submitted = await submitForApproval("vendor_bill", gatedId);
+    assert.equal(submitted.gated, true);
+    // A pending recipe revision for FG-GUJI through its own approval flow.
+    await withBypassContext(async () => {
+      await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"manufacturing":true,"inventory":true,"warehousing":true}'::jsonb) where id=${org.orgId}`);
+      await db.execute(sql`update items set code='FG-GUJI', name='Guji Widget' where org_id=${org.orgId} and id=${org.items.assembly}`);
+    });
+    const maker = await withBypassContext(() => createManufacturingOperator(org.orgId, "Shop lead"));
+    await withBypassContext(() => seedApprovalFlow(org.orgId, {
+      subjectKind: "financial_change",
+      assignees: [{ type: "user", userId: actors.approver1Id }],
+      mode: "any",
+    }));
+    const today = await run((tx) => businessTodayInTx(tx, org.orgId));
+    const version = await run((tx) => readBomPolicyVersion(tx, org.orgId, org.items.assembly));
+    const proposal = await run((tx) => saveBomPolicy(tx, org.orgId, maker, {
+      assemblyItemId: org.items.assembly, expectedVersion: version, reason: "Approve the next material requirement",
+      subsidiaryId: org.subsidiaryId, requestKey: randomUUID(),
+      components: [{ componentItemId: org.items.component, quantityPer: "2", effectiveFrom: null, effectiveTo: null, operationSeq: null, scrapPct: null, isByproduct: false }],
+    }));
+    assert.ok("changeId" in proposal);
+    await withBypassContext(() => submitBomRevision(org.orgId, maker, proposal.changeId as string));
+    const scope: WorklistPageScope = { roles: ["approver"], allowedSubsidiaryIds: null };
+    // By assembly SKU.
+    let page = await worklistApprovalsPage(org.orgId, actors.approver1Id, scope, { limit: 25, offset: 0, query: "FG-GUJI" });
+    const bomGate = (items: typeof page.items) => items.find((item) => item.kind === "flow_gate" && item.gate.subjectKind === "financial_change");
+    assert.ok(bomGate(page.items), "a pending recipe revision is found by its assembly SKU");
+    assert.equal(page.total, 1, "the SKU search counts exactly the matching gate");
+    const hit = bomGate(page.items);
+    assert.equal(hit?.kind === "flow_gate" ? hit.gate.subjectLabel : null, "FG-GUJI — Guji Widget");
+    // By item name, case-insensitively.
+    page = await worklistApprovalsPage(org.orgId, actors.approver1Id, scope, { limit: 25, offset: 0, query: "guji widget" });
+    assert.ok(bomGate(page.items), "a pending recipe revision is found by its item name");
+    assert.equal(page.total, 1);
+    // A document gate is still found by its number, without the recipe gate.
+    page = await worklistApprovalsPage(org.orgId, actors.approver1Id, scope, { limit: 25, offset: 0, query: "vb-search-1" });
+    assert.ok(page.items.some((item) => item.kind === "flow_gate" && item.gate.subjectId === gatedId), "a document gate is found by its number");
+    assert.ok(!bomGate(page.items), "the recipe revision does not match the document number");
+    // A non-matching query returns nothing on rows and counts alike.
+    page = await worklistApprovalsPage(org.orgId, actors.approver1Id, scope, { limit: 25, offset: 0, query: "no-such-subject-zzz" });
+    assert.deepEqual(page.items, []);
+    assert.equal(page.total, 0);
+    // The unfiltered union still carries both gates.
+    page = await worklistApprovalsPage(org.orgId, actors.approver1Id, scope, { limit: 25, offset: 0 });
+    assert.equal(page.total, 2);
+    assert.ok(bomGate(page.items) && page.items.some((item) => item.kind === "flow_gate" && item.gate.subjectId === gatedId));
   } finally {
     await dropScratchOrg(org.orgId);
   }

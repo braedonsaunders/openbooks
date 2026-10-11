@@ -7,6 +7,7 @@ import { getFlowAdapter, listFlowSubjectProfiles } from "./registry.ts";
 import { DOCUMENT_FLOW_KINDS } from "./subject-profiles.ts";
 import { resolveSubjectSubsidiaries } from "./subject-scope.ts";
 import { CLOSE_RUN_SUBJECT_KIND, closeRunsFlowAdapter } from "./close-runs-adapter.ts";
+import { MANUFACTURING_BOM_APPROVAL_OPERATION, MANUFACTURING_LOSS_DISPOSITION_OPERATION, MANUFACTURING_ROUTING_APPROVAL_OPERATION, MANUFACTURING_SCRAP_RESTATEMENT_OPERATION, MANUFACTURING_STANDARD_ROLLUP_OPERATION } from "../platform/financial-changes.ts";
 import { executeFlowPlan } from "./execute.ts";
 import { enqueueApprovalEscalation, enqueueFlowEmail } from "../delivery/outbox-enqueue.ts";
 import { parseFlowGraph } from "./run.ts";
@@ -1002,6 +1003,53 @@ function mapWorklistRow(
   };
 }
 
+/**
+ * Subject identity behind a gate row, resolved from the same sources the
+ * inbox row renders (the per-kind subject resolvers read these identical
+ * tables). One CASE feeds both the selected subjectLabel column and the
+ * text search, so a query matches exactly what the row displays. The match
+ * stays in SQL — never a filter after the page — so windowed rows and kind
+ * counts cannot disagree. Financial-change branches mirror
+ * loadFinancialChangeSubjectLabel domain by domain; the final else names
+ * subsidiary subjects the same way.
+ */
+const WORKLIST_SUBJECT_JOINS = sql`
+      left join financial_changes fc on fc.id = g.subject_id and fc.org_id = g.org_id and g.subject_kind = 'financial_change'
+      left join items fci on fci.id = fc.subject_id and fci.org_id = fc.org_id and fc.domain = 'manufacturing'
+        and fc.operation in (${MANUFACTURING_BOM_APPROVAL_OPERATION}, ${MANUFACTURING_STANDARD_ROLLUP_OPERATION})
+      left join mfg_routings fcr on fcr.id = fc.subject_id and fcr.org_id = fc.org_id and fc.domain = 'manufacturing' and fc.operation = ${MANUFACTURING_ROUTING_APPROVAL_OPERATION}
+      left join mfg_work_orders fcwol on fcwol.id = fc.subject_id and fcwol.org_id = fc.org_id and fc.domain = 'manufacturing' and fc.operation = ${MANUFACTURING_LOSS_DISPOSITION_OPERATION}
+      left join mfg_scrap_events fcse on fcse.id = fc.subject_id and fcse.org_id = fc.org_id and fc.domain = 'manufacturing' and fc.operation = ${MANUFACTURING_SCRAP_RESTATEMENT_OPERATION}
+      left join mfg_work_orders fcwos on fcwos.id = fcse.work_order_id and fcwos.org_id = fcse.org_id
+      left join parties fcp on fcp.id = fc.subject_id and fcp.org_id = fc.org_id and fc.domain = 'payroll'
+      left join document_lines fdcl on fdcl.id = fc.subject_id and fdcl.org_id = fc.org_id and fc.domain = 'sales'
+      left join documents fdcd on fdcd.id = fdcl.document_id and fdcd.org_id = fdcl.org_id
+      left join lease_agreements fcl on fcl.id = fc.subject_id and fcl.org_id = fc.org_id and fc.domain = 'lease'
+      left join fixed_assets fca on fca.id = fc.subject_id and fca.org_id = fc.org_id and fc.domain = 'asset'
+      left join revenue_contracts fcrc on fcrc.id = fc.subject_id and fcrc.org_id = fc.org_id and fc.domain = 'revenue'
+      left join provision_obligations fcpv on fcpv.id = fc.subject_id and fcpv.org_id = fc.org_id and fc.domain = 'provision'
+      left join subsidiary_ownership_interests fcsoi on fcsoi.id = fc.subject_id and fcsoi.org_id = fc.org_id
+      left join subsidiaries fcsub on fcsub.id = fcsoi.subsidiary_id and fcsub.org_id = fcsoi.org_id
+      left join hrm_employment_change_requests hcr on hcr.id = g.subject_id and hcr.org_id = g.org_id and g.subject_kind = 'hrm_employment_change_request'
+      left join worker_employments hce on hce.id = hcr.employment_id and hce.org_id = hcr.org_id
+      left join parties hcp on hcp.id = hce.worker_party_id and hcp.org_id = hce.org_id`;
+const WORKLIST_SUBJECT_LABEL = sql`
+      case when cp.name is not null then cp.name || ' close'
+           when g.subject_kind = 'hrm_employment_change_request' then hcp.display_name
+           when g.subject_kind = 'financial_change' then case
+             when fc.domain = 'payroll' then fcp.display_name
+             when fc.domain = 'sales' then fdcd.document_number || ' — line ' || fdcl.line_number
+             when fc.domain = 'lease' then nullif(concat_ws(' — ', fcl.lease_number, nullif(btrim(fcl.description), '')), '')
+             when fc.domain = 'asset' then fca.asset_number || ' — ' || fca.name
+             when fc.domain = 'revenue' then nullif(concat_ws(' — ', fcrc.contract_number, nullif(btrim(fcrc.memo), '')), '')
+             when fc.domain = 'provision' then fcpv.name
+             when fc.domain = 'manufacturing' and fc.operation in (${MANUFACTURING_BOM_APPROVAL_OPERATION}, ${MANUFACTURING_STANDARD_ROLLUP_OPERATION}) then concat_ws(' — ', fci.code, fci.name)
+             when fc.domain = 'manufacturing' and fc.operation = ${MANUFACTURING_ROUTING_APPROVAL_OPERATION} then concat_ws(' — ', fcr.code, fcr.name)
+             when fc.domain = 'manufacturing' and fc.operation = ${MANUFACTURING_LOSS_DISPOSITION_OPERATION} then fcwol.number
+             when fc.domain = 'manufacturing' and fc.operation = ${MANUFACTURING_SCRAP_RESTATEMENT_OPERATION} then fcwos.number || ' — scrap'
+             when fc.domain = 'manufacturing' then null
+             else fcsub.name end end`;
+
 const WORKLIST_SELECT = sql`
     select g.id, g.run_id as "runId", g.flow_id as "flowId", g.node_id as "nodeId",
            g.group_key as "groupKey", g.quorum, g.title,
@@ -1013,12 +1061,13 @@ const WORKLIST_SELECT = sql`
            d.subsidiary_id as "subsidiaryId",
            d.total, d.currency, d.document_date as "documentDate", d.memo,
            p.display_name as "partyName", cp.name as "closePeriodName",
-           case when cp.name is not null then cp.name || ' close' else null end as "subjectLabel"
+           ${WORKLIST_SUBJECT_LABEL} as "subjectLabel"
       from flow_gates g
       left join documents d on d.id = g.subject_id and d.org_id = g.org_id
       left join parties p on p.id = d.party_id and p.org_id = d.org_id
       left join close_runs cr on cr.id = g.subject_id and cr.org_id = g.org_id and g.subject_kind = ${CLOSE_RUN_SUBJECT_KIND}
-      left join accounting_periods cp on cp.id = cr.period_id and cp.org_id = cr.org_id`;
+      left join accounting_periods cp on cp.id = cr.period_id and cp.org_id = cr.org_id
+      ${WORKLIST_SUBJECT_JOINS}`;
 
 /**
  * Pending gates the user may act on: assigned to them directly, to a role
@@ -1108,7 +1157,7 @@ function worklistGateKindSql(kind: string | undefined): SQL {
 function worklistGateSearchSql(query: string | undefined): SQL {
   const needle = query?.trim().toLowerCase()
   if (!needle) return sql``
-  return sql`and position(${needle} in lower(concat_ws(' ', g.title, g.subject_kind, d.document_number, d.memo))) > 0`
+  return sql`and position(${needle} in lower(concat_ws(' ', g.title, g.subject_kind, d.document_number, d.memo, ${WORKLIST_SUBJECT_LABEL}))) > 0`
 }
 
 function worklistGateOverdueSql(overdue: boolean | undefined): SQL {
@@ -1262,7 +1311,11 @@ export async function worklistGateKindCounts(
   };
   const baseJoins = sql`
       from flow_gates g
-      left join documents d on d.id = g.subject_id and d.org_id = g.org_id`;
+      left join documents d on d.id = g.subject_id and d.org_id = g.org_id
+      left join parties p on p.id = d.party_id and p.org_id = d.org_id
+      left join close_runs cr on cr.id = g.subject_id and cr.org_id = g.org_id and g.subject_kind = ${CLOSE_RUN_SUBJECT_KIND}
+      left join accounting_periods cp on cp.id = cr.period_id and cp.org_id = cr.org_id
+      ${WORKLIST_SUBJECT_JOINS}`;
   accumulate((await db.execute<{ kind: string; n: string }>(sql`
     select coalesce(d.kind, g.subject_kind) as kind, count(*) as n
       ${baseJoins}
