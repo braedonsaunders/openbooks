@@ -13,7 +13,7 @@ import {
   Textarea,
 } from "@openbooks/ui";
 import { RemoteRecordChoice } from "@/components/remote-record-choice";
-import { fetchAppAction } from "@/lib/api-error";
+import { fetchAppAction, readApiErrorMessage } from "@/lib/api-error";
 import { toast } from "sonner";
 import { OperatingProfilePicker } from "@/components/operating-profile-picker";
 import type { OperatingProfileChoice } from "@openbooks/engine/src/organization/operating-profiles.ts";

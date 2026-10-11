@@ -100,6 +100,7 @@ export function FilingWorksheet({
       setError(await readApiErrorMessage(res, t('errors.saveFailed')))
       return null
     }
+    const payload = (await res.json().catch(() => ({}))) as Record<string, unknown>
     startTransition(() => router.refresh())
     return payload
   }
