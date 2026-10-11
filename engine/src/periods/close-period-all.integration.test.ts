@@ -2,12 +2,14 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { closePeriodAllModules, setPeriodLockState, type CloseModule } from "./period-locks.ts";
+import { decidePeriodReopen, requestPeriodReopen } from "../close/reopening.ts";
 import { CLOSE_MODULES } from "./period-policy.ts";
 import { db } from "../platform/db.ts";
 import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
+  seedFlowActors,
 } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -179,6 +181,66 @@ test("a blank reason fails fast with nothing written", { skip: !DB }, async () =
       /lock-state reason is required/,
     );
     assert.deepEqual(await lockStates(org.orgId, org.periodId, org.bookId), {});
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a reopened period re-closes its open modules with audit, not a silent no-op", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actors = await seedFlowActors(org.orgId);
+    // December stands fully closed, then Banking and GL reopen under an
+    // approved window: the re-close must flip both back and audit both.
+    const first = await closePeriodAllModules({
+      orgId: org.orgId,
+      periodId: org.periodId,
+      bookId: org.bookId,
+      actorId: actors.adminId,
+      reason: "December close control",
+    });
+    assert.ok(first.results.every((result) => result.ok), "the first close lands");
+    const requestId = await requestPeriodReopen({
+      orgId: org.orgId,
+      periodId: org.periodId,
+      bookId: org.bookId,
+      modules: ["banking", "gl"],
+      reason: "Banking corrections after the close",
+      actorId: actors.adminId,
+    });
+    await decidePeriodReopen({ orgId: org.orgId, requestId, actorId: actors.approver1Id, approve: true, hours: 2 });
+    assert.deepEqual(await lockStates(org.orgId, org.periodId, org.bookId), {
+      ar: "closed",
+      ap: "closed",
+      banking: "open",
+      assets: "closed",
+      tax: "closed",
+      gl: "open",
+    }, "the approved window leaves Banking and GL open");
+
+    const { results } = await closePeriodAllModules({
+      orgId: org.orgId,
+      periodId: org.periodId,
+      bookId: org.bookId,
+      actorId: actors.adminId,
+      reason: "December re-close control",
+    });
+
+    assert.ok(results.every((result) => result.ok), "the re-close reports every module ok");
+    assert.deepEqual(await lockStates(org.orgId, org.periodId, org.bookId), {
+      ar: "closed",
+      ap: "closed",
+      banking: "closed",
+      assets: "closed",
+      tax: "closed",
+      gl: "closed",
+    }, "Banking and GL stand closed again");
+    const recloseAudits = (await db.execute<{ n: string }>(sql`
+      select count(*)::text as n from audit_log
+       where org_id = ${org.orgId} and table_name = 'period_locks' and action = 'update'
+         and changes->'after'->>'state' = 'closed'
+    `)).rows[0];
+    assert.ok(Number(recloseAudits?.n ?? 0) >= 2, "both re-closed modules leave audit entries");
   } finally {
     await dropScratchOrg(org.orgId);
   }

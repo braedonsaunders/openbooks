@@ -221,6 +221,157 @@ test('report package remove controls have names that identify each report', asyn
   }
 })
 
+function setNativeValue(element: HTMLElement, value: string) {
+  const prototype = element instanceof window.HTMLTextAreaElement
+    ? window.HTMLTextAreaElement.prototype
+    : window.HTMLInputElement.prototype
+  const setter = Object.getOwnPropertyDescriptor(prototype, 'value')!.set!
+  setter.call(element, value)
+  element.dispatchEvent(new window.Event('input', { bubbles: true }))
+}
+
+function partiallyClosedPeriod() {
+  return {
+    id: 'p1',
+    name: 'Dec 2025',
+    starts_on: '2025-12-01',
+    ends_on: '2025-12-31',
+    entries: 3,
+    locks: {
+      ar: { state: 'closed' },
+      ap: { state: 'closed' },
+      banking: { state: 'open' },
+      assets: { state: 'closed' },
+      tax: { state: 'closed' },
+      gl: { state: 'open' },
+    },
+    calendar_name: 'Gregorian',
+  }
+}
+
+async function openCloseAllPanel(props: WorkspaceProps) {
+  const { pushes, unmount } = await mountWorkspace(props)
+  await act(async () => {
+    clickButton(String(closeSetup.actions?.closeAll)).click()
+    await tick()
+  })
+  const reasonBox = document.querySelector('textarea')
+  assert.ok(reasonBox, 'the close-all panel asks for one shared reason')
+  return { pushes, unmount, reasonBox: reasonBox as HTMLTextAreaElement }
+}
+
+/** A close submit that cannot send must say why instead of dying silently:
+ * with no book in scope the request never leaves the browser, so the
+ * drawer persists the remedy inline and as a toast. */
+test('close-all without a book sends nothing and names the missing scope', async () => {
+  const calls: string[] = []
+  const prior = globalThis.fetch
+  globalThis.fetch = (async (input: unknown) => {
+    calls.push(String(input))
+    return Response.json({ ok: true, results: [] })
+  }) as typeof fetch
+  const props = {
+    ...baseProps({ tab: 'periods', period: 'p1' }),
+    books: [],
+    selectedBookId: '',
+    periods: [partiallyClosedPeriod()],
+  } as unknown as WorkspaceProps
+  const { unmount, reasonBox } = await openCloseAllPanel(props)
+  try {
+    await act(async () => {
+      setNativeValue(reasonBox, 'December re-close control')
+      await tick()
+    })
+    await act(async () => {
+      clickButton(String(closeSetup.actions?.confirmClose)).click()
+      await tick()
+    })
+    assert.deepEqual(calls, [], 'no request may leave the browser without a book')
+    assert.equal(
+      document.querySelector('p[role="alert"]')?.textContent,
+      closeSetup.periods?.closeUnavailable,
+      'the drawer names the missing scope inline',
+    )
+    const errors = (globalThis.__closeTestToasts ?? []).filter((toast) => toast.kind === 'error')
+    assert.equal(errors.length, 1, 'exactly one error toast names the missing scope')
+    assert.equal(errors[0]?.message, closeSetup.periods?.closeUnavailable)
+  } finally {
+    await unmount()
+    globalThis.fetch = prior
+  }
+})
+
+/** A refused close-period keeps the panel open with the server text: the
+ * operator sees which module blocked and why, not an empty alert. */
+test('close-period refusal persists the server reason and keeps the panel open', async () => {
+  const reason = 'close BANKING before GL'
+  const prior = globalThis.fetch
+  globalThis.fetch = (async () => Response.json({ error: reason }, { status: 422 })) as typeof fetch
+  const props = {
+    ...baseProps({ tab: 'periods', period: 'p1' }),
+    periods: [partiallyClosedPeriod()],
+  } as unknown as WorkspaceProps
+  const { pushes, unmount, reasonBox } = await openCloseAllPanel(props)
+  try {
+    await act(async () => {
+      setNativeValue(reasonBox, 'December re-close control')
+      await tick()
+    })
+    await act(async () => {
+      clickButton(String(closeSetup.actions?.confirmClose)).click()
+      await tick()
+      await tick()
+    })
+    assert.equal(document.querySelector('p[role="alert"]')?.textContent, reason, 'the refusal text renders verbatim')
+    assert.ok(
+      [...document.querySelectorAll('button')].some((b) => (b.textContent ?? '').trim() === String(closeSetup.actions?.confirmClose)),
+      'the panel stays open for the retry',
+    )
+    assert.deepEqual(pushes, [], 'a refused close must not navigate away')
+  } finally {
+    await unmount()
+    globalThis.fetch = prior
+  }
+})
+
+/** A hung close request must not wedge the drawer: the timeout surfaces a
+ * visible error and releases the form for a checked retry. */
+test('close-period timeout surfaces the timeout remedy and releases the form', async () => {
+  const prior = globalThis.fetch
+  globalThis.fetch = (async () => {
+    throw new DOMException('The operation was aborted', 'AbortError')
+  }) as typeof fetch
+  const props = {
+    ...baseProps({ tab: 'periods', period: 'p1' }),
+    periods: [partiallyClosedPeriod()],
+  } as unknown as WorkspaceProps
+  const { unmount, reasonBox } = await openCloseAllPanel(props)
+  try {
+    await act(async () => {
+      setNativeValue(reasonBox, 'December re-close control')
+      await tick()
+    })
+    await act(async () => {
+      clickButton(String(closeSetup.actions?.confirmClose)).click()
+      await tick()
+      await tick()
+    })
+    assert.equal(
+      document.querySelector('p[role="alert"]')?.textContent,
+      closeSetup.periods?.requestTimedOut,
+      'the timeout remedy renders inline',
+    )
+    assert.equal(
+      clickButton(String(closeSetup.actions?.confirmClose)).disabled,
+      false,
+      'the form releases for a checked retry',
+    )
+  } finally {
+    await unmount()
+    globalThis.fetch = prior
+  }
+})
+
 test('reopen approval preserves an independent-approval refusal and releases the action', async () => {
   const props = baseProps({ tab: 'periods', reopen: 'r1' })
   props.reopenRequests = [{ id: 'r1', period_id: 'p1', book_id: 'b1', status: 'requested', reason: 'correct the closing entry', modules: ['gl'], period_name: 'January', book_name: 'Main', requester_name: 'Rae', approver_name: null }] as WorkspaceProps['reopenRequests']
