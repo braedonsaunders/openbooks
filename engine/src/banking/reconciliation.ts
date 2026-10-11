@@ -782,3 +782,229 @@ export async function markReconciled(
     return { journalLinesReconciled: stamped.rows.length };
   });
 }
+
+// ---------------------------------------------------------------------------
+// Sign-off staleness
+// ---------------------------------------------------------------------------
+
+/** One journal entry posted into a signed-off period after its sign-off. */
+export interface StaleJournalEntry {
+  entryNumber: string;
+  /** True (business) date of the entry. */
+  postingDate: string;
+  /** Signed bank-account amount in GL terms. */
+  amount: string;
+  postedBy: string | null;
+  postedAt: string | null;
+}
+
+/** A matched line the sign-off relied on that was later reversed. */
+export interface ReversedMatchEntry extends StaleJournalEntry {
+  reversalNumber: string | null;
+  reversedAt: string | null;
+}
+
+export interface ReconciliationStaleness {
+  stale: boolean;
+  /** Civil date of the earliest late posting or reversal, once stale. */
+  staleSince: string | null;
+  /** In-period entries posted after the sign-off, oldest first. */
+  lateEntries: StaleJournalEntry[];
+  /** Session matches whose entry has since been reversed. */
+  reversedMatches: ReversedMatchEntry[];
+  /** Net effect of the late entries on the cleared balance. */
+  clearedEffect: string;
+}
+
+const CLEAN_STALENESS: ReconciliationStaleness = {
+  stale: false,
+  staleSince: null,
+  lateEntries: [],
+  reversedMatches: [],
+  clearedEffect: "0.0000",
+};
+
+type StalenessSession = ReconciliationRow & { signed_off_at: string | null };
+
+async function loadSignedSession(
+  executor: BankingSqlExecutor,
+  reconciliationId: string,
+  ctx: BankingContext,
+): Promise<StalenessSession> {
+  // The scope gate reads exactly like every other session verb: a restricted
+  // caller cannot distinguish another entity's session from a missing one.
+  const recon = await loadReconciliation(ctx.orgId, reconciliationId, ctx.allowedSubsidiaryIds);
+  const row = (await executor.execute<StalenessSession>(sql`
+    select r.id, r.account_id, r.through_date, r.currency, r.statement_balance, r.status,
+           r.signed_off_at::text as signed_off_at
+      from reconciliations r
+     where r.id = ${reconciliationId} and r.org_id = ${ctx.orgId}
+  `)).rows[0]!;
+  return { ...recon, signed_off_at: row.signed_off_at };
+}
+
+/**
+ * A signed-off session is STALE when the ledger kept moving underneath it:
+ * a posted (or reversed) journal line on its account dated on or before its
+ * cutoff arrived (posted_at) after the sign-off, or a matched line it
+ * relied on was later reversed. Read from the ledger every time — the
+ * sign-off row stays immutable, so staleness is history, not state.
+ */
+export async function reconciliationStaleness(
+  reconciliationId: string,
+  ctx: BankingContext,
+): Promise<ReconciliationStaleness> {
+  return withOrgTransaction(ctx.orgId, async () => {
+    const recon = await loadSignedSession(db, reconciliationId, ctx);
+    if (recon.status !== "signed_off" || !recon.signed_off_at) return { ...CLEAN_STALENESS };
+    const bookId = await reconciliationBookId(db, ctx.orgId);
+    const lateEntries = (await db.execute<StaleJournalEntry & { posted_at: string }>(sql`
+      select je.entry_number as "entryNumber", je.posting_date::text as "postingDate",
+             coalesce(sum(jl.txn_amount), 0)::text as amount,
+             max(u.name) as "postedBy", min(je.posted_at)::text as posted_at
+        from journal_lines jl
+        join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
+        left join users u on u.id = je.posted_by and u.org_id = je.org_id
+       where jl.org_id = ${ctx.orgId} and jl.account_id = ${recon.account_id}
+         and jl.currency = ${recon.currency}
+         and je.book_id = ${bookId}
+         and je.status in ('posted', 'reversed')
+         and je.posting_date <= ${recon.through_date}
+         and je.posted_at > ${recon.signed_off_at}::timestamptz
+       group by je.id, je.entry_number, je.posting_date
+       order by je.posting_date, je.entry_number
+    `)).rows;
+    const reversedMatches = (await db.execute<ReversedMatchEntry & { posted_at: string; updated_at: string }>(sql`
+      select je.entry_number as "entryNumber", je.posting_date::text as "postingDate",
+             coalesce(sum(jl.txn_amount), 0)::text as amount,
+             max(u.name) as "postedBy", min(je.posted_at)::text as posted_at,
+             max(rev.entry_number) as "reversalNumber",
+             coalesce(max(rev.posted_at), max(je.updated_at))::text as "reversedAt",
+             max(je.updated_at)::text as updated_at
+        from reconciliation_matches m
+        join journal_lines jl on jl.id = m.journal_line_id and jl.org_id = m.org_id
+        join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
+        left join journal_entries rev
+          on rev.org_id = je.org_id and rev.reverses_entry_id = je.id
+        left join users u on u.id = coalesce(rev.posted_by, je.posted_by) and u.org_id = je.org_id
+       where m.org_id = ${ctx.orgId} and m.reconciliation_id = ${recon.id}
+         and je.status = 'reversed'
+         and coalesce(rev.posted_at, je.updated_at) > ${recon.signed_off_at}::timestamptz
+       group by je.id, je.entry_number, je.posting_date
+       order by je.posting_date, je.entry_number
+    `)).rows;
+    const late = lateEntries.map(({ posted_at: _postedAt, ...entry }) => ({
+      ...entry,
+      amount: fromUnits(toUnits(entry.amount)),
+      postedAt: _postedAt,
+    }));
+    const reversed = reversedMatches.map(({ posted_at: _postedAt, updated_at: _updatedAt, ...entry }) => ({
+      ...entry,
+      amount: fromUnits(toUnits(entry.amount)),
+      postedAt: _postedAt,
+      reversedAt: entry.reversedAt,
+    }));
+    // The sign-off footed posted lines only, so a reversal never restates the
+    // cleared balance the way a late posting does: the effect is the late
+    // postings' net, and the reversed matches stand apart as void evidence.
+    const clearedEffect = fromUnits(
+      late.reduce((total, entry) => total + toUnits(entry.amount), 0n),
+    );
+    const since = [...late.map((entry) => entry.postedAt), ...reversed.map((entry) => entry.reversedAt)]
+      .filter((value): value is string => value !== null)
+      .map((value) => value.slice(0, 10))
+      .sort()[0] ?? null;
+    return {
+      stale: late.length > 0 || reversed.length > 0,
+      staleSince: late.length > 0 || reversed.length > 0 ? since : null,
+      lateEntries: late,
+      reversedMatches: reversed,
+      clearedEffect,
+    };
+  });
+}
+
+export interface ReconciliationStalenessSummary {
+  stale: boolean;
+  staleSince: string | null;
+  clearedEffect: string;
+}
+
+/**
+ * One batched staleness read for an account's session list. Sessions share
+ * one transaction and reuse the single-session reader, so the list badge can
+ * never disagree with the workspace panel.
+ */
+export async function reconciliationStalenessSummaries(
+  accountId: string,
+  reconciliationIds: readonly string[],
+  ctx: BankingContext,
+): Promise<Record<string, ReconciliationStalenessSummary>> {
+  if (reconciliationIds.length === 0) return {};
+  return withOrgTransaction(ctx.orgId, async () => {
+    // The account read already gated the caller; confirm every id belongs to
+    // it so a mixed list cannot leak another account's sessions.
+    const owned = new Set((await db.execute<{ id: string }>(sql`
+      select id from reconciliations
+       where org_id = ${ctx.orgId} and account_id = ${accountId}
+         and id = any(${sql.param([...reconciliationIds])}::uuid[])
+    `)).rows.map((row) => row.id));
+    const summaries: Record<string, ReconciliationStalenessSummary> = {};
+    for (const id of reconciliationIds) {
+      if (!owned.has(id)) continue;
+      const detail = await reconciliationStaleness(id, ctx);
+      summaries[id] = {
+        stale: detail.stale,
+        staleSince: detail.staleSince,
+        clearedEffect: detail.clearedEffect,
+      };
+    }
+    return summaries;
+  });
+}
+
+export interface PriorPeriodLateEffect {
+  /** Cutoff of the earlier signed-off session the late entries landed in. */
+  throughDate: string;
+  amount: string;
+}
+
+/**
+ * The opening-difference explanation for an unsigned session: every earlier
+ * signed-off session's late in-period effect, oldest period first. The late
+ * lines themselves appear as outstanding ledger lines; this names the periods
+ * whose sign-offs they landed behind.
+ */
+export async function priorPeriodLateEffect(
+  accountId: string,
+  throughDate: string,
+  ctx: BankingContext,
+): Promise<PriorPeriodLateEffect[]> {
+  return withOrgTransaction(ctx.orgId, async () => {
+    const bookId = await reconciliationBookId(db, ctx.orgId);
+    const rows = (await db.execute<{ through_date: string; amount: string }>(sql`
+      select r.through_date::text as through_date, coalesce(sum(jl.txn_amount), 0)::text as amount
+        from reconciliations r
+        join journal_lines jl
+          on jl.org_id = r.org_id and jl.account_id = r.account_id
+        join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
+       where r.org_id = ${ctx.orgId} and r.account_id = ${accountId}
+         and r.status = 'signed_off' and r.through_date < ${throughDate}::date
+         and jl.currency = r.currency
+         and je.book_id = ${bookId}
+         and je.status in ('posted', 'reversed')
+         and je.posting_date <= r.through_date
+         and je.posted_at > r.signed_off_at
+       group by r.id, r.through_date
+      having coalesce(sum(jl.txn_amount), 0) <> 0
+       order by r.through_date
+    `)).rows;
+    const byPeriod = new Map<string, bigint>();
+    for (const row of rows) {
+      byPeriod.set(row.through_date, (byPeriod.get(row.through_date) ?? 0n) + toUnits(row.amount));
+    }
+    return [...byPeriod.entries()]
+      .filter(([, total]) => total !== 0n)
+      .map(([period, total]) => ({ throughDate: period, amount: fromUnits(total) }));
+  });
+}
