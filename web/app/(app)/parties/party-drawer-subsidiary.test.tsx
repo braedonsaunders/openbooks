@@ -175,7 +175,8 @@ async function click(button: HTMLButtonElement) {
 }
 
 async function typeName() {
-  const nameInput = document.querySelector("input") as HTMLInputElement | null;
+  // The header's photo control renders a file input ahead of the name field.
+  const nameInput = document.querySelector('input:not([type="file"])') as HTMLInputElement | null;
   assert.ok(nameInput, "overview must render a name input");
   await act(async () => {
     const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;

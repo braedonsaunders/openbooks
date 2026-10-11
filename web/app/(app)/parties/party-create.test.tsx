@@ -484,5 +484,6 @@ test("new employee from an existing person patches the role and chains Hire on t
     "person-7",
     "the employment names the existing party",
   );
-  assert.deepEqual(globalThis.__partyCreateRouter!.replaces, ["/parties?party=person-7"]);
+  // A recorded hire lands on the Employment tab for direct-deposit capture.
+  assert.deepEqual(globalThis.__partyCreateRouter!.replaces, ["/parties?party=person-7&partyTab=employment"]);
 });

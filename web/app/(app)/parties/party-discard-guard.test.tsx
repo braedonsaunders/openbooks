@@ -160,7 +160,8 @@ async function typeIntoForm() {
     const inputs = [...document.querySelectorAll("input")] as HTMLInputElement[];
     const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
     for (const input of inputs) {
-      if (input.disabled || input.readOnly || input.type === "hidden" || input.type === "checkbox") continue;
+      // File inputs (the party photo control) cannot take a programmatic value.
+      if (input.disabled || input.readOnly || input.type === "hidden" || input.type === "checkbox" || input.type === "file") continue;
       setter?.call(input, `${input.value}x`);
       input.dispatchEvent(new window.Event("input", { bubbles: true }));
     }
