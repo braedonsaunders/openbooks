@@ -12,6 +12,7 @@ import { toast } from 'sonner'
 import { ActionError } from '@braedonsaunders/appkit-errors'
 import { fetchAppAction } from '@/lib/api-error'
 import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
+import { PeriodClosedRefusal } from '@/components/period-closed-refusal'
 import { useAppAction } from '@/lib/use-app-action'
 import { Badge, Button, Input, Label, SearchSelect } from '@openbooks/ui'
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
@@ -1164,6 +1165,7 @@ function JournalDrawerBody({
     >
       <div className="space-y-6 p-1">
         <ActionAlert error={refusal} fallbackMessage={t('postFailed')} />
+        <PeriodClosedRefusal error={refusal} />
         {postWarnings.map((warning, index) => (
           <p key={index} role="alert" className="rounded-md border border-amber-200 bg-amber-50 p-2.5 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
             {warning}

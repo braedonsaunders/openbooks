@@ -79,7 +79,8 @@
     "documentation": "Documentation",
     "lockPeriod": "Lock period",
     "publish": "Publish package",
-    "downloadBinder": "Download immutable audit binder"
+    "downloadBinder": "Download immutable audit binder",
+    "viewReopenRequests": "Reopen requests"
   },
   "errors": {
     "actionFailed": "The close action could not be completed"
@@ -485,6 +486,13 @@
       "requestedBy": "Requested by {name}",
       "reopenActiveUntil": "Active until {date}",
       "activeReopenWindows": "Active reopen windows",
+      "requestReopenLink": "Request a controlled reopening",
+      "reopenEntity": "Entity: {name}",
+      "approvedBy": "Approved by {name}",
+      "selfApprovedNote": "Self-approved under sole-approver attestation",
+      "rejectedBy": "Rejected by {name}",
+      "endedBy": "Ended by {name}",
+      "reopenEndReason": "End reason: {reason}",
       "endReopenTitle": "End this reopen",
       "endReopenHint": "Ending re-closes every module this window opened and frees the period for new reopen requests.",
       "endReopenReasonRequired": "A reason of at least 10 characters is required to end the reopen.",

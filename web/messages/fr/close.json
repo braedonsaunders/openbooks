@@ -79,7 +79,8 @@
     "documentation": "Documentation",
     "lockPeriod": "Verrouiller la période",
     "publish": "Publier le dossier",
-    "downloadBinder": "Télécharger le dossier d’audit immuable"
+    "downloadBinder": "Télécharger le dossier d’audit immuable",
+    "viewReopenRequests": "Demandes de réouverture"
   },
   "errors": {
     "actionFailed": "L’action de clôture n’a pas pu être effectuée"
@@ -485,6 +486,13 @@
       "requestedBy": "Demandée par {name}",
       "reopenActiveUntil": "Actif jusqu'au {date}",
       "activeReopenWindows": "Réouvertures actives",
+      "requestReopenLink": "Demander une réouverture contrôlée",
+      "reopenEntity": "Entité : {name}",
+      "approvedBy": "Approuvé par {name}",
+      "selfApprovedNote": "Auto-approuvé avec attestation d’approbateur unique",
+      "rejectedBy": "Rejeté par {name}",
+      "endedBy": "Terminé par {name}",
+      "reopenEndReason": "Motif de fin : {reason}",
       "endReopenTitle": "Terminer cette réouverture",
       "endReopenHint": "La clôture referme chaque module ouvert par cette fenêtre et libère la période pour de nouvelles demandes.",
       "endReopenReasonRequired": "Un motif d'au moins 10 caractères est requis pour terminer la réouverture.",

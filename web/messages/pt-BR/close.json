@@ -79,7 +79,8 @@
     "documentation": "Documentação",
     "lockPeriod": "Bloquear período",
     "publish": "Publicar pacote",
-    "downloadBinder": "Baixar dossiê de auditoria imutável"
+    "downloadBinder": "Baixar dossiê de auditoria imutável",
+    "viewReopenRequests": "Solicitações de reabertura"
   },
   "errors": {
     "actionFailed": "Não foi possível concluir a ação de fechamento"
@@ -485,6 +486,13 @@
       "requestedBy": "Solicitado por {name}",
       "reopenActiveUntil": "Ativo até {date}",
       "activeReopenWindows": "Reaberturas ativas",
+      "requestReopenLink": "Solicitar reabertura controlada",
+      "reopenEntity": "Entidade: {name}",
+      "approvedBy": "Aprovado por {name}",
+      "selfApprovedNote": "Autoaprovado com atestado de aprovador único",
+      "rejectedBy": "Rejeitado por {name}",
+      "endedBy": "Encerrado por {name}",
+      "reopenEndReason": "Motivo do encerramento: {reason}",
       "endReopenTitle": "Encerrar esta reabertura",
       "endReopenHint": "Encerrar fecha novamente cada módulo que esta janela abriu e libera o período para novas solicitações.",
       "endReopenReasonRequired": "É necessário um motivo com pelo menos 10 caracteres para encerrar a reabertura.",

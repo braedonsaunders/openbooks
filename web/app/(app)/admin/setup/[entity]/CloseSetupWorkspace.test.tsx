@@ -387,6 +387,35 @@ test('reopen approval preserves an independent-approval refusal and releases the
   } finally { await unmount(); globalThis.fetch = prior }
 })
 
+/** A self-approved reopen quotes its stored attestation: the detail names
+ * the sole-approver attestation and the exact words the approver signed,
+ * read from the decision evidence rather than reconstructed. */
+test('a self-approved reopen shows the approver and the quoted attestation', async () => {
+  const props = baseProps({ tab: 'periods', reopen: 'r7' })
+  props.reopenRequests = [{
+    id: 'r7', period_id: 'p1', book_id: 'b1', status: 'approved',
+    reason: 'correct the closing entry', modules: ['gl'],
+    period_name: 'January', book_name: 'Main',
+    requested_by: 'u-solo', requester_name: 'Solo',
+    approved_by: 'u-solo', approver_name: 'Solo',
+    decision_action: 'self_approve',
+    decision_attestation: 'Only administrator available; this correction is necessary',
+    end_actor_name: null, end_reason: null,
+  }] as WorkspaceProps['reopenRequests']
+  const { unmount } = await mountWorkspace(props)
+  try {
+    const body = document.body.textContent ?? ''
+    assert.ok(
+      body.includes(String(closeSetup.periods?.selfApprovedNote)),
+      'the self-approval names its sole-approver attestation',
+    )
+    assert.ok(
+      body.includes('Only administrator available; this correction is necessary'),
+      'the stored attestation text is quoted verbatim',
+    )
+  } finally { await unmount() }
+})
+
 /** An approved reopen offers an audited end action: the requester ends the
  * window with a reason instead of waiting out the expiry while overlap
  * blocks new requests. */
@@ -751,6 +780,62 @@ test('the period row ends an active reopen window with its reason', async () => 
       requestId: 'r9',
       reason: 'Stale window; every module already re-closed',
     }])
+  } finally { await unmount(); globalThis.fetch = prior }
+})
+
+/** A refusal deep link arms the reopen form with the refused scope: the
+ * period drawer opens on the period and book with the module's reopen form
+ * armed and the entity carried into the request, then consumes the link. */
+test('a refusal deep link arms the reopen form with period, book, entity and module', async () => {
+  const bodies: unknown[] = []
+  const prior = globalThis.fetch
+  globalThis.fetch = (async (_input: unknown, init?: { body?: string }) => {
+    bodies.push(JSON.parse(String(init?.body ?? '{}')))
+    return Response.json({ ok: true })
+  }) as typeof fetch
+  const entityId = '33333333-3333-3333-3333-333333333333'
+  const props = baseProps({ tab: 'periods', period: 'p1', book: 'b1', reopenModule: 'banking', reopenEntity: entityId })
+  props.periods = [{
+    id: 'p1',
+    name: 'Dec 2025',
+    starts_on: '2025-12-01',
+    ends_on: '2025-12-31',
+    entries: 0,
+    locks: { banking: { state: 'closed' }, gl: { state: 'closed' } },
+    calendar_name: 'Gregorian',
+  }] as WorkspaceProps['periods']
+  props.subsidiaries = [{ id: entityId, name: 'East' }] as WorkspaceProps['subsidiaries']
+  const { unmount, pushes } = await mountWorkspace(props)
+  try {
+    const body = document.body.textContent ?? ''
+    assert.ok(body.includes(String(closeSetup.periods?.reopenTitle)), 'the refused module opens its reopen form')
+    assert.ok(body.includes('Entity: East'), 'the refused entity rides into the form')
+    const box = document.querySelector('[role="dialog"] textarea') as HTMLTextAreaElement | null
+    assert.ok(box, 'the prefilled form asks for a reason without a row click')
+    await act(async () => {
+      setNativeValue(box!, 'Refused banking posting needs a controlled window')
+      await tick()
+    })
+    await act(async () => {
+      clickButton(String(closeSetup.actions?.requestReopen)).click()
+      await tick()
+      await tick()
+    })
+    const requests = bodies.filter(
+      (entry) => (entry as { action?: string }).action === 'request-reopen',
+    )
+    assert.deepEqual(requests, [{
+      action: 'request-reopen',
+      periodId: 'p1',
+      bookId: 'b1',
+      subsidiaryId: entityId,
+      modules: ['banking', 'gl'],
+      reason: 'Refused banking posting needs a controlled window',
+    }])
+    assert.ok(
+      pushes.some((url) => !url.includes('reopenModule') && !url.includes('reopenEntity')),
+      'the posted request consumes the deep link',
+    )
   } finally { await unmount(); globalThis.fetch = prior }
 })
 

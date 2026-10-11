@@ -266,6 +266,7 @@
   },
   "moduleKeywords": {
     "receipts": "receipt, receipts, receive payment, payment, customer payment, cash receipt",
-    "payments": "pay bills, pay bill, bill payment, payment, cheque, check"
+    "payments": "pay bills, pay bill, bill payment, payment, cheque, check",
+    "close-reopen-requests": "reopen, reopening, reopen request, controlled reopening"
   }
 }

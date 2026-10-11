@@ -3,7 +3,7 @@ import { ModuleHomeTabs } from '@/components/module-home/tabs'
 
 import { apiJson, ApiResponseError } from "@/lib/api-error";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -47,7 +47,8 @@ import {
 import { PERIOD_PRESETS } from "@openbooks/reports";
 import { SearchInput } from "../../../../../components/search-input";
 import { Pagination } from "../../../../../components/pagination";
-import { mergeHref, pickString } from "../../../../../lib/list-params";
+import { ReopenDecisionEvidence } from "../../../../../components/reopen-decision-evidence";
+import { isUuid, mergeHref, pickString } from "../../../../../lib/list-params";
 import type { ReportDescriptor } from "../../../../../lib/close/report-descriptor";
 import type { Opt } from "../../../../../lib/documents.ts";
 
@@ -181,8 +182,15 @@ export interface ReopenRow extends Record<string, unknown> {
   modules: unknown[];
   period_name: string;
   book_name: string;
+  requested_by: string;
   requester_name: string;
+  approved_by: string | null;
   approver_name: string | null;
+  /** Stored decision/end evidence from the audit trail (CloseSetupPage). */
+  decision_action: string | null;
+  decision_attestation: string | null;
+  end_actor_name: string | null;
+  end_reason: string | null;
 }
 /** One bank account's reconciliation status for the period being closed. */
 export interface BankingReconAccount {
@@ -1508,6 +1516,28 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
   useEffect(() => {
     setCloseArmed(false);
   }, [action?.module, action?.state]);
+  // Deep link from a closed-period refusal: ?reopenModule=<module> arms
+  // that module's reopen form on open, and ?reopenEntity=<subsidiary>
+  // carries the refused entity through the request. Both validate here;
+  // anything else opens the plain drawer. One-shot per mount so posting
+  // (which clears the action) never re-arms the form.
+  const prefillModule = pickString(props.currentParams.reopenModule);
+  const reopenPrefillModule = MODULES.includes(prefillModule as (typeof MODULES)[number])
+    ? (prefillModule as (typeof MODULES)[number])
+    : null;
+  const prefillEntity = pickString(props.currentParams.reopenEntity);
+  const reopenPrefillEntity = prefillEntity && isUuid(prefillEntity) ? prefillEntity : null;
+  const reopenPrefillEntityName = reopenPrefillEntity
+    ? (props.subsidiaries.find((item) => item.id === reopenPrefillEntity)?.display_name
+      ?? props.subsidiaries.find((item) => item.id === reopenPrefillEntity)?.name
+      ?? reopenPrefillEntity)
+    : null;
+  const prefillConsumed = useRef(false);
+  useEffect(() => {
+    if (prefillConsumed.current || action || !reopenPrefillModule) return;
+    prefillConsumed.current = true;
+    setAction({ module: reopenPrefillModule, state: "reopen" });
+  }, [action, reopenPrefillModule]);
   const [closeAllOverrides, setCloseAllOverrides] = useState<Record<string, string>>({});
   const [closeAllResults, setCloseAllResults] = useState<{ module: string; ok: boolean; error?: string }[] | null>(null);
   // One end-window reason draft per active reopen request on this row.
@@ -1598,6 +1628,7 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
             action: "request-reopen",
             periodId: row.id,
             bookId: selectedBook.id,
+            ...(reopenPrefillEntity ? { subsidiaryId: reopenPrefillEntity } : {}),
             modules:
               action.module === "gl" || !offerIncludeGl
                 ? [action.module]
@@ -1639,6 +1670,12 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
       clearReason(closedModule);
       setIncludeGl(true);
       setBankingAck("");
+      // A prefilled request must not re-arm on refresh: consume the deep
+      // link once the request posts.
+      if (reopenPrefillModule || reopenPrefillEntity)
+        router.push(
+          mergeHref(BASE, props.currentParams, { reopenModule: null, reopenEntity: null }),
+        );
       router.refresh();
     } catch (error) {
       const message =
@@ -2097,6 +2134,13 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
                   module: t(`modules.${action.module}`),
                 })}
               </p>
+              {action.state === "reopen" && reopenPrefillEntity ? (
+                <p className="mt-1 text-sm text-slate-500">
+                  {t("periods.reopenEntity", {
+                    name: reopenPrefillEntityName ?? reopenPrefillEntity,
+                  })}
+                </p>
+              ) : null}
             </div>
             <Field label={t("fields.reason")}>
               <Textarea
@@ -2494,6 +2538,18 @@ function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
             {t("periods.requestedBy", { name: row.requester_name })}
           </Label>
         </div>
+        <ReopenDecisionEvidence
+          source={{
+            status: row.status,
+            requestedById: row.requested_by,
+            approvedById: row.approved_by,
+            approvedByName: row.approver_name,
+            decisionAction: row.decision_action,
+            attestation: row.decision_attestation,
+            endActorName: row.end_actor_name,
+            endReason: row.end_reason,
+          }}
+        />
         <Badge
           variant={
             row.status === "approved"

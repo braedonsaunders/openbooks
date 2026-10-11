@@ -79,7 +79,8 @@
     "documentation": "Dokumentation",
     "lockPeriod": "Periode sperren",
     "publish": "Paket veröffentlichen",
-    "downloadBinder": "Unveränderlichen Prüfungsordner herunterladen"
+    "downloadBinder": "Unveränderlichen Prüfungsordner herunterladen",
+    "viewReopenRequests": "Wiedereröffnungsanträge"
   },
   "errors": {
     "actionFailed": "Die Abschlussaktion konnte nicht abgeschlossen werden"
@@ -485,6 +486,13 @@
       "requestedBy": "Angefordert von {name}",
       "reopenActiveUntil": "Aktiv bis {date}",
       "activeReopenWindows": "Aktive Wiedereröffnungen",
+      "requestReopenLink": "Kontrollierte Wiedereröffnung anfordern",
+      "reopenEntity": "Entität: {name}",
+      "approvedBy": "Genehmigt von {name}",
+      "selfApprovedNote": "Selbst genehmigt mit Einzelgenehmiger-Bestätigung",
+      "rejectedBy": "Abgelehnt von {name}",
+      "endedBy": "Beendet von {name}",
+      "reopenEndReason": "Grund für die Beendigung: {reason}",
       "endReopenTitle": "Diese Wiedereröffnung beenden",
       "endReopenHint": "Das Beenden schließt alle Module, die dieses Fenster geöffnet hat, wieder und gibt die Periode für neue Wiedereröffnungsanfragen frei.",
       "endReopenReasonRequired": "Zum Beenden der Wiedereröffnung ist eine Begründung mit mindestens 10 Zeichen erforderlich.",

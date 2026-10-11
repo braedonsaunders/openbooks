@@ -79,7 +79,8 @@
     "documentation": "ドキュメント",
     "lockPeriod": "期間をロック",
     "publish": "パッケージを公表",
-    "downloadBinder": "改ざん不可の監査バインダーをダウンロード"
+    "downloadBinder": "改ざん不可の監査バインダーをダウンロード",
+    "viewReopenRequests": "再オープン依頼"
   },
   "errors": {
     "actionFailed": "決算アクションを完了できませんでした"
@@ -485,6 +486,13 @@
       "requestedBy": "{name}が依頼",
       "reopenActiveUntil": "{date} まで有効",
       "activeReopenWindows": "有効な再オープン",
+      "requestReopenLink": "統制された再オープンを依頼する",
+      "reopenEntity": "エンティティ: {name}",
+      "approvedBy": "{name}が承認",
+      "selfApprovedNote": "単独承認者の証明による自己承認",
+      "rejectedBy": "{name}が却下",
+      "endedBy": "{name}が終了",
+      "reopenEndReason": "終了理由: {reason}",
       "endReopenTitle": "この再オープンを終了する",
       "endReopenHint": "終了すると、この期間で開いたすべてのモジュールが再び締められ、新しい再オープン依頼が可能になります。",
       "endReopenReasonRequired": "再オープンを終了するには10文字以上の理由が必要です。",

@@ -325,18 +325,32 @@ export async function readAppActionResult<T = unknown>(
   if (res.ok) return { ok: true, status: res.status, data: body as T }
   const code = readRefusalCode(body)
   const safeFallback = copy.fallback.trim() !== '' ? copy.fallback : 'request failed'
-  return {
-    ok: false,
-    error: new ActionError({
-      kind: kindForStatus(res.status),
-      status: res.status,
-      code,
-      issues: readRefusalIssues(body),
-      serverMessage:
-        refusalMessageFromBody(body, copy) ??
-        (code ? `${safeFallback} (HTTP ${res.status}, ${code})` : `${safeFallback} (HTTP ${res.status})`),
-    }),
-  }
+  const error: DetailedActionError = new ActionError({
+    kind: kindForStatus(res.status),
+    status: res.status,
+    code,
+    issues: readRefusalIssues(body),
+    serverMessage:
+      refusalMessageFromBody(body, copy) ??
+      (code ? `${safeFallback} (HTTP ${res.status}, ${code})` : `${safeFallback} (HTTP ${res.status})`),
+  })
+  // Structured machine evidence rides beside the refusal (never rendered by
+  // the alert itself): renderers that know a details kind — a closed
+  // period's scope with its reopen route — read it from here instead of
+  // parsing message text.
+  const details = readRefusalDetails(body)
+  if (details) error.details = details
+  return { ok: false, error }
+}
+
+/**
+ * An ActionError carrying the refusal body's structured evidence. Built
+ * only by the app's own result readers; consumers keep treating it as an
+ * ActionError and branch on `details` solely through the helpers that know
+ * a details kind.
+ */
+export interface DetailedActionError extends ActionError {
+  details?: Record<string, unknown> | null
 }
 
 /**

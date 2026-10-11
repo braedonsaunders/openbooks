@@ -365,3 +365,37 @@ test("a sales workstream task heading renders the translated label, not the mess
   assert.ok(headings.includes("Sales"), `expected a Sales group heading, saw: ${headings.join(" | ")}`);
   assert.ok(!host.textContent?.includes("workstreams.sales"), "the raw message key must not render");
 });
+
+test("the wizard header links reopen requests exactly for the reopen permission", async (t) => {
+  for (const canReopen of [true, false]) {
+    globalThis.__closeTestRouter = { push() {}, refresh() {} };
+    globalThis.__closeTestToasts = [];
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const root = createRoot(host);
+    t.after(async () => {
+      await act(async () => {
+        root.unmount();
+      });
+      host.remove();
+    });
+    await act(async () => {
+      root.render(
+        <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+          <CloseWizard {...props()} canReopen={canReopen} />
+        </NextIntlClientProvider>,
+      );
+      await tick();
+    });
+    await tick();
+    assert.equal(
+      (host.textContent ?? "").includes("Reopen requests"),
+      canReopen,
+      `the reopen surface links from the run header exactly when close.reopen is held (canReopen=${canReopen})`,
+    );
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  }
+});

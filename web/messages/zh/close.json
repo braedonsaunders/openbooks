@@ -79,7 +79,8 @@
     "documentation": "文档",
     "lockPeriod": "锁定期间",
     "publish": "发布结账包",
-    "downloadBinder": "下载不可变审计档案"
+    "downloadBinder": "下载不可变审计档案",
+    "viewReopenRequests": "重开申请"
   },
   "errors": {
     "actionFailed": "无法完成该结账操作"
@@ -485,6 +486,13 @@
       "requestedBy": "申请人 {name}",
       "reopenActiveUntil": "有效期至 {date}",
       "activeReopenWindows": "有效的重开",
+      "requestReopenLink": "申请受控重开",
+      "reopenEntity": "实体：{name}",
+      "approvedBy": "批准人：{name}",
+      "selfApprovedNote": "经唯一审批人证明自批",
+      "rejectedBy": "拒绝人：{name}",
+      "endedBy": "结束人：{name}",
+      "reopenEndReason": "结束原因：{reason}",
       "endReopenTitle": "结束此次重开",
       "endReopenHint": "结束后，此窗口打开的所有模块将重新关闭，该期间可接受新的重开申请。",
       "endReopenReasonRequired": "结束重开需要至少 10 个字符的理由。",

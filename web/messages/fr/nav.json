@@ -266,6 +266,7 @@
   },
   "moduleKeywords": {
     "receipts": "reçu, reçus, recevoir un paiement, paiement, encaissement, paiement client",
-    "payments": "payer des factures, payer la facture, paiement de facture, paiement, chèque"
+    "payments": "payer des factures, payer la facture, paiement de facture, paiement, chèque",
+    "close-reopen-requests": "réouverture, rouvrir, réouverture contrôlée"
   }
 }

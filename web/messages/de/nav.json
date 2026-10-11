@@ -266,6 +266,7 @@
   },
   "moduleKeywords": {
     "receipts": "Beleg, Zahlungseingang, Zahlung erfassen, Zahlung, Kundenzahlung, Einzahlung",
-    "payments": "Rechnungen bezahlen, Rechnung bezahlen, Rechnungszahlung, Zahlung, Scheck"
+    "payments": "Rechnungen bezahlen, Rechnung bezahlen, Rechnungszahlung, Zahlung, Scheck",
+    "close-reopen-requests": "Wiedereröffnung, wieder eröffnen, kontrollierte Wiedereröffnung"
   }
 }

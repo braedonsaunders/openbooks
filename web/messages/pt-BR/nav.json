@@ -266,6 +266,7 @@
   },
   "moduleKeywords": {
     "receipts": "recibo, recibos, receber pagamento, pagamento, recebimento, pagamento de cliente",
-    "payments": "pagar contas, pagar conta, pagamento de contas, pagamento, cheque"
+    "payments": "pagar contas, pagar conta, pagamento de contas, pagamento, cheque",
+    "close-reopen-requests": "reabertura, reabrir, reabertura controlada"
   }
 }

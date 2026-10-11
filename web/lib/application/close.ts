@@ -182,9 +182,27 @@ export async function listPeriodReopenRequests(
   const [rows, count] = await Promise.all([
     db.execute<Record<string, unknown>>(sql`
       select r.id, r.modules, r.reason, r.status, r.expires_at, r.reclosed_at, r.created_at, r.requested_by,
+             r.approved_by,
              p.name as period_name, b.name as book_name, b.code as book_code,
              s.name as subsidiary_name,
-             req.name as requested_by_name, app.name as approved_by_name, r.approved_at
+             req.name as requested_by_name, app.name as approved_by_name, r.approved_at,
+             (select a.action from audit_log a
+               where a.org_id = r.org_id and a.table_name = 'close_reopen_requests' and a.row_id = r.id
+                 and a.action in ('approve', 'self_approve')
+               order by a.at desc limit 1) as decision_action,
+             (select a.changes#>>'{after,attestation}' from audit_log a
+               where a.org_id = r.org_id and a.table_name = 'close_reopen_requests' and a.row_id = r.id
+                 and a.action in ('approve', 'self_approve')
+               order by a.at desc limit 1) as decision_attestation,
+             (select ender.name from audit_log a
+                left join users ender on ender.id = a.actor_id
+               where a.org_id = r.org_id and a.table_name = 'close_reopen_requests' and a.row_id = r.id
+                 and a.action = 'end'
+               order by a.at desc limit 1) as end_actor_name,
+             (select coalesce(a.changes#>>'{after,reason}', a.changes->>'reason') from audit_log a
+               where a.org_id = r.org_id and a.table_name = 'close_reopen_requests' and a.row_id = r.id
+                 and a.action = 'end'
+               order by a.at desc limit 1) as end_reason
         from close_reopen_requests r
         join accounting_periods p on p.id = r.period_id and p.org_id = r.org_id
         join accounting_books b on b.id = r.book_id and b.org_id = r.org_id
@@ -211,7 +229,12 @@ export async function listPeriodReopenRequests(
       requestedBy: row.requested_by_name,
       requestedById: row.requested_by,
       approvedBy: row.approved_by_name,
+      approvedById: row.approved_by,
       approvedAt: row.approved_at,
+      decisionAction: row.decision_action,
+      decisionAttestation: row.decision_attestation,
+      endActorName: row.end_actor_name,
+      endReason: row.end_reason,
       expiresAt: row.expires_at,
       reclosedAt: row.reclosed_at,
       createdAt: row.created_at,

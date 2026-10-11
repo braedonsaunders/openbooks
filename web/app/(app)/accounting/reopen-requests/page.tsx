@@ -7,6 +7,7 @@ import { requirePermission } from '@/lib/authz'
 import { applicationContextFromSession } from '@/lib/application/context'
 import { listPeriodReopenRequests } from '@/lib/application/close'
 import { ReopenDecision } from './ReopenDecision'
+import { ReopenDecisionEvidence } from '@/components/reopen-decision-evidence'
 
 export const dynamic = 'force-dynamic'
 
@@ -62,7 +63,20 @@ export default async function ReopenRequestsPage() {
             className: 'px-3 py-2 text-right',
             cell: (row) => row.status === 'requested'
               ? <ReopenDecision requestId={String(row.id)} ownRequest={row.requestedById === authz.user.id} />
-              : <span className="text-xs text-slate-500 dark:text-slate-400">{text(row.approvedBy)}</span>,
+              : <span className="text-xs text-slate-500 dark:text-slate-400">
+                  <ReopenDecisionEvidence
+                    source={{
+                      status: row.status,
+                      requestedById: row.requestedById,
+                      approvedById: row.approvedById,
+                      approvedByName: row.approvedBy,
+                      decisionAction: row.decisionAction,
+                      attestation: row.decisionAttestation,
+                      endActorName: row.endActorName,
+                      endReason: row.endReason,
+                    }}
+                  />
+                </span>,
           },
         ]}
       />

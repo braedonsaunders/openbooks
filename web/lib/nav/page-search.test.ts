@@ -12,6 +12,14 @@ const MENU: SidebarNavGroup[] = [
     items: [
       { href: '/journal', label: 'Journal Entries', iconKey: 'book' },
       { href: '/close', label: 'Period Close', iconKey: 'lock', subgroup: 'Close', subgroupHref: '/close/hub' },
+      {
+        href: '/accounting/reopen-requests',
+        label: 'Reopen Requests',
+        iconKey: 'history',
+        subgroup: 'Close',
+        subgroupHref: '/close/hub',
+        keywords: ['reopen', 'reopening', 'reopen request', 'controlled reopening'],
+      },
     ],
   },
   {
@@ -108,4 +116,11 @@ test('a page is also found by its localized synonyms, after pages its words name
   assert.deepEqual(searchPages(buildPageIndex(menu), 'receipt')[0], {
     href: '/receipts', title: 'Customer Payments', trail: ['Customers'], iconKey: 'check',
   }, 'synonyms never leak into the hit')
+})
+
+test('the reopen requests surface is found by its task names', () => {
+  // The permission-gated reopen page must stay discoverable through global
+  // search under every name an operator would type for it.
+  assert.deepEqual(hrefs('reopen'), ['/accounting/reopen-requests'])
+  assert.deepEqual(hrefs('reopening'), ['/accounting/reopen-requests'])
 })

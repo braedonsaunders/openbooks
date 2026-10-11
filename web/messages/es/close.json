@@ -79,7 +79,8 @@
     "documentation": "Documentación",
     "lockPeriod": "Bloquear período",
     "publish": "Publicar paquete",
-    "downloadBinder": "Descargar expediente de auditoría inmutable"
+    "downloadBinder": "Descargar expediente de auditoría inmutable",
+    "viewReopenRequests": "Solicitudes de reapertura"
   },
   "errors": {
     "actionFailed": "No se pudo completar la acción de cierre"
@@ -485,6 +486,13 @@
       "requestedBy": "Solicitada por {name}",
       "reopenActiveUntil": "Activo hasta {date}",
       "activeReopenWindows": "Reaperturas activas",
+      "requestReopenLink": "Solicitar reapertura controlada",
+      "reopenEntity": "Entidad: {name}",
+      "approvedBy": "Aprobado por {name}",
+      "selfApprovedNote": "Autoaprobado con declaración de aprobador único",
+      "rejectedBy": "Rechazado por {name}",
+      "endedBy": "Terminado por {name}",
+      "reopenEndReason": "Motivo de finalización: {reason}",
       "endReopenTitle": "Terminar esta reapertura",
       "endReopenHint": "Al terminar se vuelven a cerrar todos los módulos que abrió esta ventana y el período queda libre para nuevas solicitudes.",
       "endReopenReasonRequired": "Se requiere un motivo de al menos 10 caracteres para terminar la reapertura.",

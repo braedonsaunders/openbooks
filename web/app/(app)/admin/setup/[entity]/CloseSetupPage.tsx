@@ -266,7 +266,29 @@ export async function CloseSetupPage({
          ${packageList.query ? sql`and (name ilike ${`%${packageList.query}%`} or description ilike ${`%${packageList.query}%`} or (${packageDefaultMatch} and name = 'close.defaultData.package.name'))` : sql``}`),
     db.execute<ReopenRow>(sql`
       select r.*, p.name as period_name, b.name as book_name,
-             requester.name as requester_name, approver.name as approver_name
+             requester.name as requester_name, approver.name as approver_name,
+             -- Decision evidence is read from the stored audit trail, never
+             -- reconstructed: the decision action (approve vs the
+             -- sole-approver self_approve) with its quoted attestation, and
+             -- the explicit end with its actor and reason. Windows consumed
+             -- automatically carry no end audit row, so those stay absent.
+             (select a.action from audit_log a
+               where a.org_id = r.org_id and a.table_name = 'close_reopen_requests' and a.row_id = r.id
+                 and a.action in ('approve', 'self_approve')
+               order by a.at desc limit 1) as decision_action,
+             (select a.changes#>>'{after,attestation}' from audit_log a
+               where a.org_id = r.org_id and a.table_name = 'close_reopen_requests' and a.row_id = r.id
+                 and a.action in ('approve', 'self_approve')
+               order by a.at desc limit 1) as decision_attestation,
+             (select ender.name from audit_log a
+                left join users ender on ender.id = a.actor_id
+               where a.org_id = r.org_id and a.table_name = 'close_reopen_requests' and a.row_id = r.id
+                 and a.action = 'end'
+               order by a.at desc limit 1) as end_actor_name,
+             (select coalesce(a.changes#>>'{after,reason}', a.changes->>'reason') from audit_log a
+               where a.org_id = r.org_id and a.table_name = 'close_reopen_requests' and a.row_id = r.id
+                 and a.action = 'end'
+               order by a.at desc limit 1) as end_reason
         from close_reopen_requests r
         join accounting_periods p on p.id = r.period_id and p.org_id = r.org_id
         join accounting_books b on b.id = r.book_id and b.org_id = r.org_id

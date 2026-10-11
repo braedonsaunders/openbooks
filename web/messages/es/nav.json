@@ -266,6 +266,7 @@
   },
   "moduleKeywords": {
     "receipts": "recibo, recibos, recibir pago, pago, cobro, pago de cliente",
-    "payments": "pagar facturas, pagar factura, pago de facturas, pago, cheque"
+    "payments": "pagar facturas, pagar factura, pago de facturas, pago, cheque",
+    "close-reopen-requests": "reapertura, reabrir, reapertura controlada"
   }
 }

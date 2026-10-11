@@ -280,6 +280,13 @@ export function CloseWizard(props: Props) {
               {t("actions.revalidate")}
             </Button>
           ) : null}
+          {props.canReopen ? (
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/accounting/reopen-requests">
+                {t("actions.viewReopenRequests")}
+              </Link>
+            </Button>
+          ) : null}
         </div>
       </div>
       <div className="grid gap-3 sm:grid-cols-3">

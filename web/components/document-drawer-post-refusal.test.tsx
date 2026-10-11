@@ -288,3 +288,107 @@ test("an unmatched-lines Post refusal offers the match dialog", async (t) => {
     "the match dialog opens from the refusal",
   );
 });
+
+test("a typed closed-period Post refusal links the prefilled reopen form", async (t) => {
+  globalThis.__drawerRouter = { push() {}, refresh() {} };
+  globalThis.__drawerToasts = [];
+  globalThis.__confirmCalls = [];
+  globalThis.__confirmVerdict = true;
+  const periodId = randomUUID();
+  const bookId = randomUUID();
+  const subsidiaryId = randomUUID();
+  const restoreFetch = scriptFetch((url) => {
+    if (url === "/api/documents/actions") {
+      return Response.json(
+        {
+          error: "AP is closed for this period and accounting book — request a controlled reopen to post here",
+          code: "period-closed",
+          details: {
+            kind: "period-closed",
+            periodId,
+            bookId,
+            subsidiaryId,
+            module: "ap",
+          },
+        },
+        { status: 422 },
+      );
+    }
+    return null;
+  });
+  t.after(restoreFetch);
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  t.after(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  });
+  const doc = {
+    id: randomUUID(),
+    kind: "vendor_bill",
+    status: "approved",
+    document_number: "BILL-00001",
+    currency: "USD",
+    updated_at: "2026-09-17T12:00:00.000000Z",
+    document_date: "2026-09-17",
+    subtotal: "100.00",
+    tax_total: "0.00",
+    total: "100.00",
+  };
+  await act(async () => {
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <MoneyProvider currency="USD">
+          <DocumentDrawer
+            payload={{ doc, lines: [] }}
+            config={DOC_KINDS["vendor_bill"]!}
+            basePath="/ap/bills"
+            parties={[]}
+            accounts={[]}
+            taxCodes={[]}
+            taxGroups={[]}
+            cards={[]}
+            bankAccounts={[]}
+            departments={[]}
+            projects={[]}
+            locations={[]}
+            classes={[]}
+            items={[]}
+            subsidiaries={[]}
+            headerDefs={[]}
+            lineDefs={[]}
+            segments={SEGMENTS}
+            canCreate
+            canPost
+            layout={{ header: { groups: [] }, lines: { columns: [] }, actions: [{ key: "post", visible: true }] } as never}
+          />
+        </MoneyProvider>
+      </NextIntlClientProvider>,
+    );
+    await tick();
+  });
+  await tick();
+  await tick();
+  const menu = buttonsNamed("Actions")[0];
+  assert.ok(menu, "record actions must live behind the Actions menu");
+  await click(menu);
+  const post = buttonsNamed("Post")[0];
+  assert.ok(post, "an approved bill must offer Post");
+  await click(post);
+  await tick();
+  await tick();
+  // next/link is stubbed children-only in this file, so the prefilled href
+  // itself is pinned in period-closed-refusal.test.tsx; here the drawer
+  // must wire the renderer beside the pinned refusal.
+  const linkLabel = String(
+    (messages as { close?: { setup?: { periods?: { requestReopenLink?: string } } } })
+      .close?.setup?.periods?.requestReopenLink ?? "Request a controlled reopening",
+  );
+  assert.ok(
+    (document.body.textContent ?? "").includes(linkLabel),
+    "the typed closed period offers the prefilled reopen form beside the refusal",
+  );
+});
