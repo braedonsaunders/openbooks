@@ -1,7 +1,9 @@
 import { resolveAgencyPosting } from './drop-ship-agency.ts';
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
-import { add, cmp, isZero, neg, toUnits } from "../money/money.ts";
+import { add, cmp, isZero, neg } from "../money/money.ts";
+import { fromQuantityUnits, toQuantityUnits } from "../money/quantity.ts";
+import { orderedNetOfCancelledSql } from "../records/order-line-remainders.ts";
 import { extendCost, unitCostPerQuantity } from "./costing.ts";
 import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
 import { BillLinesUnmatchedError, InventoryError, type Runner } from "./contracts.ts";
@@ -10,10 +12,16 @@ import { assertInventoryOffHoldsNoStock, assertMovementOwner, inventoryFeatureEn
 import { stockLocationDim, postInventoryEntry } from "./journal.ts";
 import { primaryBookId, periodForDate, subsidiaryCurrency, lockInventoryPosition } from "./position.ts";
 import { receiveInventory } from "./movements.ts";
-import { liveReceiptQuantity } from "./return-quantities.ts";
 import { loadDocumentInventoryLines, unprofiledInventoryLines, assertNoUnprofiledInventoryLines, inventoryPostingEffectKey, isJsonRecord, type DocumentInventoryLine } from "./document-lines.ts";
 import { kitLabel, kitNoStockRefusal } from "./kits.ts";
-import { matchablePurchaseOrderLines, type MatchablePurchaseOrderLine } from "./bill-matchable-lines.ts";
+import {
+  billLinePurchaseOrderLineId,
+  livePurchaseOrderLineReceipts,
+  matchablePurchaseOrderLines,
+  resolveEntityScope,
+  unifiedUnbilledCover,
+  type MatchablePurchaseOrderLine,
+} from "./bill-matchable-lines.ts";
 import { receivedNotBilledMissingMessage, resolveReceivedNotBilledAccount } from "../records/control-accounts.ts";
 import { lineRequiresReceipt } from "../records/stock-receipt.ts";
 
@@ -149,14 +157,228 @@ export async function assertBillReceiptsPostable(
 }
 
 /**
+ * Match a hand-coded vendor-bill line to its purchase-order line inside the
+ * posting transaction, with the Match action's own write set: the line
+ * keeps conversion-grade provenance (`purchaseOrderLineId` plus a
+ * `convertedFrom` cover the void path walks back), the order gains a
+ * `bills` edge, and the order line's billed quantity advances under the
+ * ordered ceiling. Approved bills and orders reopen only for the writes
+ * and return to approved before commit, the established order-cycle
+ * pattern for approved-source counter advances. Anything the match cannot
+ * take — no candidate, several candidates, a quantity beyond cover, or a
+ * unit the order line does not share — stays for the posting guard below,
+ * which refuses it with the operator's remedy instead of receiving the
+ * stock a second time.
+ */
+export async function autoMatchBillLinesToOrders(
+  runner: SqlExecutor,
+  orgId: string,
+  documentId: string,
+  actorId: string | null,
+): Promise<{ matched: { billLineId: string; purchaseOrderLineId: string; quantity: string }[] }> {
+  const lines = await loadDocumentInventoryLines(runner as Runner, orgId, documentId);
+  const manual = lines.filter(
+    (line) =>
+      lineRequiresReceipt(line.itemKind) &&
+      billLinePurchaseOrderLineId(line.custom) === null,
+  );
+  if (manual.length === 0) return { matched: [] };
+  const bill = (await runner.execute<{
+    id: string;
+    document_number: string;
+    status: string;
+    party_id: string | null;
+    subsidiary_id: string | null;
+  }>(sql`
+    select id, document_number, status, party_id, subsidiary_id from documents
+     where id = ${documentId} and org_id = ${orgId} and kind = 'vendor_bill'
+     for update`)).rows[0];
+  if (!bill) {
+    throw new InventoryError("vendor bill not found while checking purchase-order matching");
+  }
+  if (bill.status !== "draft" && bill.status !== "approved") return { matched: [] };
+  const entityId = await resolveEntityScope(runner, orgId, bill.subsidiary_id);
+  // Cover compares in the order line's own unit, which the shared
+  // predicate guarantees is the bill line's unit under folded spelling —
+  // so plan against the bill lines' raw document quantities, not the
+  // base-converted posting quantities the loader carries.
+  const rawQuantities = new Map(
+    (await runner.execute<{ id: string; quantity: string }>(sql`
+      select id, quantity::text as quantity from document_lines
+       where org_id = ${orgId} and document_id = ${documentId}`)).rows.map((row) => [row.id, row.quantity]),
+  );
+  const planned: { line: DocumentInventoryLine; candidate: MatchablePurchaseOrderLine; cover: string }[] = [];
+  for (const line of manual) {
+    const candidates = await matchablePurchaseOrderLines(runner, orgId, {
+      itemId: line.itemId,
+      unit: line.unit,
+      partyId: bill.party_id,
+      subsidiaryId: bill.subsidiary_id,
+    });
+    // Automatic only when exactly one order line covers the whole bill
+    // line: anything ambiguous or partial belongs to the operator in the
+    // Match dialog, and the guard below refuses it with that remedy.
+    if (candidates.length !== 1) continue;
+    const candidate = candidates[0]!;
+    const raw = rawQuantities.get(line.lineId);
+    if (!raw) continue;
+    const billUnits = toQuantityUnits(raw);
+    if (billUnits <= 0n) continue;
+    if (billUnits > toQuantityUnits(candidate.billableQuantity)) continue;
+    planned.push({ line, candidate, cover: fromQuantityUnits(billUnits) });
+  }
+  if (planned.length === 0) return { matched: [] };
+  // Lock every purchase-order header before any line, in id order: the
+  // same header-before-lines order conversion uses, so a concurrent
+  // conversion of the same order serializes instead of deadlocking.
+  const poIds = [...new Set(planned.map((row) => row.candidate.purchaseOrderId))].sort();
+  const poHeaders = (await runner.execute<{ id: string; status: string; document_number: string }>(sql`
+    select id, status, document_number from documents
+     where org_id = ${orgId} and id = any(${`{${poIds.join(",")}}`}::uuid[])
+     order by id
+     for update`)).rows;
+  if (poHeaders.length !== poIds.length) {
+    throw new InventoryError("a purchase order changed while the bill was being matched");
+  }
+  const byPoLine = new Map<string, { id: string; document_id: string; status: string; document_number: string; party_id: string | null; subsidiary_id: string | null; line_number: number; item_id: string | null; unit: string | null; quantity: string; quantity_fulfilled: string; quantity_billed: string; quantity_cancelled: string }>();
+  const poLineRows = (await runner.execute<{
+    id: string;
+    document_id: string;
+    status: string;
+    document_number: string;
+    party_id: string | null;
+    subsidiary_id: string | null;
+    line_number: number;
+    item_id: string | null;
+    unit: string | null;
+    quantity: string;
+    quantity_fulfilled: string;
+    quantity_billed: string;
+    quantity_cancelled: string;
+  }>(sql`
+    select l.id, d.id as document_id, d.status, d.document_number, d.party_id, d.subsidiary_id,
+           l.line_number, l.item_id, l.unit,
+           l.quantity::text as quantity, l.quantity_fulfilled::text as quantity_fulfilled,
+           l.quantity_billed::text as quantity_billed, l.quantity_cancelled::text as quantity_cancelled
+      from document_lines l
+      join documents d on d.id = l.document_id and d.org_id = l.org_id
+     where l.org_id = ${orgId} and l.id = any(${`{${planned.map((row) => row.candidate.purchaseOrderLineId).join(",")}}`}::uuid[])
+     order by l.document_id, l.id
+     for update of l`)).rows;
+  for (const row of poLineRows) byPoLine.set(row.id, row);
+  const reopened: string[] = [];
+  const reopenForWrites = async (id: string, status: string, label: string) => {
+    if (status !== "approved") return;
+    const reopenedRow = (await runner.execute<{ id: string }>(sql`
+      update documents set status = 'draft', updated_at = now(), updated_by = ${actorId}
+       where id = ${id} and org_id = ${orgId} and status = 'approved'
+      returning id`)).rows[0];
+    if (!reopenedRow) throw new InventoryError(`${label} changed while the bill was being matched`);
+    reopened.push(id);
+  };
+  await reopenForWrites(bill.id, bill.status, `bill ${bill.document_number}`);
+  for (const header of poHeaders) {
+    await reopenForWrites(header.id, header.status, `purchase order ${header.document_number}`);
+  }
+  const matched: { billLineId: string; purchaseOrderLineId: string; quantity: string }[] = [];
+  for (const row of planned) {
+    const poLine = byPoLine.get(row.candidate.purchaseOrderLineId);
+    if (!poLine) throw new InventoryError("a purchase-order line changed while the bill was being matched");
+    if (poLine.status !== "approved") {
+      throw new InventoryError(
+        `purchase order ${poLine.document_number} is ${poLine.status} — only an approved order can be matched`,
+      );
+    }
+    if (poLine.item_id !== row.line.itemId) {
+      throw new InventoryError("a purchase-order line changed while the bill was being matched");
+    }
+    const poEntityId = await resolveEntityScope(runner, orgId, poLine.subsidiary_id);
+    if ((bill.party_id ?? null) !== (poLine.party_id ?? null) || entityId !== poEntityId) {
+      throw new InventoryError("a purchase order changed to a different vendor or legal entity while the bill was being matched");
+    }
+    const billUnits = toQuantityUnits(row.cover);
+    const orderedOpen =
+      toQuantityUnits(poLine.quantity) -
+      toQuantityUnits(poLine.quantity_cancelled) -
+      toQuantityUnits(poLine.quantity_billed);
+    if (billUnits > orderedOpen) {
+      throw new InventoryError(
+        `purchase order ${poLine.document_number} line ${poLine.line_number} changed while the bill was being matched`,
+      );
+    }
+    // Re-derive the unified cover under the locks: a concurrent receipt,
+    // void, or return that consumed it makes THIS post refuse whole.
+    const cover = await unifiedUnbilledCover(runner, orgId, {
+      purchaseOrderLineId: poLine.id,
+      itemId: row.line.itemId,
+      unit: poLine.unit,
+      orderedQuantity: poLine.quantity,
+      fulfilledQuantity: poLine.quantity_fulfilled,
+      billedQuantity: poLine.quantity_billed,
+      cancelledQuantity: poLine.quantity_cancelled,
+    });
+    if (billUnits > toQuantityUnits(cover.billableQuantity)) {
+      throw new InventoryError(
+        `purchase order ${poLine.document_number} line ${poLine.line_number} changed while the bill was being matched`,
+      );
+    }
+    const advanced = (await runner.execute<{ id: string }>(sql`
+      update document_lines set quantity_billed = quantity_billed + ${row.cover}, updated_at = now(), updated_by = ${actorId}
+       where id = ${poLine.id} and org_id = ${orgId}
+         and quantity_billed + ${row.cover} <= ${orderedNetOfCancelledSql("document_lines")}
+      returning id`)).rows[0];
+    if (!advanced) {
+      throw new InventoryError("a purchase-order line changed while the bill was being matched");
+    }
+    const bag = (isJsonRecord(row.line.custom) ? { ...row.line.custom } : {}) as Record<string, unknown>;
+    bag.purchaseOrderLineId = poLine.id;
+    bag.convertedFrom = { documentId: poLine.document_id, lineId: poLine.id, quantity: row.cover };
+    const stamped = (await runner.execute<{ id: string }>(sql`
+      update document_lines set custom = ${JSON.stringify(bag)}::jsonb, updated_at = now(), updated_by = ${actorId}
+       where id = ${row.line.lineId} and org_id = ${orgId}
+      returning id`)).rows[0];
+    if (!stamped) throw new InventoryError("a bill line changed while the bill was being matched");
+    const edge = (await runner.execute<{ id: string }>(sql`
+      select id from document_links
+       where org_id = ${orgId} and from_document_id = ${poLine.document_id}
+         and to_document_id = ${documentId} and link_type = 'bills'`)).rows[0];
+    if (!edge) {
+      await runner.execute(sql`
+        insert into document_links (org_id, from_document_id, to_document_id, link_type, created_by)
+        values (${orgId}, ${poLine.document_id}, ${documentId}, 'bills', ${actorId})`);
+    }
+    matched.push({ billLineId: row.line.lineId, purchaseOrderLineId: poLine.id, quantity: row.cover });
+  }
+  for (const id of reopened) {
+    const restored = (await runner.execute<{ id: string }>(sql`
+      update documents set status = 'approved', updated_at = now(), updated_by = ${actorId}
+       where id = ${id} and org_id = ${orgId} and status = 'draft'
+      returning id`)).rows[0];
+    if (!restored) throw new InventoryError("a document changed while the bill was being matched");
+  }
+  await runner.execute(sql`
+    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+    values (${orgId}, 'documents', ${documentId}, 'update',
+            ${JSON.stringify({
+              mode: "bill_lines_auto_matched",
+              matchedLines: matched.map((row) => ({
+                purchaseOrderLineId: row.purchaseOrderLineId,
+                quantity: row.quantity,
+              })),
+            })}::jsonb, ${actorId})`);
+  return { matched };
+}
+
+/**
  * A vendor-bill line coded by hand for receipt-tracked stock must not bypass
  * three-way matching: billing it with no purchase-order provenance and then
- * receiving the same stock on its purchase order counts it twice. When a
- * matchable purchase-order line exists — the one predicate the Match dialog
- * reads, so the guard names exactly what the dialog offers — refuse naming
- * the order: match the bill to its purchase-order line (or receive first)
- * instead. Direct counter purchases with no matchable order keep the legacy
- * bill-is-the-receipt path.
+ * receiving the same stock on its purchase order counts it twice. Any line
+ * the automatic match above could not take — no covering order line, or
+ * several, or a quantity beyond cover — refuses here naming the orders the
+ * one shared predicate finds, so the guard names exactly what the Match
+ * dialog offers: match the bill to its purchase-order line (or receive
+ * first) instead. Direct counter purchases with no matchable order keep
+ * the legacy bill-is-the-receipt path.
  */
 async function assertManualBillLinesMatched(
   runner: SqlExecutor,
@@ -252,13 +474,32 @@ export async function applyBillInventoryReceipts(
     // already brought into stock must not receive it again: the receipt
     // credited received-not-billed at the order price, this bill debits it at
     // the invoiced price, and the difference is purchase price variance.
+    // Cover is the one shared definition the guard and the Match dialog
+    // read, in the item's base units like the line's posting quantity.
     const purchaseOrderLineId = billLinePurchaseOrderLineId(line.custom);
     if (purchaseOrderLineId) {
-      const received = await purchaseReceiptCoverage(runner, orgId, purchaseOrderLineId);
-      if (received) {
-        await settleReceivedBillLineVariance(runner, orgId, actorId, line, received, date, subsidiaryId);
+      const live = await livePurchaseOrderLineReceipts(runner, orgId, purchaseOrderLineId);
+      if (toQuantityUnits(live.quantity) > 0n) {
+        await settleReceivedBillLineVariance(runner, orgId, actorId, line, live, date, subsidiaryId);
         count++;
         continue;
+      }
+      // A linked line with no live cover left must refuse instead of
+      // falling through to receiving the stock again: the goods were
+      // returned or the receipt was voided after the match, so bringing
+      // them in here would count stock the order no longer holds.
+      if (lineRequiresReceipt(line.itemKind)) {
+        const purchaseOrder = (await runner.execute<{ document_number: string; line_number: number }>(sql`
+          select d.document_number, dl.line_number
+            from document_lines dl
+            join documents d on d.id = dl.document_id and d.org_id = dl.org_id
+           where dl.id = ${purchaseOrderLineId} and dl.org_id = ${orgId}`)).rows[0];
+        const orderLabel = purchaseOrder
+          ? `purchase order ${purchaseOrder.document_number} line ${purchaseOrder.line_number}`
+          : `its purchase-order line`;
+        throw new InventoryError(
+          `document line ${line.lineNumber} (item ${line.itemId}) is matched to ${orderLabel} but no received cover remains for that order line — the goods were returned or the receipt was voided after matching. Unmatch the bill line and post again to receive the stock directly, or receive the goods and match the bill again`,
+        );
       }
     }
     // The bill already debited inventory at the line's extended amount: that
@@ -281,70 +522,6 @@ export async function applyBillInventoryReceipts(
     count++;
   }
   return count;
-}
-
-/** The purchase-order line a bill line was drawn from, from either writer's evidence. */
-function billLinePurchaseOrderLineId(custom: unknown): string | null {
-  if (!isJsonRecord(custom)) return null;
-  const direct = custom.purchaseOrderLineId;
-  if (typeof direct === "string" && direct) return direct;
-  const capture = custom.apCaptureEvidence;
-  if (isJsonRecord(capture) && typeof capture.purchaseOrderLineId === "string" && capture.purchaseOrderLineId) {
-    return capture.purchaseOrderLineId;
-  }
-  return null;
-}
-
-/**
- * Live stock a goods receipt (purchase_receipt document) still holds for a
- * purchase-order line: posted receipt movements on receipt lines whose
- * immutable evidence names that source line, each net of its posted
- * reversals through the shared live-receipt helper. A receipt the return
- * flow treats as dead nets to zero here, so the bill falls through to the
- * legacy bill-is-the-receipt path and brings the stock into layers instead
- * of clearing a variance against vanished stock. Null when nothing live
- * was received that way.
- */
-async function purchaseReceiptCoverage(
-  runner: SqlExecutor,
-  orgId: string,
-  purchaseOrderLineId: string,
-): Promise<{ quantity: string; value: string } | null> {
-  const receipts = (await runner.execute<{ id: string }>(sql`
-    select m.id
-      from inventory_movements m
-      join document_lines rl on rl.id = m.document_line_id and rl.org_id = m.org_id
-      join documents rd on rd.id = rl.document_id and rd.org_id = rl.org_id
-     where m.org_id = ${orgId} and m.kind = 'receipt' and m.status = 'posted'
-       and rd.kind = ${PURCHASE_RECEIPT_DOCUMENT_KIND}
-       and rl.custom->'receipt'->>'sourceLineId' = ${purchaseOrderLineId}
-  `)).rows;
-  // One movement per receipt line in practice; each nets its own reversals
-  // through the helper the vendor-return guard shares, so both readers
-  // agree on what "received" means.
-  let quantity = "0";
-  let value = "0";
-  for (const receipt of receipts) {
-    const live = await liveReceiptQuantity(runner, orgId, receipt.id);
-    quantity = add(quantity, live.quantity);
-    value = add(value, live.value);
-  }
-  const dropShipConfirmations = (await runner.execute<{ quantity: string; value: string }>(sql`
-    select rl.quantity::text as quantity, rl.amount::text as value
-      from document_lines rl
-      join documents rd on rd.id = rl.document_id and rd.org_id = rl.org_id
-     where rl.org_id = ${orgId}
-       and rd.kind = ${PURCHASE_RECEIPT_DOCUMENT_KIND}
-       and rd.status in ('approved', 'posted')
-       and rd.custom ? 'dropShipConfirmation'
-       and rl.custom->'receipt'->>'sourceLineId' = ${purchaseOrderLineId}
-  `)).rows;
-  for (const confirmation of dropShipConfirmations) {
-    quantity = add(quantity, confirmation.quantity);
-    value = add(value, confirmation.value);
-  }
-  if (toUnits(quantity) <= 0n) return null;
-  return { quantity, value };
 }
 
 /**

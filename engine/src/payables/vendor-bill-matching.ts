@@ -7,7 +7,11 @@ import { lineRequiresReceipt } from "../records/stock-receipt.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { fromQuantityUnits, toQuantityUnits } from "../money/quantity.ts";
 import { normalizeInventoryUnit } from "../inventory/costing.ts";
-import { matchablePurchaseOrderLines } from "../inventory/bill-matchable-lines.ts";
+import {
+  matchablePurchaseOrderLines,
+  resolveEntityScope,
+  unifiedUnbilledCover,
+} from "../inventory/bill-matchable-lines.ts";
 
 /**
  * Link a drawer-created vendor bill to its purchase order after the fact.
@@ -377,9 +381,14 @@ export async function matchVendorBillLines(input: {
             `bill line ${billLine.line_number} is billed in ${billLine.unit ?? "no unit"} but purchase order ${poLine.document_number} line ${poLine.line_number} orders in ${poLine.unit ?? "no unit"} — match lines share one unit`,
           );
         }
+        // A blank entity is the hierarchy root (the posting default) on
+        // both sides, so a bill that leaves it blank matches an order
+        // that names the root explicitly, and vice versa.
+        const billEntityId = await resolveEntityScope(tx, orgId, bill.subsidiary_id);
+        const poEntityId = await resolveEntityScope(tx, orgId, poLine.document_subsidiary_id);
         if (
           (bill.party_id ?? null) !== (poLine.document_party_id ?? null) ||
-          (bill.subsidiary_id ?? null) !== (poLine.document_subsidiary_id ?? null)
+          billEntityId !== poEntityId
         ) {
           throw new BillMatchError(
             `purchase order ${poLine.document_number} is a different vendor or legal entity than this bill — match within one vendor and entity`,
@@ -395,7 +404,17 @@ export async function matchVendorBillLines(input: {
             `purchase order ${poLine.document_number} line ${poLine.line_number} has only ${fromQuantityUnits(orderedOpen < 0n ? 0n : orderedOpen)} open to bill`,
           );
         }
-        const receivedOpen = toQuantityUnits(poLine.quantity_fulfilled) - toQuantityUnits(poLine.quantity_billed);
+        // The one shared cover: counter or live receipts, less billed.
+        const cover = await unifiedUnbilledCover(tx, orgId, {
+          purchaseOrderLineId: poLine.id,
+          itemId: poLine.item_id!,
+          unit: poLine.unit,
+          orderedQuantity: poLine.quantity,
+          fulfilledQuantity: poLine.quantity_fulfilled,
+          billedQuantity: poLine.quantity_billed,
+          cancelledQuantity: poLine.quantity_cancelled,
+        });
+        const receivedOpen = toQuantityUnits(cover.coverQuantity);
         if (billUnits > receivedOpen) {
           throw new BillMatchError(
             `purchase order ${poLine.document_number} line ${poLine.line_number} has only ${fromQuantityUnits(receivedOpen < 0n ? 0n : receivedOpen)} received and unbilled — receive the goods first, then match`,
@@ -420,11 +439,14 @@ export async function matchVendorBillLines(input: {
       }
       const matched: MatchedBillLine[] = [];
       for (const { billLine, poLine, cover } of prepared) {
+        // The ordered ceiling stays in storage arithmetic; the received
+        // ceiling is the unified cover validated above under these same
+        // locks (live receipts can exceed the received counter after a
+        // return or a historic write, so the counter ceiling cannot stand).
         const advanced = (await tx.execute<{ id: string }>(sql`
           update document_lines set quantity_billed = quantity_billed + ${cover}, updated_at = now(), updated_by = ${actorId}
            where id = ${poLine.id} and org_id = ${orgId}
              and quantity_billed + ${cover} <= ${orderedNetOfCancelledSql("document_lines")}
-             and quantity_billed + ${cover} <= quantity_fulfilled
           returning id`)).rows[0];
         if (!advanced) {
           throw new BillMatchError(

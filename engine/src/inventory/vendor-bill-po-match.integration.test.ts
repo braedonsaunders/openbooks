@@ -6,17 +6,17 @@ const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
 /**
  * A drawer-created vendor bill hand-coded against received stock: the bill
- * carries no purchase-order links and no capture evidence — its stocked
- * lines debit received-not-billed directly, the way an operator mimics a
- * matched bill by hand — while its purchase order is fully received and
- * unbilled. Posting must refuse naming the open order (billing it blind
- * would receive the stock a second time), and the refusal must stay
- * matchable: linking the bill lines to their purchase-order lines lets the
- * same bill post, clearing received-not-billed at the receipt value with
- * any invoice/order price difference in purchase price variance.
+ * carries no purchase-order links and no capture evidence. Posting matches
+ * each stocked line to its purchase-order line automatically when exactly
+ * one order line covers it — the bill clears received-not-billed at the
+ * receipt value with any invoice/order price difference in purchase price
+ * variance, and no second inventory movement posts. An ambiguous bill
+ * (several order lines covering one bill line) still refuses naming the
+ * open orders with the Match remedy, and voiding the posted bill walks
+ * the billed cover and the variance entries back.
  * Runs in a child with React's server condition like its siblings.
  */
-test("a hand-coded bill for received stock refuses until matched, then posts through RNB", { skip: !DB }, () => {
+test("a hand-coded bill for received stock auto-matches on post, refuses when ambiguous", { skip: !DB }, () => {
   const source = `
     import assert from "node:assert/strict";
     import { randomUUID } from "node:crypto";
@@ -91,17 +91,7 @@ test("a hand-coded bill for received stock refuses until matched, then posts thr
       \`)).rows[0].count;
       assert.equal(links, 0, "the drawer bill carries no purchase-order links");
 
-      // The blind bill must refuse naming the open order: posting it would
-      // receive already-received stock a second time.
-      await assert.rejects(
-        withOrg(org.orgId, () => postDocument(billId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } })),
-        (error) => /still open on purchase order/.test(error.message) && /match the bill/.test(error.message),
-      );
-      const stayed = (await db.execute(sql\`select status from documents where id = \${billId}\`)).rows[0];
-      assert.equal(stayed.status, "approved", "a refused post leaves the bill approved");
-      console.log("M27-HAND-CODED-BILL-REFUSES");
-
-      // ---- Matching links the lines, then the same bill posts ------------
+      // ---- The Match dialog offers each received line its order line ----
       const { matchVendorBillLines, billMatchCandidates } = await import("./engine/src/payables/vendor-bill-matching.ts");
       const suggestions = await withOrg(org.orgId, () => billMatchCandidates(org.orgId, billId));
       assert.equal(suggestions.lines.length, 3);
@@ -110,27 +100,39 @@ test("a hand-coded bill for received stock refuses until matched, then posts thr
       assert.equal(suggestions.lines[0].candidates[0].receipts.length, 1, "the candidate names its goods receipt");
       assert.equal(suggestions.lines[2].candidates.length, 0, "the freight line has nothing to match");
 
+      // ---- Posting matches each line automatically: no second receipt ----
+      await postDocument(billId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
+      const stamps = (await db.execute(sql\`
+        select line_number as ln, custom from document_lines
+         where org_id = \${org.orgId} and document_id = \${billId} and line_number in (1, 2) order by line_number
+      \`)).rows;
+      assert.equal(stamps[0].custom.purchaseOrderLineId, sourceA, "posting stamps the drawn-from order line");
+      assert.equal(stamps[1].custom.purchaseOrderLineId, sourceB);
+      assert.ok(stamps[0].custom.convertedFrom, "posting stamps conversion-grade cover the void walks back");
+      const edge = (await db.execute(sql\`
+        select count(*)::int as count from document_links
+         where org_id = \${org.orgId} and to_document_id = \${billId} and link_type = 'bills'
+      \`)).rows[0].count;
+      assert.equal(edge, 1, "posting links the order to the bill");
+      const audit = (await db.execute(sql\`
+        select count(*)::int as count from audit_log
+         where org_id = \${org.orgId} and row_id = \${billId} and changes->>'mode' = 'bill_lines_auto_matched'
+      \`)).rows[0].count;
+      assert.equal(audit, 1, "the automatic match is audited");
+      console.log("M27-HAND-CODED-BILL-AUTO-MATCHES");
+
+      // A posted bill can no longer be matched through the dialog action.
       const billLineIds = (await db.execute(sql\`
         select id, line_number as ln from document_lines
          where org_id = \${org.orgId} and document_id = \${billId} and line_number in (1, 2) order by line_number
       \`)).rows;
-      const matched = await withOrg(org.orgId, () => matchVendorBillLines({
-        orgId: org.orgId, billId, actorId: userId,
-        matches: [
-          { billLineId: billLineIds[0].id, purchaseOrderLineId: sourceA },
-          { billLineId: billLineIds[1].id, purchaseOrderLineId: sourceB },
-        ],
-      }));
-      assert.equal(matched.matched.length, 2);
       await assert.rejects(
         withOrg(org.orgId, () => matchVendorBillLines({
           orgId: org.orgId, billId, actorId: userId,
           matches: [{ billLineId: billLineIds[0].id, purchaseOrderLineId: sourceA }],
         })),
-        /already matched/,
+        /only a draft or approved bill/,
       );
-
-      await postDocument(billId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
       const facts = (await db.execute(sql\`
         select (select status from documents where id = \${billId}) as status,
                (select coalesce(sum(quantity), 0)::text from inventory_movements
@@ -159,6 +161,54 @@ test("a hand-coded bill for received stock refuses until matched, then posts thr
       assert.equal(toUnits(billed[1].billed), toUnits("2128"));
       console.log("M27-MATCHED-BILL-POSTS");
 
+      // ---- An ambiguous bill still refuses with the Match remedy ---------
+      const order2 = await withOrg(org.orgId, () => createOrderDraft(org.orgId, userId, "purchase_order", randomUUID(), null));
+      const sourceC = randomUUID();
+      const sourceD = randomUUID();
+      await db.execute(sql\`
+        insert into document_lines
+          (id, org_id, document_id, line_number, item_id, account_id, description, quantity, unit,
+           unit_price, amount, tax_amount, quantity_fulfilled, quantity_billed, stock_location_id, custom)
+        values
+          (\${sourceC}, \${org.orgId}, \${order2.id}, 1, \${org.items.fifo}, \${org.accounts.invAsset},
+           'Grain A', '100', 'lb', '6', '600', '0', '0', '0', \${org.stockLocationId}, '{}'::jsonb),
+          (\${sourceD}, \${org.orgId}, \${order2.id}, 2, \${org.items.fifo}, \${org.accounts.invAsset},
+           'Grain A again', '50', 'lb', '6', '300', '0', '0', '0', \${org.stockLocationId}, '{}'::jsonb)
+      \`)
+      await db.execute(sql\`
+        update documents
+           set status = 'approved', party_id = \${org.vendorId}, subsidiary_id = \${org.subsidiaryId},
+               document_date = \${org.date}, subtotal = '900', total = '900'
+         where id = \${order2.id} and org_id = \${org.orgId}
+      \`)
+      await withOrg(org.orgId, () => receivePurchaseOrder(org.orgId, userId, order2.id, {
+        receiptDate: org.date, idempotencyKey: "m27-second-receipt",
+        lines: [{ sourceLineId: sourceC, quantity: "100" }, { sourceLineId: sourceD, quantity: "50" }],
+      }));
+      const bill2Id = randomUUID();
+      await db.execute(sql\`
+        insert into documents (id, org_id, kind, document_number, party_id, document_date, due_date, currency,
+                               status, subsidiary_id, subtotal, tax_total, total, custom, created_by)
+        values (\${bill2Id}, \${org.orgId}, 'vendor_bill', 'BILL-M27-2', \${org.vendorId}, \${org.date}, \${org.date},
+                \${currency}, 'draft', \${org.subsidiaryId}, '600', '0', '600', '{}'::jsonb, \${userId})
+      \`)
+      await db.execute(sql\`
+        insert into document_lines
+          (id, org_id, document_id, line_number, item_id, account_id, description, quantity, unit,
+           unit_price, amount, tax_amount, stock_location_id, custom)
+        values
+          (\${randomUUID()}, \${org.orgId}, \${bill2Id}, 1, \${org.items.fifo}, \${org.accounts.clearing},
+           'Grain A', '100', 'lb', '6', '600', '0', \${org.stockLocationId}, '{}'::jsonb)
+      \`)
+      await db.execute(sql\`update documents set status = 'approved' where id = \${bill2Id} and org_id = \${org.orgId}\`);
+      await assert.rejects(
+        withOrg(org.orgId, () => postDocument(bill2Id, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } })),
+        (error) => /still open on purchase order/.test(error.message) && /Match this bill/.test(error.remedy ?? ""),
+      );
+      const stayed = (await db.execute(sql\`select status from documents where id = \${bill2Id}\`)).rows[0];
+      assert.equal(stayed.status, "approved", "a refused post leaves the bill approved");
+      console.log("M27-AMBIGUOUS-BILL-REFUSES");
+
       // ---- Voiding the matched bill walks the cover back ------------------
       const { requestDocumentVoid } = await import("./engine/src/ledger/document-void.ts");
       const voided = await withOrg(org.orgId, () => requestDocumentVoid({
@@ -171,6 +221,25 @@ test("a hand-coded bill for received stock refuses until matched, then posts thr
       \`)).rows;
       assert.equal(toUnits(restored[0].billed), toUnits("0"), "voiding the bill releases its billed cover");
       assert.equal(toUnits(restored[1].billed), toUnits("0"));
+      // Reversed entries carry the unwound half, so the economic lens sums
+      // posted and reversed: the payable and the variance net to zero, the
+      // receipt's received-not-billed credit stands (goods still on hand,
+      // no longer billed), and inventory keeps the receipt cost alone.
+      const balanceOfAll = async (accountId) => (await db.execute(sql\`
+        select coalesce(sum(l.amount), 0)::text as amount from journal_lines l
+          join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+         where l.org_id = \${org.orgId} and l.account_id = \${accountId} and e.status in ('posted', 'reversed')
+      \`)).rows[0].amount;
+      assert.equal(toUnits(await balanceOfAll(org.accounts.adjustment)), toUnits("0"), "voiding the bill reverses its price variance");
+      assert.equal(toUnits(await balanceOfAll(org.accounts.ap)), toUnits("0"), "voiding the bill reverses its payable");
+      assert.equal(toUnits(await balanceOfAll(org.accounts.clearing)), toUnits("-26132"), "the receipts' received-not-billed credits stand un-billed");
+      assert.equal(toUnits(await balanceOfAll(org.accounts.invAsset)), toUnits("26132"), "inventory keeps the receipts' cost alone");
+      const afterVoid = (await db.execute(sql\`
+        select coalesce(sum(quantity), 0)::text as on_hand from inventory_movements
+         where org_id = \${org.orgId} and status = 'posted'
+           and item_id in (\${org.items.fifo}, \${org.items.movingAvg})
+      \`)).rows[0].on_hand;
+      assert.equal(toUnits(afterVoid), toUnits("4710"), "voiding a matched bill moves no stock");
       console.log("M27-MATCHED-BILL-VOID-RESTORES");
     } finally {
       await dropScratchOrg(org.orgId);
@@ -192,7 +261,8 @@ test("a hand-coded bill for received stock refuses until matched, then posts thr
     { cwd: process.cwd(), env: process.env, encoding: "utf8" },
   );
   assert.equal(result.status, 0, result.stderr || result.stdout);
-  assert.match(result.stdout, /M27-HAND-CODED-BILL-REFUSES/);
+  assert.match(result.stdout, /M27-HAND-CODED-BILL-AUTO-MATCHES/);
   assert.match(result.stdout, /M27-MATCHED-BILL-POSTS/);
+  assert.match(result.stdout, /M27-AMBIGUOUS-BILL-REFUSES/);
   assert.match(result.stdout, /M27-MATCHED-BILL-VOID-RESTORES/);
 });

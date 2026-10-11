@@ -22,7 +22,7 @@ import { assertDocumentMutationRefsOwned } from "../records/mutation-refs.ts";
 import { consolidationSourceRefusal } from "../records/consolidation-source-policy.ts";
 import { runRecordFlows } from "../flows/run.ts";
 
-import { assertBillReceiptsPostable, resolveBillInventoryAccounts } from "../inventory/documents-purchasing.ts";
+import { assertBillReceiptsPostable, autoMatchBillLinesToOrders, resolveBillInventoryAccounts } from "../inventory/documents-purchasing.ts";
 import { assertInvoiceIssuesPostable } from "../inventory/documents-sales.ts";
 import { assertVendorCreditInventoryReturnsPostable, resolveVendorCreditInventoryAccounts } from "../inventory/documents-vendor-credits.ts";
 import { assertCustomerCreditInventoryReturnsPostable } from "../inventory/documents-customer-credits.ts";
@@ -204,6 +204,20 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
       // in the message so the operator sees it beside the refusal.
       if (error instanceof CashCloseoutError) throw new PostingError(`${error.message} ${error.remedy}`);
       throw error;
+    }
+  }
+  if (doc.kind === "vendor_bill" && !deps.migration) {
+    // A hand-coded line for received stock is matched to its order inside
+    // this same posting unit — before the journal maps its debit — so it
+    // clears received-not-billed instead of receiving the stock again.
+    try {
+      await autoMatchBillLinesToOrders(db, doc.orgId, doc.id, options.audit?.actorId ?? null);
+    } catch (error) {
+      if (error instanceof PostingError) throw error;
+      throw carryRefusalIdentity(
+        new PostingError(error instanceof Error ? error.message : String(error)),
+        error,
+      );
     }
   }
   if (doc.kind === "vendor_bill" && !deps.inventoryAssetByLine) {
