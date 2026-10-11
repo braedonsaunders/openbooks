@@ -1,0 +1,1 @@
+Data-only feature-state backfill that preserves behavior: organizations with subcontractorCompliance stored on gain informationReturns, so every 1099 surface stays reachable; no schema object changes and no organization loses a capability it had.
