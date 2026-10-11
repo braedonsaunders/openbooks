@@ -1,5 +1,6 @@
 import { resolveAgencyPosting } from '../inventory/drop-ship-agency.ts';
 import { and, asc, eq, sql } from "drizzle-orm";
+import { toUnits } from "../money/money.ts";
 import { db, schema } from "../platform/db.ts";
 import { isUuid } from "../platform/uuid.ts";
 import { assertPeriodModulesOpen, closeModuleForDocument } from "../periods/period-policy.ts";
@@ -15,6 +16,7 @@ import { assertFinalKernelBalance } from "../journal/posting-invariants.ts";
 import { resolveDeferralAccounts, resolveTaxAccounts, resolveExpenseReceivableDeps, resolveOrgTaxAccounts, resolveTaxComponents, validateRequiredDimensions, resolveOpenItemAccounts } from "./posting-accounts.ts";
 import { resolveStoredValueLiabilityByLine, resolveStoreCreditLiability } from "../stored-value/posting-accounts.ts";
 import { resolveCashPostingTenders, TenderRefusal } from "../sales/document-tenders.ts";
+import { CashCloseoutError, resolveCashCloseoutForPosting } from "../sales/cash-closeout.ts";
 import { resolveMarketplaceClearingForDocument } from "./posting-tax-policy.ts";
 import { applySubsidiaries } from "./posting-subsidiaries.ts";
 import { resolveInternalBillingPostingContext } from "./internal-billing-posting.ts";
@@ -166,6 +168,27 @@ export async function regenerateGlImpactTx(
       };
     } catch (error) {
       if (error instanceof TenderRefusal) throw new PostingError(error.message);
+      throw error;
+    }
+  }
+  if (doc.kind === "cash_sale" && deps.cashCloseout === undefined) {
+    try {
+      deps = {
+        ...deps,
+        cashCloseout: await resolveCashCloseoutForPosting(
+          tx,
+          doc.orgId,
+          doc.custom,
+          (deps.cashTenders ?? []).map((tender) => ({
+            kind: tender.kind,
+            amountMinor: toUnits(tender.amount),
+          })),
+        ),
+      };
+    } catch (error) {
+      // PostingError carries no remedy field: the named Setup remedy rides
+      // in the message so the operator sees it beside the refusal.
+      if (error instanceof CashCloseoutError) throw new PostingError(`${error.message} ${error.remedy}`);
       throw error;
     }
   }

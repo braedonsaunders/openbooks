@@ -1,6 +1,6 @@
-import { abs, cmp } from "../money/money.ts";
+import { abs, add, cmp, neg, sum } from "../money/money.ts";
 import { sumMoney, type Money } from "../money/brands.ts";
-import { PostingError, type CashPostingTender } from "../journal/posting-contracts.ts";
+import { PostingError, type CashPostingTender, type CashSaleCloseout } from "../journal/posting-contracts.ts";
 
 /**
  * Paid-at-sale tender evidence for `cash_sale` and `cash_refund`, read from
@@ -69,6 +69,41 @@ export function assertTendersMatchTotal(
     throw new PostingError(
       `${kindLabel} ${documentNumber} tenders ${tendered} but lines and tax total ${abs(incomeAndTaxTotal)} — ` +
         `tenders must sum to the document total; add, remove, or correct a tender`,
+    );
+  }
+}
+
+/**
+ * Close-out tender cross-foot for a cash sale: the till collects the
+ * document total plus card tips, keeps back the processor fees withheld at
+ * settlement, and counts over or short against the expected cash — so
+ * tenders must equal total + tips − fees ± over/short (over positive,
+ * short negative), stated explicitly so a mis-tendered close-out reads as
+ * arithmetic, never as a plug.
+ */
+export function assertCloseoutTendersMatchTotal(
+  tenders: readonly CashPostingTender[],
+  incomeAndTaxTotal: Money,
+  closeout: CashSaleCloseout,
+  documentNumber: string,
+): void {
+  const tendered = sumMoney(tenders.map((t) => t.amount));
+  const expected = sum([
+    abs(incomeAndTaxTotal),
+    closeout.tipsTotal,
+    neg(closeout.feeTotal),
+    closeout.overShort,
+  ]);
+  if (cmp(tendered, expected) !== 0) {
+    const parts = [`document total ${abs(incomeAndTaxTotal)}`];
+    if (cmp(closeout.tipsTotal, "0") !== 0) parts.push(`tips ${closeout.tipsTotal}`);
+    if (cmp(closeout.feeTotal, "0") !== 0) parts.push(`fees −${closeout.feeTotal}`);
+    if (cmp(closeout.overShort, "0") !== 0) {
+      parts.push(cmp(closeout.overShort, "0") > 0 ? `over ${closeout.overShort}` : `short ${closeout.overShort}`);
+    }
+    throw new PostingError(
+      `cash sale ${documentNumber} tenders ${tendered} but ${parts.join(" + ")} = ${add(expected, "0")} — ` +
+        `tenders must sum to the document total + tips − fees ± over/short; add, remove, or correct a tender or the close-out`,
     );
   }
 }

@@ -146,6 +146,12 @@ export interface PostingDeps {
    */
   cashTenders?: CashPostingTender[];
   /**
+   * Resolved daily close-out for a cash_sale (tips, processor fees,
+   * over/short), parsed from documents.custom.closeout with its control
+   * accounts resolved. Absent when the sale recorded no close-out.
+   */
+  cashCloseout?: CashSaleCloseout | null;
+  /**
    * The internal billing treatment an internal_billing document posts
    * under: the rule version it names, both rule accounts, and the
    * providing legal entity. Resolved at the posting boundary.
@@ -206,6 +212,29 @@ export interface CashPostingTender {
   reference: string | null;
   /** Stored-value account redeemed or credited; null for money tenders. */
   storedValueAccountId: string | null;
+}
+
+/**
+ * A cash sale's daily close-out as the posting kernel consumes it: tips
+ * owed to staff, processor fees withheld at settlement, and the signed cash
+ * over/short. Built by the sales module; the shape lives here so the
+ * journal contract stays importable without the sales module above it.
+ */
+export interface CashSaleCloseout {
+  /** Card tips collected inside the tenders, canonical ledger money. */
+  tipsTotal: Money;
+  /** Processor fees withheld from card settlement, canonical ledger money. */
+  feeTotal: Money;
+  /** Signed over/short: positive is cash over, negative is cash short. */
+  overShort: Money;
+  /** Staff party the tips belong to; null pools the liability. */
+  serverPartyId: string | null;
+  /** Tips-payable liability; null only when the tips total is zero. */
+  tipsPayableAccountId: string | null;
+  /** Processor-fee expense; null only when the fee total is zero. */
+  processorFeeAccountId: string | null;
+  /** Over/short account; null only when the over/short is zero. */
+  cashOverShortAccountId: string | null;
 }
 
 export interface TaxPostingComponent {

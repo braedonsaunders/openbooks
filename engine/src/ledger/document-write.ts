@@ -59,6 +59,13 @@ import {
   TenderRefusal,
   type TenderInput,
 } from '@openbooks/engine/sales/document-tenders'
+import {
+  CashCloseoutError,
+  assertCloseoutServer,
+  parseCashCloseout,
+  serializeCashCloseout,
+} from '../sales/cash-closeout.ts'
+import { fromUnits, toUnits } from '../money/money.ts'
 import { persistTaxQuote } from '../tax/rate-providers.ts'
 import { PROVIDER_COMMIT_KINDS } from '@openbooks/engine/tax'
 import { decimalNullRefusal } from '../money/decimal-refusal.ts'
@@ -1412,6 +1419,8 @@ export async function applyDocumentEdit(
           amount: typeof tender.amount === 'string' ? tender.amount : '',
           reference: typeof tender.reference === 'string' ? tender.reference : null,
           externalRef: typeof tender.externalRef === 'string' ? tender.externalRef : null,
+          tipAmount: typeof tender.tipAmount === 'string' ? tender.tipAmount : null,
+          feeAmount: typeof tender.feeAmount === 'string' ? tender.feeAmount : null,
         } satisfies TenderInput
       })
       // Never persist the key: the table is the single source from here on.
@@ -1419,6 +1428,166 @@ export async function applyDocumentEdit(
       // carried in through the existing-custom spread would survive — delete
       // it explicitly.
       if (headerCustom) delete headerCustom.tenders
+    }
+  }
+
+  // Daily close-out (cash_sale only): tips, processor fees and the counted
+  // over/short. The drawer submits per-tender tip/fee amounts inside the
+  // tender entries above plus overShort/serverPartyId inside custom.closeout
+  // (never totals — the writer derives them from the parts, so the two can
+  // never drift). Persisted canonically as custom.closeout; the tenders key
+  // above never stores it. A close-out on a refund refuses: payouts ride
+  // the sale.
+  if (body.custom !== undefined && (current.kind === 'cash_sale' || current.kind === 'cash_refund')) {
+    const suppliedCloseout = (body.custom as Record<string, unknown>).closeout
+    const tenderTipsFees = (tenderInputs ?? []).some(
+      (input) =>
+        (typeof input.tipAmount === 'string' && input.tipAmount !== '') ||
+        (typeof input.feeAmount === 'string' && input.feeAmount !== ''),
+    )
+    if (current.kind === 'cash_refund' && (suppliedCloseout !== undefined || tenderTipsFees)) {
+      throw new DocumentEditError(
+        422,
+        'a cash refund cannot carry a close-out — record tips, fees and over/short on the cash sale',
+      )
+    }
+    const existingCloseout = (current.custom as Record<string, unknown> | null)?.closeout
+    // A resubmitted tender set re-opens the stored close-out even when the
+    // caller said nothing about it: stale positions must refuse here with
+    // the rebuild remedy, not at posting.
+    const closeoutTouched =
+      suppliedCloseout !== undefined ||
+      tenderTipsFees ||
+      (tenderInputs !== undefined && existingCloseout !== undefined && existingCloseout !== null)
+    if (current.kind === 'cash_sale' && closeoutTouched && headerCustom) {
+      try {
+        if (suppliedCloseout !== undefined && suppliedCloseout !== null &&
+          (typeof suppliedCloseout !== 'object' || Array.isArray(suppliedCloseout))) {
+          throw new CashCloseoutError(
+            'Cash sale close-out must be an object.',
+            'Rebuild the close-out from the tenders on the document.',
+          )
+        }
+        const suppliedBag =
+          suppliedCloseout !== undefined && suppliedCloseout !== null
+            ? (suppliedCloseout as Record<string, unknown>)
+            : {}
+        // Tender facts for the cross-foot: freshly supplied inputs win (the
+        // writer validates their amounts below); otherwise the table rows
+        // already stored for this draft.
+        let facts: { kind: string; amountMinor: bigint }[]
+        if (tenderInputs !== undefined) {
+          facts = tenderInputs.map((input, index) => {
+            let amountMinor: bigint
+            try {
+              amountMinor = toUnits(input.amount)
+            } catch {
+              throw new CashCloseoutError(
+                `Tender ${index + 1} amount ${JSON.stringify(input.amount)} is not a valid amount.`,
+                `Enter tender ${index + 1} as a decimal amount with at most four places.`,
+              )
+            }
+            return { kind: input.kind, amountMinor }
+          })
+        } else {
+          const stored = await runner.execute<{ kind: string; minor: string }>(sql`
+            select kind, amount_minor::text as minor from document_tenders
+             where org_id = ${orgId} and document_id = ${id} order by position`)
+          facts = stored.rows.map((row) => ({ kind: row.kind, amountMinor: BigInt(row.minor) }))
+        }
+        // Parts ride the freshly supplied tenders when present; otherwise
+        // the stored close-out's parts (an over/short-only edit resubmits no
+        // tenders). Supplied parts are ignored beside fresh tenders — the
+        // inputs are the single source — and read only in that case.
+        const partRaws =
+          tenderInputs !== undefined
+            ? tenderInputs.map((input, index) => ({
+                position: index + 1,
+                tip: input.tipAmount ?? '',
+                fee: input.feeAmount ?? '',
+              }))
+            : ((suppliedBag.parts ?? (existingCloseout as Record<string, unknown> | undefined)?.parts ?? []) as unknown[])
+        if (!Array.isArray(partRaws)) {
+          throw new CashCloseoutError(
+            'Cash sale close-out parts must be a list.',
+            'Rebuild the close-out from the tenders on the document.',
+          )
+        }
+        const partMinor = (raw: unknown, position: number, what: 'tip' | 'fee'): bigint => {
+          if (raw === undefined || raw === null || raw === '') return 0n
+          if (typeof raw !== 'string') {
+            throw new CashCloseoutError(
+              `Close-out tender ${position} ${what} must be a decimal amount.`,
+              `Enter tender ${position}'s ${what} as a decimal amount, or leave it blank.`,
+            )
+          }
+          let minor: bigint
+          try {
+            minor = toUnits(raw)
+          } catch {
+            throw new CashCloseoutError(
+              `Close-out tender ${position} ${what} ${JSON.stringify(raw)} is not a valid amount.`,
+              `Enter tender ${position}'s ${what} as a decimal amount with at most four places.`,
+            )
+          }
+          if (minor < 0n) {
+            throw new CashCloseoutError(
+              `Close-out tender ${position} ${what} cannot be negative.`,
+              `Enter tender ${position}'s ${what} as zero or a positive amount.`,
+            )
+          }
+          return minor
+        }
+        const parts = partRaws
+          .map((entry) => {
+            if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+              throw new CashCloseoutError(
+                'A close-out tender part is not an object.',
+                'Rebuild the close-out from the tenders on the document.',
+              )
+            }
+            const row = entry as Record<string, unknown>
+            const position = row.position
+            if (typeof position !== 'number' || !Number.isInteger(position)) {
+              throw new CashCloseoutError(
+                'A close-out tender part names no tender.',
+                'Rebuild the close-out from the tenders on the document.',
+              )
+            }
+            return {
+              position,
+              tip: fromUnits(partMinor(row.tip, position, 'tip')),
+              fee: fromUnits(partMinor(row.fee, position, 'fee')),
+            }
+          })
+          .filter((part) => part.tip !== '0.0000' || part.fee !== '0.0000')
+        const bag: Record<string, unknown> = { ...suppliedBag, parts }
+        // Totals derive from the parts unless the caller stated them — then
+        // the parse cross-foots them.
+        if (bag.tipsTotal === undefined) {
+          bag.tipsTotal = fromUnits(parts.reduce((sum, part) => sum + toUnits(part.tip), 0n))
+        }
+        if (bag.feeTotal === undefined) {
+          bag.feeTotal = fromUnits(parts.reduce((sum, part) => sum + toUnits(part.fee), 0n))
+        }
+        if (bag.overShort === undefined) {
+          bag.overShort =
+            typeof (existingCloseout as Record<string, unknown> | undefined)?.overShort === 'string'
+              ? (existingCloseout as Record<string, unknown>).overShort
+              : '0'
+        }
+        if (bag.serverPartyId === undefined) {
+          const existingServer = (existingCloseout as Record<string, unknown> | undefined)?.serverPartyId
+          bag.serverPartyId = typeof existingServer === 'string' ? existingServer : null
+        }
+        const parsed = parseCashCloseout(bag, facts)
+        if (parsed) await assertCloseoutServer(runner, orgId, parsed.serverPartyId)
+        if (parsed) headerCustom.closeout = serializeCashCloseout(parsed)
+        else delete headerCustom.closeout
+      } catch (error) {
+        if (error instanceof CashCloseoutError) throw new DocumentEditError(422, error.message)
+        throw error
+      }
     }
   }
 

@@ -94,6 +94,19 @@ export const CONTROL_ACCOUNT_TYPE_POLICY = {
   // control must be payable-family. Profile accounts keep their own
   // save-time offset validation and are only required live and postable.
   receivedNotBilled: ["liability_payable", "liability_current_other"],
+  // Card tips collected at the till are staff money, never revenue: the cash
+  // sale credits this liability and payroll later pays it out. Tips parked in
+  // revenue overstate sales and hide a payroll obligation, so only liability
+  // types qualify.
+  tipsPayable: ["liability_payable", "liability_current_other"],
+  // Card processor fees withheld at settlement are a selling cost of the
+  // cash sale that deducted them. Expense only — netting them against
+  // revenue would understate both sales and costs.
+  processorFees: ["expense", "expense_other"],
+  // Till cash over/short: shortages debit it as an expense, overages credit
+  // it as other income. Both families qualify so one account carries the
+  // whole close-out variance.
+  cashOverShort: ["income", "income_other", "expense", "expense_other"],
 } as const;
 
 export type ControlAccountRole = keyof typeof CONTROL_ACCOUNT_TYPE_POLICY;
@@ -138,6 +151,9 @@ export const CONTROL_ACCOUNT_ROLE_LABELS: Record<ControlAccountRole, string> = {
   valuationAllowance: "Valuation allowance",
   storedValueLiability: "Stored value liability",
   receivedNotBilled: "Received not billed",
+  tipsPayable: "Tips payable",
+  processorFees: "Processor fees",
+  cashOverShort: "Cash over/short",
 };
 
 /** Operator-facing chart account-type names for control-account refusals. */

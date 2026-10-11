@@ -14,6 +14,7 @@ import {
 } from "../stored-value/accounts.ts";
 import { attachDocumentLoad } from "../stored-value/document-loads.ts";
 import { StoredValueError } from "../stored-value/errors.ts";
+import { CashCloseoutError, assertTenderCloseoutPart } from "./cash-closeout.ts";
 
 /**
  * Typed paid-at-sale tenders (`document_tenders`, migration 0494). A tender
@@ -95,6 +96,16 @@ export interface TenderInput {
   amount: string;
   reference?: string | null;
   externalRef?: string | null;
+  /**
+   * Close-out components collected inside this tender: a card tip (extra
+   * money for staff, posted to the tips-payable liability) and a processor
+   * fee (withheld at settlement, posted to the fee expense). Decimal amount
+   * strings; blank means none. Validated here, persisted on the document's
+   * close-out (never on the tender row, whose amount stays the gross
+   * collected).
+   */
+  tipAmount?: string | null;
+  feeAmount?: string | null;
 }
 
 export interface DocumentTenderRow {
@@ -461,6 +472,51 @@ export async function replaceDocumentTenders(
         422,
         `Enter ${label.toLowerCase()} as a positive amount.`,
       );
+    }
+    // Close-out components ride inside the collected amount: a card tip for
+    // staff, a processor fee withheld at settlement. Validated here at the
+    // write boundary; the document writer folds them into the sale's
+    // close-out and the kernel splits them back out at posting.
+    const parseCloseoutPart = (raw: unknown, what: "tip" | "fee"): bigint => {
+      if (raw === undefined || raw === null || raw === "") return 0n;
+      if (typeof raw !== "string") {
+        throw refusal(
+          `${label} ${what} must be a decimal amount.`,
+          "invalid_input",
+          422,
+          `Enter ${label.toLowerCase()} ${what} as a decimal amount, or leave it blank.`,
+        );
+      }
+      let minor: bigint;
+      try {
+        minor = toUnits(raw);
+      } catch {
+        throw refusal(
+          `${label} ${what} ${JSON.stringify(raw)} is not a valid amount.`,
+          "invalid_input",
+          422,
+          `Enter ${label.toLowerCase()} ${what} as a decimal amount with at most four places.`,
+        );
+      }
+      if (minor < 0n) {
+        throw refusal(
+          `${label} ${what} cannot be negative.`,
+          "invalid_input",
+          422,
+          `Enter ${label.toLowerCase()} ${what} as zero or a positive amount.`,
+        );
+      }
+      return minor;
+    };
+    const tipMinor = parseCloseoutPart(input.tipAmount, "tip");
+    const feeMinor = parseCloseoutPart(input.feeAmount, "fee");
+    try {
+      assertTenderCloseoutPart({ kind: input.kind, amountMinor, tipMinor, feeMinor }, label);
+    } catch (error) {
+      if (error instanceof CashCloseoutError) {
+        throw refusal(error.message, "invalid_input", 422, error.remedy);
+      }
+      throw error;
     }
     if (storedValueAccount) {
       if (storedValueAccount.currency !== parent.currency) {

@@ -11,7 +11,7 @@ import { assertExpenseEmployee, assertExpenseSettlement } from "../records/expen
 import { assertGeneratedBillingPostable, BillingSourceIntegrityError } from "../projects/billing-source-integrity.ts";
 import { PayrollError as PayrollRemittanceError } from "../payroll/error.ts";
 import { assertPayrollRemittanceBillCurrent } from "../payroll/remittance.ts";
-import { isZero } from "../money/money.ts";
+import { isZero, toUnits } from "../money/money.ts";
 import { parseMoney, sumMoney } from "../money/brands.ts";
 import { isIso4217CurrencyCode } from "../fx/currencies.ts";
 import { CustomGlLinesError, mergeBeforePostCustomMutation, resolveScriptUser, runCustomGlLineScripts, runTriggerScripts, type ScriptContext } from "../scripting/scripting.ts";
@@ -36,6 +36,7 @@ import { assertFinalKernelBalance, assertCreditMemoDirection } from "../journal/
 import { resolveDeferralAccounts, resolveTaxAccounts, resolveExpenseReceivableDeps, resolveOrgTaxAccounts, resolveTaxComponents, validateRequiredDimensions, resolveOpenItemAccounts } from "./posting-accounts.ts";
 import { resolveStoredValueLiabilityByLine, resolveStoreCreditLiability } from "../stored-value/posting-accounts.ts";
 import { resolveCashPostingTenders, TenderRefusal } from "../sales/document-tenders.ts";
+import { CashCloseoutError, resolveCashCloseoutForPosting } from "../sales/cash-closeout.ts";
 import { resolveProviderTaxPlans, resolveShipToSnapshot } from "./posting-provider-tax.ts";
 import { applySubsidiaries } from "./posting-subsidiaries.ts";
 import { resolveInternalBillingPostingContext } from "./internal-billing-posting.ts";
@@ -149,6 +150,36 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
       };
     } catch (error) {
       if (error instanceof TenderRefusal) throw new PostingError(error.message);
+      throw error;
+    }
+  }
+  // Daily close-out (cash_sale only): tips, processor fees and the counted
+  // over/short from documents.custom.closeout, with its control accounts
+  // resolved. A close-out on a refund refuses at the write boundary; this
+  // backstop catches bags written around it (or before the fence existed).
+  if (doc.kind === "cash_refund" && (doc.custom as Record<string, unknown> | null)?.closeout !== undefined) {
+    throw new PostingError(
+      `cash refund ${doc.documentNumber} carries a close-out — record tips, fees and over/short on the cash sale`,
+    );
+  }
+  if (doc.kind === "cash_sale" && deps.cashCloseout === undefined) {
+    try {
+      deps = {
+        ...deps,
+        cashCloseout: await resolveCashCloseoutForPosting(
+          db,
+          doc.orgId,
+          doc.custom,
+          (deps.cashTenders ?? []).map((tender) => ({
+            kind: tender.kind,
+            amountMinor: toUnits(tender.amount),
+          })),
+        ),
+      };
+    } catch (error) {
+      // PostingError carries no remedy field: the named Setup remedy rides
+      // in the message so the operator sees it beside the refusal.
+      if (error instanceof CashCloseoutError) throw new PostingError(`${error.message} ${error.remedy}`);
       throw error;
     }
   }

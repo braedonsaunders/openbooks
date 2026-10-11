@@ -2,7 +2,7 @@
 import { add, cmp, isZero, neg, toUnits } from "../money/money.ts";
 import { addMoney, negMoney, parseMoney, sumMoney, ZERO_MONEY, type Money } from "../money/brands.ts";
 import { type Doc, type DocLine, type KernelLine, type PostingDeps, type ExpenseSettlement, PostingError } from "../journal/posting-contracts.ts";
-import { assertCashTendersPresent, assertTendersMatchTotal } from "../sales/cash-tenders.ts";
+import { assertCashTendersPresent, assertCloseoutTendersMatchTotal, assertTendersMatchTotal } from "../sales/cash-tenders.ts";
 import { componentsForLine, assertTaxControlAccount } from "./posting-tax-policy.ts";
 import { internalBillingKernelLines, InternalBillingPolicyError } from "./internal-billing-policy.ts";
 /**
@@ -424,7 +424,33 @@ export const RULES: Record<string, RuleFn> = {
     // empty set refuses here rather than posting an unsettled sale.
     const tenders = deps.cashTenders ?? [];
     assertCashTendersPresent(tenders, doc.documentNumber, "cash sale");
-    assertTendersMatchTotal(tenders, incomeAndTax, doc.documentNumber, "cash sale");
+    // A close-out re-states the cross-foot explicitly: the till collects the
+    // document total plus card tips, net of processor fees and the counted
+    // over/short. Without one the tenders must match the total exactly.
+    const closeout = deps.cashCloseout ?? null;
+    if (closeout) {
+      assertCloseoutTendersMatchTotal(tenders, incomeAndTax, closeout, doc.documentNumber);
+      if (cmp(closeout.tipsTotal, "0") !== 0 && !closeout.tipsPayableAccountId) {
+        throw new PostingError(
+          `cash sale ${doc.documentNumber} records tips with no tips-payable liability — ` +
+            `set the Tips payable account in Setup → Company & Accounting → Control accounts, then repost`,
+        );
+      }
+      if (cmp(closeout.feeTotal, "0") !== 0 && !closeout.processorFeeAccountId) {
+        throw new PostingError(
+          `cash sale ${doc.documentNumber} records processor fees with no fee expense account — ` +
+            `set the Processor fees account in Setup → Company & Accounting → Control accounts, then repost`,
+        );
+      }
+      if (cmp(closeout.overShort, "0") !== 0 && !closeout.cashOverShortAccountId) {
+        throw new PostingError(
+          `cash sale ${doc.documentNumber} records cash over/short with no over/short account — ` +
+            `set the Cash over/short account in Setup → Company & Accounting → Control accounts, then repost`,
+        );
+      }
+    } else {
+      assertTendersMatchTotal(tenders, incomeAndTax, doc.documentNumber, "cash sale");
+    }
     return [
       // Tender legs are bank legs, not AR legs: they carry no party and are
       // never open items, so a paid sale can never appear in aging, dunning,
@@ -435,6 +461,40 @@ export const RULES: Record<string, RuleFn> = {
         memo: tenderMemo(t),
         ...dims(doc),
       })),
+      // Tips are staff money held for pay-out, never revenue: credit the
+      // liability tagged with the server's party when the sale names one
+      // (payroll pays per employee), otherwise pooled for the house split.
+      ...(closeout && cmp(closeout.tipsTotal, "0") !== 0
+        ? [{
+            accountId: closeout.tipsPayableAccountId!,
+            amount: negMoney(closeout.tipsTotal),
+            memo: `Card tips — cash sale ${doc.documentNumber}`,
+            partyId: closeout.serverPartyId,
+            ...dims(doc),
+          } satisfies KernelLine]
+        : []),
+      // Processor fees are a selling cost of this sale, booked gross so the
+      // deposit reconciles net — never netted against revenue.
+      ...(closeout && cmp(closeout.feeTotal, "0") !== 0
+        ? [{
+            accountId: closeout.processorFeeAccountId!,
+            amount: closeout.feeTotal,
+            memo: `Processor fees — cash sale ${doc.documentNumber}`,
+            ...dims(doc),
+          } satisfies KernelLine]
+        : []),
+      // The counted over/short: an over credits the account as other income,
+      // a short debits it as an expense — one signed leg either way.
+      ...(closeout && cmp(closeout.overShort, "0") !== 0
+        ? [{
+            accountId: closeout.cashOverShortAccountId!,
+            amount: negMoney(closeout.overShort),
+            memo: cmp(closeout.overShort, "0") > 0
+              ? `Cash over — cash sale ${doc.documentNumber}`
+              : `Cash short — cash sale ${doc.documentNumber}`,
+            ...dims(doc),
+          } satisfies KernelLine]
+        : []),
       ...income,
       ...tax,
     ];
