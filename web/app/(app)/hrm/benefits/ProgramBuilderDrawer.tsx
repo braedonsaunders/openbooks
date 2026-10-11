@@ -72,6 +72,12 @@ function seedDraft(family: ProgramFamily, seed: ProgramEditSeed | null): Program
     scopeCustomerIds: [...seed.scopeCustomerIds],
     scopeDepartmentIds: [...seed.scopeDepartmentIds],
     unassignedTime: seed.unassignedTime,
+    scopeExcludedProjectIds: [...seed.scopeExcludedProjectIds],
+    lossPercentRate: text(seed.lossPercentRate),
+    projectProfitCap: text(seed.projectProfitCap),
+    projectLossCap: text(seed.projectLossCap),
+    poolRounding: seed.poolRounding,
+    includeOpenCommitments: seed.includeOpenCommitments,
     allocation: seed.allocation,
     percentRate: text(seed.percentRate),
     fixedAmount: text(seed.fixedAmount),
@@ -195,6 +201,14 @@ function buildPayload(draft: ProgramDraft, mode: 'create' | 'edit', reason: stri
     scopeCustomerIds: draft.family === 'incentive' && draft.metricScope === 'project' ? draft.scopeCustomerIds : [],
     scopeDepartmentIds: draft.family === 'incentive' && draft.metricScope === 'project' ? draft.scopeDepartmentIds : [],
     unassignedTime: draft.family === 'incentive' && draft.metricScope !== 'company' ? draft.unassignedTime : 'refuse',
+    ...(draft.metric === 'project_margin' ? {
+      scopeExcludedProjectIds: draft.scopeExcludedProjectIds,
+      lossPercentRate: optional(draft.lossPercentRate),
+      projectProfitCap: optional(draft.projectProfitCap),
+      projectLossCap: optional(draft.projectLossCap),
+      poolRounding: draft.poolRounding,
+      includeOpenCommitments: draft.includeOpenCommitments,
+    } : { scopeExcludedProjectIds: [], lossPercentRate: null, projectProfitCap: null, projectLossCap: null, poolRounding: 'share', includeOpenCommitments: false }),
     allocation: draft.allocation,
     percentRate: optional(draft.percentRate),
     fixedAmount: optional(draft.fixedAmount),
@@ -295,6 +309,8 @@ export function ProgramBuilderDrawer({
     setDraft((current) => {
       const next = { ...current, [key]: value }
       if (key === 'metric' && value === 'transactions') Object.assign(next, { valuation:'percent', allocation:'responsibility', metricScope:'company', scopeIds:[], sourceAccountIds:[], capAmount:'', budgetAmount:'', thresholdAmount:'' })
+      if (key === 'metric' && value === 'project_margin') Object.assign(next, { valuation:'percent', allocation:'responsibility', metricScope:'company', scopeIds:[], capAmount:'', budgetAmount:'', thresholdAmount:'' })
+      if (key === 'metric' && value !== 'project_margin' && current.metric === 'project_margin') Object.assign(next, { allocation:'equal', scopeExcludedProjectIds:[], lossPercentRate:'', projectProfitCap:'', projectLossCap:'', poolRounding:'share', includeOpenCommitments:false })
       if (key === 'metric' && value !== 'transactions' && current.metric === 'transactions') Object.assign(next, { allocation:'equal', valuation:current.valuation === 'per_unit' ? 'percent' : current.valuation })
       if (key === 'valuation' && value === 'per_unit' && current.metric === 'approved_hours') Object.assign(next, { allocation:'hours', percentRate:'', deliveryMethod:'payroll' })
       if (key === 'metric' && current.metric === 'approved_hours' && current.valuation === 'per_unit' && value !== 'approved_hours' && value !== 'transactions') next.valuation = 'percent'
@@ -416,6 +432,14 @@ export function ProgramBuilderDrawer({
       for (const option of departmentOptions.filter((option) => draft.scopeDepartmentIds.includes(option.value))) addSummary(t('portfolio.builder.fields.workDepartments'), option.label)
     }
     if (draft.metricScope !== 'company') addSummary(t('portfolio.builder.fields.unassignedTime'), t(`portfolio.unassignedTime.${draft.unassignedTime}`))
+    if (draft.metric === 'project_margin') {
+      if (draft.lossPercentRate) addSummary(t('portfolio.builder.fields.lossPercentRate'), `${draft.lossPercentRate}%`)
+      if (draft.projectProfitCap) addSummary(t('portfolio.builder.fields.projectProfitCap'), money(draft.projectProfitCap, { currency: draft.currency }))
+      if (draft.projectLossCap) addSummary(t('portfolio.builder.fields.projectLossCap'), money(draft.projectLossCap, { currency: draft.currency }))
+      addSummary(t('portfolio.builder.fields.poolRounding'), t(`portfolio.poolRounding.${draft.poolRounding}`))
+      if (draft.includeOpenCommitments) addSummary(t('portfolio.builder.fields.includeOpenCommitments'), t('portfolio.builder.yes'))
+      for (const option of projectOptions.filter((option) => draft.scopeExcludedProjectIds.includes(option.value))) addSummary(t('portfolio.builder.fields.excludedProjects'), option.label)
+    }
     addSummary(t('portfolio.builder.fields.allocation'), t(`portfolio.allocations.${draft.allocation}`))
     for (const option of accountOptions.filter((option) => draft.sourceAccountIds.includes(option.value))) addSummary(t('portfolio.builder.fields.measuredAccountIds'), option.label)
   }
@@ -586,6 +610,7 @@ export function ProgramBuilderDrawer({
                     <option value="net_profit">{t('portfolio.metrics.net_profit')}</option>
                     <option value="approved_hours">{t('portfolio.metrics.approved_hours')}</option>
                     <option value="transactions">{t('portfolio.metrics.transactions')}</option>
+                    <option value="project_margin">{t('portfolio.metrics.project_margin')}</option>
                   </Select>
                   <FieldError id="program-builder-metric-error" message={errors.metric} />
                 </div>
@@ -593,7 +618,7 @@ export function ProgramBuilderDrawer({
                   <Label htmlFor="program-builder-scope">{t('portfolio.builder.fields.metricScope')}</Label>
                   <Select
                     id="program-builder-scope"
-                    disabled={draft.metric === 'transactions'}
+                    disabled={draft.metric === 'transactions' || draft.metric === 'project_margin'}
                     value={draft.metricScope}
                     onChange={(e) => { set('metricScope', e.target.value as ProgramDraft['metricScope']); set('scopeIds', []); set('scopeCustomerIds', []); set('scopeDepartmentIds', []); if (e.target.value === 'company') set('unassignedTime', 'refuse') }}
                   >
@@ -667,7 +692,45 @@ export function ProgramBuilderDrawer({
                 ) : null}
               </>
             ) : null}
-            {draft.metric !== 'transactions' ? <>
+            {draft.metric === 'project_margin' ? (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="program-builder-loss-rate">{t('portfolio.builder.fields.lossPercentRate')}</Label>
+                    <Input id="program-builder-loss-rate" inputMode="decimal" value={draft.lossPercentRate} onChange={(e) => set('lossPercentRate', e.target.value)} />
+                  </div>
+                  <div>
+                    <Label htmlFor="program-builder-pool-rounding">{t('portfolio.builder.fields.poolRounding')}</Label>
+                    <Select id="program-builder-pool-rounding" value={draft.poolRounding} onChange={(e) => set('poolRounding', e.target.value as ProgramDraft['poolRounding'])}>
+                      <option value="share">{t('portfolio.poolRounding.share')}</option>
+                      <option value="pool">{t('portfolio.poolRounding.pool')}</option>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="program-builder-profit-cap">{t('portfolio.builder.fields.projectProfitCap')}</Label>
+                    <Input id="program-builder-profit-cap" inputMode="decimal" value={draft.projectProfitCap} onChange={(e) => set('projectProfitCap', e.target.value)} />
+                  </div>
+                  <div>
+                    <Label htmlFor="program-builder-loss-cap">{t('portfolio.builder.fields.projectLossCap')}</Label>
+                    <Input id="program-builder-loss-cap" inputMode="decimal" value={draft.projectLossCap} onChange={(e) => set('projectLossCap', e.target.value)} />
+                  </div>
+                </div>
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={draft.includeOpenCommitments} onChange={(e) => set('includeOpenCommitments', e.target.checked)} />
+                  {t('portfolio.builder.fields.includeOpenCommitments')}
+                </label>
+                <OptionMultiPicker
+                  id="program-builder-excluded-projects"
+                  label={t('portfolio.builder.fields.excludedProjects')}
+                  options={projectOptions}
+                  selected={draft.scopeExcludedProjectIds}
+                  onChange={(ids) => set('scopeExcludedProjectIds', ids)}
+                  searchPlaceholder={t('portfolio.builder.searchProjects')}
+                  emptyLabel={t('portfolio.builder.noProjects')}
+                />
+              </>
+            ) : null}
+            {draft.metric !== 'transactions' && draft.metric !== 'project_margin' ? <>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label htmlFor="program-builder-cap">{t('portfolio.builder.fields.capAmount')}</Label>

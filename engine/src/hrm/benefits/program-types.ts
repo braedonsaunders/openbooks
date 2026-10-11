@@ -95,6 +95,17 @@ export interface BenefitProgram {
   readonly scopeDepartmentIds: readonly string[];
   /** Approved time without the scoped project or department: refuse the measure or exclude it. */
   readonly unassignedTime: BenefitUnassignedTime;
+  /** Projects excluded from an otherwise wider measurement. */
+  readonly scopeExcludedProjectIds: readonly string[];
+  /** Project-margin programs: percent of a project loss charged to its recipients (null shares no losses). */
+  readonly lossPercentRate: string | null;
+  /** Project-margin programs: largest pool one project pays, and largest loss it charges. */
+  readonly projectProfitCap: string | null;
+  readonly projectLossCap: string | null;
+  /** share rounds each recipient share from the exact pool; pool rounds the pool first. */
+  readonly poolRounding: "share" | "pool";
+  /** Project-margin programs: open purchase commitments count as project cost. */
+  readonly includeOpenCommitments: boolean;
   readonly allocation: BenefitAllocation;
   readonly percentRate: string | null;
   readonly fixedAmount: string | null;

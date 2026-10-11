@@ -2954,7 +2954,8 @@
       "gross_profit": "Marge brute",
       "net_profit": "Bénéfice net",
       "approved_hours": "Heures approuvées",
-      "transactions": "Transactions approuvées"
+      "transactions": "Transactions approuvées",
+      "project_margin": "Marge du projet"
     },
     "scopes": {
       "company": "Toute l'entreprise",
@@ -3093,7 +3094,13 @@
         "reason": "Motif de modification",
         "customers": "Clients",
         "workDepartments": "Services de travail",
-        "unassignedTime": "Temps sans le projet du périmètre"
+        "unassignedTime": "Temps sans le projet du périmètre",
+        "lossPercentRate": "Part des pertes (%)",
+        "projectProfitCap": "Plafond de bénéfice par projet",
+        "projectLossCap": "Plafond de perte par projet",
+        "poolRounding": "Arrondi",
+        "includeOpenCommitments": "Compter les engagements d’achat ouverts comme coûts",
+        "excludedProjects": "Projets exclus"
       },
       "allEntities": "Choisir l’entité juridique",
       "entityHint": "Une entité juridique porte le programme et ses obligations de paie. Ajoutez les employés admissibles après la création du brouillon.",
@@ -3170,7 +3177,8 @@
         }
       },
       "searchCustomers": "Rechercher des clients…",
-      "noCustomers": "Aucun client avec des projets"
+      "noCustomers": "Aucun client avec des projets",
+      "yes": "Oui"
     },
     "awardBuilderTitle": "Nouvelle récompense",
     "awardFields": {
@@ -3302,6 +3310,10 @@
     "unassignedTime": {
       "refuse": "Refuser la mesure jusqu’à son affectation",
       "exclude": "L’exclure de la mesure"
+    },
+    "poolRounding": {
+      "share": "Arrondir chaque part à partir de la réserve exacte",
+      "pool": "Arrondir d’abord la réserve du projet"
     }
   },
   "talentWorkspace": {

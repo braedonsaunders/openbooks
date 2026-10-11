@@ -2954,7 +2954,8 @@
       "gross_profit": "Rohertrag",
       "net_profit": "Reingewinn",
       "approved_hours": "Genehmigte Stunden",
-      "transactions": "Genehmigte Transaktionen"
+      "transactions": "Genehmigte Transaktionen",
+      "project_margin": "Projektmarge"
     },
     "scopes": {
       "company": "Gesamtes Unternehmen",
@@ -3093,7 +3094,13 @@
         "reason": "Änderungsgrund",
         "customers": "Kunden",
         "workDepartments": "Arbeitsabteilungen",
-        "unassignedTime": "Zeit ohne zugeordnetes Projekt"
+        "unassignedTime": "Zeit ohne zugeordnetes Projekt",
+        "lossPercentRate": "Verlustanteil (%)",
+        "projectProfitCap": "Gewinnobergrenze je Projekt",
+        "projectLossCap": "Verlustobergrenze je Projekt",
+        "poolRounding": "Rundung",
+        "includeOpenCommitments": "Offene Bestellverpflichtungen als Kosten zählen",
+        "excludedProjects": "Ausgeschlossene Projekte"
       },
       "allEntities": "Rechtsträger wählen",
       "entityHint": "Ein Rechtsträger trägt das Programm und seine Abrechnungsverpflichtungen. Fügen Sie berechtigte Beschäftigte nach dem Erstellen des Entwurfs hinzu.",
@@ -3170,7 +3177,8 @@
         }
       },
       "searchCustomers": "Kunden suchen…",
-      "noCustomers": "Keine Kunden mit Projekten"
+      "noCustomers": "Keine Kunden mit Projekten",
+      "yes": "Ja"
     },
     "awardBuilderTitle": "Neue Anerkennung",
     "awardFields": {
@@ -3302,6 +3310,10 @@
     "unassignedTime": {
       "refuse": "Messung ablehnen, bis die Zeit zugeordnet ist",
       "exclude": "Aus der Messung ausschließen"
+    },
+    "poolRounding": {
+      "share": "Jeden Anteil aus dem exakten Pool runden",
+      "pool": "Zuerst den Projektpool runden"
     }
   },
   "talentWorkspace": {

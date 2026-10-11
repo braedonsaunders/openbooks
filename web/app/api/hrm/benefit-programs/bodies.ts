@@ -17,7 +17,7 @@ const uuidList = z.array(uuid).max(100).nullish();
 const family = z.enum(["reward", "allowance", "incentive", "custom"]);
 const delivery = z.enum(["payroll", "external"]);
 const valuation = z.enum(["fixed", "percent", "pool", "per_unit"]);
-const metric = z.enum(["revenue", "gross_profit", "net_profit", "approved_hours", "transactions"]).nullish();
+const metric = z.enum(["revenue", "gross_profit", "net_profit", "approved_hours", "transactions", "project_margin"]).nullish();
 const metricScope = z.enum(["company", "department", "project"]).nullish();
 const allocation = z.enum(["equal", "hours", "role", "responsibility"]);
 const frequency = z.enum(["monthly", "quarterly", "annual", "project_complete", "manual"]);
@@ -44,6 +44,12 @@ export const createProgramBody = z.object({
   scopeCustomerIds: uuidList,
   scopeDepartmentIds: uuidList,
   unassignedTime,
+  scopeExcludedProjectIds: uuidList,
+  lossPercentRate: decimal,
+  projectProfitCap: decimal,
+  projectLossCap: decimal,
+  poolRounding: z.enum(["share", "pool"]).optional(),
+  includeOpenCommitments: z.boolean().optional(),
   allocation: allocation.optional(),
   percentRate: decimal,
   fixedAmount: decimal,
@@ -74,6 +80,12 @@ const updateProgramBody = z.object({
   scopeCustomerIds: uuidList,
   scopeDepartmentIds: uuidList,
   unassignedTime,
+  scopeExcludedProjectIds: uuidList,
+  lossPercentRate: decimal,
+  projectProfitCap: decimal,
+  projectLossCap: decimal,
+  poolRounding: z.enum(["share", "pool"]).optional(),
+  includeOpenCommitments: z.boolean().optional(),
   allocation: allocation.optional(),
   percentRate: decimal,
   fixedAmount: decimal,

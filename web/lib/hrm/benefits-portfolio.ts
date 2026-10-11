@@ -135,6 +135,12 @@ export interface ProgramDraft {
   scopeCustomerIds: string[]
   scopeDepartmentIds: string[]
   unassignedTime: 'refuse' | 'exclude'
+  scopeExcludedProjectIds: string[]
+  lossPercentRate: string
+  projectProfitCap: string
+  projectLossCap: string
+  poolRounding: 'share' | 'pool'
+  includeOpenCommitments: boolean
   allocation: Allocation
   percentRate: string
   fixedAmount: string
@@ -167,6 +173,12 @@ export function emptyProgramDraft(family: ProgramFamily): ProgramDraft {
     scopeCustomerIds: [],
     scopeDepartmentIds: [],
     unassignedTime: 'refuse',
+    scopeExcludedProjectIds: [],
+    lossPercentRate: '',
+    projectProfitCap: '',
+    projectLossCap: '',
+    poolRounding: 'share',
+    includeOpenCommitments: false,
     allocation: 'equal',
     percentRate: '',
     fixedAmount: '',
@@ -274,6 +286,12 @@ export interface ProgramEditSeed {
   scopeCustomerIds: readonly string[]
   scopeDepartmentIds: readonly string[]
   unassignedTime: ProgramDraft['unassignedTime']
+  scopeExcludedProjectIds: readonly string[]
+  lossPercentRate: string | null
+  projectProfitCap: string | null
+  projectLossCap: string | null
+  poolRounding: ProgramDraft['poolRounding']
+  includeOpenCommitments: boolean
   allocation: ProgramDraft['allocation']
   percentRate: string | null
   fixedAmount: string | null

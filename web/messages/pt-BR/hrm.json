@@ -2954,7 +2954,8 @@
       "gross_profit": "Lucro bruto",
       "net_profit": "Lucro líquido",
       "approved_hours": "Horas aprovadas",
-      "transactions": "Transações aprovadas"
+      "transactions": "Transações aprovadas",
+      "project_margin": "Margem do projeto"
     },
     "scopes": {
       "company": "Empresa toda",
@@ -3093,7 +3094,13 @@
         "reason": "Motivo da alteração",
         "customers": "Clientes",
         "workDepartments": "Departamentos de trabalho",
-        "unassignedTime": "Tempo sem o projeto do escopo"
+        "unassignedTime": "Tempo sem o projeto do escopo",
+        "lossPercentRate": "Participação no prejuízo (%)",
+        "projectProfitCap": "Teto de lucro por projeto",
+        "projectLossCap": "Teto de prejuízo por projeto",
+        "poolRounding": "Arredondamento",
+        "includeOpenCommitments": "Contar compromissos de compra em aberto como custo",
+        "excludedProjects": "Projetos excluídos"
       },
       "allEntities": "Escolher entidade jurídica",
       "entityHint": "Uma entidade jurídica é responsável pelo programa e suas obrigações de folha. Adicione funcionários elegíveis após criar o rascunho.",
@@ -3170,7 +3177,8 @@
         }
       },
       "searchCustomers": "Buscar clientes…",
-      "noCustomers": "Nenhum cliente com projetos"
+      "noCustomers": "Nenhum cliente com projetos",
+      "yes": "Sim"
     },
     "awardBuilderTitle": "Nova recompensa",
     "awardFields": {
@@ -3302,6 +3310,10 @@
     "unassignedTime": {
       "refuse": "Recusar a medição até ser atribuído",
       "exclude": "Excluir da medição"
+    },
+    "poolRounding": {
+      "share": "Arredondar cada parcela a partir do fundo exato",
+      "pool": "Arredondar primeiro o fundo do projeto"
     }
   },
   "talentWorkspace": {

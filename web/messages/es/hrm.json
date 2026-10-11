@@ -2954,7 +2954,8 @@
       "gross_profit": "Utilidad bruta",
       "net_profit": "Utilidad neta",
       "approved_hours": "Horas aprobadas",
-      "transactions": "Transacciones aprobadas"
+      "transactions": "Transacciones aprobadas",
+      "project_margin": "Margen del proyecto"
     },
     "scopes": {
       "company": "Toda la empresa",
@@ -3093,7 +3094,13 @@
         "reason": "Motivo del cambio",
         "customers": "Clientes",
         "workDepartments": "Departamentos de trabajo",
-        "unassignedTime": "Tiempo sin el proyecto del alcance"
+        "unassignedTime": "Tiempo sin el proyecto del alcance",
+        "lossPercentRate": "Participación en pérdidas (%)",
+        "projectProfitCap": "Tope de ganancia por proyecto",
+        "projectLossCap": "Tope de pérdida por proyecto",
+        "poolRounding": "Redondeo",
+        "includeOpenCommitments": "Contar compromisos de compra abiertos como costo",
+        "excludedProjects": "Proyectos excluidos"
       },
       "allEntities": "Elegir entidad jurídica",
       "entityHint": "Una entidad jurídica es responsable del programa y sus obligaciones de nómina. Añada empleados elegibles tras crear el borrador.",
@@ -3170,7 +3177,8 @@
         }
       },
       "searchCustomers": "Buscar clientes…",
-      "noCustomers": "No hay clientes con proyectos"
+      "noCustomers": "No hay clientes con proyectos",
+      "yes": "Sí"
     },
     "awardBuilderTitle": "Nueva recompensa",
     "awardFields": {
@@ -3302,6 +3310,10 @@
     "unassignedTime": {
       "refuse": "Rechazar la medición hasta que se asigne",
       "exclude": "Excluirlo de la medición"
+    },
+    "poolRounding": {
+      "share": "Redondear cada parte desde el fondo exacto",
+      "pool": "Redondear primero el fondo del proyecto"
     }
   },
   "talentWorkspace": {

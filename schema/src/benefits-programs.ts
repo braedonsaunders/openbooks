@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   check,
   date,
   foreignKey,
@@ -42,6 +43,7 @@ export const BENEFIT_PROGRAM_METRICS = [
   "net_profit",
   "approved_hours",
   "transactions",
+  "project_margin",
 ] as const;
 export const BENEFIT_PROGRAM_SCOPES = ["company", "department", "project"] as const;
 export const BENEFIT_PROGRAM_ALLOCATIONS = ["equal", "hours", "role", "responsibility"] as const;
@@ -107,6 +109,12 @@ export const benefitPrograms = pgTable(
     paymentDelayDays: integer("payment_delay_days").notNull().default(0),
     /** Approved time without the scoped project or department: refuse the measure or exclude it. */
     unassignedTime: text("unassigned_time", { enum: [...BENEFIT_PROGRAM_UNASSIGNED_TIME] }).notNull().default("refuse"),
+    /** Project-margin programs: loss share rate, per-project pool caps, pool rounding, open commitments as cost. */
+    lossPercentRate: numeric("loss_percent_rate", { precision: 9, scale: 4 }),
+    projectProfitCap: numeric("project_profit_cap", { precision: 19, scale: 4 }),
+    projectLossCap: numeric("project_loss_cap", { precision: 19, scale: 4 }),
+    poolRounding: text("pool_rounding", { enum: ["share", "pool"] }).notNull().default("share"),
+    includeOpenCommitments: boolean("include_open_commitments").notNull().default(false),
     revision: integer("revision").notNull().default(1),
     ...auditColumns,
   },
@@ -147,6 +155,8 @@ export const benefitProgramScopes = pgTable(
     departmentId: uuid("department_id"),
     projectId: uuid("project_id"),
     customerId: uuid("customer_id"),
+    /** Excludes the scoped project from an otherwise wider measurement. */
+    excluded: boolean("excluded").notNull().default(false),
     ...auditColumns,
   },
   (t) => [

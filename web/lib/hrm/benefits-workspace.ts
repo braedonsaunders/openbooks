@@ -610,6 +610,14 @@ export async function loadBenefitsPortfolio(
           for (const option of departments.rows.filter((option) => found.scopeDepartmentIds.includes(option.id))) policy('workDepartments', option.name)
         }
         if (found.metricScope && found.metricScope !== 'company') policy('unassignedTime', t(`portfolio.unassignedTime.${found.unassignedTime}`))
+        if (found.metric === 'project_margin') {
+          if (found.lossPercentRate !== null) policy('lossPercentRate', `${found.lossPercentRate}%`)
+          if (found.projectProfitCap !== null) policy('projectProfitCap', amountLabel(found.projectProfitCap, found.currency))
+          if (found.projectLossCap !== null) policy('projectLossCap', amountLabel(found.projectLossCap, found.currency))
+          policy('poolRounding', t(`portfolio.poolRounding.${found.poolRounding}`))
+          if (found.includeOpenCommitments) policy('includeOpenCommitments', t('portfolio.builder.yes'))
+          for (const option of projects.rows.filter((option) => found.scopeExcludedProjectIds.includes(option.id))) policy('excludedProjects', option.name)
+        }
         policy('allocation', t(`portfolio.allocations.${found.allocation}`))
       }
       policy('frequency', t(`portfolio.frequencies.${found.frequency}`))

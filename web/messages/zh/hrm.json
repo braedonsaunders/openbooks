@@ -2954,7 +2954,8 @@
       "gross_profit": "毛利",
       "net_profit": "净利",
       "approved_hours": "已批准工时",
-      "transactions": "已批准交易"
+      "transactions": "已批准交易",
+      "project_margin": "项目利润"
     },
     "scopes": {
       "company": "全公司",
@@ -3093,7 +3094,13 @@
         "reason": "更改原因",
         "customers": "客户",
         "workDepartments": "工作部门",
-        "unassignedTime": "不属于限定项目的工时"
+        "unassignedTime": "不属于限定项目的工时",
+        "lossPercentRate": "亏损分担比例（%）",
+        "projectProfitCap": "每个项目的利润上限",
+        "projectLossCap": "每个项目的亏损上限",
+        "poolRounding": "舍入",
+        "includeOpenCommitments": "将未结采购承诺计为成本",
+        "excludedProjects": "排除的项目"
       },
       "allEntities": "选择法人实体",
       "entityHint": "由一个法人实体负责此计划和工资义务。创建草稿后添加符合资格的员工。",
@@ -3170,7 +3177,8 @@
         }
       },
       "searchCustomers": "搜索客户…",
-      "noCustomers": "没有带项目的客户"
+      "noCustomers": "没有带项目的客户",
+      "yes": "是"
     },
     "awardBuilderTitle": "新增奖励",
     "awardFields": {
@@ -3302,6 +3310,10 @@
     "unassignedTime": {
       "refuse": "在分配之前拒绝计量",
       "exclude": "不计入该计量"
+    },
+    "poolRounding": {
+      "share": "从精确资金池舍入每个份额",
+      "pool": "先舍入项目资金池"
     }
   },
   "talentWorkspace": {

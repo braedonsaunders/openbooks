@@ -1,4 +1,5 @@
 import { measureTransactionSettlement, type TransactionSettlementSnapshot } from "./transaction-settlement.ts";
+import { measureProjectMarginSettlement, type ProjectMarginSnapshot } from "./project-margin-settlement.ts";
 import { createHash } from "node:crypto";
 import { canonicalDecimal } from "../../money/exact-decimal.ts";
 import { normalizeMoney } from "../../money/money.ts";
@@ -395,12 +396,18 @@ async function measureAndCompute(
   moneySnapshot: MoneySourceSnapshot | null;
   hoursSnapshot: HoursSourceSnapshot | null;
   transactionSnapshot?: TransactionSettlementSnapshot;
+  projectMarginSnapshot?: ProjectMarginSnapshot;
 }> {
   const { program } = ctx;
   const metric = program.metric!;
   if (metric === "transactions") {
     const result=await measureTransactionSettlement({orgId,actorId,program,members:ctx.members,minorUnits:ctx.minorUnits,basis:ctx.basis,periodFrom,periodTo});
     return {...result,moneySnapshot:null,hoursSnapshot:null};
+  }
+  if (metric === "project_margin") {
+    const result = await measureProjectMarginSettlement({ orgId, program, members: ctx.members, minorUnits: ctx.minorUnits, basis: ctx.basis, periodFrom, periodTo,
+      revenueAccountIds: ctx.revenueAccountIds, expenseAccountIds: ctx.expenseAccountIds });
+    return { ...result, moneySnapshot: null, hoursSnapshot: null };
   }
   const eligible = eligibleMembers(ctx.members, periodFrom, periodTo);
   const memberEmploymentIds = new Set<string>();
@@ -809,7 +816,7 @@ export async function settleIncentivePeriod(query: SettleIncentivePeriodQuery): 
 export function buildSourceSnapshot(
   ctx: SettlementContext,
   query: PreviewIncentiveSettlementQuery,
-  result: { moneySnapshot: MoneySourceSnapshot | null; hoursSnapshot: HoursSourceSnapshot | null; transactionSnapshot?: TransactionSettlementSnapshot },
+  result: { moneySnapshot: MoneySourceSnapshot | null; hoursSnapshot: HoursSourceSnapshot | null; transactionSnapshot?: TransactionSettlementSnapshot; projectMarginSnapshot?: ProjectMarginSnapshot },
   computation: IncentiveComputation,
   excluded: readonly string[],
 ): Record<string, unknown> {
@@ -827,15 +834,16 @@ export function buildSourceSnapshot(
     periodBasis: ctx.basis,
     fiscalCalendarId: ctx.fiscalCalendarId,
     projectCompletion: ctx.projectCompletion,
-    metric: result.transactionSnapshot?.metric ?? money?.metric ?? "approved_hours",
+    metric: result.projectMarginSnapshot?.metric ?? result.transactionSnapshot?.metric ?? money?.metric ?? "approved_hours",
     ...(result.transactionSnapshot ? { transaction: result.transactionSnapshot } : {}),
-    scope: result.transactionSnapshot?.scope ?? money?.scope ?? hours?.scope ?? null,
+    ...(result.projectMarginSnapshot ? { projectMargin: result.projectMarginSnapshot } : {}),
+    scope: result.projectMarginSnapshot?.scope ?? result.transactionSnapshot?.scope ?? money?.scope ?? hours?.scope ?? null,
     measuredValue: computation.measuredValue,
     poolValue: computation.poolValue,
     currency: computation.currency,
     minorUnits: ctx.minorUnits,
     bookId: money?.bookId ?? null,
-    digest: result.transactionSnapshot?.digest ?? money?.digest ?? createHash("sha256")
+    digest: result.projectMarginSnapshot?.digest ?? result.transactionSnapshot?.digest ?? money?.digest ?? createHash("sha256")
       .update(`${hours?.entryIds.join(",") ?? ""}#${hours?.totalHours ?? ""}#${attribution}`, "utf8")
       .digest("hex"),
     entryIds: [...(result.transactionSnapshot ? new Set(result.transactionSnapshot.source.lines.map(line => line.documentId)) : money?.entryIds ?? hours?.entryIds ?? [])].sort(),

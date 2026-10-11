@@ -2954,7 +2954,8 @@
       "gross_profit": "売上総利益",
       "net_profit": "純利益",
       "approved_hours": "承認済み時間",
-      "transactions": "承認済み取引"
+      "transactions": "承認済み取引",
+      "project_margin": "プロジェクト利益"
     },
     "scopes": {
       "company": "会社全体",
@@ -3093,7 +3094,13 @@
         "reason": "変更理由",
         "customers": "顧客",
         "workDepartments": "作業部門",
-        "unassignedTime": "対象プロジェクトのない時間"
+        "unassignedTime": "対象プロジェクトのない時間",
+        "lossPercentRate": "損失負担率（%）",
+        "projectProfitCap": "プロジェクトごとの利益上限",
+        "projectLossCap": "プロジェクトごとの損失上限",
+        "poolRounding": "端数処理",
+        "includeOpenCommitments": "未決済の購買コミットメントを原価に含める",
+        "excludedProjects": "除外するプロジェクト"
       },
       "allEntities": "責任法人を選択",
       "entityHint": "1つの法人がプログラムと給与義務を担います。下書き作成後に対象従業員を追加してください。",
@@ -3170,7 +3177,8 @@
         }
       },
       "searchCustomers": "顧客を検索…",
-      "noCustomers": "プロジェクトのある顧客はありません"
+      "noCustomers": "プロジェクトのある顧客はありません",
+      "yes": "はい"
     },
     "awardBuilderTitle": "新規報酬",
     "awardFields": {
@@ -3302,6 +3310,10 @@
     "unassignedTime": {
       "refuse": "割り当てられるまで測定を拒否",
       "exclude": "測定から除外"
+    },
+    "poolRounding": {
+      "share": "正確なプールから各配分を端数処理",
+      "pool": "先にプロジェクトのプールを端数処理"
     }
   },
   "talentWorkspace": {

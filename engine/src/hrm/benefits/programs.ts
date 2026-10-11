@@ -87,6 +87,9 @@ const PROGRAM_COLUMNS = sql`id, code, name, family,
   fixed_amount::text as "fixedAmount", cap_amount::text as "capAmount",
   budget_amount::text as "budgetAmount", threshold_amount::text as "thresholdAmount",
   frequency, payment_delay_days as "paymentDelayDays", unassigned_time as "unassignedTime",
+  loss_percent_rate::text as "lossPercentRate", project_profit_cap::text as "projectProfitCap",
+  project_loss_cap::text as "projectLossCap", pool_rounding as "poolRounding",
+  include_open_commitments as "includeOpenCommitments",
   revision, created_by as "createdBy", updated_by as "updatedBy"`;
 
 function asFamily(value: unknown, field: string): BenefitProgramFamily {
@@ -133,13 +136,13 @@ function asMetric(value: unknown): BenefitMetric | null {
     value === "revenue" ||
     value === "gross_profit" ||
     value === "net_profit" ||
-    value === "approved_hours" || value === "transactions"
+    value === "approved_hours" || value === "transactions" || value === "project_margin"
   ) {
     return value;
   }
   throw new BenefitsError(
     "INVALID_INPUT",
-    "metric is revenue, gross_profit, net_profit, approved_hours, or transactions",
+    "metric is revenue, gross_profit, net_profit, approved_hours, transactions, or project_margin",
   );
 }
 
@@ -201,6 +204,7 @@ interface ProgramScopeRows {
   readonly departmentIds: readonly string[];
   readonly projectIds: readonly string[];
   readonly customerIds: readonly string[];
+  readonly excludedProjectIds: readonly string[];
 }
 
 async function loadProgramScopes(
@@ -209,18 +213,18 @@ async function loadProgramScopes(
   programId: string,
 ): Promise<ProgramScopeRows> {
   const rows = (
-    await exec.execute<{ department_id: string | null; project_id: string | null; customer_id: string | null }>(sql`
-      select department_id, project_id, customer_id from hrm_benefit_program_scopes
+    await exec.execute<{ department_id: string | null; project_id: string | null; customer_id: string | null; excluded: boolean }>(sql`
+      select department_id, project_id, customer_id, excluded from hrm_benefit_program_scopes
        where org_id = ${orgId} and program_id = ${programId}
        order by department_id, project_id, customer_id
     `)
   ).rows;
-  const pick = (key: "department_id" | "project_id" | "customer_id") =>
-    rows.filter((row) => row[key] !== null).map((row) => String(row[key]));
-  return { departmentIds: pick("department_id"), projectIds: pick("project_id"), customerIds: pick("customer_id") };
+  const pick = (key: "department_id" | "project_id" | "customer_id", excluded = false) =>
+    rows.filter((row) => row[key] !== null && row.excluded === excluded).map((row) => String(row[key]));
+  return { departmentIds: pick("department_id"), projectIds: pick("project_id"), customerIds: pick("customer_id"), excludedProjectIds: pick("project_id", true) };
 }
 
-const NO_SCOPES: ProgramScopeRows = { departmentIds: [], projectIds: [], customerIds: [] };
+const NO_SCOPES: ProgramScopeRows = { departmentIds: [], projectIds: [], customerIds: [], excludedProjectIds: [] };
 
 function toProgram(row: Record<string, unknown>, scopes: ProgramScopeRows = NO_SCOPES): BenefitProgram {
   const metricScope = asMetricScope(row.metricScope);
@@ -245,6 +249,12 @@ function toProgram(row: Record<string, unknown>, scopes: ProgramScopeRows = NO_S
     scopeCustomerIds: [...scopes.customerIds],
     scopeDepartmentIds: metricScope === "project" ? [...scopes.departmentIds] : [],
     unassignedTime: row.unassignedTime === "exclude" ? "exclude" : "refuse",
+    scopeExcludedProjectIds: [...scopes.excludedProjectIds],
+    lossPercentRate: row.lossPercentRate != null ? String(row.lossPercentRate) : null,
+    projectProfitCap: row.projectProfitCap != null ? String(row.projectProfitCap) : null,
+    projectLossCap: row.projectLossCap != null ? String(row.projectLossCap) : null,
+    poolRounding: row.poolRounding === "pool" ? "pool" : "share",
+    includeOpenCommitments: row.includeOpenCommitments === true,
     allocation: asAllocation(row.allocation),
     percentRate: row.percentRate != null ? String(row.percentRate) : null,
     fixedAmount: row.fixedAmount != null ? String(row.fixedAmount) : null,
@@ -451,6 +461,12 @@ interface ProgramRuleInput {
   readonly scopeCustomerIds: readonly string[];
   readonly scopeDepartmentIds: readonly string[];
   readonly unassignedTime: BenefitUnassignedTime;
+  readonly scopeExcludedProjectIds: readonly string[];
+  readonly lossPercentRate: string | null;
+  readonly projectProfitCap: string | null;
+  readonly projectLossCap: string | null;
+  readonly poolRounding: "share" | "pool";
+  readonly includeOpenCommitments: boolean;
   readonly percentRate: string | null;
   readonly fixedAmount: string | null;
   readonly capAmount: string | null;
@@ -463,7 +479,19 @@ interface ProgramRuleInput {
 
 /** Every advertised rule must resolve: missing pieces refuse by name. */
 function requireResolvableRules(code: string, rules: ProgramRuleInput): void {
-  if (rules.metric === "transactions") {
+  const marginTerms = rules.lossPercentRate !== null || rules.projectProfitCap !== null || rules.projectLossCap !== null || rules.poolRounding !== "share" || rules.includeOpenCommitments || rules.scopeExcludedProjectIds.length > 0;
+  if (rules.metric !== "project_margin" && marginTerms) {
+    throw new BenefitsError("INVALID_INPUT", "Loss rates, project pool caps, pool rounding, open commitments and excluded projects apply to project-margin programs — choose that metric or clear those terms.");
+  }
+  if (rules.metric === "project_margin") {
+    if (rules.family !== "incentive" || rules.valuation !== "percent" || rules.allocation !== "responsibility" || rules.metricScope !== "company" || rules.deliveryMethod !== "payroll" || rules.scopeIds.length || rules.scopeCustomerIds.length || rules.capAmount !== null || rules.thresholdAmount !== null || rules.budgetAmount !== null || !["monthly", "manual"].includes(rules.frequency)) {
+      throw new BenefitsError("INVALID_INPUT", "A project-margin incentive pays a percentage of each project's margin to its manager through payroll, measured company-wide and settled monthly or on chosen spans; use project pool caps instead of recipient caps, thresholds or budgets.");
+    }
+    if (rules.percentRate === null || cmp(rules.percentRate, "0") <= 0) throw new BenefitsError("INVALID_INPUT", "Configure a positive profit-share percentage before activating this program.");
+    for (const [label, value, max] of [["loss share percentage", rules.lossPercentRate, "100"], ["project profit cap", rules.projectProfitCap, null], ["project loss cap", rules.projectLossCap, null]] as const) {
+      if (value !== null && (cmp(value, "0") < 0 || (max !== null && cmp(value, max) > 0))) throw new BenefitsError("INVALID_INPUT", `The ${label} must be ${max ? "between 0 and 100" : "zero or more"}.`);
+    }
+  } else if (rules.metric === "transactions") {
     if (!(["incentive","custom"] as readonly string[]).includes(rules.family) || rules.metricScope !== "company" || rules.allocation !== "responsibility" || rules.deliveryMethod !== "payroll" || rules.scopeIds.length || rules.capAmount !== null || rules.thresholdAmount !== null || rules.budgetAmount !== null || !["percent","per_unit"].includes(rules.valuation)) {
       throw new BenefitsError("INVALID_INPUT", "Transaction programs use payroll delivery, explicit transaction grouping and percent or per-unit valuation; configure ceilings in transaction rules instead of overlapping header caps, thresholds or budgets.");
     }
@@ -700,12 +728,21 @@ async function writeProgramScopes(
   scopeIds: readonly string[],
   customerIds: readonly string[] = [],
   workDepartmentIds: readonly string[] = [],
+  excludedProjectIds: readonly string[] = [],
 ): Promise<void> {
   const deleted = await exec.execute(sql`
     delete from hrm_benefit_program_scopes
      where org_id = ${orgId} and program_id = ${programId}
   `);
   void deleted;
+  for (const projectId of new Set(excludedProjectIds.map(String))) {
+    const project = (await exec.execute<{ id: string }>(sql`select id from projects where org_id = ${orgId} and id = ${projectId}`)).rows[0];
+    if (!project) throw new BenefitsError("REFUSED", "the program excludes a project outside this organization — choose projects of this org");
+    requireOneRow((await exec.execute(sql`
+      insert into hrm_benefit_program_scopes (org_id, program_id, project_id, excluded, created_by, updated_by)
+      values (${orgId}, ${programId}, ${projectId}, true, ${actorId}, ${actorId}) returning id
+    `)).rows, "recording the excluded project");
+  }
   if (metricScope === null || metricScope === "company") return;
   if (metricScope === "project" && !(await lockAndCheckOrgFeature(exec, orgId, "projects"))) {
     throw new BenefitsError(
@@ -817,6 +854,12 @@ export interface CreateBenefitProgramQuery {
   readonly scopeCustomerIds?: readonly string[];
   readonly scopeDepartmentIds?: readonly string[];
   readonly unassignedTime?: BenefitUnassignedTime;
+  readonly scopeExcludedProjectIds?: readonly string[];
+  readonly lossPercentRate?: string | number | null;
+  readonly projectProfitCap?: string | number | null;
+  readonly projectLossCap?: string | number | null;
+  readonly poolRounding?: "share" | "pool";
+  readonly includeOpenCommitments?: boolean;
   readonly allocation?: BenefitAllocation;
   readonly percentRate?: string | number | null;
   readonly fixedAmount?: string | number | null;
@@ -878,6 +921,12 @@ export async function createBenefitProgram(query: CreateBenefitProgramQuery): Pr
     scopeCustomerIds: query.scopeCustomerIds ?? [],
     scopeDepartmentIds: query.scopeDepartmentIds ?? [],
     unassignedTime: asUnassignedTime(query.unassignedTime ?? "refuse"),
+    scopeExcludedProjectIds: query.scopeExcludedProjectIds ?? [],
+    lossPercentRate: canonicalAmount(query.lossPercentRate ?? null, "lossPercentRate"),
+    projectProfitCap: canonicalAmount(query.projectProfitCap ?? null, "projectProfitCap"),
+    projectLossCap: canonicalAmount(query.projectLossCap ?? null, "projectLossCap"),
+    poolRounding: query.poolRounding === "pool" ? "pool" : "share",
+    includeOpenCommitments: query.includeOpenCommitments === true,
     percentRate: canonicalAmount(query.percentRate ?? null, "percentRate"),
     fixedAmount: canonicalAmount(query.fixedAmount ?? null, "fixedAmount"),
     capAmount: canonicalAmount(query.capAmount ?? null, "capAmount"),
@@ -915,6 +964,7 @@ export async function createBenefitProgram(query: CreateBenefitProgramQuery): Pr
              valuation, metric, metric_scope, allocation,
              percent_rate, fixed_amount, cap_amount, budget_amount,
              threshold_amount, frequency, period_basis, payment_delay_days, unassigned_time,
+             loss_percent_rate, project_profit_cap, project_loss_cap, pool_rounding, include_open_commitments,
              created_by, updated_by)
           values (${orgId}, ${code}, ${name}, ${family}, ${description}, ${legalEntityId},
                   ${currency}, ${effectiveFrom}::date, ${effectiveTo}::date,
@@ -922,7 +972,9 @@ export async function createBenefitProgram(query: CreateBenefitProgramQuery): Pr
                   ${metricScope}, ${allocation},
                   ${rules.percentRate}, ${rules.fixedAmount}, ${rules.capAmount},
                   ${rules.budgetAmount}, ${rules.thresholdAmount}, ${frequency},
-                  ${periodBasis}, ${paymentDelayDays}, ${rules.unassignedTime}, ${actorId}, ${actorId})
+                  ${periodBasis}, ${paymentDelayDays}, ${rules.unassignedTime},
+                  ${rules.lossPercentRate}, ${rules.projectProfitCap}, ${rules.projectLossCap}, ${rules.poolRounding}, ${rules.includeOpenCommitments},
+                  ${actorId}, ${actorId})
           returning ${PROGRAM_COLUMNS}
         `)
       ).rows;
@@ -937,7 +989,7 @@ export async function createBenefitProgram(query: CreateBenefitProgramQuery): Pr
     }
     const inserted = requireOneRow(insertedRows, "recording the benefit program");
     const insertedId = String(inserted.id);
-    await writeProgramScopes(db, orgId, actorId, insertedId, code, legalEntityId, metricScope, rules.scopeIds, rules.scopeCustomerIds, rules.scopeDepartmentIds);
+    await writeProgramScopes(db, orgId, actorId, insertedId, code, legalEntityId, metricScope, rules.scopeIds, rules.scopeCustomerIds, rules.scopeDepartmentIds, rules.scopeExcludedProjectIds);
     const scopes = await loadProgramScopes(db, orgId, insertedId);
     const program = toProgram(inserted, scopes);
     const sources = query.sourceAccountIds ?? [];
@@ -977,6 +1029,12 @@ export interface UpdateBenefitProgramQuery {
   readonly scopeCustomerIds?: readonly string[];
   readonly scopeDepartmentIds?: readonly string[];
   readonly unassignedTime?: BenefitUnassignedTime;
+  readonly scopeExcludedProjectIds?: readonly string[];
+  readonly lossPercentRate?: string | number | null;
+  readonly projectProfitCap?: string | number | null;
+  readonly projectLossCap?: string | number | null;
+  readonly poolRounding?: "share" | "pool";
+  readonly includeOpenCommitments?: boolean;
   readonly allocation?: BenefitAllocation;
   readonly percentRate?: string | number | null;
   readonly fixedAmount?: string | number | null;
@@ -1046,6 +1104,12 @@ export async function updateBenefitProgram(query: UpdateBenefitProgramQuery): Pr
       scopeCustomerIds: query.scopeCustomerIds === undefined ? before.scopeCustomerIds : query.scopeCustomerIds,
       scopeDepartmentIds: query.scopeDepartmentIds === undefined ? before.scopeDepartmentIds : query.scopeDepartmentIds,
       unassignedTime: query.unassignedTime === undefined ? before.unassignedTime : asUnassignedTime(query.unassignedTime),
+      scopeExcludedProjectIds: query.scopeExcludedProjectIds === undefined ? before.scopeExcludedProjectIds : query.scopeExcludedProjectIds,
+      lossPercentRate: query.lossPercentRate === undefined ? before.lossPercentRate : canonicalAmount(query.lossPercentRate, "lossPercentRate"),
+      projectProfitCap: query.projectProfitCap === undefined ? before.projectProfitCap : canonicalAmount(query.projectProfitCap, "projectProfitCap"),
+      projectLossCap: query.projectLossCap === undefined ? before.projectLossCap : canonicalAmount(query.projectLossCap, "projectLossCap"),
+      poolRounding: query.poolRounding === undefined ? before.poolRounding : query.poolRounding === "pool" ? "pool" as const : "share" as const,
+      includeOpenCommitments: query.includeOpenCommitments === undefined ? before.includeOpenCommitments : query.includeOpenCommitments === true,
       allocation: query.allocation === undefined ? before.allocation : asAllocation(query.allocation),
       percentRate:
         query.percentRate === undefined ? before.percentRate : canonicalAmount(query.percentRate, "percentRate"),
@@ -1080,6 +1144,12 @@ export async function updateBenefitProgram(query: UpdateBenefitProgramQuery): Pr
       scopeCustomerIds: next.scopeCustomerIds,
       scopeDepartmentIds: next.scopeDepartmentIds,
       unassignedTime: next.unassignedTime,
+      scopeExcludedProjectIds: next.scopeExcludedProjectIds,
+      lossPercentRate: next.lossPercentRate,
+      projectProfitCap: next.projectProfitCap,
+      projectLossCap: next.projectLossCap,
+      poolRounding: next.poolRounding,
+      includeOpenCommitments: next.includeOpenCommitments,
       percentRate: next.percentRate,
       fixedAmount: next.fixedAmount,
       capAmount: next.capAmount,
@@ -1116,6 +1186,9 @@ export async function updateBenefitProgram(query: UpdateBenefitProgramQuery): Pr
                  budget_amount = ${next.budgetAmount}, threshold_amount = ${next.thresholdAmount},
                  frequency = ${next.frequency}, period_basis = ${next.periodBasis},
                  payment_delay_days = ${next.paymentDelayDays}, unassigned_time = ${next.unassignedTime},
+                 loss_percent_rate = ${next.lossPercentRate}, project_profit_cap = ${next.projectProfitCap},
+                 project_loss_cap = ${next.projectLossCap}, pool_rounding = ${next.poolRounding},
+                 include_open_commitments = ${next.includeOpenCommitments},
                  revision = revision + 1, updated_by = ${actorId}, updated_at = now()
            where org_id = ${orgId} and id = ${programId}
           returning ${PROGRAM_COLUMNS}
@@ -1123,7 +1196,7 @@ export async function updateBenefitProgram(query: UpdateBenefitProgramQuery): Pr
       ).rows,
       "updating the benefit program",
     );
-    await writeProgramScopes(db, orgId, actorId, programId, before.code, next.legalEntityId, next.metricScope, next.scopeIds, next.scopeCustomerIds, next.scopeDepartmentIds);
+    await writeProgramScopes(db, orgId, actorId, programId, before.code, next.legalEntityId, next.metricScope, next.scopeIds, next.scopeCustomerIds, next.scopeDepartmentIds, next.scopeExcludedProjectIds);
     if (query.sourceAccountIds !== undefined) {
       await db.execute(sql`
         delete from hrm_benefit_program_sources
@@ -1200,6 +1273,12 @@ async function setProgramStatus(
         scopeCustomerIds: before.scopeCustomerIds,
         scopeDepartmentIds: before.scopeDepartmentIds,
         unassignedTime: before.unassignedTime,
+        scopeExcludedProjectIds: before.scopeExcludedProjectIds,
+        lossPercentRate: before.lossPercentRate,
+        projectProfitCap: before.projectProfitCap,
+        projectLossCap: before.projectLossCap,
+        poolRounding: before.poolRounding,
+        includeOpenCommitments: before.includeOpenCommitments,
         percentRate: before.percentRate,
         fixedAmount: before.fixedAmount,
         capAmount: before.capAmount,

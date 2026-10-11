@@ -2954,7 +2954,8 @@
       "gross_profit": "Gross profit",
       "net_profit": "Net profit",
       "approved_hours": "Approved hours",
-      "transactions": "Approved transactions"
+      "transactions": "Approved transactions",
+      "project_margin": "Project margin"
     },
     "scopes": {
       "company": "Whole company",
@@ -3093,7 +3094,13 @@
         "reason": "Reason for change",
         "customers": "Customers",
         "workDepartments": "Work departments",
-        "unassignedTime": "Time without the scoped project"
+        "unassignedTime": "Time without the scoped project",
+        "lossPercentRate": "Loss share (%)",
+        "projectProfitCap": "Project profit cap",
+        "projectLossCap": "Project loss cap",
+        "poolRounding": "Rounding",
+        "includeOpenCommitments": "Count open purchase commitments as cost",
+        "excludedProjects": "Excluded projects"
       },
       "allEntities": "Choose legal entity",
       "entityHint": "One legal entity owns the program and its payroll obligations. Add eligible employees after creating the draft.",
@@ -3170,7 +3177,8 @@
         }
       },
       "searchCustomers": "Search customers…",
-      "noCustomers": "No customers with projects"
+      "noCustomers": "No customers with projects",
+      "yes": "Yes"
     },
     "awardBuilderTitle": "New reward",
     "awardFields": {
@@ -3302,6 +3310,10 @@
     "unassignedTime": {
       "refuse": "Refuse the measure until it is assigned",
       "exclude": "Leave it out of the measure"
+    },
+    "poolRounding": {
+      "share": "Round each share from the exact pool",
+      "pool": "Round the project pool first"
     }
   },
   "talentWorkspace": {
