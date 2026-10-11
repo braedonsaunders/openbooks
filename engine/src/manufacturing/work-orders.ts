@@ -96,7 +96,7 @@ type WorkOrderRow = {
   completedAt: Date | null; closedAt: Date | null; holdReason: string | null; cancelReason: string | null; shortCloseReason: string | null;
   productionMode:"order"|"batch"|"continuous";campaignReference:string|null;
   lossChangeId:string|null;receiptReworkInspectionId:string|null;receiptReworkSequence:number|null;holdPriorStatus: string | null; operatingProfileVersionId: string | null; operatingDepartmentId: string | null;
-  standardCostSnapshot: string | null; costCollected: string;
+  standardCostSnapshot: string | null; costCollected: string | null;
 };
 
 type WorkOrderRead = WorkOrderRow & { pendingApproval: boolean };
@@ -344,7 +344,37 @@ export async function getWorkOrder(tx: SqlExecutor, orgId: string, id: string, l
           and gate.status in ('pending','escalated')
       )) as "pendingApproval"
       from mfg_work_orders where org_id=${orgId} and id=${id} ${lock ? sql`for update` : sql``}`)).rows[0];
-  return row ?? null;
+  if (!row) return null;
+  if (!lock) row.costCollected = await workOrderCostCollected(tx, orgId, row);
+  return row;
+}
+
+/**
+ * Cost collected is what the ledger has charged into WIP for this order:
+ * the debits of its live manufacturing entries to the WIP control account
+ * (material issues, conversion, subcontract service). Read from the posted
+ * entries so it can never drift from the books; unknown when WIP is not
+ * mapped.
+ */
+async function workOrderCostCollected(tx: SqlExecutor, orgId: string, order: WorkOrderRow): Promise<string | null> {
+  let wipId: string;
+  try {
+    wipId = await manufacturingControlAccount(tx, orgId, order.subsidiaryId, "mfgWip");
+  } catch (error) {
+    if (error instanceof ManufacturingError) return null;
+    throw error;
+  }
+  const collected = (await tx.execute<{ amount: string }>(sql`
+    select coalesce(sum(line.amount) filter (where line.amount > 0), 0)::text as amount
+      from journal_entries entry
+      join journal_lines line on line.org_id = entry.org_id and line.entry_id = entry.id
+     where entry.org_id = ${orgId} and entry.origin = 'manufacturing'
+       and entry.custom->>'work_order_number' = ${order.number}
+       -- Live entries only: a reversed charge and its reversal are not cost collected.
+       and entry.status = 'posted' and entry.reverses_entry_id is null
+       and line.account_id = ${wipId}
+  `)).rows[0];
+  return collected?.amount ?? "0";
 }
 
 export async function updateDraftWorkOrder(

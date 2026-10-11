@@ -1157,6 +1157,8 @@ for(const {tracking,quarantined} of [{tracking:'lot',quarantined:false},{trackin
     assert.deepEqual(await counts(f),issuedCounts);assert.deepEqual(await serialState(),{status:'shipped',location:null});
   }
   const order=(await run(tx=>getWorkOrder(tx,f.org.orgId,orderId)))!;assert.equal(await wip(f,order.number),tracking==='lot'?'6.0000':'3.0000');
+  // Cost collected reads the same posted WIP charges the ledger holds.
+  assert.equal(order.costCollected,tracking==='lot'?'6.0000':'3.0000');
   const operation=(await run(tx=>tx.execute<{id:string}>(sql`select id from mfg_wo_operations where org_id=${f.org.orgId} and work_order_id=${orderId}`))).rows[0]!;
   await run(tx=>startWorkOrderOperation(tx,f.org.orgId,f.actorId,orderId,operation.id));
   const acceptance=(await run(tx=>tx.execute<{id:string}>(sql`select id from inventory_inspections where org_id=${f.org.orgId} and operation_id=${operation.id}`))).rows[0]!;

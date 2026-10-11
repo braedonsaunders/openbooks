@@ -86,7 +86,6 @@ const statuses: Record<ManufacturingView, string[]> = {
     "in_progress",
     "on_hold",
     "done",
-    "closed",
     "cancelled",
   ],
   "work-centers": ["active", "inactive"],
