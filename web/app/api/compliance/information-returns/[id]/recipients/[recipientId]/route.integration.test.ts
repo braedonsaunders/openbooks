@@ -78,7 +78,12 @@ const routeUrl = "./route.ts?ir-recipient-freeze-test";
 const { PATCH } = (await import(routeUrl)) as typeof import("./route.ts");
 const postRouteUrl = "../../route.ts?ir-filing-action-test";
 const { POST } = (await import(postRouteUrl)) as typeof import("../../route.ts");
-hooks.deregister();
+// The stub stays registered for the whole file on purpose: defineRoute
+// resolves its authz seam with a request-time dynamic import of the same
+// "@/lib/authz" alias, and deregistering would let that import fall through
+// to the real cookie session ("cookies was called outside a request scope").
+// Unmatched specifiers still forward to the real modules, so the later
+// database and fixture imports below are unaffected.
 
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const {
