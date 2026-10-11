@@ -38,6 +38,7 @@ import { buildHref, isUuid, pickString } from '../../../../lib/list-params'
 import { statementReportSpec } from '@/lib/reports/statement-report-spec'
 import { decimalSum } from '../../../../lib/statement-format'
 import { orgInfo } from '../../../../lib/data'
+import { necEmptyCause } from './empty-cause'
 
 /**
  * 1099-NEC preparation: per-vendor reportable amounts by box for a calendar
@@ -116,6 +117,7 @@ export interface NecPreparationData {
   showEmpty: boolean
   emptyTitle: string
   emptyDescription: string
+  emptyAction: { href: string; label: string } | null
   paymentsTitle: string | null
   allVendorsLabel: string
   allVendorsHref: string
@@ -164,6 +166,24 @@ async function loadCardPaidPayments(orgId: string, taxYear: number): Promise<Car
      order by d.document_date, d.document_number
   `)).rows
   return rows
+}
+
+/**
+ * Vendor payments in the calendar year that never posted. Drafts and
+ * approvals hold cash the cash-basis trace cannot see, so an empty
+ * worksheet names them instead of restating that nothing traced.
+ */
+async function loadUnpostedPaymentTotal(orgId: string, taxYear: number): Promise<{ count: number; total: string } | null> {
+  const rows = (await db.execute<{ count: number; total: string }>(sql`
+    select count(*)::int as count, coalesce(sum(total), 0)::text as total
+      from documents
+     where org_id = ${orgId} and kind = 'vendor_payment'
+       and status in ('draft', 'approved')
+       and document_date between ${`${taxYear}-01-01`} and ${`${taxYear}-12-31`}
+  `)).rows
+  const [row] = rows
+  if (!row || row.count === 0) return null
+  return { count: row.count, total: row.total }
 }
 
 export async function loadNecPreparation(
@@ -255,6 +275,35 @@ export async function loadNecPreparation(
 
   const cardTotal = decimalSum([...cardPaidByParty.values(), '0'])
   const hasCardPaid = Number(cardTotal) > 0
+  // An empty worksheet names what blocks tracing instead of restating that
+  // nothing traced: paid vendors missing reportability details link to the
+  // vendor record, and unposted payments link to the payments list.
+  let emptyCause: { description: string; action: { href: string; label: string } } | null = null
+  if (!refusal && rows.length === 0) {
+    const cause = necEmptyCause({
+      exceptions: computation?.exceptions ?? [],
+      unposted: await loadUnpostedPaymentTotal(orgId, year),
+    })
+    if (cause?.kind === 'vendors') {
+      const [first] = cause.vendors
+      emptyCause = {
+        description: t('emptyVendorsDescription', {
+          vendors: cause.vendors.map((vendor) => `${vendor.name} (${m(vendor.total)})`).join('; '),
+          year: String(year),
+        }),
+        action: { href: `/compliance/vendors?vendor=${first!.partyId}`, label: t('emptyVendorAction') },
+      }
+    } else if (cause?.kind === 'unposted') {
+      emptyCause = {
+        description: t('emptyUnpostedDescription', {
+          count: cause.count,
+          total: m(cause.total),
+          year: String(year),
+        }),
+        action: { href: '/payments', label: t('emptyPaymentsAction') },
+      }
+    }
+  }
   const org = await orgInfo()
   const yearToggle = (option: number) => ({
     href: buildHref(ROUTE, { year: String(option) }),
@@ -293,7 +342,8 @@ export async function loadNecPreparation(
     rows,
     showEmpty: !refusal && rows.length === 0,
     emptyTitle: t('emptyTitle'),
-    emptyDescription: t('emptyDescription', { year: String(year) }),
+    emptyDescription: emptyCause?.description ?? t('emptyDescription', { year: String(year) }),
+    emptyAction: emptyCause?.action ?? null,
     paymentsTitle: selected ? t('paymentsTitle', { vendor: selected.vendorName }) : null,
     allVendorsLabel: t('allVendors'),
     allVendorsHref: buildHref(ROUTE, { year: String(year) }),
@@ -352,7 +402,12 @@ export function necPreparationSpec(data: NecPreparationData): PageSpec {
         ? []
         : [
             ...(data.showEmpty
-              ? [widgetBlock('empty-state', { title: f('emptyTitle'), description: f('emptyDescription') })]
+              ? [widgetBlock('empty-state', {
+                  title: f('emptyTitle'),
+                  description: f('emptyDescription'),
+                  action: data.emptyAction ? 'link-button' : null,
+                  actionProps: data.emptyAction ?? undefined,
+                })]
               : [table({
                   variant: 'report',
                   rows: f('rows'),

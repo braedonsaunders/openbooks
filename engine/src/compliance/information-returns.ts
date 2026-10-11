@@ -906,10 +906,15 @@ export async function computeFiling(args: {
   for (const [partyId, payments] of traces) {
     const profile = profiles.get(partyId);
     if (!profile) continue;
-    // Only vendors whose resolved form is THIS form belong in this filing.
-    // Unassigned reportable vendors are surfaced as exceptions instead.
-    const onThisForm = profile.resolvedForm === args.formType;
+    // Vendors whose resolved form is THIS form belong in this filing — plus
+    // reportable vendors with no assignment at all, whose spend falls to
+    // this filing's default box (a vendor-named box when the vendor sets
+    // one). The only flag most operators ever set is the reportable flag,
+    // so excluding the unassigned would silently drop exactly the vendors a
+    // preparation worksheet exists to catch. Their missing assignment still
+    // surfaces as an exception below.
     const unassigned = profile.reportable && (profile.resolvedForm === null || profile.resolvedForm === "none");
+    const onThisForm = profile.resolvedForm === args.formType || unassigned;
     const defaultBox =
       profile.defaultBox && validBoxes.has(profile.defaultBox) ? profile.defaultBox : form.defaultBox;
     const summary = summarizeRecipient({

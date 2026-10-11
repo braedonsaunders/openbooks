@@ -281,7 +281,11 @@
     "allVendors": "Todos os fornecedores",
     "emptyTitle": "Nenhum fornecedor declaravel",
     "emptyDescription": "Nenhum pagamento contabilizado a fornecedores em campos 1099-NEC para {year}.",
-    "refusalTitle": "Preparação indisponível"
+    "refusalTitle": "Preparação indisponível",
+    "emptyVendorsDescription": "Estes fornecedores pagos estão sem dados declarables para {year}: {vendors}. Abra o cadastro do fornecedor para sinalizá-los ou completar os dados faltantes.",
+    "emptyVendorAction": "Abrir cadastro do fornecedor",
+    "emptyUnpostedDescription": "{count} pagamentos a fornecedores ({total}) em {year} não estão lançados. Lance-os para vê-los aqui.",
+    "emptyPaymentsAction": "Abrir pagamentos"
   },
   "aging": {
     "receivablesTitle": "Aging de Contas a Receber",

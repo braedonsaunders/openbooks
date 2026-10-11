@@ -281,7 +281,11 @@
     "allVendors": "Alle Lieferanten",
     "emptyTitle": "Keine meldepflichtigen Lieferanten",
     "emptyDescription": "Keine gebuchten Lieferantenzahlungen für {year} auf 1099-NEC-Feldern.",
-    "refusalTitle": "Vorbereitung nicht verfügbar"
+    "refusalTitle": "Vorbereitung nicht verfügbar",
+    "emptyVendorsDescription": "Diesen bezahlten Lieferanten fehlen Melde-Details für {year}: {vendors}. Öffnen Sie den Lieferantendatensatz, um sie zu kennzeichnen oder die fehlenden Angaben zu ergänzen.",
+    "emptyVendorAction": "Lieferantendatensatz öffnen",
+    "emptyUnpostedDescription": "{count} Lieferantenzahlungen ({total}) in {year} sind nicht gebucht. Buchen Sie sie, um sie hier zu erfassen.",
+    "emptyPaymentsAction": "Zahlungen öffnen"
   },
   "aging": {
     "receivablesTitle": "Fälligkeitsanalyse Forderungen",

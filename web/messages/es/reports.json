@@ -281,7 +281,11 @@
     "allVendors": "Todos los proveedores",
     "emptyTitle": "Sin proveedores declarables",
     "emptyDescription": "Sin pagos contabilizados a proveedores en casillas 1099-NEC para {year}.",
-    "refusalTitle": "Preparación no disponible"
+    "refusalTitle": "Preparación no disponible",
+    "emptyVendorsDescription": "A estos proveedores pagados les faltan datos declarables para {year}: {vendors}. Abra la ficha del proveedor para marcarlos o completar los datos faltantes.",
+    "emptyVendorAction": "Abrir ficha del proveedor",
+    "emptyUnpostedDescription": "{count} pagos a proveedores ({total}) en {year} no están contabilizados. Contabilícelos para verlos aquí.",
+    "emptyPaymentsAction": "Abrir pagos"
   },
   "aging": {
     "receivablesTitle": "Antigüedad de CxC",

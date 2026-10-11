@@ -281,7 +281,11 @@
     "allVendors": "Tous les fournisseurs",
     "emptyTitle": "Aucun fournisseur déclarable",
     "emptyDescription": "Aucun paiement fournisseur comptabilisé dans les cases 1099-NEC pour {year}.",
-    "refusalTitle": "Préparation indisponible"
+    "refusalTitle": "Préparation indisponible",
+    "emptyVendorsDescription": "Il manque des informations déclarables pour {year} à ces fournisseurs payés : {vendors}. Ouvrez la fiche fournisseur pour les signaler ou compléter les informations manquantes.",
+    "emptyVendorAction": "Ouvrir la fiche fournisseur",
+    "emptyUnpostedDescription": "{count} paiements fournisseurs ({total}) en {year} ne sont pas comptabilisés. Comptabilisez-les pour les voir ici.",
+    "emptyPaymentsAction": "Ouvrir les paiements"
   },
   "aging": {
     "receivablesTitle": "Balance âgée clients",

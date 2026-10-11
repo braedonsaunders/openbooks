@@ -265,6 +265,10 @@
     "allVendors": "All vendors",
     "emptyTitle": "No reportable vendors",
     "emptyDescription": "No posted vendor payments traced to 1099-NEC boxes for {year}.",
+    "emptyVendorsDescription": "These paid vendors are missing reportability details for {year}: {vendors}. Open the vendor record to flag them or complete the missing details.",
+    "emptyVendorAction": "Open vendor record",
+    "emptyUnpostedDescription": "{count} vendor payments ({total}) in {year} are not posted. Post them to trace them here.",
+    "emptyPaymentsAction": "Open payments",
     "refusalTitle": "Preparation unavailable"
   },
   "partners": {

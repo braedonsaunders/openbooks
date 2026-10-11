@@ -281,7 +281,11 @@
     "allVendors": "所有供应商",
     "emptyTitle": "无应申报供应商",
     "emptyDescription": "{year}年没有计入1099-NEC项的已过账供应商付款。",
-    "refusalTitle": "准备不可用"
+    "refusalTitle": "准备不可用",
+    "emptyVendorsDescription": "{year}这些已付款供应商缺少申报信息：{vendors}。请打开供应商档案进行标记或补全缺失信息。",
+    "emptyVendorAction": "打开供应商档案",
+    "emptyUnpostedDescription": "{year}有{count}笔供应商付款（{total}）尚未过账。过账后即可在此查看。",
+    "emptyPaymentsAction": "打开付款"
   },
   "aging": {
     "receivablesTitle": "应收账龄",

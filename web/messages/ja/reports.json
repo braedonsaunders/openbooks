@@ -281,7 +281,11 @@
     "allVendors": "すべてのベンダー",
     "emptyTitle": "申告対象ベンダーなし",
     "emptyDescription": "{year}年の1099-NECボックスに計上されたベンダー支払いはありません。",
-    "refusalTitle": "準備を利用できません"
+    "refusalTitle": "準備を利用できません",
+    "emptyVendorsDescription": "{year}について報告対象の詳細が不足している支払済み仕入先: {vendors}。仕入先レコードを開いてフラグ付けするか、不足情報を補完してください。",
+    "emptyVendorAction": "仕入先レコードを開く",
+    "emptyUnpostedDescription": "{year}の仕入先支払い{count}件（{total}）が未転記です。転記するとここに表示されます。",
+    "emptyPaymentsAction": "支払いを開く"
   },
   "aging": {
     "receivablesTitle": "売掛金年齢分析",
