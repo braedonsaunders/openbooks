@@ -1036,6 +1036,7 @@ function closeTaskActionHref(task: CloseTaskRow, run: CloseRunRow): string | nul
     "ar-cutoff": "/ar",
     "ap-cutoff": "/ap",
     "depreciation-posted": "/assets",
+    "asset-capitalization-reviewed": "/assets/proposals",
     "fx-ready": "/admin/setup/fx-rates",
     "intercompany-balanced": "/reports/trial-balance",
     consolidation: "/reports/trial-balance",

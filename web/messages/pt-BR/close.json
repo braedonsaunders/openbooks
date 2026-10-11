@@ -430,6 +430,10 @@
     "commerce-complete": {
       "title": "Provar a integridade do commerce",
       "description": "Cada venda da loja está no razão: os pedidos conferem com a loja, os pagamentos estão lançados, a compensação zera e os passivos conferem."
+    },
+    "asset-capitalization-reviewed": {
+      "title": "Revisar a capitalização de ativos",
+      "description": "Decidir as propostas de ativos pendentes e conciliar o imobilizado em andamento com suas contas do razão."
     }
   },
   "setup": {

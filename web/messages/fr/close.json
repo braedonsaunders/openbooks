@@ -430,6 +430,10 @@
     "commerce-complete": {
       "title": "Prouver l’exhaustivité du commerce",
       "description": "Chaque vente de la boutique est au grand livre : les commandes correspondent à la boutique, les versements sont comptabilisés, les comptes d’attente sont à zéro et les passifs concordent."
+    },
+    "asset-capitalization-reviewed": {
+      "title": "Contrôler l’immobilisation des actifs",
+      "description": "Statuer sur les propositions d’immobilisation en attente et rapprocher les immobilisations en cours de leurs comptes du grand livre."
     }
   },
   "setup": {

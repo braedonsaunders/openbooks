@@ -430,6 +430,10 @@
     "commerce-complete": {
       "title": "コマースの完全性を証明する",
       "description": "すべての店舗売上は元帳にあります。注文は店舗と一致し、精算は転記済み、クリアリングはゼロ、負債の繰越は一致しています。"
+    },
+    "asset-capitalization-reviewed": {
+      "title": "資産計上の確認",
+      "description": "保留中の資産計上候補を処理し、建設仮勘定を総勘定元帳の勘定と照合します。"
     }
   },
   "setup": {

@@ -430,6 +430,10 @@
     "commerce-complete": {
       "title": "证明商务完整性",
       "description": "每一笔网店销售都已入账：订单与网店一致，结算已过账，清算为零，负债结转相符。"
+    },
+    "asset-capitalization-reviewed": {
+      "title": "审核资产资本化",
+      "description": "处理待定的资产建议，并将在建工程与其总账科目核对。"
     }
   },
   "setup": {

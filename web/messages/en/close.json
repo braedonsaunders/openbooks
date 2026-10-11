@@ -430,6 +430,10 @@
     "commerce-complete": {
       "title": "Prove commerce complete",
       "description": "Every storefront sale is in the ledger: orders match the storefront, payouts are posted, clearing is zero, and liability roll-forwards tie."
+    },
+    "asset-capitalization-reviewed": {
+      "title": "Review asset capitalization",
+      "description": "Decide pending asset proposals and reconcile construction in progress to its GL accounts."
     }
   },
   "setup": {

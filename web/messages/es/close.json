@@ -430,6 +430,10 @@
     "commerce-complete": {
       "title": "Probar la integridad del comercio",
       "description": "Cada venta de la tienda está en el mayor: los pedidos coinciden con la tienda, los pagos están contabilizados, la compensación queda en cero y los pasivos cuadran."
+    },
+    "asset-capitalization-reviewed": {
+      "title": "Revisar la capitalización de activos",
+      "description": "Resolver las propuestas de activos pendientes y conciliar las obras en curso con sus cuentas del libro mayor."
     }
   },
   "setup": {

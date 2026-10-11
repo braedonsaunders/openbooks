@@ -430,6 +430,10 @@
     "commerce-complete": {
       "title": "Commerce-Vollständigkeit nachweisen",
       "description": "Jeder Shopverkauf steht im Hauptbuch: Bestellungen stimmen mit dem Shop überein, Auszahlungen sind gebucht, Verrechnungskonten sind null, und Schuldabstimmungen stimmen."
+    },
+    "asset-capitalization-reviewed": {
+      "title": "Aktivierung von Anlagen prüfen",
+      "description": "Offene Anlagenvorschläge entscheiden und Anlagen im Bau mit ihren Hauptbuchkonten abstimmen."
     }
   },
   "setup": {
