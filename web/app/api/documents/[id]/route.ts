@@ -225,12 +225,16 @@ export const DELETE = defineRoute({
         }
       }
     try {
-        // An omitted token reaches the named revision refusal below; a supplied
-        // token must still be a non-empty string.
+        // An omitted token is missing input, not a state conflict: it refuses
+        // as a bad request, while a supplied token that is not the current
+        // revision keeps the conflict refusal below.
         const routeBodySchema2 = z.object({ reason: z.string().optional(), expectedUpdatedAt: z.string().min(1).optional() });
     const parsedBody2 = await parseJsonBody(req, routeBodySchema2);
         if (!parsedBody2.ok) return parsedBody2.response;
         const body = (parsedBody2.data) as { reason?: string; expectedUpdatedAt?: string }
+        if (body.expectedUpdatedAt === undefined) {
+          return NextResponse.json({ error: DOCUMENT_EDIT_VERSION_REQUIRED }, { status: 400 })
+        }
         if (!isDocumentRevisionToken(body.expectedUpdatedAt)) {
           return NextResponse.json({ error: DOCUMENT_EDIT_VERSION_REQUIRED }, { status: 409 })
         }
