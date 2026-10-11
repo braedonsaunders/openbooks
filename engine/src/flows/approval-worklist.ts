@@ -9,16 +9,23 @@ import {
   type GateSubsidiaryScope,
   type WorklistGate,
 } from "./gates.ts";
+import {
+  DIRECT_TIMESHEET_UNION_KIND,
+  worklistDirectTimesheetCount,
+  worklistDirectTimesheets,
+  type DirectTimesheetWeek,
+} from "./timesheet-direct.ts";
 
 /**
  * The unified approvals worklist. Flows gates are only one approval
  * mechanism: documents sitting in `pending_approval` with no pending gate
- * (migrated rows, abandoned runs, legacy direct writes) and budget scenarios
- * in `pending_approval` submitted through the direct maker/checker path are
- * invisible to worklistGates, so an approver would see an empty worklist while
- * work waits. This reader returns every thing awaiting the caller — pending
- * gates AND gateless document approvals AND pending budgets — with one row
- * per actionable item. Payment runs approve through their Flows gates and
+ * (migrated rows, abandoned runs, legacy direct writes), budget scenarios
+ * in `pending_approval` submitted through the direct maker/checker path, and
+ * gateless submitted timesheet weeks are invisible to worklistGates, so an
+ * approver would see an empty worklist while work waits. This reader returns
+ * every thing awaiting the caller — pending gates AND gateless document
+ * approvals AND pending budgets AND direct timesheet approvals — with one
+ * row per actionable item. Payment runs approve through their Flows gates and
  * arrive on the gate leg like any other subject:
  *
  * - a document WITH a pending gate appears only through its gate (never as
@@ -63,10 +70,23 @@ export interface WorklistBudget {
   createdAt: string;
 }
 
+export interface WorklistTimesheet {
+  kind: "timesheet";
+  /** Week id — the inbox decides it through the native direct-approval path
+   * and opens it in the week drawer. */
+  id: string;
+  employeePartyId: string;
+  personName: string | null;
+  weekStart: string;
+  submittedAt: string | null;
+  createdAt: string;
+}
+
 export type UnifiedApproval =
   | { kind: "flow_gate"; id: string; gate: WorklistGate }
   | { kind: "document"; id: string; document: WorklistDocument }
-  | { kind: "budget"; id: string; budget: WorklistBudget };
+  | { kind: "budget"; id: string; budget: WorklistBudget }
+  | { kind: "timesheet"; id: string; timesheet: WorklistTimesheet };
 
 export interface WorklistScope {
   roles?: Iterable<string>;
@@ -76,6 +96,11 @@ export interface WorklistScope {
    * stay out of the worklist without it.
    */
   includeBudgets?: boolean;
+  /**
+   * The caller holds time.approve with Time Tracking on. Gateless submitted
+   * weeks stay out of the worklist without it.
+   */
+  includeTimesheets?: boolean;
 }
 
 function scopeAllows(allowed: GateSubsidiaryScope, subsidiaryId: string | null): boolean {
@@ -242,8 +267,21 @@ export interface WorklistPageResult {
 /** Merge order key: requested-at, matching the worklist page display sort. */
 function worklistMergeMs(item: UnifiedApproval): number {
   if (item.kind === "flow_gate") return +new Date(item.gate.createdAt);
+  if (item.kind === "timesheet") return +new Date(item.timesheet.submittedAt ?? item.timesheet.createdAt);
   const row = item.kind === "document" ? item.document : item.budget;
   return +new Date(row.submittedAt ?? row.createdAt);
+}
+
+function toWorklistTimesheet(week: DirectTimesheetWeek): WorklistTimesheet {
+  return {
+    kind: "timesheet",
+    id: week.id,
+    employeePartyId: week.employee_party_id,
+    personName: week.person_name,
+    weekStart: week.week_start,
+    submittedAt: week.submitted_at,
+    createdAt: week.created_at,
+  };
 }
 
 function sumKindCounts(counts: Map<string, number>): number {
@@ -257,7 +295,7 @@ function worklistCounts(
   userId: string,
   scope: WorklistPageScope,
   { kind, query, overdue }: Pick<WorklistPage, "kind" | "query" | "overdue"> = {},
-): Promise<[Map<string, number>, Map<string, number>, number]> {
+): Promise<[Map<string, number>, Map<string, number>, number, number]> {
   return Promise.all([
     scope.includeFlows !== false
       ? worklistGateKindCounts(orgId, userId, scope.roles, scope.allowedSubsidiaryIds, kind, query, overdue)
@@ -267,6 +305,9 @@ function worklistCounts(
       : Promise.resolve(new Map<string, number>()),
     scope.includeBudgets === true && (kind == null || kind === "budget_scenario") && !overdue
       ? worklistBudgetCount(orgId, userId, kind, query)
+      : Promise.resolve(0),
+    scope.includeTimesheets === true && !overdue
+      ? worklistDirectTimesheetCount(db, orgId, userId, scope.allowedSubsidiaryIds, kind, query)
       : Promise.resolve(0),
   ]);
 }
@@ -301,8 +342,8 @@ export async function worklistApprovalsCount(
   userId: string,
   scope: WorklistPageScope = {},
 ): Promise<number> {
-  const [gates, documents, budgets] = await worklistCounts(orgId, userId, scope);
-  return sumKindCounts(gates) + sumKindCounts(documents) + budgets;
+  const [gates, documents, budgets, timesheets] = await worklistCounts(orgId, userId, scope);
+  return sumKindCounts(gates) + sumKindCounts(documents) + budgets + timesheets;
 }
 
 /**
@@ -325,9 +366,11 @@ export async function worklistApprovalsPage(
   const filtered = kind != null;
   const includeFlows = scope.includeFlows !== false;
   const includeBudgets = scope.includeBudgets === true;
+  const includeTimesheets = scope.includeTimesheets === true;
   const skipBudgets = filtered && kind !== "budget_scenario";
+  const skipTimesheets = filtered && kind !== DIRECT_TIMESHEET_UNION_KIND;
 
-  const [gateRows, documentRows, budgetRows] = await Promise.all([
+  const [gateRows, documentRows, budgetRows, timesheetRows] = await Promise.all([
     includeFlows
       ? worklistGates(orgId, userId, scope.roles, scope.allowedSubsidiaryIds, { prefix, kind, query, overdue })
       : Promise.resolve([]),
@@ -337,11 +380,14 @@ export async function worklistApprovalsPage(
     includeBudgets && !skipBudgets && !overdue
       ? worklistBudgets(orgId, userId, { prefix, kind, query })
       : Promise.resolve([]),
+    includeTimesheets && !skipTimesheets && !overdue
+      ? worklistDirectTimesheets(db, orgId, userId, scope.allowedSubsidiaryIds, { prefix, kind, query })
+      : Promise.resolve([]),
   ]);
-  const [gateCounts, documentCounts, budgetCount] = await worklistCounts(orgId, userId, scope, { kind, query, overdue });
+  const [gateCounts, documentCounts, budgetCount, timesheetCount] = await worklistCounts(orgId, userId, scope, { kind, query, overdue });
   // Kind chips ignore the kind filter (same as the unpaged page), so a
   // filtered read re-runs the aggregates unpredicated for the chips.
-  const [chipGateCounts, chipDocumentCounts, chipBudgetCount] = filtered
+  const [chipGateCounts, chipDocumentCounts, chipBudgetCount, chipTimesheetCount] = filtered
     ? await Promise.all([
         includeFlows
           ? worklistGateKindCounts(orgId, userId, scope.roles, scope.allowedSubsidiaryIds, undefined, query, overdue)
@@ -350,13 +396,17 @@ export async function worklistApprovalsPage(
           ? worklistDocumentKindCounts(orgId, userId, scope.allowedSubsidiaryIds, undefined, query)
           : Promise.resolve(new Map<string, number>()),
         includeBudgets && !overdue ? worklistBudgetCount(orgId, userId, undefined, query) : Promise.resolve(0),
+        includeTimesheets && !overdue
+          ? worklistDirectTimesheetCount(db, orgId, userId, scope.allowedSubsidiaryIds, undefined, query)
+          : Promise.resolve(0),
       ])
-    : [gateCounts, documentCounts, budgetCount];
+    : [gateCounts, documentCounts, budgetCount, timesheetCount];
 
   const merged: UnifiedApproval[] = [
     ...gateRows.map((gate) => ({ kind: "flow_gate" as const, id: gate.id, gate })),
     ...documentRows.map((document) => ({ kind: "document" as const, id: document.id, document })),
     ...budgetRows.map((budget) => ({ kind: "budget" as const, id: budget.id, budget })),
+    ...timesheetRows.map((week) => ({ kind: "timesheet" as const, id: week.id, timesheet: toWorklistTimesheet(week) })),
   ].sort(
     (a, b) =>
       worklistMergeMs(a) - worklistMergeMs(b) ||
@@ -370,9 +420,12 @@ export async function worklistApprovalsPage(
   if (includeBudgets && chipBudgetCount > 0) {
     kindCounts.set("budget_scenario", (kindCounts.get("budget_scenario") ?? 0) + chipBudgetCount);
   }
+  if (includeTimesheets && chipTimesheetCount > 0) {
+    kindCounts.set(DIRECT_TIMESHEET_UNION_KIND, (kindCounts.get(DIRECT_TIMESHEET_UNION_KIND) ?? 0) + chipTimesheetCount);
+  }
   return {
     items: merged.slice(page.offset, page.offset + page.limit),
-    total: sumKindCounts(gateCounts) + sumKindCounts(documentCounts) + budgetCount,
+    total: sumKindCounts(gateCounts) + sumKindCounts(documentCounts) + budgetCount + timesheetCount,
     kindCounts,
   };
 }
@@ -390,6 +443,11 @@ export async function worklistApprovals(
   if (scope.includeBudgets) {
     for (const budget of await worklistBudgets(orgId, userId)) {
       out.push({ kind: "budget", id: budget.id, budget });
+    }
+  }
+  if (scope.includeTimesheets) {
+    for (const week of await worklistDirectTimesheets(db, orgId, userId, scope.allowedSubsidiaryIds)) {
+      out.push({ kind: "timesheet", id: week.id, timesheet: toWorklistTimesheet(week) });
     }
   }
   return out;

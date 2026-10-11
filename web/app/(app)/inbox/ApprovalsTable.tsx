@@ -24,6 +24,7 @@ import { promptDialog } from '../../../lib/prompt'
 import { readApiErrorMessage } from '../../../lib/api-error'
 import { APPROVALS_BULK_BATCH_MAX } from '../../../lib/approvals-limits'
 import { GateActions, type DelegateOption } from './GateActions'
+import { TimesheetActions } from './TimesheetActions'
 
 export interface ApprovalRow {
   /** Stable selection key: `gate:${id}` / `doc:${id}` / `payrun:${id}`. */
@@ -34,6 +35,12 @@ export interface ApprovalRow {
    * enter the gate-scoped bulk payload.
    */
   gateId: string | null
+  /**
+   * Direct-week inbox item id for single-row approval. Week rows carry it
+   * (their Approve posts the week's item through the native direct-approval
+   * path); every other row carries null and never enters a week payload.
+   */
+  timesheetItemId: string | null
   documentNumber: string
   kind: string
   kindLabel: string
@@ -504,6 +511,8 @@ export function ApprovalsTable({
                           users={users}
                           signatureRequired={r.signatureRequired}
                         />
+                      ) : r.timesheetItemId != null ? (
+                        <TimesheetActions itemId={r.timesheetItemId} />
                       ) : null}
                     </>
                   ),

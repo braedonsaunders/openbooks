@@ -17,6 +17,10 @@
 import { sql } from "drizzle-orm";
 import { TIMESHEET_WEEK_SUBJECT_KIND } from "../../flows/timesheet-weeks-adapter.ts";
 import { subsidiaryVisibleFilter } from "../../organization/subsidiary-scope.ts";
+import {
+  worklistDirectTimesheetCount,
+  worklistDirectTimesheets,
+} from "../../flows/timesheet-direct.ts";
 import { actorPermissionOn, orgFeatureOn, toWorklistScope } from "../guard.ts";
 import { db, type SqlExecutor } from "../../platform/db.ts";
 import type { InboxAdapter } from "../registry.ts";
@@ -100,25 +104,15 @@ export const timesheetApprovalAdapter: InboxAdapter = {
   async list(ctx: InboxListContext): Promise<InboxItem[]> {
     if (!(await mayApprove(ctx))) return [];
     const exec: SqlExecutor = ctx.exec ?? db;
-    const rows = await listDirectApprovalWeeks(exec, ctx.orgId, toWorklistScope(ctx).allowedSubsidiaryIds ?? null, 50);
+    // The union's own predicate (gateless, in scope, never the actor's own
+    // week under prevent-self-approval), windowed for the working list.
+    const rows = await worklistDirectTimesheets(exec, ctx.orgId, ctx.actorId, toWorklistScope(ctx).allowedSubsidiaryIds ?? null, { prefix: 50 });
     return rows.map((row) => toItem(ctx, row));
   },
   async count(ctx: InboxListContext): Promise<number> {
     if (!(await mayApprove(ctx))) return 0;
     const exec: SqlExecutor = ctx.exec ?? db;
-    const scope = toWorklistScope(ctx);
-    const rows = (await exec.execute<{ n: number }>(sql`
-      select count(*)::int as n
-        from timesheet_weeks w
-        join parties p on p.org_id = w.org_id and p.id = w.employee_party_id
-       where w.org_id = ${ctx.orgId} and w.status = 'submitted'
-         ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, scope.allowedSubsidiaryIds ?? null)}
-         and not exists (
-           select 1 from flow_gates g
-            where g.org_id = w.org_id and g.subject_kind = ${TIMESHEET_WEEK_SUBJECT_KIND}
-              and g.subject_id = w.id and g.status in ('pending', 'escalated'))
-    `)).rows[0];
-    return rows?.n ?? 0;
+    return worklistDirectTimesheetCount(exec, ctx.orgId, ctx.actorId, toWorklistScope(ctx).allowedSubsidiaryIds ?? null);
   },
   async lookup(ctx: InboxListContext, sourceId: string): Promise<InboxItem | null> {
     if (!(await mayApprove(ctx))) return null;

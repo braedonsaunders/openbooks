@@ -8,6 +8,7 @@ import {
   worklistGatesAwaitingAnotherApprover,
   type WorklistBudget,
   type WorklistDocument,
+  type WorklistTimesheet,
 } from "@openbooks/engine/src/flows/approval-worklist.ts";
 import {
   decideGate,
@@ -26,14 +27,16 @@ import { executeIdempotent } from "./idempotency";
 export type ApprovalWorklistItem =
   | ({ kind: "flow_gate"; awaitingAnotherApprover?: boolean } & WorklistGate)
   | ({ kind: "document" } & WorklistDocument)
-  | ({ kind: "budget" } & WorklistBudget);
+  | ({ kind: "budget" } & WorklistBudget)
+  | ({ kind: "timesheet" } & WorklistTimesheet);
 
 /**
  * One worklist for every thing awaiting the caller's approval: pending Flows
  * gates (assigned, role-held, or delegated — payment runs included),
- * document-status approvals with no pending gate, and pending budget
- * scenarios. Gate rows keep their exact shape; document and budget rows
- * carry a kind discriminator and their own decide handle. get_vitals counts this
+ * document-status approvals with no pending gate, pending budget
+ * scenarios, and gateless submitted timesheet weeks. Gate rows keep their
+ * exact shape; document, budget, and week rows carry a kind discriminator
+ * and their own decide handle. get_vitals counts this
  * same array, so the two can never disagree.
  */
 export async function listApprovalWorklist(context: ApplicationContext): Promise<ApprovalWorklistItem[]> {
@@ -42,7 +45,8 @@ export async function listApprovalWorklist(context: ApplicationContext): Promise
 
 /**
  * The unified worklist for a bare Authz (no transport context): pending Flows
- * gates, gateless document-status approvals, and pending budget scenarios. The read path only ever touches authz, so surfaces
+ * gates, gateless document-status approvals, pending budget scenarios, and
+ * gateless submitted timesheet weeks. The read path only ever touches authz, so surfaces
  * that hold no ApplicationContext (dashboard metrics, cron summaries) share
  * this exact reader instead of re-querying one leg of the union. Callers
  * that cannot approve anything must apply the same doorway as get_vitals
@@ -53,11 +57,12 @@ export async function listApprovalWorklist(context: ApplicationContext): Promise
 export async function approvalWorklistForAuthz(authz: Authz): Promise<ApprovalWorklistItem[]> {
   const scope = await approvalWorklistScopeForAuthz(authz);
   if (!scope) return [];
-  const { orgId, mayFlows, mayBudgets } = scope;
+  const { orgId, mayFlows, mayBudgets, mayTimesheets } = scope;
   const items = await worklistApprovals(orgId, authz.user.id, {
     roles: authz.user.roles.map((role) => role.key),
     allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
     includeBudgets: mayBudgets,
+    includeTimesheets: mayTimesheets,
   });
   const out: ApprovalWorklistItem[] = [];
   for (const item of items) {
@@ -67,6 +72,8 @@ export async function approvalWorklistForAuthz(authz: Authz): Promise<ApprovalWo
       if (mayFlows) out.push({ ...item.document, kind: "document" });
     } else if (item.kind === "budget") {
       if (mayBudgets) out.push({ ...item.budget, kind: "budget" });
+    } else if (item.kind === "timesheet") {
+      if (mayTimesheets) out.push({ ...item.timesheet, kind: "timesheet" });
     }
   }
   return out;
@@ -93,7 +100,7 @@ export async function approvalWorklistPageForAuthz(
 ): Promise<{ items: ApprovalWorklistItem[]; total: number; kindCounts: Map<string, number> }> {
   const scope = await approvalWorklistScopeForAuthz(authz);
   if (!scope) return { items: [], total: 0, kindCounts: new Map() };
-  const { orgId, mayFlows, mayBudgets } = scope;
+  const { orgId, mayFlows, mayBudgets, mayTimesheets } = scope;
   const page = await worklistApprovalsPage(
     orgId,
     authz.user.id,
@@ -102,6 +109,7 @@ export async function approvalWorklistPageForAuthz(
       allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
       includeFlows: mayFlows,
       includeBudgets: mayBudgets,
+      includeTimesheets: mayTimesheets,
     },
     { limit: window.limit, offset: window.offset, kind: window.kind, query: window.query, overdue: window.overdue },
   );
@@ -119,6 +127,10 @@ export async function approvalWorklistPageForAuthz(
       if (mayFlows) out.push({ ...item.document, kind: "document" });
     } else if (item.kind === "budget") {
       if (mayBudgets) out.push({ ...item.budget, kind: "budget" });
+    } else if (item.kind === "timesheet") {
+      // The leg already excludes the actor's own weeks under
+      // prevent-self-approval, so every row here is actionable.
+      if (mayTimesheets) out.push({ ...item.timesheet, kind: "timesheet" });
     }
   }
   return { items: out, total: page.total, kindCounts: page.kindCounts };
@@ -143,17 +155,19 @@ export async function approvalWorklistAwaitingForAuthz(authz: Authz): Promise<nu
 
 async function approvalWorklistScopeForAuthz(authz: Authz) {
   const orgId = authz.user.orgId;
-  const [flowsOn, budgetsOn] = await Promise.all([
+  const [flowsOn, budgetsOn, timeTrackingOn] = await Promise.all([
     isFeatureEnabled(orgId, "flows"),
     isFeatureEnabled(orgId, "budgets"),
+    isFeatureEnabled(orgId, "timeTracking"),
   ]);
   const mayFlows = flowsOn && can(authz, "flows.approve");
   const mayBudgets = budgetsOn && can(authz, "budgets.approve");
-  if (!mayFlows && !mayBudgets) {
+  const mayTimesheets = timeTrackingOn && can(authz, "time.approve");
+  if (!mayFlows && !mayBudgets && !mayTimesheets) {
     if (!flowsOn) return null;
     throw forbidden("flows.approve");
   }
-  return { orgId, mayFlows, mayBudgets };
+  return { orgId, mayFlows, mayBudgets, mayTimesheets };
 }
 
 /** Count the same approval union while retaining live feature and grant checks. */
@@ -165,6 +179,7 @@ export async function approvalWorklistCountForAuthz(authz: Authz): Promise<numbe
     allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
     includeFlows: scope.mayFlows,
     includeBudgets: scope.mayBudgets,
+    includeTimesheets: scope.mayTimesheets,
   });
 }
 

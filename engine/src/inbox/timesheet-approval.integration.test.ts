@@ -64,7 +64,7 @@ test("weeks owned by a pending gate stay on the gate leg", { skip: !DB }, async 
   try {
     await db.execute(sql`insert into flows(id,org_id,subject_kind,graph) values (${flow},${f.org.orgId},'timesheet_week','{}'::jsonb)`);
     await db.execute(sql`insert into flow_runs(id,org_id,flow_id,subject_kind,subject_id,trigger) values (${run},${f.org.orgId},${flow},'timesheet_week',${f.week},'submit')`);
-    await db.execute(sql`insert into flow_gates(id,org_id,flow_id,run_id,node_id,subject_kind,subject_id,title,group_key,status) values (${randomUUID()},${f.org.orgId},${flow},${run},'approve','timesheet_week',${f.week},'Approve week','${run}:approve','pending')`);
+    await db.execute(sql`insert into flow_gates(id,org_id,flow_id,run_id,node_id,subject_kind,subject_id,title,group_key,status) values (${randomUUID()},${f.org.orgId},${flow},${run},'approve','timesheet_week',${f.week},'Approve week',${`${run}:approve`},'pending')`);
     const ctx = f.ctxFor(f.supervisor);
     assert.deepEqual(await timesheetApprovalAdapter.list(ctx), []);
     assert.equal(await timesheetApprovalAdapter.count!(ctx), 0);

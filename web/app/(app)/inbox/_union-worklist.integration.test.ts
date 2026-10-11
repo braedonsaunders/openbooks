@@ -174,6 +174,130 @@ for (const tab of ["mine", "all", "submitted"] as const) {
   });
 }
 
+function weekAuthzFor(orgId: string, userId: string, name: string): Authz {
+  return {
+    user: {
+      id: userId, email: `${userId}@test`, name, orgId,
+      roles: [{ key: "approver", name: "approver" }],
+      envKind: "sandbox", productionOrgId: orgId, isSuperAdmin: false,
+      homeUserId: userId, homeOrgId: orgId,
+    },
+    permissions: new Set(["flows.approve", "time.approve"]),
+    allowedSubsidiaryIds: null,
+  };
+}
+
+/** A submitted week with submitted entries, awaiting a direct approval (no flow run). */
+async function postedSubmittedWeek(
+  org: ScratchOrg,
+  submittedBy: string,
+  personName: string,
+  weekStart: string,
+): Promise<{ weekId: string; employeeId: string }> {
+  const employeeId = randomUUID();
+  await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
+    values (${employeeId}, ${org.orgId}, 'person', ${personName}, ${org.subsidiaryId}, true, '{}'::jsonb)`);
+  const weekId = randomUUID();
+  await db.execute(sql`insert into timesheet_weeks (id, org_id, employee_party_id, week_start, status, submitted_at, created_by, updated_by)
+    values (${weekId}, ${org.orgId}, ${employeeId}, ${weekStart}, 'submitted', now(), ${submittedBy}, ${submittedBy})`);
+  await db.execute(sql`insert into time_entries (id, org_id, employee_party_id, worked_on, hours, status, created_by, updated_by)
+    values (${randomUUID()}, ${org.orgId}, ${employeeId}, ${weekStart}, '8.0000', 'submitted', ${submittedBy}, ${submittedBy})`);
+  await db.execute(sql`insert into labor_cost_rates (id, org_id, employee_party_id, currency, rate, basis, annual_hours, effective_from, is_active)
+    values (${randomUUID()}, ${org.orgId}, ${employeeId}, 'CAD', '30.0000', 'hour', '2080.0000', '2026-01-01', true)`);
+  return { weekId, employeeId };
+}
+
+test("approvals mine tab lists gateless submitted weeks with one shared count", { skip: !DB }, async () => {
+  // N submitted gateless weeks show badge N and list N rows: the nav badge,
+  // the tab bubble, and the tab rows all read the union's own predicate.
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const submitter = await withBypass(() => createScratchUser(org.orgId, "Week Submitter", "accountant"));
+    const approver = await withBypass(() => createScratchUser(org.orgId, "Week Approver", "approver"));
+    await withBypass(async () => {
+      await db.execute(sql`update orgs set settings = settings || '{"features": {"flows": true, "timeTracking": true}}'::jsonb where id = ${org.orgId}`);
+      await db.execute(sql`update app_roles set permissions = '["flows.approve", "time.approve"]'::jsonb where org_id = ${org.orgId} and key = 'approver'`);
+    });
+    const seeded = await withBypass(async () => [
+      await postedSubmittedWeek(org, submitter as unknown as string, "Week Worker One", "2026-07-12"),
+      await postedSubmittedWeek(org, submitter as unknown as string, "Week Worker Two", "2026-07-19"),
+      await postedSubmittedWeek(org, submitter as unknown as string, "Week Worker Three", "2026-07-26"),
+    ]);
+    state.authz = weekAuthzFor(org.orgId, approver as unknown as string, "Week Approver");
+    const data = await withOrgContext(org.orgId, () => loadApprovals({}));
+    assert.ok(data, "loader returns data");
+    assert.equal(data!.total, 3, "union totals the three weeks");
+    assert.equal(data!.approvalRows.length, 3, "the tab lists the three weeks");
+    assert.equal(data!.tabs.find((t) => t.key === "mine")!.count, 3, "the bubble ties the rows");
+    for (const week of seeded) {
+      const row = data!.approvalRows.find((r) => r.timesheetItemId === `timesheet_approval:${week.weekId}`);
+      assert.ok(row, "each week carries its inbox item for Approve");
+      assert.equal(row!.kind, "timesheet_week");
+      assert.equal(row!.href, `/timesheets?timesheet=${week.employeeId}:${["2026-07-12", "2026-07-19", "2026-07-26"][seeded.indexOf(week)]!}`, "Open lands in the week drawer");
+    }
+    const counts = await withOrgContext(org.orgId, async () => {
+      const authz = state.authz as Authz;
+      return inboxCounts(authz, await inboxContext(authz));
+    });
+    assert.equal(counts.approvals, 3, "the nav badge ties the tab through the same predicate");
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
+
+test("badge is zero when only decided history remains", { skip: !DB }, async () => {
+  // Decided weeks and decided gates are history, not work: a tenant with no
+  // actionable items shows badge 0 even with approved weeks and gates behind.
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const submitter = await withBypass(() => createScratchUser(org.orgId, "History Submitter", "accountant"));
+    const approver = await withBypass(() => createScratchUser(org.orgId, "History Approver", "approver"));
+    await withBypass(async () => {
+      await db.execute(sql`update orgs set settings = settings || '{"features": {"flows": true, "timeTracking": true}}'::jsonb where id = ${org.orgId}`);
+      await db.execute(sql`update app_roles set permissions = '["flows.approve", "time.approve"]'::jsonb where org_id = ${org.orgId} and key = 'approver'`);
+    });
+    const seeded = await withBypass(async () => [
+      await postedSubmittedWeek(org, submitter as unknown as string, "History Worker One", "2026-07-12"),
+      await postedSubmittedWeek(org, submitter as unknown as string, "History Worker Two", "2026-07-19"),
+    ]);
+    state.authz = weekAuthzFor(org.orgId, approver as unknown as string, "History Approver");
+    // Decide every week through the native direct-approval path.
+    await withOrgContext(org.orgId, async () => {
+      const authz = state.authz as Authz;
+      const ctx = await inboxContext(authz);
+      const { actOnInboxItem } = await import("@openbooks/engine/src/inbox/index.ts");
+      for (const week of seeded) {
+        await actOnInboxItem(ctx, `timesheet_approval:${week.weekId}`, "approve");
+      }
+    });
+    // A decided gate in history: approved gate on a completed run.
+    await withBypass(async () => {
+      const flowId = randomUUID();
+      await db.execute(sql`insert into flows (id, org_id, name, subject_kind, enabled, graph)
+        values (${flowId}, ${org.orgId}, 'History flow', 'vendor_bill', true, '{}'::jsonb)`);
+      const runId = randomUUID();
+      await db.execute(sql`insert into flow_runs (id, org_id, flow_id, subject_kind, subject_id, trigger, status)
+        values (${runId}, ${org.orgId}, ${flowId}, 'vendor_bill', ${randomUUID()}, 'on_submit', 'completed')`);
+      await db.execute(sql`insert into flow_gates
+        (id, org_id, flow_id, run_id, node_id, subject_kind, subject_id, title, group_key, quorum, status, decided_at, assignee_user_id)
+        values (${randomUUID()}, ${org.orgId}, ${flowId}, ${runId}, 'node-0', 'vendor_bill', ${randomUUID()},
+                'History gate', 'g-0', 'any', 'approved', now(), ${approver as unknown as string})`);
+    });
+    const data = await withOrgContext(org.orgId, () => loadApprovals({}));
+    assert.ok(data, "loader returns data");
+    assert.deepEqual(data!.approvalRows, [], "no actionable rows remain");
+    assert.equal(data!.total, 0, "union totals zero");
+    assert.equal(data!.tabs.find((t) => t.key === "mine")!.count, 0, "the bubble reconciles to zero");
+    const counts = await withOrgContext(org.orgId, async () => {
+      const authz = state.authz as Authz;
+      return inboxCounts(authz, await inboxContext(authz));
+    });
+    assert.equal(counts.approvals, 0, "the nav badge reconciles to zero");
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
+
 for (const tab of ["mine", "all"] as const) {
   test(`approvals ${tab} tab lists gateless pending documents like the tile`, { skip: !DB }, async () => {
     const org = await withBypass(() => createScratchOrg());

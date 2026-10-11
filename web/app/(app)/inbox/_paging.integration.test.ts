@@ -117,7 +117,7 @@ async function seedPagingOrg(gateCount: number, docCount: number): Promise<{ org
       const employeeId = randomUUID();
       const weekId = randomUUID();
       await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
-        values (${employeeId}, ${org.orgId}, 'employee', ${`Paging Worker ${i}`}, ${org.subsidiaryId}, true, '{}'::jsonb)`);
+        values (${employeeId}, ${org.orgId}, 'person', ${`Paging Worker ${i}`}, ${org.subsidiaryId}, true, '{}'::jsonb)`);
       await db.execute(sql`insert into timesheet_weeks (id, org_id, employee_party_id, week_start, status, created_by, updated_by)
         values (${weekId}, ${org.orgId}, ${employeeId}, '2026-07-12', 'submitted', ${submitter}, ${submitter})`);
       await db.execute(sql`insert into flow_gates
@@ -257,11 +257,11 @@ test("paged worklist agrees with the full worklist the tile counts", { skip: !DB
   }
 });
 
-test("mine bubble counts the rows its tab lists, not the badge legs", { skip: !DB }, async () => {
-  // Direct timesheet approvals ride the inbox badge (inboxCounts folds them
-  // into approvals) but the union table never lists them: wiring the badge
-  // figure into the mine bubble showed waiting work on an empty tab. The
-  // bubble reads the union totals beside its rows.
+test("mine bubble ties the listed rows with direct weeks in the union", { skip: !DB }, async () => {
+  // Gateless submitted weeks ride the union itself, so the badge figure the
+  // mine bubble shows always ties the rows the tab lists: one gated week
+  // plus one direct week read bubble 2 with 2 rows, never work on an
+  // empty tab.
   const org = await withBypass(() => createScratchOrg());
   try {
     const submitter = (await withBypass(() => createScratchUser(org.orgId, "Bubble Submitter", "accountant"))) as unknown as string;
@@ -277,7 +277,7 @@ test("mine bubble counts the rows its tab lists, not the badge legs", { skip: !D
       const gatedWeek = randomUUID();
       const gatedEmployee = randomUUID();
       await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
-        values (${gatedEmployee}, ${org.orgId}, 'employee', 'Bubble Gated', ${org.subsidiaryId}, true, '{}'::jsonb)`);
+        values (${gatedEmployee}, ${org.orgId}, 'person', 'Bubble Gated', ${org.subsidiaryId}, true, '{}'::jsonb)`);
       await db.execute(sql`insert into timesheet_weeks (id, org_id, employee_party_id, week_start, status, created_by, updated_by)
         values (${gatedWeek}, ${org.orgId}, ${gatedEmployee}, '2026-07-12', 'submitted', ${submitter}, ${submitter})`);
       await db.execute(sql`insert into flow_runs (id, org_id, flow_id, subject_kind, subject_id, trigger, status)
@@ -289,7 +289,7 @@ test("mine bubble counts the rows its tab lists, not the badge legs", { skip: !D
       // Gateless submitted week: counted by the inbox badge, never a union row.
       const directEmployee = randomUUID();
       await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
-        values (${directEmployee}, ${org.orgId}, 'employee', 'Bubble Direct', ${org.subsidiaryId}, true, '{}'::jsonb)`);
+        values (${directEmployee}, ${org.orgId}, 'person', 'Bubble Direct', ${org.subsidiaryId}, true, '{}'::jsonb)`);
       await db.execute(sql`insert into timesheet_weeks (id, org_id, employee_party_id, week_start, status, submitted_at, created_by, updated_by)
         values (${randomUUID()}, ${org.orgId}, ${directEmployee}, '2026-07-19', 'submitted', now(), ${submitter}, ${submitter})`);
     });
@@ -299,11 +299,11 @@ test("mine bubble counts the rows its tab lists, not the badge legs", { skip: !D
     };
     const data = await withOrgContext(org.orgId, () => loadApprovals({}));
     assert.ok(data, "loader returns data");
-    assert.equal(data!.total, 1, "union lists only the gated week");
-    assert.equal(data!.unfilteredTotal, 1, "union totals match the rows");
-    assert.equal(data!.approvalRows.length, 1, "one actionable row");
+    assert.equal(data!.total, 2, "union lists the gated week and the direct week");
+    assert.equal(data!.unfilteredTotal, 2, "union totals match the rows");
+    assert.equal(data!.approvalRows.length, 2, "two actionable rows");
     const mineTab = data!.tabs.find((t) => t.key === "mine");
-    assert.equal(mineTab?.count, 1, "mine bubble ties the listed rows, not the badge legs");
+    assert.equal(mineTab?.count, 2, "mine bubble ties the listed rows");
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
   }

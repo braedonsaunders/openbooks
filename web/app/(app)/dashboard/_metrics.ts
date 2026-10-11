@@ -878,6 +878,20 @@ async function readDashboardMetrics(
           createdAt: unionRequestedAt(item),
         }
       }
+      if (item.kind === 'timesheet') {
+        return {
+          id: item.id,
+          targetKind: 'timesheet_week',
+          targetId: item.id,
+          amount: null as string | null,
+          currency: null as string | null,
+          title: `${item.personName ?? 'Timesheet'} · week of ${item.weekStart}`,
+          createdAt: unionRequestedAt(item),
+          // Open lands in the week drawer (employee + week), not the
+          // week-id deep-link the flow adapter names.
+          weekHref: `/timesheets?timesheet=${item.employeePartyId}:${item.weekStart}`,
+        }
+      }
       return {
         id: item.id,
         targetKind: item.document?.kind ?? item.subjectKind,
@@ -888,7 +902,10 @@ async function readDashboardMetrics(
         createdAt: unionRequestedAt(item),
       }
     })
-    .map((row) => ({ ...row, href: approvalRecordHref(row.targetKind, row.targetId) }))
+    .map((row) => ({
+      ...row,
+      href: 'weekHref' in row && typeof row.weekHref === 'string' ? row.weekHref : approvalRecordHref(row.targetKind, row.targetId),
+    }))
   const agent = (agentFindings as unknown as { rows: Array<{ open: number; proposals: number; last_run: string | Date | null }> }).rows[0]!
   return {
     baseCurrency,

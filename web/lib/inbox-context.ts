@@ -106,17 +106,16 @@ export async function inboxTaskFilters(ctx: InboxListContext, selected = true) {
 /** Unfiltered personal work totals shared by navigation, Inbox and Home.
  * Count each source rather than a bounded list window. The badge totals the
  * My Approvals and My Tasks tabs, independent of the active tab or filters.
- * Direct timesheet approvals count with approvals: they await this actor's
- * decision exactly like a gate, through the same native command. */
+ * Gateless submitted weeks ride the union itself (the same leg the tab
+ * lists), so the approvals figure is the union count — never the union
+ * plus a second timesheet tally. */
 export async function inboxCounts(authz: Authz, ctx: InboxListContext) {
   const notices: InboxSourceNotice[] = [];
-  const [unionApprovals, directApprovals, tasks] = await Promise.all([
+  const [approvals, tasks] = await Promise.all([
     maySeeUnion(authz)
       ? import("./application/approvals").then(({ approvalWorklistCountForAuthz }) => approvalWorklistCountForAuthz(authz))
       : Promise.resolve(0),
-    countInbox(ctx, { kinds: ["timesheet_approval"], notices }),
     countInbox(ctx, { kinds: INBOX_TASK_KINDS, notices }),
   ]);
-  const approvals = unionApprovals + directApprovals;
   return { approvals, tasks, count: approvals + tasks, notices };
 }

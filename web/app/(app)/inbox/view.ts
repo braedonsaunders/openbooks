@@ -227,12 +227,11 @@ export async function loadApprovals(
   const canManageFlows = can(authz, 'flows.manage')
   const canSeeAll = canManageFlows
 
-  // The nav badge and the default-tab landing come from the same native
-  // counts. With no tab chosen, the inbox opens where the waiting work is:
-  // My approvals when anything awaits a decision, otherwise My tasks when
-  // tasks are waiting — never an "all clear" page beside a badge that
-  // counts tasks. The mine bubble itself reads the union totals beside the
-  // rows, never the badge figure.
+  // The badge, the tab bubbles, and the default-tab landing come from the
+  // same native counts. With no tab chosen, the inbox opens where the
+  // waiting work is: My approvals when anything awaits a decision,
+  // otherwise My tasks when tasks are waiting — never an "all clear" page
+  // beside a badge that counts tasks.
   const ctx = await inboxContext(authz)
   const [counts, approvalFlowsConfigured] = await Promise.all([
     inboxCounts(authz, ctx),
@@ -368,6 +367,7 @@ export async function loadApprovals(
     return {
       key: `gate:${g.id}`,
       gateId: g.id,
+      timesheetItemId: null,
       overdue:
         g.escalateAt != null && new Date(g.escalateAt).getTime() < Date.now(),
       documentNumber:
@@ -409,6 +409,7 @@ export async function loadApprovals(
   ): ApprovalRow => ({
     key: `doc:${d.id}`,
     gateId: null,
+    timesheetItemId: null,
     documentNumber: d.documentNumber,
     kind: d.docKind,
     kindLabel: kindLabel(d.docKind),
@@ -431,6 +432,7 @@ export async function loadApprovals(
   ): ApprovalRow => ({
     key: `budget:${b.id}`,
     gateId: null,
+    timesheetItemId: null,
     documentNumber: b.name,
     kind: 'budget_scenario',
     kindLabel: kindLabel('budget_scenario'),
@@ -440,6 +442,30 @@ export async function loadApprovals(
     approvalTitle: null,
     engineName: '',
     requestedAt: iso(b.submittedAt ?? b.createdAt),
+    assignee: null,
+    canDelegate: false,
+    quorumAll: false,
+    signatureRequired: false,
+  })
+
+  // Gateless submitted weeks: Open goes to the week drawer; Approve acts
+  // through the native direct-approval path (the row's TimesheetActions
+  // posts the week's inbox item, exactly like the task list would).
+  const weekToRow = (
+    w: Extract<ApprovalWorklistItem, { kind: 'timesheet' }>,
+  ): ApprovalRow => ({
+    key: `week:${w.id}`,
+    gateId: null,
+    timesheetItemId: `timesheet_approval:${w.id}`,
+    documentNumber: `Week of ${w.weekStart}`,
+    kind: 'timesheet_week',
+    kindLabel: kindLabel('timesheet_week'),
+    href: `/timesheets?timesheet=${w.employeePartyId}:${w.weekStart}`,
+    party: w.personName,
+    amount: null,
+    approvalTitle: null,
+    engineName: '',
+    requestedAt: iso(w.submittedAt ?? w.createdAt),
     assignee: null,
     canDelegate: false,
     quorumAll: false,
@@ -483,6 +509,7 @@ export async function loadApprovals(
   ): ApprovalRow => {
     if (item.kind === 'document') return docToRow(item)
     if (item.kind === 'budget') return budgetToRow(item)
+    if (item.kind === 'timesheet') return weekToRow(item)
     return gateToRow(item, assignee)
   }
 
@@ -723,14 +750,12 @@ export async function loadApprovals(
     showTasks && taskRows.length === 0 && failedSourceNotices.length === 0
   const filterCount = (key: InboxFilter): number => taskFilters[key].length
 
-  // The mine bubble counts exactly the rows its tab lists: the union totals
-  // from the same paged reader as the rows below (one predicate for count
-  // and list). inboxCounts.approvals additionally folds in direct timesheet
-  // approvals, which the union table never lists — wiring it here let the
-  // badge outrun both tabs. The nav badge keeps inboxCounts (it covers the
-  // whole inbox, not this tab).
+  // The mine bubble is the approvals badge figure, and the badge figure is
+  // the union count: gateless weeks ride the union itself, so badge, bubble,
+  // and rows read one predicate and cannot disagree — on the approvals tabs
+  // and on the tasks tab, where the union page stays unloaded.
   const tabs: { key: Tab; label: string; count?: number }[] = [
-    { key: 'mine', label: t('tabs.mine'), count: unfilteredTotal },
+    { key: 'mine', label: t('tabs.mine'), count: counts.approvals },
     { key: 'tasks', label: ti('filters.myTasks'), count: counts.tasks },
     { key: 'submitted', label: t('tabs.submitted') },
     ...(canSeeAll ? [{ key: 'all' as Tab, label: t('tabs.all') }] : []),
