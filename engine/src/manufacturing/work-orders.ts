@@ -970,9 +970,14 @@ async function releaseOne(
     refuse(`Work order ${order.number} is awaiting approval.`, "work_order_pending_approval", "Resolve the pending work-order approval before releasing it.", 409);
   }
   if (!order.subsidiaryId) refuse(`Work order ${order.number} has no subsidiary.`, "work_order_subsidiary_required", "Choose an operating subsidiary before release.");
-  const asOf = order.plannedStart ?? new Date().toISOString().slice(0, 10);
+  // The single governing date for every date-effective release lookup
+  // (routing and recipe effectivity below; labor, FX and overhead rates in
+  // the release snapshots): the order's planned start, falling back to
+  // today's business date in the org's time zone. A back-dated order
+  // releases against the rates and versions effective then, never today.
+  const releaseDate = order.plannedStart ?? await releaseBusinessDate(tx, orgId);
   const produced = await itemDetails(tx, orgId, order.producedItemId);
-  const routing = await activeRouting(tx, orgId, order.producedItemId, produced.code?.trim() || produced.name, asOf, order.routingId);
+  const routing = await activeRouting(tx, orgId, order.producedItemId, produced.code?.trim() || produced.name, releaseDate, order.routingId);
   const releaseScope = await lockManufacturingRoutingAuthority(tx,orgId,actorId,routing.id);
   const issueLocationId = order.issueLocationId ?? routing.default_issue_location_id;
   const receiptLocationId = order.receiptLocationId ?? routing.default_receipt_location_id;
@@ -987,8 +992,8 @@ async function releaseOne(
   const repair=await loadReceiptRework(tx,orgId,id);
   if(repair&&(repair.itemId!==order.producedItemId||repair.subsidiaryId!==order.subsidiaryId||repair.stockLocationId!==issueLocationId||cmp(repair.quantity,order.quantityOrdered)!==0))
     refuse('The rework draft must retain its original inspected item, entity, source location and quantity.','receipt_rework_draft_mismatch','Restore the failed receipt defaults before releasing this repair.');
-  const explosion = repair?{components:[],byproducts:[]}:await explodeBom(tx, orgId, order.producedItemId, order.quantityOrdered, asOf);
-  const directRows = repair?[]:await effectiveBomRows(tx, orgId, order.producedItemId, asOf);
+  const explosion = repair?{components:[],byproducts:[]}:await explodeBom(tx, orgId, order.producedItemId, order.quantityOrdered, releaseDate);
+  const directRows = repair?[]:await effectiveBomRows(tx, orgId, order.producedItemId, releaseDate);
   const revision = repair?inventoryRequestHash({inspectionId:repair.id,receiptMovementId:repair.receiptMovementId,itemId:repair.itemId,quantity:repair.quantity,plan:repair.planSnapshot}):bomRevision(order.producedItemId, directRows);
   const operations = await tx.execute<{
     sequence: number; name: string; work_center_id: string; setup_minutes: string; run_minutes_per_unit: string;
@@ -1008,7 +1013,7 @@ async function releaseOne(
       select supply_method from mfg_item_policies where org_id=${orgId} and item_id=${row.component_item_id}`)).rows[0];
     if (policy?.supply_method !== "make") continue;
     const code = row.component_code?.trim() || row.component_item_id;
-    await activeRouting(tx, orgId, row.component_item_id, code, asOf, null);
+    await activeRouting(tx, orgId, row.component_item_id, code, releaseDate, null);
     directMake.add(row.component_item_id);
   }
   const rootMaterialLines = directRows
@@ -1027,7 +1032,6 @@ async function releaseOne(
   // mutation below: any refusal throws here and rolls the whole release
   // back, so operations are only ever inserted with complete coherent
   // values. There is no draft/null insert-then-fill path.
-  const releaseDate = await releaseBusinessDate(tx, orgId);
   const functionalCurrency = await releaseFunctionalCurrency(tx, orgId, order);
   const snapshots = await resolveOperationReleaseSnapshots(tx, orgId, order, operations.rows, routing, releaseDate, functionalCurrency);
   const before = order;
