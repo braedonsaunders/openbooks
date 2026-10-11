@@ -6,7 +6,8 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Button } from '@openbooks/ui'
-import { BookCheck, Eye, LoaderCircle, Send } from 'lucide-react'
+import { BookCheck, Eye, LoaderCircle, Send, Undo2 } from 'lucide-react'
+import { promptDialog } from '../lib/prompt'
 import type { DocKindConfig } from '../lib/document-kinds'
 
 /**
@@ -75,6 +76,37 @@ export function DocumentRowActions({
     }
   }
 
+  async function withdraw() {
+    const reason = await promptDialog({
+      title: tCommon('approvalFlow.withdrawTitle'),
+      label: tCommon('approvalFlow.withdrawReasonLabel'),
+      confirmLabel: tCommon('actions.withdrawSubmission'),
+    })
+    if (!reason) return
+    setBusy(true)
+    setRefusal(null)
+    try {
+      const res = await fetch('/api/documents/actions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'withdraw', documentId: id, reason }),
+      })
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: unknown }
+        const message = typeof data.error === 'string' && data.error ? data.error : t('toasts.actionFailed')
+        setRefusal(message)
+        toast.error(message)
+      } else toast.success(tCommon('approvalFlow.withdrawn'))
+      router.refresh()
+    } catch {
+      const message = t('toasts.actionFailed')
+      setRefusal(message)
+      toast.error(message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const refusalAlert = refusal ? (
     <p role="alert" className="max-w-44 text-right text-xs break-words text-red-600 dark:text-red-400">
       {refusal}
@@ -125,6 +157,29 @@ export function DocumentRowActions({
     return (
       <div className="flex flex-col items-end gap-1">
         {postButton({ primary: true })}
+        {refusalAlert}
+      </div>
+    )
+  }
+  if (status === 'pending_approval' && !config.directPost) {
+    // The submitter's recall of a submission still awaiting decision. The
+    // row cannot resolve submitter identity, so the server enforces
+    // submitter-or-approver and the refusal persists row-inline (with the
+    // toast) instead of reading as nothing happened.
+    const label = tCommon('actions.withdrawSubmission')
+    return (
+      <div className="flex flex-col items-end gap-1">
+        <Button
+          variant="outline"
+          size="icon"
+          className="h-7 w-7"
+          disabled={busy}
+          onClick={() => void withdraw()}
+          aria-label={label}
+          title={label}
+        >
+          {busy ? <LoaderCircle size={14} className="animate-spin" /> : <Undo2 size={14} />}
+        </Button>
         {refusalAlert}
       </div>
     )

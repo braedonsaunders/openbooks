@@ -3349,7 +3349,7 @@ export function DocumentDrawer({
       case 'workflow':
         return <FlowManualButtons subjectKind={String(doc.kind)} subjectId={String(doc.id)} />
       case 'approval':
-        return <ApprovalActions subjectKind={String(doc.kind)} subjectId={String(doc.id)} />
+        return <ApprovalActions subjectKind={String(doc.kind)} subjectId={String(doc.id)} withdrawDocumentId={String(doc.id)} />
       case 'submit':
         return isDraft && canCreate && !config.directPost ? (
           <Button disabled={busy || (config.partyRole ? !partyId : false) || !positiveAmount(effectiveTotals.total)} onClick={() => act('submit')}>

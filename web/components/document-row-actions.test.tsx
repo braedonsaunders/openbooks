@@ -7,6 +7,7 @@ import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
 declare global {
   var __docRowRouter: { push(): void; refresh(): void } | undefined;
   var __docRowToasts: { kind: string; message: string }[] | undefined;
+  var __docRowPrompt: string | null | undefined;
 }
 
 // jsdom first: the row actions read browser globals at render.
@@ -27,6 +28,12 @@ registerHooks({
       return {
         shortCircuit: true,
         url: "data:text/javascript,export const toast={success(m){(globalThis.__docRowToasts??=[]).push({kind:'success',message:String(m)})},error(m){(globalThis.__docRowToasts??=[]).push({kind:'error',message:String(m)})}};export function Toaster(){return null}",
+      };
+    }
+    if (specifier.endsWith("/lib/prompt")) {
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export async function promptDialog(){return globalThis.__docRowPrompt ?? null}",
       };
     }
     return next(specifier, context);
@@ -264,4 +271,82 @@ test("a 422 post refusal persists as a row-inline alert until the next action", 
   await clickPost(host);
   await tick();
   assert.equal(host.querySelector('[role="alert"]'), null, "a later action must clear the refusal alert");
+});
+
+async function mountPendingBillRow() {
+  globalThis.__docRowRouter = { push() {}, refresh() {} };
+  globalThis.__docRowToasts = [];
+  const id = randomUUID();
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  await act(async () => {
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <DocumentRowActions id={id} status="pending_approval" config={config} openHref="/ap/bills/1" canPost={false} />
+      </NextIntlClientProvider>,
+    );
+    await tick();
+  });
+  return { host, root, id };
+}
+
+async function clickWithdraw(host: HTMLElement) {
+  const withdraw = host.querySelector('button[aria-label="Withdraw submission"]') as HTMLButtonElement;
+  assert.ok(withdraw, "a pending-approval row must offer Withdraw submission");
+  await act(async () => {
+    withdraw.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  });
+  await tick();
+  await tick();
+  await tick();
+}
+
+/** a pending-approval bill row offers Withdraw submission — the recall
+ * posts the prompted reason to the native withdraw and toasts success. */
+test("a pending-approval bill row withdraws with the prompted reason", async (t) => {
+  const posted: unknown[] = [];
+  const prior = globalThis.fetch;
+  globalThis.fetch = (async (_url: unknown, init?: { body?: unknown }) => {
+    posted.push(JSON.parse(String((init?.body as string) ?? "{}")));
+    return Response.json({ ok: true }, { status: 200 });
+  }) as typeof fetch;
+  globalThis.__docRowPrompt = "billed the wrong vendor";
+  const { host, root, id } = await mountPendingBillRow();
+  t.after(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+    globalThis.fetch = prior;
+    globalThis.__docRowPrompt = null;
+  });
+  await clickWithdraw(host);
+  assert.deepEqual(posted, [{ action: "withdraw", documentId: id, reason: "billed the wrong vendor" }]);
+  const successes = (globalThis.__docRowToasts ?? []).filter((toast) => toast.kind === "success");
+  assert.equal(successes.length, 1, "the withdraw must surface exactly one success toast");
+});
+
+/** a withdraw the server refuses (a stranger's click) persists the typed
+ * reason row-inline instead of reading as nothing happened. */
+test("a refused row withdraw persists the server reason inline", async (t) => {
+  const prior = globalThis.fetch;
+  globalThis.fetch = (async () =>
+    Response.json({ error: "only the submitter or an approver may withdraw this submission" }, { status: 403 })) as typeof fetch;
+  globalThis.__docRowPrompt = "changed my mind";
+  const { host, root } = await mountPendingBillRow();
+  t.after(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+    globalThis.fetch = prior;
+    globalThis.__docRowPrompt = null;
+  });
+  await clickWithdraw(host);
+  const errors = (globalThis.__docRowToasts ?? []).filter((toast) => toast.kind === "error");
+  assert.equal(errors.length, 1, "the refused withdraw must surface exactly one error toast");
+  const alert = host.querySelector('[role="alert"]');
+  assert.ok(alert, "the refused withdraw must persist a row-inline alert");
+  assert.match(alert.textContent ?? "", /submitter or an approver/);
 });

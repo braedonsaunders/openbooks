@@ -128,6 +128,7 @@ export function ApprovalActions({
   subjectKind,
   subjectId,
   submitApprovalHref,
+  withdrawDocumentId,
 }: {
   subjectKind: string
   subjectId: string
@@ -137,6 +138,13 @@ export function ApprovalActions({
    * surfaces that own such a path — the row stays quiet without it.
    */
   submitApprovalHref?: string
+  /**
+   * Document id for the native "Withdraw submission" recall. Passed only
+   * by document surfaces; the button additionally requires the record
+   * state's canWithdraw flag (viewer submitted it or may decide a live
+   * gate), so strangers never see an action that would refuse them.
+   */
+  withdrawDocumentId?: string
 }) {
   const t = useTranslations('common')
   const router = useRouter()
@@ -241,6 +249,50 @@ export function ApprovalActions({
     router.refresh()
   }, [submitApprovalHref, router, t])
 
+  // The submitter's own recall of a submission still awaiting decision
+  // (or a live approver's): collects the mandatory reason, posts the
+  // native withdraw through the documents action route, and refreshes the
+  // approval state so the drawer shows the draft again.
+  const withdrawSubmission = useCallback(async () => {
+    if (!withdrawDocumentId) return
+    const reason = await promptDialog({
+      title: t('approvalFlow.withdrawTitle'),
+      label: t('approvalFlow.withdrawReasonLabel'),
+      confirmLabel: t('actions.withdrawSubmission'),
+    })
+    if (!reason) return
+    setBusy(true)
+    try {
+      const res = await fetch('/api/documents/actions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'withdraw', documentId: withdrawDocumentId, reason }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error(
+          typeof data.error === 'string' && data.error ? data.error : t('approvalFlow.withdrawFailed'),
+        )
+      } else {
+        toast.success(t('approvalFlow.withdrawn'))
+      }
+    } catch {
+      toast.error(t('approvalFlow.withdrawFailed'))
+    } finally {
+      setBusy(false)
+    }
+    refreshApprovalState()
+    router.refresh()
+  }, [withdrawDocumentId, router, t])
+
+  const showWithdraw = !!withdrawDocumentId && !!state?.canWithdraw
+
+  const withdrawButton = showWithdraw ? (
+    <Button variant="outline" disabled={busy} onClick={withdrawSubmission}>
+      {t('actions.withdrawSubmission')}
+    </Button>
+  ) : null
+
   const showRetry = !!state?.failedRun && !!state?.canRetry
   // A record the engine never saw (no run, hence no live gate and no failed
   // run) with a status still claiming it awaits approval: offer the surface's
@@ -312,6 +364,7 @@ export function ApprovalActions({
         <Button variant="outline" disabled={busy} onClick={() => decide('rejected')}>
           {t('actions.reject')}
         </Button>
+        {withdrawButton}
       </>
     )
   }
@@ -330,6 +383,7 @@ export function ApprovalActions({
           <Users className="h-3.5 w-3.5 shrink-0" aria-hidden />
           <span className="truncate">{t('approvalFlow.awaitingAnother')}</span>
         </span>
+        {withdrawButton}
         {retryButton}
       </>
     )
@@ -346,6 +400,7 @@ export function ApprovalActions({
           <Users className="h-3.5 w-3.5 shrink-0" aria-hidden />
           <span className="truncate">{t('approvalFlow.pendingWith', { names })}</span>
         </span>
+        {withdrawButton}
         {retryButton}
       </>
     )

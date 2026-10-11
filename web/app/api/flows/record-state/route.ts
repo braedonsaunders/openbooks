@@ -98,6 +98,13 @@ export interface RecordApprovalState {
   neverSubmitted: boolean;
   /** Whether the caller may retry a failed run (flows.manage). */
   canRetry: boolean;
+  /**
+   * Whether the caller may withdraw the open submission (the viewer
+   * submitted it, or may decide a live gate): drawers render "Withdraw
+   * submission" only on this flag — never offered then refused. The
+   * documents action route re-checks submitter-or-approver on POST.
+   */
+  canWithdraw: boolean;
 }
 
 const iso = (v: unknown): string =>
@@ -115,6 +122,7 @@ function emptyApprovalState(status: string): RecordApprovalState {
     failedRun: null,
     neverSubmitted: false,
     canRetry: false,
+    canWithdraw: false,
   };
 }
 
@@ -195,7 +203,8 @@ async function legacyGET(req: Request) {
     `),
       db.execute<Record<string, unknown>>(sql`
       select r.id, r.status, r.error, r.finished_at as "finishedAt",
-             r.started_at as "startedAt", u.name as "submitterName"
+             r.started_at as "startedAt", r.created_by as "submitterId",
+             u.name as "submitterName"
         from flow_runs r
         left join users u on u.id = r.created_by
        where r.org_id = ${orgId} and r.subject_kind = ${subjectKind}
@@ -302,6 +311,18 @@ async function legacyGET(req: Request) {
 
     const latestRun =
       runs.rows.length > 0 ? runs.rows[runs.rows.length - 1]! : null;
+    // Withdraw is the submitter's own recall (or a live approver's) of a
+    // submission still awaiting decision: an open run with a live gate,
+    // viewed by its submitter or by someone who may decide a gate. Anyone
+    // else never sees the button; the action route enforces the same rule.
+    const openRun =
+      latestRun && (latestRun.status === "running" || latestRun.status === "waiting")
+        ? latestRun
+        : null;
+    const canWithdraw =
+      !!openRun &&
+      pendingWith.length > 0 &&
+      (openRun.submitterId === authz.user.id || !!myActions.gateId);
     const body: RecordApprovalState = {
       approvalState: {
         status,
@@ -320,6 +341,7 @@ async function legacyGET(req: Request) {
           : null,
       neverSubmitted: runs.rows.length === 0 && pendingWith.length === 0,
       canRetry: can(authz, "flows.manage"),
+      canWithdraw,
     };
     return NextResponse.json(body);
   });
