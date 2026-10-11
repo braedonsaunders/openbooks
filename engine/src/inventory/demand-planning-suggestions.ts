@@ -16,6 +16,7 @@ import {
   buildSeries,
   listPlanSuggestions,
   readHistoryRows,
+  type DemandPlanRun,
   type HistoryRow,
 } from "./demand-planning-runs.ts";
 import { lastReceiptVendors } from "./replenishment.ts";
