@@ -6975,7 +6975,8 @@
       "limits": "分组上限",
       "limitsHint": "为每个分组选择金额上限或不设限。本计划此前的奖励会占用该上限。",
       "reason": "审计原因",
-      "reasonHint": "说明规则变更原因。所有部分一并保存；已生效规则需要通过替代计划变更。",
+      "reasonHint": "说明规则变更原因。所有部分一并保存；已生效计划的变更自所选日期起适用。",
+      "changeEffectiveFromHint": "修订后的规则自该日期起适用;此前的期间沿用已生效的规则。",
       "documentDate": "单据日期",
       "companyGrouping": "不指定分组时使用负责雇主。分组选项根据所选内置或自定义维度调整。",
       "fields": {
@@ -6997,6 +6998,7 @@
         "kind": "上限决定",
         "amount": "上限金额",
         "reason": "原因",
+        "changeEffectiveFrom": "更改生效日期",
         "recipientSource": "接收人来源",
         "fallbackSource": "该角色为空时使用",
         "unassignedShare": "无已登记接收人的份额",

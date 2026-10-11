@@ -19,7 +19,7 @@ import { benefitsErrorResponse } from "../../benefits/_lib";
 import { benefitProgramPatchBody } from "../bodies";
 
 /**
- * One employer-defined program: read, edit a draft, activate, close, or
+ * One employer-defined program: read, edit a draft or active program, activate, close, or
  * manage membership. Reads need hrm.benefits.read; every move needs
  * hrm.benefits.manage with the employment scope rechecked inside the
  * engine transaction.
@@ -56,6 +56,8 @@ export const PATCH = defineRoute({
     try {
       switch (body.action) {
         case "update": {
+          // The typed body spreads through whole, so an active program's
+          // `changeEffectiveFrom` reaches the service beside its reason.
           const program = await updateBenefitProgram({
             ...base,
             ...body,

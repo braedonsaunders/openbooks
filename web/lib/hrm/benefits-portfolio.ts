@@ -194,7 +194,7 @@ export function emptyProgramDraft(family: ProgramFamily): ProgramDraft {
   }
 }
 
-function isCivilDate(value: string): boolean {
+export function isCivilDate(value: string): boolean {
   try { parseCivilDate(value); return true } catch { return false }
 }
 const ISO_CURRENCY_RE = /^[A-Z]{3}$/
@@ -265,11 +265,24 @@ export function validateProgramDraft(draft: ProgramDraft): FieldErrors {
 }
 
 /**
- * A draft program for edits: the loader resolves it from the authoritative
+ * Drafts and active programs accept edits; a closed program is final. An
+ * active program's edit carries a reason and the date the change applies
+ * from, and the program service decides whether the revision is allowed.
+ */
+export function isProgramEditable(status: string): boolean {
+  return status === 'draft' || status === 'active'
+}
+
+/**
+ * A program for edits: the loader resolves it from the authoritative
  * program row, so the builder edits server state — never a client echo.
  */
 export interface ProgramEditSeed {
   id: string
+  /** Lifecycle state the edit starts from; active edits need an apply-from date. */
+  status?: string
+  /** Business date in the organization's time zone, the default apply-from date. */
+  businessToday?: string | null
   code: string
   name: string
   family: ProgramFamily

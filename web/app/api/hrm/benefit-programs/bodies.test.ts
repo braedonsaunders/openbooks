@@ -78,6 +78,17 @@ test("draft source replacement survives the boundary and rejects foreign-shaped 
   assert.equal(benefitProgramPatchBody.safeParse({ ...body, sourceAccountIds: ["not-an-id"] }).success, false);
 });
 
+test("an active revision carries an optional civil apply-from date and still requires its reason", () => {
+  const parsed = benefitProgramPatchBody.parse({ action: "update", fixedAmount: "150.00", reason: "Rate review", changeEffectiveFrom: "2026-10-11" });
+  assert.equal(parsed.action, "update");
+  if (parsed.action === "update") assert.equal(parsed.changeEffectiveFrom, "2026-10-11");
+  const draft = benefitProgramPatchBody.parse({ action: "update", reason: "Draft fix" });
+  if (draft.action === "update") assert.equal(draft.changeEffectiveFrom, undefined);
+  assert.equal(benefitProgramPatchBody.safeParse({ action: "update", reason: "Rate review", changeEffectiveFrom: "2026-02-30" }).success, false);
+  assert.equal(benefitProgramPatchBody.safeParse({ action: "update", reason: "Rate review", changeEffectiveFrom: "11/10/2026" }).success, false);
+  assert.equal(benefitProgramPatchBody.safeParse({ action: "update", changeEffectiveFrom: "2026-10-11" }).success, false);
+});
+
 
 test("approval setting accepts only no approvals or native Flows for create and edit", () => {
   const create = { action: "create", code: "REWARD", name: "Recognition", family: "reward", currency: "USD", effectiveFrom: "2026-01-01" };

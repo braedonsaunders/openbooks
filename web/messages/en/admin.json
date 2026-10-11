@@ -6975,7 +6975,8 @@
       "limits": "Group ceilings",
       "limitsHint": "Choose a monetary ceiling or no limit for each assigned group. Earlier awards in this program consume the ceiling.",
       "reason": "Audit reason",
-      "reasonHint": "Explain this rule change. All sections save together; active rules require a replacement program.",
+      "reasonHint": "Explain this rule change. All sections save together; an active program’s changes apply from the date you choose.",
+      "changeEffectiveFromHint": "The revised rules apply from this date; earlier periods keep the rules already in force.",
       "documentDate": "Document date",
       "companyGrouping": "Leave grouping empty to use the responsible employer. Group choices follow the selected built-in or custom dimension.",
       "fields": {
@@ -6997,6 +6998,7 @@
         "kind": "Ceiling decision",
         "amount": "Ceiling amount",
         "reason": "Reason",
+        "changeEffectiveFrom": "Changes apply from",
         "recipientSource": "Recipient comes from",
         "fallbackSource": "When that role is empty, use",
         "unassignedShare": "Share without an enrolled recipient",

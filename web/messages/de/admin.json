@@ -6975,7 +6975,8 @@
       "limits": "Gruppenobergrenzen",
       "limitsHint": "Wählen Sie je Gruppe eine Geldobergrenze oder keine Begrenzung. Frühere Zuteilungen dieses Programms verbrauchen die Obergrenze.",
       "reason": "Änderungsgrund",
-      "reasonHint": "Begründen Sie die Änderung. Alle Abschnitte werden gemeinsam gespeichert; aktive Regeln benötigen ein Ersatzprogramm.",
+      "reasonHint": "Begründen Sie die Änderung. Alle Abschnitte werden gemeinsam gespeichert; Änderungen an einem aktiven Programm gelten ab dem gewählten Datum.",
+      "changeEffectiveFromHint": "Die geänderten Regeln gelten ab diesem Datum; frühere Zeiträume behalten die bisher geltenden Regeln.",
       "documentDate": "Belegdatum",
       "companyGrouping": "Ohne Gruppierung gilt der verantwortliche Arbeitgeber. Gruppen folgen der ausgewählten nativen oder benutzerdefinierten Dimension.",
       "fields": {
@@ -6997,6 +6998,7 @@
         "kind": "Begrenzungsentscheidung",
         "amount": "Obergrenzenbetrag",
         "reason": "Begründung",
+        "changeEffectiveFrom": "Änderungen gelten ab",
         "recipientSource": "Empfänger stammt aus",
         "fallbackSource": "Wenn diese Rolle leer ist, verwenden",
         "unassignedShare": "Anteil ohne eingeschriebenen Empfänger",

@@ -17,6 +17,7 @@ import {
   type BenefitPayComponentOption,
   BENEFIT_PROGRAMS_API,
   emptyProgramDraft,
+  isCivilDate,
   programResourceUrl,
   validateProgramDraft,
   translatedFieldErrors,
@@ -31,7 +32,8 @@ import {
 /**
  * Program builder, opened from the page header through `program=new`
  * (cards preselect `family=`) or from a program drawer through
- * `program=<id>&edit=1` for draft edits. Guided steps — offer,
+ * `program=<id>&edit=1` for draft and active edits. An active program's
+ * edit also names the date the revision applies from. Guided steps — offer,
  * eligibility, value, timing, controls, delivery — with a live policy
  * summary beside the form and field-level refusals before anything crosses
  * the wire.
@@ -183,7 +185,7 @@ function OptionMultiPicker({
   )
 }
 
-function buildPayload(draft: ProgramDraft, mode: 'create' | 'edit', reason: string): Record<string, unknown> {
+function buildPayload(draft: ProgramDraft, mode: 'create' | 'edit', reason: string, changeEffectiveFrom: string | null): Record<string, unknown> {
   const optional = (value: string): string | null => (value.trim() === '' ? null : value.trim())
   const shared = {
     name: draft.name.trim(),
@@ -230,10 +232,12 @@ function buildPayload(draft: ProgramDraft, mode: 'create' | 'edit', reason: stri
       ...shared,
     }
   }
-  // Updates replace the measured set (drafts only): the seed carries the
-  // authoritative accounts, and a failed source read blocks the edit rather
-  // than implying a cleared set.
-  return { action: 'update', ...shared, reason }
+  // Updates replace the measured set: the seed carries the authoritative
+  // accounts, and a failed source read blocks the edit rather than implying
+  // a cleared set. Active revisions also name the date they apply from.
+  return changeEffectiveFrom === null
+    ? { action: 'update', ...shared, reason }
+    : { action: 'update', ...shared, reason, changeEffectiveFrom }
 }
 
 function FieldError({ id, message }: { id: string; message: string | undefined }) {
@@ -288,6 +292,12 @@ export function ProgramBuilderDrawer({
   const [step, setStep] = useState<Step>('offer')
   const [errors, setErrors] = useState<FieldErrors>({})
   const [reason, setReason] = useState('')
+  // An active program revises forward from a named date; drafts have no history to protect.
+  const activeEdit = mode === 'edit' && editSeed?.status === 'active'
+  const initialChangeFrom = activeEdit ? editSeed?.businessToday ?? '' : ''
+  const [changeFrom, setChangeFrom] = useState(initialChangeFrom)
+  const [changeFromError, setChangeFromError] = useState<string | undefined>(undefined)
+  const [refusal, setRefusal] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const amountFieldKey = draft.valuation === 'per_unit'
     ? draft.metric === 'approved_hours' ? 'portfolio.valuations.per_hour' : 'portfolio.valuations.per_unit'
@@ -298,7 +308,10 @@ export function ProgramBuilderDrawer({
     router.refresh()
   }
 
-  const dirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(initialDraft) || reason.trim() !== '', [draft, initialDraft, reason])
+  const dirty = useMemo(
+    () => JSON.stringify(draft) !== JSON.stringify(initialDraft) || reason.trim() !== '' || changeFrom !== initialChangeFrom,
+    [draft, initialDraft, reason, changeFrom, initialChangeFrom],
+  )
   const closeGuard = useDirtyClose({
     dirty,
     busy: saving,
@@ -375,17 +388,29 @@ export function ProgramBuilderDrawer({
       setStep('review')
       return
     }
+    if (activeEdit && !isCivilDate(changeFrom)) {
+      setChangeFromError(t('portfolio.builder.changeEffectiveFromRequired'))
+      toast.error(t('portfolio.builder.changeEffectiveFromRequired'))
+      setStep('review')
+      return
+    }
+    setChangeFromError(undefined)
+    setRefusal(null)
     setSaving(true)
+    const failure = mode === 'edit' ? t('portfolio.builder.saveFailed') : t('portfolio.builder.createFailed')
     try {
       const url = mode === 'edit' && programId ? programResourceUrl(programId) : BENEFIT_PROGRAMS_API
       const res = await fetch(url, {
         method: mode === 'edit' ? 'PATCH' : 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(buildPayload(draft, mode, reason.trim())),
+        body: JSON.stringify(buildPayload(draft, mode, reason.trim(), activeEdit ? changeFrom : null)),
       })
-      // res.ok first, always: a refusal body is read only for its message.
+      // res.ok first, always: a refusal body is read only for its message,
+      // which stays beside the Save action until the next attempt.
       if (!res.ok) {
-        toast.error(await readApiErrorMessage(res, t('portfolio.builder.createFailed')))
+        const message = await readApiErrorMessage(res, failure)
+        setRefusal(message)
+        toast.error(message)
         return
       }
       const body: unknown = await res.json().catch(() => null)
@@ -402,7 +427,8 @@ export function ProgramBuilderDrawer({
       router.push(`${closeHref.split('?')[0]}${query ? `?${query}` : ''}` as never)
       router.refresh()
     } catch {
-      toast.error(t('portfolio.builder.createFailed'))
+      setRefusal(failure)
+      toast.error(failure)
     } finally {
       setSaving(false)
     }
@@ -963,7 +989,7 @@ export function ProgramBuilderDrawer({
                 ))}
               </ul>
             )}
-            <p className="text-xs text-slate-500 dark:text-slate-400">{t('portfolio.builder.reviewHint')}</p>
+            {mode === 'create' ? <p className="text-xs text-slate-500 dark:text-slate-400">{t('portfolio.builder.reviewHint')}</p> : null}
             {mode === 'edit' ? (
               <div>
                 <Label htmlFor="program-builder-reason">{t('portfolio.builder.fields.reason')}</Label>
@@ -976,9 +1002,32 @@ export function ProgramBuilderDrawer({
                 />
               </div>
             ) : null}
+            {activeEdit ? (
+              <div>
+                <Label htmlFor="program-builder-changeEffectiveFrom">{t('portfolio.builder.fields.changeEffectiveFrom')}</Label>
+                <Input
+                  id="program-builder-changeEffectiveFrom"
+                  type="date"
+                  className="w-44"
+                  value={changeFrom}
+                  onChange={(e) => { setChangeFrom(e.target.value); setChangeFromError(undefined) }}
+                  aria-describedby={changeFromError ? 'program-builder-changeEffectiveFrom-error' : 'program-builder-changeEffectiveFrom-hint'}
+                  aria-invalid={changeFromError ? true : undefined}
+                  required
+                />
+                <p id="program-builder-changeEffectiveFrom-hint" className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('portfolio.builder.changeEffectiveFromHint')}</p>
+                <FieldError id="program-builder-changeEffectiveFrom-error" message={changeFromError} />
+              </div>
+            ) : null}
           </div>
         ) : null}
 
+        {refusal ? (
+          <Alert variant="destructive" className="flex items-start gap-2">
+            <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+            <span>{refusal}</span>
+          </Alert>
+        ) : null}
         <div className="flex justify-between gap-2">
           <Button variant="outline" onClick={() => void closeGuard.close()}>
             {t('portfolio.builder.cancel')}

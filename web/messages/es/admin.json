@@ -6975,7 +6975,8 @@
       "limits": "Límites por grupo",
       "limitsHint": "Indique un límite monetario o sin límite por grupo. Las adjudicaciones anteriores del programa consumen el límite.",
       "reason": "Motivo de auditoría",
-      "reasonHint": "Explique el cambio. Todas las secciones se guardan juntas; las reglas activas requieren un programa sustituto.",
+      "reasonHint": "Explique el cambio. Todas las secciones se guardan juntas; los cambios de un programa activo aplican desde la fecha que elija.",
+      "changeEffectiveFromHint": "Las reglas revisadas aplican desde esta fecha; los periodos anteriores conservan las reglas vigentes.",
       "documentDate": "Fecha del documento",
       "companyGrouping": "Sin agrupación se utiliza el empleador responsable. Los grupos corresponden a la dimensión nativa o personalizada elegida.",
       "fields": {
@@ -6997,6 +6998,7 @@
         "kind": "Decisión de límite",
         "amount": "Importe límite",
         "reason": "Motivo",
+        "changeEffectiveFrom": "Los cambios aplican desde",
         "recipientSource": "El destinatario proviene de",
         "fallbackSource": "Si ese rol está vacío, usar",
         "unassignedShare": "Parte sin destinatario inscrito",

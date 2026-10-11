@@ -43,7 +43,7 @@ export async function ProgramWorkspace({ authz, workspace, sp }: {
     <PreparedPagedTable source="hrm_benefit_program_participants_page" rows={workspace.participants.map(person => ({
       id: person.id, searchText: `${person.employeeName} ${person.status}`, cells: [
         <Link key="employee" href={`/entities/employees?party=${person.employeePartyId}&partyTab=benefits`} className="font-medium text-teal-700 hover:underline">{person.employeeName}</Link>,
-        <span key="dates" className="tabular-nums">{person.effectiveFrom} – {person.effectiveTo ?? '…'}</span>,
+        <span key="dates" className="whitespace-nowrap tabular-nums">{person.effectiveTo ? `${person.effectiveFrom} – ${person.effectiveTo}` : t('portfolio.effectiveOpen', { date: person.effectiveFrom })}</span>,
         <Badge key="status">{t.has(`benefits.statusNames.${person.status}`) ? t(`benefits.statusNames.${person.status}`) : t.has(`programWorkspace.participantStatus.${person.status}`) ? t(`programWorkspace.participantStatus.${person.status}`) : person.status}</Badge>,
         <Link key="assignment" href={person.nativeKind === 'enrollment' ? `/hrm/benefits?view=employees&enrollmentConfig=${person.id}` : `/hrm/benefits?view=employees&vacationTerms=${person.id}`} className="text-teal-700 hover:underline">{t('programWorkspace.openAssignment')}</Link>,
       ],

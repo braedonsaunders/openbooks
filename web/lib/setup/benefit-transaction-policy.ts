@@ -49,3 +49,21 @@ export const BENEFIT_TRANSACTION_POLICY_ENTITY: SetupEntity = {
     field('reason', 'textarea', { required: true, fullWidth: true, resetOnEdit: true }),
   ],
 }
+
+/**
+ * The editor for one program's rules. A draft saves its rules in place; an
+ * active program saves a dated revision, so the form also asks for the date
+ * the revised rules apply from. Closed programs are read-only.
+ */
+export function benefitTransactionPolicyEditor(status: string, canManage: boolean): SetupEntity {
+  const base = BENEFIT_TRANSACTION_POLICY_ENTITY
+  const readOnly = !canManage || (status !== 'draft' && status !== 'active')
+  if (status !== 'active') return { ...base, readOnly }
+  return {
+    ...base,
+    readOnly,
+    mutationUpdateKeys: [...(base.mutationUpdateKeys ?? []), 'changeEffectiveFrom'],
+    recordSections: base.recordSections?.map(section => section.key === 'reason' ? { ...section, fields: ['changeEffectiveFrom', ...section.fields] } : section),
+    fields: [...base.fields, field('changeEffectiveFrom', 'date', { required: true, helpTextKey: 'transactionBenefits.changeEffectiveFromHint' })],
+  }
+}

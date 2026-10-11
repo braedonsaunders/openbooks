@@ -1,4 +1,6 @@
+import type { ReactNode } from 'react'
 import Link from 'next/link'
+import { useTranslations } from 'next-intl'
 import { Badge, TableCell, TableRow } from '@openbooks/ui'
 import { PreparedPagedTable, type PreparedTableRow } from '../../../../components/prepared-paged-table'
 import type { PortfolioAwardRow } from '../../../../lib/hrm/benefits-workspace'
@@ -17,7 +19,13 @@ import type { UnifiedProgramRow, AwardTableText, ProgramTableText } from '../../
 
 export type { AwardTableText, ProgramTableText }
 
-function programCells(row: UnifiedProgramRow): PreparedTableRow {
+/** Closed ranges read "from – to"; an open-ended range reads "From <date>". */
+export function useEffectiveRangeLabel(): (from: string | null, to: string | null) => string {
+  const t = useTranslations('hrm')
+  return (from, to) => from === null || from === '' ? '—' : to ? `${from} – ${to}` : t('portfolio.effectiveOpen', { date: from })
+}
+
+function programCells(row: UnifiedProgramRow, effectiveRange: (from: string | null, to: string | null) => string): PreparedTableRow {
   return {
     id: row.id,
     searchText: `${row.code} ${row.name} ${row.familyLabel} ${row.statusLabel}`,
@@ -33,8 +41,8 @@ function programCells(row: UnifiedProgramRow): PreparedTableRow {
       <span key="value" className="tabular-nums">
         {row.valueLabel}
       </span>,
-      <span key="effective" className="tabular-nums">
-        {row.effectiveFrom ? row.effectiveTo ? `${row.effectiveFrom} – ${row.effectiveTo}` : `${row.effectiveFrom} – …` : '—'}
+      <span key="effective" className="whitespace-nowrap tabular-nums">
+        {effectiveRange(row.effectiveFrom, row.effectiveTo)}
       </span>,
       <Badge key="status" variant={row.statusVariant}>
         {row.statusLabel}
@@ -102,16 +110,17 @@ export function ProgramPortfolioTable({
   truncated: boolean
   typeFilter?: { label: string; allLabel: string; options: { value: string; label: string }[]; currentParams: Record<string, string | undefined> }
 }) {
+  const effectiveRange = useEffectiveRangeLabel()
   return (
     <PreparedPagedTable
       source="hrm_benefit_programs"
-      rows={rows.map(programCells)}
+      rows={rows.map((row) => programCells(row, effectiveRange))}
       toolbarAfter={typeFilter ? <ListFilterSelect basePath="/hrm/benefits" currentParams={typeFilter.currentParams} paramKey="type" label={typeFilter.label} allLabel={typeFilter.allLabel} options={typeFilter.options} /> : undefined}
       columns={[
         { key: 'program', header: text.program },
         { key: 'family', header: text.family },
         { key: 'value', header: text.value, align: 'right', className: 'tabular-nums' },
-        { key: 'effective', header: text.effective, className: 'tabular-nums' },
+        { key: 'effective', header: text.effective, className: 'whitespace-nowrap tabular-nums' },
         { key: 'status', header: text.status },
       ]}
       empty={emptyBlock(text.emptyTitle, text.emptyDescription)}
@@ -125,20 +134,24 @@ export function AwardPortfolioTable({
   text,
   total,
   truncated,
+  toolbarAfter,
 }: {
   rows: PortfolioAwardRow[]
   text: AwardTableText
   total: number
   truncated: boolean
+  /** Controls sharing the search row, e.g. a drawer's period picker. */
+  toolbarAfter?: ReactNode
 }) {
   return (
     <PreparedPagedTable
       source="hrm_benefit_awards"
       rows={rows.map(awardCells)}
+      toolbarAfter={toolbarAfter}
       columns={[
         { key: 'program', header: text.program },
         { key: 'recipient', header: text.recipient },
-        { key: 'period', header: text.period, className: 'tabular-nums' },
+        { key: 'period', header: text.period, className: 'whitespace-nowrap tabular-nums' },
         { key: 'value', header: text.value, align: 'right', className: 'tabular-nums' },
         { key: 'status', header: text.status },
       ]}

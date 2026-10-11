@@ -99,6 +99,8 @@ const updateProgramBody = z.object({
   paymentDelayDays: z.number().int().min(0).max(3650).optional(),
   sourceAccountIds: uuidList,
   reason,
+  /** Civil date an active program's revision applies from; earlier periods keep prior terms. */
+  changeEffectiveFrom: civilDate.optional(),
 });
 
 const activateProgramBody = z.object({ action: z.literal("activate") });

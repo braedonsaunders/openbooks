@@ -209,3 +209,45 @@ test('no-approval submission states readiness without inventing an approver or r
   assert.ok(!document.querySelector('a[href="/approvals"]'))
   assert.equal(reads, 0)
 })
+
+test('an active program keeps lifecycle in the header and hides an empty Actions menu', async (t) => {
+  const programDrawer = {
+    program: { id: 'program', name: 'Summit Incentive', code: 'SUMMIT', family: 'incentive', familyLabel: 'Incentive', metric: 'net_profit', approvalMode: 'none', status: 'active', statusLabel: 'Active', statusVariant: 'success', valueLabel: '5%', effectiveFrom: '2026-01-01', effectiveTo: null, programHref: '/hrm/benefits?view=programs&program=program' },
+    policyLines: [], members: [], membersEmpty: 'No members', sources: [], sourcesEmpty: 'No sources', activity: [], activityRefusal: null, activityTruncated: false,
+    drawerRefusal: null, simulation: null, simulationRefusal: null, editHref: '/hrm/benefits?view=programs&program=program&edit=1', simulateHref: '/hrm/benefits?view=programs&program=program',
+    canConfigureApprovalPolicies: false, approvalPoliciesRefusal: null, approvalPolicies: null,
+  }
+  await mount(t, <ProgramDrawer drawer={programDrawer as never} closeHref="/hrm/benefits?view=programs" canManage employmentOptions={[]} />, (async () => { throw new Error('No write expected') }) as typeof fetch)
+  const labels = Array.from(document.querySelectorAll('button')).map((button) => button.textContent?.trim())
+  assert.ok(labels.includes('Edit'), 'an active program is editable')
+  assert.ok(labels.includes('Close'), 'closing is a header action')
+  assert.ok(!labels.includes('Activate'))
+  assert.ok(!labels.includes('Actions'), 'no menu renders without an entry')
+  assert.ok(document.body.textContent?.includes('From 2026-01-01'), 'an open-ended range reads as a start date')
+  assert.ok(!document.body.textContent?.includes('Why does this program close?'), 'no in-body close form')
+})
+
+test('editing an active program sends its reason and apply-from date and keeps the server refusal visible', async (t) => {
+  const writes: Record<string, unknown>[] = []
+  const fetcher = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+    writes.push(JSON.parse(String(init?.body)))
+    return Response.json({ error: 'Settled periods already use these terms; choose a later apply-from date.' }, { status: 422 })
+  }) as typeof fetch
+  const seed = { ...emptyProgramDraft('reward'), status: 'active', businessToday: '2026-10-11', code: 'THANKS', name: 'Recognition', currency: 'USD', effectiveFrom: '2026-01-01', fixedAmount: '25.00', legalEntityId: 'entity', payComponentId: 'cash-component', sourceAccountIds: [], paymentDelayDays: 0 }
+  await mount(t, <MoneyProvider currency="USD"><ProgramBuilderDrawer closeHref="/hrm/benefits" initialFamily="reward" familyLocked mode="edit" programId="program" editSeed={seed as never} currencyOptions={[{ value: 'USD', label: 'USD · US Dollar', scopeValue: 'entity' }]} subsidiaryOptions={[{ value: 'entity', label: 'Employer' }]} departmentOptions={[]} projectOptions={[]} accountOptions={[]} employmentsTruncated={false} payComponentOptions={[{ value: 'cash-component', label: 'Cash reward', paymentKind: 'cash' }]} /></MoneyProvider>, fetcher)
+  for (let index = 0; index < 5; index++) await click('Next')
+  assert.equal((document.getElementById('program-builder-changeEffectiveFrom') as HTMLInputElement | null)?.value, '2026-10-11', 'the apply-from date defaults to the business day')
+  await click('Save changes')
+  assert.equal(writes.length, 0, 'a missing reason refuses before the request')
+  await fill('program-builder-reason', 'Rate review')
+  await fill('program-builder-changeEffectiveFrom', '')
+  await click('Save changes')
+  assert.equal(writes.length, 0, 'a missing apply-from date refuses before the request')
+  await fill('program-builder-changeEffectiveFrom', '2026-11-01')
+  await click('Save changes')
+  assert.equal(writes.length, 1)
+  assert.equal(writes[0]?.action, 'update')
+  assert.equal(writes[0]?.reason, 'Rate review')
+  assert.equal(writes[0]?.changeEffectiveFrom, '2026-11-01')
+  assert.ok(document.body.textContent?.includes('Settled periods already use these terms'), 'the refusal stays in the drawer')
+})

@@ -22,6 +22,7 @@ import {
 import { can, type Authz } from '../authz'
 import {
   buildAttentionQueue,
+  isProgramEditable,
   portfolioHref,
   totalsByCurrency,
   type BenefitPayComponentOption,
@@ -399,7 +400,7 @@ export async function loadBenefitsPortfolio(
   const newProgramForm = sp.program === 'new'
     && ['reward', 'allowance', 'incentive', 'custom'].includes(sp.family ?? '')
   const programForm = canManage && (newProgramForm
-    || (sp.edit === '1' && selectedProgram?.status === 'draft'))
+    || (sp.edit === '1' && selectedProgram !== undefined && isProgramEditable(selectedProgram.status)))
   const programDetail = selectedProgram !== undefined && !sp.award && sp.edit !== '1'
   const programOptions = programForm || programDetail
   const recipientOptions = canManage && (sp.award === 'new'
@@ -650,7 +651,7 @@ export async function loadBenefitsPortfolio(
           employeeLabel: memberLabels.workerByEmployment.get(member.employmentId)?.name ?? member.employmentId,
           employeeHref: memberLabels.workerByEmployment.get(member.employmentId)?.partyId ? `/entities/employees?party=${memberLabels.workerByEmployment.get(member.employmentId)!.partyId}&partyTab=benefits` : null,
           rangeLabel:
-            member.effectiveTo !== null ? `${member.effectiveFrom} – ${member.effectiveTo}` : `${member.effectiveFrom} – …`,
+            member.effectiveTo !== null ? `${member.effectiveFrom} – ${member.effectiveTo}` : t('portfolio.effectiveOpen', { date: member.effectiveFrom }),
           weight: member.weight,
           role: member.role,
         })),

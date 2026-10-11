@@ -6975,7 +6975,8 @@
       "limits": "Tetos por grupo",
       "limitsHint": "Escolha um teto monetário ou sem limite para cada grupo. As concessões anteriores do programa consomem o teto.",
       "reason": "Motivo da alteração",
-      "reasonHint": "Explique a alteração. Todas as seções são salvas juntas; regras ativas exigem um programa substituto.",
+      "reasonHint": "Explique a alteração. Todas as seções são salvas juntas; alterações em um programa ativo valem a partir da data escolhida.",
+      "changeEffectiveFromHint": "As regras revisadas valem a partir desta data; períodos anteriores mantêm as regras já vigentes.",
       "documentDate": "Data do documento",
       "companyGrouping": "Sem agrupamento, utiliza-se o empregador responsável. Os grupos seguem a dimensão nativa ou personalizada selecionada.",
       "fields": {
@@ -6997,6 +6998,7 @@
         "kind": "Decisão do teto",
         "amount": "Valor do teto",
         "reason": "Motivo",
+        "changeEffectiveFrom": "Alterações valem a partir de",
         "recipientSource": "O beneficiário vem de",
         "fallbackSource": "Quando essa função estiver vazia, usar",
         "unassignedShare": "Parcela sem beneficiário inscrito",

@@ -23,6 +23,7 @@ import { loadQueueLabels } from './change-requests'
 import { listScopedDepartmentOptions } from '../scoped-options'
 import { subsidiaryVisibleFilter } from '../subsidiaries'
 import {
+  isProgramEditable,
   parsePortfolioView,
   type UnifiedProgramRow,
   type BenefitDeliveryRow,
@@ -404,7 +405,9 @@ export async function loadBenefits(authz: Authz, sp: Record<string, string | und
   const departmentOptions = dialogOpen
     ? departments.map((row) => ({ value: row.id, label: row.name }))
     : portfolio.departmentOptions
-  const portfolioFields = toPortfolioFields(t, authz, canManage, basePath, sp, portfolio, segment === 'all' ? undefined : segment)
+  // An active program's edit defaults its apply-from date to the business day.
+  const editBusinessToday = sp.edit === '1' && sp.program !== undefined && sp.program !== 'new' ? await businessToday(orgId) : null
+  const portfolioFields = toPortfolioFields(t, authz, canManage, basePath, sp, portfolio, segment === 'all' ? undefined : segment, editBusinessToday)
 
   try {
     const catalog = []
@@ -776,6 +779,7 @@ function toPortfolioFields(
   sp: Record<string, string | undefined>,
   portfolio: PortfolioData,
   segment: string | undefined,
+  editBusinessToday: string | null = null,
 ): Omit<ReturnType<typeof emptyPortfolioFields>, 'portfolioView'> & { portfolioView: PortfolioView } {
   const portfolioView = parsePortfolioView(sp.view)
   const viewParam = (view: string): string => (view === 'overview' ? basePath : `${basePath}?view=${view}`)
@@ -930,17 +934,19 @@ function toPortfolioFields(
     scopeDepartments: portfolio.departmentOptions,
     scopeProjects: portfolio.projectOptions,
     scopeCustomers: portfolio.customerOptions,
-    programEditOpen: sp.edit === '1' && portfolio.programs.some((program) => program.id === sp.program && program.status === 'draft') && canManage && portfolio.optionsRefusal === null,
+    programEditOpen: sp.edit === '1' && portfolio.programs.some((program) => program.id === sp.program && isProgramEditable(program.status)) && canManage && portfolio.optionsRefusal === null,
     // The edit seed resolves from the authoritative program row the service
     // just listed — the builder edits server state, never a client echo.
     // Source accounts resolve through the detail drawer when it is open.
     programEditSeed: (() => {
       if (sp.edit !== '1' || sp.program === undefined || sp.program === 'new') return null
       const seed = portfolio.programs.find((row) => row.id === sp.program) ?? null
-      if (!seed || seed.status !== 'draft' || portfolio.optionsRefusal) return null
+      if (!seed || !isProgramEditable(seed.status) || portfolio.optionsRefusal) return null
       const drawerSources = [...portfolio.editSourceAccountIds]
       return {
         id: seed.id,
+        status: seed.status,
+        businessToday: editBusinessToday,
         code: seed.code,
         name: seed.name,
         family: seed.family,

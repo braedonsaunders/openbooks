@@ -6975,7 +6975,8 @@
       "limits": "Plafonds par groupe",
       "limitsHint": "Choisissez un plafond monétaire ou aucun plafond par groupe. Les attributions antérieures du programme consomment le plafond.",
       "reason": "Motif d’audit",
-      "reasonHint": "Expliquez la modification. Toutes les sections sont enregistrées ensemble; les règles actives nécessitent un programme de remplacement.",
+      "reasonHint": "Expliquez la modification. Toutes les sections sont enregistrées ensemble; les modifications d’un programme actif s’appliquent à partir de la date choisie.",
+      "changeEffectiveFromHint": "Les règles révisées s’appliquent à partir de cette date ; les périodes antérieures conservent les règles déjà en vigueur.",
       "documentDate": "Date du document",
       "companyGrouping": "Sans regroupement, l’employeur responsable est utilisé. Les groupes suivent la dimension native ou personnalisée sélectionnée.",
       "fields": {
@@ -6997,6 +6998,7 @@
         "kind": "Décision de plafond",
         "amount": "Montant du plafond",
         "reason": "Motif",
+        "changeEffectiveFrom": "Modifications applicables à partir du",
         "recipientSource": "Le bénéficiaire provient de",
         "fallbackSource": "Si ce rôle est vide, utiliser",
         "unassignedShare": "Part sans bénéficiaire inscrit",

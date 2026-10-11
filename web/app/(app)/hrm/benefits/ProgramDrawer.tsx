@@ -1,32 +1,34 @@
 'use client'
 
 import Link from 'next/link'
-import { useId, useState } from 'react'
+import { useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { AlertTriangle } from 'lucide-react'
-import { Alert, Button, Drawer, Input, Label, Select, Textarea } from '@openbooks/ui'
-import { SublistAddButton, SublistHeading } from '../../../../components/drawer-sublist'
+import { Alert, Badge, Button, Drawer, Input, Label, Select } from '@openbooks/ui'
+import { SublistAddButton } from '../../../../components/drawer-sublist'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { promptDialog } from '../../../../lib/prompt'
 import { useDirtyClose } from '../../../../lib/use-dirty-close'
-import { programResourceUrl, validateMembershipDraft, type MembershipDraft } from '../../../../lib/hrm/benefits-portfolio'
+import { isProgramEditable, programResourceUrl, validateMembershipDraft, type MembershipDraft } from '../../../../lib/hrm/benefits-portfolio'
 import type { BuilderOption } from '../../../../lib/hrm/benefits-portfolio'
 import { TransactionDrawer } from '../../../../components/transaction-drawer'
 import { InspectorPanel } from '../../../../components/builder/builder-kit'
 import { PreparedPagedTable } from '../../../../components/prepared-paged-table'
-import { AwardPortfolioTable } from './PortfolioTables'
+import { AwardPortfolioTable, useEffectiveRangeLabel } from './PortfolioTables'
 import type { ProgramDetailDrawer } from '../../../../lib/hrm/benefits-workspace'
 
 /**
  * Program detail drawer, opened from a row through the `program=<id>`
  * search param. Loader-resolved policy, memberships, and incentive source
  * accounts with their amounts; closing navigates the param away.
- * Activation, closure (with the required reason), and membership writes
- * ride the benefit-programs route, and the list refreshes after every
- * transition. Preview reads the posted financial and approved time sources;
- * settlement records controlled awards only after the period has closed.
+ * Lifecycle moves sit in the header: Edit for any open program, Activate
+ * for drafts, and Close for active programs (its required reason is asked
+ * for in the shared prompt). Lifecycle and membership writes ride the
+ * benefit-programs route, and the list refreshes after every transition.
+ * Preview reads the posted financial and approved time sources; settlement
+ * records controlled awards only after the period has closed.
  */
 export function ProgramDrawer({
   drawer,
@@ -43,12 +45,9 @@ export function ProgramDrawer({
   const t = useTranslations('hrm')
   const tCommon = useTranslations('common')
   const router = useRouter()
-  const reasonId = useId()
   const [working, setWorking] = useState(false)
   const searchParams = useSearchParams()
   const [tab, setTab] = useState(() => { const requested=searchParams.get('transactionTab'); return ['participants','activity','delivery','audit'].includes(requested ?? '') ? requested! : 'details' })
-  const [closing, setClosing] = useState(false)
-  const [reason, setReason] = useState('')
   const [adding, setAdding] = useState(false)
   const [simulateFrom, setSimulateFrom] = useState(drawer.simulation?.periodFrom ?? '')
   const [simulateTo, setSimulateTo] = useState(drawer.simulation?.periodTo ?? '')
@@ -61,6 +60,7 @@ export function ProgramDrawer({
   })
   const [memberError, setMemberError] = useState<string | null>(null)
   const program = drawer.program
+  const effectiveRange = useEffectiveRangeLabel()
 
   function close() {
     router.push(closeHref as never)
@@ -68,20 +68,20 @@ export function ProgramDrawer({
   }
 
   const closeGuard = useDirtyClose({
-    dirty: reason.trim().length > 0 || adding,
+    dirty: adding,
     busy: working,
     onClose: close,
     message: tCommon('feedback.unsavedChanges'),
     confirmLabel: tCommon('confirm.discardChanges'),
   })
 
-  async function act(body: Record<string, unknown>) {
+  async function act(body: Record<string, unknown>, method: 'PATCH' | 'POST' = 'PATCH') {
     setWorking(true)
     try {
-      // Activation and closure patch the program resource; the id rides the
-      // path, never the body.
+      // Activation and closure patch the program resource and membership
+      // removal posts to it; the id rides the path, never the body.
       const res = await fetch(programResourceUrl(program.id), {
-        method: 'PATCH',
+        method,
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body),
       })
@@ -89,7 +89,6 @@ export function ProgramDrawer({
         toast.error(await readApiErrorMessage(res, t('portfolio.programActionFailed')))
         return
       }
-      setClosing(false)
       setAdding(false)
       router.refresh()
     } catch {
@@ -180,61 +179,210 @@ export function ProgramDrawer({
     )
   }
 
-  const lifecycleActions = <>        {canManage && !drawer.drawerRefusal ? (
-          <div className="flex flex-wrap justify-end gap-2">
-            {program.status === 'draft' ? (
-              <>
-                <Button disabled={working} onClick={() => act({ action: 'activate' })}>
-                  {t('portfolio.activateProgram')}
-                </Button>
-              </>
-            ) : null}
-            {program.status === 'active' && !closing ? (
-              <Button variant="outline" onClick={() => {setClosing(true);setTab('details')}}>
-                {t('portfolio.closeProgram')}
-              </Button>
-            ) : null}
-          </div>
-        ) : null}
-</>
+  async function closeProgram() {
+    const reason = await promptDialog({
+      title: t('portfolio.closeProgramTitle', { name: program.name }),
+      label: t('portfolio.closeReasonLabel'),
+      multiline: true,
+      confirmLabel: t('portfolio.closeProgram'),
+    })
+    // The shared prompt resolves null on cancel or an empty reason; closing
+    // never proceeds without the reason the service records.
+    if (reason === null || reason.trim() === '') return
+    await act({ action: 'close', reason: reason.trim() })
+  }
+
+  const manageable = canManage && !drawer.drawerRefusal
+  const headerActions = manageable && program.status !== 'closed' ? (
+    <>
+      {isProgramEditable(program.status) ? (
+        <Button variant="outline" size="sm" disabled={working} onClick={() => router.push(drawer.editHref as never)}>
+          {t('portfolio.editProgram')}
+        </Button>
+      ) : null}
+      {program.status === 'active' ? (
+        <Button variant="outline" size="sm" disabled={working} onClick={() => void closeProgram()}>
+          {t('portfolio.closeProgram')}
+        </Button>
+      ) : null}
+      {program.status === 'draft' ? (
+        <Button size="sm" disabled={working} onClick={() => void act({ action: 'activate' })}>
+          {t('portfolio.activateProgram')}
+        </Button>
+      ) : null}
+    </>
+  ) : null
+  // The Actions menu renders only when it holds an entry.
+  const menuActions = program.metric === 'transactions' ? (
+    <Button asChild variant="ghost">
+      <Link href={`/hrm/benefits?view=programs&transactionRules=${program.id}` as never}>{t('portfolio.transactionRules')}</Link>
+    </Button>
+  ) : undefined
+
   const tableText = {
     program: t('portfolio.columns.program'), recipient: t('portfolio.columns.recipient'),
     period: t('portfolio.columns.period'), value: t('portfolio.columns.value'), status: t('portfolio.columns.status'),
     emptyTitle: t('portfolio.awardsEmptyTitle'), emptyDescription: t('programWorkspace.activityEmpty'),
     totalLabel: t('portfolio.totalLabel'), truncatedLabel: t('portfolio.awardsTruncated'),
   }
-  const activity = <div className="space-y-4 p-4">
-    {program.family !== 'incentive' && canManage && program.status === 'active' ? <div className="flex justify-end"><Button asChild size="sm"><Link href={`${program.programHref}&award=new` as never}>{t(program.family === 'reward' ? 'programWorkspace.giveReward' : 'programWorkspace.createGrant')}</Link></Button></div> : null}
-    {drawer.activityRefusal ? <Alert variant="destructive">{drawer.activityRefusal.message}</Alert> : <AwardPortfolioTable rows={drawer.activity} text={tableText} total={drawer.activity.length} truncated={drawer.activityTruncated} />}
-  </div>
-  const deliveryRows = drawer.activity.filter(award => ['approved', 'queued', 'delivered'].includes(award.status))
-  return (
-    <TransactionDrawer recordId={program.id} targetTable="hrm_benefit_programs" closeHref={closeHref}
-      title={program.name} description={program.code} beforeClose={closeGuard.beforeClose} actions={lifecycleActions}
-      primaryAction={canManage && program.status === 'draft' && !drawer.drawerRefusal ? <Button variant="outline" size="sm" onClick={()=>router.push(drawer.editHref as never)}>{t('portfolio.editProgram')}</Button> : null}
-      showAttachments={false} detailsLabel={t('programWorkspace.rules')} activeTab={tab} onActiveTabChange={setTab}
-      detailTabs={[
-        { key: 'participants', label: t('programWorkspace.participants'), content: <div className="p-4">        {!drawer.drawerRefusal ? <div>
-          <div className="mb-3 flex items-start justify-between gap-3">
-            <SublistHeading title={t('portfolio.membersTitle')} />
-            {canManage && program.status !== 'closed' ? (
-              <div className="shrink-0"><SublistAddButton label={t('portfolio.addMember')} onClick={() => setAdding(true)} /></div>
-            ) : null}
+
+  // One toolbar row: the table's search sits at the left, then the period
+  // pickers, then the run action at the right.
+  const simulateControls = !drawer.drawerRefusal && program.family === 'incentive' ? (
+    <>
+      <div className="flex items-center gap-1.5">
+        <Label htmlFor="program-simulate-from" className="whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">{t('portfolio.simulate.periodFrom')}</Label>
+        <Input id="program-simulate-from" type="date" className="w-40" value={simulateFrom} onChange={(e) => setSimulateFrom(e.target.value)} />
+      </div>
+      <div className="flex items-center gap-1.5">
+        <Label htmlFor="program-simulate-to" className="whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">{t('portfolio.simulate.periodTo')}</Label>
+        <Input id="program-simulate-to" type="date" className="w-40" value={simulateTo} onChange={(e) => setSimulateTo(e.target.value)} />
+      </div>
+      <Button variant="outline" className="ml-auto" onClick={simulate}>
+        {t('portfolio.simulate.run')}
+      </Button>
+    </>
+  ) : null
+  const grantAction = program.family !== 'incentive' && canManage && program.status === 'active' ? (
+    <Button asChild className="ml-auto">
+      <Link href={`${program.programHref}&award=new` as never}>{t(program.family === 'reward' ? 'programWorkspace.giveReward' : 'programWorkspace.createGrant')}</Link>
+    </Button>
+  ) : null
+  const activityToolbar = simulateControls ?? grantAction ?? undefined
+
+  const simulation = drawer.simulation ? (
+    <section className="flex flex-col gap-3 rounded-lg border border-slate-200 p-3 dark:border-slate-700" aria-label={t('portfolio.simulate.title')}>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('portfolio.simulate.title')}</h3>
+        <span className="text-xs tabular-nums text-slate-500 dark:text-slate-400">{effectiveRange(drawer.simulation.periodFrom, drawer.simulation.periodTo)}</span>
+      </div>
+      {drawer.simulation.isEstimate ? (
+        <Alert variant="default" className="flex items-start gap-2">
+          <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+          <span>{t('portfolio.simulate.estimate')}</span>
+        </Alert>
+      ) : null}
+      <ul className="space-y-1">
+        {drawer.simulation.summaryLines.map((line) => (
+          <li key={line} className="text-xs text-slate-600 dark:text-slate-300">
+            {line}
+          </li>
+        ))}
+      </ul>
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+        {drawer.simulation.measuredLines.map((line) => (
+          <div key={line.label} className="flex items-baseline justify-between gap-2">
+            <dt className="text-slate-500 dark:text-slate-400">{line.label}</dt>
+            <dd className="font-medium tabular-nums text-slate-900 dark:text-slate-100">{line.value}</dd>
           </div>
-          <PreparedPagedTable source="hrm_benefit_program_participants" rows={drawer.members.map(m => ({
-            id:m.id,searchText:`${m.employeeLabel} ${m.role ?? ''}`,cells:[
-              m.employeeHref ? <Link key="employee" href={m.employeeHref as never} className="font-medium text-teal-700 hover:underline">{m.employeeLabel}</Link> : m.employeeLabel,
-              <span key="range" className="tabular-nums">{m.rangeLabel}</span>,m.role ?? '—',m.weight ?? '—',
-              canManage && program.status !== 'closed' ? <Button key="remove" variant="ghost" size="sm" disabled={working} onClick={async()=>{
-                const removal=await promptDialog({title:t('portfolio.removeReasonPrompt'),label:t('portfolio.removeReasonPrompt'),confirmLabel:t('portfolio.removeMember')})
-                if(removal===null) return
-                if(!removal.trim()){toast.error(t('portfolio.removeReasonRequired'));return}
-                await act({action:'removeMember',membershipId:m.id,reason:removal.trim()})
-              }}>{t('portfolio.removeMember')}</Button> : null,
-            ],
-          }))} columns={[{key:'employee',header:t('benefits.columns.employee')},{key:'effective',header:t('portfolio.columns.effective')},{key:'role',header:t('portfolio.members.role')},{key:'weight',header:t('portfolio.members.weight'),align:'right'},{key:'actions',header:''}]} empty={<p>{drawer.membersEmpty}</p>} />
+        ))}
+      </dl>
+      {drawer.simulation.recipients.length === 0 ? (
+        <p className="text-sm text-slate-500 dark:text-slate-400">{t('portfolio.simulate.noRecipients')}</p>
+      ) : (
+        <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+          {drawer.simulation.recipients.map((recipient) => (
+            <li key={recipient.employmentId} className="py-2">
+              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <span className="text-sm font-medium text-slate-700 dark:text-slate-200">{recipient.employeeLabel}</span>
+                <span className="text-xs tabular-nums text-slate-500 dark:text-slate-400">{recipient.share}</span>
+                <span className="ml-auto text-sm font-medium tabular-nums text-slate-900 dark:text-slate-100">
+                  {recipient.netValue}
+                </span>
+              </div>
+              <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{recipient.explanation}</p>
+            </li>
+          ))}
+        </ul>
+      )}
+      {drawer.simulation.excluded.length > 0 ? (
+        <ul className="space-y-1">
+          {drawer.simulation.excluded.map((line) => (
+            <li key={line} className="text-xs text-amber-700 dark:text-amber-300">
+              {line}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <div className="flex items-center justify-between gap-2 text-sm">
+        <span className="text-slate-500 dark:text-slate-400">{t('portfolio.simulate.totalAwarded')}</span>
+        <span className="flex items-center gap-3">
+          <span className="font-semibold tabular-nums text-slate-900 dark:text-slate-100">{drawer.simulation.totalAwarded}</span>
+          {canManage && program.status === 'active' && !drawer.simulation.isEstimate ? (
+            <Button size="sm" disabled={working} onClick={settle}>
+              {t('portfolio.simulate.settle')}
+            </Button>
+          ) : null}
+        </span>
+      </div>
+    </section>
+  ) : null
+
+  const activity = (
+    <div className="flex flex-col gap-4 p-4">
+      {!drawer.drawerRefusal && drawer.simulationRefusal ? (
+        <Alert variant="destructive" className="flex items-start gap-2">
+          <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+          <span>
+            <span className="block font-medium">{drawer.simulationRefusal.title}</span>
+            <span className="block text-xs">{drawer.simulationRefusal.message}</span>
+          </span>
+        </Alert>
+      ) : null}
+      {!drawer.drawerRefusal ? simulation : null}
+      {drawer.activityRefusal ? (
+        <>
+          {activityToolbar ? <div className="flex flex-wrap items-center gap-2">{activityToolbar}</div> : null}
+          <Alert variant="destructive">{drawer.activityRefusal.message}</Alert>
+        </>
+      ) : (
+        <AwardPortfolioTable rows={drawer.activity} text={tableText} total={drawer.activity.length} truncated={drawer.activityTruncated} toolbarAfter={activityToolbar} />
+      )}
+    </div>
+  )
+  const deliveryRows = drawer.activity.filter(award => ['approved', 'queued', 'delivered'].includes(award.status))
+  const memberManageable = canManage && program.status !== 'closed'
+
+  const participants = (
+    <div className="p-4">
+      {!drawer.drawerRefusal ? (
+        <>
+          <PreparedPagedTable
+            source="hrm_benefit_program_participants"
+            rows={drawer.members.map((m) => ({
+              id: m.id,
+              searchText: `${m.employeeLabel} ${m.role ?? ''}`,
+              cells: [
+                m.employeeHref ? <Link key="employee" href={m.employeeHref as never} className="font-medium text-teal-700 hover:underline">{m.employeeLabel}</Link> : m.employeeLabel,
+                <span key="range" className="whitespace-nowrap tabular-nums">{m.rangeLabel}</span>,
+                m.role ?? '—',
+                m.weight ?? '—',
+                memberManageable ? (
+                  <Button key="remove" variant="ghost" size="sm" disabled={working} onClick={async () => {
+                    const removal = await promptDialog({ title: t('portfolio.removeReasonPrompt'), label: t('portfolio.removeReasonPrompt'), confirmLabel: t('portfolio.removeMember') })
+                    if (removal === null) return
+                    if (!removal.trim()) { toast.error(t('portfolio.removeReasonRequired')); return }
+                    await act({ action: 'removeMember', membershipId: m.id, reason: removal.trim() }, 'POST')
+                  }}>{t('portfolio.removeMember')}</Button>
+                ) : null,
+              ],
+            }))}
+            toolbarAfter={memberManageable ? (
+              <div className="ml-auto flex items-center">
+                <SublistAddButton label={t('portfolio.addMember')} onClick={() => setAdding(true)} />
+              </div>
+            ) : undefined}
+            columns={[
+              { key: 'employee', header: t('benefits.columns.employee') },
+              { key: 'effective', header: t('portfolio.columns.effective'), className: 'whitespace-nowrap tabular-nums' },
+              { key: 'role', header: t('portfolio.members.role') },
+              { key: 'weight', header: t('portfolio.members.weight'), align: 'right' },
+              { key: 'actions', header: '' },
+            ]}
+            empty={<p>{drawer.membersEmpty}</p>}
+          />
           <Drawer
-            open={adding && canManage && program.status !== 'closed'}
+            open={adding && memberManageable}
             onClose={() => { if (!working) setAdding(false) }}
             stacked
             size="md"
@@ -316,132 +464,44 @@ export function ProgramDrawer({
               ) : null}
             </div>
           </Drawer>
-        </div> : null}
+        </>
+      ) : null}
+    </div>
+  )
 
-</div> },
-        { key: 'activity', label: t(program.family === 'incentive' ? 'programWorkspace.calculations' : 'programWorkspace.activity'), content: <div>        {!drawer.drawerRefusal && program.family === 'incentive' ? (
-          <div className="flex flex-col gap-3">
-            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('portfolio.simulate.title')}</h3>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label htmlFor="program-simulate-from">{t('portfolio.simulate.periodFrom')}</Label>
-                <Input id="program-simulate-from" type="date" value={simulateFrom} onChange={(e) => setSimulateFrom(e.target.value)} />
-              </div>
-              <div>
-                <Label htmlFor="program-simulate-to">{t('portfolio.simulate.periodTo')}</Label>
-                <Input id="program-simulate-to" type="date" value={simulateTo} onChange={(e) => setSimulateTo(e.target.value)} />
-              </div>
-            </div>
-            <div className="flex justify-end">
-              <Button variant="outline" size="sm" onClick={simulate}>
-                {t('portfolio.simulate.run')}
-              </Button>
-            </div>
-            {drawer.simulationRefusal ? (
-              <Alert variant="destructive" className="flex items-start gap-2">
-                <AlertTriangle size={16} className="mt-0.5 shrink-0" />
-                <span>
-                  <span className="block font-medium">{drawer.simulationRefusal.title}</span>
-                  <span className="block text-xs">{drawer.simulationRefusal.message}</span>
-                </span>
-              </Alert>
-            ) : null}
-            {drawer.simulation ? (
-              <div className="flex flex-col gap-3 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-                {drawer.simulation.isEstimate ? (
-                  <Alert variant="default" className="flex items-start gap-2">
-                    <AlertTriangle size={16} className="mt-0.5 shrink-0" />
-                    <span>{t('portfolio.simulate.estimate')}</span>
-                  </Alert>
-                ) : null}
-                <ul className="space-y-1">
-                  {drawer.simulation.summaryLines.map((line) => (
-                    <li key={line} className="text-xs text-slate-600 dark:text-slate-300">
-                      {line}
-                    </li>
-                  ))}
-                </ul>
-                <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                  {drawer.simulation.measuredLines.map((line) => (
-                    <div key={line.label} className="flex items-baseline justify-between gap-2">
-                      <dt className="text-slate-500 dark:text-slate-400">{line.label}</dt>
-                      <dd className="font-medium tabular-nums text-slate-900 dark:text-slate-100">{line.value}</dd>
-                    </div>
-                  ))}
-                </dl>
-                {drawer.simulation.recipients.length === 0 ? (
-                  <p className="text-sm text-slate-500 dark:text-slate-400">{t('portfolio.simulate.noRecipients')}</p>
-                ) : (
-                  <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-                    {drawer.simulation.recipients.map((recipient) => (
-                      <li key={recipient.employmentId} className="py-2">
-                        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                          <span className="text-sm font-medium text-slate-700 dark:text-slate-200">{recipient.employeeLabel}</span>
-                          <span className="text-xs tabular-nums text-slate-500 dark:text-slate-400">{recipient.share}</span>
-                          <span className="ml-auto text-sm font-medium tabular-nums text-slate-900 dark:text-slate-100">
-                            {recipient.netValue}
-                          </span>
-                        </div>
-                        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{recipient.explanation}</p>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {drawer.simulation.excluded.length > 0 ? (
-                  <ul className="space-y-1">
-                    {drawer.simulation.excluded.map((line) => (
-                      <li key={line} className="text-xs text-amber-700 dark:text-amber-300">
-                        {line}
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-                <div className="flex items-baseline justify-between gap-2 text-sm">
-                  <span className="text-slate-500 dark:text-slate-400">{t('portfolio.simulate.totalAwarded')}</span>
-                  <span className="font-semibold tabular-nums text-slate-900 dark:text-slate-100">
-                    {drawer.simulation.totalAwarded}
-                  </span>
-                </div>
-                {canManage && program.status === 'active' && !drawer.simulation.isEstimate ? (
-                  <div className="flex justify-end">
-                    <Button disabled={working} onClick={settle}>
-                      {t('portfolio.simulate.settle')}
-                    </Button>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-
-{activity}</div> },
+  return (
+    <TransactionDrawer recordId={program.id} targetTable="hrm_benefit_programs" closeHref={closeHref}
+      title={<span className="flex items-center gap-2">{program.name}<Badge variant={program.statusVariant}>{program.statusLabel}</Badge></span>}
+      description={program.code} beforeClose={closeGuard.beforeClose}
+      primaryAction={headerActions} actions={menuActions}
+      showAttachments={false} detailsLabel={t('programWorkspace.rules')} activeTab={tab} onActiveTabChange={setTab}
+      detailTabs={[
+        { key: 'participants', label: t('programWorkspace.participants'), content: participants },
+        { key: 'activity', label: t(program.family === 'incentive' ? 'programWorkspace.calculations' : 'programWorkspace.activity'), content: activity },
         { key: 'delivery', label: t('programWorkspace.delivery'), content: <div className="space-y-4 p-4"><p className="text-sm text-slate-500">{t('programWorkspace.deliveryHint')}</p>{drawer.activityRefusal ? <Alert variant="destructive">{drawer.activityRefusal.message}</Alert> : <AwardPortfolioTable rows={deliveryRows} text={tableText} total={deliveryRows.length} truncated={drawer.activityTruncated} />}</div> },
       ]}>
-      <div className="flex flex-col gap-5 p-4">
+      <div className="flex flex-col gap-4 p-4">
         {drawer.drawerRefusal ? (
           <Alert variant="destructive" className="flex items-start gap-2">
             <AlertTriangle size={16} className="mt-0.5 shrink-0" />
-            <span>
-              <span className="block font-medium">{drawer.drawerRefusal.title}</span>
-              <span className="block text-xs">{drawer.drawerRefusal.message}</span>
+            <span className="flex flex-col items-start gap-2">
+              <span>
+                <span className="block font-medium">{drawer.drawerRefusal.title}</span>
+                <span className="block text-xs">{drawer.drawerRefusal.message}</span>
+              </span>
               <Button variant="outline" size="sm" onClick={() => router.refresh()}>{tCommon('actions.retry')}</Button>
             </span>
           </Alert>
         ) : null}
-        {program.metric === 'transactions' ? <Button asChild variant="outline"><Link href={`/hrm/benefits?view=programs&transactionRules=${program.id}` as never}>{t('portfolio.transactionRules')}</Link></Button> : null}
         <InspectorPanel title={program.familyLabel}><dl className="grid gap-x-4 gap-y-4 text-sm sm:grid-cols-2">
-          <div>
-            <dt className="text-xs text-slate-500 dark:text-slate-400">{t('portfolio.columns.status')}</dt>
-            <dd className="font-medium text-slate-900 dark:text-slate-100">{program.statusLabel}</dd>
-          </div>
           <div>
             <dt className="text-xs text-slate-500 dark:text-slate-400">{t('portfolio.columns.value')}</dt>
             <dd className="font-medium tabular-nums text-slate-900 dark:text-slate-100">{program.valueLabel}</dd>
           </div>
           <div>
             <dt className="text-xs text-slate-500 dark:text-slate-400">{t('portfolio.columns.effective')}</dt>
-            <dd className="font-medium tabular-nums text-slate-900 dark:text-slate-100">
-              {program.effectiveTo ? `${program.effectiveFrom} – ${program.effectiveTo}` : `${program.effectiveFrom} – …`}
+            <dd className="whitespace-nowrap font-medium tabular-nums text-slate-900 dark:text-slate-100">
+              {effectiveRange(program.effectiveFrom, program.effectiveTo)}
             </dd>
           </div>
           {drawer.policyLines.map((line) => <div key={`${line.label}:${line.value}`}>
@@ -458,34 +518,18 @@ export function ProgramDrawer({
           </>}
         </InspectorPanel>
 
-        {!drawer.drawerRefusal && program.family === 'incentive' && program.metric !== 'approved_hours' && program.metric !== 'transactions' ? <div>
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('portfolio.sourcesTitle')}</h3>
-          {drawer.sources.length === 0 ? (
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{drawer.sourcesEmpty}</p>
-          ) : (
-            <ul className="mt-2 divide-y divide-slate-100 dark:divide-slate-800">
-              {drawer.sources.map((s) => (
-                <li key={s.id} className="flex items-baseline justify-between gap-3 py-1.5">
-                  <span className="text-sm text-slate-600 dark:text-slate-300">{s.accountLabel}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div> : null}
-
-        {closing ? (
-          <div className="flex flex-col gap-2">
-            <Label htmlFor={reasonId}>{t('portfolio.closeReasonLabel')}</Label>
-            <Textarea id={reasonId} value={reason} onChange={(e) => setReason(e.target.value)} required />
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setClosing(false)}>
-                {t('portfolio.builder.cancel')}
-              </Button>
-              <Button disabled={working || !reason.trim()} onClick={() => act({ action: 'close', reason: reason.trim() })}>
-                {t('portfolio.closeProgram')}
-              </Button>
-            </div>
-          </div>
+        {!drawer.drawerRefusal && program.family === 'incentive' && program.metric !== 'approved_hours' && program.metric !== 'transactions' ? (
+          <InspectorPanel title={t('portfolio.sourcesTitle')}>
+            {drawer.sources.length === 0 ? (
+              <p className="text-sm text-slate-500 dark:text-slate-400">{drawer.sourcesEmpty}</p>
+            ) : (
+              <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+                {drawer.sources.map((s) => (
+                  <li key={s.id} className="py-1.5 text-sm text-slate-600 dark:text-slate-300">{s.accountLabel}</li>
+                ))}
+              </ul>
+            )}
+          </InspectorPanel>
         ) : null}
       </div>
     </TransactionDrawer>
