@@ -18,6 +18,8 @@ import { resolveFormLayout } from '../../../lib/customization/resolve'
 import { featureEnabled, isFeatureEnabled, resolvedFeatureState } from '../../../lib/features'
 import { readCashSalesSettings } from '../../../lib/company-settings'
 import { buildDuplicateSeed } from '../../../lib/cash-sales-duplicate'
+import { postedReturnQuantity } from '@openbooks/engine/src/inventory/return-quantities.ts'
+import { fromUnits, mul, toUnits } from '@openbooks/engine/src/money/money.ts'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import type { DocumentDrawer } from '../../../components/document-drawer'
 import { readProviderTransactionsForDocument } from '@openbooks/engine/tax'
@@ -98,61 +100,56 @@ export interface CashSalesData {
 
 const BASE_PATH = '/cash-sales'
 
-/** Returnable (unreturned) quantities per sale line location for the refund prefill. */
+/**
+ * Returnable (unreturned) quantities per sale line location for the refund
+ * prefill. A stocked line split across locations prefills one line per issue
+ * movement at its still-unreturned remainder, priced at the original unit
+ * price; fully-returned movements drop out so the proposal can never
+ * over-return on arrival. Non-stocked lines prefill in full with no return
+ * evidence. Issue movements store negative quantities, so the shipped
+ * quantity is the magnitude, and prior returns count through the same rule
+ * the credit posting enforces.
+ */
 async function returnableSaleLines(orgId: string, saleId: string) {
   const rows = (await db.execute<{
     lineId: string; itemId: string | null; accountId: string; amount: string;
     quantity: string; unitPrice: string | null; description: string | null;
     taxCodeId: string | null; stockLocationId: string | null;
     marketplaceFacilitator: string | null;
-    issueMovementId: string | null; shipped: string | null; returned: string;
+    issueMovementId: string | null; shipped: string | null;
   }>(sql`
-    with shipped as (
-      select m.document_line_id as line_id, m.id as movement_id, m.stock_location_id,
-             m.quantity as shipped_qty
-        from inventory_movements m
-       where m.org_id = ${orgId} and m.document_line_id in (
-         select id from document_lines where org_id = ${orgId} and document_id = ${saleId} and item_id is not null
-       )
-         and m.kind = 'issue' and m.status = 'posted'
-    ),
-    returned as (
-      -- The stored source id is JSON text while movement ids are uuid: the
-      -- uuid side casts, never the stored text, so a malformed stored id
-      -- misses instead of failing the whole query.
-      select (l.custom->'inventoryReturn'->>'sourceIssueMovementId') as issue_id,
-             coalesce(sum(case when m.kind = 'receipt' then m.quantity else -m.quantity end), 0) as qty
-        from document_lines l
-        join documents d on d.id = l.document_id and d.org_id = l.org_id
-        left join inventory_movements m on m.document_line_id = l.id and m.org_id = l.org_id
-         and m.kind in ('receipt', 'reversal') and m.status = 'posted'
-       where l.org_id = ${orgId}
-         and l.custom->'inventoryReturn'->>'sourceIssueMovementId' in (select movement_id::text from shipped)
-         and d.status = 'posted'
-       group by 1
-    )
     select l.id as "lineId", l.item_id as "itemId", l.account_id as "accountId",
-           -- A stocked line split across locations prefills one line per
-           -- issue movement at its still-unreturned remainder, priced at the
-           -- original unit price; fully-returned movements drop out so the
-           -- proposal can never over-return on arrival. Non-stocked lines
-           -- prefill in full with no return evidence.
-           case when s.movement_id is null then l.amount
-                else (l.unit_price * greatest(s.shipped_qty - coalesce(r.qty, 0), 0)) end::text as amount,
-           case when s.movement_id is null then l.quantity
-                else greatest(s.shipped_qty - coalesce(r.qty, 0), 0) end::text as quantity,
+           l.amount::text as amount, l.quantity::text as quantity,
            l.unit_price::text as "unitPrice", l.description,
            l.tax_code_id as "taxCodeId", l.stock_location_id as "stockLocationId",
            l.marketplace_facilitator as "marketplaceFacilitator",
-           s.movement_id as "issueMovementId", s.shipped_qty::text as shipped,
-           coalesce(r.qty, 0)::text as returned
+           m.id as "issueMovementId", (-m.quantity)::text as shipped
       from document_lines l
-      left join shipped s on s.line_id = l.id
-      left join returned r on r.issue_id = s.movement_id::text
+      left join inventory_movements m
+        on m.org_id = l.org_id and m.document_line_id = l.id
+       and l.item_id is not null and m.kind = 'issue' and m.status = 'posted'
      where l.org_id = ${orgId} and l.document_id = ${saleId}
-       and (s.movement_id is null or s.shipped_qty - coalesce(r.qty, 0) > 0)
-     order by l.line_number`)).rows
-  return rows
+     order by l.line_number, m.moved_at, m.id`)).rows
+  const returnable = []
+  for (const row of rows) {
+    if (!row.issueMovementId || row.shipped === null) {
+      returnable.push(row)
+      continue
+    }
+    const returned = await postedReturnQuantity(db, orgId, {
+      returnKind: 'receipt',
+      evidenceKey: 'sourceIssueMovementId',
+      sourceMovementId: row.issueMovementId,
+    })
+    const remaining = fromUnits(toUnits(row.shipped) - toUnits(returned))
+    if (toUnits(remaining) <= 0n) continue
+    returnable.push({
+      ...row,
+      quantity: remaining,
+      amount: row.unitPrice === null ? row.amount : mul(row.unitPrice, remaining),
+    })
+  }
+  return returnable
 }
 
 export async function loadCashSales(

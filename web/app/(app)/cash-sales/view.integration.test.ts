@@ -25,9 +25,11 @@ registerHooks({
     return next(specifier, context)
   },
 })
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext, withOrg, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { postDocument } = await import('@openbooks/engine/src/ledger/posting-document.ts')
+const { receiveInventory } = await import('@openbooks/engine/src/inventory/movements.ts')
 const { loadCashSales } = await import('./view')
 
 const sessionFor = (orgId: string, actor: string): SessionUser => ({
@@ -127,16 +129,36 @@ test('refund prefill loads returnable lines for a sale with an issued stock line
     const cashier = await role(org.orgId, 'cashier', ['cash_sales.read', 'cash_sales.create'])
     const saleId = crypto.randomUUID()
     const lineId = crypto.randomUUID()
-    const movementId = crypto.randomUUID()
+    const tillId = crypto.randomUUID()
+    await withBypassContext(() => db.execute(sql`
+      insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, currency_restriction, required_dimensions, custom, subsidiary_include_children)
+      values (${tillId}, ${org.orgId}, '1015', 'Till Cash', 'asset_current_other', false, true, false, false, null, '[]'::jsonb, '{}'::jsonb, true)`))
+    // Stock on hand first: the native posting issues the sale's stock
+    // itself, so the fixture receives, drafts, approves and posts instead
+    // of inserting posted rows the period guard refuses.
+    await withOrg(org.orgId, () => receiveInventory(org.orgId, cashier, {
+      itemId: org.items.fifo, stockLocationId: org.stockLocationId, quantity: '10', unitCost: '4',
+      subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: org.date,
+    }))
     await withBypassContext(() => db.execute(sql`
       insert into documents (id, org_id, kind, document_number, document_date, currency, subsidiary_id, created_by, status)
-      values (${saleId}, ${org.orgId}, 'cash_sale', 'CS-T5', ${org.date}, 'USD', ${org.subsidiaryId}, ${cashier}, 'posted')`))
+      values (${saleId}, ${org.orgId}, 'cash_sale', 'CS-T5', ${org.date}, 'CAD', ${org.subsidiaryId}, ${cashier}, 'draft')`))
     await withBypassContext(() => db.execute(sql`
       insert into document_lines (id, org_id, document_id, line_number, account_id, description, quantity, unit_price, amount, item_id, stock_location_id)
       values (${lineId}, ${org.orgId}, ${saleId}, 1, ${org.accounts.revenue}, 'FIFO Widget', 2, 10, 20, ${org.items.fifo}, ${org.stockLocationId})`))
     await withBypassContext(() => db.execute(sql`
-      insert into inventory_movements (id, org_id, subsidiary_id, item_id, kind, moved_at, stock_location_id, quantity, document_line_id, status)
-      values (${movementId}, ${org.orgId}, ${org.subsidiaryId}, ${org.items.fifo}, 'issue', now(), ${org.stockLocationId}, 2, ${lineId}, 'posted')`))
+      insert into document_tenders (org_id, document_id, position, kind, method_label, account_id,
+           stored_value_account_id, amount_minor, currency, reference)
+      values (${org.orgId}, ${saleId}, 1, 'cash', 'cash', ${tillId}, null, '200000', 'CAD', null)`))
+    await withBypassContext(() => db.execute(sql`
+      update documents set status = 'approved' where id = ${saleId} and org_id = ${org.orgId}`))
+    await withOrg(org.orgId, () => postDocument(saleId, {
+      control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+    }))
+    const movementId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
+      select id from inventory_movements
+       where org_id = ${org.orgId} and document_line_id = ${lineId} and kind = 'issue'`))).rows[0]?.id
+    assert.ok(movementId, 'posting the stocked sale must issue its stock natively')
 
     const load = (user: string, sp: Record<string, string>) => {
       state.user = sessionFor(org.orgId, user)
