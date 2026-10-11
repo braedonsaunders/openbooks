@@ -164,7 +164,7 @@ test('a match-blocked import offers unmatch-all beside the disabled delete', asy
         showDelete
         matchedCount={2}
         unmatchAllConfirmMessage="Unmatch 2 matched lines?"
-      />
+      />,
     messages,
   )
   try {
@@ -208,7 +208,7 @@ test('a non-match block shows no unmatch-all', async () => {
         showDelete
         matchedCount={0}
         unmatchAllConfirmMessage="Unmatch 0 matched lines?"
-      />
+      />,
     messages,
   )
   try {
