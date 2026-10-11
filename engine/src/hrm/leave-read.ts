@@ -11,6 +11,7 @@ import {
   requireHrmLeaveRead,
 } from "./authorization.ts";
 import { EmploymentReadError, likeEscape } from "./employment-read.ts";
+import { parseCivilDate } from "./temporal.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
@@ -277,6 +278,100 @@ function withRules(
     from,
     to,
   );
+}
+
+export interface LeaveTypeBalance {
+  readonly leaveTypeId: string;
+  readonly code: string;
+  readonly name: string;
+  /** Earned plus carried; null when the entitlement is unbounded. */
+  readonly entitlement: string | null;
+  /** Absence hours in the accrual year through asOf. */
+  readonly taken: string;
+  /** Draft and submitted request hours starting on or before asOf. */
+  readonly pending: string;
+  /** Entitlement minus taken minus pending; null when unbounded. */
+  readonly remaining: string | null;
+  readonly unlimited: boolean;
+}
+
+function requireBalanceDate(value: unknown): string {
+  if (typeof value !== "string") {
+    throw new LeaveError("INVALID_INPUT", "asOf must be a real YYYY-MM-DD calendar date in years 0001 through 9999");
+  }
+  try {
+    parseCivilDate(value);
+    return value;
+  } catch {
+    throw new LeaveError("INVALID_INPUT", "asOf must be a real YYYY-MM-DD calendar date in years 0001 through 9999");
+  }
+}
+
+async function pendingRequestHours(
+  exec: SqlExecutor,
+  orgId: string,
+  employmentId: string,
+  leaveTypeId: string,
+  asOf: string,
+): Promise<string> {
+  const rows = (await exec.execute<{ hours: string }>(sql`
+    select hours::text as hours from hrm_leave_requests
+     where org_id = ${orgId} and employment_id = ${employmentId} and leave_type_id = ${leaveTypeId}
+       and status in ('draft', 'submitted') and starts_on <= ${asOf}
+  `)).rows;
+  let total = "0";
+  for (const row of rows) total = addHours(total, String(row.hours));
+  return total;
+}
+
+/**
+ * Per-employee, per-leave-type balances as of a date. Reads through
+ * timeBalanceAsOf — the same function the filing gate and the drawer use —
+ * so the display can never disagree with the gate. No second calculator:
+ * entitlement and taken come from the time balance, pending sums the
+ * undecided requests, and remaining is exact-decimal subtraction through
+ * leave-math. Scope rides on the caller (own employments, an already-gated
+ * path), exactly like listLeaveTypes; the single-employment entry below
+ * gates per employment.
+ */
+export async function leaveEmploymentBalances(
+  exec: SqlExecutor,
+  orgId: string,
+  employmentId: string,
+  asOf: string,
+): Promise<LeaveTypeBalance[]> {
+  const date = requireBalanceDate(asOf);
+  const types = await listLeaveTypes(exec, orgId);
+  const out: LeaveTypeBalance[] = [];
+  for (const type of types) {
+    if (!type.isActive) continue;
+    const read = await timeBalanceAsOf(exec, orgId, employmentId, type.id, date);
+    const pending = await pendingRequestHours(exec, orgId, employmentId, type.id, date);
+    const entitlement = read.unlimited || read.earned === null ? null : addHours(read.earned, read.carried);
+    out.push({
+      leaveTypeId: type.id,
+      code: type.code,
+      name: type.name,
+      entitlement,
+      taken: read.taken,
+      pending,
+      remaining: entitlement === null ? null : subHours(subHours(entitlement, read.taken), pending),
+      unlimited: read.unlimited,
+    });
+  }
+  return out;
+}
+
+/** One employment's balances, gated on that employment — never by a caller-supplied party. */
+export async function leaveBalancesForEmployment(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  employmentId: string,
+  asOf: string,
+): Promise<LeaveTypeBalance[]> {
+  await requireHrmLeaveRead(exec, orgId, actorId, employmentId);
+  return leaveEmploymentBalances(exec, orgId, employmentId, asOf);
 }
 
 export interface ValueBalanceEntry {
@@ -560,13 +655,18 @@ export interface LeaveRequestSummary {
   readonly decisionReason: string | null;
   readonly attachmentId: string | null;
   readonly requiresAttachment: boolean;
+  /** 'request' for filed requests, 'recorded' for manager-recorded absence days. */
+  readonly source: "request" | "recorded";
+  /** The absence row for recorded days; null for requests. */
+  readonly absenceId: string | null;
 }
 
 const SUMMARY_COLUMNS = sql`r.id, r.employment_id, e.worker_party_id as worker_party_id,
   r.leave_type_id, t.code as leave_type_code,
   r.starts_on::text as starts_on, r.ends_on::text as ends_on, r.hours::text as hours,
   r.reason, r.status, r.decided_by, r.decided_at::text as decided_at, r.decision_reason,
-  r.attachment_id, t.requires_attachment`;
+  r.attachment_id, t.requires_attachment,
+  'request' as source, null::uuid as absence_id`;
 
 function toSummary(row: Record<string, unknown>): LeaveRequestSummary {
   return {
@@ -585,6 +685,8 @@ function toSummary(row: Record<string, unknown>): LeaveRequestSummary {
     decisionReason: row.decision_reason != null ? String(row.decision_reason) : null,
     attachmentId: row.attachment_id != null ? String(row.attachment_id) : null,
     requiresAttachment: row.requires_attachment === true,
+    source: row.source === "recorded" ? "recorded" : "request",
+    absenceId: row.absence_id != null ? String(row.absence_id) : null,
   };
 }
 
@@ -694,17 +796,35 @@ export async function listOrgLeaveRequests(
   }
   const allowed = await actorAllowedSubsidiaryIds(exec, orgId, actorId);
   const limit = Math.min(Math.max(opts.limit ?? 500, 1), 500);
+  const scopeList = sql`select jsonb_array_elements_text(${allowed === null ? "[]" : JSON.stringify([...allowed])}::jsonb)::uuid`;
+  // Recorded absence days ride the SAME bounded scoped query as the
+  // requests (one statement, one subsidiary scope, one truncation signal) —
+  // never a second list beside it. Reversal rows are not facts and stay
+  // out; a recorded day reads as its own summary with status 'recorded'.
   const rows = (await exec.execute<Record<string, unknown>>(sql`
-    select ${SUMMARY_COLUMNS} from hrm_leave_requests r
-      join hrm_leave_types t on t.id = r.leave_type_id and t.org_id = r.org_id
-      join worker_employments e on e.id = r.employment_id and e.org_id = r.org_id
-     where r.org_id = ${orgId}
-       and (${allowed === null}::boolean
-            or e.employer_subsidiary_id in (
-              select jsonb_array_elements_text(${allowed === null ? "[]" : JSON.stringify([...allowed])}::jsonb)::uuid
-            ))
-       and (${opts.status ?? null}::text is null or r.status = ${opts.status ?? null}::text)
-     order by r.starts_on desc, r.created_at desc, r.id
+    select * from (
+      select ${SUMMARY_COLUMNS}, r.starts_on as sort_date, r.created_at as sort_created
+        from hrm_leave_requests r
+        join hrm_leave_types t on t.id = r.leave_type_id and t.org_id = r.org_id
+        join worker_employments e on e.id = r.employment_id and e.org_id = r.org_id
+       where r.org_id = ${orgId}
+         and (${allowed === null}::boolean or e.employer_subsidiary_id in (${scopeList}))
+      union all
+      select a.id, a.employment_id, e.worker_party_id,
+        a.leave_type_id, t.code as leave_type_code,
+        a.on_date::text as starts_on, a.on_date::text as ends_on, a.hours::text as hours,
+        a.reason, 'recorded' as status, null::uuid as decided_by, null::text as decided_at, null::text as decision_reason,
+        null::uuid as attachment_id, false as requires_attachment,
+        'recorded' as source, a.id as absence_id,
+        a.on_date as sort_date, a.created_at as sort_created
+        from hrm_absences a
+        join hrm_leave_types t on t.id = a.leave_type_id and t.org_id = a.org_id
+        join worker_employments e on e.id = a.employment_id and e.org_id = a.org_id
+       where a.org_id = ${orgId} and a.source = 'recorded' and a.reversal_of is null
+         and (${allowed === null}::boolean or e.employer_subsidiary_id in (${scopeList}))
+    ) combined
+     where (${opts.status ?? null}::text is null or combined.status = ${opts.status ?? null}::text)
+     order by sort_date desc, sort_created desc, id
      limit ${limit + 1}
   `)).rows;
   return {

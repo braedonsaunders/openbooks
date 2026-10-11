@@ -187,6 +187,62 @@ export interface DepartmentAbsenceDay extends AbsenceDay {
   readonly leaveRequestId: string | null;
 }
 
+export interface AbsenceDetail extends AbsenceDay {
+  readonly leaveTypeId: string;
+  readonly leaveTypeName: string;
+  readonly workerName: string;
+  /** The approved request behind a request-sourced day; null for recorded days. */
+  readonly leaveRequestId: string | null;
+  readonly recordedBy: string | null;
+  readonly recordedAt: string | null;
+}
+
+/** One absence day, gated on its employment — never by a caller-supplied party. */
+export async function getAbsence(query: { orgId: string; actorId: string; absenceId: string }): Promise<AbsenceDetail> {
+  const orgId = requireOrgId(query.orgId);
+  const actorId = requireActorId(query.actorId);
+  requireId(query.absenceId, "absenceId");
+  return withOrgTransaction(orgId, async () => {
+    const row = (await db.execute<{
+      id: string; employment_id: string; on_date: string; hours: string;
+      source: "request" | "recorded"; reason: string | null;
+      leave_request_id: string | null; leave_type_id: string;
+      created_by: string | null; created_at: string;
+      code: string; type_name: string; worker_name: string;
+    }>(sql`
+      select a.id, a.employment_id, a.on_date::text as on_date, a.hours::text as hours,
+             a.source, a.reason, a.leave_request_id, a.leave_type_id,
+             a.created_by::text as created_by, a.created_at::text as created_at,
+             t.code, t.name as type_name, p.display_name as worker_name
+        from hrm_absences a
+        join hrm_leave_types t on t.id = a.leave_type_id and t.org_id = a.org_id
+        join worker_employments e on e.id = a.employment_id and e.org_id = a.org_id
+        join parties p on p.id = e.worker_party_id and p.org_id = a.org_id
+       where a.org_id = ${orgId} and a.id = ${query.absenceId}
+    `)).rows[0];
+    // Zero rows is a failure: unknown id, or an id from another
+    // organization — never report which, so existence cannot be probed
+    // across tenants.
+    if (!row) throw new LeaveError("NOT_FOUND", "absence not found in this organization — check the absence id");
+    await requireHrmLeaveRead(db, orgId, actorId, row.employment_id);
+    return {
+      id: row.id,
+      employmentId: row.employment_id,
+      onDate: String(row.on_date).slice(0, 10),
+      hours: String(row.hours),
+      leaveTypeCode: row.code,
+      source: row.source,
+      reason: row.reason != null ? String(row.reason) : null,
+      leaveTypeId: row.leave_type_id,
+      leaveTypeName: row.type_name,
+      workerName: row.worker_name,
+      leaveRequestId: row.leave_request_id != null ? String(row.leave_request_id) : null,
+      recordedBy: row.created_by != null ? String(row.created_by) : null,
+      recordedAt: String(row.created_at),
+    };
+  });
+}
+
 /**
  * Calendar read across all departments, or one selected department. A null
  * department includes employments without a department assignment. Every

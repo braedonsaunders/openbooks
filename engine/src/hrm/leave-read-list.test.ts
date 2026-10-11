@@ -83,6 +83,46 @@ test("org leave list uses one bounded scoped request query", async () => {
   assert.match(requestStatements[0]!, /limit/i);
 });
 
+test("org leave list maps recorded days beside requests in the same statement", async () => {
+  const statements: string[] = [];
+  const absenceId = randomUUID();
+  const result = await listOrgLeaveRequests(
+    fakeExec({
+      permission: true,
+      statements,
+      rows: [
+        { ...requestRow(randomUUID(), "2026-09-05"), status: "draft" },
+        {
+          ...requestRow(randomUUID(), "2026-08-03"),
+          status: "recorded",
+          source: "recorded",
+          absence_id: absenceId,
+          reason: "approved verbally by the owner",
+          decided_by: null,
+          decided_at: null,
+          decision_reason: null,
+        },
+      ],
+    }),
+    randomUUID(),
+    randomUUID(),
+    {},
+  );
+
+  assert.equal(result.requests.length, 2);
+  const day = result.requests.find((row) => row.source === "recorded")!;
+  assert.equal(day.status, "recorded");
+  assert.equal(day.absenceId, absenceId);
+  assert.equal(day.startsOn, "2026-08-03");
+  assert.equal(day.endsOn, "2026-08-03");
+  assert.equal(day.reason, "approved verbally by the owner");
+  assert.equal(result.requests.find((row) => row.source === "request")?.absenceId, null);
+  const requestStatements = statements.filter((text) => /from hrm_leave_requests/i.test(text));
+  assert.equal(requestStatements.length, 1, "recorded days ride the same statement, never a second list");
+  assert.match(requestStatements[0]!, /union all/i);
+  assert.match(requestStatements[0]!, /hrm_absences/i);
+});
+
 test("org leave list refuses a missing read grant before querying requests", async () => {
   const statements: string[] = [];
   await assert.rejects(
