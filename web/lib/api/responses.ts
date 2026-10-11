@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { CommerceError } from "@openbooks/engine/commerce/contracts";
+import { ConsolidationError } from "@openbooks/engine/src/consolidation/consolidation.ts";
 import { PostingError } from "@openbooks/engine/src/journal/posting-contracts.ts";
+import { PeriodClosedError } from "@openbooks/engine/src/periods/period-policy.ts";
 import { InventoryError } from "@openbooks/engine/src/inventory/contracts.ts";
 import { PaymentError } from "@openbooks/engine/src/payments-core/payment-errors.ts";
 import { PayrollError } from "@openbooks/engine/src/payroll/error.ts";
@@ -101,12 +103,17 @@ export function created(body: Record<string, unknown>): NextResponse {
 
 /**
  * One table for the engine refusal families that carry no HTTP status:
- * posting, closed-period, inventory, payment, payroll, and temporal
- * refusals. A family member escaping a handler answers 422 with
- * `{ error: message, code, remedy? }` — never a 500, never a stack — and
- * 409 when it names a conflict. Handlers still map authorization and
- * not-found conditions explicitly (403/404) before this backstop runs:
- * those name who may act or what exists, which a domain code must not.
+ * posting, closed-period, consolidation, inventory, payment, payroll, and
+ * temporal refusals. A family member escaping a handler answers 422 with
+ * `{ error: message, code, remedy?, details? }` — never a 500, never a
+ * stack — and 409 when it names a conflict. `details` carries the structured
+ * evidence the shared refusal renderer needs (a closed period's locked
+ * scope with its reopen route); plain objects only, so internals never
+ * leak. Handlers still map authorization and not-found conditions explicitly
+ * (403/404) before this backstop runs: those name who may act or what
+ * exists, which a domain code must not — so only the consolidation
+ * period-closed refusal (never its not-found/not-configured siblings) maps
+ * here.
  */
 interface RefusalFamily {
   match: (error: object) => boolean;
@@ -117,6 +124,12 @@ interface RefusalFamily {
 const REFUSAL_FAMILIES: RefusalFamily[] = [
   { match: (error) => error instanceof CommerceError, code: "commerce_refused", pinCode: false },
   { match: (error) => error instanceof PostingEffectsReplayError, code: "posting_effects_replay_refused", pinCode: true },
+  { match: (error) => error instanceof PeriodClosedError, code: "period-closed", pinCode: true },
+  {
+    match: (error) => error instanceof ConsolidationError && error.code === "period-closed",
+    code: "period-closed",
+    pinCode: true,
+  },
   { match: (error) => error instanceof PostingError, code: "posting_refused", pinCode: false },
   { match: (error) => error instanceof InventoryError, code: "inventory_refused", pinCode: false },
   { match: (error) => error instanceof PaymentError, code: "payment_refused", pinCode: false },
@@ -136,9 +149,9 @@ function refusalConflicts(error: Error): boolean {
 /**
  * Map one status-less engine refusal to its 4xx, or null when the error
  * belongs to no family (the caller tries the next mapping). `code` comes
- * from the instance when it carries one, else the family default;
- * `remedy` rides along only when the instance names one, so internal
- * evidence (stacks, audit images) never leaks into the body.
+ * from the instance when it carries one, else the family default; `remedy`
+ * and `details` ride along only when the instance names plain values, so
+ * internal evidence (stacks, audit images) never leaks into the body.
  */
 export function postingRefusal(error: unknown): NextResponse | null {
   if (!(error instanceof Error)) return null;
@@ -154,5 +167,9 @@ export function postingRefusal(error: unknown): NextResponse | null {
   }
   const remedy = record["remedy"];
   if (typeof remedy === "string") body.remedy = remedy;
+  const details = record["details"];
+  if (details !== null && typeof details === "object" && !Array.isArray(details)) {
+    body.details = details as Record<string, unknown>;
+  }
   return NextResponse.json(body, { status: refusalConflicts(error) ? 409 : 422 });
 }

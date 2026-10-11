@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { CommerceError } from "@openbooks/engine/src/commerce/errors.ts";
+import { ConsolidationError } from "@openbooks/engine/src/consolidation/consolidation.ts";
 import { PostingError } from "@openbooks/engine/src/journal/posting-contracts.ts";
+import { PeriodClosedError } from "@openbooks/engine/src/periods/period-policy.ts";
 import { InventoryError } from "@openbooks/engine/src/inventory/contracts.ts";
 import { PaymentRevisionConflictError } from "@openbooks/engine/src/payments-core/payment-errors.ts";
 import { PayrollError } from "@openbooks/engine/src/payroll/error.ts";
@@ -75,4 +77,51 @@ test("status-less engine refusals map by family, 409 on conflict", async () => {
     assert.deepEqual(await response.json(), body);
   }
   for (const notFamily of [new Error("boom"), "nope", null]) assert.equal(postingRefusal(notFamily), null);
+});
+
+test("closed-period refusals keep their locked scope for the shared renderer", async () => {
+  const scope = { kind: "period-closed", periodId: "period-1", bookId: "book-1", subsidiaryId: "sub-1", module: "gl" };
+  const wrapped = new PostingError("journal entry JE-1: GL is closed for this period", { details: scope });
+  const wrappedResponse = postingRefusal(wrapped);
+  assert.ok(wrappedResponse);
+  assert.equal(wrappedResponse.status, 422);
+  assert.deepEqual(await wrappedResponse.json(), {
+    error: "journal entry JE-1: GL is closed for this period",
+    code: "posting_refused",
+    details: scope,
+  });
+
+  const raw = new PeriodClosedError("GL is closed for this period", scope);
+  const rawResponse = postingRefusal(raw);
+  assert.ok(rawResponse);
+  assert.equal(rawResponse.status, 422);
+  assert.deepEqual(await rawResponse.json(), {
+    error: "GL is closed for this period",
+    code: "period-closed",
+    details: scope,
+  });
+
+  const consolidation = new ConsolidationError(
+    "GL is closed for this period — consolidated exchange rates are close evidence",
+    "period-closed",
+    { remedy: "Request a controlled reopen of the period, then derive the rates again.", details: scope },
+  );
+  const consolidationResponse = postingRefusal(consolidation);
+  assert.ok(consolidationResponse);
+  assert.equal(consolidationResponse.status, 422);
+  assert.deepEqual(await consolidationResponse.json(), {
+    error: "GL is closed for this period — consolidated exchange rates are close evidence",
+    code: "period-closed",
+    remedy: "Request a controlled reopen of the period, then derive the rates again.",
+    details: scope,
+  });
+
+  // A refusal without structured evidence keeps the established envelope.
+  const bare = postingRefusal(new PostingError("Out of balance"));
+  assert.ok(bare);
+  assert.deepEqual(await bare.json(), { error: "Out of balance", code: "posting_refused" });
+
+  // Sibling consolidation failures still name who/what explicitly elsewhere.
+  assert.equal(postingRefusal(new ConsolidationError("period nope not found", "not-found")), null);
+  assert.equal(postingRefusal(new ConsolidationError("no book", "not-configured")), null);
 });

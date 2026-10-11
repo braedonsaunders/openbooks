@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { getTranslations } from 'next-intl/server'
+import { postingRefusal } from './responses'
 
 /** A typed refusal is safe to show only when its class names the business condition and its status is 4xx. */
 /**
@@ -37,6 +38,14 @@ export async function apiErrorResponse(
     }
     return NextResponse.json({ error: error.message, ...metadata, ...options.details }, { status })
   }
+
+  // A status-less engine refusal is still a domain refusal, never a 500:
+  // the shared family table answers it with its 4xx, code, remedy, and
+  // structured details (a closed period's locked scope). Only genuine class
+  // members map — a plain Error with forged fields still falls through to
+  // the unknown-error path below.
+  const refusal = postingRefusal(error)
+  if (refusal) return refusal
 
   const requestId = randomUUID()
   console.error('Unhandled API error', { requestId, error, path: options.request ? new URL(options.request.url).pathname : undefined })

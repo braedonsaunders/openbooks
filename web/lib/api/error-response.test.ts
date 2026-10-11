@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { StoredValueError } from '@openbooks/engine/stored-value'
+import { ConsolidationError } from '@openbooks/engine/src/consolidation/consolidation.ts'
+import { PostingError } from '@openbooks/engine/src/journal/posting-contracts.ts'
+import { PeriodClosedError } from '@openbooks/engine/src/periods/period-policy.ts'
 import { apiErrorResponse } from './error-response'
 import { readApiErrorMessage } from '../api-error'
 
@@ -39,4 +42,46 @@ test('an unexpected error cannot publish forged refusal metadata', async (t) => 
   assert.equal(body.field, undefined)
   assert.doesNotMatch(body.error, /private/)
   assert.equal(typeof body.requestId, 'string')
+})
+
+test('a status-less posting refusal answers 422 with its scope, never a 500', async () => {
+  const scope = { kind: 'period-closed', periodId: 'period-1', bookId: 'book-1', subsidiaryId: null, module: 'gl' }
+  const response = await apiErrorResponse(new PostingError('journal entry JE-1: GL is closed for this period', { details: scope }))
+  assert.equal(response.status, 422)
+  assert.deepEqual(await response.json(), {
+    error: 'journal entry JE-1: GL is closed for this period', code: 'posting_refused', details: scope,
+  })
+})
+
+test('a raw closed-period refusal answers 422 with its scope, never a 500', async () => {
+  const scope = { kind: 'period-closed', periodId: 'period-1', bookId: 'book-1', subsidiaryId: 'sub-1', module: 'gl' }
+  const response = await apiErrorResponse(new PeriodClosedError('GL is closed for this period', scope))
+  assert.equal(response.status, 422)
+  assert.deepEqual(await response.json(), {
+    error: 'GL is closed for this period', code: 'period-closed', details: scope,
+  })
+})
+
+test('a consolidation period-closed refusal answers 422 with remedy and scope, never a 500', async () => {
+  const scope = { kind: 'period-closed', periodId: 'period-1', bookId: 'book-1', subsidiaryId: null, module: 'gl' }
+  const response = await apiErrorResponse(new ConsolidationError(
+    'GL is closed for this period — consolidated exchange rates are close evidence',
+    'period-closed',
+    { remedy: 'Request a controlled reopen of the period, then derive the rates again.', details: scope },
+  ))
+  assert.equal(response.status, 422)
+  assert.deepEqual(await response.json(), {
+    error: 'GL is closed for this period — consolidated exchange rates are close evidence',
+    code: 'period-closed',
+    remedy: 'Request a controlled reopen of the period, then derive the rates again.',
+    details: scope,
+  })
+})
+
+test('a non-period consolidation sibling still answers 500 without safeStatus', async (t) => {
+  const original = console.error
+  console.error = () => {}
+  t.after(() => { console.error = original })
+  const response = await apiErrorResponse(new ConsolidationError('period nope not found', 'not-found'))
+  assert.equal(response.status, 500)
 })
