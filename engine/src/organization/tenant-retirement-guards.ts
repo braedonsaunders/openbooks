@@ -794,8 +794,8 @@ export const TENANT_RETIREMENT_GUARDS = [
   {
     "name": "openbooks_bank_statement_line_guard",
     "source": "0335_bank_statement_line_possible_duplicate.sql",
-    "sha256": "a9f21e836b32ccb22bfd602fc1cf36c964ce0d5ea79556b121ed4a017d986dd4",
-    "newSha256": "f4cd4e43879c5950d76caf0c87c0876acb6d15ef7b5c76231eba30b80cbabaed",
+    "sha256": "f4cd4e43879c5950d76caf0c87c0876acb6d15ef7b5c76231eba30b80cbabaed",
+    "newSha256": "54b74c992874a580d5d2871f4944c41a3b54b018ee4b184c4eea84f4be0960da",
     "patch": true
   },
   {
@@ -906,8 +906,8 @@ export const TENANT_RETIREMENT_GUARDS = [
   {
     "name": "openbooks_reconciliation_match_guard",
     "source": "0623_reconciliation_match_clone_authority.sql",
-    "sha256": "c821ef41d0f81a9b77e2c4ac099dfb6a7de46ff953009aa1987a973d99bb857e",
-    "newSha256": "febb0a2f859f4c8a6aa95e2c3d8abe66bcd850babeca7038c2c8155369da8966",
+    "sha256": "febb0a2f859f4c8a6aa95e2c3d8abe66bcd850babeca7038c2c8155369da8966",
+    "newSha256": "442f7133e0dac3816cf6a89622434315cc35e2f7ec24550b6de6d33584311de1",
     "patch": true
   },
   {
