@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
+import { readApiErrorMessage } from '@/lib/api-error'
 
 /**
  * The signature capture half of the public signing page. Deliberately
@@ -35,9 +36,10 @@ export function SignDocumentForm(props: {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(action),
     })
+    // The refusal reads through the shared helper so message, remedy and
+    // code render instead of a bare fallback.
     if (!res.ok) {
-      const body = (await res.json().catch(() => null)) as { error?: string } | null
-      setError(body?.error ?? 'This action failed — the message above explains why.')
+      setError(await readApiErrorMessage(res, 'This action failed — the message above explains why.'))
       setState('error')
       return
     }

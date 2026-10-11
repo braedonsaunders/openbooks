@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { createMoneyFormatter } from '@/lib/money-format'
+import { refusalMessageFromBody } from '@/lib/api-error'
 
 /**
  * The customer's side of quote-to-cash: review the quoted subscription,
@@ -73,10 +74,12 @@ export function QuoteSignForm({ token }: { token: string }) {
   const [activatedCount, setActivatedCount] = useState(0)
 
   const load = useCallback(async () => {
+    // The refusal reads through the shared helper so message, remedy and
+    // code render instead of the bare `error` field.
     const res = await fetch(`/api/sign/quotes/${encodeURIComponent(token)}`)
     if (!res.ok) {
       const body = (await res.json().catch(() => null)) as { error?: string } | null
-      setRefusal(typeof body?.error === 'string' && body.error ? body.error : t('quoteSign.unavailable'))
+      setRefusal(refusalMessageFromBody(body, { fallback: t('quoteSign.unavailable') }) ?? t('quoteSign.unavailable'))
       return
     }
     const body = (await res.json()) as QuoteLine
@@ -98,9 +101,10 @@ export function QuoteSignForm({ token }: { token: string }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, name: name.trim() }),
       })
+      // The refusal reads through the shared helper (see load above).
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as { error?: string } | null
-        setRefusal(typeof body?.error === 'string' && body.error ? body.error : t('quoteSign.unavailable'))
+        setRefusal(refusalMessageFromBody(body, { fallback: t('quoteSign.unavailable') }) ?? t('quoteSign.unavailable'))
         return
       }
       if (action === 'decline') {

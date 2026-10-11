@@ -1,5 +1,6 @@
 'use client'
 
+import { readApiErrorMessage } from '../../lib/api-error'
 import { useState, type FormEvent, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 
@@ -10,16 +11,9 @@ export async function portalAction<T>(path: string, payload: Record<string, unkn
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(payload),
   })
-  if (!res.ok) {
-    let detail = ''
-    try {
-      const data = (await res.json()) as { error?: string; remedy?: string }
-      detail = [data.error, data.remedy].filter(Boolean).join(' — ')
-    } catch {
-      detail = ''
-    }
-    throw new Error(detail || `Request failed (${res.status})`)
-  }
+  // The refusal reads through the shared helper so message, nested error,
+  // remedy and code render instead of a bare status string.
+  if (!res.ok) throw new Error(await readApiErrorMessage(res, `Request failed (${res.status})`))
   return (await res.json()) as T
 }
 

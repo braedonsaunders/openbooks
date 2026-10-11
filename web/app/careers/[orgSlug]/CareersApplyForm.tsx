@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { readApiErrorMessage } from '@/lib/api-error'
 
 /**
  * Public application form (HR-18): name + contact, future-roles opt-in,
@@ -35,9 +36,10 @@ export function CareersApplyForm({ postingId }: { postingId: string }) {
         }),
       })
       // Error bodies are checked before they are parsed.
+      // The refusal reads through the shared helper so message, remedy and
+      // code render instead of a bare fallback.
       if (!res.ok) {
-        const parsed = (await res.json().catch(() => null)) as { error?: string } | null
-        setError(parsed?.error ?? 'Your application was not received. Please try again.')
+        setError(await readApiErrorMessage(res, 'Your application was not received. Please try again.'))
         return
       }
       setDone(true)

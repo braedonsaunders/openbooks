@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { readApiErrorMessage } from '@/lib/api-error'
 
 /**
  * The response capture half of the public survey page. Deliberately
@@ -45,9 +46,10 @@ export function SurveyRespondForm({ token, questions }: { token: string; questio
         answers: questions.map((q) => ({ questionId: q.id, value: values[q.id] ?? null })),
       }),
     })
+    // The refusal reads through the shared helper so message, remedy and
+    // code render instead of a bare fallback.
     if (!res.ok) {
-      const body = (await res.json().catch(() => null)) as { error?: string } | null
-      setError(body?.error ?? 'Your response was not counted — the message above explains why.')
+      setError(await readApiErrorMessage(res, 'Your response was not counted — the message above explains why.'))
       setState('error')
       return
     }

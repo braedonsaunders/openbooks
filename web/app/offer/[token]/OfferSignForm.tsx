@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { readApiErrorMessage } from '@/lib/api-error'
 
 /**
  * Offer signing form (HR-18): typed-name e-sign plus decline-with-reason.
@@ -40,9 +41,10 @@ export function OfferSignForm({
       })
       // Error bodies are checked before they are parsed: a refusal names
       // the remedy instead of becoming a parse error.
+      // The refusal reads through the shared helper so message, remedy and
+      // code render instead of a bare fallback.
       if (!res.ok) {
-        const parsed = (await res.json().catch(() => null)) as { error?: string } | null
-        setError(parsed?.error ?? 'This signing link is no longer live.')
+        setError(await readApiErrorMessage(res, 'This signing link is no longer live.'))
         return
       }
       setDone(mode === 'sign' ? 'signed' : 'declined')

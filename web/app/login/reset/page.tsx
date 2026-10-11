@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Button, Card, CardContent, Input, Label } from '@openbooks/ui'
+import { readApiErrorMessage } from '@/lib/api-error'
 
 /**
  * Password reset. Without ?token= this asks for the account email and always
@@ -61,8 +62,11 @@ function ResetForm() {
     if (res.ok) {
       setDone(true)
     } else {
-      const data = await res.json().catch(() => ({}))
-      setError(data.error === 'weak_password' ? t('reset.weakPassword') : t('reset.invalidToken'))
+      // The body parses from a clone so the weak-password code keeps its
+      // mapped copy while every other refusal reads through the shared
+      // helper with message, remedy and code.
+      const data = (await res.clone().json().catch(() => ({}))) as { error?: string }
+      setError(data.error === 'weak_password' ? t('reset.weakPassword') : await readApiErrorMessage(res, t('reset.invalidToken')))
     }
     setBusy(false)
   }

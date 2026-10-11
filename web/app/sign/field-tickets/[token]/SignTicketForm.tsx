@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { SignaturePad } from '../../../../components/signature-pad'
+import { readApiErrorMessage } from '@/lib/api-error'
 
 /** The signature capture half of the public signing page. Deliberately does
  * not use the app's i18n provider (public route, no session): plain English
@@ -22,7 +23,9 @@ export function SignTicketForm(props: { token: string; alreadySigned: boolean; s
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token: props.token, signature, name: name.trim(), comment: comment.trim() || null }),
       })
-      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? 'Signing failed')
+      // The refusal reads through the shared helper so the server's reason
+      // renders instead of a bare string.
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'Signing failed'))
       setState('done')
     } catch (e) {
       setError((e as Error).message)

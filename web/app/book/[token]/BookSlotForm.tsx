@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { readApiErrorMessage } from '@/lib/api-error'
 
 /**
  * Candidate self-booking form (HR-18): the proposed slots as radio options
@@ -24,9 +25,10 @@ export function BookSlotForm({ token, slots }: { token: string; slots: { id: str
       })
       // Error bodies are checked before they are parsed: a refusal is a
       // message naming the remedy, never a parse error.
+      // The refusal reads through the shared helper so message, remedy and
+      // code render instead of a bare fallback.
       if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as { error?: string } | null
-        setError(body?.error ?? 'Booking failed. Please try another slot.')
+        setError(await readApiErrorMessage(res, 'Booking failed. Please try another slot.'))
         return
       }
       const body = (await res.json()) as { slot: { startsAt: string; timezone: string } }
