@@ -2065,6 +2065,45 @@ export async function convertOrder(
       if (!reopened) throw new ConversionError('Order changed while it was being converted', 409)
     }
 
+    // A vendor bill drawn from received stock clears received-not-billed when
+    // it posts, for matched lines whatever account the line carries (see
+    // resolveBillInventoryAccounts). The converted line therefore carries that
+    // clearing account, so the draft shows where its value actually lands
+    // instead of the order line's inventory asset account. The account must
+    // pass the same subsidiary scope the bill save applies to its accounts,
+    // or the saved draft would be refused. Resolved once per item.
+    const receivedStockAccounts = new Map<string, string>()
+    if (doc.kind === 'purchase_order' && target.kind === 'vendor_bill') {
+      for (const { line } of covered) {
+        if (line.item_id == null || !lineRequiresReceipt(line.item_kind ?? null)) continue
+        if (receivedStockAccounts.has(line.item_id)) continue
+        const itemLabel = line.item_name ? ` (${line.item_name})` : ''
+        const resolved = await resolveReceivedNotBilledAccount(tx, orgId, line.item_id)
+        if (!resolved) {
+          throw new ConversionError(
+            `Purchase-order line ${line.line_number}${itemLabel} cannot be billed: ${receivedNotBilledMissingMessage(line.item_name ?? `item ${line.item_id}`)}`,
+            422,
+            ITEM_MISSING_RNB_ACCOUNT,
+            { lineNumber: line.line_number, itemId: line.item_id, itemName: line.item_name },
+          )
+        }
+        const visible = (await tx.execute<{ id: string }>(sql`
+          select id from accounts
+           where id = ${resolved.accountId} and org_id = ${orgId}
+             and (subsidiary_id is null or subsidiary_id = ${doc.subsidiary_id}::uuid)
+        `)).rows[0]
+        if (!visible) {
+          throw new ConversionError(
+            `Purchase-order line ${line.line_number}${itemLabel} cannot be billed: its received-not-billed account is not available to this order's subsidiary — set the item's costing profile or the company Received not billed account to an account of this subsidiary, then convert again`,
+            422,
+          )
+        }
+        receivedStockAccounts.set(line.item_id, resolved.accountId)
+      }
+    }
+    const billedAccountOf = (l: OrderConvertLineRow): string | null =>
+      (l.item_id != null ? receivedStockAccounts.get(l.item_id) : undefined) ?? convertedAccountOf(l)
+
     let lineNo = 1
     for (const r of covered) {
       const l = r.line
@@ -2081,7 +2120,7 @@ export async function convertOrder(
               quantity, unit, unit_price, amount, tax_code_id, tax_group_id, tax_amount, marketplace_facilitator, department_id, project_id,
               location_id, class_id, extra_dims, stock_location_id, is_billable, custom, created_by, price_basis,
               work_from, work_to)
-        values (${orgId}, ${newId}, ${lineNo}, ${l.item_id}, ${convertedAccountOf(l)}, ${l.description},
+        values (${orgId}, ${newId}, ${lineNo}, ${l.item_id}, ${billedAccountOf(l)}, ${l.description},
               ${coveredQty}, ${l.unit}, ${l.unit_price}, ${amount},
               ${l.tax_code_id}, ${l.tax_group_id}, ${taxAmount}, ${l.marketplace_facilitator}, ${l.department_id}, ${l.project_id},
               ${l.location_id}, ${l.class_id}, ${JSON.stringify(l.extra_dims ?? {})}::jsonb, ${l.stock_location_id}, ${l.is_billable},
