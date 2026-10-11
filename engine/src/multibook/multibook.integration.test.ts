@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypass, withOrgContext, withOrgTransaction } from "../platform/db.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg, grantScratchPermissions, type ScratchOrg } from "../testing/fixtures.ts";
 import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
 import { bookReplicationGaps, bookReplicationReadiness, replicateEntryToBooks } from "../journal/book-replication.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
@@ -32,6 +32,7 @@ async function fixture(run: (f: Fixture) => Promise<void>): Promise<void> {
   const org = await withBypass(() => createScratchOrg());
   try {
     const actor = await withBypass(() => createScratchUser(org.orgId, "Controller", "admin"));
+    await withBypass(() => grantScratchPermissions(org.orgId, actor, ["gl.post_book_specific", "amortization.manage"]));
     const book = randomUUID();
     let baseCurrency = "";
     await withOrgContext(org.orgId, async () => {

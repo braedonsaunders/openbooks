@@ -755,6 +755,20 @@ export async function createScratchUser(
   return userId;
 }
 
+/** Grant only the native duties exercised by a fixture's authorized actor. */
+export async function grantScratchPermissions(orgId: string, userId: string, permissions: readonly string[]): Promise<void> {
+  await assertFixtureDatabase();
+  for (const permission of new Set(permissions)) {
+    const granted = await db.execute<{ permission: string }>(sql`
+      insert into user_permission_overrides (org_id, user_id, permission, effect)
+      values (${orgId}, ${userId}, ${permission}, 'grant')
+      on conflict (user_id, permission) do update set effect = 'grant'
+      where user_permission_overrides.org_id = excluded.org_id
+      returning permission`);
+    if (granted.rows.length !== 1) throw new Error(`fixture permission ${permission} was not granted`);
+  }
+}
+
 /**
  * Give a scratch party an active employment. pinTimekeeper (and the weekly
  * save behind it) requires an active employee_roles row for an active

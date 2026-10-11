@@ -97,7 +97,7 @@ test('batch create refuses without the send grant and without transport', async 
     const unconfigured = await withOrgContext(org.orgId, () =>
       batches.POST(new Request('http://audit.local/api', { method: 'POST', body: JSON.stringify({}) }), undefined as never))
     assert.equal(unconfigured.status, 422)
-    assert.match((await unconfigured.json() as { error: string }).error, /not configured/)
+    assert.match((await unconfigured.json() as { error: string }).error, /Email delivery is not enabled.*Admin → Email/)
 
     const listed = await withOrgContext(org.orgId, () =>
       batches.GET(new Request('http://audit.local/api'), undefined as never))

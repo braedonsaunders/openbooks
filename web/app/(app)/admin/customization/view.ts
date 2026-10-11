@@ -440,7 +440,9 @@ export async function loadCustomization(
             break
           case 'stock_location':
             result = await db.execute(
-              sql`select id::text as value, concat_ws(' · ', code, name) as label from stock_locations where org_id=${authz.user.orgId} and is_active order by code`,
+              sql`select sl.id::text as value, concat_ws(' · ', l.name, sl.code) as label
+                from stock_locations sl join locations l on l.org_id=sl.org_id and l.id=sl.location_id
+                where sl.org_id=${authz.user.orgId} and sl.is_active order by l.name, sl.code`,
             )
             break
           case 'accounting_book':

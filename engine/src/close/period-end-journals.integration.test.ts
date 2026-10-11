@@ -15,7 +15,7 @@ import {
   previewPeriodEndJournals,
   reversePeriodEndJournals,
 } from "./period-end-journals.ts";
-import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg, grantScratchPermissions, seedFlowActors, type ScratchOrg } from "../testing/fixtures.ts";
 import {
   balancesThrough,
   closeScratchPeriods,
@@ -36,6 +36,7 @@ function closedYearPeriods(year: PeriodEndYear): string[] {
 
 async function readyYear(org: ScratchOrg, options: { incomeSummary?: boolean; balanceSheetJournals?: boolean } = {}) {
   const actors = await seedFlowActors(org.orgId);
+  await grantScratchPermissions(org.orgId, actors.adminId, ["close.run"]);
   const year = await seedPeriodEndYear(org);
   await postScratchYearActivity(org, year, actors.adminId);
   await closeScratchPeriods(org, actors.adminId, closedYearPeriods(year));
@@ -235,6 +236,7 @@ test("a governed reopen admits only the year-end period and its approval reverse
   const org = await createScratchOrg();
   try {
     const { actors, year, december } = await readyYear(org);
+    await grantScratchPermissions(org.orgId, actors.approver1Id, ["close.reopen"]);
     await generatePeriodEndJournals(org.orgId, actors.adminId, { periodId: december, reason: REASON });
     await closeScratchPeriods(org, actors.adminId, [december]);
 
@@ -265,6 +267,7 @@ test("generation refuses an unready year by name and posts nothing", { skip: !DB
   const org = await createScratchOrg();
   try {
     const actors = await seedFlowActors(org.orgId);
+    await grantScratchPermissions(org.orgId, actors.adminId, ["close.run"]);
     const year = await seedPeriodEndYear(org);
     await postScratchYearActivity(org, year, actors.adminId);
     const december = year.periods.get("2026-12")!;

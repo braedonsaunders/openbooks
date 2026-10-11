@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
+import { errorChainMatches } from "../testing/error-chain.ts";
 import { db, withBypassContext, withOrgContext } from "../platform/db.ts";
 import { postEntry } from "../journal/post-entry.ts";
 import { installEngineSeams } from "../composition/install.ts";
@@ -146,12 +147,12 @@ test("storage keeps each named value inside its own segment and refuses overlapp
       await assert.rejects(
         db.execute(sql`insert into segment_value_dependencies (org_id, segment_id, value_id, controlling_segment_id, allowed_value_id)
           values (${s.org.orgId}, ${classSegment}, ${s.departmentA}, ${departmentSegment}, ${s.departmentA})`),
-        /does not belong to its segment/,
+        (error: unknown) => errorChainMatches(error, /does not belong to its segment/),
       );
       await assert.rejects(
         db.execute(sql`insert into segment_value_dependencies (org_id, segment_id, value_id, controlling_segment_id, allowed_value_id)
           values (${s.org.orgId}, ${classSegment}, ${s.classX}, ${departmentSegment}, ${s.departmentA})`),
-        /segment_value_dependencies_one_pairing|conflicting key/,
+        (error: unknown) => errorChainMatches(error, /segment_value_dependencies_one_pairing|conflicting key/),
       );
     });
     const other = await createScratchOrg();
@@ -162,7 +163,7 @@ test("storage keeps each named value inside its own segment and refuses overlapp
         await assert.rejects(
           db.execute(sql`insert into segment_value_dependencies (org_id, segment_id, value_id, controlling_segment_id, allowed_value_id)
             values (${other.orgId}, ${otherClass}, ${s.classX}, ${otherDepartment}, ${s.departmentA})`),
-          /does not belong to its segment/,
+          (error: unknown) => errorChainMatches(error, /does not belong to its segment/),
           "another organization's values cannot be named",
         );
       });

@@ -329,5 +329,5 @@ export async function recalculateStaleApprovedPayRun(
       supersededRunIds: returned.supersededRunIds,
       cancelledRunIds: returned.cancelledRunIds,
     };
-  });
+  }, { isolationLevel: "REPEATABLE READ" });
 }

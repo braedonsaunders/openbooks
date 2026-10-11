@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
+import { errorChainMatches } from "../testing/error-chain.ts";
 import { db, withBypassContext } from "../platform/db.ts";
 import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 import {
@@ -107,7 +108,7 @@ test("a localized number belongs to one account per scope and period, and ambigu
       const pcg = await context(org, "PCG");
       await localize(org, pcg.id, org.accounts.bank, { number: "512", from: "2026-01-01" });
       // Same scope, overlapping window: storage refuses.
-      await assert.rejects(localize(org, pcg.id, org.accounts.cogs, { number: "512", from: "2026-03-01" }), /account_localizations_unique_number|conflicting key/);
+      await assert.rejects(localize(org, pcg.id, org.accounts.cogs, { number: "512", from: "2026-03-01" }), (error: unknown) => errorChainMatches(error, /account_localizations_unique_number|conflicting key/));
       // Setup refuses a subsidiary-specific clash with an organization-wide number.
       const clash = await accountLocalizationWriteError(db, org.orgId, {
         contextId: pcg.id, accountId: org.accounts.cogs, subsidiaryId: org.subsidiaryId,

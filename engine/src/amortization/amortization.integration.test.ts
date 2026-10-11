@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
+import { errorChainMatches } from "../testing/error-chain.ts";
 import { db } from "../platform/db.ts";
 import { daysInCivilMonth } from "../platform/civil-date.ts";
 import { postDocument } from "../ledger/posting-document.ts";
@@ -380,7 +381,7 @@ test("hold, resume and term changes are governed, audited and refuse stale or po
     assert.ok(Number(audited.n) >= 4, "every change is audited");
     await assert.rejects(
       db.execute(sql`update expense_amortization_schedule_lines set planned_amount = 1 where schedule_id = ${schedule.id} and status = 'posted'`),
-      /final/,
+      (error: unknown) => errorChainMatches(error, /final/),
       "a posted period is immutable",
     );
   } finally {
@@ -469,7 +470,7 @@ test("posting refuses a templated line while the feature is off, and a template 
     await postSourceDocument(w, { number: "B-AM-10", amount: "300.00" });
     await assert.rejects(
       db.execute(sql`update expense_amortization_templates set period_count = 6 where id = ${w.templateId}`),
-      /in use and its policy is fixed/,
+      (error: unknown) => errorChainMatches(error, /in use and its policy is fixed/),
     );
     await db.execute(sql`update expense_amortization_templates set name = 'Prepaid insurance (annual)' where id = ${w.templateId}`);
     await setFeature(w.org.orgId, "expenseAmortization", false);

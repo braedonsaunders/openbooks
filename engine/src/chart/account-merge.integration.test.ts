@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
+import { errorChainMatches } from "../testing/error-chain.ts";
 import { db, withBypassContext, withOrgContext } from "../platform/db.ts";
 import { postEntry } from "../journal/post-entry.ts";
 import { installEngineSeams } from "../composition/install.ts";
@@ -335,15 +336,15 @@ test("a merged account refuses new postings, new references and reactivation", {
     );
     await assert.rejects(
       withBypassContext(() => db.execute(sql`update vendor_roles set default_expense_account_id = ${s.source} where org_id = ${s.org.orgId} and id = ${s.vendorRole}`)),
-      /was merged into account/,
+      (error: unknown) => errorChainMatches(error, /was merged into account/),
     );
     await assert.rejects(
       withBypassContext(() => db.execute(sql`update accounts set is_active = true where org_id = ${s.org.orgId} and id = ${s.source}`)),
-      /cannot be reactivated/,
+      (error: unknown) => errorChainMatches(error, /cannot be reactivated/),
     );
     await assert.rejects(
       withBypassContext(() => db.execute(sql`update account_merges set reason = 'Rewritten reason text' where org_id = ${s.org.orgId}`)),
-      /permanent history/,
+      (error: unknown) => errorChainMatches(error, /permanent history/),
     );
   } finally {
     await dropScratchOrg(s.org.orgId);

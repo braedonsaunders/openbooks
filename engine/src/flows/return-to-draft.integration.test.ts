@@ -13,6 +13,7 @@ import {
 import { loadDocumentEditCurrent } from "../ledger/document-service.ts";
 import { applyDocumentEdit, createDocument } from "../ledger/document-write.ts";
 import { postDocument } from "../ledger/posting-document.ts";
+import { requestDocumentVoid } from "../ledger/document-void.ts";
 import { DocumentEditError } from "../records/document-edit-policy.ts";
 import { decideGate } from "./gates.ts";
 import {
@@ -215,8 +216,9 @@ test("non-approved documents refuse with a named remedy", { skip: !DB }, async (
       (error: unknown) => error instanceof ReturnToDraftError && /void it or post a correction/.test(error.message),
     );
 
-    const voidedId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
-    await db.execute(sql`update documents set status = 'voided' where id = ${voidedId} and org_id = ${org.orgId}`);
+    const voidedId = await nativeBill(org, actors.submitterId);
+    await submitAndReleaseIfUngated("vendor_bill", voidedId, actors.submitterId);
+    await requestDocumentVoid({ documentId: voidedId, orgId: org.orgId, actorId: actors.submitterId, reason: "Cancel duplicate bill before posting" });
     await assert.rejects(
       returnDocumentToDraft({ documentId: voidedId, orgId: org.orgId, actorId: actors.submitterId, reason: "mistake in the batch" }),
       (error: unknown) => error instanceof ReturnToDraftError && /terminal/.test(error.message),

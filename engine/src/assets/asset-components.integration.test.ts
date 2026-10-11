@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withOrgContext } from "../platform/db.ts";
-import { createScratchOrg, dropScratchOrg, seedFlowActors, seedPostingAccount } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg, grantScratchPermissions, seedFlowActors, seedPostingAccount } from "../testing/fixtures.ts";
 import { AssetRefusal } from "./asset-refusal.ts";
 import {
   attachAssetComponent,
@@ -27,6 +27,7 @@ async function refusedWith(code: string, run: () => Promise<unknown>): Promise<v
 
 async function setup(org: Org) {
   const actors = await seedFlowActors(org.orgId);
+  await grantScratchPermissions(org.orgId, actors.adminId, ["assets.manage"]);
   return withOrgContext(org.orgId, async () => {
     await db.execute(sql`
       update orgs set settings = jsonb_set(settings, '{features}',

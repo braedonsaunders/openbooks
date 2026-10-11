@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withOrgContext, withOrgTransaction } from "../platform/db.ts";
-import { createScratchOrg, dropScratchOrg, seedFlowActors, seedPostingAccount } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg, grantScratchPermissions, seedFlowActors, seedPostingAccount } from "../testing/fixtures.ts";
 import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
 import { AssetRefusal } from "./asset-refusal.ts";
 import {
@@ -39,6 +39,7 @@ async function rejectsMatching(run: Promise<unknown>, pattern: RegExp): Promise<
 
 async function setup(org: Org) {
   const actors = await seedFlowActors(org.orgId);
+  await grantScratchPermissions(org.orgId, actors.adminId, ["assets.capitalize"]);
   return withOrgContext(org.orgId, async () => {
     await db.execute(sql`
       update orgs set settings = jsonb_set(settings, '{features}',

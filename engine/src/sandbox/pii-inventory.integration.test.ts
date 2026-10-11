@@ -88,6 +88,19 @@ function isCoveredByConstruction(table: string, column: string, udtName: string)
  *   with faked names they identify nobody.
  */
 const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
+  // Constrained policy classifications and opaque delivery digests carry no identity or prose.
+  "hrm_benefit_programs.unassigned_time",
+  "hrm_benefit_programs.pool_rounding",
+  "hrm_benefit_programs.eligibility",
+  "hrm_benefit_transaction_policies.unassigned_share",
+  "hrm_benefit_transaction_policies.rounding",
+  "hrm_benefit_transaction_positions.recipient_source",
+  "hrm_benefit_transaction_positions.fallback_source",
+  "purchase_over_receipt_tolerances.item_category",
+  "statement_batch_items.currency_code",
+  "statement_batch_items.status",
+  "statement_batch_items.delivery_key",
+  "statement_batch_runs.status",
   // Native constrained stock, ownership and presentation classifications.
   "consignment_events.kind",
   "consignment_stock.owner_kind",

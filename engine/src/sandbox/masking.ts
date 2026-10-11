@@ -310,6 +310,12 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   { tableName: "hrm_benefit_transaction_limits", columnName: "reason", transform: "redact" },
   { tableName: "hrm_benefit_programs", columnName: "name", transform: "faker_name" },
   { tableName: "hrm_benefit_programs", columnName: "description", transform: "redact" },
+  // Employment decisions and configuration reasons may identify a person.
+  { tableName: "employee_payroll_profiles", columnName: "wcb_exempt_reason", transform: "redact" },
+  { tableName: "hrm_absences", columnName: "reason", transform: "redact" },
+  { tableName: "payroll_statutory_rates", columnName: "source_citation", transform: "redact" },
+  { tableName: "payroll_statutory_rates", columnName: "reason", transform: "redact" },
+  { tableName: "purchase_over_receipt_tolerances", columnName: "reason", transform: "redact" },
   // Operational reasons and obligation titles may name people. Goods-tax
   // evidence includes registration details, so retain no authored snapshot.
   { tableName: "assembly_disassemblies", columnName: "reason", transform: "redact" },
@@ -389,6 +395,10 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   { tableName: "crm_activity_participants", columnName: "email", transform: "faker_email" },
   { tableName: "dunning_log", columnName: "to_email", transform: "faker_email" },
   { tableName: "statement_batch_items", columnName: "to_email", transform: "faker_email" },
+  { tableName: "statement_batch_items", columnName: "error", transform: "redact" },
+  // Remove authored filter payloads and captured delivery authority from masked copies.
+  { tableName: "statement_batch_runs", columnName: "filters", transform: "null_out" },
+  { tableName: "statement_batch_runs", columnName: "authorization_snapshot", transform: "null_out" },
   { tableName: "vendor_roles", columnName: "eft_notification_email", transform: "faker_email" },
   { tableName: "report_runs", columnName: "recipient_emails", transform: "null_out" },
   { tableName: "report_schedules", columnName: "recipient_emails", transform: "null_out" },

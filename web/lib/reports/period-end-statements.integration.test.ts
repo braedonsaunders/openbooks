@@ -11,7 +11,7 @@ import test from 'node:test'
  */
 const root = pathToFileURL(process.cwd() + '/').href
 const { withBypassContext, withOrgContext } = (await import('@openbooks/engine/platform/db')) as typeof import('@openbooks/engine/platform/db')
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = (await import('@openbooks/engine/testing/fixtures')) as typeof import('@openbooks/engine/testing/fixtures')
+const { createScratchOrg, dropScratchOrg, grantScratchPermissions, seedFlowActors } = (await import('@openbooks/engine/testing/fixtures')) as typeof import('@openbooks/engine/testing/fixtures')
 const fixtures = (await import('@openbooks/engine/testing/period-end-fixtures')) as typeof import('@openbooks/engine/testing/period-end-fixtures')
 const { generatePeriodEndJournals } = (await import('@openbooks/engine/close/period-end-journals')) as typeof import('@openbooks/engine/close/period-end-journals')
 const { profitAndLoss, balanceSheet, trialBalance } = (await import(root + 'web/lib/reports/statements.ts')) as typeof import('./statements')
@@ -45,6 +45,7 @@ for (const balanceSheetJournals of [false, true]) {
     try {
       const { adminId, periodId } = await withBypassContext(async () => {
         const actors = await seedFlowActors(org.orgId)
+        await grantScratchPermissions(org.orgId, actors.adminId, ["close.run"])
         const year = await fixtures.seedPeriodEndYear(org)
         await fixtures.postScratchYearActivity(org, year, actors.adminId)
         await fixtures.closeScratchPeriods(org, actors.adminId,
