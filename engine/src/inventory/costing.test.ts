@@ -92,12 +92,10 @@ test("toBaseQuantity folds case and whitespace; empty means the base unit", () =
   assert.equal(toBaseQuantity("5", " ea ", conv, "ea"), "5.0000");
   assert.equal(toBaseQuantity("5", "", conv, "ea"), "5.0000");
   assert.equal(toBaseQuantity("5", "   ", conv, "ea"), "5.0000");
-  // Genuine aliases do NOT fold: "Each" is not "ea" until the operator maps
-  // it once as a conversion. The refusal names that remedy.
-  assert.throws(
-    () => toBaseQuantity("2", "Each", conv, "ea"),
-    /unit "Each" with no conversion/,
-  );
+  // Canonical aliases fold to the base unit through the shared rule, so a
+  // line raised as "Each" posts 1:1 against "ea" on every movement path. An
+  // explicit conversion row still wins when one is mapped.
+  assert.equal(toBaseQuantity("2", "Each", conv, "ea"), "2.0000");
   assert.equal(toBaseQuantity("2", "Each", { Each: 1 }, "ea"), "2.0000");
 });
 
