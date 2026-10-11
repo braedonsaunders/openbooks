@@ -24,7 +24,7 @@ Me appears under My Work when three things are true. If one is missing, this is 
 - **Your login is linked to your employee record.** Without the link every Me page says so. An administrator links it in Administration → Users with Link person. A sole administrator can link their own login there too: the link is attested, recorded in the audit log with a reason, and refused once a second active administrator exists, who must then perform it.
 - **Your employee record has an employment.** Creating an employee in People → Employees does not create an employment. The employee record says when one is missing and points to its Employment tab, where HR hires the employee. Until then the overview shows no employment and leave requests refuse with the same remedy.
 
-Every built-in role carries the self-service grants. A custom role needs them too: View own employment summary and File profile changes for own party for Me to appear, and Request leave for own employment for My leave and the time-off balances card.
+Every built-in role carries the employee self-service baseline. New custom roles carry it too by default: the role editor shows Employee self-service switched on, and switching it off warns that people holding only that role cannot request leave, update their profile, or submit bank details. Custom roles created before the default gain the baseline automatically when none of their holders already carries a self-service grant. Each grant is scoped to the worker behind the login — View own employment summary and File profile changes for own party for Me to appear, and Request leave for own employment for My leave and the time-off balances card.
 
 ## Overview
 
