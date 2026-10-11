@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { toUnits } from "../money/money.ts";
+import { ledgerSideTotals, toUnits } from "../money/money.ts";
 import { canonicalDecimal, compareDecimal } from "../money/exact-decimal.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { accountingPreferences } from "../organization/accounting-preferences.ts";
@@ -16,7 +16,7 @@ export { validateJournalInstructionLines, type JournalInstructionLine } from "./
 import { validateJournalInstructionLines } from "./journal-instruction-validation.ts";
 
 /** Persisted validation covers UI, API, imports and posting, including header-only edits. */
-export async function validateJournalInstructions(runner: SqlExecutor, orgId: string, documentId: string, posting = false): Promise<void> {
+export async function validateJournalInstructions(runner: SqlExecutor, orgId: string, documentId: string, posting = false): Promise<{ debits: string; credits: string }> {
   const doc = (await runner.execute<{ subsidiary_id: string; document_date: string; posting_date: string; currency: string; fx_rate: string;
     journal_mode: string; journal_reverse_on: string | null; accounting_book_id: string | null; base_currency: string }>(sql`
     select d.subsidiary_id,d.document_date::text,coalesce(d.posting_date,d.document_date)::text as posting_date,
@@ -94,4 +94,5 @@ export async function validateJournalInstructions(runner: SqlExecutor, orgId: st
     }
     if (!lines.some(line => line.journal_currency)) throw new JournalInstructionError("A currency adjustment must identify the foreign currency whose zero balance has a base residual.", "Choose the foreign currency on the residual-clearing line and a gain/loss offset on another line.");
   }
+  return ledgerSideTotals(canonicalLines.map(line => line.balanceTxnAmount ?? line.amount));
 }

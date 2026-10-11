@@ -662,7 +662,10 @@ async function writeTransactions(
               if(changed.rows.length!==1)throw new Error('Journal import instruction did not match its saved line.')
             }
             const { validateJournalInstructions } = await import("@openbooks/engine/ledger/journal-instructions")
-            await validateJournalInstructions(tx,ctx.orgId,doc.id)
+            const totals = await validateJournalInstructions(tx,ctx.orgId,doc.id)
+            const measured = await tx.execute(sql`update documents set subtotal=${totals.debits},total=${totals.debits}
+              where org_id=${ctx.orgId} and id=${doc.id} and status='draft' returning id`)
+            if(measured.rows.length!==1)throw new Error("The imported journal's header-currency total could not be saved.")
             const after=await captureTransactionAuditSnapshot(tx,doc.id,ctx.orgId)
             if(!before || !after)throw new Error('The imported journal disappeared before its instructions were audited.')
             await recordTransactionAudit(tx,{orgId:ctx.orgId,documentId:doc.id,action:'update',actorId:ctx.actorId,source:'import',before,after})

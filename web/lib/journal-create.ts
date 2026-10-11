@@ -391,7 +391,12 @@ export async function createManualJournal(input: {
       // Segment value dependencies on the saved lines, as posting will read them.
       await assertDocumentSegmentDependencies(tx, orgId, requestId);
       await validateSavedAmortizationLines(tx, orgId, requestId);
-      await validateJournalInstructions(tx,orgId,requestId);
+      const totals = await validateJournalInstructions(tx,orgId,requestId);
+      const measured = await tx.execute(sql`update documents set subtotal=${totals.debits},total=${totals.debits}
+        where org_id=${orgId} and id=${requestId} and status='draft' returning id`);
+      if (measured.rows.length !== 1) throw new JournalCreateError("The journal's header-currency total could not be saved",409);
+      snapshot.subtotal = totals.debits;
+      snapshot.total = totals.debits;
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
         values (${orgId}, 'documents', ${requestId}, 'insert',

@@ -521,7 +521,10 @@ export const PATCH = defineRoute({
           // Segment value dependencies on the saved lines, as posting will read them.
           await assertDocumentSegmentDependencies(tx, user.orgId, id)
           await validateSavedAmortizationLines(tx, user.orgId, id)
-          await validateJournalInstructions(tx,user.orgId,id)
+          const totals = await validateJournalInstructions(tx,user.orgId,id)
+          const measured = await tx.execute(sql`update documents set subtotal=${totals.debits},total=${totals.debits}
+            where org_id=${user.orgId} and id=${id} and status='draft' returning id`)
+          if (measured.rows.length !== 1) throw new DocumentEditError(409,"The journal's header-currency total could not be saved")
 
           const auditAfter = await captureTransactionAuditSnapshot(tx, id, user.orgId)
           if (!auditAfter) throw new Error(`journal ${id} disappeared during update`)
