@@ -413,7 +413,7 @@ test("voiding a goods receipt unwinds stock and restores counters, then the orde
   assert.match(result.stdout, /PURCHASE-RECEIPT-VOID-UNWIND/);
 });
 
-test("a reversed goods receipt is dead coverage: the later bill receives into layers", { skip: !DB }, () => {
+test("a reversed goods receipt is dead coverage: the later bill refuses instead of receiving again", { skip: !DB }, () => {
   const source = `
     import assert from "node:assert/strict";
     import { randomUUID } from "node:crypto";
@@ -469,26 +469,41 @@ test("a reversed goods receipt is dead coverage: the later bill receives into la
       \`)).rows[0];
       assert.equal(toUnits(billLine.quantity), toUnits("10"));
       await db.execute(sql\`update documents set status = 'approved' where id = \${bill.id} and org_id = \${org.orgId}\`);
-      await postDocument(bill.id, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
 
-      // The bill must receive the stock into layers: the reversed receipt
-      // nets to zero coverage, so the variance-only path must not apply.
-      const facts = (await db.execute(sql\`
-        select (select count(*)::int from inventory_movements
+      // The converted bill is linked to its order line but the reversed
+      // receipt nets to zero live cover, so posting must refuse instead of
+      // receiving the returned stock into layers a second time.
+      const failure = await postDocument(bill.id, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } }).then(
+        () => null,
+        (cause) => cause,
+      );
+      assert.ok(failure instanceof Error, "posting must refuse without live cover");
+      assert.match(failure.message, /no received cover remains/);
+      assert.match(failure.message, /void this bill and rebill/);
+      const refused = (await db.execute(sql\`
+        select (select status from documents where id = \${bill.id}) as status,
+               (select count(*)::int from inventory_movements
                  where org_id = \${org.orgId} and document_line_id = \${billLine.id} and kind = 'receipt') as bill_receipts,
                (select coalesce(sum(quantity), 0)::text from inventory_movements
                  where org_id = \${org.orgId} and item_id = \${org.items.fifo} and status = 'posted') as on_hand,
-               (select coalesce(sum(remaining_quantity), 0)::text from cost_layers
-                 where org_id = \${org.orgId} and item_id = \${org.items.fifo}) as layered,
                (select coalesce(sum(l.amount), 0)::text from journal_lines l
                   join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
                  where l.org_id = \${org.orgId} and l.account_id = \${org.accounts.adjustment}
                    and e.status = 'posted') as ppv
       \`)).rows[0];
-      assert.equal(facts.bill_receipts, 1, "the bill receives into layers after its receipt was reversed");
-      assert.equal(toUnits(facts.on_hand), toUnits("10"));
-      assert.equal(toUnits(facts.layered), toUnits("10"));
-      assert.equal(toUnits(facts.ppv), toUnits("0"), "no variance against vanished stock");
+      assert.equal(refused.status, "approved", "the refused post leaves the bill approved");
+      assert.equal(refused.bill_receipts, 0, "no second receipt movement posts");
+      assert.equal(toUnits(refused.on_hand), toUnits("0"), "the returned stock stays gone");
+      assert.equal(toUnits(refused.ppv), toUnits("0"), "no variance against vanished stock");
+
+      // The remedy works: voiding the refused bill unwinds nothing but its
+      // own (unposted) entry and leaves the ledger clean.
+      const { requestDocumentVoid } = await import("./engine/src/ledger/document-void.ts");
+      const voided = await withOrg(org.orgId, () => requestDocumentVoid({
+        documentId: bill.id, orgId: org.orgId, actorId: userId,
+        reason: "goods were returned before billing — rebill on arrival", reversalDate: org.date,
+      }));
+      assert.equal(voided.status, "voided");
       console.log("PURCHASE-RECEIPT-REVERSED-COVERAGE");
     } finally {
       await dropScratchOrg(org.orgId);

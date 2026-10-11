@@ -498,7 +498,7 @@ export async function applyBillInventoryReceipts(
           ? `purchase order ${purchaseOrder.document_number} line ${purchaseOrder.line_number}`
           : `its purchase-order line`;
         throw new InventoryError(
-          `document line ${line.lineNumber} (item ${line.itemId}) is matched to ${orderLabel} but no received cover remains for that order line — the goods were returned or the receipt was voided after matching. Unmatch the bill line and post again to receive the stock directly, or receive the goods and match the bill again`,
+          `document line ${line.lineNumber} (item ${line.itemId}) is matched to ${orderLabel} but no received cover remains for that order line — the goods were returned or the receipt was voided after matching. Receive the replacement goods and post the bill again, or void this bill and rebill once the goods arrive`,
         );
       }
     }
