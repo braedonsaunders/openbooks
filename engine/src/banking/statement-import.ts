@@ -2,7 +2,7 @@
 import { BankingError, type ParsedStatementLine, type StatementSource, BANK_STATEMENT_PARSER_VERSION, type StatementSourceEvidence, type BankingContext, requireActorId, type SkippedStatementRow, type BalanceCandidateLine } from "./banking-core"
 import { canonicalCsvMapping } from "./statement-parsers/csv"
 import { loadReconcilableAccount, lockBankAccountInScope, lockReconciliationAccount } from "./reconcilable-account"
-import { assertRealDate, normalizeAmount } from "./statement-parsers/shared"
+import { assertRealDate, detectStatementBalanceRole, normalizeAmount } from "./statement-parsers/shared"
 import { createHash, randomUUID } from "node:crypto"
 import { sql } from "drizzle-orm"
 import { db, schema, type SqlExecutor } from "../platform/db.ts"
@@ -330,18 +330,21 @@ export async function importStatement(
   // Balance-hint tags (CSV/OFX "Opening balance …" rows) split out before
   // dedupe: a summary row has no GL counterpart, so importing it as a
   // transaction would block sign-off forever. Candidates are offered as
-  // opening/closing balances in the preview and never written.
+  // opening/closing balances in the preview and never written. Lines that
+  // arrive without a parser hint are detected here too, so pre-parsed
+  // callers get the same contract as source-text imports.
   const balanceCandidates: BalanceCandidateLine[] = [];
   const transactable: typeof validated = [];
   for (const line of validated) {
-    if (line.balanceHint) {
+    const role = line.balanceHint ?? detectStatementBalanceRole(line.description);
+    if (role) {
       balanceCandidates.push({
         postedOn: line.postedOn,
         amount: line.amount,
         description: line.description,
         counterpartyRef: line.counterpartyRef ?? null,
         bankTransactionId: line.bankTransactionId ?? null,
-        role: line.balanceHint,
+        role,
       });
     } else {
       transactable.push(line);
