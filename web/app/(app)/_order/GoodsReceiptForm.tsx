@@ -106,7 +106,9 @@ export function GoodsReceiptForm({ orderId, apiBase, warehouses, onSubmit, onClo
     if (!prefill || saving) return
     for (const line of prefill.lines) {
       const raw = (quantities[line.sourceLineId] ?? '').trim()
-      if (raw === '') continue
+      // Blank or zero means "not received now": the line is omitted from the
+      // request, so a partial receipt receives some lines and not others.
+      if (raw === '' || Number(raw) === 0) continue
       const qty = Number(raw)
       if (!Number.isFinite(qty) || qty <= 0) {
         setInlineError(t('invalidLineSave', { row: line.lineNumber, field: t('receive.receiveQty') }))
@@ -119,11 +121,11 @@ export function GoodsReceiptForm({ orderId, apiBase, warehouses, onSubmit, onClo
     }
     const lines = prefill.lines.flatMap((line) => {
       const raw = (quantities[line.sourceLineId] ?? '').trim()
-      if (raw === '' || Number(raw) <= 0) return []
+      if (raw === '' || Number(raw) === 0) return []
       return [{ sourceLineId: line.sourceLineId, quantity: raw }]
     })
     if (lines.length === 0) {
-      setInlineError(t('receive.noLines'))
+      setInlineError(t('receive.enterQuantity'))
       return
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(receiptDate)) {

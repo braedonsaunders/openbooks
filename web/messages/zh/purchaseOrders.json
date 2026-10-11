@@ -122,7 +122,8 @@
       "prefillFailed": "无法加载收货草稿。",
       "receiptFailed": "无法记录收货。",
       "overReceive": "行 {line}：{qty} 超出剩余可收数量 {remaining}。",
-      "invalidDate": "请按YYYY-MM-DD格式输入收货日期。"
+      "invalidDate": "请按YYYY-MM-DD格式输入收货日期。",
+      "enterQuantity": "请至少在一行中输入数量。"
     },
     "restoreDraftTitle": "发现未保存更改",
     "restoreDraftPrompt": "是否恢复来自 {time} 的未保存更改?",

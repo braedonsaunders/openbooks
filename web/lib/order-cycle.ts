@@ -1148,6 +1148,54 @@ type PurchaseReceiptSourceLineRow = Record<string, unknown> & {
 }
 
 /**
+ * Canonical receipt lines for a purchase order. A zero quantity means "not
+ * received now", so a partial receipt carries only its nonzero lines and a
+ * receipt with nothing entered refuses naming what to do. Canonicalization
+ * names raw source ids, which the sanitizer redacts to an ellipsis on
+ * screen — unresolvable for the operator — so a refusal on the error path
+ * resolves the human line numbers with a lock-free lookup (never a new lock,
+ * so lock ordering is unchanged) and names those instead.
+ */
+async function canonicalPurchaseReceiptLines(
+  tx: OrderCycleTx,
+  orgId: string,
+  sourceId: string,
+  lines: PurchaseReceiptLineInput[],
+): Promise<CanonicalFulfillmentLine[]> {
+  const live = lines.filter((line) => {
+    try {
+      return toQuantityUnits(line.quantity) !== 0n
+    } catch {
+      return true
+    }
+  })
+  if (live.length === 0 && lines.length > 0) {
+    throw new ConversionError('Enter a quantity on at least one line')
+  }
+  try {
+    return canonicalFulfillmentLines(live)
+  } catch (error) {
+    if (!(error instanceof ConversionError)) throw error
+    const ids = [...new Set(live.map((line) => line.sourceLineId.trim()).filter((id) => id !== ''))]
+    if (ids.length === 0) throw error
+    const numbers = new Map((await tx.execute<{ id: string; line_number: number }>(sql`
+      select id, line_number from document_lines
+       where org_id = ${orgId} and document_id = ${sourceId} and id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
+    `)).rows.map((row) => [row.id, row.line_number]))
+    if (numbers.size === 0) throw error
+    throw new ConversionError(
+      error.message.replace(/line ([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi, (match, id: string) => {
+        const lineNumber = numbers.get(id)
+        return lineNumber === undefined ? match : `line ${lineNumber}`
+      }),
+      error.status,
+      error.code,
+      error.details,
+    )
+  }
+}
+
+/**
  * Record one immutable goods receipt against a purchase order and bring the
  * stock in within the same transaction (DR inventory / CR received-not-billed
  * at the order price). Advances the order lines' received quantity, which is
@@ -1181,7 +1229,7 @@ export async function receivePurchaseOrderInTx(
     throw new ConversionError('Receipt idempotency key must be between 1 and 500 characters')
   }
   if (!isIsoCalendarDate(input.receiptDate)) throw new ConversionError('Receipt date must be YYYY-MM-DD')
-  const requested = canonicalFulfillmentLines(input.lines)
+  const requested = await canonicalPurchaseReceiptLines(tx, orgId, sourceId, input.lines)
   const command = {
     receiptDate: input.receiptDate,
     lines: requested,

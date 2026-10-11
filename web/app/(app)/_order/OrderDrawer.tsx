@@ -11,6 +11,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { ActionError, fetchAction, readActionResult } from '@braedonsaunders/appkit-errors'
 import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
+import { readApiErrorMessage } from '@/lib/api-error'
 import { useAppAction } from '@/lib/use-app-action'
 import { basisForResolvedRow, parsePriceBasis, type PriceBasis } from '@/lib/price-basis'
 import { Badge, Button, FieldLabel, Input, Label, SearchSelect } from '@openbooks/ui'
@@ -397,6 +398,32 @@ interface RnbRemedyTarget {
  * its `details` do not, and the costing link needs the item id. Never
  * branches on message text — only on the machine code and its shape.
  */
+/**
+ * Refusal text for the receipt form: the status is checked first and the
+ * message is read through the shared error reader — never a bespoke body
+ * field, so a refusal in any server envelope (`error`, `message`, `detail`,
+ * or an unreadable body covered by the fallback) renders instead of an
+ * empty alert. The typed remedy the receive route nests under `details` is
+ * appended, so the pinned refusal carries what to do next. Reads clones
+ * only, before the action reader consumes the body.
+ */
+async function readReceiptRefusalMessage(res: Response, fallback: string): Promise<string> {
+  if (typeof res.clone !== 'function') return fallback
+  const message = await readApiErrorMessage(res.clone(), fallback)
+  const body = (await res.clone().json().catch(() => null)) as {
+    remedy?: unknown
+    details?: unknown
+  } | null
+  const details = body && typeof body === 'object' && !Array.isArray(body)
+    ? (body.details as { remedy?: unknown } | null)
+    : null
+  const remedy = details && typeof details === 'object' && !Array.isArray(details)
+    && typeof details.remedy === 'string' && details.remedy.trim() !== ''
+    ? details.remedy.trim()
+    : null
+  return remedy && !message.includes(remedy) ? `${message} — ${remedy}` : message
+}
+
 async function readRnbRemedyTarget(res: Response): Promise<RnbRemedyTarget | null> {
   if (res.ok || typeof res.clone !== 'function') return null
   const body = (await res.clone().json().catch(() => null)) as {
@@ -1546,10 +1573,15 @@ export function OrderDrawer({
         headers: { 'Content-Type': 'application/json', 'Idempotency-Key': input.idempotencyKey },
         body: JSON.stringify({ receiptDate: input.receiptDate, lines: input.lines }),
       })
+      // The status decides refused vs saved — never a bespoke body field.
+      // Clone reads run before the action reader consumes the body.
       const remedy = await readRnbRemedyTarget(res)
+      const refusalMessage = !res.ok ? await readReceiptRefusalMessage(res, t('receive.receiptFailed')) : null
       const result = await readActionResult<ConvertedDocument>(res)
       if (!result.ok && remedy) setRnbRemedy(remedy)
-      outcome = result.ok ? { ok: true } : { ok: false, message: result.error.displayMessage(t('receive.receiptFailed')) }
+      outcome = result.ok || refusalMessage === null
+        ? { ok: true }
+        : { ok: false, message: refusalMessage }
       return result
     }, {
       fallbackMessage: t('receive.receiptFailed'),

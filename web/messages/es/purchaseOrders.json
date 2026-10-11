@@ -122,7 +122,8 @@
       "prefillFailed": "No se pudo cargar el borrador de recepción.",
       "receiptFailed": "No se pudo registrar la recepción de mercancía.",
       "overReceive": "Línea {line}: {qty} supera los {remaining} pendientes de recibir.",
-      "invalidDate": "Indique la fecha de recepción como AAAA-MM-DD."
+      "invalidDate": "Indique la fecha de recepción como AAAA-MM-DD.",
+      "enterQuantity": "Indique una cantidad en al menos una línea."
     },
     "restoreDraftTitle": "Se encontraron cambios sin guardar",
     "restoreDraftPrompt": "¿Restaurar los cambios sin guardar de {time}?",

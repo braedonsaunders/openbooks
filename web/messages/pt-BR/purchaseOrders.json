@@ -122,7 +122,8 @@
       "prefillFailed": "Não foi possível carregar o rascunho de recebimento.",
       "receiptFailed": "Não foi possível registrar o recebimento de mercadorias.",
       "overReceive": "Linha {line}: {qty} excede os {remaining} restantes para receber.",
-      "invalidDate": "Informe a data de recebimento como AAAA-MM-DD."
+      "invalidDate": "Informe a data de recebimento como AAAA-MM-DD.",
+      "enterQuantity": "Informe uma quantidade em pelo menos uma linha."
     },
     "restoreDraftTitle": "Alterações não salvas encontradas",
     "restoreDraftPrompt": "Restaurar as alterações não salvas de {time}?",

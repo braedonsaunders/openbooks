@@ -242,6 +242,148 @@ test('a failed save keeps the form state and retries with the same key', async (
   assert.deepEqual(globalThis.__dashRouter.pushes, ['/inventory'])
 })
 
+const LINE2_ID = '99999999-9999-4999-8999-999999999999'
+
+function prefillTwoLines() {
+  return Response.json({
+    receiptDate: '2026-08-01',
+    lines: [
+      {
+        sourceLineId: LINE_ID,
+        lineNumber: 1,
+        description: 'Widget',
+        unit: 'ea',
+        unitPrice: '2.00',
+        remaining: '10',
+        stockLocationId: WH_ID,
+      },
+      {
+        sourceLineId: LINE2_ID,
+        lineNumber: 2,
+        description: 'Gadget',
+        unit: 'box',
+        unitPrice: '24.00',
+        remaining: '2',
+        stockLocationId: WH_ID,
+      },
+    ],
+  })
+}
+
+async function setQtyN(n: number, value: string) {
+  const input = dialog()?.querySelector(`[aria-label="Receive qty ${n}"]`) as HTMLInputElement | null
+  assert.ok(input, `the form offers a quantity for line ${n}`)
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
+  await act(async () => {
+    setter.call(input, value)
+    input.dispatchEvent(new window.Event('input', { bubbles: true }))
+    await tick()
+  })
+  await tick()
+}
+
+function formAlert(): HTMLElement | null {
+  return dialog()?.querySelector('[role="alert"]')
+}
+
+test('a zero line is left out so a partial receipt posts the other line', async (t) => {
+  const posts: Record<string, unknown>[] = []
+  const restoreFetch = scriptFetch((url, init) => {
+    if (url === `/api/purchase-orders/${PO_ID}/receive` && (init?.method ?? 'GET') === 'GET') return prefillTwoLines()
+    if (url === `/api/purchase-orders/${PO_ID}/receive` && init?.method === 'POST') {
+      posts.push(JSON.parse(init.body as string) as Record<string, unknown>)
+      return Response.json({ kind: 'purchase_receipt', id: 'rcpt-1', documentNumber: 'RCPT-00001' })
+    }
+    if (url.startsWith('/api/flows/')) return Response.json({ error: 'no flow state' }, { status: 404 })
+    return null
+  })
+  t.after(restoreFetch)
+  const { unmount } = await mountPo()
+  t.after(unmount)
+  await openReceiptForm()
+  await setQtyN(1, '0')
+  await clickFormSave()
+  assert.equal(posts.length, 1, 'one explicit save posts once')
+  assert.deepEqual(posts[0], {
+    receiptDate: '2026-08-01',
+    lines: [{ sourceLineId: LINE2_ID, quantity: '2' }],
+  }, 'the zero line is omitted: zero means not received now')
+  assert.deepEqual(globalThis.__dashRouter.pushes, ['/inventory'])
+})
+
+test('zero on every line refuses without posting', async (t) => {
+  let posted = 0
+  const restoreFetch = scriptFetch((url, init) => {
+    if (url === `/api/purchase-orders/${PO_ID}/receive` && (init?.method ?? 'GET') === 'GET') return prefillTwoLines()
+    if (url === `/api/purchase-orders/${PO_ID}/receive` && init?.method === 'POST') {
+      posted += 1
+      return Response.json({ kind: 'purchase_receipt', id: 'rcpt-1', documentNumber: 'RCPT-00001' })
+    }
+    if (url.startsWith('/api/flows/')) return Response.json({ error: 'no flow state' }, { status: 404 })
+    return null
+  })
+  t.after(restoreFetch)
+  const { unmount } = await mountPo()
+  t.after(unmount)
+  await openReceiptForm()
+  await setQtyN(1, '0')
+  await setQtyN(2, '0.00')
+  await clickFormSave()
+  assert.equal(posted, 0, 'an all-zero receipt never posts')
+  assert.match(formAlert()?.textContent ?? '', /at least one line/, 'the refusal says what to enter')
+  assert.deepEqual(globalThis.__dashRouter.pushes, [], 'a refused save never navigates')
+})
+
+test('a server refusal with a nested remedy pins message and remedy beside the form', async (t) => {
+  const restoreFetch = scriptFetch((url, init) => {
+    if (url === `/api/purchase-orders/${PO_ID}/receive` && (init?.method ?? 'GET') === 'GET') return prefillOk()
+    if (url === `/api/purchase-orders/${PO_ID}/receive` && init?.method === 'POST') {
+      return Response.json(
+        {
+          error: 'This purchase order is routed for direct vendor shipment and cannot be received into stock',
+          code: 'drop_ship_confirmation_required',
+          details: { remedy: 'Confirm the vendor shipment from the drop-ship purchase order' },
+        },
+        { status: 409 },
+      )
+    }
+    if (url.startsWith('/api/flows/')) return Response.json({ error: 'no flow state' }, { status: 404 })
+    return null
+  })
+  t.after(restoreFetch)
+  const { unmount } = await mountPo()
+  t.after(unmount)
+  await openReceiptForm()
+  await setQty('4')
+  await clickFormSave()
+  const text = formAlert()?.textContent ?? ''
+  assert.match(text, /direct vendor shipment/, 'the server message renders')
+  assert.match(text, /Confirm the vendor shipment/, 'the nested remedy renders beside it')
+  assert.deepEqual(globalThis.__dashRouter.pushes, [], 'a refused save never navigates')
+})
+
+test('an unreadable server refusal pins the fallback, never an empty alert', async (t) => {
+  const restoreFetch = scriptFetch((url, init) => {
+    if (url === `/api/purchase-orders/${PO_ID}/receive` && (init?.method ?? 'GET') === 'GET') return prefillOk()
+    if (url === `/api/purchase-orders/${PO_ID}/receive` && init?.method === 'POST') {
+      return new Response(null, { status: 500 })
+    }
+    if (url.startsWith('/api/flows/')) return Response.json({ error: 'no flow state' }, { status: 404 })
+    return null
+  })
+  t.after(restoreFetch)
+  const { unmount } = await mountPo()
+  t.after(unmount)
+  await openReceiptForm()
+  await setQty('4')
+  await clickFormSave()
+  const alert = formAlert()
+  assert.ok(alert, 'the refusal pins beside the form')
+  assert.match(alert?.textContent ?? '', /could not be recorded/, 'an empty body falls back to the translated copy')
+  assert.ok((alert?.textContent ?? '').trim() !== '', 'the alert is never empty')
+  assert.deepEqual(globalThis.__dashRouter.pushes, [], 'a refused save never navigates')
+})
+
 test('a failed prefill offers retry instead of a dead form', async (t) => {
   let loads = 0
   const restoreFetch = scriptFetch((url, init) => {

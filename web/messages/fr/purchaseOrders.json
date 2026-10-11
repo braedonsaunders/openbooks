@@ -122,7 +122,8 @@
       "prefillFailed": "Le brouillon de réception n'a pas pu être chargé.",
       "receiptFailed": "La réception de marchandise n'a pas pu être enregistrée.",
       "overReceive": "Ligne {line} : {qty} dépasse les {remaining} restant à recevoir.",
-      "invalidDate": "Saisissez la date de réception au format AAAA-MM-JJ."
+      "invalidDate": "Saisissez la date de réception au format AAAA-MM-JJ.",
+      "enterQuantity": "Saisissez une quantité sur au moins une ligne."
     },
     "restoreDraftTitle": "Modifications non enregistrées détectées",
     "restoreDraftPrompt": "Restaurer les modifications non enregistrées du {time} ?",
