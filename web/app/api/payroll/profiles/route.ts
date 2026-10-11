@@ -576,6 +576,11 @@ export const GET = defineRoute({
           derivedProfileColumns[derived.column] = derived.value
         }
       }
+      // The hire date the certificate filings default their effective date
+      // to, so the main Save files an explicit date instead of today.
+      const employmentStart = (await db.execute<{ hired_on: string | null }>(sql`
+        select min(hired_on)::text as hired_on from employee_roles
+         where org_id = ${gate.user.orgId} and party_id = ${employee}`)).rows[0]?.hired_on ?? null
       return NextResponse.json({
         profile: profileRes.rows[0] ?? null,
         employmentId: (() => {
@@ -583,6 +588,7 @@ export const GET = defineRoute({
           if (linked) return employmentsRes.rows.some(row => row.id === linked) ? linked : null
           return employmentsRes.rows.length === 1 ? employmentsRes.rows[0]!.id : null
         })(),
+        employmentStart,
         derivedProfileColumns,
         storedCertificates: storedRes.rows,
         schedules: schedulesRes.rows,

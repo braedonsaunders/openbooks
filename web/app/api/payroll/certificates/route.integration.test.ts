@@ -142,8 +142,8 @@ test('certificate rows validate purely from the pack declaration', async () => {
         answers: { tax_code: '1257L' }, effectiveFrom: '2026-04-06',
       })
       assert.equal(response.status, 200, await response.clone().text())
-      const body = (await response.json()) as { ok: boolean; certificateKey: string; effectiveFrom: string }
-      assert.deepEqual(body, { ok: true, certificateKey: 'gb_tax_code_notice', effectiveFrom: '2026-04-06' })
+      const body = (await response.json()) as { ok: boolean; certificateKey: string; effectiveFrom: string; effectiveTo: string | null }
+      assert.deepEqual(body, { ok: true, certificateKey: 'gb_tax_code_notice', effectiveFrom: '2026-04-06', effectiveTo: null })
     }
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId))
@@ -169,6 +169,7 @@ test('concurrent first filings serialize on the employee payroll profile', async
         ok: true,
         certificateKey: 'gb_tax_code_notice',
         effectiveFrom: '2026-04-06',
+        effectiveTo: null,
       })
     }
 
@@ -284,10 +285,21 @@ test('a re-filing supersedes rather than overwrites, and prior dates resolve old
       ...base, answers: { tax_code: 'BR' }, effectiveFrom: '2026-08-01',
     })
     assert.equal(second.status, 200, await second.clone().text())
-    // A backdated filing against a newer current row is refused by name.
+    // A back-filled EARLIER filing is accepted as closed history: it closes
+    // at the later filing's start and leaves that filing current, so the
+    // earlier pay date reads the earlier answers.
     const backdated = await post({ ...base, answers: { tax_code: '0T' }, effectiveFrom: '2026-01-01' })
-    assert.equal(backdated.status, 422, await backdated.clone().text())
-    assert.match(((await backdated.json()) as { error: string }).error, /\(effective 2026-08-01\) is already on file/)
+    assert.equal(backdated.status, 200, await backdated.clone().text())
+    assert.deepEqual(await backdated.json(), {
+      ok: true, certificateKey: 'gb_tax_code_notice', effectiveFrom: '2026-01-01', effectiveTo: '2026-04-06',
+    })
+    // ...but a filing overlapping closed history is refused by name, with the
+    // covering interval and the remedy, never silently rewritten.
+    const overlapping = await post({ ...base, answers: { tax_code: 'D' }, effectiveFrom: '2026-05-01' })
+    assert.equal(overlapping.status, 422, await overlapping.clone().text())
+    const overlapBody = (await overlapping.json()) as { error: string; remedy: string }
+    assert.match(overlapBody.error, /already covers 2026-05-01/)
+    assert.match(overlapBody.remedy, /void or correct/)
     const rows = await withOrgContext(org.orgId, () => db.execute<{
       answers: Record<string, string>; effective_from: string; superseded_on: string | null;
     }>(sql`
@@ -295,11 +307,14 @@ test('a re-filing supersedes rather than overwrites, and prior dates resolve old
         from employee_tax_certificates
        where org_id = ${org.orgId} and employee_party_id = ${hire}
        order by effective_from`))
-    assert.equal(rows.rows.length, 2)
+    assert.equal(rows.rows.length, 3)
     assert.deepEqual(rows.rows[0], {
-      answers: { tax_code: '1257L' }, effective_from: '2026-04-06', superseded_on: '2026-08-01',
+      answers: { tax_code: '0T' }, effective_from: '2026-01-01', superseded_on: '2026-04-06',
     })
     assert.deepEqual(rows.rows[1], {
+      answers: { tax_code: '1257L' }, effective_from: '2026-04-06', superseded_on: '2026-08-01',
+    })
+    assert.deepEqual(rows.rows[2], {
       answers: { tax_code: 'BR' }, effective_from: '2026-08-01', superseded_on: null,
     })
     // The engine's own resolver — the same function the pay run calls — reads
@@ -311,6 +326,8 @@ test('a re-filing supersedes rather than overwrites, and prior dates resolve old
       effectiveFrom: row.effective_from,
       supersededOn: row.superseded_on,
     }))
+    const backfilledRun = resolveCertificate({ certificate, stored, asOf: '2026-02-05' })
+    assert.equal(backfilledRun.answers.tax_code, '0T')
     const oldRun = resolveCertificate({ certificate, stored, asOf: '2026-05-05' })
     assert.equal(oldRun.answers.tax_code, '1257L')
     const newRun = resolveCertificate({ certificate, stored, asOf: '2026-09-05' })
