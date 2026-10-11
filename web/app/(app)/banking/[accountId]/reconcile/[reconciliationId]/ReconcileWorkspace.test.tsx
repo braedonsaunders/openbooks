@@ -592,6 +592,35 @@ test('an unproven opening confirmation surfaces the refusal', async (t) => {
   )
 })
 
+test('a refused opening confirmation persists beside the opening form', async (t) => {
+  // A refused confirmation that only fires a transient toast reads as
+  // "nothing happened" once it dismisses: the typed refusal must persist
+  // as a workspace alert until the next success.
+  await mountWorkspace(t, (async () => Response.json(
+    { error: 'Import the statement lines first — there is no covered period to carry an opening into' },
+    { status: 422 },
+  )) as typeof fetch, { opening: balanceLessOpening })
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set
+  const reason = [...document.querySelectorAll('input')].find((input) => input.getAttribute('placeholder')?.includes('Opening balance from')) as HTMLInputElement | undefined
+  assert.ok(reason, 'the opening form renders')
+  await act(async () => {
+    setter?.call(reason, 'Opening balance from the prior-year close, confirmed to the bank records')
+    reason.dispatchEvent(new window.Event('input', { bubbles: true }))
+    for (let i = 0; i < 4; i++) await tick()
+  })
+  const confirm = [...document.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === 'Confirm opening') as HTMLButtonElement | undefined
+  assert.ok(confirm && !confirm.disabled, 'the reasoned confirmation is submittable')
+  await act(async () => {
+    confirm.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    for (let i = 0; i < 6; i++) await tick()
+  })
+  const alert = document.querySelector('[role="alert"]')
+  assert.ok(
+    alert && (alert.textContent ?? '').includes('Import the statement lines first'),
+    `the opening refusal must persist in the workspace, got ${JSON.stringify(alert?.textContent ?? null)}`,
+  )
+})
+
 test('a confirmed opening reads as the session opening position', async (t) => {
   await mountWorkspace(t, (async () => Response.json({})) as typeof fetch, {
     opening: {

@@ -225,6 +225,10 @@ function ReconcileWorkspaceForId({
   // alert with the blocking lines beside it, cleared by the next success.
   const [signOffError, setSignOffError] = useState<string | null>(null)
   const [blockers, setBlockers] = useState<{ lines: SignOffBlocker[]; total: number } | null>(null)
+  // A refused opening confirmation that only fires a transient toast reads as
+  // "nothing happened" once it dismisses — the typed refusal persists as a
+  // workspace alert beside the opening form, cleared by the next success.
+  const [openingError, setOpeningError] = useState<string | null>(null)
   const subjectKey = reconciliation.id
   const selectionKey = JSON.stringify([
     subjectKey,
@@ -290,6 +294,7 @@ function ReconcileWorkspaceForId({
       // A success moves the session: any persisted refusal is stale.
       setSignOffError(null)
       setBlockers(null)
+      setOpeningError(null)
       return await res.json().catch(() => null) as ReconciliationActionResult | null
     } catch {
       const message = tBanking('errors.requestFailed')
@@ -357,11 +362,17 @@ function ReconcileWorkspaceForId({
 
   async function confirmOpening() {
     // The refusal reads through the shared helper like every other
-    // workspace mutation: a confirmation the ledger does not prove toasts
-    // the typed message with its remedy instead of failing silently.
+    // workspace mutation, and persists beside the opening form: a
+    // confirmation the ledger does not prove keeps its typed message with
+    // its remedy on screen instead of failing silently once the toast
+    // dismisses.
+    setOpeningError(null)
     const data = await call('POST', `/api/banking/reconciliations/${reconciliation.id}/opening`, {
       openingBalance: openingAmount,
       reason: openingReason.trim(),
+    }, (message) => {
+      setOpeningError(message)
+      toast.error(message)
     })
     if (!data) return
     toast.success(t('openingConfirmedToast', { amount: money(openingAmount) }))
@@ -512,6 +523,14 @@ function ReconcileWorkspaceForId({
               </p>
               {opening.confirmation && !opening.carryApplies ? (
                 <p className="text-sm text-amber-700 dark:text-amber-300">{t('openingStaleNote')}</p>
+              ) : null}
+              {openingError ? (
+                <div
+                  role="alert"
+                  className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300"
+                >
+                  <p>{openingError}</p>
+                </div>
               ) : null}
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
