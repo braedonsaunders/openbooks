@@ -25,6 +25,8 @@ registerHooks({
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+type ScratchOrg = Awaited<ReturnType<typeof createScratchOrg>>
+const { postDocument } = await import('@openbooks/engine/src/ledger/posting-document.ts')
 const { POST } = await import('./route')
 
 const request = (body: unknown) => new Request('http://return-to-draft.local/api/documents/actions', { method: 'POST', body: JSON.stringify(body) })
@@ -39,14 +41,40 @@ async function seedClerk(orgId: string, permissions: string[]): Promise<string> 
   return actor
 }
 
-async function seedBill(orgId: string, actor: string, subsidiaryId: string, vendorId: string, date: string, status: string): Promise<string> {
+async function seedBill(org: ScratchOrg, actor: string, date: string, status: string): Promise<string> {
   const id = randomUUID()
+  // A posted document must carry its posted entry and period
+  // (`documents_posted_period_required`), so it is seeded through the native
+  // path — draft with lines, approve, post through the kernel — exactly like
+  // production. Draft and approved documents never touch the GL and keep the
+  // lightweight header-only insert.
+  if (status === 'posted') {
+    await withBypassContext(() => db.execute(sql`
+      insert into documents
+        (id, org_id, kind, status, document_number, subsidiary_id, party_id,
+         document_date, due_date, currency, fx_rate, subtotal, tax_total, total, created_by)
+      values (${id}, ${org.orgId}, 'vendor_bill', 'draft', ${`BILL-${id.slice(0, 8)}`},
+              ${org.subsidiaryId}, ${org.vendorId}, ${date}, ${date},
+              'CAD', '1', '100', '0', '100', ${actor})`))
+    await withBypassContext(() => db.execute(sql`
+      insert into document_lines
+        (org_id, document_id, line_number, item_id, account_id, quantity, unit_price, amount, tax_amount,
+         is_billable, quantity_fulfilled, quantity_billed, custom, tax_overridden, extra_dims)
+      values (${org.orgId}, ${id}, 1, ${org.items.service}, ${org.accounts.cogs}, '1', '100', '100', '0',
+              false, '0', '0', '{}'::jsonb, false, '{}'::jsonb)`))
+    await withBypassContext(() => db.execute(sql`
+      update documents set status = 'approved', updated_at = now() where id = ${id} and org_id = ${org.orgId}`))
+    await withBypassContext(() => postDocument(id, {
+      control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+    }))
+    return id
+  }
   await withBypassContext(() => db.execute(sql`
     insert into documents
       (id, org_id, kind, status, document_number, subsidiary_id, party_id,
        document_date, due_date, currency, fx_rate, subtotal, tax_total, total, created_by)
-    values (${id}, ${orgId}, 'vendor_bill', ${status}, ${`BILL-${id.slice(0, 8)}`},
-            ${subsidiaryId}, ${vendorId}, ${date}, ${date},
+    values (${id}, ${org.orgId}, 'vendor_bill', ${status}, ${`BILL-${id.slice(0, 8)}`},
+            ${org.subsidiaryId}, ${org.vendorId}, ${date}, ${date},
             'CAD', '1', '100', '0', '100', ${actor})`))
   return id
 }
@@ -71,7 +99,7 @@ test('return_to_draft needs the approve grant, then returns the bill with a befo
   const org = await withBypassContext(() => createScratchOrg())
   try {
     const actor = await withBypassContext(() => seedClerk(org.orgId, ['ap.read', 'ap.create']))
-    const billId = await seedBill(org.orgId, actor, org.subsidiaryId, org.vendorId, org.date, 'approved')
+    const billId = await seedBill(org, actor, org.date, 'approved')
     state.user = actorFor(actor, org.orgId)
 
     await withOrgContext(org.orgId, async () => {
@@ -106,8 +134,8 @@ test('return_to_draft refuses posted and draft documents with named remedies', a
     const actor = await withBypassContext(() => seedClerk(org.orgId, ['ap.read', 'ap.create', 'ap.post']))
     state.user = actorFor(actor, org.orgId)
 
-    const postedId = await seedBill(org.orgId, actor, org.subsidiaryId, org.vendorId, org.date, 'posted')
-    const draftId = await seedBill(org.orgId, actor, org.subsidiaryId, org.vendorId, org.date, 'draft')
+    const postedId = await seedBill(org, actor, org.date, 'posted')
+    const draftId = await seedBill(org, actor, org.date, 'draft')
     await withOrgContext(org.orgId, async () => {
       const posted = await POST(request({ action: 'return_to_draft', documentId: postedId, reason: 'approved the wrong batch' }))
       assert.equal(posted.status, 422)
@@ -128,7 +156,7 @@ test('return_to_draft validates the reason at the boundary', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     const actor = await withBypassContext(() => seedClerk(org.orgId, ['ap.read', 'ap.create', 'ap.post']))
-    const billId = await seedBill(org.orgId, actor, org.subsidiaryId, org.vendorId, org.date, 'approved')
+    const billId = await seedBill(org, actor, org.date, 'approved')
     state.user = actorFor(actor, org.orgId)
 
     await withOrgContext(org.orgId, async () => {
