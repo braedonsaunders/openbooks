@@ -7,6 +7,7 @@ import { lineRequiresReceipt } from "../records/stock-receipt.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { fromQuantityUnits, toQuantityUnits } from "../money/quantity.ts";
 import { normalizeInventoryUnit } from "../inventory/costing.ts";
+import { matchablePurchaseOrderLines } from "../inventory/bill-matchable-lines.ts";
 
 /**
  * Link a drawer-created vendor bill to its purchase order after the fact.
@@ -97,30 +98,11 @@ function existingPurchaseOrderLineId(custom: unknown): string | null {
   return null;
 }
 
-function billableRemainderUnits(input: {
-  orderedQuantity: string;
-  billedQuantity: string;
-  cancelledQuantity: string;
-  fulfilledQuantity: string;
-  requiresReceipt: boolean;
-}): bigint {
-  // The same ceiling order conversion bills from: stock lines bill only
-  // received-and-unbilled cover, other lines the ordered remainder.
-  const remaining =
-    toQuantityUnits(input.orderedQuantity) -
-    toQuantityUnits(input.cancelledQuantity) -
-    toQuantityUnits(input.billedQuantity);
-  if (remaining <= 0n) return 0n;
-  if (!input.requiresReceipt) return remaining;
-  const cover = toQuantityUnits(input.fulfilledQuantity) - toQuantityUnits(input.billedQuantity);
-  if (cover <= 0n) return 0n;
-  return cover < remaining ? cover : remaining;
-}
-
 /**
  * What a draft or approved unposted vendor bill can match: every stocked
- * bill line without provenance, each with the approved purchase-order
- * lines holding the same item open, and the goods receipts behind them so
+ * bill line without provenance, each with the matchable purchase-order
+ * lines — the one predicate the posting guard reads, so the dialog offers
+ * exactly what the guard names — and the goods receipts behind them so
  * the operator confirms the right delivery. Read-only; matching
  * revalidates everything under row locks.
  */
@@ -187,63 +169,38 @@ export async function billMatchCandidates(
       lines.push({ ...base, matched: null, candidates: [] });
       continue;
     }
-    const candidates = (await db.execute<{
-      purchase_order_id: string;
-      purchase_order_number: string;
-      purchase_order_line_id: string;
-      purchase_order_line_number: number;
-      unit: string | null;
-      unit_price: string;
-      ordered_quantity: string;
-      fulfilled_quantity: string;
-      billed_quantity: string;
-      cancelled_quantity: string;
-    }>(sql`
-      select d.id as purchase_order_id, d.document_number as purchase_order_number,
-             dl.id as purchase_order_line_id, dl.line_number as purchase_order_line_number,
-             dl.unit, dl.unit_price::text as unit_price,
-             dl.quantity::text as ordered_quantity, dl.quantity_fulfilled::text as fulfilled_quantity,
-             dl.quantity_billed::text as billed_quantity, dl.quantity_cancelled::text as cancelled_quantity
-        from document_lines dl
-        join documents d on d.id = dl.document_id and d.org_id = dl.org_id
-       where dl.org_id = ${orgId}
-         and d.kind = 'purchase_order'
-         and d.status = 'approved'
-         and dl.item_id = ${billLine.item_id}
-         and (d.party_id is not distinct from ${bill.party_id})
-         and (d.subsidiary_id is not distinct from ${bill.subsidiary_id})
-       order by d.document_number, dl.line_number`)).rows;
+    // The one matchable-line predicate, shared with the posting guard:
+    // same vendor and entity, approved order, same item with unit
+    // spellings folded, received-not-yet-billed cover outstanding.
+    const candidates = await matchablePurchaseOrderLines(db, orgId, {
+      itemId: billLine.item_id,
+      unit: billLine.unit,
+      partyId: bill.party_id,
+      subsidiaryId: bill.subsidiary_id,
+    });
     const result: BillMatchCandidate[] = [];
     for (const candidate of candidates) {
-      const billable = billableRemainderUnits({
-        orderedQuantity: candidate.ordered_quantity,
-        billedQuantity: candidate.billed_quantity,
-        cancelledQuantity: candidate.cancelled_quantity,
-        fulfilledQuantity: candidate.fulfilled_quantity,
-        requiresReceipt: true,
-      });
-      if (billable <= 0n) continue;
       const receipts = (await db.execute<PurchaseReceiptReference>(sql`
         select r.id, r.document_number as "documentNumber", r.document_date::text as "documentDate", r.status
           from document_links link
           join documents r on r.id = link.to_document_id and r.org_id = link.org_id
          where link.org_id = ${orgId}
-           and link.from_document_id = ${candidate.purchase_order_id}
+           and link.from_document_id = ${candidate.purchaseOrderId}
            and link.link_type = 'fulfills'
            and r.kind = 'purchase_receipt'
          order by r.document_date, r.document_number`)).rows;
       result.push({
-        purchaseOrderId: candidate.purchase_order_id,
-        purchaseOrderNumber: candidate.purchase_order_number,
-        purchaseOrderLineId: candidate.purchase_order_line_id,
-        purchaseOrderLineNumber: candidate.purchase_order_line_number,
+        purchaseOrderId: candidate.purchaseOrderId,
+        purchaseOrderNumber: candidate.purchaseOrderNumber,
+        purchaseOrderLineId: candidate.purchaseOrderLineId,
+        purchaseOrderLineNumber: candidate.purchaseOrderLineNumber,
         unit: candidate.unit,
-        unitPrice: candidate.unit_price,
-        orderedQuantity: candidate.ordered_quantity,
-        fulfilledQuantity: candidate.fulfilled_quantity,
-        billedQuantity: candidate.billed_quantity,
-        cancelledQuantity: candidate.cancelled_quantity,
-        billableQuantity: fromQuantityUnits(billable),
+        unitPrice: candidate.unitPrice,
+        orderedQuantity: candidate.orderedQuantity,
+        fulfilledQuantity: candidate.fulfilledQuantity,
+        billedQuantity: candidate.billedQuantity,
+        cancelledQuantity: candidate.cancelledQuantity,
+        billableQuantity: candidate.billableQuantity,
         receipts,
       });
     }

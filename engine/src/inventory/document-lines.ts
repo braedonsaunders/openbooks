@@ -23,6 +23,8 @@ export interface DocumentInventoryLine {
   /** base-unit quantity for the line. Always positive: negative-quantity
    * inventory lines are refused at load time (see below), never absorbed. */
   quantity: string;
+  /** The line's own unit spelling, for unit-folded order-line matching. */
+  unit: string | null;
   /** line extended amount (for unit-cost derivation on receipts). */
   amount: string;
   assetAccountId: string;
@@ -188,6 +190,7 @@ export async function loadDocumentInventoryLines(
       itemKind: row.item_kind,
       stockLocationId: loc,
       quantity,
+      unit: row.unit,
       amount: row.amount,
       assetAccountId: row.asset_account_id,
       clearingAccountId: row.received_not_billed_account_id,

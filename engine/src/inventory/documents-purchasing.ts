@@ -13,6 +13,7 @@ import { receiveInventory } from "./movements.ts";
 import { liveReceiptQuantity } from "./return-quantities.ts";
 import { loadDocumentInventoryLines, unprofiledInventoryLines, assertNoUnprofiledInventoryLines, inventoryPostingEffectKey, isJsonRecord, type DocumentInventoryLine } from "./document-lines.ts";
 import { kitLabel, kitNoStockRefusal } from "./kits.ts";
+import { matchablePurchaseOrderLines, type MatchablePurchaseOrderLine } from "./bill-matchable-lines.ts";
 import { receivedNotBilledMissingMessage, resolveReceivedNotBilledAccount } from "../records/control-accounts.ts";
 import { lineRequiresReceipt } from "../records/stock-receipt.ts";
 
@@ -144,21 +145,23 @@ export async function assertBillReceiptsPostable(
       }
     }
   }
-  await assertManualBillLinesMatched(runner, orgId, lines);
+  await assertManualBillLinesMatched(runner, orgId, documentId, lines);
 }
 
 /**
  * A vendor-bill line coded by hand for receipt-tracked stock must not bypass
  * three-way matching: billing it with no purchase-order provenance and then
- * receiving the same stock on its purchase order counts it twice. When an
- * approved purchase order still holds that item open, refuse naming the
- * order — match the bill to its purchase-order line (or receive first)
- * instead. Direct counter purchases with no open order keep the legacy
+ * receiving the same stock on its purchase order counts it twice. When a
+ * matchable purchase-order line exists — the one predicate the Match dialog
+ * reads, so the guard names exactly what the dialog offers — refuse naming
+ * the order: match the bill to its purchase-order line (or receive first)
+ * instead. Direct counter purchases with no matchable order keep the legacy
  * bill-is-the-receipt path.
  */
 async function assertManualBillLinesMatched(
   runner: SqlExecutor,
   orgId: string,
+  documentId: string,
   lines: DocumentInventoryLine[],
 ): Promise<void> {
   const manual = lines.filter(
@@ -167,46 +170,41 @@ async function assertManualBillLinesMatched(
       billLinePurchaseOrderLineId(line.custom) === null,
   );
   if (manual.length === 0) return;
-  const open = (await runner.execute<{
-    item_id: string;
-    item_code: string | null;
-    item_name: string;
-    document_number: string;
-    line_number: number;
+  const bill = (await runner.execute<{
+    party_id: string | null;
+    subsidiary_id: string | null;
   }>(sql`
-    select dl.item_id, i.code as item_code, i.name as item_name, d.document_number, dl.line_number
-      from document_lines dl
-      join documents d on d.id = dl.document_id and d.org_id = dl.org_id
-      join items i on i.id = dl.item_id and i.org_id = dl.org_id
-     where dl.org_id = ${orgId}
-       and d.kind = 'purchase_order'
-       and d.status = 'approved'
-       and dl.item_id in (${sql.join(
-         [...new Set(manual.map((line) => line.itemId))].map(
-           (itemId) => sql`${itemId}`,
-         ),
-         sql`, `,
-       )})
-       and (dl.quantity - dl.quantity_billed - dl.quantity_cancelled) > 0`));
-  if (open.rows.length === 0) return;
-  const byItem = new Map<string, { item_code: string | null; item_name: string; document_number: string; line_number: number }[]>();
-  for (const row of open.rows) {
-    const list = byItem.get(row.item_id) ?? [];
-    list.push({ item_code: row.item_code, item_name: row.item_name, document_number: row.document_number, line_number: row.line_number });
-    byItem.set(row.item_id, list);
+    select party_id, subsidiary_id from documents
+     where id = ${documentId} and org_id = ${orgId}`)).rows[0];
+  if (!bill) {
+    throw new InventoryError("vendor bill not found while checking purchase-order matching");
   }
-  const first = manual.find((line) => byItem.has(line.itemId))!;
-  const orders = byItem.get(first.itemId)!;
+  let first: DocumentInventoryLine | null = null;
+  let orders: MatchablePurchaseOrderLine[] = [];
+  for (const line of manual) {
+    const matchable = await matchablePurchaseOrderLines(runner, orgId, {
+      itemId: line.itemId,
+      unit: line.unit,
+      partyId: bill.party_id,
+      subsidiaryId: bill.subsidiary_id,
+    });
+    if (matchable.length > 0) {
+      first = line;
+      orders = matchable;
+      break;
+    }
+  }
+  if (!first) return;
   const [primary] = orders;
-  const itemLabel = primary!.item_code ?? primary!.item_name;
-  const numbers = [...new Set(orders.map((order) => order.document_number))];
+  const itemLabel = primary!.itemCode ?? primary!.itemName;
+  const numbers = [...new Set(orders.map((order) => order.purchaseOrderNumber))];
   const more =
     orders.length > 1 ? ` (and ${orders.length - 1} more open line${orders.length > 2 ? "s" : ""})` : "";
   const ordersLabel = numbers.length > 1 ? `purchase orders ${numbers.join(", ")}` : `purchase order ${numbers[0]}`;
   throw new BillLinesUnmatchedError(
-    `vendor-bill line ${first.lineNumber} (${itemLabel}) is stock still open on ${ordersLabel} line ${primary!.line_number}${more}: match the bill to its purchase-order line so it clears received-not-billed instead of receiving the stock again — billing unmatched stock now and receiving it later counts it twice`,
+    `vendor-bill line ${first.lineNumber} (${itemLabel}) is stock still open on ${ordersLabel} line ${primary!.purchaseOrderLineNumber}${more}: match the bill to its purchase-order line so it clears received-not-billed instead of receiving the stock again — billing unmatched stock now and receiving it later counts it twice`,
     `Match this bill to ${ordersLabel} (Match to purchase order), then post again`,
-    { lineNumber: first.lineNumber, itemCode: primary!.item_code, purchaseOrderNumbers: numbers },
+    { lineNumber: first.lineNumber, itemCode: primary!.itemCode, purchaseOrderNumbers: numbers },
   );
 }
 
