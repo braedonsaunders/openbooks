@@ -135,7 +135,8 @@
       "files": "Files",
       "dashboards": "Dashboards",
       "locations": "Locations",
-      "warehouses": "Warehouses"
+      "warehouses": "Warehouses",
+      "workOrders": "Work orders"
     }
   },
   "meta": {

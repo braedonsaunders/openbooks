@@ -95,3 +95,65 @@ test('recent assets re-resolve under the reader\'s current scope', { skip: !proc
     await dropScratchOrg(org.orgId)
   }
 })
+
+async function seedWorkOrders() {
+  const org = await withBypassContext(() => createScratchOrg())
+  const other = randomUUID()
+  const inScope = randomUUID()
+  const outOfScope = randomUUID()
+  await withBypassContext(async () => {
+    await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}',
+      coalesce(settings->'features', '{}'::jsonb) || '{"manufacturing":true,"inventory":true,"multiSubsidiary":true}'::jsonb) where id = ${org.orgId}`)
+    await db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+      values (${other}, ${org.orgId}, ${org.subsidiaryId}, 'Other entity', 'CAD', 'CA')`)
+    await db.execute(sql`insert into mfg_work_orders (id, org_id, number, produced_item_id, quantity_ordered, unit, status, source, subsidiary_id)
+      values (${inScope}, ${org.orgId}, 'WO-SEARCH-1', ${org.items.assembly}, '1', 'ea', 'released', 'manual', ${org.subsidiaryId}),
+             (${outOfScope}, ${org.orgId}, 'WO-SEARCH-2', ${org.items.assembly}, '1', 'ea', 'draft', 'manual', ${other})`)
+  })
+  return { org, inScope, outOfScope }
+}
+
+function workOrderIds(groups: Awaited<ReturnType<typeof searchOperationalRecords>>): string[] {
+  return (groups.find((group) => group.type === 'work_order')?.hits ?? []).map((hit) => hit.id).sort()
+}
+
+test('manufacturing work order search answers to the workspace list: grant, Features switch and subsidiary fence', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const { org, inScope, outOfScope } = await seedWorkOrders()
+  try {
+    const search = (who: Reader) => withOrgContext(org.orgId, () => searchOperationalRecords(who, 'WO-SEARCH'))
+
+    assert.deepEqual(workOrderIds(await search(reader(org.orgId, ['manufacturing.read'], null))), [inScope, outOfScope].sort())
+    assert.deepEqual(
+      workOrderIds(await search(reader(org.orgId, ['manufacturing.read'], new Set([org.subsidiaryId])))),
+      [inScope],
+      'a restricted reader never sees another entity\'s work order',
+    )
+    assert.deepEqual(workOrderIds(await search(reader(org.orgId, [], null))), [], 'no grant, no work order results')
+
+    const hit = (await search(reader(org.orgId, ['manufacturing.read'], null))).find((group) => group.type === 'work_order')?.hits.find((candidate) => candidate.id === inScope)
+    assert.ok(hit)
+    assert.equal(hit.title, 'WO-SEARCH-1')
+    const url = new URL(hit.href, 'https://openbooks.example')
+    assert.equal(url.pathname, '/manufacturing/work-orders', 'results open the work-order drawer on the workspace')
+    assert.equal(url.searchParams.get('record'), inScope)
+
+    await withBypassContext(() => db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,manufacturing}', 'false'::jsonb) where id = ${org.orgId}`))
+    assert.deepEqual(workOrderIds(await search(reader(org.orgId, ['manufacturing.read'], null))), [], 'Manufacturing switched off hides its results')
+  } finally {
+    await dropScratchOrg(org.orgId)
+  }
+})
+
+test('recent work orders re-resolve under the reader\'s current scope', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const { org, inScope, outOfScope } = await seedWorkOrders()
+  try {
+    const refs = [{ type: 'work_order' as const, id: outOfScope }, { type: 'work_order' as const, id: inScope }]
+    const restricted = await withOrgContext(org.orgId, () =>
+      resolveRecentOperationalRecords(reader(org.orgId, ['manufacturing.read'], new Set([org.subsidiaryId])), refs))
+    assert.deepEqual(restricted.map((hit) => hit.id), [inScope])
+    const revoked = await withOrgContext(org.orgId, () => resolveRecentOperationalRecords(reader(org.orgId, [], null), refs))
+    assert.deepEqual(revoked, [])
+  } finally {
+    await dropScratchOrg(org.orgId)
+  }
+})

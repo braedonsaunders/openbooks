@@ -135,7 +135,8 @@
       "files": "文件",
       "dashboards": "仪表板",
       "locations": "地点",
-      "warehouses": "仓库"
+      "warehouses": "仓库",
+      "workOrders": "生产工单"
     }
   },
   "meta": {

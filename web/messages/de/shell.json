@@ -135,7 +135,8 @@
       "files": "Dateien",
       "dashboards": "Dashboards",
       "locations": "Standorte",
-      "warehouses": "Lager"
+      "warehouses": "Lager",
+      "workOrders": "Fertigungsaufträge"
     }
   },
   "meta": {

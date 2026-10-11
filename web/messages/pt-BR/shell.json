@@ -135,7 +135,8 @@
       "files": "Arquivos",
       "dashboards": "Painéis",
       "locations": "Locais",
-      "warehouses": "Armazéns"
+      "warehouses": "Armazéns",
+      "workOrders": "Ordens de produção"
     }
   },
   "meta": {

@@ -135,7 +135,8 @@
       "files": "Fichiers",
       "dashboards": "Tableaux de bord",
       "locations": "Emplacements",
-      "warehouses": "Entrepôts"
+      "warehouses": "Entrepôts",
+      "workOrders": "Ordres de fabrication"
     }
   },
   "meta": {

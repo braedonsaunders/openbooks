@@ -8,6 +8,7 @@ import { featureEnabled, resolvedFeatureState, subsidiaryFeatureEnabled, type Fe
 import { visibleNavigationHref } from './nav/access'
 import { entityListSource } from './list/entity-sources'
 import { subsidiaryVisibleFilter } from './subsidiaries'
+import { orderResourcesVisible } from '@openbooks/engine/organization/production-resource-scope'
 import { fileReadPredicate } from './file-cabinet/visibility'
 import { documentsPageViewer } from './file-cabinet/page-viewer'
 import { insightVisibilitySql } from './insight-access'
@@ -20,8 +21,8 @@ import type { RecentRef, SearchGroup, SearchHit, SearchRecordType } from './sear
 /**
  * Global search over the operational records beyond the core ledger
  * entities (lib/search.ts): fixed assets, equipment, opportunities,
- * activities, timesheets, subscriptions, custom records, files, dashboards,
- * locations and warehouses.
+ * activities, timesheets, subscriptions, manufacturing work orders, custom
+ * records, files, dashboards, locations and warehouses.
  *
  * Every leg answers to the page that opens its result. A result is offered
  * only when that page is in the reader's navigation (permission and
@@ -177,6 +178,49 @@ const subscriptionLeg: Leg = {
       subtitle: row.customer_name ? row.plan_name : undefined,
       href: `/collections?view=subscriptions&subscription=${row.id}`,
       iconKey: 'history',
+      badge: { kind: 'status', value: row.status },
+    }))
+  },
+}
+
+/**
+ * Manufacturing work orders, through the Manufacturing workspace's own read
+ * fence: the order's subsidiary and the production resources the reader may
+ * see (routing, operation centres, subcontract vendors and custody
+ * locations). Matches the workspace's own query text (number, produced item,
+ * campaign reference). Orders open in the work-order drawer on that page.
+ */
+const workOrderLeg: Leg = {
+  type: 'work_order',
+  labelKey: 'workOrders',
+  validId: isUuid,
+  async run(ctx, match) {
+    if (!featureEnabled(ctx.features, 'manufacturing') || !can(ctx.authz, 'manufacturing.read')) return []
+    if (!ctx.navigable('/manufacturing/work-orders')) return []
+    const scope = ctx.authz.allowedSubsidiaryIds
+    const predicate = match.kind === 'ids'
+      ? sql`r.id = any(${uuidArray(match.ids)})`
+      : sql`(r.number ilike ${match.like} or i.name ilike ${match.like} or i.code ilike ${match.like} or r.campaign_reference ilike ${match.like})`
+    const order = match.kind === 'text'
+      ? sql`similarity(r.number, ${match.q}) desc, r.created_at desc`
+      : sql`r.created_at desc`
+    const r = await db.execute<{ id: string; number: string; item_name: string; status: string }>(sql`
+      select r.id, r.number, i.name as item_name, r.status
+        from mfg_work_orders r
+        join items i on i.org_id = r.org_id and i.id = r.produced_item_id
+       where r.org_id = ${ctx.orgId}
+         ${subsidiaryVisibleFilter(sql`r.subsidiary_id`, scope)}
+         ${orderResourcesVisible(scope, 'r')}
+         and ${predicate}
+       order by ${order}
+       limit ${PER_GROUP}`)
+    return r.rows.map((row): SearchHit => ({
+      id: row.id,
+      type: 'work_order',
+      title: row.number,
+      subtitle: row.item_name || undefined,
+      href: `/manufacturing/work-orders?record=${row.id}`,
+      iconKey: 'factory',
       badge: { kind: 'status', value: row.status },
     }))
   },
@@ -367,6 +411,7 @@ const LEGS: Leg[] = [
   ...LIST_SOURCE_SEARCHES.slice(0, 2).map(listSourceLeg),
   subscriptionLeg,
   ...LIST_SOURCE_SEARCHES.slice(2).map(listSourceLeg),
+  workOrderLeg,
   customRecordLeg,
   fileLeg,
   dashboardLeg,

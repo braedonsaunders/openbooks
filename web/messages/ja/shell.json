@@ -135,7 +135,8 @@
       "files": "ファイル",
       "dashboards": "ダッシュボード",
       "locations": "拠点",
-      "warehouses": "倉庫"
+      "warehouses": "倉庫",
+      "workOrders": "製造指図"
     }
   },
   "meta": {

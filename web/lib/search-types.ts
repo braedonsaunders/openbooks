@@ -20,6 +20,7 @@ export const SEARCH_RECORD_TYPES = [
   'dashboard',
   'location',
   'warehouse',
+  'work_order',
 ] as const
 
 export const SEARCH_CATALOG_TYPES = ['report', 'setting', 'help'] as const
