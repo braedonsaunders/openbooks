@@ -537,6 +537,19 @@ export async function markWorkOrderDone(
   if (order.status !== "in_progress" && order.status !== "released") {
     refuse("Work order " + order.number + " cannot be marked done from " + order.status + ".", "invalid_work_order_transition", "Complete the released work order before marking it done.", 409);
   }
+  // A started operation must finish before the order is done: completing it
+  // is what records its time and backflushes its materials, so an order
+  // closed around a running operation would carry output that never
+  // consumed its inputs.
+  const unfinished = (await tx.execute<{ sequence: number; status: string }>(sql`
+    select operation.sequence, operation.status from mfg_wo_operations operation
+     where operation.org_id=${orgId} and operation.work_order_id=${order.id}
+       and operation.status in ('running', 'paused')
+     order by operation.sequence`)).rows;
+  if (unfinished.length) {
+    refuse("Work order " + order.number + " has unfinished operation " + unfinished.map((row) => row.sequence + " (" + row.status + ")").join(", ") + ".",
+      "operation_unfinished", "Complete each named operation, which records its time and backflushes its materials, before marking the work order done.");
+  }
   const policies = await getManufacturingPolicies(tx, orgId);
   if (!withinTolerance(add(order.quantity_completed, order.quantity_scrapped), order.quantity_ordered, policies.completionTolerancePct)) {
     refuse("Work order " + order.number + " completed " + order.quantity_completed + " of " + order.quantity_ordered + ", outside the " + policies.completionTolerancePct + "% completion tolerance.", "completion_tolerance_not_met", "Complete the remaining quantity or revise the order quantity.");

@@ -589,6 +589,11 @@ const cases: Case[] = [
     const completed = await withBypassContext(async () => (await db.execute<{ day: string }>(sql`select completed_at::date::text as day from mfg_wo_operations where org_id=${f.org.orgId} and id=${wo.operation}`)).rows[0]!.day);
     assert.equal(completed, earlier, "the corrected start lets the completion carry its true day");
   } },
+  { name: "done refuses while an operation is still running", run: async (f) => {
+    const wo = await conversionOrder(f, f.org.items.assembly);
+    await refuse(run((tx) => markWorkOrderDone(tx, f.org.orgId, f.actorId, wo.id, { shortCloseReason: "Closing the order early" })),
+      "operation_unfinished", "unfinished operation", "Complete each named operation");
+  } },
   { name: "an operation released before any overhead rate takes the rate effective at its order's date", run: async (f) => {
     // Released while no overhead rate covered the order: the frozen snapshot is empty.
     const wo = await conversionOrder(f, f.org.items.assembly, "operation", "2099-01-01");
