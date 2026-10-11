@@ -158,6 +158,20 @@ test("a hand-coded bill for received stock refuses until matched, then posts thr
       assert.equal(toUnits(billed[0].billed), toUnits("2432"));
       assert.equal(toUnits(billed[1].billed), toUnits("2128"));
       console.log("M27-MATCHED-BILL-POSTS");
+
+      // ---- Voiding the matched bill walks the cover back ------------------
+      const { requestDocumentVoid } = await import("./engine/src/ledger/document-void.ts");
+      const voided = await withOrg(org.orgId, () => requestDocumentVoid({
+        documentId: billId, orgId: org.orgId, actorId: userId,
+        reason: "supplier reissued the invoice", reversalDate: org.date,
+      }));
+      assert.equal(voided.status, "voided");
+      const restored = (await db.execute(sql\`
+        select quantity_billed::text as billed from document_lines where id in (\${sourceA}, \${sourceB}) order by line_number
+      \`)).rows;
+      assert.equal(toUnits(restored[0].billed), toUnits("0"), "voiding the bill releases its billed cover");
+      assert.equal(toUnits(restored[1].billed), toUnits("0"));
+      console.log("M27-MATCHED-BILL-VOID-RESTORES");
     } finally {
       await dropScratchOrg(org.orgId);
     }
@@ -180,4 +194,5 @@ test("a hand-coded bill for received stock refuses until matched, then posts thr
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.match(result.stdout, /M27-HAND-CODED-BILL-REFUSES/);
   assert.match(result.stdout, /M27-MATCHED-BILL-POSTS/);
+  assert.match(result.stdout, /M27-MATCHED-BILL-VOID-RESTORES/);
 });
