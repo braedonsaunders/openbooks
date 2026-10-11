@@ -25,6 +25,7 @@ import { DownstreamConsumptionError, InventoryError } from "../inventory/contrac
 import { reverseInventoryJournal, reverseInventoryMovement } from "../inventory/reversal.ts";
 import { listReceiptVoidBlockers } from "../inventory/receipt-void-dependents.ts";
 import { reverseDropShipConfirmationPair } from "../inventory/drop-ship-reversal.ts";
+import { crossSubsidiaryFulfillmentHandler, crossSubsidiaryShipment } from "../inventory/cross-subsidiary.ts";
 import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 import { emitDocumentVoided } from "../webhooks/emit.ts";
 import { lockApplicationEvidence } from "../records/application-lock.ts";
@@ -1087,6 +1088,19 @@ async function reverseOrderShipment(
           );
         }
         throw error;
+      }
+      // A line shipped from another entity's stock also reverses its
+      // intercompany cross-charge, so neither entity keeps half of the sale.
+      if (input.voidKind === "sales_fulfillment" && (await crossSubsidiaryShipment(tx, input.orgId, movement.id))) {
+        const handler = crossSubsidiaryFulfillmentHandler();
+        if (!handler) throw new DocumentVoidError("this shipment was fulfilled by another subsidiary and cannot be voided in this installation");
+        await handler.voided(tx, {
+          orgId: input.orgId,
+          actorId: input.actorId,
+          issueMovementId: movement.id,
+          reversalDate: input.reversalDate,
+          reason: input.reason,
+        });
       }
     }
     // Approved lines are storage-immutable (migration 0034): restoring the

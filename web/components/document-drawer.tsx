@@ -2011,6 +2011,7 @@ export function DocumentDrawer({
   type ControlOption = { id: string; number: string | null; name: string }
   const [controlChoices, setControlChoices] = useState<{
     accounts: ControlOption[]
+    intercompany?: ControlOption | null
     partyDefault: ControlOption | null
     organizationDefault: ControlOption | null
     selected: ControlOption | null
@@ -2048,7 +2049,9 @@ export function DocumentDrawer({
   }, [controlSide, config.kind, partyId, subsidiaryId, controlChoice, doc.id, doc.status])
   const controlLabel = (option: ControlOption | null | undefined): string =>
     option ? `${option.number ? `${option.number} · ` : ''}${option.name}` : ''
-  const controlDefault = controlChoices?.partyDefault
+  const controlDefault = controlChoices?.intercompany
+    ? t('drawer.controlAccountIntercompany', { account: controlLabel(controlChoices.intercompany) })
+    : controlChoices?.partyDefault
     ? t('drawer.controlAccountPartyDefault', { account: controlLabel(controlChoices.partyDefault) })
     : controlChoices?.organizationDefault
       ? t('drawer.controlAccountOrganizationDefault', { account: controlLabel(controlChoices.organizationDefault) })

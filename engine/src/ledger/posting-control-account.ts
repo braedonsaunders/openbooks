@@ -3,6 +3,7 @@ import type { db } from "../platform/db.ts";
 import { isUuid } from "../platform/uuid.ts";
 import { PostingError } from "../journal/posting-contracts.ts";
 import { loadSubsidiaryContext, restrictionAdmits } from "../organization/subsidiaries.ts";
+import { intercompanyControlAccount, IntercompanyPolicyError, type IntercompanyControlAccount } from "../organization/intercompany-accounts.ts";
 
 /**
  * Receivable/payable control account resolution for party documents.
@@ -29,7 +30,7 @@ export const DOCUMENT_CONTROL_SIDE: Readonly<Record<string, ControlSide>> = {
   vendor_credit: "ap",
 };
 
-export type ControlAccountSource = "document" | "party" | "organization";
+export type ControlAccountSource = "document" | "intercompany" | "party" | "organization";
 
 export interface ResolvedControlAccount {
   side: ControlSide;
@@ -50,6 +51,9 @@ function remedyFor(side: ControlSide, source: ControlAccountSource): string {
   if (source === "document") {
     return `choose an active ${NOUN[side]} account on the document`;
   }
+  if (source === "intercompany") {
+    return `correct the intercompany ${NOUN[side]} account on the intercompany pair in Setup → Accounting → Intercompany pairs`;
+  }
   if (source === "party") {
     return side === "ar"
       ? "correct the customer's Receivable account on the customer record, or choose a receivable account on the document"
@@ -60,6 +64,7 @@ function remedyFor(side: ControlSide, source: ControlAccountSource): string {
 
 function sourceLabel(side: ControlSide, source: ControlAccountSource): string {
   if (source === "document") return `the document's ${NOUN[side]} account`;
+  if (source === "intercompany") return `the intercompany ${NOUN[side]} account`;
   if (source === "party") return side === "ar" ? "the customer's Receivable account" : "the vendor's Payable account";
   return `the organization ${NOUN[side]} control account`;
 }
@@ -145,6 +150,32 @@ export async function controlAccountCandidate(
   const side = DOCUMENT_CONTROL_SIDE[subject.kind];
   if (!side) return null;
   const chosen = documentControlChoice(subject.custom);
+  if (subject.partyId) {
+    // A party that represents another subsidiary makes the document
+    // intercompany: its open item posts to the pair's intercompany control
+    // account so consolidation eliminates it. A different document choice
+    // would move the balance outside elimination and is refused.
+    let intercompany: IntercompanyControlAccount | null;
+    try {
+      intercompany = await intercompanyControlAccount(runner, {
+        orgId: subject.orgId,
+        side,
+        partyId: subject.partyId,
+        subsidiaryId: subject.subsidiaryId,
+      });
+    } catch (error) {
+      if (error instanceof IntercompanyPolicyError) throw new PostingError(error.message);
+      throw error;
+    }
+    if (intercompany) {
+      if (chosen && chosen !== intercompany.accountId) {
+        throw new PostingError(
+          `this document is intercompany with ${intercompany.representedSubsidiaryName} and posts to the pair's intercompany ${NOUN[side]} account — clear the document's ${NOUN[side]} account choice`,
+        );
+      }
+      return { side, accountId: intercompany.accountId, source: "intercompany" };
+    }
+  }
   if (chosen) return { side, accountId: chosen, source: "document" };
   if (subject.partyId) {
     const role = (await runner.execute<{ account_id: string | null }>(
@@ -251,6 +282,8 @@ export interface ControlAccountChoices {
   side: ControlSide;
   /** Active posting accounts of the side's type visible to the subsidiary. */
   accounts: ControlAccountOption[];
+  /** The intercompany control account, when the party represents another subsidiary. */
+  intercompany: ControlAccountOption | null;
   /** The party's default, when it has one. */
   partyDefault: ControlAccountOption | null;
   /** The organization control account, when configured. */
@@ -313,9 +346,26 @@ export async function controlAccountChoices(
   const postedAccount = input.postedDocumentId
     ? await postedDocumentControlAccount(runner, input.orgId, input.postedDocumentId)
     : null;
+  // An intercompany party resolves to the pair's control account; a
+  // configuration the posting would refuse simply offers no intercompany
+  // default here, and posting names the remedy.
+  let intercompanyAccount: string | null = null;
+  if (input.partyId) {
+    try {
+      intercompanyAccount = (await intercompanyControlAccount(runner, {
+        orgId: input.orgId,
+        side,
+        partyId: input.partyId,
+        subsidiaryId: input.subsidiaryId,
+      }))?.accountId ?? null;
+    } catch (error) {
+      if (!(error instanceof IntercompanyPolicyError)) throw error;
+    }
+  }
   return {
     side,
     accounts,
+    intercompany: await label(intercompanyAccount),
     partyDefault: await label(role),
     organizationDefault: await label(org),
     selected: await label(input.selectedAccountId ?? null),

@@ -141,6 +141,8 @@
         "close",
         "flows",
         "hrm",
+        "intercompany",
+        "inventory",
         "journal",
         "ledger",
         "manufacturing",
@@ -329,6 +331,21 @@
         "platform",
         "projects",
         "records"
+      ]
+    },
+    "intercompany": {
+      "description": "Intercompany framework: paired intercompany transactions and their pairing workspace, transfer pricing, netting and settlement runs, bank transfers between entities, cross-subsidiary fulfillment charges and intercompany reconciliation.",
+      "dependsOn": [
+        "flows",
+        "fx",
+        "inventory",
+        "journal",
+        "money",
+        "organization",
+        "periods",
+        "platform",
+        "records",
+        "sales"
       ]
     },
     "internal-billing": {
