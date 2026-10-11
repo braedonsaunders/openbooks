@@ -645,6 +645,7 @@ export async function fulfillSalesOrderInTx(
   const source = sourceResult.rows[0]
   if (!source) throw new ConversionError('Sales order not found')
   if (source.kind !== 'sales_order') throw new ConversionError('Only a sales order can be fulfilled')
+  if ((await tx.execute(sql`select id from subscription_renewal_occurrences where org_id=${orgId} and document_id=${sourceId} and occurrence='document' limit 1`)).rows[0]) throw new ConversionError('This renewal order commits a subscription term; accept it in Collections and use subscription billing for periodic delivery')
   if (source.status === 'draft') throw new ConversionError('Issue the sales order before fulfilling it')
   if (source.status === 'voided') throw new ConversionError('This sales order is voided')
   if (source.status !== 'approved') throw new ConversionError(`This sales order is ${source.status}`)

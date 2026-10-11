@@ -4,6 +4,7 @@ import {lockLedgerSetupFence} from '../organization/ledger-setup-fence.ts';
 import {lockActorCommandAuthority} from '../organization/actor-command-authority.ts';
 import {lockAndCheckOrgFeature} from '../organization/org-feature-lock.ts';
 import type {CommercialDocumentKind} from '../records/commercial-document-kind.ts';
+import {documentKindPermissions} from '../records/document-kind-permissions.ts';
 import {documentRevisionCounterSql} from '../records/revision.ts';
 import {createDocumentDraft,applyDocumentEdit,DocumentDraftError,type DocumentCreateResult} from './document-write.ts';
 import type {DocumentEditInput,DocumentEditCurrent} from './document-input.ts';
@@ -14,7 +15,9 @@ import type {DocumentEditInput,DocumentEditCurrent} from './document-input.ts';
 export async function createCommercialDocument(input:{orgId:string;actorId:string;kind:CommercialDocumentKind;subsidiaryId:string;body:DocumentEditInput}):Promise<DocumentCreateResult> {
  return withOrg(input.orgId,async()=>{
   await lockLedgerSetupFence(db,input.orgId,'shared');
-  const allowed=await lockActorCommandAuthority(db,input.orgId,input.actorId,input.subsidiaryId,'ar.create');
+  const permission=documentKindPermissions(input.kind)?.edit;
+  if(!permission) throw new DocumentDraftError('Commercial document kind has no native editing authority');
+  const allowed=await lockActorCommandAuthority(db,input.orgId,input.actorId,input.subsidiaryId,permission);
   if(!await lockAndCheckOrgFeature(db,input.orgId,'orders')) throw new DocumentDraftError('Enable Orders in Company Settings → Features before generating a commercial renewal');
   const draft=await createDocumentDraft(input.orgId,input.actorId,input.kind,{allowedSubsidiaryIds:allowed,subsidiaryId:input.subsidiaryId,runFlows:false,source:'api',commercialKind:input.kind});
   const current=(await db.execute<DocumentEditCurrent>(sql`select kind,status,total::text,tax_total::text as "taxTotal",party_id as "partyId",document_date::text as "documentDate",

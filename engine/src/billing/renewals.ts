@@ -5,6 +5,7 @@ import { lockLedgerSetupFence } from '../organization/ledger-setup-fence.ts';
 import { lockAndCheckOrgFeature } from '../organization/org-feature-lock.ts';
 import { lockActorCommandAuthority } from '../organization/actor-command-authority.ts';
 import { ScopeNotFoundError } from '../organization/subsidiary-scope.ts';
+import { documentKindPermissions } from '../records/document-kind-permissions.ts';
 import { createCommercialDocument } from '../ledger/commercial-document.ts';
 import { add, cmp, mul, mulPercent, prorateDays } from '../money/money.ts';
 import { AdvancedSubscriptionError, advanceLifecycleDate, type Interval } from './advanced-subscriptions.ts';
@@ -42,8 +43,9 @@ interface Policy {
 }
 
 /** One native document per subscription expiry, serialized with subscription
- * billing/amendments. Drafts retain normal commercial approval, tax, signature,
- * order conversion and fulfillment workflows. No renewal rewrites posted bills. */
+ * billing/amendments. Drafts retain native commercial approval and tax.
+ * Orders represent the service-term commitment; subscription invoices own
+ * periodic delivery and relieve that commitment without duplicate fulfillment. */
 export async function generateRenewalDocument(orgId: string, actorId: string, subscriptionId: string, asOf: string) {
   if (!isIsoCalendarDate(asOf)) throw new AdvancedSubscriptionError('Enter a renewal as-of date');
   const result = await withOrg(orgId, async () => {
@@ -51,7 +53,7 @@ export async function generateRenewalDocument(orgId: string, actorId: string, su
     await db.execute(sql`select id from subscriptions where org_id=${orgId} and id=${subscriptionId} for update`);
     const subject = (await db.execute<RenewalSubject>(sql`
       select s.id,s.customer_id,s.status,coalesce(p.subsidiary_id,root.id) as subsidiary_id,l.term_ends_on::text,
-        l.renewal_policy,l.plan_version_id,s.plan_id,l.billing_timing,v.interval,v.interval_count,l.term_starts_on::text,coalesce(v.currency,plan.currency) as currency
+        l.renewal_policy,l.plan_version_id,s.plan_id,l.billing_timing,v.interval,v.interval_count,l.term_starts_on::text,coalesce(v.currency_code,plan.currency_code) as currency
       from subscriptions s join parties p on p.org_id=s.org_id and p.id=s.customer_id
       join subscription_lifecycles l on l.org_id=s.org_id and l.subscription_id=s.id
       join subscription_plan_versions v on v.org_id=l.org_id and v.id=l.plan_version_id
@@ -68,6 +70,7 @@ export async function generateRenewalDocument(orgId: string, actorId: string, su
         and effective_from<=${asOf} and effective_to>=${asOf} for share
     `)).rows[0];
     if (!policy) throw new AdvancedSubscriptionError('Configure a dated renewal policy in Setup before generating the renewal');
+    await lockActorCommandAuthority(db,orgId,actorId,subject.subsidiary_id,documentKindPermissions(policy.document_kind)!.edit);
     const existing = (await db.execute<{ document_id: string }>(sql`
       select document_id from subscription_renewal_occurrences where org_id=${orgId} and subscription_id=${subscriptionId}
         and term_ends_on=${subject.term_ends_on} and occurrence='document'
@@ -84,7 +87,7 @@ export async function generateRenewalDocument(orgId: string, actorId: string, su
     const lines = components.map(c => {
       if (!c.income_account_id) throw new AdvancedSubscriptionError('Each renewed component requires its income account');
       const unitPrice = renewalTermAmount(renewalUnitPrice(c.unit_price, policy.uplift_percent), subject.term_ends_on!, endsOn, subject.interval, subject.interval_count, Number(subject.term_starts_on.slice(8)));
-      return { accountId: c.income_account_id, itemId: c.item_id, description: c.name, quantity: c.quantity, unitPrice, amount: mul(unitPrice, c.quantity), taxCodeId: c.tax_code_id, custom: { renewalTermStartsOn: subject.term_ends_on, renewalTermEndsOn: endsOn } };
+      return { accountId: c.income_account_id, itemId: policy.document_kind==='sales_order'?null:c.item_id, description: c.name, quantity: c.quantity, unitPrice, amount: mul(unitPrice, c.quantity), taxCodeId: c.tax_code_id, custom: { subscriptionComponent: { key:c.component_key,itemId:c.item_id,quantity:c.quantity,periodUnitPrice:renewalUnitPrice(c.unit_price,policy.uplift_percent) }, renewalTermStartsOn: subject.term_ends_on, renewalTermEndsOn: endsOn } };
     });
     const request = { partyId: subject.customer_id, documentDate: asOf, currency: subject.currency,
       memo: `Renewal ${subject.term_ends_on} through ${endsOn}`, referenceNumber: `Renewal ${subscriptionId}`,
@@ -163,8 +166,9 @@ export async function acceptRenewalDocument(orgId:string,actorId:string,document
     await lockActorCommandAuthority(db,orgId,actorId,occurrence.snapshot.subject.subsidiary_id,'ar.post');
     if(!await lockAndCheckOrgFeature(db,orgId,'advancedSubscriptions')) throw new AdvancedSubscriptionError('Enable Advanced subscriptions in Company Settings → Features');
     if((await db.execute(sql`select id from subscription_renewal_occurrences where org_id=${orgId} and subscription_id=${occurrence.subscription_id} and term_ends_on=${occurrence.term_ends_on} and occurrence='acceptance'`)).rows[0]) return {subscriptionId:occurrence.subscription_id};
-    const doc=(await db.execute<{status:string;party_id:string;subsidiary_id:string;currency:string;kind:string}>(sql`select status,party_id,subsidiary_id,currency,kind from documents where org_id=${orgId} and id=${documentId} for share`)).rows[0];
-    if(!doc||doc.status!=='approved'||doc.party_id!==occurrence.snapshot.subject.customer_id||doc.subsidiary_id!==occurrence.snapshot.subject.subsidiary_id||doc.currency!==occurrence.snapshot.subject.currency) throw new AdvancedSubscriptionError('Approve the original renewal quote or order with its subscription customer, legal entity and currency before acceptance');
+    const doc=(await db.execute<{status:string;party_id:string;subsidiary_id:string;currency:string;kind:string}>(sql`select status,party_id,subsidiary_id,currency,kind from documents where org_id=${orgId} and id=${documentId} for update`)).rows[0];
+    if(!doc||doc.kind!==occurrence.snapshot.policy.document_kind||doc.status!=='approved'||doc.party_id!==occurrence.snapshot.subject.customer_id||doc.subsidiary_id!==occurrence.snapshot.subject.subsidiary_id||doc.currency!==occurrence.snapshot.subject.currency) throw new AdvancedSubscriptionError('Approve the original renewal quote or order with its subscription customer, legal entity and currency before acceptance');
+    await lockActorCommandAuthority(db,orgId,actorId,doc.subsidiary_id,documentKindPermissions(doc.kind)!.approve);
     const term=(await db.execute<{term_ends_on:string}>(sql`select term_ends_on::text from subscription_lifecycles where org_id=${orgId} and subscription_id=${occurrence.subscription_id} for update`)).rows[0];
     if(term?.term_ends_on!==occurrence.term_ends_on) throw new AdvancedSubscriptionError('The subscription term changed; review the current term before accepting a renewal');
     const lines=(await db.execute<{quantity:string;unit_price:string;account_id:string;item_id:string|null}>(sql`select quantity::text,unit_price::text,account_id,item_id from document_lines where org_id=${orgId} and document_id=${documentId} order by line_number for share`)).rows;

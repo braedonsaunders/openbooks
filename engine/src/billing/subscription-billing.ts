@@ -680,6 +680,8 @@ async function resolveIncomeAccount(orgId: string, incomeAccountId: string | nul
 }
 
 export interface InvoiceSpec {
+  /** Native service-period provenance for accepted commercial renewal orders. */
+  renewalPeriod?: { subscriptionId: string; startsOn: string; endsOn: string };
   orgId: string;
   /**
    * The authenticated caller, or null for engine-initiated writes — the
@@ -965,6 +967,23 @@ async function createSubscriptionInvoiceInTransaction(
     }
   }
 
+  if (spec.renewalPeriod && kind === "customer_invoice") {
+    // A renewal order is a service-term commitment. The renews edge relieves
+    // native customer exposure without handing periodic stock to fulfillment.
+    const orders = (await db.execute<{id:string}>(sql`
+      select d.id from subscription_renewal_occurrences o
+      join documents d on d.org_id=o.org_id and d.id=o.document_id
+      where o.org_id=${spec.orgId} and o.subscription_id=${spec.renewalPeriod.subscriptionId}
+        and o.occurrence='acceptance' and d.kind='sales_order' and d.status='approved'
+        and o.term_ends_on<=${spec.renewalPeriod.startsOn}
+        and o.snapshot->'source'->'request'->'custom'->'subscriptionRenewal'->>'termEndsOn'>=${spec.renewalPeriod.endsOn}
+        and d.party_id=${spec.customerId} and d.currency=${spec.currency}
+        and d.subsidiary_id=${spec.subsidiaryId} for share of d
+    `)).rows;
+    if(orders.length>1) throw new SubscriptionError('Multiple accepted renewal orders cover this service period; review renewal agreement history');
+    if(orders[0] && !(await db.execute(sql`insert into document_links(org_id,from_document_id,to_document_id,link_type,created_by)
+      values(${spec.orgId},${orders[0].id},${invoiceId},'renews',${spec.actorId}) returning id`)).rows[0]) throw new SubscriptionError('Renewal billing provenance could not be saved');
+  }
   let posted = false;
   if (spec.autoPost && !spec.consolidation) {
     const submission = await submitAndReleaseIfUngated(
@@ -1150,6 +1169,7 @@ async function billOne(
     autoPost: opts?.autoPost ?? sub.autoPost,
     lines: advanced?.lines,
     custom: subscriptionBillingProvenance(sub.id, actor, billingDate),
+    renewalPeriod: {subscriptionId:sub.id,startsOn:guard.startsOn,endsOn:guard.endsOn},
     postingAuditSource: POSTING_AUDIT_SOURCES[actor.source],
   });
   await db.execute(sql`
