@@ -5,7 +5,7 @@ import { sql } from 'drizzle-orm';
 import { db } from '../platform/db.ts';
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from '../testing/fixtures.ts';
 import { assertPeriodModulesOpen, CloseError } from "../periods/period-policy.ts";
-import { decidePeriodReopen, recloseApprovedReopen, recloseExpiredReopens, requestPeriodReopen } from "./reopening.ts";
+import { decidePeriodReopen, recloseApprovedReopen, recloseExpiredReopens, reopenDecisionPreview, requestPeriodReopen } from "./reopening.ts";
 import { setPeriodLockState } from "../periods/period-locks.ts";
 
 for (const order of ['global first','entity first','race','separate entities'] as const) {
@@ -148,7 +148,7 @@ test('reopen approval refuses a conflicted approver and audits the conflict', {s
     const requestId=await requestPeriodReopen({...target,modules:['gl'],actorId:actors.adminId,reason:'Correction window'});
     await assert.rejects(
       decidePeriodReopen({orgId:org.orgId,requestId,actorId:actors.approver1Id,approve:true,hours:2}),
-      /conflict of interest.*another approver/,
+      /conflict of interest.*can decide it without a conflict/,
     );
     // The refused decision changes nothing but the audit: the request stays
     // pending and the conflict is recorded in the decision audit.
@@ -158,6 +158,43 @@ test('reopen approval refuses a conflicted approver and audits the conflict', {s
     // An unconflicted approver decides cleanly.
     await decidePeriodReopen({orgId:org.orgId,requestId,actorId:actors.approver2Id,approve:true,hours:2});
     assert.equal((await db.execute<{status:string}>(sql`select status from close_reopen_requests where id=${requestId} and org_id=${org.orgId}`)).rows[0]!.status,'approved');
+  } finally { await dropScratchOrg(org.orgId); }
+});
+
+test('when every eligible approver is conflicted, one may approve with a recorded conflict acknowledgement', {skip:!process.env.OPENBOOKS_DB_URL}, async () => {
+  const org=await createScratchOrg();
+  try {
+    const actors=await seedFlowActors(org.orgId);
+    await db.execute(sql`update app_roles set permissions = '["close.reopen"]'::jsonb where org_id = ${org.orgId} and key = 'approver'`);
+    const target={orgId:org.orgId,periodId:org.periodId,bookId:org.bookId};
+    await setPeriodLockState({...target,module:'gl',state:'closed',actorId:actors.adminId,reason:'Close for review'});
+    // Both non-requesting approvers authored live documents in the closed period.
+    for (const author of [actors.approver1Id, actors.approver2Id]) {
+      const docId=randomUUID();
+      await db.execute(sql`
+        insert into documents
+          (id, org_id, subsidiary_id, kind, status, document_number, document_date,
+           posting_date, posting_period_id, currency, subtotal, tax_total, total, created_by, submitted_by)
+        values (${docId}, ${org.orgId}, ${org.subsidiaryId}, 'customer_invoice', 'approved', ${docId},
+                ${org.date}, ${org.date}, ${org.periodId}, 'CAD', '10.0000', '0.0000', '10.0000',
+                ${author}, ${author})`);
+    }
+    const requestId=await requestPeriodReopen({...target,modules:['gl'],actorId:actors.adminId,reason:'Correction window'});
+    const preview=await reopenDecisionPreview(org.orgId,requestId,actors.approver1Id);
+    assert.deepEqual(preview.unconflictedApprovers,[]);
+    assert.equal(preview.conflictAcknowledgementAllowed,true);
+    await assert.rejects(
+      decidePeriodReopen({orgId:org.orgId,requestId,actorId:actors.approver1Id,approve:true,hours:2}),
+      /No other eligible approver is free of conflicts/,
+    );
+    await decidePeriodReopen({orgId:org.orgId,requestId,actorId:actors.approver1Id,approve:true,hours:2,
+      attestation:'Only owners can approve; the reopen corrects one supplier bill'});
+    assert.equal((await db.execute<{status:string}>(sql`select status from close_reopen_requests where id=${requestId} and org_id=${org.orgId}`)).rows[0]!.status,'approved');
+    const audit=(await db.execute<{changes:{after:{conflictAcknowledged?:boolean;attestation?:string}}}>(sql`
+      select changes from audit_log where org_id=${org.orgId} and table_name='close_reopen_requests' and row_id=${requestId} and action='approve'`)).rows;
+    assert.equal(audit.length,1);
+    assert.equal(audit[0]!.changes.after.conflictAcknowledged,true);
+    assert.match(audit[0]!.changes.after.attestation ?? '',/Only owners can approve/);
   } finally { await dropScratchOrg(org.orgId); }
 });
 

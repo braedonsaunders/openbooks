@@ -467,6 +467,8 @@
     "selfAttestationConfirm": "J'atteste qu'aucun autre approbateur habilité n'est disponible et que cette réouverture est nécessaire.",
     "selfAttestationNeeded": "Indiquez pourquoi cette réouverture est nécessaire (au moins 10 caractères) et cochez l’attestation pour approuver.",
     "conflictNotice": "Conflit d'intérêts : vous figurez sur {count} enregistrement(s) que cette réouverture déverrouillerait ({examples}). Demandez à un autre approbateur de statuer.",
+    "conflictNoticeNamed": "Conflit d’intérêts : vous figurez sur {count} enregistrement(s) que cette réouverture débloquerait ({examples}). {approvers} peut trancher sans conflit.",
+    "conflictAcknowledgementNotice": "Vous figurez sur {count} enregistrement(s) que cette réouverture débloquerait ({examples}) et aucun autre approbateur admissible n’est exempt de conflit. Vous pouvez approuver avec une reconnaissance du conflit enregistrée ; elle est conservée dans la piste d’audit.",
     "approve": "Approuver",
     "reject": "Rejeter",
     "approved": "Réouverture approuvée.",

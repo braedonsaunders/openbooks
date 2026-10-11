@@ -2305,6 +2305,7 @@ function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
     independenceRequired: boolean;
     selfApprovalAllowed: boolean;
     eligibleApprovers: string[];
+    conflictAcknowledgementAllowed: boolean;
   } | null>(null);
   const [selfAttestation, setSelfAttestation] = useState("");
   const [selfAttested, setSelfAttested] = useState(false);
@@ -2320,6 +2321,7 @@ function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
           independenceRequired?: boolean;
           selfApprovalAllowed?: boolean;
           eligibleApprovers?: unknown;
+          conflictAcknowledgementAllowed?: boolean;
         };
         setConflicts(Array.isArray(preview.conflicts) ? preview.conflicts : []);
         setDecisionPreview({
@@ -2329,6 +2331,7 @@ function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
           eligibleApprovers: Array.isArray(preview.eligibleApprovers)
             ? preview.eligibleApprovers.filter((name): name is string => typeof name === "string")
             : [],
+          conflictAcknowledgementAllowed: preview.conflictAcknowledgementAllowed === true,
         });
       })
       .catch(() => {
@@ -2350,10 +2353,15 @@ function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
   // both cases the button stays disabled with the reason. A sole eligible
   // approver deciding their own request attests instead.
   const ownRequest = decisionPreview?.ownRequest ?? false;
+  // No unconflicted approver exists: a conflicted approver records a
+  // conflict acknowledgement instead of leaving the request stuck.
+  const conflictAcknowledgement = !ownRequest && (decisionPreview?.conflictAcknowledgementAllowed ?? false);
   const approveBlocked =
     (conflictTotal > 0 || ownRequest) &&
-    (decisionPreview?.independenceRequired ?? false);
+    (decisionPreview?.independenceRequired ?? false) &&
+    !conflictAcknowledgement;
   const selfApproval = ownRequest && (decisionPreview?.selfApprovalAllowed ?? false);
+  const attests = selfApproval || conflictAcknowledgement;
   const approverNames = decisionPreview?.eligibleApprovers ?? [];
   const ownRequestNote = approverNames.length > 0
     ? t("periods.reopenOwnRequestNamedNote", { approvers: approverNames.join(", ") })
@@ -2377,7 +2385,7 @@ function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
           action: "decide-reopen",
           requestId: row.id,
           approve,
-          ...(approve && selfApproval ? { attestation: selfAttestation.trim() } : {}),
+          ...(approve && attests ? { attestation: selfAttestation.trim() } : {}),
         },
         t("errors.actionFailed"),
       );
@@ -2478,13 +2486,13 @@ function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
               {t("actions.reject")}
             </Button>
             <Button
-              disabled={busy || approveBlocked || (selfApproval && !selfAttestationReady)}
+              disabled={busy || approveBlocked || (attests && !selfAttestationReady)}
               title={
                 approveBlocked
                   ? ownRequest
                     ? ownRequestNote
                     : t("periods.reopenConflictNotice", { count: conflictTotal, examples: conflictExamples })
-                  : selfApproval && !selfAttestationReady
+                  : attests && !selfAttestationReady
                     ? t("periods.reopenSelfAttestationNeeded")
                     : undefined
               }
@@ -2515,10 +2523,12 @@ function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
             {ownRequestNote}
           </p>
         ) : null}
-        {selfApproval ? (
+        {attests ? (
           <div className="space-y-2 rounded-md border border-teal-300 bg-teal-50/50 p-3 dark:border-teal-800 dark:bg-teal-950/20">
             <p role="note" className="text-sm text-slate-700 dark:text-slate-200">
-              {t("periods.reopenSelfApprovalNotice")}
+              {selfApproval
+                ? t("periods.reopenSelfApprovalNotice")
+                : t("periods.reopenConflictAcknowledgementNotice", { count: conflictTotal, examples: conflictExamples })}
             </p>
             <Field label={t("periods.reopenSelfAttestationLabel")}>
               <Textarea

@@ -218,3 +218,30 @@ test('an own request names the approvers who can decide it', async () => {
     globalThis.fetch = prior
   }
 })
+
+/** With no unconflicted approver, the conflicted approver records an
+ * acknowledgement instead of facing a disabled Approve forever. */
+test('a conflicted approver with no unconflicted alternative approves with an acknowledgement', async () => {
+  const bodies: unknown[] = []
+  const prior = stubPreview({
+    ok: true,
+    conflicts: [{ kind: 'party_records', count: 4, examples: ['PAY-00002', 'PAY-00003', 'PAYD-1'] }],
+    ownRequest: false,
+    independenceRequired: true,
+    selfApprovalAllowed: false,
+    eligibleApprovers: ['Erik Halvorsen'],
+    unconflictedApprovers: [],
+    conflictAcknowledgementAllowed: true,
+  }, bodies)
+  const { unmount } = await mountDecision('req-5', false)
+  try {
+    const text = document.body.textContent ?? ''
+    assert.ok(text.includes('no other eligible approver is free of conflicts'), 'the acknowledgement path is explained')
+    assert.ok(text.includes('PAY-00002, PAY-00003, PAYD-1, …'), 'a truncated example list says so')
+    const approve = approveButton()
+    assert.ok(approve?.disabled, 'approve waits for the acknowledgement')
+  } finally {
+    await unmount()
+    globalThis.fetch = prior
+  }
+})

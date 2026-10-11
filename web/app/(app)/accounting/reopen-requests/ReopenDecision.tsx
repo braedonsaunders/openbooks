@@ -20,6 +20,8 @@ interface DecisionPreview {
   independenceRequired: boolean
   selfApprovalAllowed: boolean
   eligibleApprovers: string[]
+  unconflictedApprovers: string[]
+  conflictAcknowledgementAllowed: boolean
 }
 
 /**
@@ -56,6 +58,10 @@ export function ReopenDecision({ requestId, ownRequest }: { requestId: string; o
         eligibleApprovers: Array.isArray(data.eligibleApprovers)
           ? data.eligibleApprovers.filter((name): name is string => typeof name === 'string')
           : [],
+        unconflictedApprovers: Array.isArray(data.unconflictedApprovers)
+          ? data.unconflictedApprovers.filter((name): name is string => typeof name === 'string')
+          : [],
+        conflictAcknowledgementAllowed: data.conflictAcknowledgementAllowed === true,
       })
     })
     return () => {
@@ -65,9 +71,16 @@ export function ReopenDecision({ requestId, ownRequest }: { requestId: string; o
   const isOwn = preview?.ownRequest ?? ownRequest
   const conflicts = preview?.conflicts ?? []
   const conflictTotal = conflicts.reduce((sum, item) => sum + item.count, 0)
-  const conflictExamples = conflicts.flatMap((item) => item.examples).slice(0, 3).join(', ')
-  const approveBlocked = !isOwn && conflictTotal > 0 && (preview?.independenceRequired ?? false)
+  const shownExamples = conflicts.flatMap((item) => item.examples).slice(0, 3)
+  const conflictExamples = shownExamples.join(', ') + (conflictTotal > shownExamples.length ? ', …' : '')
+  // No unconflicted approver exists: the conflicted approver may decide with
+  // a recorded acknowledgement instead of leaving the request stuck.
+  const conflictAcknowledgement = !isOwn && (preview?.conflictAcknowledgementAllowed ?? false)
+  const approveBlocked = !isOwn && conflictTotal > 0 && (preview?.independenceRequired ?? false) && !conflictAcknowledgement
   const selfApproval = isOwn && (preview?.selfApprovalAllowed ?? false)
+  const conflictNotice = preview && preview.unconflictedApprovers.length > 0
+    ? t('conflictNoticeNamed', { count: conflictTotal, examples: conflictExamples, approvers: preview.unconflictedApprovers.join(', ') })
+    : t('conflictNotice', { count: conflictTotal, examples: conflictExamples })
   const attestationReady = attested && attestation.trim().length >= 10
   const decide = (approve: boolean) =>
     execute(
@@ -79,7 +92,7 @@ export function ReopenDecision({ requestId, ownRequest }: { requestId: string; o
             action: 'decide-reopen',
             requestId,
             approve,
-            ...(approve && selfApproval ? { attestation: attestation.trim() } : {}),
+            ...(approve && (selfApproval || conflictAcknowledgement) ? { attestation: attestation.trim() } : {}),
           }),
         }),
       {
@@ -96,10 +109,12 @@ export function ReopenDecision({ requestId, ownRequest }: { requestId: string; o
           : t('ownRequest')}
       </span>
     )
-  if (selfApproval)
+  if (selfApproval || conflictAcknowledgement)
     return (
       <div className="flex max-w-xs flex-col items-end gap-2">
-        <p role="note" className="text-xs text-slate-600 dark:text-slate-300">{t('selfApprovalNotice')}</p>
+        <p role="note" className="text-xs text-slate-600 dark:text-slate-300">
+          {selfApproval ? t('selfApprovalNotice') : t('conflictAcknowledgementNotice', { count: conflictTotal, examples: conflictExamples })}
+        </p>
         <textarea
           className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-900"
           rows={2}
@@ -124,7 +139,7 @@ export function ReopenDecision({ requestId, ownRequest }: { requestId: string; o
     <div className="flex flex-col items-end gap-1">
       {approveBlocked ? (
         <p role="note" className="max-w-xs text-xs text-amber-800 dark:text-amber-200">
-          {t('conflictNotice', { count: conflictTotal, examples: conflictExamples })}
+          {conflictNotice}
         </p>
       ) : null}
       <div className="flex justify-end gap-2">
@@ -132,7 +147,7 @@ export function ReopenDecision({ requestId, ownRequest }: { requestId: string; o
         <Button
           size="sm"
           disabled={busy || approveBlocked}
-          title={approveBlocked ? t('conflictNotice', { count: conflictTotal, examples: conflictExamples }) : undefined}
+          title={approveBlocked ? conflictNotice : undefined}
           onClick={() => void decide(true)}
         >{t('approve')}</Button>
       </div>

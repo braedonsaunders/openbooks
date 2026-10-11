@@ -467,6 +467,8 @@
     "selfAttestationConfirm": "Declaro que no hay ningún otro aprobador habilitado disponible y que esta reapertura es necesaria.",
     "selfAttestationNeeded": "Describa por qué es necesaria esta reapertura (al menos 10 caracteres) y marque la declaración para aprobar.",
     "conflictNotice": "Conflicto de intereses: usted figura en {count} registro(s) que esta reapertura desbloquearía ({examples}). Pida a otro aprobador que decida.",
+    "conflictNoticeNamed": "Conflicto de interés: usted figura en {count} registro(s) que esta reapertura desbloquearía ({examples}). {approvers} puede decidirla sin conflicto.",
+    "conflictAcknowledgementNotice": "Usted figura en {count} registro(s) que esta reapertura desbloquearía ({examples}) y ningún otro aprobador elegible está libre de conflictos. Puede aprobar con un reconocimiento del conflicto registrado; se conserva en la auditoría.",
     "approve": "Aprobar",
     "reject": "Rechazar",
     "approved": "Reapertura aprobada.",

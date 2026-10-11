@@ -474,6 +474,7 @@
       "reopenTitle": "Demander une réouverture contrôlée",
       "reopenIncludeGl": "Rouvrir aussi le Grand livre (requis tant que le grand livre est clôturé)",
       "reopenConflictNotice": "Conflit d’intérêts : vous êtes lié(e) à {count} enregistrement(s) que cette réouverture déverrouillerait ({examples}). Demandez à un autre approbateur de décider.",
+      "reopenConflictAcknowledgementNotice": "Vous figurez sur {count} enregistrement(s) que cette réouverture débloquerait ({examples}) et aucun autre approbateur admissible n’est exempt de conflit. Vous pouvez approuver avec une reconnaissance du conflit enregistrée ; elle est conservée dans la piste d’audit.",
       "reopenSelfApprovalNotice": "Aucun autre approbateur habilité ne peut statuer sur cette réouverture, vous pouvez donc approuver votre propre demande avec une attestation. L'auto-approbation est consignée dans la piste d'audit.",
       "reopenSelfAttestationLabel": "Attestation d'auto-approbation",
       "reopenSelfAttestationConfirm": "J'atteste qu'aucun autre approbateur habilité n'est disponible et que cette réouverture est nécessaire.",

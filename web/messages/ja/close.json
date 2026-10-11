@@ -474,6 +474,7 @@
       "reopenTitle": "統制された再オープンを依頼",
       "reopenIncludeGl": "総勘定元帳も再開する（終了済みの場合は必須）",
       "reopenConflictNotice": "利益相反：この再開で変更可能になる {count} 件の記録にあなたが関与しています（{examples}）。別の承認者に決定を依頼してください。",
+      "reopenConflictAcknowledgementNotice": "この再オープンで解除される {count} 件の記録にあなたが記録されており（{examples}）、利益相反のない他の承認者がいません。利益相反の確認を記録したうえで承認できます。監査証跡に保存されます。",
       "reopenSelfApprovalNotice": "この再オープンを決定できる他の適格な承認者がいないため、証明を添えてご自身の申請を承認できます。自己承認は監査証跡に記録されます。",
       "reopenSelfAttestationLabel": "自己承認の証明",
       "reopenSelfAttestationConfirm": "他に適格な承認者がおらず、この再オープンが必要であることを証明します。",

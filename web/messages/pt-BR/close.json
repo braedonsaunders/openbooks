@@ -474,6 +474,7 @@
       "reopenTitle": "Solicitar reabertura controlada",
       "reopenIncludeGl": "Reabrir também o Razão geral (obrigatório enquanto o razão estiver fechado)",
       "reopenConflictNotice": "Conflito de interesse: você está registrado em {count} registro(s) que esta reabertura desbloquearia ({examples}). Peça a outro aprovador que decida.",
+      "reopenConflictAcknowledgementNotice": "Você consta em {count} registro(s) que esta reabertura desbloquearia ({examples}) e nenhum outro aprovador elegível está livre de conflitos. Você pode aprovar com um reconhecimento de conflito registrado; ele fica na trilha de auditoria.",
       "reopenSelfApprovalNotice": "Nenhum outro aprovador elegível pode decidir esta reabertura, então você pode aprovar sua própria solicitação com uma declaração. A autoaprovação é registrada na trilha de auditoria.",
       "reopenSelfAttestationLabel": "Declaração de autoaprovação",
       "reopenSelfAttestationConfirm": "Declaro que nenhum outro aprovador elegível está disponível e que esta reabertura é necessária.",

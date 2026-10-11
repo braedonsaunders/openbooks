@@ -467,6 +467,8 @@
     "selfAttestationConfirm": "他に適格な承認者がおらず、この再オープンが必要であることを証明します。",
     "selfAttestationNeeded": "承認するには、この再開が必要な理由（10文字以上）を入力し、証明にチェックを入れてください。",
     "conflictNotice": "利益相反: この再オープンでロック解除される{count}件のレコードにあなたが記録されています({examples})。別の承認者に決定を依頼してください。",
+    "conflictNoticeNamed": "利益相反：この再オープンで解除される {count} 件の記録にあなたが記録されています（{examples}）。{approvers} が利益相反なしで判断できます。",
+    "conflictAcknowledgementNotice": "この再オープンで解除される {count} 件の記録にあなたが記録されており（{examples}）、利益相反のない他の承認者がいません。利益相反の確認を記録したうえで承認できます。監査証跡に保存されます。",
     "approve": "承認",
     "reject": "却下",
     "approved": "再オープンを承認しました。",

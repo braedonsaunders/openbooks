@@ -467,6 +467,8 @@
     "selfAttestationConfirm": "I attest that no other eligible approver is available and this reopening is necessary.",
     "selfAttestationNeeded": "Describe why this reopen is needed (at least 10 characters) and tick the attestation to approve.",
     "conflictNotice": "Conflict of interest: you are recorded on {count} record(s) this reopen would unlock ({examples}). Ask another approver to decide.",
+    "conflictNoticeNamed": "Conflict of interest: you are recorded on {count} record(s) this reopen would unlock ({examples}). {approvers} can decide it without a conflict.",
+    "conflictAcknowledgementNotice": "You are recorded on {count} record(s) this reopen would unlock ({examples}), and no other eligible approver is free of conflicts. You may approve with a recorded conflict acknowledgement; it is kept in the audit trail.",
     "approve": "Approve",
     "reject": "Reject",
     "approved": "Reopen approved.",

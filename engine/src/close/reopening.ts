@@ -218,6 +218,8 @@ export interface ReopenIndependence {
   reason: "another-approver" | "flow" | null;
   /** Names of the other users who may decide the request, in name order. */
   approvers: string[];
+  /** The same users' ids, aligned with `approvers`. */
+  approverIds: string[];
 }
 
 /**
@@ -240,6 +242,7 @@ export async function reopenIndependenceRequired(
      where org_id = ${orgId} and is_active and id <> ${request.requestedBy}
      order by coalesce(name, email), id`));
   const approvers: string[] = [];
+  const approverIds: string[] = [];
   for (const candidate of candidates.rows) {
     if (!(await actorHasPermission(executor, orgId, candidate.id, "close.reopen"))) continue;
     const scope = await actorAllowedSubsidiaryIds(executor, orgId, candidate.id);
@@ -249,8 +252,9 @@ export async function reopenIndependenceRequired(
       continue;
     }
     approvers.push(candidate.name?.trim() || candidate.email);
+    approverIds.push(candidate.id);
   }
-  if (approvers.length > 0) return { required: true, reason: "another-approver", approvers };
+  if (approvers.length > 0) return { required: true, reason: "another-approver", approvers, approverIds };
   // Flows own approvals outright: an enabled Flow with an approval gate
   // that has not opted out of preventSelfApproval requires an independent
   // decider, even in a one-approver organization.
@@ -264,8 +268,31 @@ export async function reopenIndependenceRequired(
             and coalesce((node->'data'->'gate'->>'preventSelfApproval')::boolean, true)
        )
      limit 1`));
-  if (governed.rows.length > 0) return { required: true, reason: "flow", approvers };
-  return { required: false, reason: null, approvers };
+  if (governed.rows.length > 0) return { required: true, reason: "flow", approvers, approverIds };
+  return { required: false, reason: null, approvers, approverIds };
+}
+
+/**
+ * The eligible approvers other than `actorId` who hold no conflict on the
+ * records the reopen would unlock. When none remain, a conflicted approver
+ * may still decide with a recorded conflict acknowledgement: a small company
+ * whose every approver is a payee must not be left with no governed path.
+ */
+export async function unconflictedReopenApprovers(
+  executor: SqlExecutor,
+  orgId: string,
+  request: { period_id: string; book_id: string; subsidiary_id: string | null },
+  independence: ReopenIndependence,
+  actorId: string,
+): Promise<string[]> {
+  const free: string[] = [];
+  for (const [index, id] of independence.approverIds.entries()) {
+    if (id === actorId) continue;
+    if ((await reopenApprovalConflicts(executor, orgId, request, id)).length === 0) {
+      free.push(independence.approvers[index]!);
+    }
+  }
+  return free;
 }
 
 /** One pending request's decision posture for the approval surfaces: the
@@ -284,6 +311,11 @@ export async function reopenDecisionPreview(
   selfApprovalAllowed: boolean;
   /** Who else may decide it — named so a requester knows whom to ask. */
   eligibleApprovers: string[];
+  /** Eligible approvers other than the viewer with no conflict on the records. */
+  unconflictedApprovers: string[];
+  /** The viewer is conflicted and no unconflicted approver exists, so the
+   * engine accepts approval with a recorded conflict acknowledgement. */
+  conflictAcknowledgementAllowed: boolean;
 }> {
   const row = (await db.execute<{ requested_by: string; subsidiary_id: string | null; period_id: string; book_id: string }>(sql`
     select requested_by, subsidiary_id, period_id, book_id from close_reopen_requests
@@ -293,13 +325,18 @@ export async function reopenDecisionPreview(
     db, orgId, { period_id: row.period_id, book_id: row.book_id, subsidiary_id: row.subsidiary_id }, actorId);
   const independence = await reopenIndependenceRequired(
     db, orgId, { requestedBy: row.requested_by, subsidiaryId: row.subsidiary_id });
+  const ownRequest = row.requested_by === actorId;
+  const scope = { period_id: row.period_id, book_id: row.book_id, subsidiary_id: row.subsidiary_id };
+  const unconflicted = await unconflictedReopenApprovers(db, orgId, scope, independence, actorId);
   return {
-    ownRequest: row.requested_by === actorId,
+    ownRequest,
     conflicts,
     independenceRequired: independence.required,
     independenceReason: independence.reason,
     selfApprovalAllowed: !independence.required,
     eligibleApprovers: independence.approvers,
+    unconflictedApprovers: unconflicted,
+    conflictAcknowledgementAllowed: !ownRequest && conflicts.length > 0 && independence.required && unconflicted.length === 0,
   };
 }
 
@@ -451,7 +488,11 @@ export async function consumeReopenRequestsForClosedModules(args: {
 }
 
 export function describeReopenConflicts(conflicts: ReopenApprovalConflict[]): string {
-  return conflicts.map((conflict) => `${conflict.count} ${conflict.kind.replace(/_/g, " ")} (${conflict.examples.join(", ")})`).join("; ");
+  return conflicts.map((conflict) => {
+    const more = conflict.count - conflict.examples.length;
+    const listed = more > 0 ? `${conflict.examples.join(", ")} and ${more} more` : conflict.examples.join(", ");
+    return `${conflict.count} ${conflict.kind.replace(/_/g, " ")} (${listed})`;
+  }).join("; ");
 }
 
 export async function decidePeriodReopen(args: {
@@ -464,7 +505,8 @@ export async function decidePeriodReopen(args: {
    * Self-approval attestation, required when the decider is the requester
    * and no independent approver is available. A 10-500 character reason
    * recording why no other approver could decide it; retained in the
-   * decision audit. Refused (unused) whenever independent approval applies.
+   * decision audit. Also the conflict acknowledgement a conflicted
+   * approver records when no unconflicted eligible approver exists.
    */
   attestation?: string;
 }): Promise<void> {
@@ -495,6 +537,7 @@ export async function decidePeriodReopen(args: {
     reason: string;
     requestedBy: string;
     selfApproved: boolean;
+    conflictAcknowledged: boolean;
     attestation: string | null;
     conflicts: ReopenApprovalConflict[];
   } | null = null;
@@ -513,7 +556,7 @@ export async function decidePeriodReopen(args: {
       ? await reopenIndependenceRequired(tx, args.orgId, {
         requestedBy: row.requested_by, subsidiaryId: row.subsidiary_id,
       })
-      : { required: false, reason: null as "another-approver" | "flow" | null, approvers: [] as string[] };
+      : { required: false, reason: null as "another-approver" | "flow" | null, approvers: [] as string[], approverIds: [] as string[] };
     if (selfApproval && args.approve && independence.required) {
       throw new CloseError(
         independence.approvers.length > 0
@@ -535,13 +578,31 @@ export async function decidePeriodReopen(args: {
         );
       }
     }
+    let conflictAcknowledged = false;
     if (args.approve && !selfApproval && conflicts.length > 0 && independence.required) {
-      // Mark the refusal for its audit on the way out: writing it here
-      // would roll back with the refused decision.
-      conflictRefusal = conflicts;
-      throw new CloseError(
-        `conflict of interest: you are recorded on the records this reopen would unlock (${describeReopenConflicts(conflicts)}); route it to another approver`,
+      const unconflicted = await unconflictedReopenApprovers(
+        tx, args.orgId, { period_id: row.period_id, book_id: row.book_id, subsidiary_id: row.subsidiary_id },
+        independence, args.actorId,
       );
+      const acknowledgement = (args.attestation ?? "").trim();
+      if (unconflicted.length > 0) {
+        // Mark the refusal for its audit on the way out: writing it here
+        // would roll back with the refused decision.
+        conflictRefusal = conflicts;
+        throw new CloseError(
+          `conflict of interest: you are recorded on the records this reopen would unlock (${describeReopenConflicts(conflicts)}); `
+          + `${unconflicted.join(", ")} can decide it without a conflict`,
+        );
+      }
+      if (acknowledgement.length < 10 || acknowledgement.length > 500) {
+        conflictRefusal = conflicts;
+        throw new CloseError(
+          `conflict of interest: you are recorded on the records this reopen would unlock (${describeReopenConflicts(conflicts)}). `
+          + "No other eligible approver is free of conflicts, so you may approve with a 10-500 character conflict acknowledgement recording why",
+        );
+      }
+      attestation = acknowledgement;
+      conflictAcknowledged = true;
     }
     if (!args.approve) {
       await tx.execute(sql`
@@ -557,6 +618,7 @@ export async function decidePeriodReopen(args: {
         reason: row.reason,
         requestedBy: row.requested_by,
         selfApproved: false,
+        conflictAcknowledged: false,
         attestation: null,
         conflicts: [],
       };
@@ -736,8 +798,9 @@ export async function decidePeriodReopen(args: {
       reason: row.reason,
       requestedBy: row.requested_by,
       selfApproved: selfApproval,
+      conflictAcknowledged,
       attestation,
-      conflicts: selfApproval ? conflicts : [],
+      conflicts: selfApproval || conflictAcknowledged ? conflicts : [],
     };
   });
   try {
@@ -787,6 +850,14 @@ export async function decidePeriodReopen(args: {
                       conflicts: decided.conflicts,
                     }
                     : {}),
+                  ...(decided.conflictAcknowledged
+                    ? {
+                      conflictAcknowledged: true,
+                      note: "approved with a recorded conflict: no unconflicted eligible approver",
+                      attestation: decided.attestation,
+                      conflicts: decided.conflicts,
+                    }
+                    : {}),
                 },
                 scope,
                 requestedBy: decided.requestedBy,
@@ -804,6 +875,14 @@ export async function decidePeriodReopen(args: {
                   ? {
                     selfApproved: true,
                     note: "self-approved: no other eligible approver",
+                    attestation: decided.attestation,
+                    conflicts: decided.conflicts,
+                  }
+                  : {}),
+                ...(decided.conflictAcknowledged
+                  ? {
+                    conflictAcknowledged: true,
+                    note: "approved with a recorded conflict: no unconflicted eligible approver",
                     attestation: decided.attestation,
                     conflicts: decided.conflicts,
                   }

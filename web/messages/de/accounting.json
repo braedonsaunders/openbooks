@@ -467,6 +467,8 @@
     "selfAttestationConfirm": "Ich bestätige, dass kein anderer berechtigter Genehmiger verfügbar ist und diese Wiedereröffnung erforderlich ist.",
     "selfAttestationNeeded": "Beschreiben Sie, warum diese Wiedereröffnung nötig ist (mindestens 10 Zeichen), und bestätigen Sie die Erklärung, um zu genehmigen.",
     "conflictNotice": "Interessenkonflikt: Sie sind auf {count} Datensätzen erfasst, die diese Wiedereröffnung entsperren würde ({examples}). Bitten Sie einen anderen Genehmiger um die Entscheidung.",
+    "conflictNoticeNamed": "Interessenkonflikt: Sie sind in {count} Datensatz/Datensätzen erfasst, die diese Wiedereröffnung freigeben würde ({examples}). {approvers} kann ohne Konflikt entscheiden.",
+    "conflictAcknowledgementNotice": "Sie sind in {count} Datensatz/Datensätzen erfasst, die diese Wiedereröffnung freigeben würde ({examples}), und keine andere berechtigte Person ist konfliktfrei. Sie können mit einer protokollierten Konfliktbestätigung genehmigen; sie bleibt im Prüfprotokoll.",
     "approve": "Genehmigen",
     "reject": "Ablehnen",
     "approved": "Wiedereröffnung genehmigt.",

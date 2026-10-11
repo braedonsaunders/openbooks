@@ -474,6 +474,7 @@
       "reopenTitle": "Solicitar reapertura controlada",
       "reopenIncludeGl": "Reabrir también el Libro mayor (obligatorio mientras esté cerrado)",
       "reopenConflictNotice": "Conflicto de interés: usted figura en {count} registro(s) que esta reapertura desbloquearía ({examples}). Pida a otra persona que decida.",
+      "reopenConflictAcknowledgementNotice": "Usted figura en {count} registro(s) que esta reapertura desbloquearía ({examples}) y ningún otro aprobador elegible está libre de conflictos. Puede aprobar con un reconocimiento del conflicto registrado; se conserva en la auditoría.",
       "reopenSelfApprovalNotice": "Ningún otro aprobador habilitado puede decidir esta reapertura, por lo que puede aprobar su propia solicitud con una declaración. La autoaprobación queda registrada en la auditoría.",
       "reopenSelfAttestationLabel": "Declaración de autoaprobación",
       "reopenSelfAttestationConfirm": "Declaro que no hay ningún otro aprobador habilitado disponible y que esta reapertura es necesaria.",

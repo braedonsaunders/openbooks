@@ -474,6 +474,7 @@
       "reopenTitle": "Kontrollierte Wiedereröffnung anfordern",
       "reopenIncludeGl": "Hauptbuch ebenfalls öffnen (erforderlich, solange das Hauptbuch geschlossen ist)",
       "reopenConflictNotice": "Interessenkonflikt: Sie sind in {count} Datensätzen erfasst, die diese Wiedereröffnung entsperren würde ({examples}). Bitten Sie eine andere Person um die Entscheidung.",
+      "reopenConflictAcknowledgementNotice": "Sie sind in {count} Datensatz/Datensätzen erfasst, die diese Wiedereröffnung freigeben würde ({examples}), und keine andere berechtigte Person ist konfliktfrei. Sie können mit einer protokollierten Konfliktbestätigung genehmigen; sie bleibt im Prüfprotokoll.",
       "reopenSelfApprovalNotice": "Es kann kein anderer berechtigter Genehmiger über diese Wiedereröffnung entscheiden, daher dürfen Sie Ihre eigene Anfrage mit einer Bestätigung genehmigen. Die Selbstgenehmigung wird im Prüfprotokoll festgehalten.",
       "reopenSelfAttestationLabel": "Bestätigung der Selbstgenehmigung",
       "reopenSelfAttestationConfirm": "Ich bestätige, dass kein anderer berechtigter Genehmiger verfügbar ist und diese Wiedereröffnung erforderlich ist.",

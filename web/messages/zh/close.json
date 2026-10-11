@@ -474,6 +474,7 @@
       "reopenTitle": "申请受控重新开启",
       "reopenIncludeGl": "同时重开总账（总账已关闭时必需）",
       "reopenConflictNotice": "利益冲突：您与本次重开将解锁的 {count} 条记录有关（{examples}）。请其他审批人决定。",
+      "reopenConflictAcknowledgementNotice": "您记录在此次重开将解锁的 {count} 条记录中（{examples}），且没有其他无冲突的合格审批人。您可以在记录利益冲突确认后批准；该确认会保留在审计记录中。",
       "reopenSelfApprovalNotice": "没有其他合格审批人可以决定此次重开，因此您可以附上证明批准自己的申请。自我批准将记录在审计轨迹中。",
       "reopenSelfAttestationLabel": "自我批准证明",
       "reopenSelfAttestationConfirm": "我证明没有其他合格审批人可以决定，且此次重开确有必要。",

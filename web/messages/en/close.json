@@ -474,6 +474,7 @@
       "reopenTitle": "Request controlled reopening",
       "reopenIncludeGl": "Also reopen General ledger (required while the ledger is closed)",
       "reopenConflictNotice": "Conflict of interest: you are recorded on {count} record(s) this reopen would unlock ({examples}). Ask another approver to decide.",
+      "reopenConflictAcknowledgementNotice": "You are recorded on {count} record(s) this reopen would unlock ({examples}), and no other eligible approver is free of conflicts. You may approve with a recorded conflict acknowledgement; it is kept in the audit trail.",
       "reopenSelfApprovalNotice": "No other eligible approver can decide this reopen, so you may approve your own request with an attestation. The self-approval is recorded in the audit trail.",
       "reopenSelfAttestationLabel": "Self-approval attestation",
       "reopenSelfAttestationConfirm": "I attest that no other eligible approver is available and this reopening is necessary.",
