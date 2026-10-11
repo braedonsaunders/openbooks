@@ -49,7 +49,7 @@ const hooks = registerHooks({
     }
     // Engine modules (the feature-state resolver among them) import the pool
     // by relative path, so every spelling of the platform pool loads the double.
-    if (specifier.endsWith('/platform/db.ts') || specifier === '@openbooks/engine/platform/database') {
+    if (specifier.endsWith('/platform/db.ts') || specifier === '@openbooks/engine/platform/db' || specifier === '@openbooks/engine/platform/database') {
       return {
         shortCircuit: true,
         url: `data:text/javascript,${encodeURIComponent(withPlatformDbTestSurface(`
