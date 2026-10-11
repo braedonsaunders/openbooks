@@ -1,7 +1,7 @@
 import { FEATURES, featureRequirements } from "../organization/feature-registry.ts";
 
 /** Capabilities awaiting a released schema/scenario contract remain visibly upcoming. */
-export const UPCOMING_DEMO_FEATURES = ["manufacturingSubcontract"] as const;
+export const UPCOMING_DEMO_FEATURES = ["manufacturingSubcontract", "periodEndJournals"] as const;
 
 /** The industry demos collectively expose the complete product switchboard. */
 export const DEMO_FEATURES_BY_INDUSTRY: Record<string, readonly string[]> = {
