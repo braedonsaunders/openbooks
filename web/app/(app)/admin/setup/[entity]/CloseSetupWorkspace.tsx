@@ -2214,7 +2214,9 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
                   ? t("actions.requestReopen")
                   : action.state === "open"
                     ? t("actions.unlock")
-                    : t("actions.confirmClose")}
+                    : closeArmed
+                      ? t("actions.confirmClose")
+                      : t("actions.reviewClose")}
               </Button>
             </div>
           </div>

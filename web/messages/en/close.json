@@ -572,6 +572,7 @@
       "reopen": "Reopen",
       "requestReopen": "Request reopening",
       "confirmClose": "Confirm close",
+      "reviewClose": "Review close",
       "closeAll": "Close period",
       "approve": "Approve",
       "reject": "Reject",

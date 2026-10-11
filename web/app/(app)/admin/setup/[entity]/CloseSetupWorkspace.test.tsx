@@ -533,7 +533,7 @@ test('closing a module arms a named confirm before anything posts', async () => 
       await tick()
     })
     await act(async () => {
-      clickButton(String(closeSetup.actions?.confirmClose)).click()
+      clickButton(String(closeSetup.actions?.reviewClose)).click()
       await tick()
     })
     assert.deepEqual(bodies, [], 'the first confirm arms instead of posting')
@@ -605,7 +605,7 @@ test('closing banking surfaces in-progress and unmatched counts in the confirm',
       await tick()
     })
     await act(async () => {
-      clickButton(String(closeSetup.actions?.confirmClose)).click()
+      clickButton(String(closeSetup.actions?.reviewClose)).click()
       await tick()
     })
     const summary = document.querySelector('div[role="alertdialog"]')
@@ -886,7 +886,7 @@ test('each module close starts with an empty reason', async () => {
     )
     // Posting the banking close clears only banking's draft.
     await act(async () => {
-      clickButton(String(closeSetup.actions?.confirmClose)).click()
+      clickButton(String(closeSetup.actions?.reviewClose)).click()
       await tick()
     })
     await act(async () => {
