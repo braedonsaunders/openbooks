@@ -13,6 +13,7 @@ export const PAYMENT_SYSTEM_CUSTOM_FIELDS = [
   "withholdingAmount",
   "withholdingAuthorisation",
   "withholdingAuthorisedAmount",
+  "providerReturn",
 ] as const;
 
 export const PAYMENT_SYSTEM_CUSTOM_FIELD_SET: ReadonlySet<string> =

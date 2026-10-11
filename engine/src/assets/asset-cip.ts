@@ -334,6 +334,8 @@ export async function capitalizeCip(
   return withOrgTransaction(orgId, async () => {
     const tx: SqlExecutor = db;
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${"asset-cip-capitalization:" + orgId + ":" + input.idempotencyKey}, 0))`);
+    const cip = await lockCip(tx, orgId, input.cipAssetId, options.allowedSubsidiaryIds);
+    await assertAssetAccess(tx, { orgId, actorId: options.actorId, permission: "assets.capitalize", feature: "constructionInProgress", subsidiaryIds: [cip.subsidiary_id] });
     const prior = (await tx.execute<{ id: string; request_hash: string; entry_id: string; capitalized_amount: string; expensed_amount: string }>(sql`
       select id, request_hash, entry_id, capitalized_amount::text as capitalized_amount, expensed_amount::text as expensed_amount
         from asset_cip_capitalizations where org_id = ${orgId} and idempotency_key = ${input.idempotencyKey}`)).rows[0];
@@ -356,8 +358,6 @@ export async function capitalizeCip(
       };
     }
 
-    const cip = await lockCip(tx, orgId, input.cipAssetId, options.allowedSubsidiaryIds);
-    await assertAssetAccess(tx, { orgId, actorId: options.actorId, permission: "assets.capitalize", feature: "constructionInProgress", subsidiaryIds: [cip.subsidiary_id] });
     if (cip.status !== "construction") refuse("cip_closed", `construction in progress ${cip.asset_number} is closed`);
 
     // The as-of balance: costs posted by the capitalization date, less every

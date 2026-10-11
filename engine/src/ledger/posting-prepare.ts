@@ -7,6 +7,8 @@ import { CrossBorderTaxError } from '../tax/cross-border-place-of-supply.ts';
 import { resolveAgencyPosting,AgencyError } from '../inventory/drop-ship-agency.ts';
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db, schema } from "../platform/db.ts";
+import { assertProviderReturnPosting } from "../payments-core/provider-return-posting.ts";
+import { PaymentError } from "../payments-core/payment-errors.ts";
 import { assertExpenseEmployee, assertExpenseSettlement } from "../records/expense-validation.ts";
 import { assertGeneratedBillingPostable, BillingSourceIntegrityError } from "../projects/billing-source-integrity.ts";
 import { PayrollError as PayrollRemittanceError } from "../payroll/error.ts";
@@ -80,6 +82,8 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
     .from(schema.documents)
     .where(eq(schema.documents.id, documentId));
   if (!doc) throw new PostingError(`document ${documentId} not found`);
+  try { assertProviderReturnPosting(doc); }
+  catch (error) { if (error instanceof PaymentError) throw new PostingError(error.message); throw error; }
   const consolidationRefusal = await consolidationSourceRefusal(db, doc.orgId, documentId);
   if (consolidationRefusal) throw new PostingError(consolidationRefusal);
   if (doc.status === "posted")

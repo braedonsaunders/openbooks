@@ -6,6 +6,8 @@ interface DisputeRouteState {
   permissions: Set<string>;
   reviewCalls: Array<{ action: string; disputeId: string; reason?: string }>;
   existingDisputes: Set<string>;
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
+  reviewScopes: Array<ReadonlySet<string> | null>;
 }
 
 const stateKey = Symbol.for("openbooks.psp-disputes-route-test");
@@ -13,6 +15,8 @@ const routeState: DisputeRouteState = {
   permissions: new Set(),
   reviewCalls: [],
   existingDisputes: new Set(),
+  allowedSubsidiaryIds: null,
+  reviewScopes: [],
 };
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] =
   routeState;
@@ -56,7 +60,7 @@ const mockSources = new Map<string, string>([
         return {
           user: { orgId: 'org-1', id: 'user-1' },
           permissions: new Set(state.permissions),
-          allowedSubsidiaryIds: null,
+          allowedSubsidiaryIds: state.allowedSubsidiaryIds,
         }
       }
 
@@ -78,12 +82,14 @@ const mockSources = new Map<string, string>([
 
       export class PspAutomationError extends Error {}
 
-      export async function approveDisputeReview(orgId, disputeId, actorId) {
+      export async function approveDisputeReview(orgId, disputeId, actorId, scope) {
+        state.reviewScopes.push(scope)
         state.reviewCalls.push({ action: 'approve', disputeId })
         return { status: 'posted', disputeId, documents: ['doc-1'] }
       }
 
-      export async function rejectDisputeReview(orgId, disputeId, actorId, reason) {
+      export async function rejectDisputeReview(orgId, disputeId, actorId, reason, scope) {
+        state.reviewScopes.push(scope)
         if (reason === 'explode') throw new PspAutomationError('review is posted; only a queued review can be rejected')
         state.reviewCalls.push({ action: 'reject', disputeId, reason })
       }
@@ -135,7 +141,18 @@ function reset() {
   routeState.permissions = new Set(["banking.reconcile"]);
   routeState.reviewCalls = [];
   routeState.existingDisputes = new Set([DISPUTE_ID]);
+  routeState.allowedSubsidiaryIds = null;
+  routeState.reviewScopes = [];
 }
+
+test("both review commands receive the authenticated legal-entity scope", async () => {
+  reset();
+  const scope = new Set(["22222222-2222-4222-8222-222222222222"]);
+  routeState.allowedSubsidiaryIds = scope;
+  assert.equal((await post({ action: "approve", disputeId: DISPUTE_ID })).status, 200);
+  assert.equal((await post({ action: "reject", disputeId: DISPUTE_ID, reason: "duplicate provider advice" })).status, 200);
+  assert.deepEqual(routeState.reviewScopes, [scope, scope]);
+});
 
 test("approve posts through the automation and returns its outcome", async () => {
   reset();

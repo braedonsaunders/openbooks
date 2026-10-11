@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { stageReturnReceipt, postReturnReceipt, returnFinancialStage, returnStageDocument, withdrawReturnReceipts } from "./psp-return-stages.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { cmp, fromUnits, mulRate, neg, toUnits } from "../money/money.ts";
 import { assertPeriodModulesOpen } from "../periods/period-policy.ts";
@@ -9,7 +10,7 @@ import { reversePaymentForReturn } from "./payment-return.ts";
 import { openItemsForParty } from "./payment-queries.ts";
 import { PSP_AUTOMATION_SYSTEM_ACTOR_ID, type RefundAutomationOutcome, PspAutomationError, type AutomationContext } from "./psp-automation-context.ts";
 import { insertDisputeRow, transitionDisputeRow, disputeRow, type ProviderDisputeEvent, findDisputeByRef, parkDisputeForReview, asDocIds } from "./psp-automation-disputes.ts";
-import { findPostedPurposeReceipt, postAppliedReceipt, applyPaymentToOpenItem, openDisputeHold } from "./psp-automation-postings.ts";
+import { applyPaymentToOpenItem, openDisputeHold } from "./psp-automation-postings.ts";
 
 /** Dispute outcomes: a won dispute restores the receipt, a lost dispute reverses it and charges the provider fee. */
 
@@ -32,7 +33,7 @@ export async function transitionDisputeOutcome(
         feeAmount: "0", providerRef: dispute.id, reason: null,
       });
       return parkDisputeForReview(orgId, id, dispute.state === "won" ? "dispute-won" : "dispute-lost",
-        { providerEventId: event.providerEventId, dispute },
+        { providerEventId: event.providerEventId, dispute, feeAmount: eventFee(event) },
         `dispute ${dispute.id} (${dispute.state}) arrived with no hold and no posted receipt; approve once confirmed`);
     }
     const { id } = await insertDisputeRow(orgId, {
@@ -47,9 +48,10 @@ export async function transitionDisputeOutcome(
     }
     return runDisputeLost(orgId, id, event, ctx, true);
   }
-  if (existing.status !== "opened") {
+  if (existing.status !== "opened" && asDocIds(existing.documents_posted).length === 0) {
     const { id } = existing;
     if (dispute.state === "won") {
+      await withdrawReturnReceipts(orgId, id, PSP_AUTOMATION_SYSTEM_ACTOR_ID, "Dispute won before any hold posted; the original receipt stands");
       await transitionDisputeRow(orgId, id, "won", asDocIds(existing.documents_posted), "no open hold; receipt stands");
       return { status: "posted", disputeId: id, documents: asDocIds(existing.documents_posted) };
     }
@@ -70,37 +72,44 @@ async function runDisputeWon(
 ): Promise<RefundAutomationOutcome> {
   const row = await disputeRow(orgId, disputeId);
   const docs = asDocIds(row.documents_posted);
-  const holdId = docs.find((id) => row.receipt_document_id !== id) ?? docs[docs.length - 1];
-  if (!ctx || !holdId) {
-    return parkDisputeForReview(orgId, disputeId, "dispute-won",
-      { providerEventId: event.providerEventId, dispute: event.dispute },
-      `dispute ${event.dispute.id} was won but the hold cannot be resolved; approve once the hold receipt is confirmed`);
-  }
-  const reversalId = await reversePaymentForReturn(holdId, orgId, `Dispute ${event.dispute.id} won; hold released`, PSP_AUTOMATION_SYSTEM_ACTOR_ID);
-  const purpose = `PSP dispute re-collection ${event.dispute.id}`;
-  const reused = await findPostedPurposeReceipt(orgId, purpose);
-  const recollected = reused ?? (await postAppliedReceipt(orgId, {
-    partyId: ctx.link.party_id,
-    bankAccountId: ctx.bankAccountId,
-    subsidiaryId: ctx.link.subsidiary_id,
-    currency: row.currency,
-    invoiceId: row.invoice_document_id ?? ctx.invoice.id,
-    invoiceOpenBalance: ctx.invoice.open_balance,
-    amount: row.amount,
-    feeAmount: "0",
-    feeIncomeAccountId: null,
-    memo: purpose,
-    referenceNumber: `psp-dispute:${event.dispute.id.slice(0, 12)}`,
-  })).receiptId;
-  const relinked = (await db.execute(sql`
-    update payment_attempts set status = 'succeeded', payment_document_id = ${recollected}, updated_at = now()
-     where id = ${ctx.attempt.id} and org_id = ${orgId}
-  `));
-  if ((relinked.rowCount ?? 0) !== 1) {
-    throw new PspAutomationError("payment attempt could not be pointed at its re-collected receipt");
-  }
-  await transitionDisputeRow(orgId, disputeId, "won", [...docs, reversalId, recollected], null);
-  return { status: "posted", disputeId, documents: [...docs, reversalId, recollected] };
+  const stagedId = await returnStageDocument(orgId, disputeId, "dispute-opened", "hold");
+  if (!ctx) return parkDisputeForReview(orgId, disputeId, "dispute-won",
+    { providerEventId: event.providerEventId, dispute: event.dispute, feeAmount: eventFee(event) }, "The dispute's payment attempt could not be resolved; reconcile its provider identity before resuming.");
+  const candidates = [...new Set(stagedId ? [stagedId] : docs)];
+  const holds = candidates.length ? (await db.execute<{ id: string; control_account_id: string }>(sql`
+    select d.id, jl.account_id as control_account_id from documents d
+      join journal_lines jl on jl.org_id = d.org_id and jl.entry_id = d.posted_entry_id and jl.is_open_item
+      join journal_entries entry on entry.org_id = d.org_id and entry.id = d.posted_entry_id and entry.status = 'posted'
+     where d.org_id = ${orgId} and d.id in (${sql.join(candidates.map(id => sql`${id}`), sql`, `)})
+       and d.kind = 'customer_payment' and d.status = 'posted' and d.currency = ${row.currency}
+       and d.party_id = ${ctx.link.party_id} and d.subsidiary_id = ${ctx.link.subsidiary_id}
+       and d.total = ${row.amount}::numeric
+       and (d.custom->'providerReturn' @> ${JSON.stringify({ disputeId, phase: "dispute-opened", role: "hold" })}::jsonb
+            or d.memo = ${`PSP dispute hold ${row.provider_ref ?? event.dispute.id}`})
+     for update of d
+  `)).rows : [];
+  if (holds.length !== 1) return parkDisputeForReview(orgId, disputeId, "dispute-won",
+    { providerEventId: event.providerEventId, dispute: event.dispute, feeAmount: eventFee(event) }, "The posted hold receipt could not be uniquely resolved; reconcile its receipt identity before resuming.");
+  const hold = holds[0]!;
+  const issued = await stageReturnReceipt(orgId, {
+    disputeId, phase: "dispute-won", role: "recollection", sourceReceiptId: hold.id,
+    partyId: ctx.link.party_id, bankAccountId: ctx.bankAccountId, subsidiaryId: ctx.link.subsidiary_id,
+    currency: row.currency, amount: row.amount, controlAccountId: hold.control_account_id,
+    applyInvoiceId: row.invoice_document_id ?? ctx.invoice.id, memo: `Provider dispute re-collection ${disputeId}`,
+  });
+  if (!issued.ready) return parkDisputeForReview(orgId, disputeId, "dispute-won",
+    { providerEventId: event.providerEventId, dispute: event.dispute, feeAmount: eventFee(event) },
+    `Approve re-collection receipt ${issued.receiptId}, then resume this review. The dispute hold remains posted.`);
+  return returnFinancialStage<RefundAutomationOutcome>(async () => {
+    const reversalId = await reversePaymentForReturn(hold.id, orgId, `Dispute ${event.dispute.id} won; hold released`, PSP_AUTOMATION_SYSTEM_ACTOR_ID);
+    await postReturnReceipt(orgId, issued.receiptId);
+    const relinked = await db.execute(sql`update payment_attempts set status = 'succeeded', payment_document_id = ${issued.receiptId}, updated_at = now()
+      where id = ${ctx.attempt.id} and org_id = ${orgId}`);
+    if (relinked.rowCount !== 1) throw new PspAutomationError("The payment attempt could not be linked to its re-collected receipt.");
+    const documents = [...docs, reversalId, issued.receiptId];
+    await transitionDisputeRow(orgId, disputeId, "won", documents, null);
+    return { status: "posted", disputeId, documents };
+  });
 }
 
 /** Settle the invoice from the held funds and write off the loss and fee. */
@@ -115,8 +124,19 @@ async function runDisputeLost(
   const docs = asDocIds(row.documents_posted);
   if (!ctx || !ctx.receipt) {
     return parkDisputeForReview(orgId, disputeId, "dispute-lost",
-      { providerEventId: event.providerEventId, dispute: event.dispute },
+      { providerEventId: event.providerEventId, dispute: event.dispute, feeAmount: eventFee(event) },
       `dispute ${event.dispute.id} was lost with no receipt context; approve once confirmed`);
+  }
+  const lossAccount = ctx.disputeAccounts.chargebackLossAccountId;
+  if (!lossAccount) {
+    return parkDisputeForReview(orgId, disputeId, "dispute-lost",
+      { providerEventId: event.providerEventId, dispute: event.dispute, feeAmount: eventFee(event) },
+      `chargeback loss account is not configured; set it in Company Settings → Payment Providers for ${ctx.attempt.provider}`);
+  }
+  if (ctx.disputeAccounts.disputeFeeAccountId === null && cmp(eventFee(event), "0") > 0) {
+    return parkDisputeForReview(orgId, disputeId, "dispute-lost",
+      { providerEventId: event.providerEventId, dispute: event.dispute, feeAmount: eventFee(event) },
+      `dispute fee account is not configured; set it in Company Settings → Payment Providers for ${ctx.attempt.provider}`);
   }
   let holdId = docs.length > 0 ? docs[docs.length - 1]! : null;
   let documents = [...docs];
@@ -125,33 +145,22 @@ async function runDisputeLost(
     // sees the same shape as a normally aged dispute.
     let held: { documents: string[]; holdId: string; gated: boolean };
     try {
-      held = await openDisputeHold(orgId, ctx, row.amount, event.dispute.id);
+      held = await openDisputeHold(orgId, ctx, row.amount, event.dispute.id, disputeId);
     } catch (error) {
       if (error instanceof PspAutomationError) {
         return parkDisputeForReview(orgId, disputeId, "dispute-lost",
-          { providerEventId: event.providerEventId, dispute: event.dispute }, error.message);
+          { providerEventId: event.providerEventId, dispute: event.dispute, feeAmount: eventFee(event) }, error.message);
       }
       throw error;
     }
     if (held.gated) {
       return parkDisputeForReview(orgId, disputeId, "dispute-lost",
-        { providerEventId: event.providerEventId, dispute: event.dispute },
+        { providerEventId: event.providerEventId, dispute: event.dispute, feeAmount: eventFee(event) },
         `replacement receipt for the undisputed remainder needs approval before the loss can post`);
     }
     holdId = held.holdId;
     documents = [...documents, ...held.documents];
     await transitionDisputeRow(orgId, disputeId, "opened", documents, compressed ? "hold compressed from the lost event" : null);
-  }
-  const lossAccount = ctx.disputeAccounts.chargebackLossAccountId;
-  if (!lossAccount) {
-    return parkDisputeForReview(orgId, disputeId, "dispute-lost",
-      { providerEventId: event.providerEventId, dispute: event.dispute },
-      `chargeback loss account is not configured; set it in Company Settings → Payment Providers for ${ctx.attempt.provider}`);
-  }
-  if (ctx.disputeAccounts.disputeFeeAccountId === null && cmp(eventFee(event), "0") > 0) {
-    return parkDisputeForReview(orgId, disputeId, "dispute-lost",
-      { providerEventId: event.providerEventId, dispute: event.dispute },
-      `dispute fee account is not configured; set it in Company Settings → Payment Providers for ${ctx.attempt.provider}`);
   }
   // Apply the held credit to the invoice: the customer owes nothing — the
   // provider took the money — so the invoice settles from the hold.
@@ -203,6 +212,9 @@ async function runDisputeLost(
     modules: ["banking"],
   });
   const fee = eventFee(event);
+  const feeWritten = await db.execute(sql`update payment_disputes set fee_amount = ${fee}
+    where org_id = ${orgId} and id = ${disputeId}`);
+  if (feeWritten.rowCount !== 1) throw new PspAutomationError("The dispute's fee evidence could not be recorded.");
   // A dispute in a currency other than the subsidiary's functional currency
   // clears its hold at the rate the hold receipt posted at (the posting
   // kernel stamps that rate on the hold document). Converting at that one

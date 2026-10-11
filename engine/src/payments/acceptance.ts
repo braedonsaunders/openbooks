@@ -136,6 +136,11 @@ export interface WebhookEvent {
    *  automation parks for review instead of guessing full vs partial. */
   refundedAmount?: string | null;
   refundCurrency?: string | null;
+  refundAmountBasis?: "incremental" | "cumulative";
+  providerRefundId?: string | null;
+  /** Refund object updates describe an existing return; the Charge snapshot
+   * is Stripe's authoritative cumulative accounting stream. */
+  refundObservation?: boolean;
   /** Dispute lifecycle detail. State follows the provider: opened on
    *  creation/notification, won/lost on close/reversal. Separate from the
    *  `dispute` boolean above (which autopay reads): detail drives the
@@ -547,7 +552,7 @@ function normalizeStripeNotification(event: unknown): WebhookEvent | null {
     // refund from a partial one without guessing.
     const intent = obj.payment_intent ? String(obj.payment_intent) : null;
     const refundCurrency = typeof obj.currency === "string" ? obj.currency.toUpperCase() : null;
-    const refundedRaw = obj.amount_refunded ?? obj.amount;
+    const refundedRaw = type === "charge.refunded" ? obj.amount_refunded : obj.amount;
     return {
       externalRef: String(obj.payment_intent ?? obj.id ?? ""),
       intentRef: intent,
@@ -562,6 +567,10 @@ function normalizeStripeNotification(event: unknown): WebhookEvent | null {
           ? fromMinorUnits(BigInt(refundedRaw as string | number | bigint | boolean), refundCurrency)
           : null,
       refundCurrency,
+      refundAmountBasis: "cumulative",
+      providerRefundId: type === "charge.refunded" && typeof obj.id === "string" && refundedRaw != null
+        ? `${obj.id}:${String(refundedRaw)}` : null,
+      refundObservation: type === "charge.refund.updated",
       raw: root,
     };
   }
@@ -2494,6 +2503,8 @@ async function consumePendingClawback(
 ): Promise<{
   providerEventId: string;
   refundedAmount: string | null;
+  refundAmountBasis: "incremental" | "cumulative";
+  providerRefundId: string | null;
   refundCurrency: string | null;
   providerRef: string | null;
   dispute: {
@@ -2521,6 +2532,8 @@ async function consumePendingClawback(
         ? detail.providerEventId
         : `${provider}:${intentRef}:parked`,
     refundedAmount: typeof detail.refundedAmount === "string" ? detail.refundedAmount : null,
+    refundAmountBasis: detail.refundAmountBasis === "cumulative" || (detail.refundAmountBasis === undefined && provider === "stripe") ? "cumulative" : "incremental",
+    providerRefundId: typeof detail.providerRefundId === "string" ? detail.providerRefundId : null,
     refundCurrency: typeof detail.refundCurrency === "string" ? detail.refundCurrency : null,
     providerRef: typeof detail.providerRef === "string" ? detail.providerRef : null,
     dispute: (detail.dispute ?? null) as {
@@ -2603,6 +2616,14 @@ async function processWebhookEvent(
     `));
   }
   const found = attempt.rows[0];
+  if (event.refundObservation) {
+    if (!found) return "unknown_attempt";
+    const payload = isJsonRecord(event.raw.data) && isJsonRecord(event.raw.data.object) ? event.raw.data.object : {};
+    await db.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'payment_attempts', ${found.id}, 'update',
+        ${JSON.stringify({ mode: "provider_refund_observation", provider, providerEventId: event.providerEventId ?? null, refundId: payload.id ?? null, status: payload.status ?? null })}::jsonb, null)`);
+    return "refunded_noted";
+  }
   if (!found) {
     // Automatic collection settles against collection attempts, not payment
     // attempts: offer async-debit and off-session results to autopay before
@@ -2638,6 +2659,8 @@ async function processWebhookEvent(
                   normalized: {
                     providerEventId: event.providerEventId ?? null,
                     refundedAmount: event.refundedAmount ?? null,
+                    refundAmountBasis: event.refundAmountBasis ?? "incremental",
+                    providerRefundId: event.providerRefundId ?? null,
                     refundCurrency: event.refundCurrency ?? null,
                     providerRef: event.disputeDetail?.id ?? event.externalRef,
                     dispute: event.disputeDetail ?? null,
@@ -2860,6 +2883,8 @@ async function runReturnAutomation(
     providerEventId: returnEventId(provider, event),
     attemptId,
     refundedAmount: event.refundedAmount ?? null,
+    refundAmountBasis: event.refundAmountBasis,
+    providerRefundId: event.providerRefundId,
     refundCurrency: event.refundCurrency ?? null,
     providerRef: event.disputeDetail?.id ?? event.externalRef,
     raw: event.raw,
@@ -2875,6 +2900,8 @@ async function replayParkedReturn(
   parked: {
     providerEventId: string;
     refundedAmount: string | null;
+    refundAmountBasis: "incremental" | "cumulative";
+    providerRefundId: string | null;
     refundCurrency: string | null;
     providerRef: string | null;
     dispute: {
@@ -2904,6 +2931,8 @@ async function replayParkedReturn(
     providerEventId: parked.providerEventId,
     attemptId,
     refundedAmount: parked.refundedAmount,
+    refundAmountBasis: parked.refundAmountBasis,
+    providerRefundId: parked.providerRefundId,
     refundCurrency: parked.refundCurrency,
     providerRef: parked.providerRef,
   });

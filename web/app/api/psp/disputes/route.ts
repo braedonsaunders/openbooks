@@ -64,6 +64,7 @@ export const POST = defineRoute({
           orgId,
           body.disputeId,
           authz.user.id,
+          authz.allowedSubsidiaryIds,
         );
         return NextResponse.json(outcome);
       }
@@ -72,6 +73,7 @@ export const POST = defineRoute({
         body.disputeId,
         authz.user.id,
         body.reason,
+        authz.allowedSubsidiaryIds,
       );
       return NextResponse.json({ ok: true });
     } catch (e) {

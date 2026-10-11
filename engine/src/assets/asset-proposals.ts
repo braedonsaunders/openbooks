@@ -476,6 +476,16 @@ export async function acceptAssetProposals(
   return withOrgTransaction(orgId, async () => {
     const tx: SqlExecutor = db;
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${"asset-proposal-acceptance:" + orgId + ":" + input.idempotencyKey}, 0))`);
+    if (input.proposalIds.length === 0) refuse("proposal_not_found", "select at least one proposal", { status: 404 });
+    const proposals = await lockProposals(tx, orgId, input.proposalIds, options.allowedSubsidiaryIds);
+    const subsidiaryId = proposals[0]!.subsidiary_id;
+    await assertAssetAccess(tx, {
+      orgId,
+      actorId: options.actorId,
+      permission: "assets.capitalize",
+      feature: "assetProposals",
+      subsidiaryIds: [...new Set(proposals.map((proposal) => proposal.subsidiary_id))],
+    });
     const prior = (await tx.execute<{ id: string; request_hash: string; reclass_entry_id: string | null }>(sql`
       select id, request_hash, reclass_entry_id from asset_proposal_acceptances
        where org_id = ${orgId} and idempotency_key = ${input.idempotencyKey}`)).rows[0];
@@ -489,15 +499,6 @@ export async function acceptAssetProposals(
       return acceptanceResult(tx, orgId, prior.id, prior.reclass_entry_id);
     }
 
-    const proposals = await lockProposals(tx, orgId, input.proposalIds, options.allowedSubsidiaryIds);
-    const subsidiaryId = proposals[0]!.subsidiary_id;
-    await assertAssetAccess(tx, {
-      orgId,
-      actorId: options.actorId,
-      permission: "assets.capitalize",
-      feature: "assetProposals",
-      subsidiaryIds: [...new Set(proposals.map((proposal) => proposal.subsidiary_id))],
-    });
     for (const proposal of proposals) {
       if (proposal.status !== "pending") {
         refuse("proposal_not_pending", `a selected proposal is already ${proposal.status}`, { status: 409, remedy: "Refresh the queue." });

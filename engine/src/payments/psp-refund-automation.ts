@@ -2,19 +2,22 @@ import { sql } from "drizzle-orm";
 import { db, withOrg } from "../platform/db.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
+import { PaymentError } from "../payments-core/payment-errors.ts";
+import { PostingError } from "../journal/posting-contracts.ts";
+import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
+import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
+import { refundSource, refundSourceOf, refundDelta, postedAttemptRefunds } from "./refund-source.ts";
+import { returnFinancialStage, withdrawReturnReceipts } from "./psp-return-stages.ts";
 import { reversePaymentForReturn } from "./payment-return.ts";
 import { PSP_AUTOMATION_SYSTEM_ACTOR_ID, type PspAutomationPolicy, type ProviderRefundEvent, type RefundAutomationOutcome, PspAutomationError, loadAutomationContext } from "./psp-automation-context.ts";
-import { insertDisputeRow, transitionDisputeRow, disputeRow, parkForReview, type ProviderDisputeEvent, type PendingAction, findDisputeByRef, historyHasEvent, pendingActionOf, parkDisputeForReview, asDocIds } from "./psp-automation-disputes.ts";
-import { postedAgainstReceipt, voidAndReissueRemainder, refundAgainstCredit, openCreditCovering, setAttemptRefunded, openDisputeHold } from "./psp-automation-postings.ts";
+import { insertDisputeRow, transitionDisputeRow, disputeRow, parkForReview, type ProviderDisputeEvent, type PendingAction, findDisputeByRef, historyHasEvent, pendingActionOf, pendingEventOf, parkDisputeForReview, asDocIds } from "./psp-automation-disputes.ts";
+import { voidAndReissueRemainder, refundAgainstCredit, openCreditCovering, setAttemptRefunded, openDisputeHold } from "./psp-automation-postings.ts";
 import { transitionDisputeOutcome, eventFee } from "./psp-automation-dispute-outcomes.ts";
 
 /**
  * Automatic provider refund/dispute accounting.
  *
- * A provider refund or chargeback used to land as an audit note while the
- * receipt stayed posted and the invoice stayed settled — the controller
- * hand-reversed every return. This module posts the accounting instead,
- * driven by the normalized webhook event:
+ * Normalized provider evidence drives governed return accounting:
  *
  * - Full refund: reverse the receipt through reversePaymentForReturn (the
  *   invoice reopens by the void machinery, never by editing applications).
@@ -38,10 +41,6 @@ import { transitionDisputeOutcome, eventFee } from "./psp-automation-dispute-out
  * the reason and the remedy, never as a 500 and never silently.
  */
 
-/** The nil-UUID system actor every payment automation posts under — the same
- *  convention as PAYMENT_RUN_SYSTEM_ACTOR_ID,aliased so refund/dispute audit
- *  rows name their own actor without minting a second identity. */
-
 /**
  * Run one provider refund event to posted accounting (or to the review
  * queue). The dispute row is created first as pending_review, so a crash
@@ -60,140 +59,96 @@ export async function processProviderRefundEvent(
       );
     }
     const ctx = await loadAutomationContext(orgId, event.attemptId);
-    const receiptTotal = ctx.receipt?.status === "posted" ? ctx.receipt.total : null;
-    const { id: disputeId, created } = await insertDisputeRow(orgId, {
-      provider: event.provider,
-      providerEventId: event.providerEventId,
-      kind: "refund",
-      status: "pending_review",
-      attemptId: event.attemptId,
-      receiptDocumentId: ctx.receipt?.id ?? null,
-      invoiceDocumentId: ctx.invoice.id,
-      currency: event.refundCurrency ?? ctx.link.currency,
-      amount: event.refundedAmount ?? "0",
-      feeAmount: "0",
-      providerRef: event.providerRef,
-      reason: null,
-    });
-    if (!created) {
-      const existing = await disputeRow(orgId, disputeId);
-      const docs = Array.isArray(existing.documents_posted) ? existing.documents_posted : [];
-      // Only a terminal row with posted documents is a duplicate: anything
-      // else is a crashed or parked run the redelivery must resume.
-      if ((existing.status === "posted" || existing.status === "rejected") && docs.length > 0) {
-        return { status: "duplicate", disputeId };
-      }
-      if (existing.status === "pending_review" && docs.length === 0) {
-        // Parked before posting (review policy or missing evidence): resume
-        // below with fresh state instead of posting twice.
-      } else if (docs.length > 0) {
-        return { status: "duplicate", disputeId };
-      }
+    if (ctx.attempt.provider !== event.provider) throw new PspAutomationError("The refund provider does not match its payment attempt.");
+    const source = refundSource(event);
+    const identity = (await db.execute<{ id: string }>(sql`
+      select id from payment_disputes where org_id = ${orgId} and provider = ${event.provider} and kind = 'refund'
+        and (provider_event_id = ${event.providerEventId} or
+          (${source.refundId}::text is not null and attempt_id = ${event.attemptId}
+            and status_history @> ${JSON.stringify([{ refundSource: { refundId: source.refundId } }])}::jsonb))
+       order by created_at limit 1
+    `)).rows[0];
+    const disputeId = identity?.id ?? (await insertDisputeRow(orgId, {
+      provider: event.provider, providerEventId: event.providerEventId, kind: "refund", status: "pending_review",
+      attemptId: event.attemptId, receiptDocumentId: ctx.receipt?.id ?? null, invoiceDocumentId: ctx.invoice.id,
+      currency: source.currency ?? ctx.link.currency, amount: source.amount ?? "0", feeAmount: "0",
+      providerRef: event.providerRef, reason: null, refundSource: source,
+    })).id;
+    const row = await disputeRow(orgId, disputeId);
+    if (row.attempt_id !== event.attemptId) throw new PspAutomationError("The refund delivery is already associated with another payment attempt.");
+    if (row.status === "posted" || row.status === "rejected") return { status: "duplicate", disputeId };
+    const persistedSource = refundSourceOf(row.status_history);
+    const completingEvidence = persistedSource?.amount === null && source.amount !== null;
+    if (completingEvidence && (persistedSource.basis !== source.basis ||
+        (persistedSource.currency !== null && persistedSource.currency !== source.currency))) {
+      return parkForReview(orgId, disputeId, "The redelivered refund evidence changes its currency or amount basis; reconcile its provider identity before resuming.");
     }
-    if ((opts.forcePolicy ?? ctx.policy) === "review") {
-      return parkForReview(
-        orgId,
-        disputeId,
-        `refund ${event.providerRef ?? event.providerEventId} for receipt ${ctx.receipt?.document_number ?? "(none)"} needs approval before posting`,
-      );
+    const evidence = completingEvidence ? source : persistedSource ?? source;
+    if (!persistedSource || completingEvidence) {
+      const recorded = await db.execute(sql`update payment_disputes
+        set status_history = status_history || ${JSON.stringify({ at: new Date().toISOString(), refundSource: source })}::jsonb
+        where org_id = ${orgId} and id = ${disputeId}`);
+      if (recorded.rowCount !== 1) throw new PspAutomationError("The refund's provider evidence could not be recorded.");
     }
-    if (!ctx.receipt || ctx.receipt.status !== "posted") {
-      return parkForReview(
-        orgId,
-        disputeId,
-        `refund arrived for attempt ${ctx.attempt.external_ref} with no posted receipt; approve once the receipt posts`,
-      );
+    const currency = evidence.currency ?? ctx.link.currency;
+    const already = await postedAttemptRefunds(orgId, event.attemptId, currency);
+    const delta = refundDelta(evidence, already);
+    if (delta === null) return parkForReview(orgId, disputeId, "The provider did not report a refund amount; redeliver its confirmed refund event before approving this review.");
+    if (delta === 0n) {
+      await withdrawReturnReceipts(orgId, disputeId, PSP_AUTOMATION_SYSTEM_ACTOR_ID, "Refund total already represented by posted provider returns");
+      const observed = await db.execute(sql`update payment_disputes set amount = '0' where org_id = ${orgId} and id = ${disputeId}`);
+      if (observed.rowCount !== 1) throw new PspAutomationError("The refund observation could not be recorded.");
+      await transitionDisputeRow(orgId, disputeId, "posted", [], "Provider refund total already represented; no accounting movement");
+      return { status: "duplicate", disputeId };
     }
-    if (event.refundedAmount == null) {
-      return parkForReview(
-        orgId,
-        disputeId,
-        `provider did not report the refunded amount for ${event.providerRef ?? event.providerEventId}; approve with the amount once confirmed`,
-      );
+    if (already + delta > toUnits(ctx.attempt.amount)) return parkForReview(orgId, disputeId, "The confirmed refund total exceeds the original collected amount; reconcile the provider charge before resuming.");
+    const refundAmount = fromUnits(delta);
+    const amountWritten = await db.execute(sql`update payment_disputes set amount = ${refundAmount}
+      where org_id = ${orgId} and id = ${disputeId} and status = 'pending_review'`);
+    if (amountWritten.rowCount !== 1) throw new PspAutomationError("The refund review changed before its amount could be recorded.");
+    if ((opts.forcePolicy ?? ctx.policy) === "review") return parkForReview(orgId, disputeId,
+      `Refund ${event.providerRef ?? event.providerEventId} needs approval before posting.`);
+    const receipt = ctx.receipt;
+    if (!receipt || receipt.status !== "posted") return parkForReview(orgId, disputeId,
+      "The refund has no posted source receipt; reconcile its payment before resuming the review.");
+    if (currency !== receipt.currency.toUpperCase()) return parkForReview(orgId, disputeId,
+      `The refund is in ${currency} against a ${receipt.currency} receipt; reconcile the provider currency before resuming.`);
+    if (delta > toUnits(receipt.total)) return parkForReview(orgId, disputeId,
+      "The refund exceeds the remaining receipt; reconcile earlier returns and credits before resuming.");
+    const reason = `Provider refund ${event.providerRef ?? event.providerEventId} for ${receipt.document_number}`;
+    try {
+      return await returnFinancialStage<RefundAutomationOutcome>(async () => {
+        if (delta === toUnits(receipt.total)) {
+          const reversalId = await returnFinancialStage(() => reversePaymentForReturn(receipt.id, orgId, reason, PSP_AUTOMATION_SYSTEM_ACTOR_ID));
+          await setAttemptRefunded(orgId, ctx.attempt.id, null);
+          await transitionDisputeRow(orgId, disputeId, "posted", [reversalId], null);
+          return { status: "posted", disputeId, documents: [reversalId] };
+        }
+        const credit = await openCreditCovering(orgId, ctx.link.party_id, ctx.link.subsidiary_id, receipt.currency, refundAmount);
+        if (credit) {
+          const issued = await refundAgainstCredit(orgId, ctx, credit.documentId, credit.lineId, refundAmount, disputeId);
+          if (issued.gated) return parkForReview(orgId, disputeId,
+            `Approve refund receipt ${issued.refundId}, then resume this provider review.`);
+          await setAttemptRefunded(orgId, ctx.attempt.id, null);
+          await transitionDisputeRow(orgId, disputeId, "posted", [issued.refundId], `Settled against credit memo ${credit.documentId}`);
+          return { status: "posted", disputeId, documents: [issued.refundId] };
+        }
+        const outcome = await voidAndReissueRemainder(orgId, ctx, receipt.total, refundAmount, reason, disputeId);
+        if (outcome.gated) return parkForReview(orgId, disputeId,
+          `Approve replacement receipt ${outcome.remainderId}, then resume this provider review. The original receipt remains posted.`);
+        if (outcome.remainderId) {
+          const relinked = await db.execute(sql`update payment_attempts set status = 'succeeded', payment_document_id = ${outcome.remainderId}, updated_at = now()
+            where id = ${ctx.attempt.id} and org_id = ${orgId}`);
+          if (relinked.rowCount !== 1) throw new PspAutomationError("The payment attempt could not be linked to its remainder receipt.");
+        } else await setAttemptRefunded(orgId, ctx.attempt.id, null);
+        const documents = [outcome.reversalId, ...(outcome.remainderId ? [outcome.remainderId] : [])];
+        await transitionDisputeRow(orgId, disputeId, "posted", documents, null);
+        return { status: "posted", disputeId, documents };
+      });
+    } catch (error) {
+      if (error instanceof PaymentError || error instanceof PostingError) return parkForReview(orgId, disputeId, error.message);
+      throw error;
     }
-    const refundCurrency = (event.refundCurrency ?? ctx.receipt.currency).toUpperCase();
-    if (refundCurrency !== ctx.receipt.currency.toUpperCase()) {
-      return parkForReview(
-        orgId,
-        disputeId,
-        `refund reported in ${refundCurrency} against a ${ctx.receipt.currency} receipt; approve once the converted amount is confirmed`,
-      );
-    }
-    const already = await postedAgainstReceipt(orgId, ctx.receipt.id);
-    if (already + toUnits(event.refundedAmount) > toUnits(receiptTotal!)) {
-      return parkForReview(
-        orgId,
-        disputeId,
-        `refunds of ${fromUnits(already)} already posted against receipt ${ctx.receipt.document_number} total ${receiptTotal}; approve the extra ${event.refundedAmount} once confirmed as a second return`,
-      );
-    }
-    const reason = `Provider refund ${event.providerRef ?? event.providerEventId} for ${ctx.receipt.document_number}`;
-    if (toUnits(event.refundedAmount) >= toUnits(receiptTotal!)) {
-      const reversalId = await reversePaymentForReturn(
-        ctx.receipt.id,
-        orgId,
-        reason,
-        PSP_AUTOMATION_SYSTEM_ACTOR_ID,
-      );
-      await setAttemptRefunded(orgId, ctx.attempt.id, null);
-      await transitionDisputeRow(orgId, disputeId, "posted", [reversalId], null);
-      return { status: "posted", disputeId, documents: [reversalId] };
-    }
-    const credit = await openCreditCovering(orgId, ctx.link.party_id, ctx.receipt.currency, event.refundedAmount);
-    if (credit) {
-      const { refundId, gated } = await refundAgainstCredit(
-        orgId,
-        ctx,
-        credit.documentId,
-        credit.lineId,
-        event.refundedAmount,
-      );
-      if (gated) {
-        return parkForReview(
-          orgId,
-          disputeId,
-          `refund receipt ${refundId} needs approval before it can settle against the credit memo`,
-        );
-      }
-      await setAttemptRefunded(orgId, ctx.attempt.id, null);
-      await transitionDisputeRow(orgId, disputeId, "posted", [refundId], `settled against credit memo ${credit.documentId}`);
-      return { status: "posted", disputeId, documents: [refundId] };
-    }
-    const { reversalId, remainderId, gated } = await voidAndReissueRemainder(
-      orgId,
-      ctx,
-      receiptTotal!,
-      event.refundedAmount,
-      reason,
-    );
-    if (gated) {
-      return parkForReview(
-        orgId,
-        disputeId,
-        `replacement receipt ${remainderId} for the unrefunded remainder needs approval before the original receipt can reverse`,
-      );
-    }
-    // The attempt now points at the remainder receipt, still collected: a
-    // later refund for the rest claims from succeeded and reverses that.
-    if (remainderId) {
-      const relinked = (await db.execute(sql`
-        update payment_attempts set status = 'succeeded', payment_document_id = ${remainderId}, updated_at = now()
-         where id = ${ctx.attempt.id} and org_id = ${orgId}
-      `));
-      if ((relinked.rowCount ?? 0) !== 1) {
-        throw new PspAutomationError("payment attempt could not be pointed at its remainder receipt");
-      }
-    } else {
-      await setAttemptRefunded(orgId, ctx.attempt.id, null);
-    }
-    await transitionDisputeRow(
-      orgId,
-      disputeId,
-      "posted",
-      [reversalId, ...(remainderId ? [remainderId] : [])],
-      null,
-    );
-    return { status: "posted", disputeId, documents: [reversalId, ...(remainderId ? [remainderId] : [])] };
   });
 }
 
@@ -234,18 +189,24 @@ export async function processProviderDisputeEvent(
         reason: null,
       });
       return parkDisputeForReview(orgId, id, "dispute-opened",
-        { providerEventId: event.providerEventId, dispute },
+        { providerEventId: event.providerEventId, dispute, feeAmount: eventFee(event) },
         `dispute arrived without a provider dispute id; approve once the dispute is identified`);
     }
+    const ctx = event.attemptId ? await loadAutomationContext(orgId, event.attemptId) : null;
+    if (ctx && ctx.attempt.provider !== event.provider) throw new PspAutomationError("The dispute provider does not match its payment attempt.");
     const existing = await findDisputeByRef(orgId, event.provider, dispute.id);
-    if (existing && historyHasEvent(existing.status_history, event.providerEventId)) {
+    if (existing && event.attemptId !== existing.attempt_id) throw new PspAutomationError("The dispute delivery does not match its original payment attempt.");
+    if (existing && opts.forcePolicy !== "automatic" && existing.status !== "pending_review" && historyHasEvent(existing.status_history, event.providerEventId)) {
       return { status: "duplicate", disputeId: existing.id };
     }
     if (existing && (existing.status === "won" || existing.status === "lost" || existing.status === "rejected")) {
       await transitionDisputeRow(orgId, existing.id, existing.status, asDocIds(existing.documents_posted), `duplicate ${event.providerEventId} noted`);
       return { status: "duplicate", disputeId: existing.id };
     }
-    const ctx = event.attemptId ? await loadAutomationContext(orgId, event.attemptId) : null;
+    if (existing && dispute.state === "opened" &&
+        (asDocIds(existing.documents_posted).length > 0 || ["dispute-won", "dispute-lost"].includes(pendingActionOf(existing.status_history) ?? ""))) {
+      return { status: "duplicate", disputeId: existing.id };
+    }
     if (ctx && (opts.forcePolicy ?? ctx.policy) === "review") {
       const row = existing ?? (await insertDisputeRow(orgId, {
         provider: event.provider,
@@ -265,7 +226,7 @@ export async function processProviderDisputeEvent(
         orgId,
         row.id,
         `dispute-${dispute.state}` as PendingAction,
-        { providerEventId: event.providerEventId, dispute },
+        { providerEventId: event.providerEventId, dispute, feeAmount: eventFee(event) },
         `dispute ${dispute.id} (${dispute.state}) needs approval before posting`,
       );
     }
@@ -286,7 +247,7 @@ export async function processProviderDisputeEvent(
           reason: null,
         }));
         return parkDisputeForReview(orgId, row.id, "dispute-opened",
-          { providerEventId: event.providerEventId, dispute },
+          { providerEventId: event.providerEventId, dispute, feeAmount: eventFee(event) },
           `dispute ${dispute.id} arrived with no posted receipt; approve once the receipt posts`);
       }
       if (dispute.currency.toUpperCase() !== ctx.receipt.currency.toUpperCase()) {
@@ -297,7 +258,7 @@ export async function processProviderDisputeEvent(
           feeAmount: "0", providerRef: dispute.id, reason: null,
         }));
         return parkDisputeForReview(orgId, row.id, "dispute-opened",
-          { providerEventId: event.providerEventId, dispute },
+          { providerEventId: event.providerEventId, dispute, feeAmount: eventFee(event) },
           `dispute ${dispute.id} in ${dispute.currency} against a ${ctx.receipt.currency} receipt; approve once the converted amount is confirmed`);
       }
       if (toUnits(dispute.amount) > toUnits(ctx.receipt.total)) {
@@ -308,7 +269,7 @@ export async function processProviderDisputeEvent(
           feeAmount: "0", providerRef: dispute.id, reason: null,
         }));
         return parkDisputeForReview(orgId, row.id, "dispute-opened",
-          { providerEventId: event.providerEventId, dispute },
+          { providerEventId: event.providerEventId, dispute, feeAmount: eventFee(event) },
           `dispute ${dispute.id} for ${dispute.amount} exceeds receipt ${ctx.receipt.document_number} total ${ctx.receipt.total}; approve once confirmed`);
       }
       const row = existing ?? (await insertDisputeRow(orgId, {
@@ -325,26 +286,36 @@ export async function processProviderDisputeEvent(
         providerRef: dispute.id,
         reason: null,
       }));
-      let held: { documents: string[]; holdId: string; gated: boolean };
       try {
-        held = await openDisputeHold(orgId, ctx, dispute.amount, dispute.id);
+        return await returnFinancialStage<RefundAutomationOutcome>(async () => {
+          const held = await openDisputeHold(orgId, ctx, dispute.amount, dispute.id, row.id);
+          if (held.gated) return parkDisputeForReview(orgId, row.id, "dispute-opened",
+            { providerEventId: event.providerEventId, dispute, feeAmount: eventFee(event) },
+            "Approve the staged remainder and hold receipts, then resume this review. The original receipt remains posted.");
+          await setAttemptRefunded(orgId, ctx.attempt.id, held.holdId);
+          await transitionDisputeRow(orgId, row.id, "opened", held.documents, null);
+          return { status: "posted", disputeId: row.id, documents: held.documents };
+        });
       } catch (error) {
-        if (error instanceof PspAutomationError) {
+        if (error instanceof PaymentError || error instanceof PostingError) {
           return parkDisputeForReview(orgId, row.id, "dispute-opened",
-            { providerEventId: event.providerEventId, dispute }, error.message);
+            { providerEventId: event.providerEventId, dispute, feeAmount: eventFee(event) }, error.message);
         }
         throw error;
       }
-      if (held.gated) {
-        return parkDisputeForReview(orgId, row.id, "dispute-opened",
-          { providerEventId: event.providerEventId, dispute },
-          `replacement receipt for the undisputed remainder needs approval before the dispute hold can post`);
-      }
-      await setAttemptRefunded(orgId, ctx.attempt.id, held.holdId);
-      await transitionDisputeRow(orgId, row.id, "opened", held.documents, null);
-      return { status: "posted", disputeId: row.id, documents: held.documents };
     }
-    return transitionDisputeOutcome(orgId, event, existing, ctx);
+    try {
+      return await returnFinancialStage<RefundAutomationOutcome>(() => transitionDisputeOutcome(orgId, event, existing, ctx));
+    } catch (error) {
+      if (!(error instanceof PaymentError || error instanceof PostingError)) throw error;
+      const row = existing ?? (await insertDisputeRow(orgId, {
+        provider: event.provider, providerEventId: event.providerEventId, kind: "dispute", status: "pending_review",
+        attemptId: event.attemptId, receiptDocumentId: ctx?.receipt?.id ?? null, invoiceDocumentId: ctx?.invoice.id ?? null,
+        currency: dispute.currency, amount: dispute.amount, feeAmount: "0", providerRef: dispute.id, reason: null,
+      }));
+      return parkDisputeForReview(orgId, row.id, dispute.state === "won" ? "dispute-won" : "dispute-lost",
+        { providerEventId: event.providerEventId, dispute, feeAmount: eventFee(event) }, error.message);
+    }
   });
 }
 
@@ -356,9 +327,10 @@ export async function approveDisputeReview(
   orgId: string,
   disputeId: string,
   actorId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<RefundAutomationOutcome> {
   return withOrg(orgId, async () => {
-    const row = await disputeRow(orgId, disputeId);
+    const row = await lockReviewAuthority(orgId, disputeId, actorId, allowedSubsidiaryIds);
     if (row.status === "posted" || row.status === "won" || row.status === "lost") {
       return { status: "duplicate", disputeId };
     }
@@ -373,12 +345,16 @@ export async function approveDisputeReview(
     `);
     if (action === "refund") {
       if (!row.attempt_id) throw new PspAutomationError("review has no payment attempt to resume");
+      const source = refundSourceOf(row.status_history);
+      if (row.provider === "stripe" && !source) throw new PspAutomationError("This Stripe review has no refund amount basis. Redeliver its confirmed provider event before approving it.");
       const event: ProviderRefundEvent = {
         provider: row.provider,
         providerEventId: `${row.provider_event_id}#approved`,
         attemptId: row.attempt_id,
-        refundedAmount: row.amount,
-        refundCurrency: row.currency,
+        refundedAmount: source?.amount ?? row.amount,
+        refundAmountBasis: source?.basis,
+        providerRefundId: source?.refundId,
+        refundCurrency: source?.currency ?? row.currency,
         providerRef: row.provider_ref,
       };
       // Approval resumes under the automatic path: force the policy by
@@ -399,8 +375,8 @@ export async function approveDisputeReview(
         currency: row.currency,
         state: state as "opened" | "won" | "lost",
       },
+      raw: { feeAmount: pendingEventOf(row.status_history)?.feeAmount ?? row.fee_amount },
     };
-    void eventFee(event);
     return runApprovedDispute(orgId, disputeId, event);
   });
 }
@@ -444,23 +420,51 @@ export async function rejectDisputeReview(
   disputeId: string,
   actorId: string,
   reason: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<void> {
   const trimmed = reason.trim();
   if (trimmed.length < 5 || trimmed.length > 500) {
     throw new PspAutomationError("rejection reason must be between 5 and 500 characters");
   }
   return withOrg(orgId, async () => {
-    const row = await disputeRow(orgId, disputeId);
+    const row = await lockReviewAuthority(orgId, disputeId, actorId, allowedSubsidiaryIds);
     if (row.status !== "pending_review") {
       throw new PspAutomationError(`review is ${row.status}; only a queued review can be rejected`);
     }
-    await transitionDisputeRow(orgId, disputeId, "rejected", [], trimmed);
+    await withdrawReturnReceipts(orgId, disputeId, actorId, trimmed);
+    await transitionDisputeRow(orgId, disputeId, "rejected", asDocIds(row.documents_posted), trimmed);
     await db.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${orgId}, 'payment_disputes', ${disputeId}, 'reject',
               ${JSON.stringify({ after: { reason: trimmed } })}::jsonb, ${actorId})
     `);
   });
+}
+
+/** Lock in the same attempt → review → document order as provider delivery,
+ * then recheck the acting user's live grants and every financial endpoint. */
+async function lockReviewAuthority(orgId: string, disputeId: string, actorId: string, requested: ReadonlySet<string> | null) {
+  if (requested === undefined || !actorId) throw new ScopeNotFoundError();
+  const allowed = await lockActorCommandAuthority(db, orgId, actorId, null, "banking.reconcile");
+  const candidate = (await db.execute<{ attempt_id: string | null }>(sql`
+    select attempt_id from payment_disputes where org_id = ${orgId} and id = ${disputeId}
+  `)).rows[0];
+  if (!candidate) throw new ScopeNotFoundError();
+  if (candidate.attempt_id) await db.execute(sql`select id from payment_attempts where org_id = ${orgId} and id = ${candidate.attempt_id} for update`);
+  const row = await disputeRow(orgId, disputeId);
+  const ids = [...new Set([row.invoice_document_id, row.receipt_document_id].filter((id): id is string => id !== null))];
+  if (!ids.length) throw new ScopeNotFoundError();
+  const subjects = (await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
+    select d.id, coalesce(d.subsidiary_id, entry.subsidiary_id) as subsidiary_id from documents d
+      left join journal_entries entry on entry.org_id = d.org_id and entry.id = d.posted_entry_id
+     where d.org_id = ${orgId} and d.id in (${sql.join(ids.map(id => sql`${id}`), sql`, `)}) order by d.id for share of d
+  `)).rows;
+  if (subjects.length !== ids.length || subjects.some(subject =>
+    !subject.subsidiary_id || !subsidiaryScopeAllows(allowed, subject.subsidiary_id) || !subsidiaryScopeAllows(requested, subject.subsidiary_id))) {
+    throw new ScopeNotFoundError();
+  }
+  if (!(await orgFeatureEnabled(orgId, "banking"))) throw new ScopeNotFoundError();
+  return row;
 }
 
 /**
@@ -474,6 +478,8 @@ export async function replayParkedRefund(
   parked: {
     providerEventId: string;
     refundedAmount: string | null;
+    refundAmountBasis?: "incremental" | "cumulative";
+    providerRefundId?: string | null;
     refundCurrency: string | null;
     providerRef: string | null;
     provider: string;
@@ -484,6 +490,8 @@ export async function replayParkedRefund(
     providerEventId: parked.providerEventId,
     attemptId,
     refundedAmount: parked.refundedAmount,
+    refundAmountBasis: parked.refundAmountBasis,
+    providerRefundId: parked.providerRefundId,
     refundCurrency: parked.refundCurrency,
     providerRef: parked.providerRef,
   });

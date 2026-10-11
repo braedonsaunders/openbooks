@@ -12,6 +12,13 @@ export const PSP_AUTOMATION_SYSTEM_ACTOR_ID = PAYMENT_RUN_SYSTEM_ACTOR_ID;
 
 export type PspAutomationPolicy = "automatic" | "review";
 
+export interface RefundSourceEvidence {
+  basis: "incremental" | "cumulative";
+  amount: string | null;
+  currency: string | null;
+  refundId: string | null;
+}
+
 export interface ProviderDisputeDetail {
   id: string;
   amount: string;
@@ -27,6 +34,8 @@ export interface ProviderRefundEvent {
   refundedAmount: string | null;
   refundCurrency: string | null;
   providerRef: string | null;
+  refundAmountBasis?: RefundSourceEvidence["basis"];
+  providerRefundId?: string | null;
   dispute?: ProviderDisputeDetail | null;
   raw?: unknown;
 }
@@ -45,6 +54,7 @@ export type AutomationContext = {
     provider: string;
     external_ref: string;
     payment_document_id: string | null;
+    amount: string;
   };
   link: {
     id: string;
@@ -88,8 +98,11 @@ export async function loadAutomationContext(
     external_ref: string;
     payment_document_id: string | null;
     link_id: string;
+    amount: string;
   }>(sql`
-    select id, status, provider, external_ref, payment_document_id, link_id
+    select id, status, provider, external_ref, payment_document_id, link_id,
+           (coalesce(amount, (select amount from payment_links where id = payment_attempts.link_id and org_id = ${orgId}))
+             + coalesce(surcharge_amount, 0))::text as amount
       from payment_attempts
      where id = ${attemptId} and org_id = ${orgId}
      for update
@@ -151,6 +164,7 @@ export async function loadAutomationContext(
       provider: attempt.provider,
       external_ref: attempt.external_ref,
       payment_document_id: attempt.payment_document_id,
+      amount: attempt.amount,
     },
     link,
     receipt: receipt

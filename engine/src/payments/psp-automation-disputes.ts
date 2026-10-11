@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { PSP_AUTOMATION_SYSTEM_ACTOR_ID, type ProviderDisputeDetail, type RefundAutomationOutcome, PspAutomationError } from "./psp-automation-context.ts";
+import { PSP_AUTOMATION_SYSTEM_ACTOR_ID, type ProviderDisputeDetail, type RefundAutomationOutcome, type RefundSourceEvidence, PspAutomationError } from "./psp-automation-context.ts";
 
 /** Dispute record state for provider chargebacks: row creation, status transitions with history, lookups and review parking. */
 
@@ -24,6 +24,7 @@ export async function insertDisputeRow(
     feeAmount: string;
     providerRef: string | null;
     reason: string | null;
+    refundSource?: RefundSourceEvidence;
   },
 ): Promise<{ id: string; created: boolean }> {
   // The event key is the automation idempotency lock: a redelivery converges
@@ -38,7 +39,7 @@ export async function insertDisputeRow(
     values (${id}, ${orgId}, ${row.provider}, ${row.providerEventId}, ${row.kind},
             ${row.status}, ${row.attemptId}, ${row.receiptDocumentId}, ${row.invoiceDocumentId},
             ${row.currency}, ${row.amount}, ${row.feeAmount}, ${row.providerRef}, ${row.reason},
-            ${JSON.stringify([{ status: row.status, at: new Date().toISOString(), reason: row.reason }])}::jsonb,
+            ${JSON.stringify([{ status: row.status, at: new Date().toISOString(), reason: row.reason, ...(row.refundSource ? { refundSource: row.refundSource } : {}) }])}::jsonb,
             ${PSP_AUTOMATION_SYSTEM_ACTOR_ID}, ${PSP_AUTOMATION_SYSTEM_ACTOR_ID})
     -- Repeated provider delivery reuses the dispute selected below instead of recording it twice.
     on conflict (org_id, provider, provider_event_id) do nothing
@@ -137,7 +138,8 @@ export async function parkForReview(
   disputeId: string,
   reason: string,
 ): Promise<RefundAutomationOutcome> {
-  await transitionDisputeRow(orgId, disputeId, "pending_review", [], reason);
+  const row = await disputeRow(orgId, disputeId);
+  await transitionDisputeRow(orgId, disputeId, "pending_review", asDocIds(row.documents_posted), reason);
   return { status: "pending_review", disputeId };
 }
 
@@ -208,12 +210,22 @@ export function historyHasEvent(history: unknown, providerEventId: string): bool
 
 export function pendingActionOf(history: unknown): PendingAction | null {
   if (!Array.isArray(history)) return null;
-  for (const entry of history) {
+  for (const entry of [...history].reverse()) {
     if (typeof entry !== "object" || entry === null) continue;
     const action = (entry as Record<string, unknown>).pendingAction;
     if (action === "refund" || action === "dispute-opened" || action === "dispute-won" || action === "dispute-lost") {
       return action;
     }
+  }
+  return null;
+}
+
+export function pendingEventOf(history: unknown): Record<string, unknown> | null {
+  if (!Array.isArray(history)) return null;
+  for (const entry of [...history].reverse()) {
+    if (!entry || typeof entry !== "object" || !("pendingAction" in entry)) continue;
+    const event = (entry as { event?: unknown }).event;
+    return event && typeof event === "object" ? event as Record<string, unknown> : null;
   }
   return null;
 }
@@ -229,6 +241,7 @@ export async function parkDisputeForReview(
     update payment_disputes
        set status = 'pending_review',
            reason = ${reason},
+           fee_amount = coalesce(${typeof event.feeAmount === "string" ? event.feeAmount : null}::numeric, fee_amount),
            status_history = status_history || ${JSON.stringify({ status: "pending_review", at: new Date().toISOString(), reason, pendingAction, event })}::jsonb,
            updated_at = now(),
            updated_by = ${PSP_AUTOMATION_SYSTEM_ACTOR_ID}

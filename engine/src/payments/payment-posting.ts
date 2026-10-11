@@ -3,14 +3,15 @@ import { db, schema, withOrg } from "../platform/db.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { add, cmp, fromUnits, isZero, neg, sum, toUnits } from "../money/money.ts";
 import { postDocument } from "../ledger/posting-document.ts";
-import { postEntry } from "../journal/post-entry.ts";
 import { runPostDocumentEffects } from "../ledger/posting-dispatch.ts";
 import { evaluateBillsForRelease, recordReleaseCheck } from "../compliance/compliance.ts";
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from "../records/transaction-audit.ts";
 import { lockApplicationEvidence } from "../records/application-lock.ts";
 import { assertSubcontractPaymentCleared } from "../projects/subcontracts.ts";
 import { PaymentError } from "../payments-core/payment-errors.ts";
-import { allocationsMatchApprovedSnapshot, canonicalSettlementRate, carryingAmountForSettlement, realizedFxControlAdjustment, validateAllocationInputs, validateSettlementEvidence, type AllocationInput, type SettlementRateSource } from "./settlement-policy.ts";
+import { assertProviderReturnPosting } from "../payments-core/provider-return-posting.ts";
+import { writePaymentApplications, type SettlementApplication } from "./payment-application-writes.ts";
+import { allocationsMatchApprovedSnapshot, canonicalSettlementRate, carryingAmountForSettlement, realizedFxControlAdjustment, validateAllocationInputs, validateSettlementEvidence, type AllocationInput } from "./settlement-policy.ts";
 import { PAYMENT_KIND_SIDE, type CreditAllocationInput } from "./payment-contracts.ts";
 import { paymentControlDeps, paymentBookId } from "./payment-accounts.ts";
 import { assertNoForeignRunReservation, openItemsForParty } from "./payment-queries.ts";
@@ -22,23 +23,6 @@ import { expireStalePaymentLinkSessions } from "./payment-link-session-expiry.ts
 // ---------------------------------------------------------------------------
 // Post + apply
 // ---------------------------------------------------------------------------
-
-type SettlementApplication = {
-  fromLineId: string;
-  toLineId: string;
-  amount: string;
-  sourceAmount: string;
-  sourceTransactionAmount: string;
-  sourceTransactionCurrency: string;
-  targetTransactionAmount: string;
-  targetTransactionCurrency: string;
-  settlementRate: string;
-  settlementRateSource: SettlementRateSource;
-  settlementRateReference: string;
-  settlementFxRateId: string | null;
-  appliedOn: string;
-  controlAdjustment: string;
-};
 
 async function assertPaymentRunComposition(
   runId: string,
@@ -115,6 +99,7 @@ export async function postPaymentWithApplications(
 ): Promise<{ entryId: string }> {
   const [preflight] = await db.select().from(schema.documents).where(eq(schema.documents.id, paymentDocId));
   if (!preflight || !isPaymentKind(preflight.kind)) throw new PaymentError("payment document not found");
+  assertProviderReturnPosting(preflight);
 
   let affectedInvoicesAfterCommit: string[] = [];
   const result = await withOrg(preflight.orgId, async () => {
@@ -546,65 +531,13 @@ export async function postPaymentWithApplications(
       sourceTransactionRemaining = fromUnits(toUnits(sourceTransactionRemaining) - toUnits(allocation.sourceTransactionAmount));
     }
 
-    const fxAdjustment = sum(applicationsToWrite.map((a) => a.controlAdjustment));
-    let fxEntryId: string | null = null;
-    if (!isZero(fxAdjustment)) {
-      const gainLossAccountId = deps.control.fxRealizedGainLoss;
-      if (!gainLossAccountId) {
-        throw new PaymentError("realized FX gain/loss account is not configured");
-      }
-      // The FX adjustment posts through the ONE ledger API.
-      const postedFx = await postEntry(db, {
-        orgId: doc.orgId,
-        bookId: source.book_id,
-        subsidiaryId: source.subsidiary_id,
-        entryNumber: `${doc.documentNumber}-FX`,
-        postingDate: source.posting_date,
-        periodId: source.period_id,
-        memo: `Realized FX settlement — ${doc.documentNumber}`,
-        sourceDocumentId: doc.id,
-        origin: "fx_settlement",
-        actorId: userId ?? doc.createdBy,
-        currency: source.functional_currency,
-        lines: [
-          {
-            accountId: source.account_id,
-            amount: fxAdjustment,
-            partyId: doc.partyId,
-            memo: `Realized FX settlement — ${doc.documentNumber}`,
-          },
-          {
-            accountId: gainLossAccountId,
-            amount: neg(fxAdjustment),
-            memo: `Realized FX settlement — ${doc.documentNumber}`,
-          },
-        ],
-      });
-      fxEntryId = postedFx.entryId;
-    }
-
-    // `controlAdjustment` clears in the FX entry above; the applications table
-    // has no such column, so the insert lists the persisted fields explicitly.
-    // An on-account receipt writes no applications; the open AR credit it
-    // posts is the only settlement evidence it carries.
-    if (applicationsToWrite.length > 0) await db.insert(schema.applications).values(applicationsToWrite.map((a) => ({
-      orgId: doc.orgId,
-      fromLineId: a.fromLineId,
-      toLineId: a.toLineId,
-      amount: a.amount,
-      sourceAmount: a.sourceAmount,
-      sourceTransactionAmount: a.sourceTransactionAmount,
-      sourceTransactionCurrency: a.sourceTransactionCurrency,
-      targetTransactionAmount: a.targetTransactionAmount,
-      targetTransactionCurrency: a.targetTransactionCurrency,
-      settlementRate: a.settlementRate,
-      settlementRateSource: a.settlementRateSource,
-      settlementRateReference: a.settlementRateReference,
-      settlementFxRateId: a.settlementFxRateId,
-      appliedOn: a.appliedOn,
-      fxGainLossEntryId: fxEntryId,
-      createdBy: userId ?? doc.createdBy,
-    })));
+    await writePaymentApplications({
+      orgId: doc.orgId, sourceDocumentId: doc.id, documentNumber: doc.documentNumber,
+      bookId: source.book_id, subsidiaryId: source.subsidiary_id, controlAccountId: source.account_id,
+      partyId: doc.partyId, functionalCurrency: source.functional_currency,
+      postingDate: source.posting_date, periodId: source.period_id, actorId: userId ?? doc.createdBy,
+      gainLossAccountId: deps.control.fxRealizedGainLoss, applications: applicationsToWrite,
+    });
 
     if (creditAllocs.length > 0) {
       await db.insert(schema.applications).values(creditAllocs.map((application) => ({
