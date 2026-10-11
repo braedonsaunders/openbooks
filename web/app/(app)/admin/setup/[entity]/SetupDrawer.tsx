@@ -519,10 +519,16 @@ export function SetupDrawer({
   function errorMessage(body: unknown): string {
     // Typed server bodies: the code maps stably to
     // localized copy while a user-language message renders verbatim, so an
-    // 'invalid' 400 names its fix instead of echoing a code.
-    const record = body as { code?: unknown; error?: unknown } | null | undefined
+    // 'invalid' 400 names its fix instead of echoing a code. A nested error
+    // body and the server's remedy read the same way, so neither renders
+    // blank or drops what to do next.
+    const record = body as { code?: unknown; error?: unknown; remedy?: unknown } | null | undefined
     const code = record?.code
-    const message = record?.error
+    const nested = record?.error !== null && typeof record?.error === 'object' && !Array.isArray(record?.error)
+      ? (record?.error as { message?: unknown }).message
+      : undefined
+    const message = typeof record?.error === 'string' ? record.error : nested
+    const remedy = typeof record?.remedy === 'string' && record.remedy.trim() !== '' ? record.remedy.trim() : null
     if (code === 'duplicate') return t('errors.duplicate')
     if (code === 'overlap') return t('errors.overlap')
     if (code === 'in-use') return t('errors.inUse')
@@ -540,7 +546,7 @@ export function SetupDrawer({
       ? /^([A-Za-z][A-Za-z0-9]*) is required$/.exec(message)?.[1]
       : undefined
     if (missingField) return t('validation.required', { field: t(entity.fields.find((field) => field.key === missingField)?.labelKey ?? `fields.${missingField}`) })
-    if (typeof message === 'string' && message) return message
+    if (typeof message === 'string' && message) return remedy ? `${message} — ${remedy}` : message
     if (typeof code === 'string' && code) return code
     return tCommon('feedback.saveFailed')
   }

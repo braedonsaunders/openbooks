@@ -9,6 +9,7 @@ import { toast } from 'sonner'
 import { Badge, Button, Input, Label, SearchSelect, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { sum } from '@openbooks/engine/src/money/money.ts'
 import { SortTh } from '../../../components/sortable-th'
+import { readApiErrorMessage } from '../../../lib/api-error'
 /**
  * Payment-run builder: select posted vendor bills with an open balance
  * (across vendors), pick the paying bank account, create the run. Selection
@@ -125,15 +126,16 @@ export function RunBuilder({
           ...(mode === 'payments' ? { selectionCriteria: { captureDiscounts, applyCredits } } : {}),
         }),
       })
-      // The error body may not be JSON (proxy 5xx pages): never let the read
-      // itself throw, or the failure goes silent with an unhandled rejection.
-      const data = await res.json().catch(() => ({}))
+      // Refusals read through the shared helper: the status is checked first
+      // and message, remedy and code render instead of a bare fallback. The
+      // success body parses after the ok check.
       if (!res.ok) {
-        const message = data.error ?? t('toasts.createFailed')
+        const message = await readApiErrorMessage(res, t('toasts.createFailed'))
         setFieldError(message)
         toast.error(message)
         return
       }
+      const data = await res.json().catch(() => ({})) as { runNumber?: unknown; id?: unknown }
       setFieldError(null)
       toast.success(t('toasts.created', { number: data.runNumber }))
       setSelected({})

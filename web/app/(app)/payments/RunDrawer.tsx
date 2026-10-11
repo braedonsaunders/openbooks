@@ -255,8 +255,9 @@ export function RunDrawer({
     setBusy(true)
     try {
       const res = await fetch(`/api/payments/runs/${run.id}/${path}`, { method: 'POST', headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) { toast.error(data.error ?? t('runDrawer.toasts.actionFailed')); return false }
+      // The refusal reads through the shared helper: the status is checked
+      // first and message, remedy and code render instead of a bare fallback.
+      if (!res.ok) { toast.error(await readApiErrorMessage(res, t('runDrawer.toasts.actionFailed'))); return false }
       if (success) toast.success(success)
       router.refresh()
       return true
@@ -333,8 +334,7 @@ export function RunDrawer({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason: cancellationReason }),
       })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) { toast.error(data.error ?? t('runDrawer.toasts.cancelFailed')); return false }
+      if (!res.ok) { toast.error(await readApiErrorMessage(res, t('runDrawer.toasts.cancelFailed'))); return false }
       toast.success(t('runDrawer.toasts.cancelled'))
       router.refresh()
       return true
@@ -349,8 +349,7 @@ export function RunDrawer({
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: outcomeStatus, effectiveOn, bankReference: bankReference || null, returnCode: returnCode || null, returnReason: returnReason || null }),
       })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) { toast.error(data.error ?? t('runDrawer.toasts.outcomeFailed')); return }
+      if (!res.ok) { toast.error(await readApiErrorMessage(res, t('runDrawer.toasts.outcomeFailed'))); return }
       toast.success(t('runDrawer.toasts.outcomeSaved'))
       setOutcomeInstruction(null)
       router.refresh()
