@@ -12,8 +12,9 @@ import { reversalJournalLines } from "../records/reversal-journal-lines.ts";
 import { loadSubsidiaryContext, validateSubsidiaryRestrictions, uuidArray } from "../organization/subsidiaries.ts";
 import { businessToday, isIsoCalendarDate } from "../platform/business-date.ts";
 import { sum, isZero } from "../money/money.ts";
-import { assertPeriodModulesOpen, CloseError } from "../periods/period-policy.ts";
+import { assertPeriodModulesOpen, CloseError, periodClosedDetailsOf } from "../periods/period-policy.ts";
 import { markEntryReversed, postEntry } from "./post-entry.ts";
+import { PostingError } from "./posting-contracts.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 type ProjectGlTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 export type ProjectGlExecutor = Pick<ProjectGlTransaction, "execute">;
@@ -156,7 +157,9 @@ export async function postProjectGlEntryWithinTransaction(
     });
   } catch (error) {
     if (error instanceof CloseError) {
-      throw new Error(`the GL period covering ${postingDate} is closed`);
+      throw new PostingError(`the GL period covering ${postingDate} is closed`, {
+        details: periodClosedDetailsOf(error),
+      });
     }
     throw error;
   }
@@ -332,7 +335,9 @@ export async function reverseProjectGlEntryWithinTransaction(
     });
   } catch (error) {
     if (error instanceof CloseError) {
-      throw new Error(`the GL period covering ${reversalDate} is closed`);
+      throw new PostingError(`the GL period covering ${reversalDate} is closed`, {
+        details: periodClosedDetailsOf(error),
+      });
     }
     throw error;
   }

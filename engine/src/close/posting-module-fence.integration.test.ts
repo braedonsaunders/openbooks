@@ -6,6 +6,7 @@ import { db, pool } from "../platform/db.ts";
 import {
   CloseError,
   DOCUMENT_KINDS,
+  PeriodClosedError,
   assertPeriodModulesOpen,
   closeModuleForDocument,
 } from "../periods/period-policy.ts";
@@ -454,6 +455,60 @@ test("a module close landing mid-posting waits for the fence: the started postin
       await db.execute(sql.raw(`drop trigger if exists probe_posting_sleep_trigger on journal_entries`));
       await db.execute(sql.raw(`drop function if exists public.probe_posting_sleep()`));
     }
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a closed-period posting refusal carries the reopen scope as typed details", { skip: !DB }, async () => {
+  // The refusal link the UI renders is built from these details — never
+  // from parsed message text — so the gate and every domain wrap must
+  // preserve the exact scope the reopen request has to cover.
+  const org = await createScratchOrg();
+  try {
+    const actor = await createScratchUser(org.orgId, "Fence prover", "admin");
+    const invoiceId = await approvedCustomerInvoice(
+      org.orgId,
+      org.subsidiaryId,
+      org.customerId,
+      org.accounts.revenue,
+      org.date,
+      actor,
+    );
+    await setPeriodLockState({
+      orgId: org.orgId,
+      periodId: org.periodId,
+      bookId: org.bookId,
+      module: "ar",
+      state: "closed",
+      actorId: actor,
+      reason: "fence probe: AR closed",
+    });
+    const gate = await assertPeriodModulesOpen(db, {
+      orgId: org.orgId,
+      periodId: org.periodId,
+      bookId: org.bookId,
+      subsidiaryIds: [org.subsidiaryId],
+      modules: ["ar"],
+    }).catch((failure: unknown) => failure);
+    assert.ok(gate instanceof PeriodClosedError, "the gate throws the typed refusal");
+    assert.ok(gate instanceof CloseError, "the typed refusal stays a CloseError");
+    assert.match(gate.message, /AR is closed for this period/);
+    assert.deepEqual(gate.details, {
+      kind: "period-closed",
+      periodId: org.periodId,
+      bookId: org.bookId,
+      subsidiaryId: org.subsidiaryId,
+      module: "ar",
+    });
+    const failure = await postDocument(invoiceId, postingDeps(org)).catch((thrown: unknown) => thrown);
+    assert.ok(failure instanceof PostingError, "the posting wrap keeps its boundary class");
+    assert.match(failure.message, /AR is closed for this period/);
+    assert.deepEqual(
+      failure.details,
+      gate.details,
+      "the posting wrap preserves the gate's scope for the API boundary",
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }

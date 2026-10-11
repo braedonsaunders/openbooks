@@ -7,7 +7,7 @@
 import { sql } from "drizzle-orm";
 import { neg } from "../money/money.ts";
 import { db, withOrg } from "../platform/db.ts";
-import { CloseError, assertPeriodModulesOpen } from "../periods/period-policy.ts";
+import { CloseError, assertPeriodModulesOpen, periodClosedDetailsOf } from "../periods/period-policy.ts";
 import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
 import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 import { lockRevenueContract } from "../revenue/recognition.ts";
@@ -16,7 +16,15 @@ import { completeRequestedDocumentVoid, requestDocumentVoid } from "./document-v
 // Controlled invoice cancellation
 // ---------------------------------------------------------------------------
 
-export class RevenueRecognitionCancellationError extends Error {}
+export class RevenueRecognitionCancellationError extends Error {
+  constructor(
+    message: string,
+    /** Machine-readable evidence (never internals): the API boundary renders plain-object details. */
+    readonly details?: unknown,
+  ) {
+    super(message);
+  }
+}
 
 export interface CancelRevenueRecognitionResult {
   status: "cancelled" | "pending_approval";
@@ -225,6 +233,7 @@ export async function cancelRevenueRecognitionForInvoice(input: {
           if (error instanceof CloseError) {
             throw new RevenueRecognitionCancellationError(
               `the GL period covering ${reversalDate} is closed`,
+              periodClosedDetailsOf(error),
             );
           }
           throw error;

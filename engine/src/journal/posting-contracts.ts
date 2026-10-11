@@ -286,10 +286,18 @@ export class PostingError extends Error {
    * stay atomic with the post by design (journal-posting-atomic).
    */
   readonly customGlLineRuns?: CustomGlLineRunEvidence[];
+  /**
+   * Machine-readable evidence (never internals): the API boundary renders
+   * plain-object details. Domain wraps preserve a caught refusal's details
+   * here so the typed scope (e.g. a closed period's ids) survives the
+   * boundary crossing instead of degrading to message text.
+   */
+  readonly details?: unknown;
 
-  constructor(message?: string, options?: { customGlLineRuns?: CustomGlLineRunEvidence[] }) {
+  constructor(message?: string, options?: { customGlLineRuns?: CustomGlLineRunEvidence[]; details?: unknown }) {
     super(message);
     this.customGlLineRuns = options?.customGlLineRuns;
+    this.details = options?.details;
   }
 }
 

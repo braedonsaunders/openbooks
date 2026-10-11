@@ -5,7 +5,7 @@ import { sql } from 'drizzle-orm';
 import { db } from '../platform/db.ts';
 import { createScratchOrg, dropScratchOrg, createScratchUser, seedApprovalFlow } from '../testing/fixtures.ts';
 import { CloseError } from "../periods/period-policy.ts";
-import { decidePeriodReopen, reopenDecisionPreview, requestPeriodReopen } from "./reopening.ts";
+import { decidePeriodReopen, recloseApprovedReopen, reopenDecisionPreview, requestPeriodReopen } from "./reopening.ts";
 import { setPeriodLockState } from "../periods/period-locks.ts";
 
 async function grantReopen(orgId: string, roleKey: string): Promise<void> {
@@ -154,5 +154,56 @@ test('a user without the reopen permission is not an eligible approver', { skip:
       attestation: 'The only other user holds no reopen permission',
     });
     assert.equal((await db.execute<{ status: string }>(sql`select status from close_reopen_requests where id = ${requestId}`)).rows[0]!.status, 'approved');
+  } finally { await dropScratchOrg(org.orgId); }
+});
+
+test('the surfaces read decision and end evidence from the stored audit trail', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  // Both reopen surfaces (Setup drawer, accounting page) select these four
+  // evidence columns verbatim from audit_log: the decision action with its
+  // quoted attestation and the explicit end with its actor and reason.
+  // This pins the SQL text against a live self-approved then ended window.
+  const org = await createScratchOrg();
+  try {
+    const soloId = await createScratchUser(org.orgId, 'Solo Admin', 'admin');
+    await grantReopen(org.orgId, 'admin');
+    await closeGl(org.orgId, org.periodId, org.bookId, soloId);
+    const requestId = await requestPeriodReopen({ orgId: org.orgId, periodId: org.periodId, bookId: org.bookId, modules: ['gl'], actorId: soloId, reason: 'Correction window' });
+    await decidePeriodReopen({
+      orgId: org.orgId, requestId, actorId: soloId, approve: true, hours: 2,
+      attestation: 'I am the only administrator; this correction cannot wait for another approver',
+    });
+    await recloseApprovedReopen({
+      orgId: org.orgId, requestId, actorId: soloId, reason: 'Correction posted and reviewed; ending the window',
+    });
+    const evidence = (await db.execute<{
+      decision_action: string | null;
+      decision_attestation: string | null;
+      end_actor_name: string | null;
+      end_reason: string | null;
+    }>(sql`
+      select (select a.action from audit_log a
+               where a.org_id = r.org_id and a.table_name = 'close_reopen_requests' and a.row_id = r.id
+                 and a.action in ('approve', 'self_approve')
+               order by a.at desc limit 1) as decision_action,
+             (select a.changes#>>'{after,attestation}' from audit_log a
+               where a.org_id = r.org_id and a.table_name = 'close_reopen_requests' and a.row_id = r.id
+                 and a.action in ('approve', 'self_approve')
+               order by a.at desc limit 1) as decision_attestation,
+             (select ender.name from audit_log a
+                left join users ender on ender.id = a.actor_id
+               where a.org_id = r.org_id and a.table_name = 'close_reopen_requests' and a.row_id = r.id
+                 and a.action = 'end'
+               order by a.at desc limit 1) as end_actor_name,
+             (select coalesce(a.changes#>>'{after,reason}', a.changes->>'reason') from audit_log a
+               where a.org_id = r.org_id and a.table_name = 'close_reopen_requests' and a.row_id = r.id
+                 and a.action = 'end'
+               order by a.at desc limit 1) as end_reason
+        from close_reopen_requests r
+       where r.org_id = ${org.orgId} and r.id = ${requestId}
+    `)).rows[0]!;
+    assert.equal(evidence.decision_action, 'self_approve');
+    assert.ok((evidence.decision_attestation ?? '').includes('only administrator'));
+    assert.equal(evidence.end_actor_name, 'Solo Admin');
+    assert.ok((evidence.end_reason ?? '').includes('ending the window'));
   } finally { await dropScratchOrg(org.orgId); }
 });

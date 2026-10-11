@@ -3,6 +3,40 @@ import type { SqlExecutor } from "../platform/db.ts";
 
 export class CloseError extends Error {}
 
+/**
+ * Typed details carried by every refusal to post into a closed
+ * module/period. The API boundary renders plain-object details untouched,
+ * so a shared refusal renderer can offer the controlled route out — a
+ * reopen request prefilled with exactly this scope — instead of a bare
+ * "closed". Never internals: four scope ids plus the module.
+ */
+export interface PeriodClosedDetails {
+  kind: "period-closed";
+  periodId: string;
+  bookId: string;
+  subsidiaryId: string | null;
+  module: CloseModule;
+}
+
+/** A posting refused because its module/period is closed. The message stays
+ * the operator copy callers already match on; the details name the scope a
+ * reopen request must cover. Still a CloseError, so existing guards pass. */
+export class PeriodClosedError extends CloseError {
+  readonly code = "period-closed";
+  constructor(
+    message: string,
+    readonly details: PeriodClosedDetails,
+  ) {
+    super(message);
+  }
+}
+
+/** Period-closed details from any refusal that preserved them through a
+ * domain wrap — undefined for every other failure. */
+export function periodClosedDetailsOf(error: unknown): PeriodClosedDetails | undefined {
+  return error instanceof PeriodClosedError ? error.details : undefined;
+}
+
 export const CLOSE_MODULES = [
   "ar",
   "ap",
@@ -155,8 +189,15 @@ export async function assertPeriodModulesOpen(
          order by (subsidiary_id is not null) desc
          limit 1`));
       if (periodLockBlocksPosting(result.rows[0], args.allowImportedLocks === true))
-        throw new CloseError(
+        throw new PeriodClosedError(
           `${module.toUpperCase()} is closed for this period and accounting book${await closedPeriodRoute(executor, args, module, subsidiaryId)}`,
+          {
+            kind: "period-closed",
+            periodId: args.periodId,
+            bookId: args.bookId,
+            subsidiaryId,
+            module,
+          },
         );
     }
   }

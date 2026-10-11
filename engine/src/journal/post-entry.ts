@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { canonicalJson } from "../platform/canonical-json.ts";
 import { normalizeDecimal, normalizeMoney } from "../money/money.ts";
-import { assertPeriodModulesOpen, CloseError, type CloseModule } from "../periods/period-policy.ts";
+import { assertPeriodModulesOpen, CloseError, periodClosedDetailsOf, type CloseModule } from "../periods/period-policy.ts";
 import { inExecutorTransaction, type SqlExecutor } from "../platform/db.ts";
 import { PostingError } from "./posting-contracts.ts";
 import { collectBalancingLegs } from "./balancing-hooks.ts";
@@ -459,7 +459,9 @@ async function writeEntry(
       });
     } catch (error) {
       if (error instanceof CloseError)
-        throw new LedgerPostError(`journal entry ${input.entryNumber}: ${error.message}`);
+        throw new LedgerPostError(`journal entry ${input.entryNumber}: ${error.message}`, {
+          details: periodClosedDetailsOf(error),
+        });
       throw error;
     }
   } else {

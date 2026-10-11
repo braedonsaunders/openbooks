@@ -8,7 +8,7 @@ import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { featureEnabled, type FeatureState } from "../organization/feature-registry.ts";
 import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
 import { loadSubsidiaryContext, SubsidiaryError, validateSubsidiaryRestrictions, type SubsidiaryContext } from "../organization/subsidiaries.ts";
-import { assertPeriodModulesOpen, CloseError } from "../periods/period-policy.ts";
+import { assertPeriodModulesOpen, CloseError, periodClosedDetailsOf } from "../periods/period-policy.ts";
 import { loadControlAccounts, ControlAccountsIncompleteError } from "../records/control-accounts.ts";
 import { postEntry } from "../journal/post-entry.ts";
 import { eligibleWipSourcesSql } from "./wip-sources.ts";
@@ -35,7 +35,13 @@ import { eligibleWipSourcesSql } from "./wip-sources.ts";
 
 export class UnbilledAccrualError extends Error {
   readonly name = "UnbilledAccrualError";
-  constructor(message: string, readonly code: UnbilledAccrualProblemCode, readonly status = 422) {
+  constructor(
+    message: string,
+    readonly code: UnbilledAccrualProblemCode,
+    readonly status = 422,
+    /** Machine-readable evidence (never internals): the API boundary renders plain-object details. */
+    readonly details?: unknown,
+  ) {
     super(message);
   }
 }
@@ -568,6 +574,8 @@ export async function runUnbilledRevenueAccrual(
                 ? `The general ledger is closed for ${label}. Reopen ${label} under Setup → Periods & Close before accruing unbilled revenue.`
                 : `The accrual reverses on ${reversalDate}, but the general ledger is closed for ${label}. Reopen ${label} under Setup → Periods & Close before accruing unbilled revenue.`,
               "period_closed",
+              422,
+              periodClosedDetailsOf(error),
             );
           }
           throw error;

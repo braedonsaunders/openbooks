@@ -1,7 +1,7 @@
 import { isAgencyConfirmationLine } from './drop-ship-agency.ts';
 import { and, eq, sql } from "drizzle-orm";
 import { db, schema } from "../platform/db.ts";
-import { assertPeriodModulesOpen, CloseError } from "../periods/period-policy.ts";
+import { assertPeriodModulesOpen, CloseError, periodClosedDetailsOf } from "../periods/period-policy.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { nextFreeEntryNumber } from "../records/entry-number.ts";
 import { reversalJournalLines } from "../records/reversal-journal-lines.ts";
@@ -188,6 +188,7 @@ export async function reverseDropShipConfirmationPair(
       if (error instanceof CloseError) {
         throw new DropShipPairVoidRefusal(
           `The reversal period for drop-ship confirmation ${receipt.document_number} and paired document ${pair.document_number} is closed: ${error.message}; open a covering period, then request the void again`,
+          { details: periodClosedDetailsOf(error) },
         );
       }
       throw error;

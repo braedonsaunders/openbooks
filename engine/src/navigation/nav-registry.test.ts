@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { MODULE_BY_KEY, defaultNavConfig, resolveStoredHref } from "./nav-registry.ts";
+import { DEFAULT_NAV_ORDER, MODULE_BY_KEY, defaultNavConfig, resolveStoredHref } from "./nav-registry.ts";
 import { LOCAL_NAVIGATION } from "./local-navigation.ts";
 import { reconcileNavConfig } from "./nav-config.ts";
 
@@ -72,4 +72,19 @@ test("Manufacturing setup has one home inside Company Setup", () => {
   assert.ok(!result.groups.some(group => group.items.some(item => item.kind === 'module' && item.moduleKey === key)));
   assert.ok(result.groups.find(group => group.id === 'settings')!.items.some(item => item.kind === 'link' && item.href === unrelated.href && item.hidden));
   assert.deepEqual(reconcileNavConfig(result), result);
+});
+
+test("reopen requests stay a permission-gated accounting destination", () => {
+  // The reopen surface must remain discoverable through the menu (which the
+  // global page search indexes) without ever dropping its duty gate: only
+  // holders of the reopen-approval permission decide windows.
+  const module = MODULE_BY_KEY.get("close-reopen-requests")!;
+  assert.equal(module.href, "/accounting/reopen-requests");
+  assert.equal(module.group, "accounting");
+  assert.equal(module.requiredPermission, "close.reopen");
+  assert.ok(
+    DEFAULT_NAV_ORDER.accounting.includes("close-reopen-requests"),
+    "the default menu carries it, so page search indexes it",
+  );
+  assert.ok(!module.localOnly, "it is a real destination, not a local alias");
 });

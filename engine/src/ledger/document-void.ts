@@ -5,7 +5,7 @@ import { db, schema, withOrgTransaction, type SqlExecutor } from "../platform/db
 import { documentRevisionCounterSql, isDocumentRevisionToken } from "../records/revision.ts";
 import { isIsoCalendarDate } from "../platform/business-date.ts";
 import { activePostingPrimaryBookId } from "../platform/accounting-books.ts";
-import { arePeriodModulesOpen, assertPeriodModulesOpen, CloseError, closeModuleForDocument, type CloseModule } from "../periods/period-policy.ts";
+import { arePeriodModulesOpen, assertPeriodModulesOpen, CloseError, closeModuleForDocument, periodClosedDetailsOf, type CloseModule } from "../periods/period-policy.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { nextFreeEntryNumber } from "../records/entry-number.ts";
 import { reversalJournalLines } from "../records/reversal-journal-lines.ts";
@@ -747,6 +747,7 @@ async function assertOrderShipmentReversalPeriodOpen(
           `the reversal period for ${input.reversalDate} is closed: ${error.message}`,
           422,
           "reversal-period-closed",
+          periodClosedDetailsOf(error),
         );
       }
       throw error;
@@ -1530,6 +1531,7 @@ export async function completeRequestedDocumentVoid(
               `the reversal period for ${reversalDate} is closed: ${error.message}`,
               422,
               "reversal-period-closed",
+              periodClosedDetailsOf(error),
             );
           }
           throw error;
@@ -1679,6 +1681,9 @@ export async function completeRequestedDocumentVoid(
             if (error instanceof CloseError) {
               throw new DocumentVoidError(
                 `the reversal period for ${reversalDate} is closed: ${error.message}`,
+                422,
+                "invalid",
+                periodClosedDetailsOf(error),
               );
             }
             throw error;

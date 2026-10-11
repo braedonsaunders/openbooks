@@ -12,7 +12,7 @@ import { assertGeneratedBillingPostable, BillingSourceIntegrityError } from "../
 import { type ContributedLineWithSource } from "../allocations/post.ts";
 import { parseMoney } from "../money/brands.ts";
 
-import { assertPeriodModulesOpen, closeModuleForDocument, CloseError } from "../periods/period-policy.ts";
+import { assertPeriodModulesOpen, closeModuleForDocument, CloseError, periodClosedDetailsOf } from "../periods/period-policy.ts";
 import { applyBillInventoryReceipts } from "../inventory/documents-purchasing.ts";
 import { applyVendorCreditInventoryReturns } from "../inventory/documents-vendor-credits.ts";
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from "../records/transaction-audit.ts";
@@ -94,7 +94,8 @@ export async function commitDocumentPosting(prepared: Awaited<ReturnType<typeof 
         allowImportedLocks: deps.migration,
       });
     } catch (error) {
-      if (error instanceof CloseError) throw new PostingError(error.message);
+      if (error instanceof CloseError)
+        throw new PostingError(error.message, { details: periodClosedDetailsOf(error) });
       throw error;
     }
 
@@ -479,7 +480,8 @@ export async function commitDocumentPosting(prepared: Awaited<ReturnType<typeof 
             allowImportedLocks: deps.migration,
           });
         } catch (error) {
-          if (error instanceof CloseError) throw new PostingError(error.message);
+          if (error instanceof CloseError)
+            throw new PostingError(error.message, { details: periodClosedDetailsOf(error) });
           throw error;
         }
         const secEntry = (await tx
