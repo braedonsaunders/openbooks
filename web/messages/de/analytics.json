@@ -4088,7 +4088,9 @@
     "overdue": "überfällig",
     "pagerRange": "{from}–{to} von {total}",
     "prevPage": "Vorherige Seite",
-    "nextPage": "Nächste Seite"
+    "nextPage": "Nächste Seite",
+    "viewStatement": "Kontoauszug anzeigen",
+    "statementPdf": "PDF"
   },
   "cashWeek": {
     "actionBar": {

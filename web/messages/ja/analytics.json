@@ -4088,7 +4088,9 @@
     "overdue": "延滞",
     "pagerRange": "{from}–{to} / 全{total}件",
     "prevPage": "前のページ",
-    "nextPage": "次のページ"
+    "nextPage": "次のページ",
+    "viewStatement": "取引明細を表示",
+    "statementPdf": "PDF"
   },
   "cashWeek": {
     "actionBar": {

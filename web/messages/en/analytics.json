@@ -4053,7 +4053,9 @@
     "overdue": "overdue",
     "pagerRange": "{from}–{to} of {total}",
     "prevPage": "Previous page",
-    "nextPage": "Next page"
+    "nextPage": "Next page",
+    "viewStatement": "View statement",
+    "statementPdf": "PDF"
   },
   "cashWeek": {
     "drawerDescription": "Net {net} · ending {ending}",

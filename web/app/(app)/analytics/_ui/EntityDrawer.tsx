@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { Drawer, cn } from '@openbooks/ui'
 import { Gauge as GaugeIcon, ChevronLeft, ChevronRight } from 'lucide-react'
 import { TxnLink } from '../../reports/TxnLink'
+import { SendButton } from '@/components/send-button'
 import { useAnalyticsMoney } from './format'
 import { refusalMessage } from './fetch-refusal'
 import { useLocale, useTranslations } from 'next-intl'
@@ -140,6 +141,27 @@ export function EntityDrawer({ party, name, side, onClose }: { party: string; na
                 {label}
               </button>
             ))}
+            {side === 'ar' ? (
+              <span className="ml-auto flex shrink-0 items-center gap-1">
+                <a
+                  href={`/reports/statements/${encodeURIComponent(party)}?side=ar`}
+                  className="rounded-md px-2.5 py-1 text-xs font-semibold text-slate-500 transition-colors hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+                >
+                  {t('viewStatement')}
+                </a>
+                <a
+                  href={`/api/reports/statement/partner-statement/export?format=pdf&party=${encodeURIComponent(party)}&side=ar`}
+                  className="rounded-md px-2.5 py-1 text-xs font-semibold text-slate-500 transition-colors hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+                >
+                  {t('statementPdf')}
+                </a>
+                <SendButton
+                  recordType="party_statement"
+                  recordId={party}
+                  baseUrl={`/api/parties/${encodeURIComponent(party)}/statement/send?side=ar`}
+                />
+              </span>
+            ) : null}
           </div>
 
           {/* Paginated table — rows drill into the real document flyout. */}

@@ -4088,7 +4088,9 @@
     "overdue": "逾期",
     "pagerRange": "第{from}–{to}项，共{total}项",
     "prevPage": "上一页",
-    "nextPage": "下一页"
+    "nextPage": "下一页",
+    "viewStatement": "查看对账单",
+    "statementPdf": "PDF"
   },
   "cashWeek": {
     "actionBar": {

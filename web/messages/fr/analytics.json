@@ -4088,7 +4088,9 @@
     "overdue": "en retard",
     "pagerRange": "{from}–{to} sur {total}",
     "prevPage": "Page précédente",
-    "nextPage": "Page suivante"
+    "nextPage": "Page suivante",
+    "viewStatement": "Voir le relevé",
+    "statementPdf": "PDF"
   },
   "cashWeek": {
     "actionBar": {

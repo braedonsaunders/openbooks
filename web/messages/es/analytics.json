@@ -4088,7 +4088,9 @@
     "overdue": "vencido",
     "pagerRange": "{from}–{to} de {total}",
     "prevPage": "Página anterior",
-    "nextPage": "Página siguiente"
+    "nextPage": "Página siguiente",
+    "viewStatement": "Ver extracto",
+    "statementPdf": "PDF"
   },
   "cashWeek": {
     "actionBar": {
