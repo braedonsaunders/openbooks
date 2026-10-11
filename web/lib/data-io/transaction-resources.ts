@@ -10,8 +10,10 @@ import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature } from '@openbooks/en
 import { normalizeMoney } from '@openbooks/engine/money/money'
 import { isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
 import { postDocument } from "@openbooks/engine/ledger/posting-document";
+import { applyDocumentEdit, precomputeDocumentTotalsForCreate } from "@openbooks/engine/documents/write";
+import type { DocumentLineInput } from "@openbooks/engine/ledger/document-input";
 import { loadEntryRuleByKey } from '@openbooks/engine/allocations/entry'
-import { controlDeps } from "@openbooks/engine/ledger/document-service";
+import { controlDeps, loadDocumentEditCurrent } from "@openbooks/engine/ledger/document-service";
 import { nextDocumentNumber } from "../bills.ts";
 import { createPermission, postPermission, readPermission, type DocKindConfig } from '../document-kinds'
 import { canonicalDecimal } from '../exact-decimal'
@@ -543,6 +545,23 @@ async function writeTransactions(
       // Create the draft document + lines.
       const number = wantNumber || (await nextDocumentNumber(ctx.orgId, cfg.kind, cfg.numberPrefix))
       const currency = String(src.currency ?? '').trim() || baseCurrency
+      // Lines are written by the same edit core the drawer and the API use,
+      // so a tax-profiled line carries its calculation evidence. The
+      // provider-dependent totals resolve here, before the transaction opens:
+      // an external tax lookup never runs while the draft's rows are locked.
+      const lineInputs: DocumentLineInput[] = built.map((l) => ({
+        accountId: l.accountId,
+        amount: l.amount,
+        description: l.description,
+        taxCodeId: l.taxCodeId,
+      }))
+      const precomputedTotals = await precomputeDocumentTotalsForCreate(ctx.orgId, cfg.kind, {
+        lines: lineInputs,
+        currency,
+        documentDate,
+        partyId,
+        subsidiaryId,
+      })
       const documentId = await db.transaction(async (tx) => {
         if (subsidiaryMapped && subsidiaryId !== rootSubsidiaryId) {
           await acquireOrgFeatureGateLock(tx, ctx.orgId)
@@ -578,21 +597,28 @@ async function writeTransactions(
             .returning({ id: schema.documents.id })
           if (!doc) throw new Error('document insert did not return an id')
 
-          await tx.insert(schema.documentLines).values(
-            built.map((l, idx) => ({
-              orgId: ctx.orgId,
-              documentId: doc.id,
-              lineNumber: idx + 1,
-              accountId: l.accountId,
-              description: l.description,
-              amount: l.amount,
-              taxCodeId: l.taxCodeId,
-              // Written only when a distribution key staged a rule: the
-              // insert shape is unchanged otherwise (unit atomicity suite).
-              ...(l.distributionRuleId ? { distributionRuleId: l.distributionRuleId } : {}),
-              createdBy: ctx.actorId,
-            })),
+          // The edit core reads the draft's own revision token inside this
+          // transaction (the draft is uncommitted), then writes the lines with
+          // their tax calculation, components, and document totals.
+          const current = await loadDocumentEditCurrent(doc.id, ctx.orgId, tx)
+          if (!current) throw new Error(`document ${doc.id} disappeared during import`)
+          await applyDocumentEdit(
+            doc.id,
+            current,
+            { lines: lineInputs, expectedUpdatedAt: current.updatedAt },
+            // Imports have never fired on_update flows; the edit core keeps that.
+            { orgId: ctx.orgId, userId: ctx.actorId, source: 'api', runFlows: false, precomputedTotals },
+            { tx },
           )
+          // A staged entry-rule reference rides on its line; the edit core
+          // carries no distribution fields, and the adapter never explodes.
+          for (let idx = 0; idx < built.length; idx++) {
+            const ruleId = built[idx]!.distributionRuleId
+            if (!ruleId) continue
+            await tx.execute(sql`
+              update document_lines set distribution_rule_id = ${ruleId}
+               where org_id = ${ctx.orgId} and document_id = ${doc.id} and line_number = ${idx + 1}`)
+          }
           await tx.execute(sql`release savepoint document_import_row`)
           return doc.id
         } catch (e) {

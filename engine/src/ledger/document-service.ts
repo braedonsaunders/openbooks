@@ -89,13 +89,18 @@ export async function loadDocument(id: string, orgId: string) {
   return { doc: exactDocument, lines: lines.rows, tenders: tenders.rows }
 }
 
-/** Exact edit snapshot used by every internal and external document writer. */
+/**
+ * Exact edit snapshot used by every internal and external document writer.
+ * A writer that created the row in its own open transaction passes that
+ * transaction as `executor`: an uncommitted draft is invisible to the pool.
+ */
 export async function loadDocumentEditCurrent(
   id: string,
   orgId: string,
+  executor: Pick<typeof db, 'execute'> = db,
 ): Promise<DocumentEditCurrent | null> {
   requireOrganization(orgId)
-  const result = await db.execute<DocumentEditCurrent>(sql`
+  const result = await executor.execute<DocumentEditCurrent>(sql`
     select kind, status, total, tax_total as "taxTotal", party_id as "partyId",
            document_date as "documentDate",
            custom, subsidiary_id as "subsidiaryId",

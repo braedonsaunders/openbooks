@@ -283,6 +283,28 @@ const mockSources = new Map<string, string>([
       export async function nextDocumentNumber() {
         return 'CC-000001'
       }
+
+      export async function loadDocumentEditCurrent() {
+        return {
+          kind: 'card_charge', status: 'draft', total: '0', taxTotal: '0', partyId: null,
+          documentDate: '2026-08-24', updatedAt: 'revision-1', custom: {}, subsidiaryId: null,
+        }
+      }
+    `,
+  ],
+  [
+    // The native edit core writes the lines through the caller's transaction.
+    'mock:write',
+    `
+      const documentLines = Symbol.for('openbooks.data-import-route-test.document-lines')
+      export async function precomputeDocumentTotalsForCreate() { return null }
+      export async function applyDocumentEdit(id, current, body, ctx, scope) {
+        const lines = (body.lines ?? []).map((line, index) => ({
+          orgId: ctx.orgId, documentId: id, lineNumber: index + 1, accountId: line.accountId,
+          description: line.description, amount: line.amount, taxCodeId: line.taxCodeId, createdBy: ctx.userId,
+        }))
+        await scope.tx.insert(documentLines).values(lines)
+      }
     `,
   ],
   [
@@ -315,6 +337,8 @@ const hooks = registerHooks({
       ['@openbooks/engine/platform/db', 'mock:db'],
       ['@openbooks/engine/ledger/posting-document', 'mock:posting'],
       ['../../../engine/src/ledger/document-service.ts', 'mock:documents'],
+      ['@openbooks/engine/ledger/document-service', 'mock:documents'],
+      ['@openbooks/engine/documents/write', 'mock:write'],
       ['../bills.ts', 'mock:documents'],
       ['./resource-core', 'mock:resource-core'],
       ['../../../../lib/authz', 'mock:authz'],

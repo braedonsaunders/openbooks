@@ -49,6 +49,13 @@ const mockSources = new Map<string, string>([
       async function execute(query) {
         const text = textOf(query)
         if (text.includes('base_currency')) return { rows: [{ base_currency: 'CAD' }] }
+        if (text.includes('update document_lines')) {
+          // The staged rule reference: values are [ruleId, orgId, documentId, lineNumber].
+          const [ruleId, , , lineNumber] = query.values
+          const line = state.lines.find((candidate) => candidate.lineNumber === lineNumber)
+          if (line) line.distributionRuleId = ruleId
+          return { rows: [] }
+        }
         if (text.includes('from subsidiaries')) return { rows: [] }
         if (text.includes('from documents where')) return { rows: [] }
         if (text.includes('from documents d')) return { rows: state.docRows }
@@ -79,7 +86,24 @@ const mockSources = new Map<string, string>([
   [
     'mock:documents',
     `export async function controlDeps() { throw new Error('controlDeps is not expected here') }
-     export async function nextDocumentNumber() { return 'IMP-000001' }`,
+     export async function nextDocumentNumber() { return 'IMP-000001' }
+     export async function loadDocumentEditCurrent() {
+       return { kind: 'card_charge', status: 'draft', total: '0', taxTotal: '0', partyId: null,
+         documentDate: '2026-09-01', updatedAt: 'revision-1', custom: {}, subsidiaryId: null }
+     }`,
+  ],
+  [
+    'mock:write',
+    `// The native edit core writes the lines through the caller's transaction.
+     const documentLines = Symbol.for('dist.document-lines')
+     export async function precomputeDocumentTotalsForCreate() { return null }
+     export async function applyDocumentEdit(id, current, body, ctx, scope) {
+       const lines = (body.lines ?? []).map((line, index) => ({
+         orgId: ctx.orgId, documentId: id, lineNumber: index + 1, accountId: line.accountId,
+         description: line.description, amount: line.amount, taxCodeId: line.taxCodeId, createdBy: ctx.userId,
+       }))
+       await scope.tx.insert(documentLines).values(lines)
+     }`,
   ],
   [
     'mock:resource-core',
@@ -117,6 +141,8 @@ const hooks = registerHooks({
       ['@openbooks/engine/platform/db', 'mock:db'],
       ['@openbooks/engine/ledger/posting-document', 'mock:posting'],
       ['@openbooks/engine/allocations/entry', 'mock:entry'],
+      ['@openbooks/engine/documents/write', 'mock:write'],
+      ['@openbooks/engine/ledger/document-service', 'mock:documents'],
       ['../../../engine/src/ledger/document-service.ts', 'mock:documents'],
       ['../bills.ts', 'mock:documents'],
       ['./resource-core', 'mock:resource-core'],

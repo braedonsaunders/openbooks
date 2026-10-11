@@ -24,6 +24,8 @@ interface TransactionImportState {
   documents: Record<string, unknown>[]
   lines: Record<string, unknown>[]
   attemptedLines: Record<string, unknown>[]
+  precomputeCalls: { orgId: string; kind: string; body: Record<string, unknown> }[]
+  editCalls: { id: string; body: Record<string, unknown>; ctx: Record<string, unknown> }[]
 }
 
 const stateKey = Symbol.for('openbooks.transaction-import-test')
@@ -42,6 +44,8 @@ const importState: TransactionImportState = {
   documents: [],
   lines: [],
   attemptedLines: [],
+  precomputeCalls: [],
+  editCalls: [],
 }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = importState
 
@@ -199,6 +203,51 @@ const mockSources = new Map<string, string>([
       export async function nextDocumentNumber() {
         return 'CC-000001'
       }
+
+      // The draft's revision token, read on the import's own transaction.
+      export async function loadDocumentEditCurrent(id, orgId, executor) {
+        return {
+          kind: 'card_charge',
+          status: 'draft',
+          total: '0',
+          taxTotal: '0',
+          partyId: null,
+          documentDate: '2026-08-24',
+          updatedAt: 'revision-1',
+          custom: {},
+          subsidiaryId: null,
+        }
+      }
+    `,
+  ],
+  [
+    // The native edit core: the double records what the importer asked for
+    // and performs the same line insert through the caller's transaction, so
+    // the atomicity assertions still observe the line writes.
+    'mock:write',
+    `
+      const state = globalThis[Symbol.for('openbooks.transaction-import-test')]
+      const documentLines = Symbol.for('openbooks.transaction-import-test.document-lines')
+
+      export async function precomputeDocumentTotalsForCreate(orgId, kind, body) {
+        state.precomputeCalls.push({ orgId, kind, body })
+        return null
+      }
+
+      export async function applyDocumentEdit(id, current, body, ctx, scope) {
+        state.editCalls.push({ id, body, ctx })
+        const lines = (body.lines ?? []).map((line, index) => ({
+          orgId: ctx.orgId,
+          documentId: id,
+          lineNumber: index + 1,
+          accountId: line.accountId,
+          description: line.description,
+          amount: line.amount,
+          taxCodeId: line.taxCodeId,
+          createdBy: ctx.userId,
+        }))
+        await scope.tx.insert(documentLines).values(lines)
+      }
     `,
   ],
   [
@@ -217,6 +266,9 @@ const mockSources = new Map<string, string>([
           if (target.resource === 'accounts' && String(human) === '5000') {
             return 'account-1'
           }
+          if (target.resource === 'tax-codes' && String(human) === 'TAX') {
+            return 'tax-1'
+          }
           return null
         }
       }
@@ -231,6 +283,8 @@ const hooks = registerHooks({
       ['@openbooks/engine/platform/db', 'mock:db'],
       ['@openbooks/engine/ledger/posting-document', 'mock:posting'],
       ['../../../engine/src/ledger/document-service.ts', 'mock:documents'],
+      ['@openbooks/engine/ledger/document-service', 'mock:documents'],
+      ['@openbooks/engine/documents/write', 'mock:write'],
       ['../bills.ts', 'mock:documents'],
       ['./resource-core', 'mock:resource-core'],
     ]).get(specifier)
@@ -267,6 +321,8 @@ function resetImportState(failLineInsert: boolean): void {
   importState.documents.length = 0
   importState.lines.length = 0
   importState.attemptedLines.length = 0
+  importState.precomputeCalls.length = 0
+  importState.editCalls.length = 0
 }
 
 async function importCardCharge(
@@ -492,6 +548,30 @@ test('transaction import commits its draft and lines together', async () => {
       createdBy: 'actor-1',
     },
   ])
+})
+
+test('transaction import writes tax-profiled lines through the native edit core', async () => {
+  resetImportState(false)
+
+  const outcome = await importCardCharge({
+    documentDate: '2026-08-24',
+    account: '5000',
+    amount: '100.00',
+    taxCode: 'TAX',
+  })
+
+  assert.deepEqual(outcome, { created: 1, updated: 0, failed: 0, errors: [] })
+  const expectedLines = [{ accountId: 'account-1', amount: '100.0000', description: null, taxCodeId: 'tax-1' }]
+  assert.equal(importState.precomputeCalls.length, 1, 'provider-dependent totals resolve once, before the transaction')
+  assert.deepEqual(importState.precomputeCalls[0]!.body.lines, expectedLines)
+  assert.equal(importState.editCalls.length, 1, 'the lines are written by the shared edit core')
+  const [edit] = importState.editCalls
+  assert.equal(edit!.id, 'document-1')
+  assert.deepEqual(edit!.body.lines, expectedLines)
+  assert.equal(edit!.body.expectedUpdatedAt, 'revision-1', 'the edit carries the draft revision read in the transaction')
+  assert.equal(edit!.ctx.source, 'api')
+  assert.equal(edit!.ctx.runFlows, false, 'imports keep firing no update flows')
+  assert.equal(importState.lines[0]!.taxCodeId, 'tax-1')
 })
 
 test('transaction import refuses impossible document and due dates before writing', async () => {
