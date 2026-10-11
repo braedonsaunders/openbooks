@@ -221,6 +221,21 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "accounts.number",
   "accounts.required_dimensions",
   "accounts.type",
+  // Chart governance and presentation: merge reasons and their recorded
+  // consequences describe accounts and balances; contexts and localized
+  // labels are configuration.
+  "accounts.merge_reason",
+  "account_merges.reason",
+  "account_merges.idempotency_key",
+  "account_merges.preview_digest",
+  "account_merges.result",
+  "accounting_contexts.code",
+  "accounting_contexts.name",
+  "accounting_contexts.description",
+  "accounting_context_defaults.country",
+  "account_localizations.localized_number",
+  "account_localizations.localized_name",
+  "segment_value_dependencies.description",
   "addresses.country",
   "addresses.label",
   "addresses.region",

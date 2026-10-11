@@ -10,6 +10,13 @@ export const TENANT_TABLE_POLICIES = {
   "handling_unit_moves":"clone:catalog-uuid-rebase",
   "inventory_count_policies": "clone:catalog-uuid-rebase",
   "purchase_over_receipt_tolerances": "clone:catalog-uuid-rebase",
+  // Chart presentation and governance: merges are the record behind each
+  // merged account a copy carries; contexts and localizations are configuration.
+  "account_merges": "clone:catalog-uuid-rebase",
+  "accounting_contexts": "clone:catalog-uuid-rebase",
+  "accounting_context_defaults": "clone:catalog-uuid-rebase",
+  "account_localizations": "clone:catalog-uuid-rebase",
+  "segment_value_dependencies": "clone:catalog-uuid-rebase",
   "consignment_stock": "clone:catalog-uuid-rebase",
   "consignment_events": "clone:catalog-uuid-rebase",
   "einvoice_settings": "clone:catalog-uuid-rebase",
