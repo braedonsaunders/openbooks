@@ -131,7 +131,8 @@
     "description": "Live diagnostics detect blockers and invalidate stale sign-offs when the books change.",
     "score": "ready",
     "clear": "No blocking ledger exceptions remain.",
-    "affectedDocuments": "Affected documents: {list}"
+    "affectedDocuments": "Affected documents: {list}",
+    "periodRemedyNeedsCloseRun": "Adding the accounting period needs the “Execute close tasks and validation” permission — ask your controller or an administrator."
   },
   "diagnostics": {
     "drafts-open": {
@@ -478,6 +479,7 @@
       "reopenSelfAttestationConfirm": "I attest that no other eligible approver is available and this reopening is necessary.",
       "reopenSelfAttestationNeeded": "Describe why this reopen is needed (at least 10 characters) and tick the attestation to approve.",
       "reopenOwnRequestNote": "You requested this reopen — another approver must decide it.",
+      "reopenOwnRequestNamedNote": "You requested this reopen — {approvers} can decide it from My approvals.",
       "closeConfirmTitle": "Close {module} for {period}?",
       "closeConfirmBody": "New postings to {module} will be rejected until a controlled reopening is approved. The reason is retained in the immutable close history.",
       "bankingCloseConfirmDetail": "Reconciliations in progress: {inProgress}. Unmatched statement lines: {unmatched}.",

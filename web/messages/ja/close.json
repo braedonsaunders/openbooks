@@ -131,7 +131,8 @@
     "description": "ライブ診断が障害要因を検出し、帳簿が変更された際には古い承認を無効化します。",
     "score": "準備完了",
     "clear": "決算を妨げる元帳の例外は残っていません。",
-    "affectedDocuments": "対象の伝票: {list}"
+    "affectedDocuments": "対象の伝票: {list}",
+    "periodRemedyNeedsCloseRun": "会計期間の追加には「締めタスクと検証を実行」権限が必要です。コントローラーまたは管理者に依頼してください。"
   },
   "diagnostics": {
     "drafts-open": {
@@ -478,6 +479,7 @@
       "reopenSelfAttestationConfirm": "他に適格な承認者がおらず、この再オープンが必要であることを証明します。",
       "reopenSelfAttestationNeeded": "承認するには、この再開が必要な理由（10文字以上）を入力し、証明にチェックを入れてください。",
       "reopenOwnRequestNote": "ご自身が申請した再オープンです — 別の承認者が決定する必要があります。",
+      "reopenOwnRequestNamedNote": "ご自身が申請した再オープンです — {approvers} が「自分の承認」から決定できます。",
       "closeConfirmTitle": "{period}の{module}を締めますか?",
       "closeConfirmBody": "{module}への新しい記帳は、管理された再オープンが承認されるまで拒否されます。理由は不変の締め履歴に保持されます。",
       "bankingCloseConfirmDetail": "進行中の照合: {inProgress}。未照合の明細行: {unmatched}。",

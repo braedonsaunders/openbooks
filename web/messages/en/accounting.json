@@ -461,6 +461,7 @@
     "description": "Requests to reopen a closed period. Someone other than the requester who holds the reopen permission approves or rejects each one.",
     "empty": "No reopen requests have been filed.",
     "ownRequest": "You requested this — another approver must decide it.",
+    "ownRequestNamed": "You requested this — {approvers} can decide it from My approvals.",
     "selfApprovalNotice": "No other eligible approver can decide this request, so you may approve your own request with an attestation. The self-approval is recorded in the audit trail.",
     "selfAttestationLabel": "Self-approval attestation",
     "selfAttestationConfirm": "I attest that no other eligible approver is available and this reopening is necessary.",

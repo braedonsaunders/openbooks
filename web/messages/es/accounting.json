@@ -461,6 +461,7 @@
     "description": "Solicitudes para reabrir un período cerrado. Una persona distinta del solicitante que tenga el permiso de reapertura aprueba o rechaza cada una.",
     "empty": "No se ha presentado ninguna solicitud de reapertura.",
     "ownRequest": "Usted hizo esta solicitud: debe decidirla otro aprobador.",
+    "ownRequestNamed": "Usted hizo esta solicitud: {approvers} puede decidirla desde Mis aprobaciones.",
     "selfApprovalNotice": "Ningún otro aprobador habilitado puede decidir esta solicitud, por lo que puede aprobar su propia solicitud con una declaración. La autoaprobación queda registrada en la auditoría.",
     "selfAttestationLabel": "Declaración de autoaprobación",
     "selfAttestationConfirm": "Declaro que no hay ningún otro aprobador habilitado disponible y que esta reapertura es necesaria.",

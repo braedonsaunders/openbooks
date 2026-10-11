@@ -131,7 +131,8 @@
     "description": "实时诊断可检测阻碍项，并在账簿变动时使过期的审签失效。",
     "score": "就绪",
     "clear": "无阻碍性总账异常。",
-    "affectedDocuments": "受影响的单据：{list}"
+    "affectedDocuments": "受影响的单据：{list}",
+    "periodRemedyNeedsCloseRun": "添加会计期间需要“执行结账任务和校验”权限——请联系您的财务主管或管理员。"
   },
   "diagnostics": {
     "drafts-open": {
@@ -478,6 +479,7 @@
       "reopenSelfAttestationConfirm": "我证明没有其他合格审批人可以决定，且此次重开确有必要。",
       "reopenSelfAttestationNeeded": "请说明需要重新开放的原因（至少 10 个字符）并勾选证明后再批准。",
       "reopenOwnRequestNote": "此次重开由您申请 — 须由另一位审批人决定。",
+      "reopenOwnRequestNamedNote": "此次重开由您申请 — {approvers} 可在“我的审批”中决定。",
       "closeConfirmTitle": "关闭{period}的{module}?",
       "closeConfirmBody": "在受控重开获得批准之前，{module}的新过账将被拒绝。原因将保留在不可变的结账历史记录中。",
       "bankingCloseConfirmDetail": "进行中的对账: {inProgress}。未匹配的对账单行: {unmatched}。",

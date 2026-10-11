@@ -131,7 +131,8 @@
     "description": "Los diagnósticos en vivo detectan bloqueos e invalidan aprobaciones obsoletas cuando cambian los libros.",
     "score": "listo",
     "clear": "No quedan excepciones contables bloqueantes.",
-    "affectedDocuments": "Documentos afectados: {list}"
+    "affectedDocuments": "Documentos afectados: {list}",
+    "periodRemedyNeedsCloseRun": "Agregar el período contable requiere el permiso «Ejecutar tareas y validaciones de cierre»; pídaselo a su controller o a un administrador."
   },
   "diagnostics": {
     "drafts-open": {
@@ -478,6 +479,7 @@
       "reopenSelfAttestationConfirm": "Declaro que no hay ningún otro aprobador habilitado disponible y que esta reapertura es necesaria.",
       "reopenSelfAttestationNeeded": "Describa por qué es necesaria esta reapertura (al menos 10 caracteres) y marque la declaración para aprobar.",
       "reopenOwnRequestNote": "Usted solicitó esta reapertura; otro aprobador debe decidirla.",
+      "reopenOwnRequestNamedNote": "Usted solicitó esta reapertura; {approvers} puede decidirla desde Mis aprobaciones.",
       "closeConfirmTitle": "¿Cerrar {module} para {period}?",
       "closeConfirmBody": "Las nuevas contabilizaciones en {module} serán rechazadas hasta que se apruebe una reapertura controlada. El motivo queda registrado en el historial inmutable del cierre.",
       "bankingCloseConfirmDetail": "Conciliaciones en curso: {inProgress}. Líneas de extracto sin conciliar: {unmatched}.",

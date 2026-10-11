@@ -131,7 +131,8 @@
     "description": "Les diagnostics en direct détectent les blocages et invalident les approbations périmées lorsque les livres changent.",
     "score": "prêt",
     "clear": "Aucune exception bloquante ne subsiste.",
-    "affectedDocuments": "Documents concernés : {list}"
+    "affectedDocuments": "Documents concernés : {list}",
+    "periodRemedyNeedsCloseRun": "L’ajout de la période comptable nécessite l’autorisation « Exécuter les tâches et validations de clôture » — adressez-vous à votre contrôleur ou à un administrateur."
   },
   "diagnostics": {
     "drafts-open": {
@@ -478,6 +479,7 @@
       "reopenSelfAttestationConfirm": "J'atteste qu'aucun autre approbateur habilité n'est disponible et que cette réouverture est nécessaire.",
       "reopenSelfAttestationNeeded": "Indiquez pourquoi cette réouverture est nécessaire (au moins 10 caractères) et cochez l’attestation pour approuver.",
       "reopenOwnRequestNote": "Vous avez demandé cette réouverture — un autre approbateur doit statuer.",
+      "reopenOwnRequestNamedNote": "Vous avez demandé cette réouverture — {approvers} peut statuer depuis Mes approbations.",
       "closeConfirmTitle": "Clore {module} pour {period} ?",
       "closeConfirmBody": "Les nouvelles écritures sur {module} seront rejetées jusqu'à l'approbation d'une réouverture contrôlée. Le motif est conservé dans l'historique immuable de la clôture.",
       "bankingCloseConfirmDetail": "Rapprochements en cours : {inProgress}. Lignes de relevé non rapprochées : {unmatched}.",

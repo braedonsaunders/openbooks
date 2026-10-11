@@ -97,12 +97,15 @@ test('self-approval still refuses when another eligible approver exists', { skip
     const preview = await reopenDecisionPreview(org.orgId, requestId, adminId);
     assert.equal(preview.independenceRequired, true);
     assert.equal(preview.selfApprovalAllowed, false);
+    // The requester is told whom to ask, never just "another approver".
+    assert.ok(preview.eligibleApprovers.includes('Second Admin'));
+    assert.ok(!preview.eligibleApprovers.includes('Admin'));
     await assert.rejects(
       decidePeriodReopen({
         orgId: org.orgId, requestId, actorId: adminId, approve: true, hours: 2,
         attestation: 'An attestation cannot replace the available second approver',
       }),
-      /independent approval/,
+      /independent approval: .*Second Admin.* can decide it from My approvals/,
     );
     assert.equal((await db.execute<{ status: string }>(sql`select status from close_reopen_requests where id = ${requestId}`)).rows[0]!.status, 'requested');
   } finally { await dropScratchOrg(org.orgId); }

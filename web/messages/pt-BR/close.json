@@ -131,7 +131,8 @@
     "description": "Diagnósticos ao vivo detectam bloqueios e invalidam aprovações desatualizadas quando os livros mudam.",
     "score": "pronto",
     "clear": "Nenhuma exceção bloqueante do razão permanece.",
-    "affectedDocuments": "Documentos afetados: {list}"
+    "affectedDocuments": "Documentos afetados: {list}",
+    "periodRemedyNeedsCloseRun": "Adicionar o período contábil exige a permissão “Executar tarefas de fechamento e validação” — peça ao seu controller ou a um administrador."
   },
   "diagnostics": {
     "drafts-open": {
@@ -478,6 +479,7 @@
       "reopenSelfAttestationConfirm": "Declaro que nenhum outro aprovador elegível está disponível e que esta reabertura é necessária.",
       "reopenSelfAttestationNeeded": "Descreva por que esta reabertura é necessária (pelo menos 10 caracteres) e marque a declaração para aprovar.",
       "reopenOwnRequestNote": "Você solicitou esta reabertura — outro aprovador deve decidi-la.",
+      "reopenOwnRequestNamedNote": "Você solicitou esta reabertura — {approvers} pode decidi-la em Minhas aprovações.",
       "closeConfirmTitle": "Fechar {module} para {period}?",
       "closeConfirmBody": "Novos lançamentos em {module} serão rejeitados até que uma reabertura controlada seja aprovada. O motivo é mantido no histórico imutável do fechamento.",
       "bankingCloseConfirmDetail": "Conciliações em andamento: {inProgress}. Linhas de extrato sem conciliação: {unmatched}.",

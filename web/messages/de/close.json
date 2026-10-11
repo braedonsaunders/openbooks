@@ -131,7 +131,8 @@
     "description": "Live-Diagnosen erkennen Blocker und machen veraltete Freigaben ungültig, wenn sich die Bücher ändern.",
     "score": "bereit",
     "clear": "Es verbleiben keine blockierenden Hauptbuchausnahmen.",
-    "affectedDocuments": "Betroffene Belege: {list}"
+    "affectedDocuments": "Betroffene Belege: {list}",
+    "periodRemedyNeedsCloseRun": "Zum Anlegen der Buchungsperiode ist die Berechtigung „Abschlussaufgaben und Validierung ausführen“ nötig — wenden Sie sich an Ihr Controlling oder eine Administration."
   },
   "diagnostics": {
     "drafts-open": {
@@ -478,6 +479,7 @@
       "reopenSelfAttestationConfirm": "Ich bestätige, dass kein anderer berechtigter Genehmiger verfügbar ist und diese Wiedereröffnung erforderlich ist.",
       "reopenSelfAttestationNeeded": "Beschreiben Sie, warum diese Wiedereröffnung nötig ist (mindestens 10 Zeichen), und bestätigen Sie die Erklärung, um zu genehmigen.",
       "reopenOwnRequestNote": "Sie haben diese Wiedereröffnung angefordert — ein anderer Genehmiger muss darüber entscheiden.",
+      "reopenOwnRequestNamedNote": "Sie haben diese Wiedereröffnung angefordert — {approvers} kann sie unter „Meine Genehmigungen“ entscheiden.",
       "closeConfirmTitle": "{module} für {period} schließen?",
       "closeConfirmBody": "Neue Buchungen auf {module} werden abgelehnt, bis eine kontrollierte Wiedereröffnung genehmigt wurde. Der Grund bleibt in der unveränderlichen Abschlusshistorie erhalten.",
       "bankingCloseConfirmDetail": "Abstimmungen in Arbeit: {inProgress}. Nicht zugeordnete Kontoauszugspositionen: {unmatched}.",

@@ -461,6 +461,7 @@
     "description": "重新打开已结账期间的申请。由申请人以外、拥有重新打开权限的人员批准或拒绝每项申请。",
     "empty": "尚未提交任何重新打开申请。",
     "ownRequest": "此申请由您提交——必须由其他审批人决定。",
+    "ownRequestNamed": "此申请由您提交——{approvers} 可在“我的审批”中决定。",
     "selfApprovalNotice": "没有其他合格审批人可以决定此申请，因此您可以附上证明批准自己的申请。自我批准将记录在审计轨迹中。",
     "selfAttestationLabel": "自我批准证明",
     "selfAttestationConfirm": "我证明没有其他合格审批人可以决定，且此次重开确有必要。",

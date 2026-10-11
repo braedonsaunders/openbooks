@@ -109,6 +109,12 @@ test("allocation permissions are catalogued, grouped, and granted by duty", () =
   assert.equal(holds("approver", "allocations.approve"), true);
   assert.equal(holds("approver", "allocations.manage"), false, "approver must not author rules");
   assert.equal(holds("approver", "allocations.run"), false, "approver must not run allocations");
+  // A period reopen request is an approval decision, and a bill's approval
+  // context includes its receipt; neither grant lets the approver post.
+  assert.equal(holds("approver", "close.reopen"), true, "approver decides reopen requests");
+  assert.equal(holds("approver", "items.read"), true, "approver reads the receipt a bill matches");
+  assert.equal(holds("approver", "periods.manage"), false, "approver must not lock or unlock periods");
+  assert.equal(holds("approver", "items.post"), false, "approver must not post inventory");
   // Viewer reads; sales roles stay out of the ledger module.
   assert.equal(holds("viewer", "allocations.read"), true);
   assert.equal(holds("viewer", "allocations.manage"), false);

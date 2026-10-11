@@ -2304,6 +2304,7 @@ function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
     ownRequest: boolean;
     independenceRequired: boolean;
     selfApprovalAllowed: boolean;
+    eligibleApprovers: string[];
   } | null>(null);
   const [selfAttestation, setSelfAttestation] = useState("");
   const [selfAttested, setSelfAttested] = useState(false);
@@ -2318,12 +2319,16 @@ function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
           ownRequest?: boolean;
           independenceRequired?: boolean;
           selfApprovalAllowed?: boolean;
+          eligibleApprovers?: unknown;
         };
         setConflicts(Array.isArray(preview.conflicts) ? preview.conflicts : []);
         setDecisionPreview({
           ownRequest: preview.ownRequest === true,
           independenceRequired: preview.independenceRequired === true,
           selfApprovalAllowed: preview.selfApprovalAllowed === true,
+          eligibleApprovers: Array.isArray(preview.eligibleApprovers)
+            ? preview.eligibleApprovers.filter((name): name is string => typeof name === "string")
+            : [],
         });
       })
       .catch(() => {
@@ -2349,6 +2354,10 @@ function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
     (conflictTotal > 0 || ownRequest) &&
     (decisionPreview?.independenceRequired ?? false);
   const selfApproval = ownRequest && (decisionPreview?.selfApprovalAllowed ?? false);
+  const approverNames = decisionPreview?.eligibleApprovers ?? [];
+  const ownRequestNote = approverNames.length > 0
+    ? t("periods.reopenOwnRequestNamedNote", { approvers: approverNames.join(", ") })
+    : t("periods.reopenOwnRequestNote");
   const selfAttestationReady = selfAttested && selfAttestation.trim().length >= 10;
   // An approved window can be ended early or extended/widened instead of
   // opening an overlapping request. Both carry their own reason and are
@@ -2473,7 +2482,7 @@ function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
               title={
                 approveBlocked
                   ? ownRequest
-                    ? t("periods.reopenOwnRequestNote")
+                    ? ownRequestNote
                     : t("periods.reopenConflictNotice", { count: conflictTotal, examples: conflictExamples })
                   : selfApproval && !selfAttestationReady
                     ? t("periods.reopenSelfAttestationNeeded")
@@ -2503,7 +2512,7 @@ function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
         ) : null}
         {ownRequest && decisionPreview && !selfApproval ? (
           <p role="note" className="rounded-md border border-slate-300 bg-slate-50 p-2.5 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-            {t("periods.reopenOwnRequestNote")}
+            {ownRequestNote}
           </p>
         ) : null}
         {selfApproval ? (

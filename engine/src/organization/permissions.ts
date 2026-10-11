@@ -1307,12 +1307,18 @@ export const BUILT_IN_ROLES: Record<
   approver: {
     name: "Approver",
     description:
-      "Reviews and decides approval requests, with read access to the ledger, subledgers and reports. Cannot enter, post or pay transactions.",
+      "Reviews and decides approval requests, including period reopen requests, with read access to the ledger, subledgers and reports. Cannot enter, post or pay transactions.",
     permissions: [
       "gl.read",
       "close.read",
       "close.approve",
+      // Deciding a period reopen request is an approval decision; the
+      // engine still refuses self-approval and conflicted approvers.
+      "close.reopen",
       "ap.read",
+      // Approval context: a bill is checked against its receipt, which is
+      // an inventory document.
+      "items.read",
       "ap.approve",
       "purchase_orders.read",
       "ar.read",

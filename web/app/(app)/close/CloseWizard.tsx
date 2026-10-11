@@ -544,7 +544,7 @@ function ReadinessStage(
             ) : (
               <div className="space-y-2">
                 {open.map((item) => (
-                  <ExceptionRow key={item.id} item={item} run={props.run} />
+                  <ExceptionRow key={item.id} item={item} run={props.run} canRun={props.canRun} />
                 ))}
               </div>
             )}
@@ -555,10 +555,14 @@ function ReadinessStage(
   );
 }
 
-function ExceptionRow({ item, run }: { item: CloseExceptionRow; run: Props["run"] }) {
+function ExceptionRow({ item, run, canRun }: { item: CloseExceptionRow; run: Props["run"]; canRun: boolean }) {
   const t = useTranslations("close");
   const critical = ["critical", "error"].includes(item.severity);
-  const actionHref = closeExceptionActionHref(item.code, run);
+  // Posting periods are maintained by close operators: a viewer without the
+  // close run permission is told who can act instead of being sent to a
+  // page that refuses them.
+  const periodRemedyWithheld = item.code === "posting-period-missing" && !canRun;
+  const actionHref = periodRemedyWithheld ? null : closeExceptionActionHref(item.code, run);
   const values = { count: Number(item.details?.count ?? 0) };
   const title = item.title?.startsWith("close.")
     ? t((item.title.slice(6)), values)
@@ -596,6 +600,11 @@ function ExceptionRow({ item, run }: { item: CloseExceptionRow; run: Props["run"
             {t("readiness.affectedDocuments", {
               list: (item.details.documents as unknown[]).map((entry) => String(entry)).join(", "),
             })}
+          </p>
+        ) : null}
+        {periodRemedyWithheld ? (
+          <p role="note" className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+            {t("readiness.periodRemedyNeedsCloseRun")}
           </p>
         ) : null}
         {actionHref ? (
@@ -874,7 +883,7 @@ function TaskCard(props: Props & { task: CloseTaskRow }) {
             })}
           </p>
         ) : null}
-        {openException ? <ExceptionRow item={openException} run={props.run} /> : null}
+        {openException ? <ExceptionRow item={openException} run={props.run} canRun={props.canRun} /> : null}
         {props.task.status === "invalidated" && invalidatedBecause.length > 0 ? (
           <div className="space-y-1">
             {invalidatedBecause.map((bucket) => (

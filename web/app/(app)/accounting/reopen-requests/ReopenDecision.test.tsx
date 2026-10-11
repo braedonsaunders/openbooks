@@ -193,3 +193,28 @@ test('an own request with an available approver shows no decision controls', asy
     globalThis.fetch = prior
   }
 })
+
+/** The requester learns whom to ask: the eligible approvers are named. */
+test('an own request names the approvers who can decide it', async () => {
+  const bodies: unknown[] = []
+  const prior = stubPreview({
+    ok: true,
+    conflicts: [],
+    ownRequest: true,
+    independenceRequired: true,
+    selfApprovalAllowed: false,
+    eligibleApprovers: ['Erik Halvorsen', 'Mira Chen'],
+  }, bodies)
+  const { unmount } = await mountDecision('req-4', true)
+  try {
+    assert.equal(approveButton(), undefined, 'no approve control for an undecidable own request')
+    assert.ok(
+      (document.body.textContent ?? '').includes('Erik Halvorsen, Mira Chen can decide it from My approvals'),
+      'the eligible approvers are named',
+    )
+    assert.deepEqual(bodies, [], 'nothing posts')
+  } finally {
+    await unmount()
+    globalThis.fetch = prior
+  }
+})

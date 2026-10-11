@@ -971,6 +971,7 @@ export const POST = defineRoute({
           independenceRequired: preview.independenceRequired,
           independenceReason: preview.independenceReason,
           selfApprovalAllowed: preview.selfApprovalAllowed,
+          eligibleApprovers: preview.eligibleApprovers,
         });
       }
       return NextResponse.json(

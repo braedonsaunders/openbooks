@@ -399,3 +399,50 @@ test("the wizard header links reopen requests exactly for the reopen permission"
     host.remove();
   }
 });
+
+async function mountReadiness(canRun: boolean) {
+  globalThis.__closeTestRouter = { push() {}, refresh() {} };
+  globalThis.__closeTestToasts = [];
+  const base = props();
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  await act(async () => {
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <CloseWizard
+          {...base}
+          stage="readiness"
+          run={{ ...base.run, current_stage: "readiness" }}
+          canRun={canRun}
+          exceptions={[{
+            id: randomUUID(), task_id: null, code: "posting-period-missing", severity: "error", status: "open",
+            title: "Transactions need an accounting period", message: "3 transactions fall outside any period.",
+            details: { count: 3 },
+          }]}
+        />
+      </NextIntlClientProvider>,
+    );
+    await tick();
+  });
+  return { host, root };
+}
+
+test("a missing-period remedy links only for users who may maintain posting periods", async () => {
+  const withheld = await mountReadiness(false);
+  try {
+    const text = withheld.host.textContent ?? "";
+    assert.ok(!text.includes("Open work area"), "no link to a page that would refuse the viewer");
+    assert.ok(text.includes("Execute close tasks and validation"), "the viewer is told which permission can act");
+  } finally {
+    await act(async () => withheld.root.unmount());
+    withheld.host.remove();
+  }
+  const offered = await mountReadiness(true);
+  try {
+    assert.ok((offered.host.textContent ?? "").includes("Open work area"), "a close operator gets the work area");
+  } finally {
+    await act(async () => offered.root.unmount());
+    offered.host.remove();
+  }
+});

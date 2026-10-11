@@ -216,6 +216,8 @@ export async function reopenRequestConflicts(
 export interface ReopenIndependence {
   required: boolean;
   reason: "another-approver" | "flow" | null;
+  /** Names of the other users who may decide the request, in name order. */
+  approvers: string[];
 }
 
 /**
@@ -233,9 +235,11 @@ export async function reopenIndependenceRequired(
   orgId: string,
   request: { requestedBy: string; subsidiaryId: string | null },
 ): Promise<ReopenIndependence> {
-  const candidates = (await executor.execute<{ id: string }>(sql`
-    select id from users
-     where org_id = ${orgId} and is_active and id <> ${request.requestedBy}`));
+  const candidates = (await executor.execute<{ id: string; name: string | null; email: string }>(sql`
+    select id, name, email from users
+     where org_id = ${orgId} and is_active and id <> ${request.requestedBy}
+     order by coalesce(name, email), id`));
+  const approvers: string[] = [];
   for (const candidate of candidates.rows) {
     if (!(await actorHasPermission(executor, orgId, candidate.id, "close.reopen"))) continue;
     const scope = await actorAllowedSubsidiaryIds(executor, orgId, candidate.id);
@@ -244,8 +248,9 @@ export async function reopenIndependenceRequired(
     } else if (scope !== null && !scope.has(request.subsidiaryId)) {
       continue;
     }
-    return { required: true, reason: "another-approver" };
+    approvers.push(candidate.name?.trim() || candidate.email);
   }
+  if (approvers.length > 0) return { required: true, reason: "another-approver", approvers };
   // Flows own approvals outright: an enabled Flow with an approval gate
   // that has not opted out of preventSelfApproval requires an independent
   // decider, even in a one-approver organization.
@@ -259,8 +264,8 @@ export async function reopenIndependenceRequired(
             and coalesce((node->'data'->'gate'->>'preventSelfApproval')::boolean, true)
        )
      limit 1`));
-  if (governed.rows.length > 0) return { required: true, reason: "flow" };
-  return { required: false, reason: null };
+  if (governed.rows.length > 0) return { required: true, reason: "flow", approvers };
+  return { required: false, reason: null, approvers };
 }
 
 /** One pending request's decision posture for the approval surfaces: the
@@ -277,6 +282,8 @@ export async function reopenDecisionPreview(
   independenceRequired: boolean;
   independenceReason: "another-approver" | "flow" | null;
   selfApprovalAllowed: boolean;
+  /** Who else may decide it — named so a requester knows whom to ask. */
+  eligibleApprovers: string[];
 }> {
   const row = (await db.execute<{ requested_by: string; subsidiary_id: string | null; period_id: string; book_id: string }>(sql`
     select requested_by, subsidiary_id, period_id, book_id from close_reopen_requests
@@ -292,6 +299,7 @@ export async function reopenDecisionPreview(
     independenceRequired: independence.required,
     independenceReason: independence.reason,
     selfApprovalAllowed: !independence.required,
+    eligibleApprovers: independence.approvers,
   };
 }
 
@@ -505,9 +513,15 @@ export async function decidePeriodReopen(args: {
       ? await reopenIndependenceRequired(tx, args.orgId, {
         requestedBy: row.requested_by, subsidiaryId: row.subsidiary_id,
       })
-      : { required: false, reason: null as "another-approver" | "flow" | null };
+      : { required: false, reason: null as "another-approver" | "flow" | null, approvers: [] as string[] };
     if (selfApproval && args.approve && independence.required) {
-      throw new CloseError("a reopen request requires independent approval");
+      throw new CloseError(
+        independence.approvers.length > 0
+          ? `a reopen request requires independent approval: ${independence.approvers.join(", ")} `
+            + `can decide it from My approvals or Accounting → Reopen requests`
+          : "a reopen request requires independent approval: an approval Flow requires a decider other than the requester; "
+            + "an administrator can grant another user the Close reopen permission",
+      );
     }
     let attestation: string | null = null;
     if (selfApproval && args.approve) {

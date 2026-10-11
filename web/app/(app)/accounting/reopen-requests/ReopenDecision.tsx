@@ -19,6 +19,7 @@ interface DecisionPreview {
   ownRequest: boolean
   independenceRequired: boolean
   selfApprovalAllowed: boolean
+  eligibleApprovers: string[]
 }
 
 /**
@@ -52,6 +53,9 @@ export function ReopenDecision({ requestId, ownRequest }: { requestId: string; o
         ownRequest: data.ownRequest === true,
         independenceRequired: data.independenceRequired === true,
         selfApprovalAllowed: data.selfApprovalAllowed === true,
+        eligibleApprovers: Array.isArray(data.eligibleApprovers)
+          ? data.eligibleApprovers.filter((name): name is string => typeof name === 'string')
+          : [],
       })
     })
     return () => {
@@ -85,7 +89,13 @@ export function ReopenDecision({ requestId, ownRequest }: { requestId: string; o
       },
     )
   if (isOwn && !selfApproval)
-    return <span className="text-xs text-slate-500 dark:text-slate-400">{t('ownRequest')}</span>
+    return (
+      <span className="text-xs text-slate-500 dark:text-slate-400">
+        {preview && preview.eligibleApprovers.length > 0
+          ? t('ownRequestNamed', { approvers: preview.eligibleApprovers.join(', ') })
+          : t('ownRequest')}
+      </span>
+    )
   if (selfApproval)
     return (
       <div className="flex max-w-xs flex-col items-end gap-2">
