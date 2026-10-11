@@ -46,7 +46,9 @@
       "projectBudgetVsActualTitle": "Budget du projet vs réel",
       "projectBudgetVsActualDescription": "Budget initial et actuel par rapport aux heures et coûts réels, par tâche.",
       "necPreparationTitle": "Préparation 1099-NEC",
-      "necPreparationDescription": "Paiements fournisseurs au comptant par case pour l'année fiscale."
+      "necPreparationDescription": "Paiements fournisseurs au comptant par case pour l'année fiscale.",
+      "statementsTitle": "Relevés clients",
+      "statementsDescription": "Choisissez un client pour ouvrir son relevé : pièces ouvertes, paiements et ancienneté de la période."
     },
     "groups": {
       "financial": "États financiers",
@@ -261,6 +263,16 @@
     },
     "noPartyOnLines": "(aucun tiers sur les lignes)",
     "noPartyDrillLabel": "Lignes de comptes de contrôle sans contrepartie"
+  },
+  "statementsPicker": {
+    "title": "Relevés clients",
+    "searchPlaceholder": "Rechercher un client…",
+    "columnCustomer": "Client",
+    "columnBalance": "En cours",
+    "periodRange": "{from} → {to}",
+    "periodDefault": "Période en cours",
+    "emptyTitle": "Aucun client avec un solde",
+    "emptyHint": "Comptabilisez une facture client et elle apparaîtra ici."
   },
   "necPreparation": {
     "cashBasisNotice": "Base caisse : paiements effectivement versés en {year}, non les montants facturés. Les paiements par carte sont exclus.",

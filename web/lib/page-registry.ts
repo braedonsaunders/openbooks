@@ -2824,6 +2824,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/reports/statements': {
+    route: '/reports/statements',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/reports/statements/view')
+      return {
+        load: (input) => m.loadStatementPicker(input.searchParams ?? {}),
+        spec: (data) => m.statementPickerSpec(data as never),
+      }
+    },
+  },
   '/reports/statements/[partyId]': {
     route: '/reports/statements/[partyId]',
     segments: ['partyId'],

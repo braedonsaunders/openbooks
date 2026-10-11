@@ -46,7 +46,9 @@
       "projectBudgetVsActualTitle": "Presupuesto del proyecto frente a real",
       "projectBudgetVsActualDescription": "Presupuesto original y actual frente a horas y coste reales, por tarea.",
       "necPreparationTitle": "Preparación 1099-NEC",
-      "necPreparationDescription": "Pagos a proveedores en efectivo por casilla para el año fiscal."
+      "necPreparationDescription": "Pagos a proveedores en efectivo por casilla para el año fiscal.",
+      "statementsTitle": "Extractos de clientes",
+      "statementsDescription": "Elija un cliente para abrir su extracto: partidas abiertas, pagos y antigüedad del periodo."
     },
     "groups": {
       "financial": "Estados financieros",
@@ -261,6 +263,16 @@
     },
     "noPartyOnLines": "(sin tercero en las líneas)",
     "noPartyDrillLabel": "Líneas de cuentas de control sin contraparte"
+  },
+  "statementsPicker": {
+    "title": "Extractos de clientes",
+    "searchPlaceholder": "Buscar cliente…",
+    "columnCustomer": "Cliente",
+    "columnBalance": "Pendiente",
+    "periodRange": "{from} → {to}",
+    "periodDefault": "Periodo actual",
+    "emptyTitle": "Sin clientes con saldo",
+    "emptyHint": "Registre una factura de venta y aparecerá aquí."
   },
   "necPreparation": {
     "cashBasisNotice": "Base de efectivo: pagos efectivamente realizados en {year}, no importes facturados. Se excluyen los pagos con tarjeta.",

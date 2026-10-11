@@ -36,6 +36,8 @@ const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await i
 // the thing under test (same rationale as banking-source-evidence-pages).
 const { loadPartners } = await import(root + 'web/app/(app)/reports/partners/view.ts')
 const { loadStatement } = await import(root + 'web/app/(app)/reports/statements/[partyId]/view.ts')
+const { loadStatementPicker } = await import(root + 'web/app/(app)/reports/statements/view.ts')
+const { postDocument } = await import(root + 'engine/src/ledger/public.ts') as typeof import('../../engine/src/ledger/public.ts')
 const { loadBankingAccount } = await import(root + 'web/app/(app)/banking/[accountId]/view.ts')
 
 function hrefParams(href: string): URLSearchParams {
@@ -139,6 +141,44 @@ test('statement drawer opener keeps list search, sort and page', { skip: !proces
     assert.equal(params.get('stmtSort'), 'source')
     assert.equal(params.get('stmtPage'), '1')
     assert.equal(params.get('reconPage'), '2')
+  } finally {
+    state.user = null
+    await dropScratchOrgReporting(org.orgId)
+  }
+})
+
+// The hub's Customer statements entry opens a picker, not a statement: each
+// row must open that customer's statement for the picker's period, so the
+// loader carries the picker's From/To into every row href.
+test('statement picker rows open that customer statement for the period', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const { org, actor } = await seedNavParamsOrg()
+  try {
+    const invoiceId = randomUUID()
+    await withBypassContext(async () => {
+      const calendarId = (await db.execute(sql`select id from fiscal_calendars where org_id = ${org.orgId} limit 1`)).rows[0]!.id as string
+      await db.execute(sql`insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
+        values (${randomUUID()}, ${org.orgId}, 2026, 1, '2026-01', '2026-01-01', '2026-01-31', false, ${calendarId})`)
+      await db.execute(sql`insert into documents
+        (id, org_id, kind, status, document_number, subsidiary_id, party_id, document_date, due_date, currency, fx_rate, subtotal, tax_total, total, created_by)
+        values (${invoiceId}, ${org.orgId}, 'customer_invoice', 'draft', ${invoiceId}, ${org.subsidiaryId}, ${org.customerId}, '2026-01-10', '2026-01-20',
+          'CAD', 1, '1240.0000', 0, '1240.0000', ${actor})`)
+      await db.execute(sql`insert into document_lines
+        (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount, tax_input_amount)
+        values (${org.orgId}, ${invoiceId}, 1, ${org.accounts.revenue}, 1, '1240.0000', '1240.0000', 0, '1240.0000')`)
+      await db.execute(sql`update documents set status = 'approved' where org_id = ${org.orgId} and id = ${invoiceId}`)
+      await postDocument(invoiceId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } })
+    })
+    const data = (await withOrgContext(org.orgId, () =>
+      loadStatementPicker({ book: org.bookId, from: '2026-01-01', to: '2026-01-31' }))) as {
+      rows: Array<{ rowKey: string; href: string }>
+    }
+    const row = data.rows.find((r) => r.rowKey === org.customerId)
+    assert.ok(row, 'the invoiced customer is listed in the picker')
+    assert.equal(row.href.slice(0, row.href.indexOf('?')), `/reports/statements/${org.customerId}`)
+    const params = hrefParams(row.href)
+    assert.equal(params.get('period'), 'custom')
+    assert.equal(params.get('from'), '2026-01-01')
+    assert.equal(params.get('to'), '2026-01-31')
   } finally {
     state.user = null
     await dropScratchOrgReporting(org.orgId)

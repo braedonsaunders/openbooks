@@ -240,6 +240,12 @@ export async function reportsHubFor(
         card('registers', '/reports/registers?side=ar', 'Receipt', 'ledger'),
         card('receivables', '/reports/partners?kind=receivable', 'Wallet', 'aging'),
         card('payables', '/reports/partners?kind=payable', 'Landmark', 'aging'),
+        // Customer statements pick a customer, then open that customer's
+        // statement for the chosen period — the hub entry accountants look
+        // for, on AR read like the receivables report beside it.
+        ...(authz && can(authz, 'ar.read')
+          ? [card('statements', '/reports/statements', 'FileText', 'aging')]
+          : []),
         // 1099-NEC preparation reads vendor payments + masked TIN status on
         // AP read: no feature switch, so the accountant reaches it whenever
         // the compliance workspace is off.

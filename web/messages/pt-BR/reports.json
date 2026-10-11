@@ -46,7 +46,9 @@
       "projectBudgetVsActualTitle": "Orçado vs. realizado do projeto",
       "projectBudgetVsActualDescription": "Orçamento original e atual comparados às horas e ao custo realizados, por tarefa.",
       "necPreparationTitle": "Preparação 1099-NEC",
-      "necPreparationDescription": "Pagamentos a fornecedores em regime de caixa por campo para o ano fiscal."
+      "necPreparationDescription": "Pagamentos a fornecedores em regime de caixa por campo para o ano fiscal.",
+      "statementsTitle": "Extratos de clientes",
+      "statementsDescription": "Escolha um cliente para abrir o extrato: itens em aberto, pagamentos e saldos por vencimento no período."
     },
     "groups": {
       "financial": "Demonstrações Financeiras",
@@ -261,6 +263,16 @@
     },
     "noPartyOnLines": "(sem parte nas linhas)",
     "noPartyDrillLabel": "Linhas de contas de controle sem contraparte"
+  },
+  "statementsPicker": {
+    "title": "Extratos de clientes",
+    "searchPlaceholder": "Pesquisar cliente…",
+    "columnCustomer": "Cliente",
+    "columnBalance": "Em aberto",
+    "periodRange": "{from} → {to}",
+    "periodDefault": "Período atual",
+    "emptyTitle": "Nenhum cliente com saldo",
+    "emptyHint": "Lance uma fatura de venda e ela aparecerá aqui."
   },
   "necPreparation": {
     "cashBasisNotice": "Regime de caixa: pagamentos efetivamente feitos em {year}, não valores faturados. Pagamentos com cartão são excluídos.",

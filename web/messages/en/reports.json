@@ -46,7 +46,9 @@
       "projectBudgetVsActualTitle": "Project Budget vs Actual",
       "projectBudgetVsActualDescription": "Original and current budget against actual hours and cost, by task.",
       "necPreparationTitle": "1099-NEC preparation",
-      "necPreparationDescription": "Cash-basis vendor payments by box for the filing year."
+      "necPreparationDescription": "Cash-basis vendor payments by box for the filing year.",
+      "statementsTitle": "Customer statements",
+      "statementsDescription": "Pick a customer to open their statement — open items, payments and aging for the period."
     },
     "groups": {
       "financial": "Financial Statements",
@@ -286,6 +288,16 @@
     },
     "noPartyOnLines": "(no party on lines)",
     "noPartyDrillLabel": "Control-account lines with no counterparty"
+  },
+  "statementsPicker": {
+    "title": "Customer statements",
+    "searchPlaceholder": "Search customer…",
+    "columnCustomer": "Customer",
+    "columnBalance": "Outstanding",
+    "periodRange": "{from} → {to}",
+    "periodDefault": "Current period",
+    "emptyTitle": "No customers with balances",
+    "emptyHint": "Post a receivable invoice and it will appear here."
   },
   "aging": {
     "receivablesTitle": "AR Aging",

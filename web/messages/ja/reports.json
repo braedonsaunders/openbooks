@@ -46,7 +46,9 @@
       "projectBudgetVsActualTitle": "プロジェクト予算と実績",
       "projectBudgetVsActualDescription": "タスク別の当初予算・現行予算と実績時間・原価の比較。",
       "necPreparationTitle": "1099-NEC 準備",
-      "necPreparationDescription": "申告年ごとの現金主義ベンダー支払額（ボックス別）。"
+      "necPreparationDescription": "申告年ごとの現金主義ベンダー支払額（ボックス別）。",
+      "statementsTitle": "得意先別明細",
+      "statementsDescription": "得意先を選んで明細を開く。期間内の未決済項目、入金、滞留残高を表示します。"
     },
     "groups": {
       "financial": "財務諸表",
@@ -261,6 +263,16 @@
     },
     "noPartyOnLines": "（明細に取引先なし）",
     "noPartyDrillLabel": "相手先のない統制勘定の明細"
+  },
+  "statementsPicker": {
+    "title": "得意先別明細",
+    "searchPlaceholder": "得意先を検索…",
+    "columnCustomer": "得意先",
+    "columnBalance": "未収残高",
+    "periodRange": "{from} → {to}",
+    "periodDefault": "現在の期間",
+    "emptyTitle": "残高のある得意先がありません",
+    "emptyHint": "売掛請求書を計上するとここに表示されます。"
   },
   "necPreparation": {
     "cashBasisNotice": "現金主義：請求額ではなく{year}年に実際に支払われた金額。カード払いは除外されます。",

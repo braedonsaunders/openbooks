@@ -46,7 +46,9 @@
       "projectBudgetVsActualTitle": "项目预算与实际",
       "projectBudgetVsActualDescription": "按任务对比原始预算、当前预算与实际工时和成本。",
       "necPreparationTitle": "1099-NEC 准备",
-      "necPreparationDescription": "按申报年度现金制供应商付款（分项）。"
+      "necPreparationDescription": "按申报年度现金制供应商付款（分项）。",
+      "statementsTitle": "客户对账单",
+      "statementsDescription": "选择客户以打开其对账单 — 该期间的未结项、回款和账龄。"
     },
     "groups": {
       "financial": "财务报表",
@@ -261,6 +263,16 @@
     },
     "noPartyOnLines": "（行上无往来方）",
     "noPartyDrillLabel": "无往来方的统制科目明细"
+  },
+  "statementsPicker": {
+    "title": "客户对账单",
+    "searchPlaceholder": "搜索客户…",
+    "columnCustomer": "客户",
+    "columnBalance": "未结余颍",
+    "periodRange": "{from} → {to}",
+    "periodDefault": "当前期间",
+    "emptyTitle": "没有有余额的客户",
+    "emptyHint": "过账一张应收发票后将显示在此处。"
   },
   "necPreparation": {
     "cashBasisNotice": "现金制：{year}年实际支付的款项，而非开票金额。卡付款除外。",

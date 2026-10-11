@@ -46,7 +46,9 @@
       "projectBudgetVsActualTitle": "Projektbudget vs. Ist",
       "projectBudgetVsActualDescription": "Ursprüngliches und aktuelles Budget gegenüber Ist-Stunden und -Kosten, je Aufgabe.",
       "necPreparationTitle": "1099-NEC-Vorbereitung",
-      "necPreparationDescription": "Lieferantenzahlungen (Kassenprinzip) nach Feld für das Meldejahr."
+      "necPreparationDescription": "Lieferantenzahlungen (Kassenprinzip) nach Feld für das Meldejahr.",
+      "statementsTitle": "Kundenkontoauszüge",
+      "statementsDescription": "Kunden wählen, um den Kontoauszug zu öffnen – offene Posten, Zahlungen und Fälligkeiten im Zeitraum."
     },
     "groups": {
       "financial": "Finanzberichte",
@@ -261,6 +263,16 @@
     },
     "noPartyOnLines": "(kein Geschäftspartner in den Zeilen)",
     "noPartyDrillLabel": "Kontrollkonten-Zeilen ohne Gegenpartei"
+  },
+  "statementsPicker": {
+    "title": "Kundenkontoauszüge",
+    "searchPlaceholder": "Kunde suchen…",
+    "columnCustomer": "Kunde",
+    "columnBalance": "Offen",
+    "periodRange": "{from} → {to}",
+    "periodDefault": "Aktuelle Periode",
+    "emptyTitle": "Keine Kunden mit Saldo",
+    "emptyHint": "Erfassen Sie eine Ausgangsrechnung, dann erscheint sie hier."
   },
   "necPreparation": {
     "cashBasisNotice": "Kassenprinzip: tatsächlich in {year} geleistete Zahlungen, nicht fakturierte Beträge. Kartenzahlungen sind ausgeschlossen.",
