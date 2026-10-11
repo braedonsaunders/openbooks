@@ -14,7 +14,7 @@ import { assertTracking, validateTrackingSelection } from "./tracking.ts";
 import { assertStockLocationAdmitsSubsidiary, assertNoForeignOnHand, resolveProfile, assertMovementOwner, assertInventoryFeature } from "./profile-policy.ts";
 import { assertItemsActive } from "./item-active.ts";
 import { stockLocationDim, postInventoryEntry, inventoryOffsetAccountProblem, type JournalLineInput } from "./journal.ts";
-import { primaryBookId, periodForDate, subsidiaryCurrency, getOnHandWith, lockInventoryPosition, persistReceiptMoney } from "./position.ts";
+import { primaryBookId, periodForDate, subsidiaryCurrency, getOnHandWith, lockInventoryPosition, persistReceiptMoney, backdatedIssueShortage } from "./position.ts";
 import { consumeLayers, recordConsumptions, resolveProvisionalUnitCost } from "./cost-layers.ts";
 import { type MovementResult } from "./movement-receive.ts";
 // ---------------------------------------------------------------------------
@@ -177,6 +177,26 @@ export async function issueInventory(
           `insufficient stock of ${item}${location}: need ${input.quantity}, on hand ${onHand.quantity} (negative inventory is disabled for this tracking configuration) — receive or adjust stock into this location, or issue from a location that holds it`,
         );
       }
+    }
+    // Explicitly permitted negative stock is priced provisionally and is not
+    // date-gated. Every other issue, including a disposition of one receipt's
+    // layers, must be covered by stock on its own date.
+    if (input.sourceReceiptMovementId || !profile.allowNegativeInventory || profile.tracking !== "none") {
+      const backdated = await backdatedIssueShortage(
+        tx,
+        orgId,
+        {
+          itemId: input.itemId,
+          stockLocationId: input.stockLocationId,
+          subsidiaryId: input.subsidiaryId,
+          lotId: input.lotId,
+          serialId: input.serialId,
+          sourceReceiptMovementId: input.sourceReceiptMovementId,
+        },
+        input.date,
+        quantity,
+      );
+      if (backdated) throw new InventoryError(backdated);
     }
     const provisionalUnitCost =
       shortage > 0n

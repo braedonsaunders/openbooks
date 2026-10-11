@@ -6,6 +6,7 @@ import { sql } from "drizzle-orm";
 import { db, env } from "../platform/db.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
 import { CostingPolicyChangeBlockedError, InventoryError, InventoryIdempotencyConflictError } from "./contracts.ts";
+import { PostingError } from "../journal/posting-contracts.ts";
 import { executeIdempotentInventoryAction } from "./action-idempotency.ts";
 import { assertCostingPolicyChangeAllowed, lockItemInventoryProfile, parseCostingMethod, parseTrackingMode } from "./profile-policy.ts";
 import { ensureLot, ensureSerial, queryLotRecall } from "./tracking.ts";
@@ -267,10 +268,11 @@ test("a vendor-bill inventory line without a resolvable stock location refuses p
 
     // MAIN and STAGE are both active, so no warehouse can be implied. Before
     // this guard, the loader dropped line 1 and posted it as non-inventory.
+    // Posting surfaces the inventory refusal as a posting refusal.
     await assert.rejects(
       () => postDocument(billId, deps),
       (error: unknown) =>
-        error instanceof InventoryError &&
+        (error instanceof InventoryError || error instanceof PostingError) &&
         /document line 1/.test(error.message) &&
         /requires a stock location/.test(error.message),
     );

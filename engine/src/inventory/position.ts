@@ -189,6 +189,90 @@ export async function lockInventoryPosition(
   );
 }
 
+/** The position an issue draws from, as the on-hand read scopes it. */
+export interface IssueDrawScope {
+  itemId: string;
+  stockLocationId: string;
+  subsidiaryId: string;
+  lotId?: string | null;
+  serialId?: string | null;
+  /** Restrict the draw to one receipt's layers. */
+  sourceReceiptMovementId?: string | null;
+}
+
+/** A quantity already drawn by an earlier line of the same posting. */
+export interface PriorIssueDraw {
+  lotId: string | null;
+  serialId: string | null;
+  quantity: string;
+}
+
+/**
+ * Stock-on-date coverage for a backdated issue. An issue dated before a
+ * posted movement at its position must be covered by the stock that was on
+ * hand on its own date: a receipt dated later cannot supply it, even when
+ * stock on hand today would. An issue dated on or after every posted movement
+ * needs no such check, since the current on-hand read already answers it.
+ *
+ * Quantities are the posted movements dated on or before `date` (reversals
+ * are posted movements with signed quantities, so a reversed receipt nets to
+ * zero from its reversal date onward). Scope matches the on-hand read: one
+ * legal entity, and the lot or serial when the draw names one. `priorDraws`
+ * carries quantities this posting has already drawn but not yet written, so
+ * lines drawing overlapping stock within one posting are counted together.
+ *
+ * Returns the refusal message, or null when the issue is covered. The caller
+ * holds the position fence (`lockInventoryPosition`).
+ */
+export async function backdatedIssueShortage(
+  runner: Runner,
+  orgId: string,
+  scope: IssueDrawScope,
+  date: string,
+  quantity: string,
+  priorDraws: PriorIssueDraw[] = [],
+): Promise<string | null> {
+  const lotId = scope.lotId ?? null;
+  const serialId = scope.serialId ?? null;
+  const receiptId = scope.sourceReceiptMovementId ?? null;
+  const r = (await runner.execute<{ backdated: boolean; on_hand: string; receipt_dated: boolean | null }>(sql`
+    select exists (
+             select 1 from inventory_movements later
+              where later.org_id = ${orgId} and later.item_id = ${scope.itemId}
+                and later.stock_location_id = ${scope.stockLocationId}
+                and later.status = 'posted' and later.moved_at::date > ${date}::date) as backdated,
+           coalesce((select sum(m.quantity) from inventory_movements m
+                      where m.org_id = ${orgId} and m.item_id = ${scope.itemId}
+                        and m.stock_location_id = ${scope.stockLocationId}
+                        and m.subsidiary_id = ${scope.subsidiaryId}
+                        and m.status = 'posted' and m.moved_at::date <= ${date}::date
+                        and (${lotId}::uuid is null or m.lot_id = ${lotId}::uuid)
+                        and (${serialId}::uuid is null or m.serial_id = ${serialId}::uuid)), 0)::text as on_hand,
+           (select r.moved_at::date <= ${date}::date from inventory_movements r
+             where r.org_id = ${orgId} and r.id = ${receiptId}::uuid) as receipt_dated`));
+  const row = r.rows[0];
+  if (!row || !row.backdated) return null;
+
+  let onHand = toUnits(row.on_hand);
+  // A receipt dated after the issue had nothing on hand on the issue date.
+  // An unresolved receipt identity also counts as nothing: fail closed.
+  if (receiptId !== null && row.receipt_dated !== true) onHand = 0n;
+  let requested = toUnits(quantity);
+  const overlaps = (a: string | null, b: string | null) => a === null || b === null || a === b;
+  for (const draw of priorDraws) {
+    if (overlaps(lotId, draw.lotId) && overlaps(serialId, draw.serialId)) requested += toUnits(draw.quantity);
+  }
+  if (onHand >= requested) return null;
+
+  const labels = (await runner.execute<{ item: string; location: string | null }>(sql`
+    select coalesce(nullif(btrim(i.code), ''), i.name) as item, l.code as location
+      from items i left join stock_locations l on l.org_id = i.org_id and l.id = ${scope.stockLocationId}
+     where i.org_id = ${orgId} and i.id = ${scope.itemId}`)).rows[0];
+  const item = labels?.item ?? scope.itemId;
+  const location = labels?.location ? ` at ${labels.location}` : "";
+  return `Item ${item}${location} had ${fromUnits(onHand)} on hand on ${date} but the issue needs ${fromUnits(requested)} — date the issue on or after the receipt that brings the stock in, or receive it first.`;
+}
+
 export function assertInventoryDate(value: string, label: string): void {
   if (!isIsoCalendarDate(value)) {
     throw new InventoryError(`${label} must be a valid YYYY-MM-DD date`);

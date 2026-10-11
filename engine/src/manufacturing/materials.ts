@@ -16,7 +16,7 @@ import { assertItemsActive } from "../inventory/item-active.ts";
 import { assertMovementOwner, assertNoForeignOnHand, assertStockLocationAdmitsSubsidiary, resolveProfile } from "../inventory/profile-policy.ts";
 import { InventoryError, type InventoryProfile, type Runner } from "../inventory/contracts.ts";
 import { consumeLayers, recordConsumptions, resolveProvisionalUnitCost, type Consumption } from "../inventory/cost-layers.ts";
-import { getOnHandWith, lockInventoryPosition, periodForDate, primaryBookId, subsidiaryCurrency } from "../inventory/position.ts";
+import { backdatedIssueShortage, getOnHandWith, lockInventoryPosition, periodForDate, primaryBookId, subsidiaryCurrency, type PriorIssueDraw } from "../inventory/position.ts";
 import { inventoryOffsetAccountProblem, stockLocationDim } from "../inventory/journal.ts";
 import { validateTrackingSelection } from "../inventory/tracking.ts";
 import { bomRequiredQuantity, type BomQuantityBasis } from "../inventory/bom-scrap.ts";
@@ -383,6 +383,9 @@ async function postMaterialIssue(
   const lines: Array<{ accountId: string; amount: string; locationId: string | null; memo: string }> = [];
   const movements: Array<{ issue: PlannedIssue; cost: string; unitCost: string; consumptions: Consumption[]; shortfall: string }> = [];
   let totalCost = "0";
+  // Lines of this posting write their movements only after the loop, so the
+  // stock-on-date check counts each earlier line's draw on the same item.
+  const priorDraws = new Map<string, PriorIssueDraw[]>();
   for (const issue of planned) {
     const onHand = await getOnHandWith(tx as Runner, orgId, issue.material.component_item_id, order.issue_location_id!, {
       lotId: issue.lotId, serialId: issue.serialId, subsidiaryId: order.subsidiary_id,sourceReceiptMovementId:issue.sourceReceiptMovementId,
@@ -392,9 +395,30 @@ async function postMaterialIssue(
       onHand, issue.provisionalUnitCost ?? onHand.unitCost, { lotId: issue.lotId, serialId: issue.serialId,sourceReceiptMovementId:issue.sourceReceiptMovementId },
       order.subsidiary_id, actorId,
     );
-    if (!isZero(shortfallQuantity) && (issue.sourceReceiptMovementId || !issue.profile.allowNegativeInventory || issue.profile.tracking !== "none")) {
+    const negativeRefused = Boolean(issue.sourceReceiptMovementId) || !issue.profile.allowNegativeInventory || issue.profile.tracking !== "none";
+    if (!isZero(shortfallQuantity) && negativeRefused) {
       refuse(`Component ${issue.componentName} is short by ${shortfallQuantity} for work order ${order.number}.`, "material_shortage", "Receive or transfer the named component into the work order issue location before posting.");
     }
+    const itemDraws = priorDraws.get(issue.material.component_item_id) ?? [];
+    if (negativeRefused) {
+      const backdated = await backdatedIssueShortage(
+        tx as Runner,
+        orgId,
+        {
+          itemId: issue.material.component_item_id,
+          stockLocationId: order.issue_location_id!,
+          subsidiaryId: order.subsidiary_id,
+          lotId: issue.lotId ?? null,
+          serialId: issue.serialId ?? null,
+          sourceReceiptMovementId: issue.sourceReceiptMovementId ?? null,
+        },
+        date,
+        issue.quantity,
+        itemDraws,
+      );
+      if (backdated) refuse(backdated, "material_shortage", "Date the material issue on or after the receipt that brings the component in, or receive the component into the work order issue location before posting.");
+    }
+    priorDraws.set(issue.material.component_item_id, [...itemDraws, { lotId: issue.lotId ?? null, serialId: issue.serialId ?? null, quantity: issue.quantity }]);
     const accountProblem = inventoryOffsetAccountProblem(issue.profile.assetAccountId, wip, "manufacturing WIP offset");
     if (accountProblem) throw new InventoryError(accountProblem);
     lines.push({ accountId: issue.profile.assetAccountId, amount: neg(cost), locationId, memo: `${order.number} material issue: ${issue.componentName}` });
