@@ -86,7 +86,7 @@ interface AccountFacts {
 
 async function accountFacts(runner: SqlExecutor, orgId: string, accountId: string): Promise<AccountFacts | null> {
   const row = (await runner.execute<{ code: string; type: string; is_active: boolean; is_summary: boolean }>(sql`
-    select code, type, is_active, is_summary from accounts where org_id = ${orgId} and id = ${accountId}`)).rows[0];
+    select coalesce(number, name) as code, type, is_active, is_summary from accounts where org_id = ${orgId} and id = ${accountId}`)).rows[0];
   return row ? { code: row.code, type: row.type, isActive: row.is_active, isSummary: row.is_summary } : null;
 }
 

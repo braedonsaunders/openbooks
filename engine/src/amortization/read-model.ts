@@ -52,8 +52,8 @@ export async function loadScheduleDetail(runner: SqlExecutor, orgId: string, sch
     line_number: number | null;
   }>(sql`
     select t.code as template_code, t.name as template_name, sub.name as subsidiary_name,
-           concat_ws(' · ', da.code, da.name) as deferral_account,
-           concat_ws(' · ', xa.code, xa.name) as destination_account,
+           concat_ws(' · ', da.number, da.name) as deferral_account,
+           concat_ws(' · ', xa.number, xa.name) as destination_account,
            d.document_number, d.kind as document_kind, dl.line_number
       from expense_amortization_schedules s
       join expense_amortization_templates t on t.org_id = s.org_id and t.id = s.template_id
@@ -67,7 +67,7 @@ export async function loadScheduleDetail(runner: SqlExecutor, orgId: string, sch
   const balance = scheduleBalance(schedule, lines);
   const accountNames = new Map(
     (await runner.execute<{ id: string; label: string }>(sql`
-      select a.id, concat_ws(' · ', a.code, a.name) as label
+      select a.id, concat_ws(' · ', a.number, a.name) as label
         from accounts a
        where a.org_id = ${orgId}
          and a.id in (select destination_account_id from expense_amortization_schedule_lines
