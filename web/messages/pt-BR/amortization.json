@@ -113,9 +113,9 @@
       "activate": "Inicia a apropriação de um cronograma manual. Seu saldo já deve constar na conta de diferimento.",
       "hold": "As execuções ignoram o cronograma até que seja retomado.",
       "resume": "Os períodos vencidos são lançados na próxima execução.",
-      "change_term": "Distribui igualmente o valor previsto a partir do período escolhido até o novo último período.",
+      "change_term": "Distribui igualmente cada valor não lançado, inclusive de períodos anteriores nunca lançados, do período escolhido até o novo último período.",
       "change_destination": "Apropria para a nova conta a partir do período escolhido.",
-      "reduce": "Registra um crédito contra o cronograma; a apropriação em excesso volta para a conta de diferimento.",
+      "reduce": "Registra um crédito contra o cronograma e replaneja os períodos não lançados; a apropriação em excesso volta para a conta de diferimento.",
       "cancel": "Baixar leva o saldo a apropriar para despesa; estornar devolve a apropriação lançada de uma origem creditada integralmente."
     },
     "modes": {

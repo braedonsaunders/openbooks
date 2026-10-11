@@ -113,9 +113,9 @@
       "activate": "Inicia la amortización de un calendario manual. Su saldo ya debe figurar en la cuenta de diferimiento.",
       "hold": "Las ejecuciones omiten el calendario hasta que se reanude.",
       "resume": "Los períodos vencidos se contabilizan en la siguiente ejecución.",
-      "change_term": "Reparte por igual el importe previsto desde el período elegido hasta el nuevo último período.",
+      "change_term": "Reparte por igual cada importe no contabilizado, incluidos los de períodos anteriores nunca contabilizados, desde el período elegido hasta el nuevo último período.",
       "change_destination": "Amortiza hacia la nueva cuenta desde el período elegido.",
-      "reduce": "Registra un crédito contra el calendario; la amortización en exceso vuelve a la cuenta de diferimiento.",
+      "reduce": "Registra un crédito contra el calendario y replanifica los períodos no contabilizados; la amortización en exceso vuelve a la cuenta de diferimiento.",
       "cancel": "Dar de baja lleva a gasto el saldo pendiente; revertir devuelve la amortización contabilizada de un origen acreditado en su totalidad."
     },
     "modes": {

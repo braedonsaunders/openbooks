@@ -12,7 +12,7 @@ import { sql } from "drizzle-orm";
 import { fromUnits } from "../money/money.ts";
 import { activePostingPrimaryBookId } from "../platform/accounting-books.ts";
 import { businessTodayInTx } from "../platform/business-date.ts";
-import { addCalendarDays, isIsoCalendarDate, startOfMonth } from "../platform/civil-date.ts";
+import { addCalendarDays, addMonthsStart, isIsoCalendarDate, startOfMonth } from "../platform/civil-date.ts";
 import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { AmortizationError } from "./errors.ts";
 import {
@@ -109,16 +109,18 @@ function assertChangePeriod(schedule: StoredSchedule, lines: readonly PlanLine[]
 }
 
 /**
- * Supersede the planned lines from `fromPeriod` and plan `amount` over the
- * new periods. Planned periods before `fromPeriod` stay as they are.
+ * Supersede planned lines and plan `amount` from `fromPeriod`. With `fold`,
+ * every unposted line is replaced, so earlier unposted periods (a closed
+ * month, a missed run) move into the new plan; without it, planned periods
+ * before `fromPeriod` stay as they are.
  */
 async function replan(
   runner: SqlExecutor,
   schedule: StoredSchedule,
   lines: readonly PlanLine[],
-  input: { fromPeriod: string; amount: bigint; newLastPeriod?: string | null; destinationAccountId: string; actorId: string },
+  input: { fromPeriod: string; amount: bigint; newLastPeriod?: string | null; destinationAccountId: string; actorId: string; fold: boolean },
 ): Promise<PlannedPeriod[]> {
-  const replaced = lines.filter((line) => line.status === "planned" && line.periodStart >= input.fromPeriod);
+  const replaced = lines.filter((line) => line.status === "planned" && (input.fold || line.periodStart >= input.fromPeriod));
   const template = await loadTemplateVersion(runner, schedule.orgId, schedule.templateId);
   const exponent = await amortizationCurrencyExponent(runner, schedule.currency);
   const plan = reforecastAmortizationPlan({
@@ -129,7 +131,8 @@ async function replan(
     newLastPeriod: input.newLastPeriod ?? null,
     quantum: planQuantum(input.amount, exponent),
   });
-  const keptPlanned = new Set(lines.filter((line) => line.status === "planned" && line.periodStart < input.fromPeriod).map((line) => line.periodStart));
+  const replacedIds = new Set(replaced.map((line) => line.id));
+  const keptPlanned = new Set(lines.filter((line) => line.status === "planned" && !replacedIds.has(line.id)).map((line) => line.periodStart));
   const posted = new Set(lines.filter((line) => line.status === "posted").map((line) => line.periodStart));
   const collision = plan.find((period) => keptPlanned.has(period.periodStart) || posted.has(period.periodStart));
   if (collision) {
@@ -413,9 +416,10 @@ function assertOpenForPlanChange(schedule: StoredSchedule): void {
 }
 
 /**
- * Change the remaining term from a period: the unposted amount planned from
- * that period spreads evenly through the new last period. Planned periods
- * before it, and every posted period, stay as they are.
+ * Change the remaining term from a period: every unposted amount — including
+ * periods before it that never posted, such as a closed month — spreads
+ * evenly from that period through the new last period. Posted periods stay
+ * as they are.
  */
 export async function changeScheduleTerm(input: ScheduleChangeInput & { effectivePeriod: string; newLastPeriod: string }): Promise<ScheduleChangeResult> {
   const reason = requireReason(input.reason);
@@ -426,16 +430,15 @@ export async function changeScheduleTerm(input: ScheduleChangeInput & { effectiv
     assertOpenForPlanChange(schedule);
     const lines = await livePlanLines(db, input.orgId, schedule.id);
     assertChangePeriod(schedule, lines, fromPeriod);
-    const amount = lines.filter((line) => line.status === "planned" && line.periodStart >= fromPeriod)
-      .reduce((acc, line) => acc + line.plannedAmount, 0n);
+    const amount = lines.filter((line) => line.status === "planned").reduce((acc, line) => acc + line.plannedAmount, 0n);
     if (amount === 0n) {
-      throw new AmortizationError(`Schedule ${schedule.scheduleNumber} has nothing planned from ${fromPeriod.slice(0, 7)}.`, {
+      throw new AmortizationError(`Schedule ${schedule.scheduleNumber} has no unposted amount to re-plan.`, {
         code: "amortization_nothing_to_replan",
-        remedy: "Choose an earlier period for the change to take effect.",
+        remedy: "Only a schedule with unposted periods can change its term.",
       });
     }
     const before = stateOf(schedule, lines);
-    await replan(db, schedule, lines, { fromPeriod, amount, newLastPeriod: lastPeriod, destinationAccountId: schedule.destinationAccountId, actorId: input.actorId });
+    await replan(db, schedule, lines, { fromPeriod, amount, newLastPeriod: lastPeriod, destinationAccountId: schedule.destinationAccountId, actorId: input.actorId, fold: true });
     const updated = await updateSchedule(db, schedule, input.actorId, {});
     const after = stateOf(updated, await livePlanLines(db, input.orgId, schedule.id));
     await recordScheduleEvent(db, {
@@ -472,7 +475,7 @@ export async function changeScheduleDestination(input: ScheduleChangeInput & { e
       });
     }
     const before = stateOf(schedule, lines);
-    await replan(db, schedule, lines, { fromPeriod, amount, destinationAccountId: input.destinationAccountId, actorId: input.actorId });
+    await replan(db, schedule, lines, { fromPeriod, amount, destinationAccountId: input.destinationAccountId, actorId: input.actorId, fold: false });
     const updated = await updateSchedule(db, schedule, input.actorId, { destinationAccountId: input.destinationAccountId });
     await recordScheduleEvent(db, {
       orgId: input.orgId, scheduleId: schedule.id, kind: "destination_changed", reason,
@@ -485,10 +488,11 @@ export async function changeScheduleDestination(input: ScheduleChangeInput & { e
 
 /**
  * Reduce a schedule for a credit (for example, a vendor credit posted to the
- * deferral account). The reduction comes out of the periods planned from
- * the credit's month. When the credit exceeds the unamortized balance, the
- * excess amortization returns to the deferral account as a catch-up entry
- * on the credit date and the schedule completes.
+ * deferral account). The reduction comes out of the unposted periods, which
+ * are re-planned from the credit's month (or the first month after the last
+ * posted period, when later). When the credit exceeds the unamortized
+ * balance, the excess amortization returns to the deferral account as a
+ * catch-up entry on the credit date and the schedule completes.
  */
 export async function reduceSchedule(input: ScheduleChangeInput & {
   amount: string;
@@ -497,7 +501,7 @@ export async function reduceSchedule(input: ScheduleChangeInput & {
 }): Promise<ScheduleChangeResult> {
   const reason = requireReason(input.reason);
   const effectiveDate = requireDate(input.effectiveDate, "the credit date");
-  const fromPeriod = startOfMonth(effectiveDate);
+  const creditPeriod = startOfMonth(effectiveDate);
   const reduction = ledgerUnits(input.amount, "the reduction");
   if (reduction <= 0n) {
     throw new AmortizationError("The reduction must be positive.", { code: "amortization_amount_not_positive", remedy: "Enter the credited amount above zero." });
@@ -524,23 +528,27 @@ export async function reduceSchedule(input: ScheduleChangeInput & {
       );
     }
     const before = stateOf(schedule, lines);
-    const plannedFrom = lines.filter((line) => line.status === "planned" && line.periodStart >= fromPeriod)
-      .reduce((acc, line) => acc + line.plannedAmount, 0n);
+    const lastPosted = lines.filter((line) => line.status === "posted").at(-1)?.periodStart ?? null;
+    const afterPosted = lastPosted ? addMonthsStart(lastPosted, 1) : creditPeriod;
+    const fromPeriod = creditPeriod > afterPosted ? creditPeriod : afterPosted;
+    const planned = balance.planned;
     let catchUp = 0n;
     let entryId: string | null = null;
-    if (reduction <= plannedFrom) {
-      assertChangePeriod(schedule, lines, fromPeriod);
-      if (plannedFrom - reduction > 0n) {
-        await replan(db, schedule, lines, { fromPeriod, amount: plannedFrom - reduction, destinationAccountId: schedule.destinationAccountId, actorId: input.actorId });
+    if (reduction <= planned) {
+      if (planned - reduction > 0n) {
+        await replan(db, schedule, lines, { fromPeriod, amount: planned - reduction, destinationAccountId: schedule.destinationAccountId, actorId: input.actorId, fold: true });
       } else {
-        await closePlannedLines(db, input.orgId, lines.filter((l) => l.status === "planned" && l.periodStart >= fromPeriod).map((l) => l.id), "superseded");
+        await closePlannedLines(db, input.orgId, lines.filter((l) => l.status === "planned").map((l) => l.id), "superseded");
       }
     } else if (reduction <= balance.remaining) {
+      // The plan always carries the unamortized balance; a gap between them
+      // is not something a credit may paper over.
       throw new AmortizationError(
-        `Only ${fromUnits(plannedFrom)} of ${schedule.scheduleNumber} is planned from ${fromPeriod.slice(0, 7)}; earlier unposted periods hold the rest.`,
+        `Schedule ${schedule.scheduleNumber} plans ${fromUnits(planned)} but carries ${fromUnits(balance.remaining)} unamortized.`,
         {
-          code: "amortization_reduction_before_period",
-          remedy: "Post the earlier due periods first (run amortization), or date the reduction in the earliest unposted period.",
+          status: 409,
+          code: "amortization_plan_gap",
+          remedy: "Review the schedule's plan and history; cancel it with a write-off or a reversal to settle its balance.",
         },
       );
     } else {
@@ -572,7 +580,7 @@ export async function reduceSchedule(input: ScheduleChangeInput & {
     }
     await recordScheduleEvent(db, {
       orgId: input.orgId, scheduleId: schedule.id, kind: "reduced", reason,
-      effectivePeriodOn: fromPeriod, effectiveOn: effectiveDate,
+      effectivePeriodOn: creditPeriod, effectiveOn: effectiveDate,
       balanceDelta: catchUp - reduction,
       before, after: { ...stateOf(final, afterLines), reduction: fromUnits(reduction), catchUp: fromUnits(catchUp) },
       journalEntryId: entryId, relatedDocumentId: input.relatedDocumentId ?? null, actorId: input.actorId,

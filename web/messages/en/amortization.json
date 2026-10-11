@@ -113,9 +113,9 @@
       "activate": "Starts amortizing a manual schedule. Its balance must already stand in the deferral account.",
       "hold": "Runs skip the schedule until it resumes.",
       "resume": "Due periods post on the next run.",
-      "change_term": "Spreads the amount planned from the chosen period evenly through the new last period.",
+      "change_term": "Spreads every unposted amount, including earlier periods that never posted, evenly from the chosen period through the new last period.",
       "change_destination": "Amortizes into the new account from the chosen period.",
-      "reduce": "Records a credit against the schedule; any excess amortization returns to the deferral account.",
+      "reduce": "Records a credit against the schedule and re-plans the unposted periods; any excess amortization returns to the deferral account.",
       "cancel": "Writing off expenses the unamortized balance; reversing returns posted amortization for a source credited in full."
     },
     "modes": {

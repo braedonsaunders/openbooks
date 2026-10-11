@@ -113,9 +113,9 @@
       "activate": "Startet die Auflösung eines manuellen Plans. Sein Saldo muss bereits auf dem Abgrenzungskonto stehen.",
       "hold": "Läufe überspringen den Plan, bis er fortgesetzt wird.",
       "resume": "Fällige Perioden werden beim nächsten Lauf gebucht.",
-      "change_term": "Verteilt den ab der gewählten Periode geplanten Betrag gleichmäßig bis zur neuen letzten Periode.",
+      "change_term": "Verteilt jeden nicht gebuchten Betrag, auch aus früheren nie gebuchten Perioden, gleichmäßig ab der gewählten Periode bis zur neuen letzten Periode.",
       "change_destination": "Löst ab der gewählten Periode auf das neue Konto auf.",
-      "reduce": "Erfasst eine Gutschrift zum Plan; zu viel aufgelöster Aufwand kehrt auf das Abgrenzungskonto zurück.",
+      "reduce": "Erfasst eine Gutschrift zum Plan und plant die nicht gebuchten Perioden neu; zu viel aufgelöster Aufwand kehrt auf das Abgrenzungskonto zurück.",
       "cancel": "Abschreiben bucht den nicht aufgelösten Saldo in den Aufwand; Rückbuchen gibt gebuchte Auflösungen für einen voll gutgeschriebenen Beleg zurück."
     },
     "modes": {

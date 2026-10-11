@@ -113,9 +113,9 @@
       "activate": "Démarre l’étalement d’un échéancier manuel. Son solde doit déjà figurer au compte de régularisation.",
       "hold": "Les traitements ignorent l’échéancier jusqu’à sa reprise.",
       "resume": "Les périodes échues sont comptabilisées au prochain traitement.",
-      "change_term": "Répartit uniformément le montant prévu à partir de la période choisie jusqu’à la nouvelle dernière période.",
+      "change_term": "Répartit uniformément chaque montant non comptabilisé, y compris celui des périodes antérieures jamais comptabilisées, de la période choisie jusqu’à la nouvelle dernière période.",
       "change_destination": "Étale vers le nouveau compte à partir de la période choisie.",
-      "reduce": "Enregistre un avoir sur l’échéancier ; l’excédent déjà étalé revient au compte de régularisation.",
+      "reduce": "Enregistre un avoir sur l’échéancier et replanifie les périodes non comptabilisées ; l’excédent déjà étalé revient au compte de régularisation.",
       "cancel": "La passation en perte constate le restant en charge ; la contrepassation restitue l’étalement comptabilisé pour une pièce entièrement créditée."
     },
     "modes": {

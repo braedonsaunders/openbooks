@@ -108,12 +108,15 @@ posted.
 
 - **Hold** and **Resume** pause and restart amortization. A held schedule is
   skipped by runs.
-- **Change term** spreads the amount planned from a period evenly through a new
-  last period. A variable schedule follows its table and cannot change term.
+- **Change term** spreads every unposted amount — including earlier periods
+  that never posted, such as a closed month — evenly from a period through a
+  new last period. A variable schedule follows its table and cannot change
+  term.
 - **Change destination** amortizes into another expense account from a period.
 - **Reduce** records a credit — for example a vendor credit coded to the
   prepaid account — against the schedule. The reduction comes out of the
-  periods planned from the credit's month. When the credit exceeds what is
+  unposted periods, which are re-planned from the credit's month (or the first
+  month after the last posted period). When the credit exceeds what is
   still unamortized, the excess amortization returns to the deferral account in
   a catch-up entry and the schedule completes.
 - **Cancel** ends the schedule. **Write off** expenses the unamortized balance
