@@ -614,7 +614,7 @@ export function SettingsForm({
               <AlertDescription>
                 {t.rich(form.requireVendorBillApproval ? 'approvals.noFlowWarningRequired' : 'approvals.noFlowWarningAuto', {
                   flows: (chunks) => (
-                    <Link href="/admin/flows" className="font-medium text-teal-700 hover:underline dark:text-teal-300">
+                    <Link href="/admin/flows?quickApproval=vendor_bill" className="font-medium text-teal-700 hover:underline dark:text-teal-300">
                       {chunks}
                     </Link>
                   ),

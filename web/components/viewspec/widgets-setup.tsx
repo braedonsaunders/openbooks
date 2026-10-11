@@ -39,7 +39,7 @@ import { SecurityPageContent } from '../../app/(app)/settings/security/sections'
 import { OverheadApplicationTabSlot, OverheadLifecycleTabSlot, OverheadModelBody, OverheadModelHeader, OverheadRatesTabSlot } from '../../app/(app)/admin/setup/overhead/sections'
 import { AllocationsDriversTabSlot, AllocationsRuleDrawerSlot, AllocationsRulesTabSlot, AllocationsRunsTabSlot, AllocationsSetupHeader } from '../../app/(app)/admin/setup/allocations/sections'
 import { SetupReadinessCheckCard, SetupReadinessHero } from '../../app/(app)/admin/setup/readiness/sections'
-import { FlowNameCell, FlowLastRunCell, FlowRowActionsCell, NewFlowButton as NewFlowListButton } from '../../app/(app)/admin/flows/sections'
+import { FlowNameCell, FlowLastRunCell, FlowRowActionsCell, NewFlowButton as NewFlowListButton, QuickApprovalButton as QuickApprovalListButton } from '../../app/(app)/admin/flows/sections'
 import { AutomationLastRunCell, AutomationNameCell, AutomationApprovalSettingsSection, AutomationRowActionsCell, NewAutomationListButton } from '../../app/(app)/admin/automations/sections'
 import { SetupBadgeLinkCell, SetupCloseSlot, SetupCodeCell, SetupCompanySlot, SetupDescription, SetupDrawerSlot, SetupFxSlot, SetupTaxProviderSlot } from '../../app/(app)/admin/setup/[entity]/sections'
 import { CustomizationTabs, FormDefaultCell, ViewScopeCell } from '../../app/(app)/admin/customization/sections'
@@ -441,7 +441,12 @@ export const SETUP_WIDGETS = {
     />
   ),
   // HR-16 end
-  'new-flow': () => <NewFlowListButton />,
+  'new-flow': () => (
+    <span className="inline-flex items-center gap-2">
+      <NewFlowListButton />
+      <QuickApprovalListButton />
+    </span>
+  ),
   'flow-name-cell': (props) => (
     <FlowNameCell name={str(props, 'name') ?? ''} href={str(props, 'href') ?? ''} />
   ),

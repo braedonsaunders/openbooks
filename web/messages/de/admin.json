@@ -7302,6 +7302,29 @@
         "other": "Weitere"
       }
     },
+    "quick": {
+      "button": "Neue Genehmigung",
+      "title": "Genehmigung erfordern",
+      "description": "Wählen Sie eine Datensatzart, optional einen Betragsschwellenwert und eine genehmigende Person. Die Einrichtung erstellt einen vollständigen Genehmigungsablauf — Auslöser, Bedingung und Freigabeschritt, alle verbunden — und aktiviert ihn.",
+      "existing": "Einreichungen dieser Datensatzart werden bereits durch diesen Ablauf gesteuert.",
+      "threshold": "Nur Einreichungen über diesem Betrag steuern",
+      "thresholdPlaceholder": "Kein Mindestbetrag — jede Einreichung steuern",
+      "noAmount": "Diese Datensatzart hat keinen Betrag, daher braucht jede Einreichung eine Genehmigung.",
+      "approver": "Genehmigende Person",
+      "create": "Genehmigungsablauf erstellen",
+      "created": "Genehmigungsablauf erstellt und aktiviert",
+      "failed": "Der Genehmigungsablauf konnte nicht erstellt werden",
+      "openFlow": "Ablauf öffnen",
+      "remove": "Genehmigung entfernen",
+      "removed": "Genehmigung entfernt. Der Ablauf ist deaktiviert, sein Verlauf bleibt erhalten.",
+      "removeFailed": "Die Genehmigung konnte nicht entfernt werden",
+      "errors": {
+        "bad-threshold": "Der Schwellenwert muss null oder mehr betragen — leer lassen, um jede Einreichung zu steuern.",
+        "no-amount-field": "Diese Datensatzart hat keinen vergleichbaren Betrag — lassen Sie den Schwellenwert leer.",
+        "unknown-role": "Diese Rolle ist für diese Datensatzart nicht verfügbar — wählen Sie eine andere genehmigende Person.",
+        "unknown-user": "Diese genehmigende Person ist kein aktives Mitglied dieser Organisation — wählen Sie eine andere Person."
+      }
+    },
     "actions": {
       "enable": "Aktivieren",
       "disable": "Deaktivieren",

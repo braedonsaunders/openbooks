@@ -7302,6 +7302,29 @@
         "other": "Other"
       }
     },
+    "quick": {
+      "button": "New approval",
+      "title": "Require approval",
+      "description": "Choose a record type, an optional amount threshold and an approver. The setup creates a complete approval flow — trigger, condition and gate, all connected — and enables it.",
+      "existing": "Submissions of this record type are already gated by this flow.",
+      "threshold": "Only gate submissions over",
+      "thresholdPlaceholder": "No minimum — gate every submission",
+      "noAmount": "This record type has no amount, so every submission needs approval.",
+      "approver": "Approver",
+      "create": "Create approval flow",
+      "created": "Approval flow created and enabled",
+      "failed": "Could not create the approval flow",
+      "openFlow": "Open flow",
+      "remove": "Remove approval",
+      "removed": "Approval removed. The flow is disabled but its history is kept.",
+      "removeFailed": "Could not remove the approval",
+      "errors": {
+        "bad-threshold": "The threshold must be zero or more — leave it blank to gate every submission.",
+        "no-amount-field": "This record type has no amount to compare — leave the threshold blank.",
+        "unknown-role": "That role is not available for this record type — pick another approver.",
+        "unknown-user": "That approver is not an active member of this organization — pick another approver."
+      }
+    },
     "actions": {
       "enable": "Enable",
       "disable": "Disable",

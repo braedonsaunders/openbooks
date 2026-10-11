@@ -7302,6 +7302,29 @@
         "other": "其他"
       }
     },
+    "quick": {
+      "button": "新建审批",
+      "title": "需要审批",
+      "description": "选择记录类型、可选的金额阈值和审批人。设置将创建完整的审批流程——触发器、条件和审批环节全部连接好——并启用它。",
+      "existing": "此记录类型的提交已由此流程管控。",
+      "threshold": "仅管控超过此金额的提交",
+      "thresholdPlaceholder": "无下限——管控所有提交",
+      "noAmount": "此记录类型没有金额，因此每次提交都需要审批。",
+      "approver": "审批人",
+      "create": "创建审批流程",
+      "created": "审批流程已创建并启用",
+      "failed": "无法创建审批流程",
+      "openFlow": "打开流程",
+      "remove": "移除审批",
+      "removed": "审批已移除。流程已停用，但历史记录予以保留。",
+      "removeFailed": "无法移除审批",
+      "errors": {
+        "bad-threshold": "阈值必须为零或更大——留空即管控所有提交。",
+        "no-amount-field": "此记录类型没有可比较的金额——请将阈值留空。",
+        "unknown-role": "该角色不适用于此记录类型——请选择其他审批人。",
+        "unknown-user": "该审批人不是本组织的在职成员——请选择其他审批人。"
+      }
+    },
     "actions": {
       "enable": "启用",
       "disable": "禁用",

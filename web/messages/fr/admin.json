@@ -7302,6 +7302,29 @@
         "other": "Autres"
       }
     },
+    "quick": {
+      "button": "Nouvelle approbation",
+      "title": "Exiger une approbation",
+      "description": "Choisissez un type de dossier, un seuil de montant facultatif et une personne approbatrice. La configuration crée un flux d'approbation complet — déclencheur, condition et porte, tous reliés — et l'active.",
+      "existing": "Les soumissions de ce type de dossier sont déjà contrôlées par ce flux.",
+      "threshold": "Ne contrôler que les soumissions au-delà de",
+      "thresholdPlaceholder": "Aucun minimum — contrôler chaque soumission",
+      "noAmount": "Ce type de dossier n'a pas de montant, donc chaque soumission exige une approbation.",
+      "approver": "Personne approbatrice",
+      "create": "Créer le flux d'approbation",
+      "created": "Flux d'approbation créé et activé",
+      "failed": "Impossible de créer le flux d'approbation",
+      "openFlow": "Ouvrir le flux",
+      "remove": "Retirer l'approbation",
+      "removed": "Approbation retirée. Le flux est désactivé mais son historique est conservé.",
+      "removeFailed": "Impossible de retirer l'approbation",
+      "errors": {
+        "bad-threshold": "Le seuil doit être zéro ou plus — laissez-le vide pour contrôler chaque soumission.",
+        "no-amount-field": "Ce type de dossier n'a pas de montant comparable — laissez le seuil vide.",
+        "unknown-role": "Ce rôle n'est pas disponible pour ce type de dossier — choisissez une autre personne approbatrice.",
+        "unknown-user": "Cette personne approbatrice n'est pas un membre actif de cette organisation — choisissez une autre personne."
+      }
+    },
     "actions": {
       "enable": "Activer",
       "disable": "Désactiver",

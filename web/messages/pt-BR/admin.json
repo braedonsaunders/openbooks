@@ -7302,6 +7302,29 @@
         "other": "Outros"
       }
     },
+    "quick": {
+      "button": "Nova aprovação",
+      "title": "Exigir aprovação",
+      "description": "Escolha um tipo de registro, um limite de valor opcional e uma pessoa aprovadora. A configuração cria um fluxo de aprovação completo — gatilho, condição e etapa, tudo conectado — e o ativa.",
+      "existing": "Os envios deste tipo de registro já são controlados por este fluxo.",
+      "threshold": "Controlar apenas envios acima de",
+      "thresholdPlaceholder": "Sem mínimo — controlar todos os envios",
+      "noAmount": "Este tipo de registro não tem valor, por isso todo envio precisa de aprovação.",
+      "approver": "Pessoa aprovadora",
+      "create": "Criar fluxo de aprovação",
+      "created": "Fluxo de aprovação criado e ativado",
+      "failed": "Não foi possível criar o fluxo de aprovação",
+      "openFlow": "Abrir fluxo",
+      "remove": "Remover aprovação",
+      "removed": "Aprovação removida. O fluxo fica desativado, mas o histórico é mantido.",
+      "removeFailed": "Não foi possível remover a aprovação",
+      "errors": {
+        "bad-threshold": "O limite deve ser zero ou mais — deixe em branco para controlar todos os envios.",
+        "no-amount-field": "Este tipo de registro não tem valor comparável — deixe o limite em branco.",
+        "unknown-role": "Essa função não está disponível para este tipo de registro — escolha outra pessoa aprovadora.",
+        "unknown-user": "Essa pessoa aprovadora não é membro ativo desta organização — escolha outra pessoa."
+      }
+    },
     "actions": {
       "enable": "Ativar",
       "disable": "Desativar",

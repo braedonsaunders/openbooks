@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { Badge } from '@openbooks/ui'
 import { NewFlowButton, FlowRowActions } from './FlowsClient'
+import { QuickApprovalButton } from './QuickApproval'
 
 /**
  * The flows list's composite cells, extracted from page.tsx.
@@ -76,4 +77,4 @@ export function FlowRowActionsCell({
   )
 }
 
-export { NewFlowButton }
+export { NewFlowButton, QuickApprovalButton }

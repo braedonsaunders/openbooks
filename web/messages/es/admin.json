@@ -7302,6 +7302,29 @@
         "other": "Otros"
       }
     },
+    "quick": {
+      "button": "Nueva aprobación",
+      "title": "Requerir aprobación",
+      "description": "Elija un tipo de registro, un umbral de importe opcional y una persona aprobadora. La configuración crea un flujo de aprobación completo — desencadenador, condición y puerta, todo conectado — y lo activa.",
+      "existing": "Los envíos de este tipo de registro ya están controlados por este flujo.",
+      "threshold": "Controlar solo los envíos superiores a",
+      "thresholdPlaceholder": "Sin mínimo — controlar todos los envíos",
+      "noAmount": "Este tipo de registro no tiene importe, por lo que cada envío necesita aprobación.",
+      "approver": "Persona aprobadora",
+      "create": "Crear flujo de aprobación",
+      "created": "Flujo de aprobación creado y activado",
+      "failed": "No se pudo crear el flujo de aprobación",
+      "openFlow": "Abrir flujo",
+      "remove": "Quitar aprobación",
+      "removed": "Aprobación eliminada. El flujo queda desactivado pero se conserva su historial.",
+      "removeFailed": "No se pudo quitar la aprobación",
+      "errors": {
+        "bad-threshold": "El umbral debe ser cero o más — déjelo en blanco para controlar todos los envíos.",
+        "no-amount-field": "Este tipo de registro no tiene importe comparable — deje el umbral en blanco.",
+        "unknown-role": "Ese rol no está disponible para este tipo de registro — elija otra persona aprobadora.",
+        "unknown-user": "Esa persona aprobadora no es miembro activo de esta organización — elija otra persona."
+      }
+    },
     "actions": {
       "enable": "Activar",
       "disable": "Desactivar",

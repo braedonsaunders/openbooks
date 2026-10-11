@@ -318,7 +318,11 @@ test('the approvals card exposes the vendor-bill requirement and the no-flow war
     const flows = [...document.querySelectorAll('a')].find((a) =>
       (a.textContent ?? '').includes('Flows'),
     ) as HTMLAnchorElement | undefined
-    assert.equal(flows?.getAttribute('href'), '/admin/flows', 'the warning links the Flows setup surface')
+    assert.equal(
+      flows?.getAttribute('href'),
+      '/admin/flows?quickApproval=vendor_bill',
+      'the warning deep-links the Flows setup surface into the one-step approval dialog for vendor bills',
+    )
     await act(async () => {
       box.click()
       await tick()
