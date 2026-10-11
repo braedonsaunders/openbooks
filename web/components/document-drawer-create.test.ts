@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { buildDocumentCreateRequest } from './document-drawer'
+// The drawer's modules build JSX at import under the classic runtime.
+const React = await import('react')
+Object.assign(globalThis, { React })
+const { buildDocumentCreateRequest } = await import('./document-drawer')
 
 /**
  * The single write an unsaved create makes: first Save POSTs the collection

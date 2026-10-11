@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 const React = await import('react')
+// The drawer's modules build JSX at import under the classic runtime.
+Object.assign(globalThis, { React })
 const { renderToString } = await import('react-dom/server')
 const { NextIntlClientProvider } = await import('next-intl')
 const { DocumentDrawerTitle } = await import('./document-drawer')

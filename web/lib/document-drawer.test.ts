@@ -4,6 +4,8 @@ import test from 'node:test'
 // tsx compiles neighboring legacy JSX modules with the classic runtime when
 // this test starts from the repository root; provide that runtime explicitly.
 const React = await import('react')
+// The drawer's modules build JSX at import under the classic runtime.
+Object.assign(globalThis, { React })
 ;(globalThis as typeof globalThis & { React: typeof React }).React = React
 
 const {
