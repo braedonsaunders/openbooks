@@ -9,7 +9,7 @@ import { canonicalJson } from "../platform/canonical-json.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
 import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
-import { assertFinancialChangeApproved, completeFinancialChange, existingFinancialChange, financialChangeFlowConfigured, loadFinancialChange, proposeFinancialChange, MANUFACTURING_BOM_APPROVAL_OPERATION } from "../platform/financial-changes.ts";
+import { assertFinancialChangeApproved, completeFinancialChange, existingFinancialChange, financialChangeFlowConfigured, loadFinancialChange, proposeFinancialChange, MANUFACTURING_BOM_APPROVAL_OPERATION, MANUFACTURING_STANDARD_ROLLUP_OPERATION } from "../platform/financial-changes.ts";
 import type { FinancialChange } from "../platform/financial-changes.ts";
 
 export class BomPolicyError extends Error {
@@ -96,10 +96,9 @@ async function validateReferences(tx: SqlExecutor, orgId: string, assemblyItemId
 }
 
 /** Earlier effectivity remains readable after a successor takes effect. A
- * back-dated revision is admitted only as a first revision for an
- * assembly with no production posted on or after its start; anything
- * posted keeps the back-date refused, naming it, and any other
- * back-dated revision keeps the standing refusal. */
+ * back-dated revision is admitted for a first recipe or a later revision
+ * alike whenever no production has posted on or after its start; anything
+ * posted keeps the back-date refused, naming it. */
 async function preserveHistory(tx: SqlExecutor, orgId: string, assemblyItemId: string, before: StoredLine[], next: BomPolicyLine[], today: string) {
   const semantic = (line: BomPolicyLine) => ({ componentItemId: line.componentItemId, quantityPer: canonicalDecimal(line.quantityPer,4), operationSeq: line.operationSeq, scrapPct: canonicalDecimal(line.scrapPct ?? "0",4), isByproduct: line.isByproduct,quantityBasis:line.quantityBasis??'per_unit',formulaOutputQuantity:canonicalDecimal(line.formulaOutputQuantity??'1',4), effectiveFrom: line.effectiveFrom });
   const matched = new Set<number>();
@@ -115,13 +114,17 @@ async function preserveHistory(tx: SqlExecutor, orgId: string, assemblyItemId: s
   if (backdated.length > 0) {
     const starts = backdated.map(({ line }) => line.effectiveFrom).filter((from): from is string => from !== null).sort();
     await assertBackdateWindowClear(tx,orgId,assemblyItemId,starts[0] ?? "0001-01-01");
-    if (before.length > 0) throw new BomPolicyError("New manufacturing component lines require an effective start of today or later; earlier recipe history cannot be introduced by a revision.",409,"bom_backdated_revision");
   }
 }
 
 /** Production evidence for a back-dated recipe: released or completed
- * work orders and posted finished builds on or after the requested
- * start each refuse the back-date, naming what posted. */
+ * work orders, posted finished builds, and applied standard-cost roll-ups
+ * on or after the requested start each refuse the back-date, naming what
+ * posted. A release freezes the effective recipe into the order's material
+ * snapshot and a roll-up freezes it into its costing evidence, so re-dating
+ * the recipe underneath either would reinterpret posted history. Routing
+ * operations carry no recipe history of their own — the release snapshot
+ * above already freezes the routing version and operation each order ran. */
 async function assertBackdateWindowClear(tx: SqlExecutor, orgId: string, assemblyItemId: string, earliestFrom: string): Promise<void> {
   const order = (await tx.execute<{ number: string; posted: string }>(sql`
     select number, greatest(released_at::date, coalesce(completed_at::date, released_at::date))::text as posted
@@ -129,13 +132,19 @@ async function assertBackdateWindowClear(tx: SqlExecutor, orgId: string, assembl
      where org_id=${orgId} and produced_item_id=${assemblyItemId} and released_at is not null
        and (released_at::date >= ${earliestFrom}::date or completed_at::date >= ${earliestFrom}::date)
      order by released_at, number limit 1`)).rows[0];
-  if (order) throw new BomPolicyError(`A back-dated first recipe is refused: work order ${order.number} already posts production for this assembly (posted ${order.posted}). Propose the revision with an effective start of today or later.`,409,"bom_backdated_revision");
+  if (order) throw new BomPolicyError(`A back-dated recipe revision is refused: work order ${order.number} already posts production for this assembly (posted ${order.posted}). Propose the revision with an effective start of today or later.`,409,"bom_backdated_revision");
   const build = (await tx.execute<{ moved: string }>(sql`
     select moved_at::date::text as moved from inventory_movements
      where org_id=${orgId} and item_id=${assemblyItemId} and kind='assembly_build' and status='posted'
        and moved_at::date >= ${earliestFrom}::date
      order by moved_at limit 1`)).rows[0];
-  if (build) throw new BomPolicyError(`A back-dated first recipe is refused: finished production of this assembly already posted on ${build.moved}. Propose the revision with an effective start of today or later.`,409,"bom_backdated_revision");
+  if (build) throw new BomPolicyError(`A back-dated recipe revision is refused: finished production of this assembly already posted on ${build.moved}. Propose the revision with an effective start of today or later.`,409,"bom_backdated_revision");
+  const rollup = (await tx.execute<{ onDate: string }>(sql`
+    select effective_on::text as "onDate" from financial_changes
+     where org_id=${orgId} and subject_id=${assemblyItemId} and domain='manufacturing' and operation=${MANUFACTURING_STANDARD_ROLLUP_OPERATION}
+       and status='applied' and effective_on >= ${earliestFrom}::date
+     order by effective_on limit 1`)).rows[0];
+  if (rollup) throw new BomPolicyError(`A back-dated recipe revision is refused: an applied standard-cost roll-up for this assembly already freezes the recipe effective on ${rollup.onDate}. Propose the revision with an effective start of today or later.`,409,"bom_backdated_revision");
 }
 
 async function replace(tx: SqlExecutor, orgId: string, actorId: string, input: BomPolicyInput, before: Awaited<ReturnType<typeof snapshot>>, lines: BomPolicyLine[], approvalChangeId?: string) {

@@ -12,6 +12,7 @@ import { BomPolicyError, applyBomRevision, readBomPolicyVersion, saveBomPolicy, 
 import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
 import { createWorkCenter } from "../manufacturing/work-centers.ts";
 import { activateRoutingDirect, createRouting, createRoutingOperation } from "../manufacturing/routings.ts";
+import { applyStandardRollup, previewStandardRollup, proposeStandardRollup } from "../manufacturing/standard-rollup.ts";
 import { createWorkOrder, releaseWorkOrder } from "../manufacturing/work-orders.ts";
 import { explodeBom } from "../manufacturing/bom-explode.ts";
 
@@ -237,6 +238,131 @@ test("back-dated first revision refuses naming posted production", { skip: !DB }
       assemblyItemId: itemId, expectedVersion: version, reason: "Record the opening recipe for converting historical production",
       subsidiaryId: f.org.subsidiaryId, requestKey: randomUUID(), components: backdatedLines(f, itemId, past),
     })), (error: unknown) => error instanceof BomPolicyError && error.code === "bom_backdated_revision" && error.message.includes(released.number));
+  } finally { await dropScratchOrg(f.org.orgId); }
+});
+
+test("back-dated revision of an existing recipe applies with no production", { skip: !DB }, async () => {
+  const f = await setup();
+  try {
+    await releaseReady(f);
+    const itemId = await emptyAssemblyItem(f);
+    const today = await run((tx) => businessTodayInTx(tx, f.org.orgId));
+    const past30 = pastDate(today, 30);
+    const past60 = pastDate(today, 60);
+    assert.ok(past60 < past30 && past30 < today);
+    const reason = "Record the opening recipe for converting historical production";
+    const line = (componentItemId: string, effectiveFrom: string) =>
+      ({ componentItemId, quantityPer: "1", effectiveFrom, effectiveTo: null, operationSeq: null, scrapPct: null, isByproduct: false });
+    const spares = [f.org.items.component, f.org.items.standard, f.org.items.fifo, f.org.items.movingAvg].filter((id) => id !== itemId);
+    assert.ok(spares.length >= 2);
+    const first = await run((tx) => saveBomPolicy(tx, f.org.orgId, f.actorId, {
+      assemblyItemId: itemId, expectedVersion: null, reason,
+      subsidiaryId: f.org.subsidiaryId, requestKey: randomUUID(), components: [line(spares[0]!, past30)],
+    }));
+    assert.ok("changeId" in first);
+    await withBypassContext(() => submitBomRevision(f.org.orgId, f.actorId, first.changeId as string));
+    const version = await run((tx) => readBomPolicyVersion(tx, f.org.orgId, itemId));
+    const revision = await run((tx) => saveBomPolicy(tx, f.org.orgId, f.actorId, {
+      assemblyItemId: itemId, expectedVersion: version, reason,
+      subsidiaryId: f.org.subsidiaryId, requestKey: randomUUID(),
+      components: [line(spares[0]!, past30), line(spares[1]!, past60)],
+    }));
+    assert.ok("changeId" in revision);
+    const changeId = revision.changeId as string;
+    await withBypassContext(() => submitBomRevision(f.org.orgId, f.actorId, changeId));
+    assert.equal((await changeRow(f, changeId))?.status, "applied");
+    const stored = (await run((tx) => tx.execute<{ effectiveFrom: string | null }>(sql`select effective_from::text as "effectiveFrom" from bom_components where org_id=${f.org.orgId} and assembly_item_id=${itemId} order by effective_from nulls first`))).rows;
+    assert.deepEqual(stored.map((row) => row.effectiveFrom), [past60, past30]);
+    const audit = await run((tx) => tx.execute<{ before: unknown[]; after: unknown[] }>(sql`select changes->'before' as before, changes->'after' as after from audit_log where org_id=${f.org.orgId} and table_name='bom_components' and row_id=${itemId} order by id desc limit 1`));
+    assert.equal(audit.rows[0]?.before.length, 1);
+    assert.equal(audit.rows[0]?.after.length, 2);
+    const exploded = await run((tx) => explodeBom(tx, f.org.orgId, itemId, "1", past60));
+    assert.equal(exploded.components.length, 1);
+  } finally { await dropScratchOrg(f.org.orgId); }
+});
+
+test("back-dated revision of an existing recipe refuses naming posted production", { skip: !DB }, async () => {
+  const f = await setup();
+  try {
+    const departmentId = await releaseReady(f);
+    const itemId = await emptyAssemblyItem(f);
+    const today = await run((tx) => businessTodayInTx(tx, f.org.orgId));
+    const past = pastDate(today, 60);
+    const current = await run((tx) => saveBomPolicy(tx, f.org.orgId, f.actorId, {
+      assemblyItemId: itemId, expectedVersion: null, reason: "Record the opening recipe for converting historical production",
+      subsidiaryId: f.org.subsidiaryId, requestKey: randomUUID(),
+      components: backdatedLines(f, itemId, past).map((line) => ({ ...line, effectiveFrom: today })),
+    }));
+    assert.ok("changeId" in current);
+    await withBypassContext(() => submitBomRevision(f.org.orgId, f.actorId, current.changeId as string));
+    await activeRoute(f, itemId, past, departmentId);
+    const draft = await run((tx) => createWorkOrder(tx, f.org.orgId, f.actorId, {
+      producedItemId: itemId, quantityOrdered: "1", subsidiaryId: f.org.subsidiaryId,
+      issueLocationId: f.org.stockLocationId, receiptLocationId: f.org.stockLocationId2, plannedStart: today,
+    }));
+    const released = await run((tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, draft.id));
+    assert.equal(released.status, "released");
+    const version = await run((tx) => readBomPolicyVersion(tx, f.org.orgId, itemId));
+    await assert.rejects(run((tx) => saveBomPolicy(tx, f.org.orgId, f.actorId, {
+      assemblyItemId: itemId, expectedVersion: version, reason: "Record the opening recipe for converting historical production",
+      subsidiaryId: f.org.subsidiaryId, requestKey: randomUUID(), components: backdatedLines(f, itemId, past),
+    })), (error: unknown) => error instanceof BomPolicyError && error.code === "bom_backdated_revision" && error.message.includes(released.number));
+  } finally { await dropScratchOrg(f.org.orgId); }
+});
+
+test("back-dated revision refuses naming an applied standard-cost roll-up", { skip: !DB }, async () => {
+  const f = await setup();
+  try {
+    const departmentId = await releaseReady(f);
+    // The standard-costed widget carries the roll-up; its component needs a
+    // standard cost for the preview to measure.
+    const itemId = f.org.items.standard;
+    const today = await run((tx) => businessTodayInTx(tx, f.org.orgId));
+    const past = pastDate(today, 60);
+    const first = await run((tx) => saveBomPolicy(tx, f.org.orgId, f.actorId, {
+      assemblyItemId: itemId, expectedVersion: null, reason: "Record the opening recipe for converting historical production",
+      subsidiaryId: f.org.subsidiaryId, requestKey: randomUUID(),
+      components: [{ componentItemId: f.org.items.component, quantityPer: "1", effectiveFrom: today, effectiveTo: null, operationSeq: null, scrapPct: null, isByproduct: false }],
+    }));
+    assert.ok("changeId" in first);
+    await withBypassContext(() => submitBomRevision(f.org.orgId, f.actorId, first.changeId as string));
+    await withBypassContext(async () => {
+      await db.execute(sql`update item_inventory_profiles set standard_cost='3' where org_id=${f.org.orgId} and item_id=${f.org.items.component}`);
+    });
+    const code = `WC-${randomUUID()}`;
+    const center = await run((tx) => createWorkCenter(tx, f.org.orgId, f.actorId, {
+      code, name: code, kind: "labor", capacityHoursPerDay: "8", efficiencyPct: "100", absorbsOverhead: false, departmentId,
+    }));
+    const routing = await run((tx) => createRouting(tx, f.org.orgId, f.actorId, {
+      producedItemId: itemId, code: `RT-${randomUUID()}`, name: "Assembly route", effectiveFrom: past,
+      defaultIssueLocationId: f.org.stockLocationId, defaultReceiptLocationId: f.org.stockLocationId2, overheadBasis: "units",
+    }));
+    await run((tx) => createRoutingOperation(tx, f.org.orgId, f.actorId, String(routing.id), {
+      sequence: 10, name: "Assemble", workCenterId: String(center.id), setupMinutes: "0", runMinutesPerUnit: "1",
+    }));
+    await run((tx) => activateRoutingDirect(tx, f.org.orgId, f.actorId, String(routing.id), {
+      subsidiaryId: f.org.subsidiaryId, reason: "Activate the configured production revision", idempotencyKey: randomUUID(),
+    }));
+    const basis = { itemId, subsidiaryId: f.org.subsidiaryId, onDate: today, batchQuantity: "10" };
+    const preview = await run((tx) => previewStandardRollup(tx, f.org.orgId, f.actorId, basis));
+    const proposal = await run((tx) => proposeStandardRollup(tx, f.org.orgId, f.actorId, {
+      ...basis, reason: "Review standard material and cell conversion costs", idempotencyKey: randomUUID(), expectedDigest: preview.digest,
+    }));
+    const approver = await withBypassContext(() => createWorkOperator(f.org.orgId, "Cost approver", ["manufacturing.manage", "items.manage"]));
+    await withBypassContext(() => seedApprovalFlow(f.org.orgId, { subjectKind: "financial_change", assignees: [{ type: "user", userId: approver }], mode: "any", preventSelfApproval: true }));
+    await withBypassContext(() => submitFinancialChange(f.org.orgId, proposal.changeId, f.actorId));
+    const gate = await run(async (tx) => (await tx.execute<{ id: string }>(sql`select id from flow_gates where org_id=${f.org.orgId} and subject_kind='financial_change' and subject_id=${proposal.changeId} and status='pending'`)).rows[0]!);
+    await withBypassContext(() => decideGate({ gateId: gate.id, userId: approver, decision: "approved" }));
+    await withBypassContext(() => applyStandardRollup(f.org.orgId, f.actorId, proposal.changeId));
+    const version = await run((tx) => readBomPolicyVersion(tx, f.org.orgId, itemId));
+    await assert.rejects(run((tx) => saveBomPolicy(tx, f.org.orgId, f.actorId, {
+      assemblyItemId: itemId, expectedVersion: version, reason: "Record the opening recipe for converting historical production",
+      subsidiaryId: f.org.subsidiaryId, requestKey: randomUUID(),
+      components: [
+        { componentItemId: f.org.items.component, quantityPer: "1", effectiveFrom: today, effectiveTo: null, operationSeq: null, scrapPct: null, isByproduct: false },
+        { componentItemId: f.org.items.fifo, quantityPer: "1", effectiveFrom: past, effectiveTo: null, operationSeq: null, scrapPct: null, isByproduct: false },
+      ],
+    })), (error: unknown) => error instanceof BomPolicyError && error.code === "bom_backdated_revision" && /roll-up/.test(error.message) && error.message.includes(today));
   } finally { await dropScratchOrg(f.org.orgId); }
 });
 
