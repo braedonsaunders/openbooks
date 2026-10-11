@@ -130,14 +130,6 @@ async function docState(orgId: string, documentId: string) {
   `)).rows[0]!;
 }
 
-async function journalCounts(orgId: string) {
-  const entries = (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from journal_entries where org_id = ${orgId}`)).rows[0]!.n;
-  const lines = (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from journal_lines where org_id = ${orgId}`)).rows[0]!.n;
-  return { entries, lines };
-}
-
 async function voidMessage(input: {
   orgId: string;
   documentId: string;
@@ -162,11 +154,14 @@ const depsFor = (org: ScratchOrg) => ({
 });
 
 // F23/INVENTORY-2: a posted vendor bill carrying inventory receipt movements
-// must be refused with a purchasing-domain remedy — never the revenue
-// cancellation screen — and the refusal must survive a kernel reversal of
-// the receipt, because the guard is existence-based and posted history is
-// immutable.
-test("voiding a posted inventory bill refuses with a purchasing remedy", { skip: !DB }, async () => {
+// voids through the governed correction — never the revenue cancellation
+// screen: the void reverses the bill's receipt movement and journal with
+// its payable, so a bill that brought stock in unwinds clean. The manual
+// two-leg correction (an account-only vendor credit plus an inventory
+// adjustment) survives only as the fallback for stock the kernel itself
+// cannot unwind (landed cost, custody, provisional chain), named by the
+// void gate below.
+test("voiding a posted inventory bill reverses its receipt movement and journal", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
     const actor = (await seedFlowActors(org.orgId)).adminId;
@@ -179,32 +174,22 @@ test("voiding a posted inventory bill refuses with a purchasing remedy", { skip:
         join document_lines line on line.id = movement.document_line_id and line.org_id = movement.org_id
        where movement.org_id = ${org.orgId} and line.document_id = ${billId}`)).rows[0]!.n;
     assert.equal(movements, 1);
+    assert.equal(toUnits((await getOnHand(org.orgId, org.items.fifo, org.stockLocationId)).quantity), toUnits("5"));
 
-    const before = await journalCounts(org.orgId);
     const message = await voidMessage({ orgId: org.orgId, documentId: billId, actorId: actor });
-    assert.ok(message, "void must be refused");
-    assert.match(message, /remains posted and cannot be voided/);
-    assert.match(message, /account-only vendor credit/);
-    assert.match(message, /inventory adjustment account/);
-    assert.match(message, /where cash is still due/);
-    assert.match(message, /Inventory Adjust/);
-    assert.match(message, /residual/);
-    assert.doesNotMatch(message, /Revenue → contract → Cancel recognition/);
-    assert.doesNotMatch(message, /reverse/);
-    assert.doesNotMatch(message, /select .* receipt/i);
+    assert.equal(message, null, `void must succeed, refused with: ${message}`);
 
-    // Zero status/journal mutations: the refusal rolls the void claim back.
     const state = await docState(org.orgId, billId);
-    assert.equal(state.status, "posted");
-    assert.equal(state.void_requested_at, null);
-    assert.equal(state.reversal_entry_id, null);
-    assert.deepEqual(await journalCounts(org.orgId), before);
+    assert.equal(state.status, "voided");
+    assert.ok(state.reversal_entry_id, "the void records its reversal entry");
+    assert.equal(toUnits((await getOnHand(org.orgId, org.items.fifo, org.stockLocationId)).quantity), toUnits("0"));
+    assert.doesNotMatch(message ?? "", /Revenue → contract → Cancel recognition/);
   } finally {
     await dropScratchOrg(org.orgId);
   }
 });
 
-test("inventory bill refusal outlives kernel reversal of the receipt", { skip: !DB }, async () => {
+test("a kernel-reversed bill receipt does not block the bill void", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
     const actor = (await seedFlowActors(org.orgId)).adminId;
@@ -225,11 +210,8 @@ test("inventory bill refusal outlives kernel reversal of the receipt", { skip: !
     });
 
     const message = await voidMessage({ orgId: org.orgId, documentId: billId, actorId: actor });
-    assert.ok(message, "void must still be refused after reversal");
-    assert.match(message, /account-only vendor credit/);
-    assert.match(message, /remains posted and cannot be voided/);
-    assert.doesNotMatch(message, /Revenue → contract → Cancel recognition/);
-    assert.equal((await docState(org.orgId, billId)).status, "posted");
+    assert.equal(message, null, `void must succeed after the reversal, refused with: ${message}`);
+    assert.equal((await docState(org.orgId, billId)).status, "voided");
   } finally {
     await dropScratchOrg(org.orgId);
   }

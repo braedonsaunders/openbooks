@@ -1505,22 +1505,6 @@ export async function completeRequestedDocumentVoid(
           reversalDate: String(doc.void_reversal_date),
           reason: String(doc.void_reason),
         });
-      } else if (String(doc.kind) === "vendor_bill") {
-        // Voiding a bill unwinds the stock its lines received first: every
-        // live "Inventory receipt (bill)" movement reverses through the
-        // inventory kernel with its journal, and every purchase price
-        // variance entry the bill settled reverses with it, so a bill that
-        // double-received voids clean instead of stranding phantom stock.
-        // Consumed stock refuses naming its consumers; anything else the
-        // kernel cannot unwind keeps the manual two-leg correction below.
-        await reverseBillInventoryReceipts(tx, {
-          orgId,
-          billId: documentId,
-          billNumber: String(doc.document_number),
-          actorId: String(doc.void_requested_by),
-          reversalDate: String(doc.void_reversal_date),
-          reason: String(doc.void_reason),
-        });
       }
 
       if (kind === "field_ticket") {
@@ -1591,6 +1575,25 @@ export async function completeRequestedDocumentVoid(
           throw new DocumentVoidError(
             "this transaction has live payments or credits applied to it — unapply them before voiding",
           );
+        }
+        if (String(doc.kind) === "vendor_bill") {
+          // Voiding a bill unwinds the stock its lines received first, after
+          // the reconciliation and payment fences above (their refusals keep
+          // their documented order) and before the subledger gate below:
+          // every live "Inventory receipt (bill)" movement reverses through
+          // the inventory kernel with its journal, and every purchase price
+          // variance entry the bill settled reverses with it, so a bill that
+          // double-received voids clean instead of stranding phantom stock.
+          // Consumed stock refuses naming its consumers; anything else the
+          // kernel cannot unwind keeps the manual two-leg correction below.
+          await reverseBillInventoryReceipts(tx, {
+            orgId,
+            billId: documentId,
+            billNumber: String(doc.document_number),
+            actorId: String(doc.void_requested_by),
+            reversalDate: String(doc.void_reversal_date),
+            reason: String(doc.void_reason),
+          });
         }
         // A voided bill unwinds its own receipt movements above, so the
         // gate below must not trip on the unwound originals: movement rows
