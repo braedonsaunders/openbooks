@@ -4,22 +4,23 @@ import { NextResponse } from "next/server";
 import { executeAutomation } from "@openbooks/engine/automations/execute";
 import { isUuid } from "../../../../../lib/list-params";
 import { runAutomationBody } from "../../bodies";
-import { automationErrorResponse } from "../../_lib";
+import { automationErrorResponse, resolveRunInvocationKey } from "../../_lib";
 
 
 export const runtime = "nodejs";
 
 /**
  * Run-now: fire one enabled automation immediately (manual trigger with an
- * optional subject). The idempotency key makes a double-click or replayed
- * request collapse onto one run row — never a double-run.
+ * optional subject). An Idempotency-Key header makes a retried or
+ * double-submitted request collapse onto one run row; without the header
+ * every request is a new invocation and runs anew.
  */
 export const POST = defineRoute({
   permission: "automations.run",
   feature: "automations",
   params: z.object({ id: z.string() }),
   body: runAutomationBody,
-  handler: async ({ request: _req, authz: gate, params, body: routeBody }) => {
+  handler: async ({ request, authz: gate, params, body: routeBody }) => {
     const ctx = { params };
 
     const { id } = await ctx.params;
@@ -28,6 +29,11 @@ export const POST = defineRoute({
         { error: "automation id must be a uuid" },
         { status: 400 },
       );
+
+    const invocation = resolveRunInvocationKey(request.headers.get("Idempotency-Key"), gate.user.id);
+    if (!invocation.ok) {
+      return NextResponse.json({ error: invocation.error }, { status: 400 });
+    }
 
     const body = routeBody;
     if ((body.subjectEntity == null) !== (body.subjectId == null)) {
@@ -51,6 +57,7 @@ export const POST = defineRoute({
             }
           : {}),
         triggerPayload: { kind: "manual" },
+        fingerprint: invocation.fingerprint,
         allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
       });
       return NextResponse.json({ run }, { status: 201 });

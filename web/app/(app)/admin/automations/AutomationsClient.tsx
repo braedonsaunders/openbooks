@@ -166,12 +166,13 @@ export function AutomationRowActions({
   const router = useRouter()
   const [busy, setBusy] = useState(false)
 
-  async function call(url: string, body?: Record<string, unknown>) {
+  async function call(url: string, body?: Record<string, unknown>, headers?: Record<string, string>) {
     setBusy(true)
     try {
       const res = await fetch(url, {
         method: 'POST',
-        ...(body ? { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {}),
+        headers: { ...(body ? { 'content-type': 'application/json' } : {}), ...headers },
+        ...(body ? { body: JSON.stringify(body) } : {}),
       })
       if (!res.ok) toast.error(await readApiErrorMessage(res, actionFailed))
       router.refresh()
@@ -193,7 +194,7 @@ export function AutomationRowActions({
           {enableLabel}
         </Button>
       )}
-      <Button variant="outline" disabled={busy || status !== 'enabled'} onClick={() => call(`/api/automations/${id}/run`, {})}>
+      <Button variant="outline" disabled={busy || status !== 'enabled'} onClick={() => call(`/api/automations/${id}/run`, {}, { 'Idempotency-Key': crypto.randomUUID() })}>
         {runLabel}
       </Button>
     </span>

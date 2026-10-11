@@ -128,6 +128,40 @@ test("idempotency: the same trigger twice collapses onto one run row", { skip: !
   }, { bypass: true });
 });
 
+test("run-now: distinct invocation keys each run; a repeated key returns the first run", { skip: !DB }, async () => {
+  await withHarness(setupAutomationsHarness, async (h) => {
+    const recipe = await createAutomation({
+      orgId: h.org.orgId,
+      actorId: h.adminId,
+      name: "run-now invocation probe",
+      trigger: { kind: "manual" },
+      rules: {},
+      conditions: {},
+      actions: [{ kind: "send_notification", to: "initiator", body: "run-now" }],
+    });
+    await db.execute(sql`update automations set status = 'enabled' where id = ${recipe.id}`);
+    const invoke = (fingerprint: string) =>
+      executeAutomation({
+        orgId: h.org.orgId,
+        actorId: h.adminId,
+        automationId: recipe.id,
+        allowedSubsidiaryIds: null,
+        triggerPayload: { kind: "manual" },
+        fingerprint,
+      });
+    const firstClick = await invoke("manual:invocation-1");
+    const secondClick = await invoke("manual:invocation-2");
+    assert.notEqual(secondClick.runId, firstClick.runId, "a new invocation runs anew");
+    assert.equal(secondClick.status, "succeeded");
+    const retried = await invoke("manual:invocation-2");
+    assert.equal(retried.runId, secondClick.runId, "a replayed invocation key returns its own run");
+    const runs = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from automation_runs where automation_id = ${recipe.id}
+    `)).rows[0]!.n;
+    assert.equal(runs, 2, "two invocations, two run rows, no double-run on replay");
+  }, { bypass: true });
+});
+
 test("a failed step rolls the run's writes back and surfaces the error as a run row", { skip: !DB }, async () => {
   await withHarness(setupAutomationsHarness, async (h) => {
     const recipe = await createAutomation({
