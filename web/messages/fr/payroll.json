@@ -88,6 +88,12 @@
       "finish": "Reporter et terminer"
     },
     "voided": "Cette paie est annulée et en lecture seule.",
+    "rejected": {
+      "title": "Rejetée par {by} le {date}",
+      "reason": "Motif : {reason}",
+      "hint": "Recalculez si les montants doivent être corrigés, puis soumettez de nouveau la paie pour approbation.",
+      "unknownApprover": "un approbateur"
+    },
     "stale": {
       "title": "Les intrants ont changé depuis le calcul de cette paie ({reasons}). Recalculez avant de comptabiliser.",
       "reason": {
@@ -446,7 +452,8 @@
     "calculated": "Calculée",
     "committed": "Comptabilisée",
     "posted": "Reportée",
-    "void": "Annulée"
+    "void": "Annulée",
+    "rejected": "Rejetée"
   },
   "empty": {
     "runs": "Aucune paie pour l'instant. Créez-en une à partir d'un calendrier de paie pour commencer.",

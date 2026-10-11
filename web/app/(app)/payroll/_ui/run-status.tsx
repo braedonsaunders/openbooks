@@ -24,7 +24,7 @@ export function RunStatusBadge({ status }: { status: string }) {
         ? 'default'
         : status === 'calculated'
           ? 'warning'
-          : status === 'void'
+          : status === 'void' || status === 'rejected'
             ? 'destructive'
             : 'secondary'
   return <Badge variant={variant}>{t(`status.${status}`)}</Badge>

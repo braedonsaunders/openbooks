@@ -88,6 +88,12 @@
       "finish": "Lançar e concluir"
     },
     "voided": "Esta folha está anulada e é somente leitura.",
+    "rejected": {
+      "title": "Rejeitada por {by} em {date}",
+      "reason": "Motivo: {reason}",
+      "hint": "Recalcule se os valores precisarem de correção e envie a folha novamente para aprovação.",
+      "unknownApprover": "um aprovador"
+    },
     "stale": {
       "title": "As entradas mudaram desde o cálculo desta folha ({reasons}). Recalcule antes de lançar.",
       "reason": {
@@ -446,7 +452,8 @@
     "calculated": "Calculada",
     "committed": "Lançada",
     "posted": "Contabilizada",
-    "void": "Anulada"
+    "void": "Anulada",
+    "rejected": "Rejeitada"
   },
   "empty": {
     "runs": "Nenhuma folha ainda. Crie uma a partir de um cronograma de folha para começar.",

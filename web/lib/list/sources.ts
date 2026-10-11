@@ -1,6 +1,7 @@
 import 'server-only'
 import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
+import { payRunRejectedSql } from '@openbooks/engine/payroll/approval'
 import type { ListViewConfig } from '@openbooks/customization'
 import { AP_KINDS, AR_KINDS, CASH_SALE_KINDS } from '../document-kinds'
 import { subsidiaryVisibleFilter } from '../subsidiaries'
@@ -349,7 +350,13 @@ const SOURCES: Record<string, DocListSource> = {
       gross_total: sql`pr.gross_total`,
       net_total: sql`pr.net_total`,
       employee_count: sql`pr.employee_count::text`,
-      status: sql`case when d.status in ('draft', 'approved') then pr.run_status else d.status end`,
+      // A run sent back from approval is a draft again, so the run stage alone
+      // would read "Calculated". The rejection is shown while it is current.
+      status: sql`case
+        when d.status = 'draft' and pr.run_status <> 'committed'
+          and ${payRunRejectedSql(sql`d.org_id`, sql`d.id`)} then 'rejected'
+        when d.status in ('draft', 'approved') then pr.run_status
+        else d.status end`,
     },
     sorts: {
       number: sql`d.document_number`,

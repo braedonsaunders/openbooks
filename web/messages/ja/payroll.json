@@ -88,6 +88,12 @@
       "finish": "転記して完了"
     },
     "voided": "この給与計算は無効化されており、読み取り専用です。",
+    "rejected": {
+      "title": "{date} に {by} が却下",
+      "reason": "理由: {reason}",
+      "hint": "金額の修正が必要な場合は再計算し、承認を再依頼してください。",
+      "unknownApprover": "承認者"
+    },
     "stale": {
       "title": "計算後に条件が変更されました（{reasons}）。確定する前に再計算してください。",
       "reason": {
@@ -446,7 +452,8 @@
     "calculated": "計算済み",
     "committed": "確定済み",
     "posted": "転記済み",
-    "void": "無効"
+    "void": "無効",
+    "rejected": "却下"
   },
   "empty": {
     "runs": "給与計算はまだありません。給与スケジュールから作成して開始してください。",

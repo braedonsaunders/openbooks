@@ -88,6 +88,12 @@
       "finish": "Post & finish"
     },
     "voided": "This pay run is voided and read-only.",
+    "rejected": {
+      "title": "Rejected by {by} on {date}",
+      "reason": "Reason: {reason}",
+      "hint": "Recalculate if the figures need correcting, then submit the run for approval again.",
+      "unknownApprover": "an approver"
+    },
     "stale": {
       "title": "Inputs changed since this run was calculated ({reasons}). Recalculate before committing.",
       "reason": {
@@ -446,7 +452,8 @@
     "calculated": "Calculated",
     "committed": "Committed",
     "posted": "Posted",
-    "void": "Void"
+    "void": "Void",
+    "rejected": "Rejected"
   },
   "empty": {
     "runs": "No pay runs yet. Create one from a pay schedule to get started.",

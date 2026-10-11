@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { PayrollError } from "./error.ts";
 import { PAY_RUN_SUBJECT_KIND } from "../flows/pay-runs-adapter.ts";
@@ -106,6 +106,95 @@ export async function payRunApprovalState(
     policyExists,
     submitted,
     released: !pending && (!policyExists || submitted),
+  };
+}
+
+/**
+ * The rejection the run is currently waiting on, recorded by the Flows gate
+ * that rejected it. The rejecter and reason are the gate's own decision
+ * fields; nothing here is stored separately.
+ */
+export interface PayRunRejection {
+  /** Display name of the approver who rejected the run; null if that user no longer resolves. */
+  rejectedBy: string | null;
+  /** ISO timestamp the rejection was recorded. */
+  rejectedAt: string;
+  /** The reason the approver recorded with the rejection, if any. */
+  reason: string | null;
+}
+
+/**
+ * Predicate over `flow_gates g`: a rejected gate of the run's most recent
+ * submission. A submission is every on_submit flow run created in one
+ * transaction (they share `started_at`); a resubmission or withdrawal starts
+ * or cancels the latest submission, so an earlier rejection stops being
+ * current the moment the run is sent back into approval. Run identity, not
+ * timestamps, relates the gate to the submission: decisions are stamped by
+ * the application clock and runs by the database clock.
+ */
+function currentRejectionPredicate(orgId: SQL, documentId: SQL): SQL {
+  return sql`g.org_id = ${orgId}
+    and g.subject_kind = ${PAY_RUN_SUBJECT_KIND}
+    and g.subject_id = ${documentId}
+    and g.status = 'rejected'
+    and g.run_id in (
+      select r.id from flow_runs r
+       where r.org_id = g.org_id and r.subject_kind = g.subject_kind
+         and r.subject_id = g.subject_id and r.trigger = 'on_submit'
+         and r.started_at = (
+           select max(l.started_at) from flow_runs l
+            where l.org_id = g.org_id and l.subject_kind = g.subject_kind
+              and l.subject_id = g.subject_id and l.trigger = 'on_submit'))`;
+}
+
+/**
+ * SQL existence test for a current pay-run rejection, for list queries.
+ * `orgId` and `documentId` are column references owned by the caller
+ * (e.g. `d.org_id`, `d.id`). The caller decides whether the document state
+ * shows it: a rejection is only meaningful while the run is back in draft
+ * and uncommitted.
+ */
+export function payRunRejectedSql(orgId: SQL, documentId: SQL): SQL {
+  return sql`exists (select 1 from flow_gates g where ${currentRejectionPredicate(orgId, documentId)})`;
+}
+
+/**
+ * The run's current rejection, or null. Returned only while the run is in
+ * draft and uncommitted: the operator can then recalculate and resubmit, and
+ * the page names who rejected it and why. A committed run never reports one.
+ */
+export async function payRunRejection(
+  orgId: string,
+  documentId: string,
+  executor: Executor = db,
+): Promise<PayRunRejection | null> {
+  const state = await executor.execute<{ status: string; run_status: string }>(sql`
+    select d.status, r.run_status
+      from documents d
+      join pay_runs r on r.document_id = d.id and r.org_id = d.org_id
+     where d.org_id = ${orgId} and d.id = ${documentId} and d.kind = 'pay_run'
+  `);
+  const run = state.rows[0];
+  if (!run) throw new PayrollError("pay run not found");
+  if (run.status !== "draft" || run.run_status === "committed") return null;
+  const rows = await executor.execute<{ decided_by_name: string | null; decided_at: Date | string | null; comment: string | null }>(sql`
+    select decider.name as decided_by_name, g.decided_at, g.comment
+      from flow_gates g
+      left join users decider on decider.id = g.decided_by and decider.org_id = g.org_id
+     where ${currentRejectionPredicate(sql`${orgId}`, sql`${documentId}`)}
+     order by g.decided_at desc nulls last, g.id desc
+     limit 1
+  `);
+  const row = rows.rows[0];
+  if (!row) return null;
+  const decidedAt = row.decided_at instanceof Date
+    ? row.decided_at.toISOString()
+    : row.decided_at == null ? "" : new Date(String(row.decided_at)).toISOString();
+  const reason = row.comment?.trim() || null;
+  return {
+    rejectedBy: row.decided_by_name ?? null,
+    rejectedAt: decidedAt,
+    reason,
   };
 }
 

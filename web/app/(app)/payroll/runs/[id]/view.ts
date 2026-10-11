@@ -24,7 +24,9 @@ import {
 } from '@openbooks/engine/payroll/readiness'
 import {
   payRunApprovalState,
+  payRunRejection,
   type PayRunApprovalState,
+  type PayRunRejection,
 } from '@openbooks/engine/payroll/approval'
 import {
   payrollPaymentMethodSettings,
@@ -130,6 +132,12 @@ export interface PayRunWizardData {
    * With no policy there is no button and commit behaves exactly as before.
    */
   approval: PayRunApprovalState
+  /**
+   * The rejection this run is waiting on (draft, never committed), read from
+   * the Flows gate that rejected it. Null when the run was never rejected or
+   * has since been resubmitted.
+   */
+  rejection: PayRunRejection | null
   /** Open block-severity anomaly flags overlapping this run's period. The
    *  commit route refuses while this is nonzero. */
   anomalyBlocks: number
@@ -436,12 +444,13 @@ export async function loadPayRunWizard(
     // Readiness, staleness, funding, the per-employee diff and the Flows
     // approval state are engine-owned (one source of truth for what blocks a
     // run, what it costs, what moved, and whether money may move yet).
-    const [readiness, staleness, funding, changes, approval] = await Promise.all([
+    const [readiness, staleness, funding, changes, approval, rejection] = await Promise.all([
       payRunReadiness(orgId, id, authz.allowedSubsidiaryIds),
       payRunStaleness(orgId, id, db, authz.allowedSubsidiaryIds),
       payRunFunding(orgId, id, authz.allowedSubsidiaryIds),
       payRunChanges(orgId, id, authz.allowedSubsidiaryIds),
       payRunApprovalState(orgId, id),
+      payRunRejection(orgId, id),
     ])
     // The funding service is the authority for both the account scope and its
     // current book balances. Reuse its scoped rows for the settlement picker so
@@ -501,6 +510,7 @@ export async function loadPayRunWizard(
       refusalAcknowledgement,
       refusalsAcknowledged,
       approval,
+      rejection,
       anomalyBlocks,
       entityOptions,
       canAttributeEntity: authz.allowedSubsidiaryIds == null,
@@ -557,6 +567,7 @@ export function payRunWizardSpec(data: PayRunWizardData): PageSpec {
         refusalAcknowledgement: data.refusalAcknowledgement,
         refusalsAcknowledged: data.refusalsAcknowledged,
         approval: data.approval,
+        rejection: data.rejection,
         anomalyBlocks: data.anomalyBlocks,
         entityOptions: data.entityOptions,
         canAttributeEntity: data.canAttributeEntity,

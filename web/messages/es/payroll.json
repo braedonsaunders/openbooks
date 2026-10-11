@@ -88,6 +88,12 @@
       "finish": "Contabilizar y terminar"
     },
     "voided": "Este ciclo está anulado y es de solo lectura.",
+    "rejected": {
+      "title": "Rechazado por {by} el {date}",
+      "reason": "Motivo: {reason}",
+      "hint": "Recalcule si las cifras necesitan corrección y envíe de nuevo el ciclo para aprobación.",
+      "unknownApprover": "un aprobador"
+    },
     "stale": {
       "title": "Los insumos cambiaron desde que se calculó este ciclo ({reasons}). Recalcule antes de contabilizar.",
       "reason": {
@@ -446,7 +452,8 @@
     "calculated": "Calculado",
     "committed": "Confirmado",
     "posted": "Contabilizado",
-    "void": "Anulado"
+    "void": "Anulado",
+    "rejected": "Rechazado"
   },
   "empty": {
     "runs": "Aún no hay ciclos de nómina. Cree uno desde un calendario de nómina para empezar.",

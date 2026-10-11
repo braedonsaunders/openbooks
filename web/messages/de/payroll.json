@@ -88,6 +88,12 @@
       "finish": "Buchen & abschließen"
     },
     "voided": "Dieser Lohnlauf ist storniert und schreibgeschützt.",
+    "rejected": {
+      "title": "Abgelehnt von {by} am {date}",
+      "reason": "Begründung: {reason}",
+      "hint": "Berechnen Sie den Lohnlauf bei Bedarf neu und reichen Sie ihn erneut zur Genehmigung ein.",
+      "unknownApprover": "einem Genehmiger"
+    },
     "stale": {
       "title": "Eingaben änderten sich seit Berechnung dieses Laufs ({reasons}). Berechnen Sie vor dem Festschreiben neu.",
       "reason": {
@@ -446,7 +452,8 @@
     "calculated": "Berechnet",
     "committed": "Festgeschrieben",
     "posted": "Verbucht",
-    "void": "Storniert"
+    "void": "Storniert",
+    "rejected": "Abgelehnt"
   },
   "empty": {
     "runs": "Noch keine Lohnläufe. Legen Sie einen aus einem Lohnplan an, um zu beginnen.",

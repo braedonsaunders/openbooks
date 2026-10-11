@@ -14,7 +14,7 @@ import { AlertTriangle, Calculator, Check, ChevronRight, Loader2, RefreshCw, Tra
 import { Badge, Button, cn } from '@openbooks/ui'
 import type { YearEndFilingSection } from '@openbooks/engine/payroll/yearend'
 import type { PayRunCalculationError, PayRunRefusalAcknowledgement } from '@openbooks/engine/payroll/run-calculation-evidence'
-import type { PayRunApprovalState } from '@openbooks/engine/payroll/approval'
+import type { PayRunApprovalState, PayRunRejection } from '@openbooks/engine/payroll/approval'
 import { refreshApprovalState } from '../../../../../components/approval-actions'
 import { readApiErrorMessage } from '../../../../../lib/api-error'
 import { useMoney } from '../../../../../components/money-provider'
@@ -85,6 +85,12 @@ export function RunWizard(props: {
    * status; never a second switch, flag, or permission-only check.
    */
   approval: PayRunApprovalState
+  /**
+   * The approver's rejection the run is waiting on, or null. A rejected run
+   * is back in draft: it shows the rejection and stays open for recalculation
+   * and resubmission.
+   */
+  rejection: PayRunRejection | null
   /** Open block-severity anomaly flags overlapping this run's period. The
    *  commit button stays off while nonzero; the commit route refuses
    *  regardless. */
@@ -654,7 +660,7 @@ export function RunWizard(props: {
     <div className="space-y-4">
       {/* Run vitals strip */}
       <div className="flex flex-wrap items-center gap-4 text-sm text-slate-600 dark:text-slate-300">
-        <RunStatusBadge status={runDisplayStatus(run)} />
+        <RunStatusBadge status={props.rejection ? 'rejected' : runDisplayStatus(run)} />
         {run.run_type !== 'regular' && (
           <Badge variant="secondary">{runTypeLabel(t, run.run_type)}</Badge>
         )}
@@ -684,6 +690,25 @@ export function RunWizard(props: {
         <div className="flex items-center gap-3 rounded-xl border border-red-200/80 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-800/60 dark:bg-red-950/40 dark:text-red-300">
           <AlertTriangle size={16} aria-hidden />
           {t('wizard.voided')}
+        </div>
+      )}
+
+      {/* Rejected in approval: the run is a draft again. The rejecter and their
+          recorded reason stay visible until the run is resubmitted; recalculate
+          and submit remain in the steps below, exactly as the lifecycle allows. */}
+      {props.rejection && !committed && (
+        <div className="rounded-xl border border-red-200/80 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-800/60 dark:bg-red-950/40 dark:text-red-300">
+          <p className="flex items-center gap-2 font-semibold">
+            <AlertTriangle size={16} aria-hidden />
+            {t('wizard.rejected.title', {
+              by: props.rejection.rejectedBy ?? t('wizard.rejected.unknownApprover'),
+              date: props.rejection.rejectedAt.slice(0, 10),
+            })}
+          </p>
+          {props.rejection.reason ? (
+            <p className="mt-1">{t('wizard.rejected.reason', { reason: props.rejection.reason })}</p>
+          ) : null}
+          <p className="mt-1 text-xs">{t('wizard.rejected.hint')}</p>
         </div>
       )}
 

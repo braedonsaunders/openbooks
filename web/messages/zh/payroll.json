@@ -88,6 +88,12 @@
       "finish": "过账并完成"
     },
     "voided": "本次工资核算已作废,只读。",
+    "rejected": {
+      "title": "{by} 于 {date} 驳回",
+      "reason": "原因:{reason}",
+      "hint": "如需更正金额,请重新计算后再次提交审批。",
+      "unknownApprover": "审批人"
+    },
     "stale": {
       "title": "本次核算计算完成后输入已变更({reasons})。提交前请重新计算。",
       "reason": {
@@ -446,7 +452,8 @@
     "calculated": "已计算",
     "committed": "已确认",
     "posted": "已过账",
-    "void": "已作废"
+    "void": "已作废",
+    "rejected": "已驳回"
   },
   "empty": {
     "runs": "尚无工资核算。请从发薪计划创建一条以开始。",
