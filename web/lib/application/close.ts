@@ -386,6 +386,7 @@ export async function decideReopenRequest(context: ApplicationContext, input: {
   requestId: string;
   approve: boolean;
   hours?: number;
+  attestation?: string;
   idempotencyKey: string;
 }): Promise<{ replayed: boolean; result: { requestId: string; approved: boolean } }> {
   assertApplicationPermission(context, "close.reopen");
@@ -406,6 +407,7 @@ export async function decideReopenRequest(context: ApplicationContext, input: {
           requestId: input.requestId,
           approve: input.approve,
           hours: input.hours,
+          attestation: input.attestation,
         });
         return { requestId: input.requestId, approved: input.approve };
       } catch (error) { mapCloseError(error); }

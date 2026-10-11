@@ -129,6 +129,9 @@ test('reopen approval refuses a conflicted approver and audits the conflict', {s
   const org=await createScratchOrg();
   try {
     const actors=await seedFlowActors(org.orgId);
+    // Independence is permission-based: the second approver must actually
+    // hold the reopen permission for the conflict control to engage.
+    await db.execute(sql`update app_roles set permissions = '["close.reopen"]'::jsonb where org_id = ${org.orgId} and key = 'approver'`);
     const target={orgId:org.orgId,periodId:org.periodId,bookId:org.bookId};
     await setPeriodLockState({...target,module:'gl',state:'closed',actorId:actors.adminId,reason:'Close for review'});
     // The approver authored a live document attributed to the closed period.

@@ -1082,6 +1082,10 @@ test(
     const org = await createScratchOrg();
     try {
       const actors = await seedFlowActors(org.orgId);
+      // The self-approval refusal below needs another eligible approver in
+      // the organization: independence is permission-based, so the approver
+      // role holds the reopen permission here.
+      await db.execute(sql`update app_roles set permissions = '["close.reopen"]'::jsonb where org_id = ${org.orgId} and key = 'approver'`);
       await closeAllGlobally(org, actors.adminId);
       const rejectedId = await requestPeriodReopen({
         orgId: org.orgId,

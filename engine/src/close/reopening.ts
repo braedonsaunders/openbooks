@@ -1,6 +1,8 @@
 import { CloseError, CLOSE_MODULES, periodLockRequiresApprovedReopen, type CloseModule } from "../periods/period-policy.ts";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgContext, type SqlExecutor } from "../platform/db.ts";
+import { actorHasPermission } from "../organization/actor-permissions.ts";
+import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { assertCloseScope, upsertLock, periodScopeAdvisoryLock, tightenNarrowerLocks } from "../periods/period-locks.ts";
 /** One row of close_reopen_requests as read by the approve/re-close paths. */
 interface CloseReopenRequestRow extends Record<string, unknown> {
@@ -202,6 +204,95 @@ export async function reopenRequestConflicts(
   return reopenApprovalConflicts(db, orgId, scoped, actorId);
 }
 
+/**
+ * Why a reopen decision still demands an independent approver. A
+ * one-person company must be able to correct a mistaken close, so the
+ * conflict-of-interest and self-approval controls engage only while
+ * independent approval is actually available — another eligible approver
+ * who could decide instead, or a configured Flow that requires it.
+ */
+export interface ReopenIndependence {
+  required: boolean;
+  reason: "another-approver" | "flow" | null;
+}
+
+/**
+ * Whether this request's decision requires an independent approver. An
+ * eligible approver is an active user other than the requester holding the
+ * reopen permission with a scope covering the request (unrestricted for an
+ * org-wide request, unrestricted or the request's entity otherwise — the
+ * same standing the approval surfaces require). Failing that, a configured
+ * approval Flow with an independent-approval gate (preventSelfApproval not
+ * explicitly opted out) still requires independence. Run on the decision
+ * transaction's executor so the answer is current as of the decision.
+ */
+export async function reopenIndependenceRequired(
+  executor: SqlExecutor,
+  orgId: string,
+  request: { requestedBy: string; subsidiaryId: string | null },
+): Promise<ReopenIndependence> {
+  const candidates = (await executor.execute<{ id: string }>(sql`
+    select id from users
+     where org_id = ${orgId} and is_active and id <> ${request.requestedBy}`));
+  for (const candidate of candidates.rows) {
+    if (!(await actorHasPermission(executor, orgId, candidate.id, "close.reopen"))) continue;
+    const scope = await actorAllowedSubsidiaryIds(executor, orgId, candidate.id);
+    if (request.subsidiaryId == null) {
+      if (scope !== null) continue;
+    } else if (scope !== null && !scope.has(request.subsidiaryId)) {
+      continue;
+    }
+    return { required: true, reason: "another-approver" };
+  }
+  // Flows own approvals outright: an enabled Flow with an approval gate
+  // that has not opted out of preventSelfApproval requires an independent
+  // decider, even in a one-approver organization.
+  const governed = (await executor.execute<{ one: number }>(sql`
+    select 1 as one from flows
+     where org_id = ${orgId} and enabled
+       and jsonb_typeof(graph->'nodes') = 'array'
+       and exists (
+         select 1 from jsonb_array_elements(graph->'nodes') node
+          where node->'data'->>'kind' = 'gate'
+            and coalesce((node->'data'->'gate'->>'preventSelfApproval')::boolean, true)
+       )
+     limit 1`));
+  if (governed.rows.length > 0) return { required: true, reason: "flow" };
+  return { required: false, reason: null };
+}
+
+/** One pending request's decision posture for the approval surfaces: the
+ * conflict scan plus whether the engine will demand an independent
+ * approver or accept a self-approval attestation. Read-only — the decision
+ * transaction re-resolves eligibility authoritatively. */
+export async function reopenDecisionPreview(
+  orgId: string,
+  requestId: string,
+  actorId: string,
+): Promise<{
+  ownRequest: boolean;
+  conflicts: ReopenApprovalConflict[];
+  independenceRequired: boolean;
+  independenceReason: "another-approver" | "flow" | null;
+  selfApprovalAllowed: boolean;
+}> {
+  const row = (await db.execute<{ requested_by: string; subsidiary_id: string | null; period_id: string; book_id: string }>(sql`
+    select requested_by, subsidiary_id, period_id, book_id from close_reopen_requests
+     where id = ${requestId} and org_id = ${orgId} and status = 'requested'`)).rows[0];
+  if (!row) throw new CloseError("pending reopen request not found");
+  const conflicts = await reopenApprovalConflicts(
+    db, orgId, { period_id: row.period_id, book_id: row.book_id, subsidiary_id: row.subsidiary_id }, actorId);
+  const independence = await reopenIndependenceRequired(
+    db, orgId, { requestedBy: row.requested_by, subsidiaryId: row.subsidiary_id });
+  return {
+    ownRequest: row.requested_by === actorId,
+    conflicts,
+    independenceRequired: independence.required,
+    independenceReason: independence.reason,
+    selfApprovalAllowed: !independence.required,
+  };
+}
+
 /** The governing lock for one module at a request's scope: exact row, else org-wide. */
 async function governingLockState(
   tx: SqlExecutor,
@@ -349,31 +440,36 @@ export async function consumeReopenRequestsForClosedModules(args: {
   return { consumed };
 }
 
+export function describeReopenConflicts(conflicts: ReopenApprovalConflict[]): string {
+  return conflicts.map((conflict) => `${conflict.count} ${conflict.kind.replace(/_/g, " ")} (${conflict.examples.join(", ")})`).join("; ");
+}
+
 export async function decidePeriodReopen(args: {
   orgId: string;
   requestId: string;
   actorId: string;
   approve: boolean;
   hours?: number;
+  /**
+   * Self-approval attestation, required when the decider is the requester
+   * and no independent approver is available. A 10-500 character reason
+   * recording why no other approver could decide it; retained in the
+   * decision audit. Refused (unused) whenever independent approval applies.
+   */
+  attestation?: string;
 }): Promise<void> {
-  // The conflict scan and its audit commit outside the decision transaction:
-  // a refused decision rolls its transaction back, which would take the
-  // audit of the refusal with it. The scan itself needs no locks — it names
-  // the approver's standing relationship to the period's records.
+  // The conflict scan needs no locks — it names the approver's standing
+  // relationship to the period's records — but whether it refuses is
+  // decided inside the decision transaction (eligibility can change between
+  // request and decision). A refused decision rolls its transaction back,
+  // which would take the refusal's audit with it, so a conflict refusal
+  // records its marker in-transaction and the audit commits on the way out.
+  let scopedForConflicts: { period_id: string; book_id: string; subsidiary_id: string | null } | null = null;
+  let conflicts: ReopenApprovalConflict[] = [];
   if (args.approve) {
-    const scoped = await loadRequestedReopen(db, args.orgId, args.requestId);
-    if (scoped) {
-      const conflicts = await reopenApprovalConflicts(db, args.orgId, scoped, args.actorId);
-      if (conflicts.length > 0) {
-        const summary = conflicts.map((conflict) => `${conflict.count} ${conflict.kind.replace(/_/g, " ")} (${conflict.examples.join(", ")})`).join("; ");
-        await db.execute(sql`
-          insert into close_events (org_id, event_type, actor_id, payload)
-          values (${args.orgId}, 'period.reopen_conflict', ${args.actorId},
-                  ${JSON.stringify({ requestId: args.requestId, conflicts })}::jsonb)`);
-        throw new CloseError(
-          `conflict of interest: you are recorded on the records this reopen would unlock (${summary}); route it to another approver`,
-        );
-      }
+    scopedForConflicts = await loadRequestedReopen(db, args.orgId, args.requestId);
+    if (scopedForConflicts) {
+      conflicts = await reopenApprovalConflicts(db, args.orgId, scopedForConflicts, args.actorId);
     }
   }
   // The decision audit commits after the decision transaction: a refused
@@ -388,16 +484,49 @@ export async function decidePeriodReopen(args: {
     modules: CloseModule[];
     reason: string;
     requestedBy: string;
+    selfApproved: boolean;
+    attestation: string | null;
+    conflicts: ReopenApprovalConflict[];
   } | null = null;
-  await db.transaction(async (tx) => {
+  let conflictRefusal: ReopenApprovalConflict[] | null = null;
+  const decide = async () => db.transaction(async (tx) => {
     const request = (await tx.execute<CloseReopenRequestRow>(sql`
       select * from close_reopen_requests
        where id = ${args.requestId} and org_id = ${args.orgId} and status = 'requested'
        for update`));
     const row = request.rows[0];
     if (!row) throw new CloseError("pending reopen request not found");
-    if (row.requested_by === args.actorId)
+    const selfApproval = row.requested_by === args.actorId;
+    // Eligibility resolves here, inside the decision transaction: another
+    // approver may have joined (or the last one left) since the request.
+    const independence = args.approve || selfApproval
+      ? await reopenIndependenceRequired(tx, args.orgId, {
+        requestedBy: row.requested_by, subsidiaryId: row.subsidiary_id,
+      })
+      : { required: false, reason: null as "another-approver" | "flow" | null };
+    if (selfApproval && args.approve && independence.required) {
       throw new CloseError("a reopen request requires independent approval");
+    }
+    let attestation: string | null = null;
+    if (selfApproval && args.approve) {
+      // The requester is the only eligible approver: self-approval is
+      // allowed with an explicit attestation, recorded as its own audit
+      // entry with the conflict detail retained.
+      attestation = (args.attestation ?? "").trim();
+      if (attestation.length < 10 || attestation.length > 500) {
+        throw new CloseError(
+          "self-approving a reopen requires a 10-500 character attestation recording why no other approver could decide it",
+        );
+      }
+    }
+    if (args.approve && !selfApproval && conflicts.length > 0 && independence.required) {
+      // Mark the refusal for its audit on the way out: writing it here
+      // would roll back with the refused decision.
+      conflictRefusal = conflicts;
+      throw new CloseError(
+        `conflict of interest: you are recorded on the records this reopen would unlock (${describeReopenConflicts(conflicts)}); route it to another approver`,
+      );
+    }
     if (!args.approve) {
       await tx.execute(sql`
         update close_reopen_requests set status = 'rejected', approved_by = ${args.actorId},
@@ -411,6 +540,9 @@ export async function decidePeriodReopen(args: {
         modules: row.modules,
         reason: row.reason,
         requestedBy: row.requested_by,
+        selfApproved: false,
+        attestation: null,
+        conflicts: [],
       };
       return;
     }
@@ -587,8 +719,25 @@ export async function decidePeriodReopen(args: {
       modules: row.modules,
       reason: row.reason,
       requestedBy: row.requested_by,
+      selfApproved: selfApproval,
+      attestation,
+      conflicts: selfApproval ? conflicts : [],
     };
   });
+  try {
+    await decide();
+  } catch (error) {
+    // The conflict refusal's audit commits here, outside the rolled-back
+    // decision transaction — a refused decision must still leave evidence
+    // of why it was refused.
+    if (conflictRefusal && error instanceof CloseError) {
+      await db.execute(sql`
+        insert into close_events (org_id, event_type, actor_id, payload)
+        values (${args.orgId}, 'period.reopen_conflict', ${args.actorId},
+                ${JSON.stringify({ requestId: args.requestId, conflicts: conflictRefusal })}::jsonb)`);
+    }
+    throw error;
+  }
   // The decision committed: the approver owns an audit row (searchable in
   // the audit trail by actor and action) and a close-history event naming
   // the scope, the decision and the requester's reason. Nothing is written
@@ -600,12 +749,29 @@ export async function decidePeriodReopen(args: {
       subsidiaryId: decided.subsidiaryId,
       modules: decided.modules,
     };
+    // A sole-approver self-approval is its own audit entry: the action
+    // names it, the note records that no other eligible approver existed,
+    // and the conflict detail the requester accepted is retained.
+    const action = decided.status === "rejected"
+      ? "reject"
+      : decided.selfApproved ? "self_approve" : "approve";
     await db.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-      values (${args.orgId}, 'close_reopen_requests', ${args.requestId}, ${decided.status === "approved" ? "approve" : "reject"},
+      values (${args.orgId}, 'close_reopen_requests', ${args.requestId}, ${action},
               ${JSON.stringify({
                 before: { status: "requested" },
-                after: { status: decided.status, reason: decided.reason },
+                after: {
+                  status: decided.status,
+                  reason: decided.reason,
+                  ...(decided.selfApproved
+                    ? {
+                      selfApproved: true,
+                      note: "self-approved: no other eligible approver",
+                      attestation: decided.attestation,
+                      conflicts: decided.conflicts,
+                    }
+                    : {}),
+                },
                 scope,
                 requestedBy: decided.requestedBy,
               })}::jsonb, ${args.actorId})`);
@@ -618,6 +784,14 @@ export async function decidePeriodReopen(args: {
                 reason: decided.reason,
                 scope,
                 requestedBy: decided.requestedBy,
+                ...(decided.selfApproved
+                  ? {
+                    selfApproved: true,
+                    note: "self-approved: no other eligible approver",
+                    attestation: decided.attestation,
+                    conflicts: decided.conflicts,
+                  }
+                  : {}),
               })}::jsonb)`);
   }
 }

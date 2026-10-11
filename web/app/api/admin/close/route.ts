@@ -7,10 +7,10 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { CLOSE_MODULES, CloseError, type CloseModule } from "@openbooks/engine/src/periods/period-policy.ts";
-import { consumeReopenRequestsForClosedModules, decidePeriodReopen, extendReopenRequest, recloseApprovedReopen, reopenRequestConflicts, requestPeriodReopen } from "@openbooks/engine/src/close/reopening.ts";
+import { consumeReopenRequestsForClosedModules, decidePeriodReopen, extendReopenRequest, recloseApprovedReopen, reopenDecisionPreview, requestPeriodReopen } from "@openbooks/engine/src/close/reopening.ts";
 import { generateAccountingPeriods } from "@openbooks/engine/src/close/calendar.ts";
 import { closePeriodAllModules, setPeriodLockState } from "@openbooks/engine/src/periods/period-locks.ts";
-import { auditBankingModuleClose, bankingCloseStatus, evaluateBankingModuleClose } from "@openbooks/engine/src/close/banking-close.ts";
+import { auditBankingModuleClose, bankingCloseStatus, bankingUnmatchedStatementLines, evaluateBankingModuleClose } from "@openbooks/engine/src/close/banking-close.ts";
 import { can, getAuthz, guardSubsidiaryScope } from "../../../../lib/authz";
 import { isUuid } from "../../../../lib/list-params";
 import { isFeatureEnabled } from "../../../../lib/features";
@@ -60,7 +60,7 @@ const closeActionSchemas = [
   z.object({ action: z.literal("close-period"), periodId: z.string().uuid(), bookId: z.string().uuid(), subsidiaryId: z.string().uuid().nullable().optional(), state: z.enum(["soft_closed", "closed"]).optional().default("closed"), modules: z.array(z.enum(CLOSE_MODULES)).min(1).optional(), moduleReasons: z.record(z.enum(CLOSE_MODULES), z.string()).optional(), reason: z.string().trim().min(1), bankingAcknowledgement: z.string().max(2000).optional(), }),
   z.object({ action: z.literal("banking-close-status"), periodId: z.string().uuid(), bookId: z.string().uuid(), subsidiaryId: z.string().uuid().nullable().optional() }),
   z.object({ action: z.literal("request-reopen"), periodId: z.string().uuid(), bookId: z.string().uuid(), subsidiaryId: z.string().uuid().nullable().optional(), modules: z.array(z.enum(CLOSE_MODULES)).min(1), reason: z.string().trim().min(1) }),
-  z.object({ action: z.literal("decide-reopen"), requestId: z.string().uuid(), approve: z.boolean(), hours: z.number().positive().max(168).optional() }),
+  z.object({ action: z.literal("decide-reopen"), requestId: z.string().uuid(), approve: z.boolean(), hours: z.number().positive().max(168).optional(), attestation: z.string().max(500).optional() }),
   z.object({ action: z.literal("extend-reopen"), requestId: z.string().uuid(), additionalHours: z.number().int().min(1).max(168).optional(), addModules: z.array(z.enum(CLOSE_MODULES)).optional(), reason: z.string().trim().min(1) }),
   z.object({ action: z.literal("reopen-conflicts"), requestId: z.string().uuid() }),
   z.object({ action: z.literal("reclose-reopen"), requestId: z.string().uuid(), reason: z.string().trim().min(1) }),
@@ -874,12 +874,18 @@ export const POST = defineRoute({
           subsidiaryId: subsidiaryId ?? undefined,
           actorId,
         });
+        const unmatchedStatementLines = await bankingUnmatchedStatementLines(orgId, {
+          periodId,
+          bookId,
+          subsidiaryId: subsidiaryId ?? undefined,
+        });
         return NextResponse.json({
           ok: true,
           accounts,
           issues: accounts.filter(
             (account) => account.status !== "signed_off" || account.stale,
           ),
+          unmatchedStatementLines,
         });
       }
       if (action === "request-reopen") {
@@ -919,6 +925,7 @@ export const POST = defineRoute({
           actorId,
           approve: body.approve === true,
           hours: body.hours == null ? undefined : Number(body.hours),
+          attestation: typeof body.attestation === "string" ? body.attestation : undefined,
         });
         return NextResponse.json({ ok: true });
       }
@@ -956,9 +963,14 @@ export const POST = defineRoute({
       if (action === "reopen-conflicts") {
         const requestId = text(body, "requestId", true)!;
         if (!isUuid(requestId)) throw new CloseError("invalid reopen request");
+        const preview = await reopenDecisionPreview(orgId, requestId, actorId);
         return NextResponse.json({
           ok: true,
-          conflicts: await reopenRequestConflicts(orgId, requestId, actorId),
+          conflicts: preview.conflicts,
+          ownRequest: preview.ownRequest,
+          independenceRequired: preview.independenceRequired,
+          independenceReason: preview.independenceReason,
+          selfApprovalAllowed: preview.selfApprovalAllowed,
         });
       }
       return NextResponse.json(
