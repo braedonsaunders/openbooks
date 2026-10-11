@@ -15,7 +15,7 @@ import { InventoryError, InventoryOwnershipError } from '@openbooks/engine/src/i
  * assembler (which pulls PDF rendering this route must not load), so it is
  * matched by its stable code, not by instanceof.
  */
-export function toActionFailure(error: unknown): { status: 403 | 422 | 500; body: { error?: string; code?: string } } {
+export function toActionFailure(error: unknown): { status: 403 | 422 | 500; body: { error?: string; code?: string; remedy?: string } } {
   // A stock movement touching another legal entity's stock is an
   // authorization boundary, not a validation miss.
   if (error instanceof InventoryOwnershipError) {
@@ -28,7 +28,15 @@ export function toActionFailure(error: unknown): { status: 403 | 422 | 500; body
     error instanceof PayrollError ||
     (error instanceof Error && (error as { code?: unknown }).code === 'invoice_backup_required')
   ) {
-    return { status: 422, body: { error: (error as Error).message } }
+    // A typed refusal may carry its machine identity for the operator's
+    // next step (a bill refused until its lines are matched names the
+    // match code and remedy the drawer offers). Only string codes and
+    // remedies pass through — never driver text or internal ids.
+    const record = error as { code?: unknown; remedy?: unknown };
+    const body: { error?: string; code?: string; remedy?: string } = { error: (error as Error).message };
+    if (typeof record.code === 'string' && record.code.trim() !== '') body.code = record.code;
+    if (typeof record.remedy === 'string' && record.remedy.trim() !== '') body.remedy = record.remedy;
+    return { status: 422, body }
   }
   return { status: 500, body: { code: 'internal_error' } }
 }

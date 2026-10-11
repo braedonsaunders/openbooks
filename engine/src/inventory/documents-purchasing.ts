@@ -4,7 +4,7 @@ import { db, type SqlExecutor } from "../platform/db.ts";
 import { add, cmp, isZero, neg, toUnits } from "../money/money.ts";
 import { extendCost, unitCostPerQuantity } from "./costing.ts";
 import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
-import { InventoryError, type Runner } from "./contracts.ts";
+import { BillLinesUnmatchedError, InventoryError, type Runner } from "./contracts.ts";
 import { assertDocumentLinesUntracked } from "./tracking.ts";
 import { assertInventoryOffHoldsNoStock, assertMovementOwner, inventoryFeatureEnabled } from "./profile-policy.ts";
 import { stockLocationDim, postInventoryEntry } from "./journal.ts";
@@ -149,7 +149,7 @@ export async function assertBillReceiptsPostable(
 
 /**
  * A vendor-bill line coded by hand for receipt-tracked stock must not bypass
- * three-way matching: billing it straight to the inventory asset and then
+ * three-way matching: billing it with no purchase-order provenance and then
  * receiving the same stock on its purchase order counts it twice. When an
  * approved purchase order still holds that item open, refuse naming the
  * order — match the bill to its purchase-order line (or receive first)
@@ -169,12 +169,15 @@ async function assertManualBillLinesMatched(
   if (manual.length === 0) return;
   const open = (await runner.execute<{
     item_id: string;
+    item_code: string | null;
+    item_name: string;
     document_number: string;
     line_number: number;
   }>(sql`
-    select dl.item_id, d.document_number, dl.line_number
+    select dl.item_id, i.code as item_code, i.name as item_name, d.document_number, dl.line_number
       from document_lines dl
       join documents d on d.id = dl.document_id and d.org_id = dl.org_id
+      join items i on i.id = dl.item_id and i.org_id = dl.org_id
      where dl.org_id = ${orgId}
        and d.kind = 'purchase_order'
        and d.status = 'approved'
@@ -186,19 +189,24 @@ async function assertManualBillLinesMatched(
        )})
        and (dl.quantity - dl.quantity_billed - dl.quantity_cancelled) > 0`));
   if (open.rows.length === 0) return;
-  const byItem = new Map<string, { document_number: string; line_number: number }[]>();
+  const byItem = new Map<string, { item_code: string | null; item_name: string; document_number: string; line_number: number }[]>();
   for (const row of open.rows) {
     const list = byItem.get(row.item_id) ?? [];
-    list.push({ document_number: row.document_number, line_number: row.line_number });
+    list.push({ item_code: row.item_code, item_name: row.item_name, document_number: row.document_number, line_number: row.line_number });
     byItem.set(row.item_id, list);
   }
   const first = manual.find((line) => byItem.has(line.itemId))!;
   const orders = byItem.get(first.itemId)!;
   const [primary] = orders;
+  const itemLabel = primary!.item_code ?? primary!.item_name;
+  const numbers = [...new Set(orders.map((order) => order.document_number))];
   const more =
     orders.length > 1 ? ` (and ${orders.length - 1} more open line${orders.length > 2 ? "s" : ""})` : "";
-  throw new InventoryError(
-    `vendor-bill line ${first.lineNumber} (item ${first.itemId}) is stock still open on purchase order ${primary!.document_number} line ${primary!.line_number}${more}: match the bill to its purchase-order line instead of coding it directly to the inventory asset — billing unmatched stock now and receiving it later counts it twice`,
+  const ordersLabel = numbers.length > 1 ? `purchase orders ${numbers.join(", ")}` : `purchase order ${numbers[0]}`;
+  throw new BillLinesUnmatchedError(
+    `vendor-bill line ${first.lineNumber} (${itemLabel}) is stock still open on ${ordersLabel} line ${primary!.line_number}${more}: match the bill to its purchase-order line so it clears received-not-billed instead of receiving the stock again — billing unmatched stock now and receiving it later counts it twice`,
+    `Match this bill to ${ordersLabel} (Match to purchase order), then post again`,
+    { lineNumber: first.lineNumber, itemCode: primary!.item_code, purchaseOrderNumbers: numbers },
   );
 }
 
