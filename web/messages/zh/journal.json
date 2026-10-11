@@ -28,7 +28,8 @@
     "migration": "迁移",
     "manufacturing": "生产制造",
     "opening": "期初",
-    "bookOpening": "账簿期初"
+    "bookOpening": "账簿期初",
+    "expenseAmortization": "费用摊销"
   },
   "detail": {
     "notFound": "未找到分录",

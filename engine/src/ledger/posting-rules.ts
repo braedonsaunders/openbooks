@@ -67,6 +67,10 @@ const cardRule: RuleFn = (doc, lines, deps) => {
   ];
 };
 
+/** Marks a leg that defers its line through an amortization template. */
+const amortizationSource = (l: DocLine, deps: PostingDeps): { amortizationSourceLineId?: string } =>
+  deps.amortizationByLine?.has(l.id) ? { amortizationSourceLineId: l.id } : {};
+
 /** Tender-leg memo: the method label plus the operator's reference when one was taken. */
 const tenderMemo = (t: { methodLabel: string; reference: string | null }): string | null =>
   t.reference ? `${t.methodLabel} ${t.reference}` : t.methodLabel;
@@ -329,12 +333,14 @@ export const RULES: Record<string, RuleFn> = {
       // the stock); all other lines DR their expense account.
       accountId: resolvedLineAccount(
         l,
-        deps.agencyByLine?.get(l.id)?.accountId ?? deps.inventoryAssetByLine?.get(l.id) ?? l.accountId,
+        deps.agencyByLine?.get(l.id)?.accountId ?? deps.inventoryAssetByLine?.get(l.id) ??
+          deps.amortizationByLine?.get(l.id)?.deferralAccountId ?? l.accountId,
       ),
       amount: purchaseBaseAmount(l, deps), // debit net + nonrecoverable tax
       memo: l.description,
       partyId: l.partyId ?? doc.partyId,
       ...dims(doc, l),
+      ...amortizationSource(l, deps),
     }));
     const tax = purchaseTaxLines(doc, lines, deps, 1);
     const total = sumMoney([...expense, ...tax].map((l) => l.amount));
@@ -648,12 +654,13 @@ export const RULES: Record<string, RuleFn> = {
     }
     const bookExpense = (ls: DocLine[], cardStamp: boolean): KernelLine[] =>
       ls.map((l) => ({
-        accountId: resolvedLineAccount(l),
+        accountId: resolvedLineAccount(l, deps.amortizationByLine?.get(l.id)?.deferralAccountId ?? l.accountId),
         amount: purchaseBaseAmount(l, deps),
         memo: l.description,
         partyId: l.partyId ?? doc.partyId,
         ...(cardStamp ? { paymentCardId: doc.paymentCardId } : {}),
         ...dims(doc, l),
+        ...amortizationSource(l, deps),
       }));
     const oopExpense = bookExpense(oop, false);
     const oopTax = purchaseTaxLines(doc, oop, deps, 1);
@@ -740,8 +747,9 @@ export const RULES: Record<string, RuleFn> = {
       // systems put the entity on the LINE, e.g. opening-balance journals).
       // Falls back to the header party when the line has none.
       const partyId = l.partyId ?? doc.partyId;
-      const accountId = resolvedLineAccount(l);
+      const accountId = resolvedLineAccount(l, deps.amortizationByLine?.get(l.id)?.deferralAccountId ?? l.accountId);
       return {
+        ...amortizationSource(l, deps),
         accountId,
         amount: parseMoney(l.amount),
         subsidiaryId: l.subsidiaryId,

@@ -230,6 +230,10 @@
     "book-replication-incomplete": {
       "title": "Full books are missing transactions",
       "message": "{count, plural, one {# transaction has not been replicated into a full book. Record a catch-up under Book replication.} other {# transactions have not been replicated into a full book. Record a catch-up under Book replication.}}"
+    },
+    "prepaid-amortization-unposted": {
+      "title": "Prepaid amortization remains unposted",
+      "message": "{count, plural, one {# amortization period is due and unposted.} other {# amortization periods are due and unposted.}}"
     }
   },
   "severity": {
@@ -450,6 +454,10 @@
     "book-replication-complete": {
       "title": "Confirm full books are complete",
       "description": "Every transaction through period end is replicated into each book that replicates in full."
+    },
+    "prepaid-amortized": {
+      "title": "Amortize prepaid expenses",
+      "description": "Post every amortization period of active prepaid and deferred expense schedules that ends by period end."
     }
   },
   "setup": {

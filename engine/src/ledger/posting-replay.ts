@@ -19,6 +19,7 @@ import { resolveCashPostingTenders, TenderRefusal } from "../sales/document-tend
 import { CashCloseoutError, resolveCashCloseoutForPosting } from "../sales/cash-closeout.ts";
 import { resolveMarketplaceClearingForDocument } from "./posting-tax-policy.ts";
 import { applySubsidiaries } from "./posting-subsidiaries.ts";
+import { scheduledDeferralByLine } from "../amortization/source-posting.ts";
 import { resolveInternalBillingPostingContext } from "./internal-billing-posting.ts";
 import { resolvePostingPeriod } from "./posting-period.ts";
 import { glProjectionScopeUnchanged, buildProjection, glLineKey, glProjectionKey } from "./posting-projection.ts";
@@ -208,6 +209,11 @@ export async function regenerateGlImpactTx(
     .from(schema.documentLines)
     .where(and(eq(schema.documentLines.documentId, documentId), eq(schema.documentLines.orgId, doc.orgId)))
     .orderBy(asc(schema.documentLines.lineNumber));
+  // Deferred lines regenerate onto the deferral account their schedules hold.
+  if (!deps.amortizationByLine) {
+    const scheduled = await scheduledDeferralByLine(tx, doc.orgId, doc.id);
+    if (scheduled.size > 0) deps = { ...deps, amortizationByLine: scheduled };
+  }
 
   if (doc.kind === "internal_billing" && !deps.internalBilling) {
     deps = {

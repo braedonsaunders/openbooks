@@ -61,6 +61,7 @@ export const JOURNAL_GL_NATIVE_ORIGINS = [
   "lease",
   "tax_provision",
   "provision",
+  "expense_amortization",
   "pledge",
   "gift",
   "grant",

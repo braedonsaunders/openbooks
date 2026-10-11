@@ -230,6 +230,10 @@
     "book-replication-incomplete": {
       "title": "フル帳簿に取引の欠落があります",
       "message": "{count, plural, other {# 件の取引がフル帳簿に複製されていません。帳簿の複製で追いつきを記録してください。}}"
+    },
+    "prepaid-amortization-unposted": {
+      "title": "前払費用の配分が未記帳です",
+      "message": "{count, plural, one {期日到来の配分期間 # 件が未記帳です。} other {期日到来の配分期間 # 件が未記帳です。}}"
     }
   },
   "severity": {
@@ -450,6 +454,10 @@
     "book-replication-complete": {
       "title": "フル帳簿の完全性を確認",
       "description": "期末までのすべての取引が、完全複製の各帳簿に複製されています。"
+    },
+    "prepaid-amortized": {
+      "title": "前払費用を配分",
+      "description": "期間末日までに終わる有効な配分スケジュールの期間をすべて記帳します。"
     }
   },
   "setup": {

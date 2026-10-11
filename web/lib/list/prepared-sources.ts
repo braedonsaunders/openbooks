@@ -868,6 +868,9 @@ const SOURCES = {
   compliance_vendors: { route: '/compliance/vendors', mode: 'loaded' },
   documents_trash: { route: '/documents/trash', mode: 'loaded' },
   tax_provisions: { route: '/tax/provisions', mode: 'loaded' },
+  amortization_schedules: { route: '/accounting/amortization', mode: 'loaded' },
+  amortization_due: { route: '/accounting/amortization', mode: 'loaded' },
+  amortization_reconciliation: { route: '/accounting/amortization', mode: 'loaded' },
   time_clock_pairs: {
     route: '/time/clock',
     rowsField: 'rows',

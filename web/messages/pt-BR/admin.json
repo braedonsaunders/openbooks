@@ -1276,7 +1276,8 @@
       "parties": "Pessoas e empresas",
       "banking": "Banco",
       "expenses": "Relatórios de despesas",
-      "intercompany": "Entre empresas"
+      "intercompany": "Entre empresas",
+      "amortization": "Apropriação de despesas"
     },
     "gl_read": "Ver lançamentos e saldos",
     "gl_manage": "Gerenciar o plano de contas",
@@ -1459,7 +1460,9 @@
     "intercompany_manage": "Criar, vincular e desvincular pares; propor e cancelar compensações",
     "intercompany_settle": "Contabilizar e estornar compensações e transferências entre empresas",
     "intercompany_approve": "Aprovar ou rejeitar compensações entre empresas",
-    "gl_post_book_specific": "Lançar diários específicos de um livro"
+    "gl_post_book_specific": "Lançar diários específicos de um livro",
+    "amortization_read": "Ver cronogramas de apropriação e relatórios",
+    "amortization_manage": "Executar a apropriação e alterar cronogramas"
   },
   "ai": {
     "metaTitle": "Configurações de IA",
@@ -3774,6 +3777,10 @@
         "title": "Replicação de livros",
         "description": "Ative, atualize ou interrompa a replicação de cada transação em um livro secundário, com o histórico de cada alteração.",
         "singularTitle": "Alteração de replicação"
+      },
+      "expense-amortization-templates": {
+        "title": "Modelos de apropriação",
+        "description": "Como despesas antecipadas e diferidas são apropriadas: método, prazo, conta de diferimento e destino padrão. Com vigência por código."
       }
     },
     "fields": {
@@ -4422,7 +4429,16 @@
       "preserveClasses": "Manter classes",
       "preserveLocations": "Manter locais",
       "preserveProjects": "Manter projetos",
-      "preserveSegments": "Manter segmentos personalizados"
+      "preserveSegments": "Manter segmentos personalizados",
+      "amortizationMethod": "Método de apropriação",
+      "amortizationTermSource": "Prazo conforme",
+      "amortizationPeriodCount": "Número de períodos",
+      "amortizationPercentages": "Tabela de percentuais",
+      "amortizationPeriodRow": "Período {number}",
+      "amortizationAddPeriod": "Adicionar período",
+      "amortizationPercent": "Percentual do valor",
+      "amortizationDeferralAccount": "Conta de diferimento (despesas antecipadas)",
+      "amortizationDestinationAccount": "Conta de destino padrão"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Dias entre a taxa utilizável mais recente e o fim do período a partir dos quais a reavaliação e a consolidação recusam a taxa. Taxas de fechamento contam a partir da data da taxa à vista de fim de período; taxas médias, a partir da cotação mais recente incluída na média. Padrão sem política: 31 dias.",
@@ -4615,7 +4631,15 @@
       "periodEndClosingMethod": "Diretamente: receitas e despesas são encerradas contra lucros acumulados. Por meio de uma conta de apuração do resultado: são encerradas contra essa conta, que depois é encerrada contra lucros acumulados.",
       "periodEndPostingPeriod": "O último período regular do exercício, ou o período de ajuste do exercício quando o calendário fiscal tiver um.",
       "periodEndBalanceSheetJournals": "Também zerar todas as contas do balanço na data de encerramento e restabelecer os mesmos saldos no primeiro dia do exercício seguinte.",
-      "periodEndPreserveSegments": "Os segmentos de balanceamento são sempre mantidos, para que cada valor de segmento continue equilibrado por si só."
+      "periodEndPreserveSegments": "Os segmentos de balanceamento são sempre mantidos, para que cada valor de segmento continue equilibrado por si só.",
+      "amortizationTemplateCode": "As versões de um modelo compartilham o código; vale a versão vigente na data de lançamento da transação.",
+      "amortizationEffectiveFrom": "Transações lançadas a partir desta data usam esta versão. Uma versão em uso mantém suas regras; adicione uma versão posterior para alterá-las.",
+      "amortizationMethod": "Linear divide igualmente por período; proporcional dá aos meses parciais inicial e final uma parte conforme seus dias; dias exatos pondera cada mês pelos dias de serviço; variável segue uma tabela de percentuais.",
+      "amortizationTermSource": "Os períodos do modelo apropriam pelo número de períodos abaixo a partir do início do serviço da linha; as datas de serviço usam o início e o fim da linha.",
+      "amortizationPercentages": "Um percentual por período, em ordem, somando exatamente 100.",
+      "amortizationPeriodOffset": "Períodos de espera entre o início e a primeira apropriação; 0 começa no primeiro período.",
+      "amortizationDeferralAccount": "A conta de ativo circulante ou outro ativo em que a despesa fica até ser apropriada.",
+      "amortizationDestinationAccount": "Em branco, cada linha é apropriada na sua própria conta de despesa."
     },
     "options": {
       "withholdingCondominiumPayer": "Pagador: condomínio",
@@ -5437,6 +5461,16 @@
       "periodEndPostingPeriod": {
         "last_period": "Último período do exercício",
         "adjustment_period": "Período de ajuste"
+      },
+      "amortizationMethod": {
+        "straight_line": "Linear por período",
+        "prorated_first_last": "Primeiro e último período proporcionais",
+        "exact_days": "Dias exatos",
+        "variable": "Percentuais variáveis"
+      },
+      "amortizationTermSource": {
+        "template": "Períodos do modelo",
+        "service_dates": "Datas de serviço da linha"
       }
     },
     "payroll": {
@@ -8216,6 +8250,14 @@
     "multiBookAccounting": {
       "title": "Contabilidade multilivros",
       "description": "Mantenha livros secundários na própria moeda base por subsidiária, mapeie contas por livro, replique cada transação nos livros completos, lance diários específicos de um livro e compare livros lado a lado."
+    },
+    "expenseAmortization": {
+      "title": "Apropriação de despesas",
+      "description": "Despesas antecipadas e diferidas de faturas, lançamentos e relatórios de despesas apropriadas por período em cronogramas, com etapa de fechamento e conciliação com o razão geral."
+    },
+    "expenseAmortizationAutoRun": {
+      "title": "Apropriação automática",
+      "description": "Lança os períodos de apropriação vencidos assim que terminam, pelo agendador, sem execução manual."
     }
   },
   "backupsManager": {

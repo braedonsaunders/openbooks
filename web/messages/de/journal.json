@@ -28,7 +28,8 @@
     "migration": "Migration",
     "manufacturing": "Fertigung",
     "opening": "Eröffnung",
-    "bookOpening": "Buch-Eröffnung"
+    "bookOpening": "Buch-Eröffnung",
+    "expenseAmortization": "Aufwandsabgrenzung"
   },
   "detail": {
     "notFound": "Buchung nicht gefunden",

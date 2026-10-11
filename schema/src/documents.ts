@@ -470,6 +470,17 @@ export const documentLines = pgTable(
     workFrom: date("work_from"),
     workTo: date("work_to"),
 
+    /**
+     * Expense amortization (0687): the template this line defers through and
+     * its optional service window. Posting routes the line to the template's
+     * deferral account and creates its amortization schedule. The template
+     * foreign key lives in the migration so this file does not cycle into
+     * expense-amortization.ts.
+     */
+    amortizationTemplateId: uuid("amortization_template_id"),
+    amortizationStartOn: date("amortization_start_on"),
+    amortizationEndOn: date("amortization_end_on"),
+
     // Order-state denormalization (orders → fulfillment → billing chain).
     // These are commercial quantities, not posted money amounts: preserve the
     // same eight decimal places as quantity so partial fulfillment and billing

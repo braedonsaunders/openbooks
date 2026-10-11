@@ -28,7 +28,8 @@
     "migration": "移行",
     "manufacturing": "製造",
     "opening": "期首",
-    "bookOpening": "帳簿期首"
+    "bookOpening": "帳簿期首",
+    "expenseAmortization": "費用の期間配分"
   },
   "detail": {
     "notFound": "仕訳が見つかりません",

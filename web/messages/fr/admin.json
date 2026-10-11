@@ -1276,7 +1276,8 @@
       "parties": "Personnes et entreprises",
       "banking": "Banque",
       "expenses": "Notes de frais",
-      "intercompany": "Intercompagnie"
+      "intercompany": "Intercompagnie",
+      "amortization": "Étalement des charges"
     },
     "gl_read": "Consulter les journaux et les soldes",
     "gl_manage": "Gérer le plan comptable",
@@ -1459,7 +1460,9 @@
     "intercompany_manage": "Créer, associer et dissocier des paires ; proposer et annuler des compensations",
     "intercompany_settle": "Comptabiliser et contrepasser les compensations et transferts intercompagnies",
     "intercompany_approve": "Approuver ou rejeter les compensations intercompagnies",
-    "gl_post_book_specific": "Passer des écritures propres à un livre"
+    "gl_post_book_specific": "Passer des écritures propres à un livre",
+    "amortization_read": "Voir les échéanciers d’étalement et les rapports",
+    "amortization_manage": "Exécuter l’étalement et modifier les échéanciers"
   },
   "ai": {
     "metaTitle": "Fournisseurs d'IA",
@@ -3699,6 +3702,10 @@
         "title": "Réplication des livres",
         "description": "Activez, rattrapez ou arrêtez la réplication de chaque transaction dans un livre secondaire, avec l’historique de chaque changement.",
         "singularTitle": "Changement de réplication"
+      },
+      "expense-amortization-templates": {
+        "title": "Modèles d’étalement",
+        "description": "Comment les charges payées d’avance et différées passent en charge : méthode, durée, compte de régularisation et destination par défaut. Datés par code."
       }
     },
     "fields": {
@@ -4347,7 +4354,16 @@
       "preserveClasses": "Conserver les classes",
       "preserveLocations": "Conserver les emplacements",
       "preserveProjects": "Conserver les projets",
-      "preserveSegments": "Conserver les segments personnalisés"
+      "preserveSegments": "Conserver les segments personnalisés",
+      "amortizationMethod": "Méthode d’étalement",
+      "amortizationTermSource": "Durée issue de",
+      "amortizationPeriodCount": "Nombre de périodes",
+      "amortizationPercentages": "Table des pourcentages",
+      "amortizationPeriodRow": "Période {number}",
+      "amortizationAddPeriod": "Ajouter une période",
+      "amortizationPercent": "Pourcentage du montant",
+      "amortizationDeferralAccount": "Compte de régularisation (charges constatées d’avance)",
+      "amortizationDestinationAccount": "Compte de destination par défaut"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Nombre de jours entre le taux utilisable le plus récent et la fin de période au-delà duquel la réévaluation et la consolidation refusent le taux. Les taux de clôture se comptent depuis la date du taux comptant de fin de période ; les taux moyens depuis la cotation la plus récente incluse dans la moyenne. Valeur par défaut sans politique : 31 jours.",
@@ -4540,7 +4556,15 @@
       "periodEndClosingMethod": "Directement : produits et charges sont soldés vers le report à nouveau. Via un compte de résultat récapitulatif : ils sont soldés vers ce compte, lui-même soldé ensuite vers le report à nouveau.",
       "periodEndPostingPeriod": "La dernière période ordinaire de l'exercice, ou la période d'ajustement de l'exercice lorsque le calendrier fiscal en comporte une.",
       "periodEndBalanceSheetJournals": "Solder également chaque compte de bilan à la date de clôture et rouvrir les mêmes soldes le premier jour de l'exercice suivant.",
-      "periodEndPreserveSegments": "Les segments d'équilibrage sont toujours conservés, afin que chaque valeur de segment reste équilibrée à elle seule."
+      "periodEndPreserveSegments": "Les segments d'équilibrage sont toujours conservés, afin que chaque valeur de segment reste équilibrée à elle seule.",
+      "amortizationTemplateCode": "Les versions d’un modèle partagent son code ; la version en vigueur à la date comptable de l’opération s’applique.",
+      "amortizationEffectiveFrom": "Les opérations comptabilisées à partir de cette date utilisent cette version. Une version utilisée conserve ses règles ; ajoutez une version ultérieure pour les modifier.",
+      "amortizationMethod": "Le linéaire répartit à parts égales par période ; le prorata attribue aux premier et dernier mois partiels une part selon leurs jours ; au jour près pondère chaque mois par ses jours de service ; le variable suit une table de pourcentages.",
+      "amortizationTermSource": "Les périodes du modèle étalent sur le nombre de périodes ci-dessous à partir du début de service de la ligne ; les dates de service utilisent le début et la fin de la ligne.",
+      "amortizationPercentages": "Un pourcentage par période, dans l’ordre, totalisant exactement 100.",
+      "amortizationPeriodOffset": "Périodes d’attente entre le début et le premier étalement ; 0 commence dès la première période.",
+      "amortizationDeferralAccount": "Le compte d’actif circulant ou autre où la charge est portée jusqu’à son étalement.",
+      "amortizationDestinationAccount": "Vide : chaque ligne s’étale sur son propre compte de charge."
     },
     "options": {
       "withholdingCondominiumPayer": "Payeur : copropriété",
@@ -5362,6 +5386,16 @@
       "periodEndPostingPeriod": {
         "last_period": "Dernière période de l'exercice",
         "adjustment_period": "Période d'ajustement"
+      },
+      "amortizationMethod": {
+        "straight_line": "Linéaire par période",
+        "prorated_first_last": "Première et dernière période au prorata",
+        "exact_days": "Au jour près",
+        "variable": "Pourcentages variables"
+      },
+      "amortizationTermSource": {
+        "template": "Périodes du modèle",
+        "service_dates": "Dates de service de la ligne"
       }
     },
     "laborCosting": {
@@ -8216,6 +8250,14 @@
     "multiBookAccounting": {
       "title": "Comptabilité multi-livres",
       "description": "Tenez des livres secondaires dans leur propre devise de base par filiale, faites correspondre les comptes par livre, répliquez chaque transaction dans les livres complets, passez des écritures propres à un livre et comparez les livres côte à côte."
+    },
+    "expenseAmortization": {
+      "title": "Étalement des charges",
+      "description": "Les charges payées d’avance et différées des factures, écritures et notes de frais sont étalées par période au moyen d’échéanciers, avec une étape de clôture et un rapprochement avec le grand livre."
+    },
+    "expenseAmortizationAutoRun": {
+      "title": "Étalement automatique",
+      "description": "Comptabilise les périodes d’étalement échues dès leur fin via le planificateur, sans traitement manuel."
     }
   },
   "backupsManager": {

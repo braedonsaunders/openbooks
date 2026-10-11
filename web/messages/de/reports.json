@@ -1144,6 +1144,14 @@
       "managed_property_portfolio": {
         "label": "Verwaltete Immobilien",
         "description": "Aktueller Portfoliolebenszyklus, beschränkt auf die für den Nutzer berechtigten Rechtseinheiten."
+      },
+      "prepaid_amortization_plan": {
+        "label": "Auflösungsplan der Rechnungsabgrenzung",
+        "description": "Jede geplante und aufgelöste Periode der Abgrenzungspläne je Monat, Konto und Plan."
+      },
+      "prepaid_amortization_reconciliation": {
+        "label": "Abstimmung der aktiven Rechnungsabgrenzung",
+        "description": "Bewegungen der Abgrenzungskonten im Hauptbuch neben den Plänen, die sie erklären; bis zu einem Datum summiert ist die Differenz null, wenn beide übereinstimmen."
       }
     },
     "columns": {
@@ -2754,6 +2762,34 @@
         "code": "Immobiliencode",
         "name": "Immobilie",
         "status": "Zustand"
+      },
+      "prepaid_amortization_plan": {
+        "month": "Monat",
+        "schedule_number": "Plan",
+        "schedule_status": "Planstand",
+        "line_status": "Periodenstand",
+        "deferral_account": "Abgrenzungskonto",
+        "destination_account": "Aufwandskonto",
+        "subsidiary": "Tochtergesellschaft",
+        "currency": "Währung",
+        "amortized": "Aufgelöst",
+        "scheduled": "Geplant",
+        "schedule_id": "Plan (ID)",
+        "journal_entry_id": "Buchungssatz (ID)",
+        "book_id": "Buch-ID"
+      },
+      "prepaid_amortization_reconciliation": {
+        "moved_on": "Datum",
+        "deferral_account": "Abgrenzungskonto",
+        "subsidiary": "Tochtergesellschaft",
+        "book": "Buch",
+        "currency": "Währung",
+        "source": "Herkunft",
+        "ledger": "Hauptbuch",
+        "subledger": "Pläne",
+        "difference": "Differenz",
+        "account_id": "Konto-ID",
+        "book_id": "Buch-ID"
       }
     },
     "enumValues": {
@@ -3134,6 +3170,14 @@
     "analytics-workforce-capacity": {
       "name": "Personalkapazität",
       "description": "Aktuelle Personalstellenstruktur: geplante, finanzierte, besetzte und unbesetzte Vollzeitäquivalente."
+    },
+    "prepaid-expense-waterfall": {
+      "name": "Verlauf der aktiven Rechnungsabgrenzung",
+      "description": "Aufgelöste und geplante Rechnungsabgrenzung je Monat, Abgrenzungskonto und Währung."
+    },
+    "prepaid-expense-reconciliation": {
+      "name": "Abstimmung der aktiven Rechnungsabgrenzung",
+      "description": "Salden der Abgrenzungskonten im Hauptbuch gegenüber dem nicht aufgelösten Saldo ihrer Pläne, je Konto, Tochtergesellschaft, Buch und Währung."
     }
   },
   "generalLedger": {
@@ -3179,7 +3223,8 @@
       "release": "Freigabe aus Zweckbindungen",
       "manufacturing": "Fertigung",
       "opening": "Eröffnung",
-      "book_opening": "Eröffnungssalden des Buchs"
+      "book_opening": "Eröffnungssalden des Buchs",
+      "expense_amortization": "Aufwandsabgrenzung"
     },
     "columns": {
       "detail": "Geschäftspartner / Notiz"

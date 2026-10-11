@@ -1276,7 +1276,8 @@
       "parties": "人と会社",
       "banking": "銀行",
       "expenses": "経費精算",
-      "intercompany": "会社間"
+      "intercompany": "会社間",
+      "amortization": "費用の期間配分"
     },
     "gl_read": "仕訳と残高を表示",
     "gl_manage": "会計科目表を管理",
@@ -1459,7 +1460,9 @@
     "intercompany_manage": "法人間伝票の組を作成・関連付け・解除し、相殺処理を提案・取消",
     "intercompany_settle": "法人間相殺と資金振替を計上・反対仕訳",
     "intercompany_approve": "法人間相殺処理を承認または却下",
-    "gl_post_book_specific": "帳簿固有の仕訳を計上"
+    "gl_post_book_specific": "帳簿固有の仕訳を計上",
+    "amortization_read": "配分スケジュールとレポートを表示",
+    "amortization_manage": "配分を実行しスケジュールを変更"
   },
   "ai": {
     "metaTitle": "AI設定",
@@ -3827,6 +3830,10 @@
         "title": "帳簿の複製",
         "description": "副帳簿へのすべての取引の複製を有効化・追いつき・停止し、各変更の履歴を残します。",
         "singularTitle": "複製の変更"
+      },
+      "expense-amortization-templates": {
+        "title": "配分テンプレート",
+        "description": "前払費用・繰延費用を費用に振り替える方法、期間、繰延勘定、既定の振替先。コードごとに適用日で管理します。"
       }
     },
     "fields": {
@@ -4475,7 +4482,16 @@
       "preserveClasses": "クラスを保持",
       "preserveLocations": "拠点を保持",
       "preserveProjects": "プロジェクトを保持",
-      "preserveSegments": "カスタムセグメントを保持"
+      "preserveSegments": "カスタムセグメントを保持",
+      "amortizationMethod": "配分方法",
+      "amortizationTermSource": "期間の基準",
+      "amortizationPeriodCount": "期間数",
+      "amortizationPercentages": "割合表",
+      "amortizationPeriodRow": "期間 {number}",
+      "amortizationAddPeriod": "期間を追加",
+      "amortizationPercent": "金額に対する割合",
+      "amortizationDeferralAccount": "繰延勘定（前払費用）",
+      "amortizationDestinationAccount": "既定の振替先勘定"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "使用可能な最新レートから期末までの日数がこれを超えると、再評価と連結はそのレートを拒否します。期末レートは期末スポットレートの日付から、平均レートは平均に含まれる最新の相場の日付から数えます。ポリシー未設定時の既定値: 31日。",
@@ -4668,7 +4684,15 @@
       "periodEndClosingMethod": "直接：収益と費用を利益剰余金へ振り替えます。損益集計勘定経由：収益と費用をその勘定へ振り替え、その後利益剰余金へ振り替えます。",
       "periodEndPostingPeriod": "会計年度の最終通常期間、または会計カレンダーに調整期間がある場合はその年度の調整期間。",
       "periodEndBalanceSheetJournals": "さらに、年度末日にすべての貸借対照表勘定をゼロにし、翌会計年度の初日に同じ残高を再計上します。",
-      "periodEndPreserveSegments": "バランシングセグメントは常に保持され、各セグメント値が単独で貸借一致します。"
+      "periodEndPreserveSegments": "バランシングセグメントは常に保持され、各セグメント値が単独で貸借一致します。",
+      "amortizationTemplateCode": "テンプレートの各バージョンは同じコードを共有し、取引の記帳日に有効なバージョンが適用されます。",
+      "amortizationEffectiveFrom": "この日以降に記帳される取引はこのバージョンを使用します。使用中のバージョンは規則を変更できないため、変更するには後日付のバージョンを追加します。",
+      "amortizationMethod": "定額は期間ごとに均等に配分し、日割りは端数の初月と最終月を日数で按分し、日数按分は各月を役務日数で按分し、変動は割合表に従います。",
+      "amortizationTermSource": "テンプレート期間は明細の役務開始日から下記の期間数で配分し、役務日付は明細の開始日と終了日を使用します。",
+      "amortizationPercentages": "期間ごとに1つの割合を順に入力し、合計をちょうど100にします。",
+      "amortizationPeriodOffset": "開始から配分開始までに待つ期間数。0の場合は最初の期間から開始します。",
+      "amortizationDeferralAccount": "配分されるまで費用を計上しておく流動資産またはその他資産の勘定。",
+      "amortizationDestinationAccount": "空欄の場合、各明細は自身の費用勘定へ配分されます。"
     },
     "options": {
       "withholdingCondominiumPayer": "集合住宅管理組合の支払者",
@@ -5490,6 +5514,16 @@
       "periodEndPostingPeriod": {
         "last_period": "年度の最終期間",
         "adjustment_period": "調整期間"
+      },
+      "amortizationMethod": {
+        "straight_line": "期間ごとの定額",
+        "prorated_first_last": "初回と最終期間を日割り",
+        "exact_days": "日数按分",
+        "variable": "変動割合"
+      },
+      "amortizationTermSource": {
+        "template": "テンプレートの期間",
+        "service_dates": "明細の役務日付"
       }
     },
     "invoicing": {
@@ -8216,6 +8250,14 @@
     "multiBookAccounting": {
       "title": "マルチブック会計",
       "description": "子会社ごとに独自の基準通貨で副帳簿を管理し、帳簿ごとに勘定科目をマッピングし、すべての取引をフル帳簿に複製し、帳簿固有の仕訳を計上し、帳簿を並べて比較します。"
+    },
+    "expenseAmortization": {
+      "title": "費用の期間配分",
+      "description": "請求書・仕訳・経費精算書の前払費用と繰延費用をスケジュールで期間ごとに配分し、決算ステップと総勘定元帳との照合を備えます。"
+    },
+    "expenseAmortizationAutoRun": {
+      "title": "自動配分",
+      "description": "スケジューラーが期間の終了時に期日到来の配分を記帳し、手動の実行は不要です。"
     }
   },
   "extensions": {

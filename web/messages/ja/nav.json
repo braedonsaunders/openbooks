@@ -167,7 +167,8 @@
     "manufacturing-quality": "品質",
     "close-reopen-requests": "再オープン申請",
     "intercompany": "会社間",
-    "intercompany-netting": "法人間相殺"
+    "intercompany-netting": "法人間相殺",
+    "amortization": "費用の期間配分"
   },
   "groups": {
     "manufacturing": "製造",

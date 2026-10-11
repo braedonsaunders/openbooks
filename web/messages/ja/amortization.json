@@ -1,0 +1,185 @@
+{
+  "workspace": {
+    "title": "費用の期間配分",
+    "description": "前払費用・繰延費用を前払勘定に計上し、期間ごとに費用へ振り替えます。"
+  },
+  "views": {
+    "schedules": "スケジュール",
+    "run": "実行",
+    "reconciliation": "照合"
+  },
+  "statusFilter": {
+    "open": "未完了",
+    "draft": "下書き",
+    "active": "有効",
+    "on_hold": "保留中",
+    "completed": "完了",
+    "cancelled": "取消済み"
+  },
+  "status": {
+    "draft": "下書き",
+    "active": "有効",
+    "on_hold": "保留中",
+    "completed": "完了",
+    "cancelled": "取消済み"
+  },
+  "sourceKind": {
+    "vendor_bill": "仕入請求書",
+    "journal": "仕訳",
+    "expense_report": "経費精算書",
+    "manual": "手動"
+  },
+  "method": {
+    "straight_line": "期間ごとの定額",
+    "prorated_first_last": "初回と最終期間を日割り",
+    "exact_days": "日数按分",
+    "variable": "変動割合"
+  },
+  "event": {
+    "created": "作成",
+    "activated": "有効化",
+    "held": "保留",
+    "resumed": "再開",
+    "term_changed": "期間変更",
+    "destination_changed": "振替先変更",
+    "reduced": "貸方による減額",
+    "cancelled": "取消",
+    "source_voided": "元伝票の取消",
+    "completed": "配分完了"
+  },
+  "list": {
+    "statusFilter": "状態でスケジュールを絞り込む",
+    "templates": "配分テンプレート",
+    "waterfall": "前払費用ウォーターフォール",
+    "empty": "該当するスケジュールはありません。配分テンプレートで請求書明細を繰り延べるか、手動スケジュールを登録してください。",
+    "columns": {
+      "number": "スケジュール",
+      "status": "状態",
+      "source": "元伝票",
+      "template": "テンプレート",
+      "subsidiary": "子会社",
+      "total": "繰延額",
+      "remaining": "未配分額",
+      "nextPeriod": "次の期間"
+    }
+  },
+  "drawer": {
+    "total": "繰延額",
+    "amortized": "配分済み",
+    "remaining": "未配分額",
+    "nextPeriod": "次の期間",
+    "source": "元伝票",
+    "line": "{line}行目",
+    "serviceWindow": "役務提供期間",
+    "method": "方法",
+    "deferralAccount": "繰延勘定",
+    "destinationAccount": "振替先勘定",
+    "subsidiary": "子会社",
+    "currency": "通貨",
+    "openingAmortized": "本スケジュール以前の配分額",
+    "holdReason": "保留理由",
+    "planTab": "計画",
+    "historyTab": "履歴",
+    "changesTab": "変更",
+    "period": "期間",
+    "account": "勘定科目",
+    "planned": "予定",
+    "posted": "記帳済み",
+    "noPlan": "予定された期間はありません。",
+    "balanceChange": "残高の増減: {amount}",
+    "viewEntry": "仕訳を表示"
+  },
+  "changes": {
+    "action": "変更内容",
+    "failed": "変更は保存されませんでした。",
+    "saved": "スケジュールを更新しました",
+    "effectivePeriod": "適用開始期間",
+    "newLastPeriod": "新しい最終期間",
+    "destinationAccount": "新しい振替先勘定",
+    "amount": "貸方金額",
+    "cancelMode": "残高の処理方法",
+    "effectiveDate": "適用日",
+    "reason": "理由",
+    "actions": {
+      "activate": "有効化",
+      "hold": "保留",
+      "resume": "再開",
+      "change_term": "期間を変更",
+      "change_destination": "振替先を変更",
+      "reduce": "貸方で減額",
+      "cancel": "スケジュールを取消"
+    },
+    "hints": {
+      "activate": "手動スケジュールの配分を開始します。残高はすでに繰延勘定に計上されている必要があります。",
+      "hold": "再開するまで実行の対象外になります。",
+      "resume": "期日の到来した期間は次回の実行で記帳されます。",
+      "change_term": "未記帳の金額（記帳されなかった前の期間を含む）を、選択した期間から新しい最終期間まで均等に配分します。",
+      "change_destination": "選択した期間から新しい勘定へ配分します。",
+      "reduce": "スケジュールに貸方を記録し、未記帳の期間を再計画します。過大な配分額は繰延勘定に戻ります。",
+      "cancel": "償却は未配分残高を費用計上します。戻し入れは全額貸方処理された元伝票の記帳済み配分を戻します。"
+    },
+    "modes": {
+      "write_off": "未配分残高の費用計上",
+      "reverse": "記帳済み配分の戻し入れ"
+    }
+  },
+  "run": {
+    "period": "配分対象の期間",
+    "submit": "{count, plural, =0 {期日到来分なし} one {#期間を記帳} other {#期間を記帳}}",
+    "description": "有効なスケジュールのうち期間末日までに終わる予定期間をすべて記帳します。記帳済みの期間が再び記帳されることはありません。",
+    "failed": "配分は実行されませんでした。",
+    "saved": "{posted, plural, =0 {記帳なし} one {#期間を記帳しました} other {#期間を記帳しました}}",
+    "empty": "この期間までに期日の到来したものはありません。",
+    "columns": {
+      "schedule": "スケジュール",
+      "period": "期間",
+      "account": "費用勘定",
+      "amount": "金額"
+    }
+  },
+  "reconciliation": {
+    "asOf": "基準日",
+    "report": "照合レポートを開く",
+    "tied": "すべての繰延勘定がスケジュールと一致しています。",
+    "untied": "繰延勘定がスケジュールと一致しません。どのスケジュールにも説明されない記帳があります。",
+    "empty": "照合する繰延勘定はまだありません。",
+    "columns": {
+      "account": "繰延勘定",
+      "subsidiary": "子会社",
+      "book": "帳簿",
+      "ledger": "総勘定元帳",
+      "subledger": "スケジュール",
+      "difference": "差額",
+      "openSchedules": "未完了のスケジュール"
+    }
+  },
+  "newSchedule": {
+    "open": "新規スケジュール",
+    "title": "新規手動スケジュール",
+    "description": "繰延勘定にすでに計上されている前払残高を管理します。下書きとして保存され、有効化するまで記帳しません。",
+    "noTemplates": "先に配分テンプレートを作成してください:",
+    "template": "テンプレート",
+    "subsidiary": "子会社",
+    "totalAmount": "繰延額",
+    "openingAmortized": "配分済み額",
+    "serviceStart": "役務開始日",
+    "serviceEnd": "役務終了日",
+    "amortizeFrom": "配分を開始する期間",
+    "destinationAccount": "振替先勘定",
+    "memo": "メモ",
+    "reason": "理由",
+    "submit": "下書きを保存",
+    "saved": "スケジュール{number}を下書きとして保存しました",
+    "failed": "スケジュールは保存されませんでした。"
+  },
+  "billLine": {
+    "lineTemplate": "期間配分",
+    "lineTemplateHelp": "この明細をテンプレートの前払勘定に繰り延べ、期間ごとに配分します。",
+    "lineNoTemplate": "即時に費用計上",
+    "lineServiceStart": "役務開始日",
+    "lineServiceEnd": "役務終了日"
+  },
+  "common": {
+    "cancel": "キャンセル"
+  }
+}

@@ -1144,6 +1144,14 @@
       "managed_property_portfolio": {
         "label": "Biens immobiliers gérés",
         "description": "Cycle de vie actuel du portefeuille, limité aux entités juridiques autorisées pour l’utilisateur."
+      },
+      "prepaid_amortization_plan": {
+        "label": "Plan d’étalement des charges constatées d’avance",
+        "description": "Chaque période prévue et étalée des échéanciers, par mois, compte et échéancier."
+      },
+      "prepaid_amortization_reconciliation": {
+        "label": "Rapprochement des charges constatées d’avance",
+        "description": "Mouvements des comptes de régularisation au grand livre à côté des échéanciers qui les expliquent ; cumulés à une date, l’écart est nul lorsqu’ils concordent."
       }
     },
     "columns": {
@@ -2754,6 +2762,34 @@
         "code": "Code du bien",
         "name": "Bien immobilier",
         "status": "Statut"
+      },
+      "prepaid_amortization_plan": {
+        "month": "Mois",
+        "schedule_number": "Échéancier",
+        "schedule_status": "État de l’échéancier",
+        "line_status": "État de la période",
+        "deferral_account": "Compte de régularisation",
+        "destination_account": "Compte de charge",
+        "subsidiary": "Filiale",
+        "currency": "Devise",
+        "amortized": "Étalé",
+        "scheduled": "Prévu",
+        "schedule_id": "Échéancier (ID)",
+        "journal_entry_id": "Écriture (ID)",
+        "book_id": "ID du livre"
+      },
+      "prepaid_amortization_reconciliation": {
+        "moved_on": "Date du mouvement",
+        "deferral_account": "Compte de régularisation",
+        "subsidiary": "Filiale",
+        "book": "Livre",
+        "currency": "Devise",
+        "source": "Origine",
+        "ledger": "Grand livre",
+        "subledger": "Échéanciers",
+        "difference": "Écart",
+        "account_id": "ID du compte",
+        "book_id": "ID du livre"
       }
     },
     "enumValues": {
@@ -3114,6 +3150,14 @@
     "analytics-workforce-capacity": {
       "name": "Capacité des effectifs",
       "description": "Structure actuelle des effectifs : équivalents temps plein prévus, financés, pourvus et vacants."
+    },
+    "prepaid-expense-waterfall": {
+      "name": "Cascade des charges constatées d’avance",
+      "description": "Charges constatées d’avance étalées et prévues par mois, compte de régularisation et devise."
+    },
+    "prepaid-expense-reconciliation": {
+      "name": "Rapprochement des charges constatées d’avance",
+      "description": "Soldes des comptes de régularisation au grand livre face au restant à étaler de leurs échéanciers, par compte, filiale, livre et devise."
     }
   },
   "generalLedger": {
@@ -3159,7 +3203,8 @@
       "release": "Levée des restrictions",
       "manufacturing": "Fabrication",
       "opening": "Ouverture",
-      "book_opening": "Soldes d’ouverture du livre"
+      "book_opening": "Soldes d’ouverture du livre",
+      "expense_amortization": "Étalement des charges"
     },
     "columns": {
       "detail": "Tiers / mémo"

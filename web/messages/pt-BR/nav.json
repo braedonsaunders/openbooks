@@ -167,7 +167,8 @@
     "manufacturing-quality": "Qualidade",
     "close-reopen-requests": "Solicitações de reabertura",
     "intercompany": "Entre empresas",
-    "intercompany-netting": "Compensação entre empresas"
+    "intercompany-netting": "Compensação entre empresas",
+    "amortization": "Apropriação de despesas"
   },
   "groups": {
     "manufacturing": "Manufatura",

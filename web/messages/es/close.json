@@ -230,6 +230,10 @@
     "book-replication-incomplete": {
       "title": "A los libros completos les faltan transacciones",
       "message": "{count, plural, one {# transacción no se ha replicado en un libro completo. Registre una puesta al día en Replicación de libros.} other {# transacciones no se han replicado en un libro completo. Registre una puesta al día en Replicación de libros.}}"
+    },
+    "prepaid-amortization-unposted": {
+      "title": "La amortización de gastos anticipados no está contabilizada",
+      "message": "{count, plural, one {# período de amortización vencido no está contabilizado.} other {# períodos de amortización vencidos no están contabilizados.}}"
     }
   },
   "severity": {
@@ -450,6 +454,10 @@
     "book-replication-complete": {
       "title": "Confirmar que los libros completos están completos",
       "description": "Cada transacción hasta el cierre del período está replicada en cada libro con replicación completa."
+    },
+    "prepaid-amortized": {
+      "title": "Amortizar gastos anticipados",
+      "description": "Contabilizar cada período de amortización de los calendarios activos que termina antes del cierre del período."
     }
   },
   "setup": {

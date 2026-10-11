@@ -15,6 +15,8 @@ import { assertCustomerInvoiceCredit } from "./posting-invoice-credit.ts";
 import { prepareDocumentPosting } from "./posting-prepare.ts";
 import { commitDocumentPosting } from "./posting-commit.ts";
 import { applyPostedInventoryEffects, runPostDocumentEffects } from "./posting-dispatch.ts";
+import { AmortizationError } from "../amortization/errors.ts";
+import { createSchedulesForPostedDocument } from "../amortization/source-posting.ts";
 
 /**
  * Public posting coordinator: prepare, atomically commit, then dispatch durable effects.
@@ -106,6 +108,26 @@ export async function postDocument(documentId: string, deps: PostingDeps, option
       await assertCustomerInvoiceCredit(db, prepared.doc);
     }
     const entryId = await commitDocumentPosting(prepared, options);
+    if (prepared.amortizationRouting.size > 0) {
+      // Each deferred line's schedule is created from its posted deferral
+      // leg in this same unit: kernel line i posted as journal line i + 1.
+      try {
+        await createSchedulesForPostedDocument(db, {
+          orgId: prepared.doc.orgId,
+          documentId,
+          documentKind: prepared.doc.kind,
+          documentNumber: prepared.effectiveDoc.documentNumber,
+          entryId,
+          actorId: options.audit?.actorId ?? null,
+          routing: prepared.amortizationRouting,
+          legs: prepared.kernelLines.flatMap((line, index) =>
+            line.amortizationSourceLineId ? [{ documentLineId: line.amortizationSourceLineId, journalLineNumber: index + 1 }] : []),
+        });
+      } catch (error) {
+        if (error instanceof AmortizationError) throw new PostingError(`${error.message} ${error.remedy}`);
+        throw error;
+      }
+    }
     if (prepared.doc.kind === "vendor_payment" && !deps.migration) await recordPaymentWithholdings(db, {
       orgId: prepared.doc.orgId, paymentDocumentId: documentId, journalEntryId: entryId,
       actorId: options.audit?.actorId ?? null,

@@ -28,7 +28,8 @@
     "migration": "Migration",
     "manufacturing": "Fabrication",
     "opening": "Ouverture",
-    "bookOpening": "Ouverture de livre"
+    "bookOpening": "Ouverture de livre",
+    "expenseAmortization": "Étalement des charges"
   },
   "detail": {
     "notFound": "Écriture introuvable",

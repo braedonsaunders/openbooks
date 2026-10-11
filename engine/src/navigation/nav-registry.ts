@@ -686,6 +686,11 @@ export const NAV_MODULES: NavModule[] = [
     group: 'accounting', subgroup: 'assets', requiredPermission: 'assets.read',
   },
   {
+    key: 'amortization', href: '/accounting/amortization', label: 'Amortization', iconKey: 'timer',
+    group: 'accounting', subgroup: 'assets', requiredPermission: 'amortization.read',
+    featureKey: 'expenseAmortization', recordTarget: { kind: 'query', param: 'schedule' },
+  },
+  {
     // Subsequent-measurement register (lease/asset/revenue/consolidation).
     // Not ASC 250 / IAS 8. Sits with Period Close, not Journals.
     key: 'accounting-changes', href: '/accounting/changes', label: 'Accounting events', iconKey: 'git-branch',

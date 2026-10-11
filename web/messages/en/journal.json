@@ -28,7 +28,8 @@
     "migration": "Migration",
     "manufacturing": "Manufacturing",
     "opening": "Opening",
-    "bookOpening": "Book opening"
+    "bookOpening": "Book opening",
+    "expenseAmortization": "Expense amortization"
   },
   "detail": {
     "notFound": "Entry not found",

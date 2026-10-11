@@ -136,6 +136,12 @@ export const FEATURES: FeatureDef[] = [
   // way. The generation step lives in the period close workspace, so the
   // close surface is its parent.
   { key: 'periodEndJournals', defaultEnabled: false, category: 'finance', group: 'close', parentKey: 'continuousClose' },
+  // Expense amortization: prepaid and deferred expense schedules from bill,
+  // journal and expense report lines, amortized by period with a close
+  // step and a GL reconciliation. Automatic amortization posts due periods
+  // on the scheduler without an operator run. Data is kept when off.
+  { key: 'expenseAmortization', defaultEnabled: false, category: 'finance', group: 'close' },
+  { key: 'expenseAmortizationAutoRun', defaultEnabled: false, category: 'finance', group: 'close', parentKey: 'expenseAmortization' },
 
   // Sales — pipeline, order entry and point-of-sale selling.
   // The account list is NOT here: leads, prospects and customers share one

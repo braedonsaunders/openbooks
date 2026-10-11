@@ -167,7 +167,8 @@
     "manufacturing-quality": "Quality",
     "close-reopen-requests": "Reopen Requests",
     "intercompany": "Intercompany",
-    "intercompany-netting": "Intercompany Netting"
+    "intercompany-netting": "Intercompany Netting",
+    "amortization": "Amortization"
   },
   "modulesShort": {
     "hrm-performance-cycles": "Manage reviews",

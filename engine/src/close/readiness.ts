@@ -13,6 +13,7 @@ import { unreconciledIntercompanyCount } from "../intercompany/reconciliation.ts
 import { periodEndJournalCloseCheck, type PeriodEndCloseCheck } from "./period-end-journals.ts";
 import { excludePeriodEndJournals } from "../records/period-end-origins.ts";
 import { bookReplicationReadiness } from "../journal/book-replication.ts";
+import { dueUnpostedAmortization } from "../amortization/reconciliation.ts";
 const nonPostingKindList = () => sql.join(NON_POSTING_DOCUMENT_KINDS.map((k) => sql`${k}`), sql`, `);
 
 type ReadinessCheck = {
@@ -516,6 +517,21 @@ export async function readinessChecks(
       orgId, bookId: ctx.book_id, through: ctx.ends_on, subsidiaryIds: scoped ? subsidiaryIds : undefined,
     });
   }
+  // Prepaid amortization is current when no active schedule holds a planned
+  // period ending on or before the period end in this book and scope. Only
+  // runs that carry the step pay for the count.
+  const prepaidTask = (
+    await db.execute<{ id: string }>(sql`
+      select id from close_run_tasks
+       where run_id = ${runId} and org_id = ${orgId} and key = 'prepaid-amortized' limit 1`)
+  ).rows[0];
+  const prepaidDue = prepaidTask
+    ? await dueUnpostedAmortization(db, orgId, {
+        endsOn: ctx.ends_on,
+        bookId: ctx.book_id,
+        subsidiaryIds: scoped ? new Set(subsidiaryIds) : null,
+      })
+    : { lines: 0, schedules: 0 };
 
   const threshold = variancePolicy.rows[0] ?? {
     amount: "10000.0000",
@@ -639,6 +655,16 @@ export async function readinessChecks(
       message: "close.diagnostics.period-end-journals-pending.message",
       count: periodEnd.count,
       details: periodEnd.details,
+    },
+    {
+      code: "prepaid-amortization-unposted",
+      taskKey: "prepaid-amortized",
+      category: "gl",
+      severity: "error",
+      title: "close.diagnostics.prepaid-amortization-unposted.title",
+      message: "close.diagnostics.prepaid-amortization-unposted.message",
+      count: prepaidDue.lines,
+      details: prepaidDue.lines > 0 ? { schedules: prepaidDue.schedules } : undefined,
     },
     {
       code: "fx-missing",

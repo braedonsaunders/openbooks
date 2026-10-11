@@ -66,6 +66,7 @@ import { itemRates } from './articles/item-rates'
 import { distributionBackorders } from './articles/distribution-backorders'
 import { fixedAssetsDepreciation } from './articles/fixed-assets-depreciation'
 import { revenueRecognition } from './articles/revenue-recognition'
+import { expenseAmortization } from './articles/expense-amortization'
 import { propertyManagement } from './articles/property-management'
 import { distributionWarehouses } from './articles/distribution-warehouses'
 import { distributionAvailability } from './articles/distribution-availability'
@@ -258,6 +259,7 @@ const ARTICLE_SECTION_BY_SLUG: Record<string, string> = {
   'chart-of-accounts-and-dimensions': 'accounting-ledger',
   'parties-items-and-projects': 'accounting-master-data',
   'revenue-recognition': 'accounting-advanced',
+  'expense-amortization': 'accounting-advanced',
   'fixed-assets-depreciation': 'accounting-advanced',
   'allocations': 'accounting-advanced',
   intercompany: 'accounting-advanced',
@@ -333,6 +335,7 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   chartOfAccountsAndDimensions,
   partiesItemsAndProjects,
   revenueRecognition,
+  expenseAmortization,
   fixedAssetsDepreciation,
   allocations,
   intercompany,

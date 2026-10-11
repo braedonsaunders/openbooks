@@ -5,6 +5,7 @@ import { sql } from 'drizzle-orm'
 import { validateIdentifierUnit } from '@openbooks/engine/inventory/item-identifiers'
 import { validateCustomerItemRef } from '@openbooks/engine/sales/customer-item-refs'
 import { validateMarketplaceFacilitatorWrite as validateMarketplaceFacilitator } from '@openbooks/engine/tax'
+import { validateTemplateWrite as validateAmortizationTemplate } from '@openbooks/engine/amortization'
 import type { SetupEntity, SetupEntityValidationHook } from '../types'
 import { validateStoredValueProgramWrite } from '../stored-value-validation'
 import { validateEInvoiceSetupWrite } from '../einvoicing-validation'
@@ -55,7 +56,21 @@ const validateMarketplaceFacilitatorWrite: SetupEntityValidationHook = async ({ 
   }
 }
 
+// Amortization template policy (method, term, percentage table, account
+// types) is validated by the engine that plans from it; the hook reads the
+// stored row so a partial edit is judged as the whole version it produces.
+const validateAmortizationTemplateWrite: SetupEntityValidationHook = async ({ orgId, body, rowId, executor }) => {
+  const current = rowId
+    ? (await executor.execute<Record<string, unknown>>(sql`
+        select method, term_source, period_count, percentages, period_offset, deferral_account_id, destination_account_id
+          from expense_amortization_templates where id = ${rowId} and org_id = ${orgId}`)).rows[0] ?? null
+    : null
+  if (rowId && !current) return 'not found'
+  return validateAmortizationTemplate(executor, orgId, body as Record<string, unknown>, current)
+}
+
 const SETUP_ENTITY_VALIDATION_HOOKS: Record<string, SetupEntityValidationHook> = {
+  'expense-amortization-templates': validateAmortizationTemplateWrite,
   'einvoice-settings': validateEInvoiceSetupWrite,
   'einvoice-recipients': validateEInvoiceSetupWrite,
   'tax-codes': validateEInvoiceSetupWrite,

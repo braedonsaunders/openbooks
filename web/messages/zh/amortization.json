@@ -1,0 +1,185 @@
+{
+  "workspace": {
+    "title": "费用摊销",
+    "description": "预付及递延费用记入预付账款科目，并按期间转入费用。"
+  },
+  "views": {
+    "schedules": "摊销计划",
+    "run": "运行",
+    "reconciliation": "对账"
+  },
+  "statusFilter": {
+    "open": "未结",
+    "draft": "草稿",
+    "active": "生效",
+    "on_hold": "暂停",
+    "completed": "已完成",
+    "cancelled": "已取消"
+  },
+  "status": {
+    "draft": "草稿",
+    "active": "生效",
+    "on_hold": "暂停",
+    "completed": "已完成",
+    "cancelled": "已取消"
+  },
+  "sourceKind": {
+    "vendor_bill": "供应商账单",
+    "journal": "日记账",
+    "expense_report": "费用报销单",
+    "manual": "手工"
+  },
+  "method": {
+    "straight_line": "按期间直线法",
+    "prorated_first_last": "首末期间按比例",
+    "exact_days": "按实际天数",
+    "variable": "可变比例"
+  },
+  "event": {
+    "created": "已创建",
+    "activated": "已启用",
+    "held": "已暂停",
+    "resumed": "已恢复",
+    "term_changed": "期限已变更",
+    "destination_changed": "转入科目已变更",
+    "reduced": "因贷项减少",
+    "cancelled": "已取消",
+    "source_voided": "来源单据已作废",
+    "completed": "已全部摊销"
+  },
+  "list": {
+    "statusFilter": "按状态筛选摊销计划",
+    "templates": "摊销模板",
+    "waterfall": "预付费用瀑布表",
+    "empty": "没有匹配的摊销计划。可通过摊销模板递延账单行，或登记手工摊销计划。",
+    "columns": {
+      "number": "摊销计划",
+      "status": "状态",
+      "source": "来源",
+      "template": "模板",
+      "subsidiary": "子公司",
+      "total": "递延金额",
+      "remaining": "未摊销金额",
+      "nextPeriod": "下一期间"
+    }
+  },
+  "drawer": {
+    "total": "递延金额",
+    "amortized": "已摊销",
+    "remaining": "未摊销金额",
+    "nextPeriod": "下一期间",
+    "source": "来源",
+    "line": "第 {line} 行",
+    "serviceWindow": "服务期间",
+    "method": "方法",
+    "deferralAccount": "递延科目",
+    "destinationAccount": "转入科目",
+    "subsidiary": "子公司",
+    "currency": "币种",
+    "openingAmortized": "本计划前已摊销",
+    "holdReason": "暂停原因",
+    "planTab": "计划",
+    "historyTab": "历史",
+    "changesTab": "变更",
+    "period": "期间",
+    "account": "科目",
+    "planned": "计划金额",
+    "posted": "已过账",
+    "noPlan": "没有剩余的计划期间。",
+    "balanceChange": "余额变动：{amount}",
+    "viewEntry": "查看分录"
+  },
+  "changes": {
+    "action": "变更类型",
+    "failed": "变更未保存。",
+    "saved": "摊销计划已更新",
+    "effectivePeriod": "生效期间",
+    "newLastPeriod": "新的最后期间",
+    "destinationAccount": "新的转入科目",
+    "amount": "贷项金额",
+    "cancelMode": "余额处理方式",
+    "effectiveDate": "生效日期",
+    "reason": "原因",
+    "actions": {
+      "activate": "启用",
+      "hold": "暂停",
+      "resume": "恢复",
+      "change_term": "变更期限",
+      "change_destination": "变更转入科目",
+      "reduce": "按贷项减少",
+      "cancel": "取消摊销计划"
+    },
+    "hints": {
+      "activate": "开始摊销手工摊销计划。其余额必须已记入递延科目。",
+      "hold": "在恢复之前，运行会跳过该计划。",
+      "resume": "到期期间将在下次运行时过账。",
+      "change_term": "将所有未过账金额（包括此前从未过账的期间）自所选期间起平均分摊至新的最后期间。",
+      "change_destination": "自所选期间起摊销至新科目。",
+      "reduce": "对计划登记贷项并重新规划未过账期间；多摊销的金额转回递延科目。",
+      "cancel": "核销将未摊销余额计入费用；冲回会对已全额贷记的来源退回已过账的摊销。"
+    },
+    "modes": {
+      "write_off": "核销未摊销余额",
+      "reverse": "冲回已过账摊销"
+    }
+  },
+  "run": {
+    "period": "摊销截至期间",
+    "submit": "{count, plural, =0 {没有到期项目} one {过账 # 个期间} other {过账 # 个期间}}",
+    "description": "过账生效摊销计划中在期间末日或之前结束的每个计划期间。已过账的期间不会再次过账。",
+    "failed": "摊销未运行。",
+    "saved": "{posted, plural, =0 {未过账任何期间} one {已过账 # 个期间} other {已过账 # 个期间}}",
+    "empty": "截至该期间没有到期项目。",
+    "columns": {
+      "schedule": "摊销计划",
+      "period": "期间",
+      "account": "费用科目",
+      "amount": "金额"
+    }
+  },
+  "reconciliation": {
+    "asOf": "截至日期",
+    "report": "打开对账报表",
+    "tied": "每个递延科目都与其摊销计划一致。",
+    "untied": "某个递延科目与其摊销计划不一致：其中有分录未被任何摊销计划解释。",
+    "empty": "目前没有需要对账的递延科目。",
+    "columns": {
+      "account": "递延科目",
+      "subsidiary": "子公司",
+      "book": "账簿",
+      "ledger": "总账",
+      "subledger": "摊销计划",
+      "difference": "差额",
+      "openSchedules": "未结摊销计划"
+    }
+  },
+  "newSchedule": {
+    "open": "新建摊销计划",
+    "title": "新建手工摊销计划",
+    "description": "跟踪已记入递延科目的预付余额。保存为草稿，启用前不过账。",
+    "noTemplates": "请先创建摊销模板：",
+    "template": "模板",
+    "subsidiary": "子公司",
+    "totalAmount": "递延金额",
+    "openingAmortized": "已摊销金额",
+    "serviceStart": "服务开始日期",
+    "serviceEnd": "服务结束日期",
+    "amortizeFrom": "开始摊销的期间",
+    "destinationAccount": "转入科目",
+    "memo": "备注",
+    "reason": "原因",
+    "submit": "保存草稿",
+    "saved": "摊销计划 {number} 已保存为草稿",
+    "failed": "摊销计划未保存。"
+  },
+  "billLine": {
+    "lineTemplate": "摊销",
+    "lineTemplateHelp": "将此行递延至模板的预付科目并按期间摊销。",
+    "lineNoTemplate": "立即计入费用",
+    "lineServiceStart": "服务开始日期",
+    "lineServiceEnd": "服务结束日期"
+  },
+  "common": {
+    "cancel": "取消"
+  }
+}

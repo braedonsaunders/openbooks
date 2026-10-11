@@ -167,7 +167,8 @@
     "manufacturing-quality": "Qualität",
     "close-reopen-requests": "Wiedereröffnungsanträge",
     "intercompany": "Konzernverrechnung",
-    "intercompany-netting": "Konzerninterne Verrechnung"
+    "intercompany-netting": "Konzerninterne Verrechnung",
+    "amortization": "Abgrenzungen"
   },
   "groups": {
     "manufacturing": "Fertigung",

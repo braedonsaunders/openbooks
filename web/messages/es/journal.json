@@ -28,7 +28,8 @@
     "migration": "Migración",
     "manufacturing": "Fabricación",
     "opening": "Apertura",
-    "bookOpening": "Apertura de libro"
+    "bookOpening": "Apertura de libro",
+    "expenseAmortization": "Amortización de gastos"
   },
   "detail": {
     "notFound": "Asiento no encontrado",

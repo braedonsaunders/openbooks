@@ -230,6 +230,10 @@
     "book-replication-incomplete": {
       "title": "完整账簿缺少交易",
       "message": "{count, plural, other {# 笔交易尚未复制到完整账簿。请在账簿复制中记录补齐。}}"
+    },
+    "prepaid-amortization-unposted": {
+      "title": "预付费用摊销尚未过账",
+      "message": "{count, plural, one {有 # 个到期摊销期间尚未过账。} other {有 # 个到期摊销期间尚未过账。}}"
     }
   },
   "severity": {
@@ -450,6 +454,10 @@
     "book-replication-complete": {
       "title": "确认完整账簿已齐全",
       "description": "截至期末的每笔交易都已复制到每个完整复制的账簿。"
+    },
+    "prepaid-amortized": {
+      "title": "摊销预付费用",
+      "description": "过账生效摊销计划中在期间末日前结束的每个摊销期间。"
     }
   },
   "setup": {

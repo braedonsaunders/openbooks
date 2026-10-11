@@ -15,6 +15,7 @@ export type DefaultCloseFeatureContext = {
   unbilledRevenueAccrual: boolean;
   periodEndJournals: boolean;
   multiBookAccounting?: boolean;
+  expenseAmortization: boolean;
 };
 
 /**
@@ -49,6 +50,7 @@ export async function defaultCloseFeatureContext(
     unbilledRevenueAccrual: featureEnabled(features, "unbilledRevenueAccrual"),
     periodEndJournals: featureEnabled(features, "periodEndJournals"),
     multiBookAccounting: featureEnabled(features, "multiBookAccounting"),
+    expenseAmortization: featureEnabled(features, "expenseAmortization"),
   };
 }
 
@@ -67,6 +69,7 @@ export function defaultCloseStepEnabled(
   if (key === "unbilled-revenue-accrued") return features.unbilledRevenueAccrual;
   if (key === "period-end-journals") return features.periodEndJournals;
   if (key === "book-replication-complete") return features.multiBookAccounting === true;
+  if (key === "prepaid-amortized") return features.expenseAmortization;
   if (["fx-ready", "fx-revalued"].includes(key)) return features.multiCurrency;
   if (["intercompany-balanced", "consolidation"].includes(key)) return features.multiSubsidiary;
   return true;

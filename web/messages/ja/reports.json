@@ -1144,6 +1144,14 @@
       "managed_property_portfolio": {
         "label": "管理物件",
         "description": "ユーザーが閲覧を許可された法人に限定した、現在の物件ポートフォリオのライフサイクル。"
+      },
+      "prepaid_amortization_plan": {
+        "label": "前払費用の配分計画",
+        "description": "配分スケジュールの予定期間と配分済み期間を月・勘定・スケジュール別に一覧します。"
+      },
+      "prepaid_amortization_reconciliation": {
+        "label": "前払費用の照合",
+        "description": "総勘定元帳の繰延勘定の動きと、それを説明するスケジュールを並べます。日付までの合計が一致すれば差額はゼロです。"
       }
     },
     "columns": {
@@ -2754,6 +2762,34 @@
         "code": "物件コード",
         "name": "物件",
         "status": "状態"
+      },
+      "prepaid_amortization_plan": {
+        "month": "月",
+        "schedule_number": "スケジュール",
+        "schedule_status": "スケジュールの状態",
+        "line_status": "期間の状態",
+        "deferral_account": "繰延勘定",
+        "destination_account": "費用勘定",
+        "subsidiary": "子会社",
+        "currency": "通貨",
+        "amortized": "配分済み",
+        "scheduled": "予定",
+        "schedule_id": "スケジュール（ID）",
+        "journal_entry_id": "仕訳（ID）",
+        "book_id": "帳簿ID"
+      },
+      "prepaid_amortization_reconciliation": {
+        "moved_on": "日付",
+        "deferral_account": "繰延勘定",
+        "subsidiary": "子会社",
+        "book": "帳簿",
+        "currency": "通貨",
+        "source": "出所",
+        "ledger": "総勘定元帳",
+        "subledger": "スケジュール",
+        "difference": "差額",
+        "account_id": "勘定科目ID",
+        "book_id": "帳簿ID"
       }
     },
     "enumValues": {
@@ -3134,6 +3170,14 @@
     "analytics-workforce-capacity": {
       "name": "要員キャパシティ",
       "description": "現在の要員配置計画：計画済み、予算確保済み、充足済み、未充足のフルタイム換算人員。"
+    },
+    "prepaid-expense-waterfall": {
+      "name": "前払費用ウォーターフォール",
+      "description": "月・繰延勘定・通貨別の配分済みおよび予定の前払・繰延費用。"
+    },
+    "prepaid-expense-reconciliation": {
+      "name": "前払費用の照合",
+      "description": "総勘定元帳の繰延勘定残高とスケジュールの未配分残高を、勘定・子会社・帳簿・通貨別に比較します。"
     }
   },
   "generalLedger": {
@@ -3179,7 +3223,8 @@
       "release": "使途制限の解除",
       "manufacturing": "製造",
       "opening": "期首",
-      "book_opening": "帳簿の期首残高"
+      "book_opening": "帳簿の期首残高",
+      "expense_amortization": "費用の期間配分"
     },
     "columns": {
       "detail": "取引先／摘要"

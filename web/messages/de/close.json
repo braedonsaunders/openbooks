@@ -230,6 +230,10 @@
     "book-replication-incomplete": {
       "title": "Vollständigen Büchern fehlen Buchungen",
       "message": "{count, plural, one {# Buchung wurde nicht in ein vollständiges Buch übernommen. Erfassen Sie unter Buchübernahme eine Aktualisierung.} other {# Buchungen wurden nicht in ein vollständiges Buch übernommen. Erfassen Sie unter Buchübernahme eine Aktualisierung.}}"
+    },
+    "prepaid-amortization-unposted": {
+      "title": "Auflösung der Rechnungsabgrenzung ist nicht gebucht",
+      "message": "{count, plural, one {# fällige Auflösungsperiode ist nicht gebucht.} other {# fällige Auflösungsperioden sind nicht gebucht.}}"
     }
   },
   "severity": {
@@ -450,6 +454,10 @@
     "book-replication-complete": {
       "title": "Vollständigkeit der vollständigen Bücher bestätigen",
       "description": "Jede Buchung bis zum Periodenende ist in jedes Buch mit vollständiger Übernahme übernommen."
+    },
+    "prepaid-amortized": {
+      "title": "Aktive Rechnungsabgrenzung auflösen",
+      "description": "Jede bis zum Periodenende fällige Auflösungsperiode aktiver Abgrenzungspläne buchen."
     }
   },
   "setup": {

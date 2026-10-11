@@ -230,6 +230,10 @@
     "book-replication-incomplete": {
       "title": "Faltam transações nos livros completos",
       "message": "{count, plural, one {# transação não foi replicada em um livro completo. Registre uma atualização em Replicação de livros.} other {# transações não foram replicadas em um livro completo. Registre uma atualização em Replicação de livros.}}"
+    },
+    "prepaid-amortization-unposted": {
+      "title": "A apropriação de despesas antecipadas não foi lançada",
+      "message": "{count, plural, one {# período de apropriação vencido não foi lançado.} other {# períodos de apropriação vencidos não foram lançados.}}"
     }
   },
   "severity": {
@@ -450,6 +454,10 @@
     "book-replication-complete": {
       "title": "Confirmar que os livros completos estão completos",
       "description": "Cada transação até o fim do período está replicada em cada livro com replicação completa."
+    },
+    "prepaid-amortized": {
+      "title": "Apropriar despesas antecipadas",
+      "description": "Lançar cada período de apropriação dos cronogramas ativos que termina até o fim do período."
     }
   },
   "setup": {

@@ -1,0 +1,1 @@
+New amortization tables and nullable line columns arrive empty, and the scheduler kind list only widens, so no existing row can violate the new constraints.

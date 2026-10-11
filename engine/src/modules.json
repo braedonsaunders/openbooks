@@ -31,6 +31,17 @@
         "reports"
       ]
     },
+    "amortization": {
+      "description": "Expense amortization: effective-dated templates, prepaid and deferred expense schedules from bill, journal and expense report lines and manual opening balances, governed schedule changes, the amortization run and scan, and the prepaid reconciliation.",
+      "dependsOn": [
+        "journal",
+        "money",
+        "organization",
+        "periods",
+        "platform",
+        "records"
+      ]
+    },
     "apps": {
       "description": "Installed app packages: the sandboxed runtime and invocation records.",
       "dependsOn": [
@@ -121,6 +132,7 @@
       "description": "Period close: calendars, module fences, close packages and automations, FX revaluation, posting-period assignment, commerce completeness proofs.",
       "dependsOn": [
         "allocations",
+        "amortization",
         "banking",
         "commerce",
         "flows",
@@ -392,6 +404,7 @@
       "description": "The posting kernel and its orchestration: postDocument, posting effects, script journal writes, document void, delete and correction, billing provenance release.",
       "dependsOn": [
         "allocations",
+        "amortization",
         "compliance",
         "contractor-withholding",
         "crm",
@@ -702,6 +715,7 @@
       "description": "The web scheduler tick, its outbox and lock identities.",
       "dependsOn": [
         "allocations",
+        "amortization",
         "banking",
         "billing",
         "close",

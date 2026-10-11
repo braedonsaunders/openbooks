@@ -522,6 +522,7 @@ const JOURNAL: RecordTypeMeta = {
         ["revaluation", "revaluation"], ["labor_burden", "laborBurden"],
         ["depreciation", "depreciation"], ["revenue_recognition", "revenueRecognition"],
         ["fx_settlement", "fxSettlement"], ["translation", "translation"],
+        ["expense_amortization", "expenseAmortization"],
         // Standalone migration true-ups remain visible in the journal list.
         ["migration", "migration"],
         ["book_opening", "bookOpening"],

@@ -167,7 +167,8 @@
     "manufacturing-quality": "Calidad",
     "close-reopen-requests": "Solicitudes de reapertura",
     "intercompany": "Intercompañía",
-    "intercompany-netting": "Compensación intercompañía"
+    "intercompany-netting": "Compensación intercompañía",
+    "amortization": "Amortización de gastos"
   },
   "modulesShort": {
     "hrm-performance-cycles": "Gestionar evaluaciones",

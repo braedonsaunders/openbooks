@@ -230,6 +230,10 @@
     "book-replication-incomplete": {
       "title": "Des transactions manquent dans les livres complets",
       "message": "{count, plural, one {# transaction n’a pas été répliquée dans un livre complet. Enregistrez un rattrapage dans Réplication des livres.} other {# transactions n’ont pas été répliquées dans un livre complet. Enregistrez un rattrapage dans Réplication des livres.}}"
+    },
+    "prepaid-amortization-unposted": {
+      "title": "L’étalement des charges constatées d’avance n’est pas comptabilisé",
+      "message": "{count, plural, one {# période d’étalement échue n’est pas comptabilisée.} other {# périodes d’étalement échues ne sont pas comptabilisées.}}"
     }
   },
   "severity": {
@@ -450,6 +454,10 @@
     "book-replication-complete": {
       "title": "Confirmer que les livres complets sont exhaustifs",
       "description": "Chaque transaction jusqu’à la fin de période est répliquée dans chaque livre en réplication complète."
+    },
+    "prepaid-amortized": {
+      "title": "Étaler les charges constatées d’avance",
+      "description": "Comptabiliser chaque période d’étalement des échéanciers actifs qui se termine avant la fin de la période."
     }
   },
   "setup": {

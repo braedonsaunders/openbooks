@@ -1276,7 +1276,8 @@
       "parties": "Personen & Unternehmen",
       "banking": "Bankwesen",
       "expenses": "Spesenabrechnungen",
-      "intercompany": "Konzernverrechnung"
+      "intercompany": "Konzernverrechnung",
+      "amortization": "Aufwandsabgrenzung"
     },
     "gl_read": "Journale und Salden anzeigen",
     "gl_manage": "Kontenplan verwalten",
@@ -1459,7 +1460,9 @@
     "intercompany_manage": "Konzerninterne Paare erstellen, verknüpfen und trennen; Verrechnungsläufe vorschlagen und abbrechen",
     "intercompany_settle": "Verrechnungsläufe und konzerninterne Überweisungen buchen und stornieren",
     "intercompany_approve": "Konzerninterne Verrechnungsläufe genehmigen oder ablehnen",
-    "gl_post_book_specific": "Buchspezifische Journale buchen"
+    "gl_post_book_specific": "Buchspezifische Journale buchen",
+    "amortization_read": "Abgrenzungspläne und Berichte anzeigen",
+    "amortization_manage": "Auflösung ausführen und Pläne ändern"
   },
   "ai": {
     "metaTitle": "KI-Einstellungen",
@@ -3827,6 +3830,10 @@
         "title": "Buchübernahme",
         "description": "Aktivieren, aktualisieren oder beenden Sie die Übernahme aller Buchungen in ein Nebenbuch, mit dem Verlauf jeder Änderung.",
         "singularTitle": "Übernahmeänderung"
+      },
+      "expense-amortization-templates": {
+        "title": "Abgrenzungsvorlagen",
+        "description": "Wie vorausbezahlte und abgegrenzte Aufwendungen aufgelöst werden: Methode, Laufzeit, Abgrenzungskonto und Standardzielkonto. Je Code mit Gültigkeitsdatum."
       }
     },
     "fields": {
@@ -4475,7 +4482,16 @@
       "preserveClasses": "Klassen beibehalten",
       "preserveLocations": "Standorte beibehalten",
       "preserveProjects": "Projekte beibehalten",
-      "preserveSegments": "Benutzerdefinierte Segmente beibehalten"
+      "preserveSegments": "Benutzerdefinierte Segmente beibehalten",
+      "amortizationMethod": "Auflösungsmethode",
+      "amortizationTermSource": "Laufzeit aus",
+      "amortizationPeriodCount": "Anzahl Perioden",
+      "amortizationPercentages": "Prozenttabelle",
+      "amortizationPeriodRow": "Periode {number}",
+      "amortizationAddPeriod": "Periode hinzufügen",
+      "amortizationPercent": "Anteil am Betrag in Prozent",
+      "amortizationDeferralAccount": "Abgrenzungskonto (aktive Rechnungsabgrenzung)",
+      "amortizationDestinationAccount": "Standard-Zielkonto"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Tage zwischen dem neuesten verwendbaren Kurs und dem Periodenende, ab denen Bewertung und Konsolidierung den Kurs ablehnen. Stichtagskurse zählen ab dem Datum des Kassakurses zum Periodenende, Durchschnittskurse ab der neuesten einbezogenen Notierung. Standard ohne Richtlinie: 31 Tage.",
@@ -4668,7 +4684,15 @@
       "periodEndClosingMethod": "Direkt: Erträge und Aufwendungen werden in die Gewinnrücklagen abgeschlossen. Über ein Ergebnissammelkonto: Sie werden auf dieses Konto abgeschlossen, das anschließend in die Gewinnrücklagen abgeschlossen wird.",
       "periodEndPostingPeriod": "Die letzte reguläre Periode des Geschäftsjahres oder die Abschlussperiode des Jahres, sofern der Geschäftskalender eine hat.",
       "periodEndBalanceSheetJournals": "Zusätzlich jedes Bilanzkonto zum Jahresende auf null stellen und dieselben Salden am ersten Tag des nächsten Geschäftsjahres wieder eröffnen.",
-      "periodEndPreserveSegments": "Ausgleichssegmente werden immer beibehalten, damit jeder Segmentwert für sich ausgeglichen bleibt."
+      "periodEndPreserveSegments": "Ausgleichssegmente werden immer beibehalten, damit jeder Segmentwert für sich ausgeglichen bleibt.",
+      "amortizationTemplateCode": "Versionen einer Vorlage teilen ihren Code; maßgeblich ist die am Buchungsdatum gültige Version.",
+      "amortizationEffectiveFrom": "Ab diesem Datum gebuchte Vorgänge verwenden diese Version. Eine verwendete Version behält ihre Regeln; für Änderungen legen Sie eine spätere Version an.",
+      "amortizationMethod": "Linear verteilt gleichmäßig je Periode; anteilig gewichtet angebrochene erste und letzte Monate nach Tagen; taggenau gewichtet jeden Monat nach seinen Leistungstagen; variabel folgt einer Prozenttabelle.",
+      "amortizationTermSource": "Vorlagenperioden lösen über die unten angegebene Periodenzahl ab Leistungsbeginn der Position auf; Leistungsdaten nutzen Beginn und Ende der Position.",
+      "amortizationPercentages": "Ein Prozentsatz je Periode in Reihenfolge, zusammen genau 100.",
+      "amortizationPeriodOffset": "Perioden zwischen Beginn und erster Auflösung; 0 beginnt in der ersten Periode.",
+      "amortizationDeferralAccount": "Das Umlauf- oder sonstige Vermögenskonto, auf dem der Aufwand bis zur Auflösung steht.",
+      "amortizationDestinationAccount": "Leer lässt jede Position auf ihr eigenes Aufwandskonto auflösen."
     },
     "options": {
       "withholdingCondominiumPayer": "Wohnungseigentümergemeinschaft als Zahler",
@@ -5490,6 +5514,16 @@
       "periodEndPostingPeriod": {
         "last_period": "Letzte Periode des Jahres",
         "adjustment_period": "Abschlussperiode"
+      },
+      "amortizationMethod": {
+        "straight_line": "Linear je Periode",
+        "prorated_first_last": "Erste und letzte Periode anteilig",
+        "exact_days": "Taggenau",
+        "variable": "Variable Prozentsätze"
+      },
+      "amortizationTermSource": {
+        "template": "Vorlagenperioden",
+        "service_dates": "Leistungsdaten der Position"
       }
     },
     "bankFeeds": {
@@ -8216,6 +8250,14 @@
     "multiBookAccounting": {
       "title": "Mehrbuchhaltung (Multi-Book)",
       "description": "Führen Sie Nebenbücher je Tochtergesellschaft in eigener Basiswährung, ordnen Sie Konten je Buch zu, übernehmen Sie jede Buchung in vollständige Bücher, buchen Sie buchspezifische Journale und vergleichen Sie Bücher nebeneinander."
+    },
+    "expenseAmortization": {
+      "title": "Aufwandsabgrenzung",
+      "description": "Vorausbezahlte und abgegrenzte Aufwendungen aus Eingangsrechnungen, Buchungssätzen und Spesenabrechnungen werden über Pläne periodenweise aufgelöst, mit Abschlussschritt und Abstimmung zum Hauptbuch."
+    },
+    "expenseAmortizationAutoRun": {
+      "title": "Automatische Auflösung",
+      "description": "Bucht fällige Auflösungsperioden über den Planer, sobald sie enden, ohne manuellen Lauf."
     }
   },
   "extensions": {

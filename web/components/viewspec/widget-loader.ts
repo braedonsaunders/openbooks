@@ -21,6 +21,7 @@ type WidgetFamilyRegistry = Readonly<Record<string, WidgetRenderer>>
 const FAMILY_LOADERS: Record<WidgetFamily, () => Promise<WidgetFamilyRegistry>> = {
   core: async () => CORE_WIDGETS,
   agents: () => import('./widgets-agents').then((m) => m.AGENTS_WIDGETS),
+  amortization: () => import('./widgets-amortization').then((m) => m.AMORTIZATION_WIDGETS),
   'assets-tax': () => import('./widgets-assets-tax').then((m) => m.ASSETS_TAX_WIDGETS),
   banking: () => import('./widgets-banking').then((m) => m.BANKING_WIDGETS),
   commerce: () => import('./widgets-commerce').then((m) => m.COMMERCE_WIDGETS),
