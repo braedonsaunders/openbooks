@@ -737,7 +737,7 @@ export function SettingsForm({
       </Card> : null}
 
       {/* Control accounts */}
-      <Card>
+      <Card id="control-accounts">
         <CardHeader>
           <CardTitle>{t('controlAccounts.title')}</CardTitle>
           <CardDescription>{t('controlAccounts.description')}</CardDescription>

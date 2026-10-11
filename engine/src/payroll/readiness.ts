@@ -61,6 +61,7 @@ import {
   packPayableProblem,
 } from "./employee-facts.ts";
 import { employeePayrollProfiles } from "@openbooks/schema";
+import { laborCostingSettings } from "../projects/labor-costing.ts";
 import {
   declaredPayrollCertificates,
   resolveCertificate,
@@ -68,6 +69,9 @@ import {
   type PayrollCertificate,
   type StoredCertificate,
 } from "./certificates.ts";
+
+/** Setup → Company & Accounting → Control accounts, where Labor clearing is mapped. */
+const CONTROL_ACCOUNTS_HREF = "/admin/setup/company#control-accounts";
 
 /**
  * Pre-flight for a pay run: what must be fixed before it can calculate, what
@@ -434,12 +438,23 @@ export async function payrollSetupState(
     ok: Boolean(settings.netPayAccountId), href: `${setupHref}?tab=accounts`,
   });
   if (settings.wagesTo === "labor_clearing") {
+    // The labour clearing control account the commit debits and labour
+    // costing credits — one mapping, read the way both of them read it.
     const clearing = (await db.execute<{ id: string | null }>(sql`
-      select settings#>>'{laborCosting,clearingAccountId}' as id from orgs where id = ${orgId}
+      select settings->'controlAccounts'->>'laborClearing' as id from orgs where id = ${orgId}
     `));
     checks.push({
       severity: "blocker", code: "setup.laborClearing",
-      ok: Boolean(clearing.rows[0]?.id), href: setupHref,
+      ok: Boolean(clearing.rows[0]?.id), href: CONTROL_ACCOUNTS_HREF,
+    });
+  }
+  // Labour costing posts standard labour to WIP against Labor clearing at
+  // approval; only wages posted to Labor clearing wash it. Expensing wages
+  // while costing posts leaves WIP and clearing grossed up every run.
+  if (settings.wagesTo !== "labor_clearing" && (await laborCostingSettings(orgId)).mode === "post") {
+    checks.push({
+      severity: "warning", code: "setup.laborWashMode",
+      ok: false, href: `${setupHref}?tab=accounts`,
     });
   }
 
@@ -708,9 +723,11 @@ export async function payRunReadiness(
     if (!settings.netPayAccountId) flag("blocker", "setup.netPay", [], { href: setupHref });
     if (settings.wagesTo === "labor_clearing") {
       const clearing = (await db.execute<{ id: string | null }>(sql`
-        select settings#>>'{laborCosting,clearingAccountId}' as id from orgs where id = ${orgId}
+        select settings->'controlAccounts'->>'laborClearing' as id from orgs where id = ${orgId}
       `));
-      if (!clearing.rows[0]?.id) flag("blocker", "setup.laborClearing", [], { href: setupHref });
+      if (!clearing.rows[0]?.id) flag("blocker", "setup.laborClearing", [], { href: CONTROL_ACCOUNTS_HREF });
+    } else if ((await laborCostingSettings(orgId)).mode === "post") {
+      flag("warning", "setup.laborWashMode", [], { href: `${setupHref}?tab=accounts` });
     }
 
     // Every statutory slot of every pack the run's people belong to must resolve

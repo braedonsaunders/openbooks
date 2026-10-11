@@ -626,3 +626,22 @@ describe("readiness-setup-schedule", () => {
     }
   });
 });
+
+test(
+  "labour costing that posts while wages are expensed warns that clearing is never washed",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const washChecks = async () => (await payrollSetupState(org.orgId)).checks.filter((check) => check.code === "setup.laborWashMode");
+      await db.execute(sql`update orgs set settings = settings || '{"payroll":{"wagesTo":"expense"}}'::jsonb where id = ${org.orgId}`);
+      assert.deepEqual(await washChecks(), [], "with labour costing off, expensing wages is coherent");
+      await db.execute(sql`update orgs set settings = settings || '{"laborCosting":{"mode":"post"}}'::jsonb where id = ${org.orgId}`);
+      const [warning] = await washChecks();
+      assert.equal(warning?.severity, "warning");
+      assert.equal(warning?.ok, false);
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
