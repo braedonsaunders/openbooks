@@ -13,13 +13,19 @@ import { defineRoute } from '@/lib/api/route'
 import { isUuid } from '@/lib/list-params'
 import { guardAutopayPartyScope } from '@/lib/autopay-scope'
 import { setupCurrencyAvailable, setupCustomerName, setupRecipients } from '@/lib/autopay-setup-link'
-import { deriveEmailDeliveryKey, paymentMethodSetupEmail, sendVia } from '@openbooks/emails'
+import {
+  deriveEmailDeliveryKey,
+  emailDeliveryBlockedMessage,
+  paymentMethodSetupEmail,
+  sendVia,
+  type EmailTransport,
+} from '@openbooks/emails'
 import {
   insertEmailLog,
   markEmailFailed,
   markEmailSent,
   markEmailUncertain,
-  resolveOrgEmailTransport,
+  resolveOrgEmailTransportDetailed,
 } from '@openbooks/engine/delivery/email-config'
 import { readOrgName } from '@/lib/record-scope-reads'
 
@@ -81,7 +87,7 @@ export const POST = defineRoute({
       )
     }
     let recipient: string | null = null
-    let transport: Awaited<ReturnType<typeof resolveOrgEmailTransport>> = null
+    let transport: EmailTransport | null = null
     if (body.recipientEmail) {
       const wanted = body.recipientEmail.toLowerCase()
       const match = (await setupRecipients(orgId, body.partyId)).find((entry) => entry.email.toLowerCase() === wanted)
@@ -91,13 +97,14 @@ export const POST = defineRoute({
           { status: 422 },
         )
       }
-      transport = await resolveOrgEmailTransport(orgId)
-      if (!transport) {
+      const transportState = await resolveOrgEmailTransportDetailed(orgId)
+      if (transportState.state !== 'ready') {
         return NextResponse.json(
-          { error: 'outbound email is not set up; configure it under Administration → Email, or create the link without a recipient and share it yourself' },
+          { error: `${emailDeliveryBlockedMessage(transportState)} Or create the link without a recipient and share it yourself.` },
           { status: 422 },
         )
       }
+      transport = transportState.transport
       recipient = match.email
     }
     const setupToken = randomBytes(32).toString('hex')

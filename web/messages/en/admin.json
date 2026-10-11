@@ -8558,6 +8558,11 @@
           "placeholder": "apikey or full email"
         }
       }
+    },
+    "readiness": {
+      "notEnabled": "Email delivery is off for this organization. Choose a provider, enter its credential, and turn delivery on below before invoices, statements, and reminders can be sent.",
+      "unusable": "Email delivery cannot send right now. Re-enter the provider settings below and save to restore it.",
+      "unusableDetail": "Reason: {reason}"
     }
   },
   "aiLedger": {

@@ -201,7 +201,7 @@ export function resolveEmailTransportDetailed(
   } catch (error) {
     return {
       state: 'unusable',
-      reason: `the stored email configuration is incomplete: ${error instanceof Error ? error.message : String(error)}`,
+      reason: `the stored email configuration is incomplete (${error instanceof Error ? error.message : String(error)})`,
     }
   }
   let secret: string | undefined
@@ -213,7 +213,7 @@ export function resolveEmailTransportDetailed(
         state: 'unusable',
         reason:
           'the stored provider credential could not be unsealed with the current data key ' +
-          '(it was rotated, moved, or is corrupt); re-enter the credential under Settings → Email before mail can send',
+          '(it was rotated, moved, or is corrupt)',
       }
     }
   } else if (raw.keyCiphertext && raw.keyNonce) {
@@ -223,7 +223,7 @@ export function resolveEmailTransportDetailed(
         state: 'unusable',
         reason:
           'the stored provider credential could not be unsealed with the current session secret ' +
-          '(it was rotated or is corrupt); re-enter the credential under Settings → Email before mail can send',
+          '(it was rotated or is corrupt)',
       }
     }
     secret = unsealed
@@ -233,8 +233,7 @@ export function resolveEmailTransportDetailed(
     return {
       state: 'unusable',
       reason:
-        'the stored email configuration is missing its sending credential or sender identity; ' +
-        're-enter the credential and sender under Settings → Email before mail can send',
+        'the stored email configuration is missing its sending credential or sender identity',
     }
   }
   return { state: 'ready', transport: resolved }

@@ -1,10 +1,11 @@
+import { emailDeliveryBlockedMessage } from '@openbooks/emails'
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { enqueueStatementBatchJobs } from '@openbooks/jobs'
-import { resolveOrgEmailTransport } from '@openbooks/engine/delivery/email-config/module'
+import { resolveOrgEmailTransportDetailed } from '@openbooks/engine/delivery/email-config/module'
 import {
   createStatementBatchRun,
   listStatementBatchRuns,
@@ -64,10 +65,11 @@ export const POST = defineRoute({
   const body = parsedBody.data as {
     from?: string; toDate?: string; overdueOnly?: boolean; subsidiaryId?: string; currency?: string
   }
-  const transport = await resolveOrgEmailTransport(gate.user.orgId)
-  if (!transport) {
-    return NextResponse.json({ error: 'email delivery is not configured — set it up in Admin → Email' }, { status: 422 })
+  const delivery = await resolveOrgEmailTransportDetailed(gate.user.orgId)
+  if (delivery.state !== 'ready') {
+    return NextResponse.json({ error: emailDeliveryBlockedMessage(delivery) }, { status: 422 })
   }
+  const transport = delivery.transport
   let preview
   try {
     preview = await buildStatementBatchPreview(

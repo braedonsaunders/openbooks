@@ -564,7 +564,9 @@ test('test-send names unusable email configuration instead of treating it as unc
   const response = await postTestSend('colleague@example.com')
 
   assert.equal(response.status, 422)
-  assert.deepEqual(await response.json(), { error: reason })
+  assert.deepEqual(await response.json(), {
+    error: `Email delivery cannot send: ${reason}. An administrator with setup access can re-enter the provider settings in Admin → Email.`,
+  })
   assert.deepEqual(emailState.engineCalls.map((call) => call.fn), ['resolveOrgEmailTransportDetailed'])
   assert.deepEqual(emailState.sendCalls, [], 'an unusable transport is never sent through')
 })

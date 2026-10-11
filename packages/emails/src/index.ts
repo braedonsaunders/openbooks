@@ -6,6 +6,7 @@ import { esc, shell, type EmailOut } from './shell'
 
 export * from './providers'
 export * from './transport'
+export * from './readiness'
 export * from './delivery-input'
 export * from './outcome'
 export { sealSecret, unsealSecret, unsealLegacyEmailSecret, type SealedSecret } from './crypto'

@@ -8558,6 +8558,11 @@
           "placeholder": "apikey ou e-mail completo"
         }
       }
+    },
+    "readiness": {
+      "notEnabled": "O envio de e-mails está desativado para esta organização. Escolha um provedor, informe sua credencial e ative o envio abaixo para que faturas, extratos e lembretes possam ser enviados.",
+      "unusable": "O envio de e-mails não pode ocorrer no momento. Informe novamente as configurações do provedor abaixo e salve para restabelecer.",
+      "unusableDetail": "Motivo: {reason}"
     }
   },
   "aiLedger": {

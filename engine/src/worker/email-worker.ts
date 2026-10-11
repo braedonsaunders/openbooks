@@ -2,6 +2,7 @@ import { authorizeReportRun } from './render-client.ts';
 import { Worker } from "bullmq";
 import { EMAIL_QUEUE, getBlockingConnection, resolveEmailDeliveryKey, type EmailJobData } from "@openbooks/jobs";
 import {
+  emailDeliveryBlockedMessage,
   isEmailAttachmentRef,
   reconcileDeliveryAttempts,
   sendVia,
@@ -282,8 +283,9 @@ export function createEmailWorker(): Worker<EmailJobData> {
         // configured" forever. The mail was never transmitted.
         if (!transport) {
           throw new Error(
-            `email provider is configured but unusable: ${resolution?.state === "unusable" ? resolution.reason : "unknown transport fault"} — ` +
-              `fix the provider credential, then the queued retry sends`,
+            resolution?.state === "unusable"
+              ? `${emailDeliveryBlockedMessage(resolution)} The queued retry sends once it is fixed.`
+              : "Email delivery is unavailable for this organization. The queued retry sends once it is fixed.",
           );
         }
         // Check current grants immediately before transmission. Keep this in

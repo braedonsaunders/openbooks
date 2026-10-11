@@ -111,7 +111,7 @@ export function sealSecret(plain: string, orgId: string): string {
 
 /**
  * Unseal a data-key credential. Throws naming the org and key id — the
- * caller surfaces it as "re-enter the credential under Settings → Email",
+ * caller surfaces it as "re-enter the credential in Admin → Email",
  * never as "not configured".
  */
 export function unsealSecret(sealed: string, orgId: string): string {
@@ -119,7 +119,7 @@ export function unsealSecret(sealed: string, orgId: string): string {
   if (typeof sealed !== 'string' || !sealed.startsWith(V2_PREFIX)) {
     throw new Error(
       `[email/crypto] stored credential for org ${org} is not a data-key sealed secret; ` +
-        're-enter the credential under Settings → Email before mail can send',
+        're-enter the credential in Admin → Email before mail can send',
     )
   }
   const parts = sealed.slice(V2_PREFIX.length).split(':')
@@ -129,7 +129,7 @@ export function unsealSecret(sealed: string, orgId: string): string {
   if (!keyId || !ivB64 || !ctB64 || !tagB64 || parts.length !== 4 || !key) {
     throw new Error(
       `[email/crypto] stored credential for org ${org} (key ${keyId || 'unknown'}) cannot be unsealed with the configured data key; ` +
-        're-enter the credential under Settings → Email before mail can send',
+        're-enter the credential in Admin → Email before mail can send',
     )
   }
   try {
@@ -140,7 +140,7 @@ export function unsealSecret(sealed: string, orgId: string): string {
   } catch {
     throw new Error(
       `[email/crypto] stored credential for org ${org} (key ${keyId}) failed authentication — it was tampered with, moved from another org, or sealed under a different key value; ` +
-        're-enter the credential under Settings → Email before mail can send',
+        're-enter the credential in Admin → Email before mail can send',
     )
   }
 }

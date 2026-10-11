@@ -8,7 +8,14 @@ import { Badge, Button, Input, Label, Select, cn } from '@openbooks/ui'
 import { EMAIL_PROVIDER_SPECS, type EmailProvider } from '@openbooks/emails/providers'
 import { readApiErrorMessage } from '@/lib/api-error'
 
+/** Server-computed send readiness: what the organization can do right now and, when it cannot, why. */
+export type EmailReadiness =
+  | { state: 'ready' }
+  | { state: 'unconfigured' }
+  | { state: 'unusable'; reason: string }
+
 type View = {
+  readiness?: EmailReadiness
   enabled?: boolean
   provider?: EmailProvider | null
   fromName?: string
@@ -64,6 +71,8 @@ export function EmailSettingsForm({ initial }: { initial: View }) {
       const { updatedAt, ...rest } = v
       const body: Record<string, unknown> = { ...rest, expectedUpdatedAt: updatedAt }
       delete body.hasSecret
+      // Readiness is computed by the server on every read; it is never an input.
+      delete body.readiness
       if (replaceSecret) body.secret = secret.trim() ? secret.trim() : null
       const res = await fetch('/api/admin/email', {
         method: 'PUT',
@@ -118,6 +127,19 @@ export function EmailSettingsForm({ initial }: { initial: View }) {
 
   return (
     <div className="max-w-2xl space-y-6" inert={saving}>
+      {/* Delivery readiness: names the state that refuses outbound mail, so an
+          administrator sees why invoices, statements and reminders cannot send. */}
+      {v.readiness && v.readiness.state !== 'ready' ? (
+        <div role="status" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+          <p className="font-medium">
+            {v.readiness.state === 'unusable' ? t('email.readiness.unusable') : t('email.readiness.notEnabled')}
+          </p>
+          {v.readiness.state === 'unusable' ? (
+            <p className="mt-1 text-xs">{t('email.readiness.unusableDetail', { reason: v.readiness.reason })}</p>
+          ) : null}
+        </div>
+      ) : null}
+
       {/* enable */}
       <label className="flex items-center gap-3 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
         <input type="checkbox" checked={!!v.enabled} onChange={(e) => set({ enabled: e.target.checked })} className="h-4 w-4" />

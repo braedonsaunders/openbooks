@@ -25,13 +25,13 @@ import {
   issuePortalReviewInvite,
   recordPortalEvent,
 } from '@openbooks/engine/portal'
-import { billingReviewRequestEmail, deriveEmailDeliveryKey, sendVia } from '@openbooks/emails'
+import { billingReviewRequestEmail, deriveEmailDeliveryKey, sendVia, emailDeliveryBlockedMessage } from '@openbooks/emails'
 import {
   insertEmailLog,
   markEmailFailed,
   markEmailSent,
   markEmailUncertain,
-  resolveOrgEmailTransport,
+  resolveOrgEmailTransportDetailed,
 } from '@openbooks/engine/delivery/email-config'
 import { createMoneyFormatter } from './money-format'
 
@@ -1789,7 +1789,7 @@ export async function sendPrebillToCustomer(
   }))
 
   const { context, recipient, token } = prepared
-  const transport = await resolveOrgEmailTransport(orgId)
+  const delivery = await resolveOrgEmailTransportDetailed(orgId)
   const orgName = (await db.execute<{ name: string; portal_name: string | null }>(sql`
     select org.name,
            (select settings.portal_name from customer_portal_settings settings
@@ -1798,9 +1798,10 @@ export async function sendPrebillToCustomer(
       from orgs org where org.id = ${orgId}
   `)).rows[0]
   let emailError: string | null = null
-  if (!transport) {
-    emailError = 'Email delivery is not configured — set it up in Admin → Email; the review is waiting in the customer portal'
+  if (delivery.state !== 'ready') {
+    emailError = `${emailDeliveryBlockedMessage(delivery)} The review is waiting in the customer portal.`
   } else {
+    const transport = delivery.transport
     const mail = billingReviewRequestEmail({
       orgName: orgName?.name ?? 'OpenBooks',
       portalName: orgName?.portal_name ?? 'Customer portal',

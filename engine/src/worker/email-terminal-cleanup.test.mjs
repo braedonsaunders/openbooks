@@ -30,6 +30,7 @@ const sources = {
     };
   `,
   '@openbooks/emails': `
+    export function emailDeliveryBlockedMessage(block) { return block.state === 'unusable' ? 'Email delivery cannot send: ' + block.reason + '. An administrator with setup access can re-enter the provider settings in Admin → Email.' : 'Email delivery is not enabled for this organization.' }
     export function isEmailAttachmentRef(attachment) { return !('content' in attachment) }
     export async function sendVia() {
       const state = globalThis.__emailTerminalCleanupTest;
@@ -135,11 +136,11 @@ test('configured but unusable transport fails with its remedy and does not ack o
   reset()
   state.transportResolution = {
     state: 'unusable',
-    reason: 'credential could not be unsealed; re-enter it under Settings → Email',
+    reason: 'the stored provider credential could not be unsealed with the current data key',
   }
   await assert.rejects(
     state.handler(job({ attemptsMade: 0, attempts: 5 })),
-    /configured but unusable: credential could not be unsealed.*re-enter it under Settings → Email/,
+    /Email delivery cannot send: the stored provider credential could not be unsealed.*re-enter the provider settings in Admin → Email/,
   )
   assert.equal(state.sendViaCalls, 0, 'a damaged credential must never reach the provider')
   assert.deepEqual(state.deleted, [], 'retries remain available until the transport is repaired')

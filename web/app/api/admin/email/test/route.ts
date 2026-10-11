@@ -3,7 +3,7 @@ import { defineRoute } from "@/lib/api/route";
 
 import { NextResponse } from 'next/server'
 
-import { deriveEmailDeliveryKey, sendVia, isValidEmailAddress } from '@openbooks/emails'
+import { deriveEmailDeliveryKey, emailDeliveryBlockedMessage, sendVia, isValidEmailAddress } from '@openbooks/emails'
 import { insertEmailLog, markEmailFailed, markEmailSent, markEmailUncertain, resolveOrgEmailTransportDetailed } from '@openbooks/engine/delivery/email-config/module'
 
 const requestBodySchema = z.object({ to: z.string().trim().min(1).max(320) });
@@ -39,11 +39,8 @@ export const POST = defineRoute({
     if (!isValidEmailAddress(to)) return NextResponse.json({ error: 'Enter a valid recipient email.' }, { status: 422 })
 
     const resolution = await resolveOrgEmailTransportDetailed(orgId)
-    if (resolution.state === 'unconfigured') {
-      return NextResponse.json({ error: 'Configure and enable an email provider first.' }, { status: 422 })
-    }
-    if (resolution.state === 'unusable') {
-      return NextResponse.json({ error: resolution.reason }, { status: 422 })
+    if (resolution.state !== 'ready') {
+      return NextResponse.json({ error: emailDeliveryBlockedMessage(resolution) }, { status: 422 })
     }
     const transport = resolution.transport
 

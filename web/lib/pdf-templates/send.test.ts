@@ -135,6 +135,11 @@ const mockSources = new Map<string, string>([
         return { state: 'ready', transport: { provider: 'test' } }
       }
 
+      export function emailDeliveryBlockedMessage() { return 'Email delivery is unavailable.' }
+      export function emailDeliveryReadiness(resolution) {
+        return resolution.state === 'ready' ? { state: 'ready' } : resolution
+      }
+
       export async function sendVia(transport, message, identity) {
         if (harness.state.sendError) throw harness.state.sendError
         harness.state.deliveries.push({ to: message.to, subject: message.subject })

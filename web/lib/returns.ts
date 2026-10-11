@@ -46,6 +46,7 @@ import {
   deriveEmailDeliveryKey,
   returnDecisionEmail,
   returnReceivedEmail,
+  emailDeliveryBlockedParts,
   sendVia,
 } from '@openbooks/emails'
 import {
@@ -53,7 +54,7 @@ import {
   markEmailFailed,
   markEmailSent,
   markEmailUncertain,
-  resolveOrgEmailTransport,
+  resolveOrgEmailTransportDetailed,
 } from '@openbooks/engine/delivery/email-config/module'
 
 export type ReturnSourceSelection = {
@@ -800,8 +801,12 @@ export async function sendReturnAuthorizationEmail(input: {
      where o.id = ${input.orgId}`)).rows[0]
   const to = input.to?.trim() || party?.email?.trim() || ''
   if (!to) throw new ReturnRefusal('No recipient email', 'invalid_input', 422, "Enter a recipient or add an email address to the customer's record")
-  const transport = await resolveOrgEmailTransport(input.orgId)
-  if (!transport) throw new ReturnRefusal('Email delivery is not configured', 'invalid_input', 422, 'Set up email delivery in Admin → Email')
+  const delivery = await resolveOrgEmailTransportDetailed(input.orgId)
+  if (delivery.state !== 'ready') {
+    const parts = emailDeliveryBlockedParts(delivery)
+    throw new ReturnRefusal(parts.summary, 'invalid_input', 422, parts.remedy)
+  }
+  const transport = delivery.transport
   const linkedCredit = authorization.customerCreditId
     ? (await db.execute<{ document_number: string }>(sql`select document_number from documents where org_id = ${input.orgId} and id = ${authorization.customerCreditId}`)).rows[0]?.document_number
     : null

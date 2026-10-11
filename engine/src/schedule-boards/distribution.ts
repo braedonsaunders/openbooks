@@ -15,6 +15,7 @@ import {
   scheduleDistributionEmail,
   normalizeEmailDeliveryInput,
   isValidEmailAddress,
+  emailDeliveryBlockedMessage,
   type ScheduleEmailLine,
 } from '@openbooks/emails';
 import { db, withOrgTransaction } from '../platform/db.ts';
@@ -532,10 +533,7 @@ async function preview(
   recipients.sort((a, b) => a.partyId.localeCompare(b.partyId));
   const provider = await readOrgEmailConfigView(actor.orgId);
   const transport = await resolveOrgEmailTransportDetailed(actor.orgId);
-  if (transport.state !== 'ready')
-    refusals.push(
-      'Configure an available outbound email provider in Company Settings → Email before sending.',
-    );
+  if (transport.state !== 'ready') refusals.push(emailDeliveryBlockedMessage(transport));
   const organizationName = (
     await db.execute<{ name: string }>(
       sql`select name from orgs where id=${actor.orgId}`,

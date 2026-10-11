@@ -207,6 +207,8 @@ const mockSources = new Map<string, string>([
         return { subject: 'Payroll document', html: '<p>Payroll document</p>', text: 'Payroll document' }
       }
 
+      export function emailDeliveryBlockedMessage() { return 'Email delivery is unavailable.' }
+
       export async function sendVia(_transport, message) {
         harness.state.deliveryCalls.push({
           to: message.to,
@@ -224,9 +226,9 @@ const mockSources = new Map<string, string>([
     'mock:email-config',
     `
       const harness = globalThis[Symbol.for('openbooks.payroll-outputs-test')]
-      export async function resolveOrgEmailTransport() {
+      export async function resolveOrgEmailTransportDetailed() {
         harness.state.transportResolveCalls += 1
-        return { provider: 'test' }
+        return { state: 'ready', transport: { provider: 'test' } }
       }
       export async function insertEmailLog() { return 'email-log-1' }
       export async function markEmailSent() {}

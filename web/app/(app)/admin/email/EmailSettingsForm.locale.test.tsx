@@ -45,7 +45,7 @@ const { EmailSettingsForm } = await import("./EmailSettingsForm");
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
-async function renderForm() {
+async function renderForm(readiness = { state: "ready" }) {
   document.body.innerHTML = "";
   const host = document.createElement("div");
   document.body.appendChild(host);
@@ -61,6 +61,7 @@ async function renderForm() {
             fromEmail: "rapports@exemple.fr",
             hasSecret: true,
             updatedAt: null,
+            readiness,
           }}
         />
       </NextIntlClientProvider>,
@@ -108,4 +109,31 @@ test("the email form renders French chrome with no English literals", async (t) 
   ]) {
     assert.ok(!text.includes(leaked), `no English literal may leak into the French form: ${leaked}`);
   }
+});
+
+test("an organization that cannot send sees the state and the administrator's remedy in French", async (t) => {
+  const copy = messages.admin.email.readiness;
+  const unconfigured = await renderForm({ state: "unconfigured" });
+  t.after(unconfigured.unmount);
+  const banner = document.querySelector('[role="status"]');
+  assert.ok(banner, "a refused organization must see the readiness banner");
+  assert.ok((banner.textContent ?? "").includes(copy.notEnabled), "the banner names the disabled state");
+  assert.ok(!(banner.textContent ?? "").includes("Email delivery is off"), "no English banner copy may leak");
+
+  const reason = "the stored provider credential could not be unsealed with the current data key";
+  const unusable = await renderForm({ state: "unusable", reason });
+  t.after(unusable.unmount);
+  const unusableBanner = document.querySelector('[role="status"]');
+  assert.ok(unusableBanner, "an unusable credential must be shown, not hidden");
+  assert.ok((unusableBanner.textContent ?? "").includes(copy.unusable), "the banner names the unusable state");
+  assert.ok(
+    (unusableBanner.textContent ?? "").includes(copy.unusableDetail.replace("{reason}", reason)),
+    "the banner carries the engine reason",
+  );
+});
+
+test("a ready organization shows no readiness banner", async (t) => {
+  const { unmount } = await renderForm({ state: "ready" });
+  t.after(unmount);
+  assert.equal(document.querySelector('[role="status"]'), null);
 });

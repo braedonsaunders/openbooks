@@ -77,9 +77,10 @@ stubModules({
       export async function markEmailFailed() {}
       export async function markEmailSent() {}
       export async function markEmailUncertain() {}
-      export async function resolveOrgEmailTransport() { return { kind: 'test' } }
+      export async function resolveOrgEmailTransportDetailed() { return { state: 'ready', transport: { kind: 'test' } } }
     `,
     "@openbooks/emails": `
+      export function emailDeliveryBlockedMessage() { return 'Email delivery is unavailable.' }
       const state = globalThis[Symbol.for('openbooks.statement-send-test')]
       export function deriveEmailDeliveryKey() { return 'key-1' }
       export function isValidEmailAddress() { return true }

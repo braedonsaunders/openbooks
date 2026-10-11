@@ -1,12 +1,12 @@
 import { sql } from "drizzle-orm";
-import { deriveEmailDeliveryKey, quoteSignatureRequestEmail, sendVia } from "@openbooks/emails";
+import { deriveEmailDeliveryKey, quoteSignatureRequestEmail, sendVia, emailDeliveryBlockedMessage } from "@openbooks/emails";
 import { db } from "@openbooks/engine/platform/database";
 import {
   insertEmailLog,
   markEmailFailed,
   markEmailSent,
   markEmailUncertain,
-  resolveOrgEmailTransport,
+  resolveOrgEmailTransportDetailed,
 } from "@openbooks/engine/delivery/email-config";
 
 /**
@@ -64,10 +64,11 @@ export async function deliverQuoteSignature(args: {
     signUrl,
     expiresDate: args.expiresAt.toISOString().slice(0, 10),
   });
-  const transport = await resolveOrgEmailTransport(args.orgId);
-  if (!transport) {
-    return { signUrl, emailed: false, emailSkippedReason: "Email delivery is not configured — set it up in Admin → Email" };
+  const delivery = await resolveOrgEmailTransportDetailed(args.orgId);
+  if (delivery.state !== "ready") {
+    return { signUrl, emailed: false, emailSkippedReason: emailDeliveryBlockedMessage(delivery) };
   }
+  const transport = delivery.transport;
   const logId = await insertEmailLog({
     orgId: args.orgId,
     jobId: null,

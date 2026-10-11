@@ -5,4 +5,5 @@ export {
   markEmailSent,
   markEmailUncertain,
   resolveOrgEmailTransport,
+  resolveOrgEmailTransportDetailed,
 } from "./email-config.ts";

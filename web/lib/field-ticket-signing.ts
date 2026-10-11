@@ -3,13 +3,13 @@ import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import { db } from '@openbooks/engine/platform/db'
-import { deriveEmailDeliveryKey, sendVia } from '@openbooks/emails'
+import { deriveEmailDeliveryKey, sendVia, emailDeliveryBlockedMessage } from '@openbooks/emails'
 import {
   insertEmailLog,
   markEmailFailed,
   markEmailUncertain,
   markEmailSent,
-  resolveOrgEmailTransport,
+  resolveOrgEmailTransportDetailed,
 } from '@openbooks/engine/delivery/email-config/module'
 import { mintSigningToken, signingTokenDigest } from './field-ticket-token'
 import { FieldTicketError } from './field-tickets'
@@ -45,14 +45,15 @@ export async function sendTicketForSignature(args: {
   const to = args.to.trim()
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) throw new FieldTicketError('A valid recipient email is required')
 
-  const [tpl, record, transport, org] = await Promise.all([
+  const [tpl, record, delivery, org] = await Promise.all([
     resolvePdfTemplate(args.orgId, 'field_ticket', null),
     loadPdfRecordValues('field_ticket', args.orgId, args.ticketId, args.allowedSubsidiaryIds),
-    resolveOrgEmailTransport(args.orgId),
+    resolveOrgEmailTransportDetailed(args.orgId),
     db.execute<{ name: string }>(sql`select name from orgs where id = ${args.orgId}`),
   ])
   if (!tpl || !record) throw new FieldTicketError('Could not render the ticket PDF')
-  if (!transport) throw new FieldTicketError('Email delivery is not configured — set it up in Admin → Email')
+  if (delivery.state !== 'ready') throw new FieldTicketError(emailDeliveryBlockedMessage(delivery))
+  const transport = delivery.transport
 
   const requestId = randomUUID()
   const expiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)

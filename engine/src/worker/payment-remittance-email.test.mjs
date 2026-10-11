@@ -19,6 +19,7 @@ const sources = {
   '@openbooks/jobs': 'export const EMAIL_QUEUE = "test"; export const getBlockingConnection = () => ({}); export const resolveEmailDeliveryKey = () => "delivery-key";',
   '../delivery/email-attachments.ts': 'export const loadEmailAttachments = async () => []; export const deleteStoredEmailAttachments = async () => {};',
   '@openbooks/emails': `
+    export function emailDeliveryBlockedMessage() { return 'Email delivery is unavailable.' }
     export const deriveEmailDeliveryKey = () => 'delivery';
     export function isEmailAttachmentRef(attachment) { return !('content' in attachment) }
     export const reconcileDeliveryAttempts = () => ({ action: 'send' });

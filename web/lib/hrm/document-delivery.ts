@@ -3,6 +3,7 @@ import {
   deriveEmailDeliveryKey,
   hrmSignatureRequestEmail,
   hrmSurveyInvitationEmail,
+  emailDeliveryBlockedMessage,
   sendVia,
 } from "@openbooks/emails";
 import { db } from "@openbooks/engine/platform/db";
@@ -11,7 +12,7 @@ import {
   markEmailFailed,
   markEmailSent,
   markEmailUncertain,
-  resolveOrgEmailTransport,
+  resolveOrgEmailTransportDetailed,
 } from "@openbooks/engine/delivery/email-config/module";
 import { writeNotification } from "@openbooks/engine/inbox/adapters/notification";
 
@@ -66,10 +67,11 @@ async function sendEmail(args: {
   text: string;
   scope: string;
 }): Promise<{ sent: boolean; skippedReason: string | null }> {
-  const transport = await resolveOrgEmailTransport(args.orgId);
-  if (!transport) {
-    return { sent: false, skippedReason: "Email delivery is not configured — set it up in Admin → Email" };
+  const delivery = await resolveOrgEmailTransportDetailed(args.orgId);
+  if (delivery.state !== "ready") {
+    return { sent: false, skippedReason: emailDeliveryBlockedMessage(delivery) };
   }
+  const transport = delivery.transport;
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(args.to)) {
     return { sent: false, skippedReason: "no valid recipient email — the signing link below still works" };
   }

@@ -9,6 +9,7 @@ import {
 import {
   deriveEmailDeliveryKey,
   documentEmail,
+  emailDeliveryBlockedMessage,
   reconcileDeliveryAttempts,
   sendVia,
   type EmailTransport,
@@ -19,7 +20,7 @@ import {
   markEmailFailed,
   markEmailSent,
   markEmailUncertain,
-  resolveOrgEmailTransport,
+  resolveOrgEmailTransportDetailed,
 } from "../delivery/email-config.ts";
 import { withOrgContext } from "../platform/db.ts";
 import {
@@ -206,12 +207,12 @@ export async function processStatementBatchJob(
       await settleStatementBatchItemFailed(orgId, item.id, "no email on file — add an email address to the party first");
       return { outcome: "refused" };
     }
-    const transport = await resolveOrgEmailTransport(orgId);
-    if (!transport) {
-      const remedy = "email delivery is not configured — set it up in Admin → Email";
-      await settleStatementBatchItemFailed(orgId, item.id, remedy);
+    const resolution = await resolveOrgEmailTransportDetailed(orgId);
+    if (resolution.state !== "ready") {
+      await settleStatementBatchItemFailed(orgId, item.id, emailDeliveryBlockedMessage(resolution));
       return { outcome: "refused" };
     }
+    const transport = resolution.transport;
     const renderPdf = deps.renderPdf ?? renderStatementBatchPdf;
     const transmit = deps.transmit ?? transmitStatementBatchEmail;
     let rendered: StatementBatchRender;

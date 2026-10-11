@@ -2,9 +2,11 @@ import { sql } from "drizzle-orm";
 import { documentRevisionSql, isDocumentRevisionToken } from "../records/revision.ts";
 import type { EmailActor } from "@openbooks/schema";
 import {
+  emailDeliveryReadiness,
   resolveEmailTransport,
   resolveEmailTransportDetailed,
   sealSecret,
+  type EmailDeliveryReadiness,
   validateStoredEmailConfig,
   type AttemptRecord,
   type EmailTransport,
@@ -51,6 +53,8 @@ export function redactEmailConfig(raw: RawEmailConfig | null | undefined): Redac
 export type OrgEmailConfigView = RedactedEmailConfig & {
   /** Exact persisted `orgs.updated_at` revision; echo it into expectedUpdatedAt to save safely. */
   updatedAt: string | null;
+  /** Whether outbound mail can leave for this organization, and why not. Carries no secret material. */
+  readiness: EmailDeliveryReadiness;
 };
 
 export async function readOrgEmailConfigView(orgId: string): Promise<OrgEmailConfigView> {
@@ -61,6 +65,7 @@ export async function readOrgEmailConfigView(orgId: string): Promise<OrgEmailCon
   return {
     ...redactEmailConfig(row?.email),
     updatedAt: row?.updatedAt ?? null,
+    readiness: emailDeliveryReadiness(resolveEmailTransportDetailed(row?.email ?? null, orgId)),
   };
 }
 
@@ -230,6 +235,7 @@ export async function saveOrgEmailConfig(
     return {
       ...after,
       updatedAt: saved.rows[0]?.updatedAt ?? null,
+      readiness: emailDeliveryReadiness(resolveEmailTransportDetailed(next, orgId)),
     };
   });
 }

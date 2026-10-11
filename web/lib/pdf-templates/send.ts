@@ -3,13 +3,13 @@ import { cookies } from 'next/headers'
 import { sql } from 'drizzle-orm'
 import type { EmailActor } from '@openbooks/schema'
 import { db } from '@openbooks/engine/platform/db'
-import { documentEmail, deriveEmailDeliveryKey, sendVia } from '@openbooks/emails'
+import { documentEmail, deriveEmailDeliveryKey, sendVia, emailDeliveryBlockedMessage } from '@openbooks/emails'
 import {
   insertEmailLog,
   markEmailFailed,
   markEmailUncertain,
   markEmailSent,
-  resolveOrgEmailTransport,
+  resolveOrgEmailTransportDetailed,
 } from '@openbooks/engine/delivery/email-config/module'
 import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import { unsealSecret } from '@openbooks/engine/platform/secrets'
@@ -173,7 +173,7 @@ export async function sendRecordPdfEmail(args: {
     throw new RecordPdfSendError('payroll compensation PDFs are delivered alone')
   }
 
-  const [tpl, record, transport, actor] = await Promise.all([
+  const [tpl, record, delivery, actor] = await Promise.all([
     (async () =>
       resolvePdfTemplate(
         args.orgId,
@@ -182,12 +182,13 @@ export async function sendRecordPdfEmail(args: {
         await loadRecordDesignatedTemplateName(args.orgId, meta.docKind, args.id),
       ))(),
     loadPdfRecordValues(args.recordType, args.orgId, args.id, args.scope),
-    resolveOrgEmailTransport(args.orgId),
+    resolveOrgEmailTransportDetailed(args.orgId),
     resolveDeliveryActor(),
   ])
   if (!tpl) throw new RecordPdfSendError('no PDF template available for this record')
   if (!record) throw new RecordPdfSendError('record not found')
-  if (!transport) throw new RecordPdfSendError('email delivery is not configured — set it up in Admin → Email')
+  if (delivery.state !== 'ready') throw new RecordPdfSendError(emailDeliveryBlockedMessage(delivery))
+  const transport = delivery.transport
 
   const v = record.values as Record<string, unknown>
   const to = (args.to?.trim() || (typeof v.party_email === 'string' ? v.party_email : '') || '').trim()

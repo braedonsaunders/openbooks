@@ -8558,6 +8558,11 @@
           "placeholder": "apikey oder vollständige E-Mail-Adresse"
         }
       }
+    },
+    "readiness": {
+      "notEnabled": "Der E-Mail-Versand ist für diese Organisation deaktiviert. Wählen Sie unten einen Anbieter, geben Sie dessen Zugangsdaten ein und aktivieren Sie den Versand, bevor Rechnungen, Kontoauszüge und Zahlungserinnerungen versendet werden können.",
+      "unusable": "Der E-Mail-Versand ist derzeit nicht möglich. Geben Sie die Anbietereinstellungen unten erneut ein und speichern Sie, um ihn wiederherzustellen.",
+      "unusableDetail": "Grund: {reason}"
     }
   },
   "aiLedger": {

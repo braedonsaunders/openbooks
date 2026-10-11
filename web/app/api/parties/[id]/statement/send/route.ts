@@ -13,9 +13,9 @@ import {
   markEmailFailed,
   markEmailSent,
   markEmailUncertain,
-  resolveOrgEmailTransport,
+  resolveOrgEmailTransportDetailed,
 } from '@openbooks/engine/delivery/email-config/module'
-import { deriveEmailDeliveryKey, documentEmail, isValidEmailAddress, sendVia } from '@openbooks/emails'
+import { deriveEmailDeliveryKey, documentEmail, isValidEmailAddress, sendVia, emailDeliveryBlockedMessage } from '@openbooks/emails'
 import { can, subsidiaryScopeAllows } from '../../../../../../lib/authz'
 import { isUuid } from '../../../../../../lib/list-params'
 import { parseReportQuery } from '../../../../../../lib/report-filters'
@@ -122,10 +122,11 @@ export const POST = defineRoute({
     return NextResponse.json({ error: 'no recipient email — add an email address to the party first' }, { status: 422 })
   }
 
-  const transport = await resolveOrgEmailTransport(gate.user.orgId)
-  if (!transport) {
-    return NextResponse.json({ error: 'email delivery is not configured — set it up in Admin → Email' }, { status: 422 })
+  const delivery = await resolveOrgEmailTransportDetailed(gate.user.orgId)
+  if (delivery.state !== 'ready') {
+    return NextResponse.json({ error: emailDeliveryBlockedMessage(delivery) }, { status: 422 })
   }
+  const transport = delivery.transport
 
   const t = (await getTranslations('reports')) as unknown as Translator
   const stamp = await businessToday(gate.user.orgId)

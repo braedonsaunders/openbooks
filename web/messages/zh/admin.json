@@ -8558,6 +8558,11 @@
           "placeholder": "apikey 或完整电子邮件地址"
         }
       }
+    },
+    "readiness": {
+      "notEnabled": "本组织已关闭邮件发送。请在下方选择服务商、填写凭据并开启发送，之后才能发送发票、对账单和催款提醒。",
+      "unusable": "当前无法发送邮件。请在下方重新填写服务商设置并保存，即可恢复发送。",
+      "unusableDetail": "原因：{reason}"
     }
   },
   "aiLedger": {

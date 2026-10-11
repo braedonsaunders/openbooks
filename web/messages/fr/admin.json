@@ -8558,6 +8558,11 @@
           "placeholder": "apikey ou adresse e-mail complète"
         }
       }
+    },
+    "readiness": {
+      "notEnabled": "L'envoi d'e-mails est désactivé pour cette organisation. Choisissez un fournisseur, saisissez ses identifiants et activez l'envoi ci-dessous avant que les factures, relevés et relances puissent être envoyés.",
+      "unusable": "L'envoi d'e-mails est actuellement impossible. Saisissez de nouveau les paramètres du fournisseur ci-dessous et enregistrez pour le rétablir.",
+      "unusableDetail": "Motif : {reason}"
     }
   },
   "aiLedger": {

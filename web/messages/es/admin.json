@@ -8558,6 +8558,11 @@
           "placeholder": "apikey o correo electrónico completo"
         }
       }
+    },
+    "readiness": {
+      "notEnabled": "El envío de correo está desactivado para esta organización. Elija un proveedor, introduzca sus credenciales y active el envío más abajo antes de poder enviar facturas, extractos y recordatorios.",
+      "unusable": "El envío de correo no puede enviarse en este momento. Vuelva a introducir la configuración del proveedor más abajo y guarde para restablecerlo.",
+      "unusableDetail": "Motivo: {reason}"
     }
   },
   "aiLedger": {

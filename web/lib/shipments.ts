@@ -12,9 +12,9 @@ import {
   markEmailFailed,
   markEmailSent,
   markEmailUncertain,
-  resolveOrgEmailTransport,
+  resolveOrgEmailTransportDetailed,
 } from '@openbooks/engine/delivery/email-config/module'
-import { deriveEmailDeliveryKey, sendVia, shipmentTrackingEmail } from '@openbooks/emails'
+import { deriveEmailDeliveryKey, sendVia, shipmentTrackingEmail, emailDeliveryBlockedParts } from '@openbooks/emails'
 import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from './custom-fields'
 import { loadKitComponents } from '@openbooks/engine/inventory'
 import { fromUnits, toUnits } from '@openbooks/engine/money'
@@ -298,15 +298,12 @@ export async function sendShipmentTracking(
       "Enter a recipient, or add an email address to the customer's record",
     )
   }
-  const transport = await resolveOrgEmailTransport(orgId)
-  if (!transport) {
-    throw new FulfillmentRefusal(
-      'Email delivery is not configured',
-      'invalid_input',
-      422,
-      'Set up email delivery in Admin → Email',
-    )
+  const delivery = await resolveOrgEmailTransportDetailed(orgId)
+  if (delivery.state !== 'ready') {
+    const parts = emailDeliveryBlockedParts(delivery)
+    throw new FulfillmentRefusal(parts.summary, 'invalid_input', 422, parts.remedy)
   }
+  const transport = delivery.transport
   const body = shipmentTrackingEmail({
     orgName: party?.org_name || 'OpenBooks',
     shipmentNumber: shipment.documentNumber,
