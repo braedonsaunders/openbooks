@@ -85,7 +85,7 @@ test("opening balance amounts are exact money, never negative, never a transpose
   assert.throws(() => normalizeOpeningBalance({ cppYtd: "lots" }), /is not a number/);
   // The realistic import error: CPP dollars pasted into pensionable earnings.
   assert.throws(
-    () => normalizeOpeningBalance({ pensionableYtd: "2380.50", cppYtd: "40000" }),
+    () => normalizeOpeningBalance({ pensionableYtd: "2380.50", insurableYtd: "0", cppYtd: "40000" }),
     /exceed pensionable earnings/,
   );
   assert.throws(
@@ -382,7 +382,7 @@ test(
         rows: [{
           employeePartyId: fx.employeeId,
           amounts: {
-            pensionableYtd: "60000", taxableYtd: "60000", nonPeriodicYtd: "5000",
+            pensionableYtd: "60000", insurableYtd: "0", taxableYtd: "60000", nonPeriodicYtd: "5000",
             cpp2BonusYtd: "120.50", qcCsbYtd: "85", ficaWithheldYtd: "4000",
           },
         }],
@@ -526,7 +526,7 @@ test(
         orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
         rows: [{
           employeePartyId: fx.employeeId,
-          amounts: { pensionableYtd: "84000", taxableYtd: "84000" },
+          amounts: { pensionableYtd: "84000", insurableYtd: "0", taxableYtd: "84000" },
           components: { RRSP: "23000.00" },
         }],
       });
@@ -609,7 +609,7 @@ test(
       // an instruction to delete a deferral year-to-date.
       await saveOpeningBalances({
         orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
-        rows: [{ employeePartyId: fx.employeeId, amounts: { pensionableYtd: "50" } }],
+        rows: [{ employeePartyId: fx.employeeId, amounts: { pensionableYtd: "50", insurableYtd: "0" } }],
       });
       const kept = await openingBalancesForYear(fx.orgId, 2026);
       assert.equal(kept.rows[0]!.componentAmounts[componentId], "1000.0000");
@@ -656,7 +656,7 @@ test(
       // A save that names nothing must not clear it.
       await saveOpeningBalances({
         orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
-        rows: [{ employeePartyId: fx.employeeId, amounts: { pensionableYtd: "50" }, components: {} }],
+        rows: [{ employeePartyId: fx.employeeId, amounts: { pensionableYtd: "50", insurableYtd: "0" }, components: {} }],
       });
       const after = await openingBalancesForYear(fx.orgId, 2026);
       assert.equal(after.rows[0]!.componentAmounts[componentId], "1000.0000");
@@ -686,7 +686,7 @@ test(
         orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
         rows: [{
           employeePartyId: fx.employeeId,
-          amounts: { pensionableYtd: "84000", taxableYtd: "84000" },
+          amounts: { pensionableYtd: "84000", insurableYtd: "0", taxableYtd: "84000" },
           components: { RRSP: "23000" },
         }],
       });
@@ -702,7 +702,7 @@ test(
           orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
           rows: [{
             employeePartyId: fx.employeeId,
-            amounts: { pensionableYtd: "84000", taxableYtd: "84000" },
+            amounts: { pensionableYtd: "84000", insurableYtd: "0", taxableYtd: "84000" },
             components: { RRSP: "1" },
           }],
         }),
@@ -741,7 +741,7 @@ test(
       // exactly the hole: the row warning goes quiet and the cap still restarts.
       await saveOpeningBalances({
         orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
-        rows: [{ employeePartyId: fx.employeeId, amounts: { pensionableYtd: "84000" } }],
+        rows: [{ employeePartyId: fx.employeeId, amounts: { pensionableYtd: "84000", insurableYtd: "0" } }],
       });
       assert.equal(openingItem(await payRunReadiness(fx.orgId, documentId)), undefined);
       assert.ok(item(await payRunReadiness(fx.orgId, documentId)));
@@ -751,7 +751,7 @@ test(
         orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
         rows: [{
           employeePartyId: fx.employeeId,
-          amounts: { pensionableYtd: "84000" },
+          amounts: { pensionableYtd: "84000", insurableYtd: "0" },
           components: { RRSP: "23000" },
         }],
       });
@@ -809,7 +809,7 @@ test(
     try {
       await saveOpeningBalances({
         orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
-        rows: [{ employeePartyId: fx.employeeId, amounts: { pensionableYtd: "40000", cppYtd: "2000" } }],
+        rows: [{ employeePartyId: fx.employeeId, amounts: { pensionableYtd: "40000", insurableYtd: "0", cppYtd: "2000" } }],
       });
       const before = await openingBalancesForYear(fx.orgId, 2026);
       assert.equal(before.rows[0]!.locked, false);
@@ -830,7 +830,7 @@ test(
       await assert.rejects(
         saveOpeningBalances({
           orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
-          rows: [{ employeePartyId: fx.employeeId, amounts: { pensionableYtd: "1", cppYtd: "1" } }],
+          rows: [{ employeePartyId: fx.employeeId, amounts: { pensionableYtd: "1", insurableYtd: "0", cppYtd: "1" } }],
         }),
         (error: unknown) => {
           assert.ok(error instanceof OpeningBalanceSaveError);
@@ -847,7 +847,7 @@ test(
       // A different tax year is a different fact and stays editable.
       await saveOpeningBalances({
         orgId: fx.orgId, actorId: fx.actorId, taxYear: 2027,
-        rows: [{ employeePartyId: fx.employeeId, amounts: { pensionableYtd: "10" } }],
+        rows: [{ employeePartyId: fx.employeeId, amounts: { pensionableYtd: "10", insurableYtd: "0" } }],
       });
       assert.equal(
         (await openingBalancesForYear(fx.orgId, 2027)).rows[0]!.amounts?.pensionableYtd,
@@ -873,8 +873,8 @@ test(
       await saveOpeningBalances({
         orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
         rows: [
-          { employeePartyId: fx.employeeId, amounts: { pensionableYtd: "40000", cppYtd: "2000" } },
-          { employeePartyId: second, amounts: { pensionableYtd: "30000", cppYtd: "1500" } },
+          { employeePartyId: fx.employeeId, amounts: { pensionableYtd: "40000", insurableYtd: "0", cppYtd: "2000" } },
+          { employeePartyId: second, amounts: { pensionableYtd: "30000", insurableYtd: "0", cppYtd: "1500" } },
         ],
       });
 
@@ -889,8 +889,8 @@ test(
       const result = await saveOpeningBalances({
         orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026, strictLocks: false,
         rows: [
-          { employeePartyId: fx.employeeId, amounts: { pensionableYtd: "1", cppYtd: "1" } },
-          { employeePartyId: second, amounts: { pensionableYtd: "31000", cppYtd: "1600" } },
+          { employeePartyId: fx.employeeId, amounts: { pensionableYtd: "1", insurableYtd: "0", cppYtd: "1" } },
+          { employeePartyId: second, amounts: { pensionableYtd: "31000", insurableYtd: "0", cppYtd: "1600" } },
         ],
       });
       assert.equal(result.errors.length, 0, "a skip is not a failure");
@@ -924,8 +924,8 @@ test(
         saveOpeningBalances({
           orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
           rows: [
-            { employeePartyId: fx.employeeId, amounts: { pensionableYtd: "40000" } },
-            { employeePartyId: second, amounts: { pensionableYtd: "100", cppYtd: "40000" } },
+            { employeePartyId: fx.employeeId, amounts: { pensionableYtd: "40000", insurableYtd: "0" } },
+            { employeePartyId: second, amounts: { pensionableYtd: "100", insurableYtd: "0", cppYtd: "40000" } },
           ],
         }),
         OpeningBalanceSaveError,
@@ -948,7 +948,7 @@ test(
     try {
       await saveOpeningBalances({
         orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
-        rows: [{ employeePartyId: fx.employeeId, amounts: { pensionableYtd: "40000" } }],
+        rows: [{ employeePartyId: fx.employeeId, amounts: { pensionableYtd: "40000", insurableYtd: "0" } }],
       });
       assert.equal((await openingBalancesForYear(fx.orgId, 2026)).entered, 1);
 
@@ -1000,7 +1000,7 @@ test(
       assert.ok(openingItem(await payRunReadiness(fx.orgId, documentId)));
       await saveOpeningBalances({
         orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
-        rows: [{ employeePartyId: fx.employeeId, amounts: { pensionableYtd: "84000", cppYtd: "4400" } }],
+        rows: [{ employeePartyId: fx.employeeId, amounts: { pensionableYtd: "84000", insurableYtd: "0", cppYtd: "4400" } }],
       });
       assert.equal(openingItem(await payRunReadiness(fx.orgId, documentId)), undefined);
     } finally {
@@ -1212,7 +1212,7 @@ test(
         orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
         rows: [{
           employeePartyId: fx.employeeId,
-          amounts: { pensionableYtd: "84000.00", taxableYtd: "84000.00" },
+          amounts: { pensionableYtd: "84000.00", insurableYtd: "0", taxableYtd: "84000.00" },
           // $100 of room left against the $23,500 ceiling.
           components: { RRSP: "23400.00" },
         }],
@@ -1272,6 +1272,22 @@ test(
 
 /* ------------------------------------------------------------------ */
 /* Second-order year-to-date (0141): bonus-attributed history           */
+test("blank insurable / unemployment wages beside earned wages refuse instead of restarting the cap", () => {
+  // A prior provider's file without the column would otherwise carry zero
+  // FUTA / EI wages and charge the tax again on wages already past the base.
+  assert.throws(
+    () => normalizeOpeningBalance({ pensionableYtd: "40000", taxableYtd: "40000" }),
+    /Insurable \/ unemployment wages is blank .*or 0 if the employee is exempt/,
+  );
+  assert.throws(
+    () => normalizeOpeningBalance({ pensionableYtd: "40000", insurableYtd: "  " }),
+    /Insurable \/ unemployment wages is blank/,
+  );
+  // An exempt employee states the zero; nothing earned needs no statement.
+  assert.equal(normalizeOpeningBalance({ pensionableYtd: "40000", insurableYtd: "0" }).insurableYtd, "0.0000");
+  assert.equal(normalizeOpeningBalance({ taxableYtd: "100" }).insurableYtd, "0.0000");
+});
+
 /* ------------------------------------------------------------------ */
 
 test("second-order opening amounts normalize, refuse transpositions, and keep a row alive", () => {
@@ -1280,7 +1296,7 @@ test("second-order opening amounts normalize, refuse transpositions, and keep a 
   // TP-1015's CSB1 (additional-QPP attributed to bonuses), and the FICA
   // dollars behind Massachusetts' $2,000 retirement-contribution subtraction.
   const clean = normalizeOpeningBalance({
-    pensionableYtd: "60000", taxableYtd: "60000", nonPeriodicYtd: "5000",
+    pensionableYtd: "60000", insurableYtd: "0", taxableYtd: "60000", nonPeriodicYtd: "5000",
     cpp2BonusYtd: "120.50", qcCsbYtd: "85", ficaWithheldYtd: "4000",
   });
   assert.equal(clean.cpp2BonusYtd, "120.5000");
@@ -1316,7 +1332,7 @@ test("second-order opening amounts normalize, refuse transpositions, and keep a 
     /exceeds/,
   );
   assert.throws(
-    () => normalizeOpeningBalance({ pensionableYtd: "60000", ficaWithheldYtd: "60000.01" }),
+    () => normalizeOpeningBalance({ pensionableYtd: "60000", insurableYtd: "0", ficaWithheldYtd: "60000.01" }),
     /exceeds/,
   );
 
@@ -1459,7 +1475,7 @@ test(
       // packs, and omission must not clear a carry-in the operator cannot see.
       await saveOpeningBalances({
         orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
-        rows: [{ employeePartyId: fx.employeeId, amounts: { pensionableYtd: "50" } }],
+        rows: [{ employeePartyId: fx.employeeId, amounts: { pensionableYtd: "50", insurableYtd: "0" } }],
       });
       const kept = await openingBalancesForYear(fx.orgId, 2026);
       assert.deepEqual(kept.rows[0]!.programAmounts, { qpip: "12000.0000" });
@@ -1470,7 +1486,7 @@ test(
         orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
         rows: [{
           employeePartyId: fx.employeeId,
-          amounts: { pensionableYtd: "50" }, programs: {},
+          amounts: { pensionableYtd: "50", insurableYtd: "0" }, programs: {},
         }],
       });
       const clearedBase = await openingBalancesForYear(fx.orgId, 2026);

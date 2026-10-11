@@ -436,10 +436,12 @@ export function assertTaxYear(taxYear: unknown): number {
  */
 export function normalizeOpeningBalance(input: Record<string, unknown>): OpeningBalanceAmounts {
   const amounts: OpeningBalanceAmounts = {};
+  const blank = new Set<string>();
   for (const field of OPENING_BALANCE_FIELDS) {
     const raw = input[field.key];
     if (raw === undefined || raw === null || String(raw).trim() === "") {
       amounts[field.key] = "0.0000";
+      blank.add(field.key);
       continue;
     }
     // Raw trimmed text goes to canonicalDecimal with NO separator stripping:
@@ -460,6 +462,18 @@ export function normalizeOpeningBalance(input: Record<string, unknown>): Opening
     // sign-flipped export or a refund somebody meant to record as a pay run.
     if (cmp(value, "0") < 0) throw new PayrollError(`${field.label} cannot be negative`);
     amounts[field.key] = value;
+  }
+
+  // Insurable / unemployment wages are capped bases of their own (EI maximum
+  // insurable earnings, the FUTA and state wage bases). Left blank beside
+  // earned pensionable / FICA wages, a zero carry-in would charge the premium
+  // or unemployment tax again on wages already past the cap, so the amount
+  // must be stated — an exempt employee states 0.
+  if (blank.has("insurableYtd") && cmp(amounts.pensionableYtd!, "0") > 0) {
+    throw new PayrollError(
+      `Insurable / unemployment wages is blank while pensionable / FICA wages are ${amounts.pensionableYtd} — `
+      + `enter the EI-insurable (Canada) or FUTA and state-unemployment (US) wages paid this year, or 0 if the employee is exempt`,
+    );
   }
 
   // Cross-field sanity: a contribution can never exceed the base it came out

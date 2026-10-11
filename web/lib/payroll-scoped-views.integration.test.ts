@@ -75,7 +75,7 @@ test(
         orgId: fx.orgId,
         actorId: fx.actorId,
         taxYear: 2025,
-        rows: [{ employeePartyId: fx.employeeId, amounts: { pensionableYtd: "5000.00", cppYtd: "100.00" }, components: {} }],
+        rows: [{ employeePartyId: fx.employeeId, amounts: { pensionableYtd: "5000.00", insurableYtd: "0", cppYtd: "100.00" }, components: {} }],
       }));
       assert.deepEqual(saved.errors, []);
 

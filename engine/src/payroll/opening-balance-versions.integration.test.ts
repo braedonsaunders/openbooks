@@ -25,7 +25,7 @@ test(
         taxYear: 2026,
         rows: [{
           employeePartyId: fx.employeeId,
-          amounts: { pensionableYtd: "60000.00", cppYtd: "3500.00" },
+          amounts: { pensionableYtd: "60000.00", insurableYtd: "0", cppYtd: "3500.00" },
           components: {},
         }],
       });
@@ -49,7 +49,7 @@ test(
         taxYear: 2026,
         rows: [{
           employeePartyId: fx.employeeId,
-          amounts: { pensionableYtd: "70000.00", cppYtd: "4000.00" },
+          amounts: { pensionableYtd: "70000.00", insurableYtd: "0", cppYtd: "4000.00" },
           components: {},
         }],
       });
@@ -70,7 +70,7 @@ test(
           taxYear: 2026,
           rows: [{
             employeePartyId: fx.employeeId,
-            amounts: { pensionableYtd: "1.00" },
+            amounts: { pensionableYtd: "1.00", insurableYtd: "0" },
             components: {},
             updatedAt: staleVersion,
           }],
@@ -95,7 +95,7 @@ test(
         taxYear: 2026,
         rows: [{
           employeePartyId: fx.employeeId,
-          amounts: { pensionableYtd: "70000.00", cppYtd: "4000.00" },
+          amounts: { pensionableYtd: "70000.00", insurableYtd: "0", cppYtd: "4000.00" },
           components: {},
           updatedAt: current,
         }],
@@ -120,7 +120,7 @@ test(
         taxYear: 2026,
         rows: [{
           employeePartyId: fx.employeeId,
-          amounts: { pensionableYtd: "60000.00" },
+          amounts: { pensionableYtd: "60000.00", insurableYtd: "0" },
           components: {},
         }],
       });
@@ -134,7 +134,7 @@ test(
           taxYear: 2026,
           rows: [{
             employeePartyId: fx.employeeId,
-            amounts: { pensionableYtd: "60000.00" },
+            amounts: { pensionableYtd: "60000.00", insurableYtd: "0" },
             components: {},
             updatedAt: null,
           }],

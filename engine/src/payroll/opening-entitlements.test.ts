@@ -563,8 +563,8 @@ test(
       await saveOpeningBalances({
         orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
         rows: [
-          { employeePartyId: fx.employeeId, amounts: { pensionableYtd: "84000" } },
-          { employeePartyId: nancy.employeeId, amounts: { pensionableYtd: "84000" } },
+          { employeePartyId: fx.employeeId, amounts: { pensionableYtd: "84000", insurableYtd: "0" } },
+          { employeePartyId: nancy.employeeId, amounts: { pensionableYtd: "84000", insurableYtd: "0" } },
         ],
       });
       const warned = bankItem(await payRunReadiness(fx.orgId, documentId));
@@ -612,7 +612,7 @@ test(
     try {
       await saveOpeningBalances({
         orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
-        rows: [{ employeePartyId: fx.employeeId, amounts: { pensionableYtd: "84000" } }],
+        rows: [{ employeePartyId: fx.employeeId, amounts: { pensionableYtd: "84000", insurableYtd: "0" } }],
       });
       const documentId = await seedRun(fx);
       assert.ok(bankItem(await payRunReadiness(fx.orgId, documentId)).length > 0);
@@ -644,7 +644,7 @@ test(
       const newHire = (await seedEmployee(fx, { name: "Newly Hired", hiredOn: "2026-07-06" })).employeeId;
       await saveOpeningBalances({
         orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
-        rows: [{ employeePartyId: fx.employeeId, amounts: { pensionableYtd: "84000" } }],
+        rows: [{ employeePartyId: fx.employeeId, amounts: { pensionableYtd: "84000", insurableYtd: "0" } }],
       });
       const documentId = await seedRun(fx);
       const warned = bankItem(await payRunReadiness(fx.orgId, documentId));

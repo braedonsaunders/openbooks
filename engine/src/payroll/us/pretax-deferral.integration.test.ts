@@ -548,7 +548,7 @@ test(
       // The refusal's remedy names the column the calculation reads.
       await assert.rejects(
         saveOpeningBalances({ orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026, rows: [{
-          employeePartyId: employee, amounts: { pensionableYtd: "199000" }, accountBases: ficaWages("199000"),
+          employeePartyId: employee, amounts: { pensionableYtd: "199000", insurableYtd: "0" }, accountBases: ficaWages("199000"),
         }] }),
         /keep it in FICA wages per federal EIN for this filing account and set Pensionable \/ FICA wages to zero/,
       );

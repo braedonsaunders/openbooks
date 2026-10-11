@@ -495,7 +495,7 @@ test(
       const harness = await seedWcbHarness(org.orgId, actorId, org.subsidiaryId, "30");
       await saveOpeningBalances({
         orgId: org.orgId, actorId, taxYear: 2026,
-        rows: [{ employeePartyId: harness.employeeId, amounts: { pensionableYtd: "74000" } }],
+        rows: [{ employeePartyId: harness.employeeId, amounts: { pensionableYtd: "74000", insurableYtd: "0" } }],
       });
       await harness.postHours("2026-07-06", "20", harness.jobA);
       await harness.postHours("2026-07-08", "20", harness.jobA);

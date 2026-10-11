@@ -33,7 +33,7 @@ test(
         taxYear: 2026,
         rows: [{
           employeePartyId: fx.employeeId,
-          amounts: { pensionableYtd: "60000.00", cppYtd: "3500.00" },
+          amounts: { pensionableYtd: "60000.00", insurableYtd: "0", cppYtd: "3500.00" },
           components: {},
         }],
       });
@@ -57,7 +57,7 @@ test(
           taxYear: 2026,
           rows: [{
             employeePartyId: fx.employeeId,
-            amounts: { pensionableYtd: "1.00", cppYtd: "0" },
+            amounts: { pensionableYtd: "1.00", insurableYtd: "0", cppYtd: "0" },
             components: {},
           }],
         }),
@@ -93,7 +93,7 @@ test(
         orgId: fx.orgId,
         actorId: fx.actorId,
         taxYear: 2026,
-        rows: [{ employeePartyId: fx.employeeId, amounts: { pensionableYtd: "60000" } }],
+        rows: [{ employeePartyId: fx.employeeId, amounts: { pensionableYtd: "60000", insurableYtd: "0" } }],
         allowedSubsidiaryIds: new Set([fx.subsidiaryId]),
       }), (error: unknown) => error instanceof ScopeNotFoundError);
       const stored = await db.execute(sql`
