@@ -71,6 +71,9 @@ test("the worker composition entry registers the automation tick without booting
       "the worker registry must carry the qualification-alerts scan after booting the composition entry",
     );
     // HR-14 end
+    for (const key of ["asset-maintenance-alerts", "asset-insurance-renewals", "asset-proposal-scan"]) {
+      assert.ok(listWorkerDuties().includes(key), `the worker registry must carry the ${key} sweep`);
+    }
   } finally {
     clearWorkerDuties();
   }

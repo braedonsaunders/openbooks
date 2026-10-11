@@ -14,6 +14,9 @@ import { registerWorkerDuty } from "@openbooks/engine/scheduling/duties";
 import { installEngineSeams } from "@openbooks/engine/composition/install";
 import { AUTOMATION_TICK_LOCK_KEY, runAutomationTickClaimed } from "@openbooks/engine/automations/tick";
 import { runQualificationAlertScan } from "@openbooks/engine/hrm/qualifications/alerts";
+import { runMaintenanceAlertScan } from "@openbooks/engine/assets/asset-maintenance";
+import { runInsuranceRenewalScan } from "@openbooks/engine/assets/asset-insurance";
+import { runAssetProposalScanDuty } from "@openbooks/engine/assets/asset-proposals";
 import { SYSTEM_ACTOR_ID } from "@openbooks/engine/banking/banking";
 import { activeRetentionRuleIdsForDuty, evaluateRetentionRule } from "@openbooks/engine/hrm/recruiting/retention";
 import { db, pool, withBypassContext, withOrgContext, withOrgTransaction } from "@openbooks/engine/platform/db";
@@ -314,6 +317,25 @@ export function registerWorkerDuties(): void {
       await runQualificationAlertScan(now);
     },
   });
+  // Fixed-asset sweeps, hourly: maintenance due/overdue notices, insurance
+  // renewal notices, and the asset-proposal catch-up for postings whose
+  // drain was interrupted. Each is idempotent per organization and
+  // serializes on its own advisory key, so a replica repeating it changes
+  // nothing.
+  const assetSweepLastRun = new Map<string, number>();
+  const hourly = (key: string, sweep: (now: Date) => Promise<unknown>) => async (now: Date) => {
+    if (now.getTime() - (assetSweepLastRun.get(key) ?? 0) < 3_600_000) return;
+    assetSweepLastRun.set(key, now.getTime());
+    await sweep(now);
+  };
+  for (const [key, sweep] of [
+    ["asset-maintenance-alerts", runMaintenanceAlertScan],
+    ["asset-insurance-renewals", runInsuranceRenewalScan],
+    ["asset-proposal-scan", runAssetProposalScanDuty],
+  ] as const) {
+    console.log(`[worker] duty registered: ${key}`);
+    registerWorkerDuty({ key, run: hourly(key, sweep) });
+  }
   console.log("[worker] duty registered: hrm-retention-tick");
   registerWorkerDuty({
     key: "hrm-retention-tick",

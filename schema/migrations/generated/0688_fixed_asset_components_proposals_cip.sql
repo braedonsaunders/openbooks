@@ -8,7 +8,9 @@
 -- form. Construction-in-progress records are fixed_assets rows in the
 -- 'construction' status (closed as 'capitalized'); their carried cost moves
 -- only through linked GL costs and governed capitalizations, which a guard
--- enforces.
+-- enforces. The same guard keeps the cost, category, account and legal
+-- entity of an asset created from posted cost fixed until its acceptance or
+-- capitalization is reversed.
 --
 -- asset_capitalization_rules hold the effective-dated rules (account, item
 -- or item category, with a minimum capitalization amount) that turn posted
@@ -92,10 +94,14 @@ $$;
 CREATE TRIGGER fixed_asset_component_guard BEFORE INSERT OR UPDATE OF parent_asset_id, subsidiary_id, status ON public.fixed_assets
  FOR EACH ROW EXECUTE FUNCTION public.fixed_asset_component_guard();
 
--- Construction in progress: the carried cost of a 'construction' record is
--- its open subledger balance, so status, cost, account and legal entity move
--- only inside the subledger writer's transaction.
-CREATE FUNCTION public.fixed_asset_cip_guard() RETURNS trigger
+-- Capitalized cost stays tied to the ledger. The carried cost of a
+-- 'construction' record is its open subledger balance, so its status, cost,
+-- account and legal entity move only inside the subledger writer's
+-- transaction. An asset created by an accepted proposal or a posted
+-- capitalization carries exactly the cost that journal moved into its
+-- category's account, so its cost, category, account and legal entity stay
+-- fixed until that acceptance or capitalization is reversed.
+CREATE FUNCTION public.fixed_asset_capitalization_guard() RETURNS trigger
  LANGUAGE plpgsql SET search_path = public, pg_catalog AS $$
 BEGIN
   IF coalesce(current_setting('openbooks.amend', true), 'off') = 'on'
@@ -115,11 +121,23 @@ BEGIN
        OR NEW.subsidiary_id IS DISTINCT FROM OLD.subsidiary_id) THEN
     RAISE EXCEPTION 'construction-in-progress cost moves only through linked costs and governed capitalization' USING ERRCODE = '23514';
   END IF;
+  IF (NEW.acquisition_cost IS DISTINCT FROM OLD.acquisition_cost
+      OR NEW.category_id IS DISTINCT FROM OLD.category_id
+      OR NEW.asset_account_id IS DISTINCT FROM OLD.asset_account_id
+      OR NEW.subsidiary_id IS DISTINCT FROM OLD.subsidiary_id)
+     AND (EXISTS (SELECT 1 FROM public.asset_proposal_allocations al
+                    JOIN public.asset_proposal_acceptances ac ON ac.org_id = al.org_id AND ac.id = al.acceptance_id
+                   WHERE al.org_id = OLD.org_id AND al.asset_id = OLD.id AND al.cip_cost_id IS NULL AND ac.status = 'posted')
+       OR EXISTS (SELECT 1 FROM public.asset_cip_capitalization_lines cl
+                    JOIN public.asset_cip_capitalizations k ON k.org_id = cl.org_id AND k.id = cl.capitalization_id
+                   WHERE cl.org_id = OLD.org_id AND cl.asset_id = OLD.id AND k.status = 'posted')) THEN
+    RAISE EXCEPTION 'this asset''s cost was capitalized from posted transactions; reverse the acceptance or capitalization to change its cost, category, account or legal entity' USING ERRCODE = '23514';
+  END IF;
   RETURN NEW;
 END;
 $$;
-CREATE TRIGGER fixed_asset_cip_guard BEFORE INSERT OR UPDATE ON public.fixed_assets
- FOR EACH ROW EXECUTE FUNCTION public.fixed_asset_cip_guard();
+CREATE TRIGGER fixed_asset_capitalization_guard BEFORE INSERT OR UPDATE ON public.fixed_assets
+ FOR EACH ROW EXECUTE FUNCTION public.fixed_asset_capitalization_guard();
 
 -- Capitalization rules ------------------------------------------------------
 
@@ -488,10 +506,10 @@ CREATE TABLE public.asset_cip_capitalization_lines (
       REFERENCES public.orgs(id) ON DELETE CASCADE DEFERRABLE,
     CONSTRAINT asset_cip_capitalization_lines_capitalization_fkey FOREIGN KEY (org_id, capitalization_id)
       REFERENCES public.asset_cip_capitalizations(org_id, id) DEFERRABLE,
-    -- A reversed capitalization removes the draft assets it created; the line
-    -- keeps the asset number it created as evidence.
+    -- A reversed capitalization clears asset_id before removing the draft
+    -- asset it created; asset_number stays as evidence.
     CONSTRAINT asset_cip_capitalization_lines_asset_fkey FOREIGN KEY (org_id, asset_id)
-      REFERENCES public.fixed_assets(org_id, id) ON DELETE SET NULL (asset_id) DEFERRABLE,
+      REFERENCES public.fixed_assets(org_id, id) DEFERRABLE,
     CONSTRAINT asset_cip_capitalization_lines_parent_fkey FOREIGN KEY (org_id, parent_asset_id)
       REFERENCES public.fixed_assets(org_id, id) DEFERRABLE,
     CONSTRAINT asset_cip_capitalization_lines_account_fkey FOREIGN KEY (org_id, target_account_id)
@@ -508,8 +526,9 @@ CREATE POLICY org_isolation ON public.asset_cip_capitalization_lines
 COMMENT ON POLICY org_isolation ON public.asset_cip_capitalization_lines IS 'openbooks:org_isolation:v1';
 
 -- Proposal allocations: one row per (proposal, resulting asset or
--- construction cost). A reversed acceptance removes the draft assets it
--- created; the allocation keeps the asset number as evidence.
+-- construction cost). A reversed acceptance clears asset_id before removing
+-- the draft assets it created; asset_number stays as evidence. While the
+-- reference stands, the asset cannot be deleted.
 CREATE TABLE public.asset_proposal_allocations (
     id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
     org_id uuid NOT NULL,
@@ -533,7 +552,7 @@ CREATE TABLE public.asset_proposal_allocations (
     CONSTRAINT asset_proposal_allocations_proposal_fkey FOREIGN KEY (org_id, proposal_id)
       REFERENCES public.asset_proposals(org_id, id) DEFERRABLE,
     CONSTRAINT asset_proposal_allocations_asset_fkey FOREIGN KEY (org_id, asset_id)
-      REFERENCES public.fixed_assets(org_id, id) ON DELETE SET NULL (asset_id) DEFERRABLE,
+      REFERENCES public.fixed_assets(org_id, id) DEFERRABLE,
     CONSTRAINT asset_proposal_allocations_cip_cost_fkey FOREIGN KEY (org_id, cip_cost_id)
       REFERENCES public.asset_cip_costs(org_id, id) DEFERRABLE,
     CONSTRAINT asset_proposal_allocations_account_fkey FOREIGN KEY (org_id, target_account_id)
