@@ -12,10 +12,16 @@ const state = { user: { orgId: "", id: "" } };
 Object.assign(globalThis, { __withdrawRouteState: state });
 registerHooks({
   resolve(specifier, context, next) {
+    // The route authorizes through the time workspace, which imports its
+    // gate relatively ('./feature-gates'), not only through the "@/lib/…"
+    // spelling the route factory uses — stub both spellings or the real
+    // session gate loads and the route cannot be reached.
     if (
-      specifier.endsWith("/lib/feature-gates") &&
-      (context.parentURL?.includes("/api/timesheets/withdraw/") ||
-        context.parentURL?.includes("/web/lib/api/route.ts"))
+      (specifier.endsWith("/lib/feature-gates") &&
+        (context.parentURL?.includes("/api/timesheets/withdraw/") ||
+          context.parentURL?.includes("/web/lib/api/route.ts"))) ||
+      (specifier === "./feature-gates" &&
+        context.parentURL?.endsWith("/web/lib/time-workspace.ts"))
     ) {
       return {
         shortCircuit: true,
@@ -58,6 +64,12 @@ async function seedSubmittedWeek(status: "submitted" | "approved" | "draft" = "s
   const org = await withBypassContext(() => createScratchOrg());
   const actors = await withBypassContext(() => seedFlowActors(org.orgId));
   const actorId = actors.adminId;
+  // The shared time authority lock runs for real: the actor holds time.manage.
+  await withBypassContext(async () => {
+    await db.execute(sql`
+      update app_roles set permissions = '["time.read", "time.manage"]'::jsonb
+       where org_id = ${org.orgId} and key = 'admin'`);
+  });
   const employeeId = randomUUID();
   const headerId = randomUUID();
   const timeEntryId = randomUUID();

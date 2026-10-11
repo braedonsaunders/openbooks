@@ -42,6 +42,17 @@ const SEED = `
   async function seedSubmittedWeek() {
     const org = await createScratchOrg();
     const actorId = (await seedFlowActors(org.orgId)).adminId;
+    // The shared time authority lock runs for real: the actor holds
+    // time.approve, and the seeded week names project time, so Projects
+    // stays on the way the suites that approve project weeks keep it.
+    await db.execute(sql\`
+      update app_roles set permissions = '["time.read", "time.manage", "time.approve", "projects.read"]'::jsonb
+       where org_id = \${org.orgId} and key = 'admin'
+    \`);
+    await db.execute(sql\`
+      update orgs set settings = settings || '{"features": {"projects": true, "timeTracking": true}}'::jsonb
+       where id = \${org.orgId}
+    \`);
     const employeeId = randomUUID();
     const headerId = randomUUID();
     const projectId = randomUUID();

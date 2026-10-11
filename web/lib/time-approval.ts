@@ -165,6 +165,9 @@ export interface ApproveSubmittedTimeEntriesOptions {
   weekStart: string
   workFamily?: TimeWorkFamily
   allowedSubsidiaryIds: ReadonlySet<string> | null
+  /** The approver's words on a flow-gated decision: recorded on the approval
+   * audit with the before/after state, never stored on the entries. */
+  comment?: string | null
 }
 
 /**
@@ -338,6 +341,7 @@ export async function approveSubmittedTimeEntries(
            and week_start = ${week}::date
       `)).rows[0]?.id ?? null)
     if (!headerId) throw new Error('timesheet week not found')
+    const approvalComment = options.comment?.trim() ? options.comment.trim() : null
     await db.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${options.orgId}, 'timesheet_weeks', ${headerId}, 'update', ${JSON.stringify({
@@ -347,6 +351,7 @@ export async function approveSubmittedTimeEntries(
         after: { status: 'approved' },
         entryIds: ids,
         weekStart: week,
+        ...(approvalComment ? { reason: approvalComment } : {}),
       })}::jsonb, ${options.actorId})
     `)
     return ids

@@ -100,6 +100,7 @@ async function auditFlowDocumentUpdate(
   subjectId: string,
   ctx: FlowExecCtx,
   before: Awaited<ReturnType<typeof captureTransactionAuditSnapshot>>,
+  reason?: string | null,
 ): Promise<void> {
   const after = await captureTransactionAuditSnapshot(db, subjectId, ctx.orgId);
   if (!before || !after) {
@@ -111,6 +112,10 @@ async function auditFlowDocumentUpdate(
     action: "update",
     actorId: ctx.userId ?? null,
     source: "flows",
+    // A gate decision's words ride the subject's own audit row — not only the
+    // gate row the Approvals section reads — so the document's change set
+    // names why it moved, for rejections and commented approvals alike.
+    ...(reason?.trim() ? { reason: reason.trim() } : {}),
     before,
     after,
   });
@@ -336,7 +341,7 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
           updatedAt: new Date(),
         })
         .where(and(eq(schema.documents.id, subjectId), eq(schema.documents.orgId, ctx.orgId)));
-      await auditFlowDocumentUpdate(subjectId, ctx, before);
+      await auditFlowDocumentUpdate(subjectId, ctx, before, detail?.comment);
     },
 
     async setField(subjectId: string, field: string, value: unknown, ctx: FlowExecCtx): Promise<void> {
