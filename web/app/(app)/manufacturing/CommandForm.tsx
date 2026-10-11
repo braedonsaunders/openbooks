@@ -13,7 +13,8 @@ import {
   Textarea,
 } from "@openbooks/ui";
 import { RemoteRecordChoice } from "@/components/remote-record-choice";
-import { readApiErrorMessage } from "@/lib/api-error";
+import { fetchAppAction } from "@/lib/api-error";
+import { toast } from "sonner";
 import { OperatingProfilePicker } from "@/components/operating-profile-picker";
 import type { OperatingProfileChoice } from "@openbooks/engine/src/organization/operating-profiles.ts";
 import type { ManufacturingRecordData } from "@openbooks/engine/src/manufacturing/workspace.ts";
@@ -111,30 +112,44 @@ export function CommandForm({
             }}
           />
         ) : f.type === "select" ? (
-          <Select
-            id={id + "-" + f.key}
-            value={String(value ?? "")}
-            required={f.required}
-            disabled={busy || uncertain}
-            onChange={(e) => {
-              set(f.key, e.target.value);
-              if (f.key === "producedItemId") set("routingId", "");
-            }}
-          >
-            <option value="">{t("choose")}</option>
-            {(f.options ?? [])
-              .filter(
-                (o) =>
-                  f.key !== "routingId" ||
-                  !values.producedItemId ||
-                  o.parentId === values.producedItemId,
-              )
-              .map((o) => (
-                <option key={o.value} value={o.value}>
-                  {label(o.label)}
-                </option>
-              ))}
-          </Select>
+          <>
+            <Select
+              id={id + "-" + f.key}
+              value={String(value ?? "")}
+              required={f.required}
+              disabled={busy || uncertain}
+              onChange={(e) => {
+                set(f.key, e.target.value);
+                if (f.key === "producedItemId") set("routingId", "");
+              }}
+            >
+              <option value="">{t("choose")}</option>
+              {(f.options ?? [])
+                .filter(
+                  (o) =>
+                    f.key !== "routingId" ||
+                    !values.producedItemId ||
+                    o.parentId === values.producedItemId,
+                )
+                .map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {label(o.label)}
+                  </option>
+                ))}
+            </Select>
+            {f.key === "routingId" && values.producedItemId && !(f.options ?? []).some((o) => o.parentId === values.producedItemId) ? (
+              <p className="text-xs text-slate-500">
+                {t.rich("noActiveRoutingHint", {
+                  item: command.fields.find((field) => field.key === "producedItemId")?.options?.find((o) => o.value === values.producedItemId)?.label ?? String(values.producedItemId),
+                  action: (chunks) => (
+                    <Link className="text-teal-700 hover:underline dark:text-teal-300" href="/manufacturing/routings">
+                      {chunks}
+                    </Link>
+                  ),
+                })}
+              </p>
+            ) : null}
+          </>
         ) : f.type === "boolean" ? (
           <Select
             id={id + "-" + f.key}
@@ -204,11 +219,16 @@ export function CommandForm({
     lock.current = true;
     setBusy(true);
     setError(null);
-    let received = false;
+    const fail = (message: string) => {
+      toast.error(message);
+      setError(message);
+    };
     try {
       for (const f of command.fields)
-        if (f.required && (values[f.key] === undefined || values[f.key] === ""))
-          throw new Error(t("choose") + " · " + t("fields." + (f.labelKey??f.key)));
+        if (f.required && (values[f.key] === undefined || values[f.key] === "")) {
+          fail(t("choose") + " · " + t("fields." + (f.labelKey??f.key)));
+          return;
+        }
       const body = commandBody(command, values);
       if (workflowCreate) {
         if (!workflowSelection) throw new Error(tOperating('chooseTitle'));
@@ -279,33 +299,36 @@ export function CommandForm({
         requestKey.current = crypto.randomUUID();
         sentBody.current = serialized;
       }
-      const response = await fetch(command.path, {
+      // Every refusal reads through the shared action reader: the server's
+      // message, remedy and code pin inline and toast, so no refusal shape
+      // can go silent. A rejected fetch never throws past this point.
+      const action = await fetchAppAction<Record<string, unknown>>(command.path, {
         method: command.method ?? "POST",
         headers: {
           "Content-Type": "application/json",
           ...(command.create ? { "Idempotency-Key": requestKey.current } : {}),
         },
         body: serialized,
-      });
-      received = true;
-      if (!response.ok)
-        throw new Error(
-          await readApiErrorMessage(response, t("commandFailed")),
-        );
-      let result: Record<string, unknown>;
-      try {
-        result = await response.json();
-      } catch {
-        setUncertain(true);
-        throw new Error(t("uncertain"));
+      }, { fallback: t("commandFailed") });
+      if (!action.ok) {
+        const message = action.error.displayMessage(t("commandFailed"));
+        if (action.error.kind === "transport") {
+          // The request may never have reached the server — or it applied
+          // and the reply was lost. Hold the form for review instead of
+          // risking a double write; the toast and note stay visible.
+          setUncertain(true);
+          fail(t("uncertain"));
+        } else fail(message);
+        return;
       }
-      await onSaved(result, command, response.status === 202);
-    } catch (cause) {
-      if (!received && sentBody.current) {
+      if (action.data === null || typeof action.data !== "object") {
         setUncertain(true);
-        setError(t("uncertain"));
-      } else
-        setError(cause instanceof Error ? cause.message : t("commandFailed"));
+        fail(t("uncertain"));
+        return;
+      }
+      await onSaved(action.data as Record<string, unknown>, command, action.status === 202);
+    } catch (cause) {
+      fail(cause instanceof Error ? cause.message : t("commandFailed"));
     } finally {
       lock.current = false;
       setBusy(false);

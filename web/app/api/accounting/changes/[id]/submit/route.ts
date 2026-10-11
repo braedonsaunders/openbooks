@@ -3,6 +3,7 @@ import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
 import { submitFinancialChange } from "@openbooks/engine/src/flows/financial-changes-adapter.ts";
+import { submitBomRevision } from "@openbooks/engine/src/inventory/bom-policy.ts";
 import { authorizeChange } from "../../_authorization";
 export const runtime = "nodejs";
 export const POST = defineRoute({
@@ -13,6 +14,10 @@ export const POST = defineRoute({
       gate = await authorizeChange(id);
     if (gate instanceof NextResponse) return gate;
     try {
+      if (gate.domain === "manufacturing" && gate.operation === "bom_revision_activation") {
+        await submitBomRevision(gate.auth.user.orgId, gate.auth.user.id, id);
+        return NextResponse.json({ submitted: true });
+      }
       await submitFinancialChange(gate.auth.user.orgId, id, gate.auth.user.id);
       return NextResponse.json({ submitted: true });
     } catch (e) {

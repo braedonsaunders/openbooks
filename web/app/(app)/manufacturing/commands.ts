@@ -174,6 +174,7 @@ export function recordCommands(
   options: ManufacturingOptions,
   canPost: boolean,
   canBuy: boolean,
+  flags?: { routingDirectApply?: boolean },
 ): Command[] {
   const r = data.record,
     base = "/api/manufacturing/" + view + "/" + r.id,
@@ -276,7 +277,8 @@ export function recordCommands(
     if (r.status === "draft") {
       commands.push(headerCommand(view, options, r));
       commands.push(operationCommand(String(r.id), options));
-      push("activate", [select("subsidiaryId",options.subsidiaries,options.subsidiaries.length===1?options.subsidiaries[0]!.value:undefined,true),reason("reason",true,8)], { note: "activateNote",create:true });
+      if (flags?.routingDirectApply) push("activateDirect", [select("subsidiaryId",options.subsidiaries,options.subsidiaries.length===1?options.subsidiaries[0]!.value:undefined,true),reason("reason",true,8)], { path: base + "/activate-direct", note: "activateDirectNote",create:true });
+      else push("activate", [select("subsidiaryId",options.subsidiaries,options.subsidiaries.length===1?options.subsidiaries[0]!.value:undefined,true),reason("reason",true,8)], { note: "activateNote",create:true });
     }
     if (r.status === "active") push("archive");
     push("newVersion", [], {

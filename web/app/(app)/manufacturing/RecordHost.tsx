@@ -191,6 +191,7 @@ export function ManufacturingRecordHost({
   canGovernRevisions = false,
   canReadQuality = false,
   canSubcontract = false,
+  routingDirectApply = false,
 }: {
   view: ManufacturingView;
   recordId?: string;
@@ -207,6 +208,7 @@ export function ManufacturingRecordHost({
   canGovernRevisions?: boolean;
   canReadQuality?:boolean;
   canSubcontract?:boolean;
+  routingDirectApply?: boolean;
 }) {
   const actionMenu = useContextMenu();
   const t = useTranslations("manufacturing"),
@@ -396,7 +398,7 @@ export function ManufacturingRecordHost({
           canBuy,
         )
       : [];
-  const actions = visibleData && canManage ? recordCommands(view,visibleData,options,canPost,canBuy).filter(action=>action.key!=="activate"||canGovernRevisions) : [];
+  const actions = visibleData && canManage ? recordCommands(view,visibleData,options,canPost,canBuy,{routingDirectApply}).filter(action=>!["activate","activateDirect"].includes(action.key)||canGovernRevisions) : [];
   let nextAction:Command|null=null;
   if(view==="work-orders" && visibleData && canManage) {
     const record=visibleData.record, operation=(visibleData.sections.operations??[]).find(row=>row.status!=="done");

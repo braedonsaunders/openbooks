@@ -16,6 +16,7 @@ import {
   type ManufacturingRow,
   type ManufacturingView,
 } from "@openbooks/engine/src/manufacturing/workspace.ts";
+import { routingDirectApplyAllowed } from "@openbooks/engine/src/manufacturing/routings.ts";
 import { requirePermission, can } from "@/lib/authz";
 import { requireFeatureEnabled } from "@/lib/feature-gates";
 import {
@@ -125,9 +126,11 @@ export async function ManufacturingWorkspacePage({
       ),
     ),
   };
-  const { page, options, operatingChoices, preferredPresentation, workFilters } = await withScopeSnapshot(
+  const canGovernRevisions = can(authz,"manufacturing.manage") && authz.allowedSubsidiaryIds===null;
+  const { page, options, operatingChoices, preferredPresentation, workFilters, routingDirectApply } = await withScopeSnapshot(
     authz.user.orgId,
     async () => ({
+      routingDirectApply: view==='routings' && canGovernRevisions ? await routingDirectApplyAllowed(db,authz.user.orgId) : false,
       workFilters: view==='work-orders' ? await readWorkListFilters(db,authz.user.orgId,authz.user.id,'production') : null,
       preferredPresentation: view==='work-orders' ? await readWorkListPresentation(db,authz.user.orgId,authz.user.id,'manufacturing_work_order') : null,
       page: await listManufacturingRecords(
@@ -311,7 +314,8 @@ export async function ManufacturingWorkspacePage({
         canBuy={authz.permissions.has("ap.create")}
         canSubcontract={await manufacturingFeatureEnabled(authz.user.orgId,"manufacturingSubcontract")} canReadQuality={can(authz,"items.read")}
         canReadJournal={can(authz, "gl.read")}
-        canGovernRevisions={can(authz,"manufacturing.manage") && authz.allowedSubsidiaryIds===null}
+        canGovernRevisions={canGovernRevisions}
+        routingDirectApply={routingDirectApply}
         canRollup={can(authz,"manufacturing.manage") && can(authz,"items.manage") && can(authz,"items.post") && authz.allowedSubsidiaryIds===null}
       />
     </ListPageLayout>
