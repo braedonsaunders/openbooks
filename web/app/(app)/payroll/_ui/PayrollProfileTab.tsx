@@ -36,6 +36,7 @@ export function PayrollProfileTab({
   readOnly = false,
   section = 'general',
   onDirtyChange,
+  onPartyRecordChanged,
 }: {
   partyId: string
   partyName: string
@@ -49,6 +50,13 @@ export function PayrollProfileTab({
    * state. Clears on either save.
    */
   onDirtyChange?: (dirty: boolean) => void
+  /**
+   * Fired after a profile save that committed. The profile save can write the
+   * party row itself (the worker-compensation class lives on the employee
+   * role and bumps the party revision), so the embedding record must re-read
+   * its concurrency token before its own Save.
+   */
+  onPartyRecordChanged?: () => void
 }) {
   const t = useTranslations('payroll.profiles')
   const [state, setState] = useState<{
@@ -241,7 +249,10 @@ export function PayrollProfileTab({
           derivedColumns={state.derivedColumns}
           employmentStart={state.employmentStart}
           onClose={() => {}}
-          onSaved={() => setVersion((v) => v + 1)}
+          onSaved={() => {
+            setVersion((v) => v + 1)
+            onPartyRecordChanged?.()
+          }}
           onDirtyChange={setEditorDirty}
         />
       </div>

@@ -53,6 +53,23 @@ import { StoreCreditPanel } from './StoreCreditPanel'
 import { PartyRelationshipSection } from './PartyRelationshipSection'
 import { ExternalIdsPanel } from '../channels/ExternalIdsPanel'
 
+/**
+ * The party row's concurrency revision plus the worker-compensation class the
+ * drawer last saw on the employee role. The class travels with the revision:
+ * both change when a section writes the employee role.
+ */
+interface PartyToken {
+  updatedAt: string
+  workerCompGroupId: string
+}
+
+function partyTokenOf(payload: PartyPayload): PartyToken {
+  return {
+    updatedAt: payload.party.updated_at,
+    workerCompGroupId: payload.employee?.worker_comp_group_id ?? '',
+  }
+}
+
 export function PartyDrawer({
   payload,
   paymentTerms,
@@ -449,6 +466,18 @@ export function PartyDrawer({
     hiredOn: payload.employee?.hired_on ?? '',
   })
 
+  // Concurrency token for the party row: every PATCH from this drawer sends
+  // the revision it currently holds. It starts at the loaded revision, follows
+  // this drawer's own saves, and is re-read after a section writes the row
+  // (see refreshPartyAfterSectionSave). The server still refuses a write when
+  // another editor changed the row after this drawer read it.
+  const [partyToken, setPartyToken] = useState<PartyToken>(() => partyTokenOf(payload))
+  const [prevServerUpdatedAt, setPrevServerUpdatedAt] = useState(p.updated_at)
+  if (prevServerUpdatedAt !== p.updated_at) {
+    setPrevServerUpdatedAt(p.updated_at)
+    setPartyToken(partyTokenOf(payload))
+  }
+
   // -- addresses ---------------------------------------------------------
   const [addresses, setAddresses] = useState<AddressRow[]>(
     payload.addresses.map(addressFromApi),
@@ -633,11 +662,11 @@ export function PartyDrawer({
           hiredOn: employee.hiredOn || null,
         },
       },
-      expectedUpdatedAt: p.updated_at,
+      expectedUpdatedAt: partyToken.updatedAt,
       addresses: serializeAddresses(addresses),
       contacts: serializeContacts(contacts),
     }),
-    [kind, displayName, legalName, shortCode, email, phone, website, customValues, invoicingPref, subsidiaryId, additionalSubsidiaryIds, multiSubsidiary, customer, vendor, employee, addresses, contacts, isActive, role, payrollEnabled, multiCurrency, p.updated_at, placeholderName, forcesCustomerRole],
+    [kind, displayName, legalName, shortCode, email, phone, website, customValues, invoicingPref, subsidiaryId, additionalSubsidiaryIds, multiSubsidiary, customer, vendor, employee, addresses, contacts, isActive, role, payrollEnabled, multiCurrency, partyToken.updatedAt, placeholderName, forcesCustomerRole],
   )
   // Track unsaved edits (no autosave — Save is an explicit button). Adjusted
   // during render (same committed value, no extra render). `skipDirty` is a
@@ -791,7 +820,7 @@ export function PartyDrawer({
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            expectedUpdatedAt: p.updated_at,
+            expectedUpdatedAt: partyToken.updatedAt,
             [kind]: kind === 'addresses'
               ? serializeAddresses(nextRows as AddressRow[])
               : serializeContacts(nextRows as ContactRow[]),
@@ -802,6 +831,7 @@ export function PartyDrawer({
         successMessage: tc('feedback.saved'),
         onOk: (result) => {
           setSkipDirty(true)
+          adoptPartyResponse(result)
           const rows = (result as { addresses?: unknown; contacts?: unknown } | null)
           if (kind === 'addresses') {
             setAddresses(((rows?.addresses ?? []) as AddressApiRecord[]).map(addressFromApi))
@@ -983,6 +1013,50 @@ export function PartyDrawer({
     if (ok) router.refresh()
   }
 
+  /**
+   * Adopt the revision a successful party PATCH returns, so the drawer's next
+   * write compares against the row it just produced. The response is the full
+   * party payload; anything else leaves the token as it was.
+   */
+  function adoptPartyResponse(data: unknown) {
+    const response = data as Partial<PartyPayload> | null
+    if (typeof response?.party?.updated_at !== 'string') return
+    setPartyToken(partyTokenOf(response as PartyPayload))
+  }
+
+  /**
+   * A section that wrote the party row through its own control (the payroll
+   * profile's worker-compensation class, or the party photo) re-reads the row.
+   * The drawer adopts the new revision, and its worker-compensation select
+   * follows the saved class unless the operator has edited that select here.
+   * An untouched select keeps the class the drawer loaded, so the drawer's
+   * Save would send that class back and undo the section's change; the
+   * follow-through keeps the select in step with the row it writes.
+   */
+  async function refreshPartyAfterSectionSave() {
+    const before = partyToken
+    let fresh: PartyPayload | null = null
+    try {
+      const res = await fetch(`/api/parties/${p.id}`, { method: 'GET' })
+      // A failed re-read leaves the token as it was; the server then refuses
+      // the drawer's next Save, which tells the operator to reload.
+      if (!res.ok) return
+      fresh = (await res.json().catch(() => null)) as PartyPayload | null
+    } catch {
+      return
+    }
+    if (typeof fresh?.party?.updated_at !== 'string') return
+    const next = partyTokenOf(fresh)
+    setPartyToken(next)
+    if (next.workerCompGroupId !== before.workerCompGroupId) {
+      setEmployee((previous) => (
+        previous.workerCompGroupId === before.workerCompGroupId
+          ? { ...previous, workerCompGroupId: next.workerCompGroupId }
+          : previous
+      ))
+    }
+  }
+
   async function save() {
     if (createMode) {
       await saveNew()
@@ -1034,6 +1108,7 @@ export function PartyDrawer({
       {
         fallbackMessage: t('autosaveFailed'),
         onOk: (data) => {
+          adoptPartyResponse(data)
           const party = (data as { party?: { is_active?: unknown } } | null)?.party
           setIsActive(party?.is_active === true)
           if (latestSavePayload.current !== submitted) {
@@ -1141,7 +1216,7 @@ export function PartyDrawer({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             isActive: next,
-            expectedUpdatedAt: p.updated_at,
+            expectedUpdatedAt: partyToken.updatedAt,
             changeReason: reason,
             ...(activateCarriesSubsidiary
               ? {
@@ -1154,7 +1229,8 @@ export function PartyDrawer({
       {
         fallbackMessage: t('updateFailed'),
         successMessage: next ? t('activated') : t('deactivated'),
-        onOk: () => {
+        onOk: (result) => {
+          adoptPartyResponse(result)
           setIsActive(next)
         },
       },
@@ -1396,7 +1472,10 @@ export function PartyDrawer({
           kind={role === 'employee' ? 'person' : kind}
           photoFileId={photoFileId}
           canManage={canManage}
-          onChange={setPhotoFileId}
+          onChange={(nextPhotoFileId) => {
+            setPhotoFileId(nextPhotoFileId)
+            void refreshPartyAfterSectionSave()
+          }}
         />
       }
       description={mode === 'edit' ? tc('feedback.editingHint') : undefined}
@@ -2373,6 +2452,7 @@ export function PartyDrawer({
             readOnly={!editable}
             section={payrollSubTab}
             onDirtyChange={setPayrollDirty}
+            onPartyRecordChanged={refreshPartyAfterSectionSave}
           />
           {/* Recurring pay components: fixed deductions, taxable benefits and
               premiums priced every regular run — the write side of the rows
