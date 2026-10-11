@@ -1443,8 +1443,12 @@ export function DocumentDrawer({
   const [matchOpen, setMatchOpen] = useState(false)
   const [matchHint, setMatchHint] = useState(false)
   const [matchRefused, setMatchRefused] = useState(false)
+  // An unsaved create has no bill to match: probing with its blank id hits
+  // a 404 against the match route, so matching stays with persisted bills
+  // whose edit grant the role holds.
   const canMatchBill =
     config.kind === 'vendor_bill' &&
+    !isCreate &&
     (doc.status === 'draft' || doc.status === 'approved') &&
     canCreate
   useEffect(() => {
