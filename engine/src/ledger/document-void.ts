@@ -689,19 +689,21 @@ export async function requestReceiptVoidWithDependents(
 }
 
 /**
- * The closed-period fence the posted-document path runs for a goods
- * receipt's reversal journals. Receipts post the same inventory journals
- * a bill void reverses, but carry no posted entry of their own — so the
- * kernel's GL-only check would wave an AP-closed period through. Judge
- * the reversal date's covering period the way the posted path does
- * (payables module for a receipt): a missing period names its remedy, a
+ * The closed-period fence the posted-document path runs for an order
+ * shipment's reversal journals. Receipts and fulfillments post the same
+ * inventory journals a bill void reverses, but carry no posted entry of
+ * their own — so the kernel's GL-only check would wave a module-closed
+ * period through. One shared predicate judges the reversal date's
+ * covering period the way the posted path does (payables for a receipt,
+ * receivables for a shipment): a missing period names its remedy, a
  * closed one refuses typed with the route out. No journals behind the
- * receipt means nothing to fence.
+ * document means nothing to fence.
  */
-async function assertReceiptReversalPeriodOpen(
+async function assertOrderShipmentReversalPeriodOpen(
   tx: Pick<typeof db, "execute">,
   input: {
     orgId: string;
+    voidKind: "purchase_receipt" | "sales_fulfillment";
     voidDocumentId: string;
     reversalDate: string;
   },
@@ -714,13 +716,14 @@ async function assertReceiptReversalPeriodOpen(
       "reversal-period-uncovered",
     );
   }
+  const movementKind = input.voidKind === "sales_fulfillment" ? "issue" : "receipt";
   const books = (await tx.execute<{ book_id: string }>(sql`
     select distinct e.book_id
       from inventory_movements movement
       join document_lines line on line.id = movement.document_line_id and line.org_id = movement.org_id
       join journal_entries e on e.id = movement.journal_entry_id and e.org_id = movement.org_id
      where movement.org_id = ${input.orgId} and line.document_id = ${input.voidDocumentId}
-       and movement.kind = 'receipt' and movement.status = 'posted' and e.status = 'posted'`)).rows;
+       and movement.kind = ${movementKind} and movement.status = 'posted' and e.status = 'posted'`)).rows;
   const bookIds = [...new Set(books.map((row) => row.book_id))];
   if (bookIds.length === 0) return;
   const subsidiaries = (await tx.execute<{ subsidiary_id: string }>(sql`
@@ -728,7 +731,7 @@ async function assertReceiptReversalPeriodOpen(
       from inventory_movements movement
       join document_lines line on line.id = movement.document_line_id and line.org_id = movement.org_id
      where movement.org_id = ${input.orgId} and line.document_id = ${input.voidDocumentId}
-       and movement.kind = 'receipt' and movement.status = 'posted'`)).rows;
+       and movement.kind = ${movementKind} and movement.status = 'posted'`)).rows;
   for (const bookId of bookIds) {
     try {
       await assertPeriodModulesOpen(tx, {
@@ -736,7 +739,7 @@ async function assertReceiptReversalPeriodOpen(
         periodId: period.id,
         bookId,
         subsidiaryIds: subsidiaries.map((row) => row.subsidiary_id),
-        modules: [voidCloseModule("purchase_receipt")],
+        modules: [voidCloseModule(input.voidKind)],
       });
     } catch (error) {
       if (error instanceof CloseError) {
@@ -775,13 +778,18 @@ async function reverseOrderShipment(
     reason: string;
   },
 ): Promise<void> {
-  // A goods receipt carries no posted entry, so the completion fence for
-  // posted documents never sees it — yet its reversal journals post all
-  // the same. Refuse a closed reversal period here, before the stock
+  // Order shipments carry no posted entry, so the completion fence for
+  // posted documents never sees them — yet their reversal journals post
+  // all the same. Refuse a closed reversal period here, before the stock
   // unwind, with the same typed refusal the posted path renders: the
   // operator picks another date first, then meets any stock blockers.
-  if (input.voidKind === "purchase_receipt") {
-    await assertReceiptReversalPeriodOpen(tx, input);
+  if (input.voidKind === "purchase_receipt" || input.voidKind === "sales_fulfillment") {
+    await assertOrderShipmentReversalPeriodOpen(tx, {
+      orgId: input.orgId,
+      voidKind: input.voidKind,
+      voidDocumentId: input.voidDocumentId,
+      reversalDate: input.reversalDate,
+    });
   }
   const evidenceKey = input.voidKind === "sales_fulfillment" ? "fulfillment" : "receipt";
   const movementKind = input.voidKind === "sales_fulfillment" ? "issue" : "receipt";
