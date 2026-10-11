@@ -689,6 +689,69 @@ export async function requestReceiptVoidWithDependents(
 }
 
 /**
+ * The closed-period fence the posted-document path runs for a goods
+ * receipt's reversal journals. Receipts post the same inventory journals
+ * a bill void reverses, but carry no posted entry of their own — so the
+ * kernel's GL-only check would wave an AP-closed period through. Judge
+ * the reversal date's covering period the way the posted path does
+ * (payables module for a receipt): a missing period names its remedy, a
+ * closed one refuses typed with the route out. No journals behind the
+ * receipt means nothing to fence.
+ */
+async function assertReceiptReversalPeriodOpen(
+  tx: Pick<typeof db, "execute">,
+  input: {
+    orgId: string;
+    voidDocumentId: string;
+    reversalDate: string;
+  },
+): Promise<void> {
+  const period = await resolveCoveringPeriod(tx, input.orgId, input.reversalDate);
+  if (!period) {
+    throw new DocumentVoidError(
+      `no accounting period covers ${input.reversalDate} — generate the period covering that date, then void again`,
+      422,
+      "reversal-period-uncovered",
+    );
+  }
+  const books = (await tx.execute<{ book_id: string }>(sql`
+    select distinct e.book_id
+      from inventory_movements movement
+      join document_lines line on line.id = movement.document_line_id and line.org_id = movement.org_id
+      join journal_entries e on e.id = movement.journal_entry_id and e.org_id = movement.org_id
+     where movement.org_id = ${input.orgId} and line.document_id = ${input.voidDocumentId}
+       and movement.kind = 'receipt' and movement.status = 'posted' and e.status = 'posted'`)).rows;
+  const bookIds = [...new Set(books.map((row) => row.book_id))];
+  if (bookIds.length === 0) return;
+  const subsidiaries = (await tx.execute<{ subsidiary_id: string }>(sql`
+    select distinct movement.subsidiary_id
+      from inventory_movements movement
+      join document_lines line on line.id = movement.document_line_id and line.org_id = movement.org_id
+     where movement.org_id = ${input.orgId} and line.document_id = ${input.voidDocumentId}
+       and movement.kind = 'receipt' and movement.status = 'posted'`)).rows;
+  for (const bookId of bookIds) {
+    try {
+      await assertPeriodModulesOpen(tx, {
+        orgId: input.orgId,
+        periodId: period.id,
+        bookId,
+        subsidiaryIds: subsidiaries.map((row) => row.subsidiary_id),
+        modules: [voidCloseModule("purchase_receipt")],
+      });
+    } catch (error) {
+      if (error instanceof CloseError) {
+        throw new DocumentVoidError(
+          `the reversal period for ${input.reversalDate} is closed: ${error.message}`,
+          422,
+          "reversal-period-closed",
+        );
+      }
+      throw error;
+    }
+  }
+}
+
+/**
  * Unwind one shipment (sales_fulfillment) or goods receipt
  * (purchase_receipt) inside the caller's void transaction: reverse every
  * still-live stock movement through the inventory kernel and restore the
@@ -712,6 +775,14 @@ async function reverseOrderShipment(
     reason: string;
   },
 ): Promise<void> {
+  // A goods receipt carries no posted entry, so the completion fence for
+  // posted documents never sees it — yet its reversal journals post all
+  // the same. Refuse a closed reversal period here, before the stock
+  // unwind, with the same typed refusal the posted path renders: the
+  // operator picks another date first, then meets any stock blockers.
+  if (input.voidKind === "purchase_receipt") {
+    await assertReceiptReversalPeriodOpen(tx, input);
+  }
   const evidenceKey = input.voidKind === "sales_fulfillment" ? "fulfillment" : "receipt";
   const movementKind = input.voidKind === "sales_fulfillment" ? "issue" : "receipt";
   const voidQtyBySource = (await tx.execute<{

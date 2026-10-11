@@ -149,6 +149,41 @@ test('a consumed receipt refuses typed with its dependents and without the casca
   }
 })
 
+test('a closed-period reversal date refuses typed so the void dialog stays open', async () => {
+  const { org, actor } = await seedOrg()
+  try {
+    const po = await seedPo(org, actor, 'PO-M38-W4')
+    const receipt = await receiveFull(org, actor, po.orderId, po.lineId)
+    await withBypassContext(() => db.execute(sql`
+      insert into accounting_periods
+        (id, org_id, fiscal_calendar_id, fiscal_year, period_number, name,
+         starts_on, ends_on, is_adjustment, custom)
+      select ${randomUUID()}, ${org.orgId}, fiscal_calendar_id,
+             2026, 8, '2026-08', '2026-08-01', '2026-08-31', false, '{}'::jsonb
+        from accounting_periods where id = ${org.periodId}`))
+    const { setPeriodLockState } = await import('@openbooks/engine/src/periods/period-locks.ts')
+    await withOrgContext(org.orgId, () => setPeriodLockState({
+      orgId: org.orgId, periodId: org.periodId, bookId: org.bookId,
+      module: 'ap', state: 'closed', actorId: actor, reason: 'closed-period void control',
+    }))
+    const revision = await revisionOf(org.orgId, receipt.id)
+    const response = await withOrgContext(org.orgId, () =>
+      voidDocument(voidCall(receipt.id, { reason: 'overstated delivery on the packing slip', reversalDate: org.date, expectedUpdatedAt: revision }),
+        { params: Promise.resolve({ id: receipt.id }) }))
+    // The dialog stays open on any refusal: the status decides, so the
+    // closed-period refusal must arrive typed with its remedy in the body.
+    assert.equal(response.status, 422, JSON.stringify(await response.clone().json()))
+    const body = await response.json() as { error: string; code: string }
+    assert.equal(body.code, 'reversal-period-closed')
+    assert.match(body.error, /reversal period for .* is closed/)
+    const status = await withBypassContext(() => db.execute<{ status: string }>(sql`
+      select status from documents where id = ${receipt.id}`))
+    assert.equal(status.rows[0]!.status, 'approved', 'the refused receipt stays voidable')
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
+
 test('void with dependents cascades through the fulfillment void', async () => {
   const { org, actor } = await seedOrg()
   try {
