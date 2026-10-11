@@ -66,3 +66,46 @@ test('cash-sale tenders have a separate active body and preserve unresolved code
     assert.deepEqual(writes, [], 'switching tabs neither saves nor resolves a stored-value code')
   } finally { await act(async () => root.unmount()); host.remove(); globalThis.fetch = prior }
 })
+
+test('a stored close-out reseeds its tender tips, balance and pooled server', async () => {
+  const prior = globalThis.fetch
+  globalThis.fetch = (async () => Response.json({ rows: [], attachments: [] })) as typeof fetch
+  const host = document.createElement('div')
+  document.body.append(host)
+  const root = createRoot(host)
+  try {
+    // Reload shape: tenders from the table carry gross amounts only, while
+    // the stored close-out names the per-tender tips, fees and server.
+    await act(async () => {
+      root.render(<NextIntlClientProvider locale="en" messages={messages} timeZone="UTC"><MoneyProvider currency="USD"><DocumentDrawer
+        payload={{ doc: { id: 'sale-1', kind: 'cash_sale', status: 'draft', currency: 'USD', document_date: '2026-10-05', document_number: 'CASH-102', subtotal: '100.00', tax_total: '0.00', total: '100.00', updated_at: '3', custom: { closeout: { tipsTotal: '12.0000', feeTotal: '2.0000', overShort: '0.0000', serverPartyId: 'server-1', parts: [{ position: 1, tip: '12.0000', fee: '2.0000' }] } } }, lines: [{ id: 'line-1', account_id: 'clearing', description: 'Till sale', quantity: '1', unit_price: '100.00', amount: '100.00', tax_input_amount: '100.00', tax_amount: '0' }], tenders: [{ position: 1, kind: 'card', methodLabel: 'card', accountId: 'clearing', amount: '110.00', currency: 'USD', reference: null, externalRef: null }] }}
+        config={DOC_KINDS.cash_sale!} basePath="/cash-sales" accounts={[]} departments={[]} projects={[]} headerDefs={[]} lineDefs={[]} canCreate canPost
+        initialMode="edit"
+        layout={defaultFormLayout('cash_sale')} tenderAccounts={[{ id: 'clearing', number: '1100', name: 'Clearing' }]}
+        serverOptions={[{ value: 'server-1', label: 'Sam Server' }]}
+      /></MoneyProvider></NextIntlClientProvider>)
+      await tick()
+    })
+    const dialog = document.querySelector('[role="dialog"]')
+    assert.ok(dialog, 'the cash-sale record must own one dialog')
+    const tabButton = [...dialog!.querySelectorAll('button')].find(node => node.hasAttribute('aria-pressed') && node.textContent?.trim() === messages.ar.tenders.title)
+    assert.ok(tabButton, 'expected a reachable Tenders tab')
+    await act(async () => { tabButton.click(); await tick() })
+    const body = dialog!.textContent ?? ''
+    const decimalValues = ([...dialog!.querySelectorAll('input')] as HTMLInputElement[])
+      .filter(node => node.placeholder === '0.00')
+      .map(node => node.value)
+    // The stored tip and fee read back on their tender instead of blank,
+    // and the balance derives total + tips − fees like the kernel.
+    assert.ok(decimalValues.some(value => value.includes('12')), 'the stored card tip must reseed onto its tender')
+    assert.ok(decimalValues.some(value => value.includes('2')), 'the stored processor fee must reseed onto its tender')
+    assert.ok(body.includes(messages.ar.tenders.balanced), 'reseeded tips must balance the till')
+    assert.ok(body.includes('Sam Server'), 'the stored server must reseed as the selection')
+    // The pooled entry is selectable, so a named server can be cleared.
+    const serverTrigger = [...dialog!.querySelectorAll('button')].find(node => (node.textContent ?? '').includes('Sam Server'))
+    assert.ok(serverTrigger, 'expected a server picker showing the stored server')
+    await act(async () => { serverTrigger.click(); await tick() })
+    const options = [...document.querySelectorAll('[role="option"]')].map(node => node.textContent?.trim())
+    assert.ok(options.includes(messages.ar.tenders.serverPooled), 'pooled must be a selectable server entry')
+  } finally { await act(async () => root.unmount()); host.remove(); globalThis.fetch = prior }
+})

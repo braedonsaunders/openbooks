@@ -41,7 +41,7 @@ const { db, withOrgContext, withOrg } = await import('@openbooks/engine/src/plat
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, createScratchUser, dropScratchOrg, seedPostingAccount } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { postDocument } = await import('@openbooks/engine/src/ledger/posting-document.ts')
-const { POST } = await import('./route.ts')
+const { GET, POST } = await import('./route.ts')
 const { installTrustedTestDatabaseBypass } = await import('@openbooks/engine/src/testing/database-bypass.ts')
 installTrustedTestDatabaseBypass()
 
@@ -156,6 +156,51 @@ test('a cashier records a posted bank drop', async () => {
     }, randomUUID())
     assert.equal(over.status, 422, JSON.stringify(over.json))
     assert.match(String(over.json.error), /undropped till cash 50\.0000/)
+  } finally {
+    await cleanup()
+  }
+})
+
+async function getDrops(
+  orgId: string,
+  saleId: string,
+): Promise<{ status: number; json: Record<string, unknown> }> {
+  const response = await withOrgContext(orgId, () => GET(
+    new Request(`http://cash.test/api/cash-sales/${saleId}/deposit`, {
+      method: 'GET',
+      headers: { accept: 'application/json' },
+    }) as never,
+    { params: { id: saleId } } as never,
+  ))
+  return { status: response.status, json: (await response.json().catch(() => null)) as Record<string, unknown> }
+}
+
+test('a sale lists its recorded drops and hides them without the grant', async () => {
+  const { orgId, saleId, cleanup } = await fixture()
+  try {
+    state.permissions = CASHIER
+    const org = await db.execute<{ date: string; bank: string }>(sql`
+      select (select document_date::text from documents where org_id = ${orgId} and id = ${saleId}) as date,
+             (select id::text from accounts where org_id = ${orgId} and number = '1000') as bank`)
+    const saved = await postDrop(orgId, saleId, {
+      amount: '30.0000',
+      date: org.rows[0]!.date,
+      bankAccountId: org.rows[0]!.bank,
+      slipNumber: 'SLIP-LIST-1',
+    }, randomUUID())
+    assert.equal(saved.status, 201, JSON.stringify(saved.json))
+    const listed = await getDrops(orgId, saleId)
+    assert.equal(listed.status, 200, JSON.stringify(listed.json))
+    const drops = listed.json.drops as Record<string, unknown>[]
+    assert.equal(drops.length, 1)
+    assert.equal(drops[0]!.documentNumber, saved.json.documentNumber)
+    assert.equal(drops[0]!.slipNumber, 'SLIP-LIST-1')
+    assert.equal(drops[0]!.status, 'posted')
+    // Without the grant the list refuses like the recording does.
+    state.permissions = NO_DEPOSIT
+    const denied = await getDrops(orgId, saleId)
+    assert.equal(denied.status, 403)
+    assert.match(String(denied.json.error), /cash_sales\.deposit/)
   } finally {
     await cleanup()
   }

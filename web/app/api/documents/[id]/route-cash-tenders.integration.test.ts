@@ -117,3 +117,174 @@ test('cash tenders persist in the table and never in custom', async () => {
     await cleanup()
   }
 })
+
+async function closeoutFixture(): Promise<{ orgId: string; saleId: string; bankId: string; cleanup: () => Promise<void> }> {
+  const org = await createScratchOrg()
+  state.orgId = org.orgId
+  state.actorId = randomUUID()
+  await db.execute(sql`
+    update orgs set settings = settings
+      || jsonb_build_object('features', coalesce(settings->'features', '{}'::jsonb) || '{"cashSales": true}'::jsonb)
+     where id = ${org.orgId}`)
+  const bankId = randomUUID()
+  await db.execute(sql`
+    insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, currency_restriction, required_dimensions, custom, subsidiary_include_children)
+    values (${bankId}, ${org.orgId}, '1010', 'Till Operating', 'asset_bank', false, true, false, true, 'CAD', '[]'::jsonb, '{}'::jsonb, true)`)
+  const saleId = randomUUID()
+  await db.execute(sql`
+    insert into documents (id, org_id, kind, status, document_number, document_date, subsidiary_id, currency, subtotal, tax_total, total, custom)
+    values (${saleId}, ${org.orgId}, 'cash_sale', 'draft', 'CS-CLOSEOUT', ${org.date}, ${org.subsidiaryId}, 'CAD', '100.0000', '0', '100.0000', '{}'::jsonb)`)
+  await db.execute(sql`
+    insert into document_lines (id, org_id, document_id, line_number, account_id, description, quantity, unit_price, amount)
+    values (${randomUUID()}, ${org.orgId}, ${saleId}, 1, ${bankId}, 'Till sale', '1', '100.0000', '100.0000')`)
+  return { orgId: org.orgId, saleId, bankId, cleanup: () => dropScratchOrg(org.orgId) }
+}
+
+async function storedCustom(orgId: string, saleId: string): Promise<Record<string, unknown>> {
+  return (await db.execute<{ custom: Record<string, unknown> }>(sql`
+    select custom from documents where id = ${saleId} and org_id = ${orgId}`)).rows[0]!.custom
+}
+
+test('card tip and fee persist and survive a table-reseeded save', async () => {
+  const { orgId, saleId, bankId, cleanup } = await closeoutFixture()
+  try {
+    // The drawer collects 110 gross on the card tender: the 100 total plus
+    // a 12 tip for staff, less a 2 processor fee.
+    const saved = await patchDoc(orgId, saleId, {
+      expectedUpdatedAt: await revision(orgId, saleId),
+      custom: {
+        tenders: [{ kind: 'card', accountId: bankId, amount: '110', tipAmount: '12', feeAmount: '2' }],
+        closeout: { overShort: '0', serverPartyId: null },
+      },
+    })
+    assert.equal(saved.status, 200, JSON.stringify(saved.json))
+    const first = await storedCustom(orgId, saleId)
+    assert.deepEqual((first.closeout as Record<string, unknown>).parts, [
+      { position: 1, tip: '12.0000', fee: '2.0000' },
+    ])
+    // A reload reseeds the editor from the tender table (gross amounts only)
+    // plus the close-out's draft shape; resaving an unrelated edit must keep
+    // the stored parts instead of blanking and wiping them.
+    const reseeded = await patchDoc(orgId, saleId, {
+      expectedUpdatedAt: await revision(orgId, saleId),
+      memo: 'counted twice',
+      custom: {
+        tenders: [{ kind: 'card', accountId: bankId, amount: '110', tipAmount: '12', feeAmount: '2' }],
+        closeout: { overShort: '0.0000' },
+      },
+    })
+    assert.equal(reseeded.status, 200, JSON.stringify(reseeded.json))
+    assert.deepEqual((await storedCustom(orgId, saleId)).closeout, first.closeout)
+  } finally {
+    await cleanup()
+  }
+})
+
+test('a close-out resubmitted against stale stated totals recomputes from the tenders', async () => {
+  const { orgId, saleId, bankId, cleanup } = await closeoutFixture()
+  try {
+    const saved = await patchDoc(orgId, saleId, {
+      expectedUpdatedAt: await revision(orgId, saleId),
+      custom: {
+        tenders: [{ kind: 'card', accountId: bankId, amount: '110', tipAmount: '12', feeAmount: '2' }],
+        closeout: { overShort: '0', serverPartyId: null },
+      },
+    })
+    assert.equal(saved.status, 200, JSON.stringify(saved.json))
+    // The operator clears the tips and reduces the tender to the total while
+    // the payload still states the stored totals: the header totals derive
+    // from the fresh tenders in the same statement, so the save recomputes
+    // the header instead of refusing — recovering the draft.
+    const revert = await patchDoc(orgId, saleId, {
+      expectedUpdatedAt: await revision(orgId, saleId),
+      custom: {
+        tenders: [{ kind: 'card', accountId: bankId, amount: '100' }],
+        closeout: (await storedCustom(orgId, saleId)).closeout,
+      },
+    })
+    assert.equal(revert.status, 200, JSON.stringify(revert.json))
+    assert.ok(!('closeout' in (await storedCustom(orgId, saleId))), 'the emptied close-out must clear')
+  } finally {
+    await cleanup()
+  }
+})
+
+test('a close-out refusal names its message and remedy', async () => {
+  const { orgId, saleId, bankId, cleanup } = await closeoutFixture()
+  try {
+    // A tip larger than its tender collects more than the till received:
+    // the 422 must carry both the reason and the remedy the drawer renders.
+    const refused = await patchDoc(orgId, saleId, {
+      expectedUpdatedAt: await revision(orgId, saleId),
+      custom: {
+        tenders: [{ kind: 'card', accountId: bankId, amount: '100', tipAmount: '200' }],
+        closeout: { overShort: '0', serverPartyId: null },
+      },
+    })
+    assert.equal(refused.status, 422, JSON.stringify(refused.json))
+    assert.match(String((refused.json as Record<string, unknown>).error), /exceeds its tender/)
+    assert.match(String((refused.json as Record<string, unknown>).remedy), /at most what the tender collected/)
+  } finally {
+    await cleanup()
+  }
+})
+
+test('clearing the close-out server pools the tips without wiping them', async () => {
+  const { orgId, saleId, bankId, cleanup } = await closeoutFixture()
+  try {
+    const serverId = (await db.execute<{ id: string }>(sql`
+      select id from parties where org_id = ${orgId} and is_active limit 1`)).rows[0]!.id
+    const saved = await patchDoc(orgId, saleId, {
+      expectedUpdatedAt: await revision(orgId, saleId),
+      custom: {
+        tenders: [{ kind: 'card', accountId: bankId, amount: '110', tipAmount: '12', feeAmount: '2' }],
+        closeout: { overShort: '0', serverPartyId: serverId },
+      },
+    })
+    assert.equal(saved.status, 200, JSON.stringify(saved.json))
+    assert.equal(((await storedCustom(orgId, saleId)).closeout as Record<string, unknown>).serverPartyId, serverId)
+    // An explicit null pools the tips: the server clears and the tender
+    // tips survive, so pooled is a selection, never a data loss.
+    const pooled = await patchDoc(orgId, saleId, {
+      expectedUpdatedAt: await revision(orgId, saleId),
+      custom: {
+        tenders: [{ kind: 'card', accountId: bankId, amount: '110', tipAmount: '12', feeAmount: '2' }],
+        closeout: { overShort: '0.0000', serverPartyId: null },
+      },
+    })
+    assert.equal(pooled.status, 200, JSON.stringify(pooled.json))
+    const stored = (await storedCustom(orgId, saleId)).closeout as Record<string, unknown>
+    assert.equal(stored.serverPartyId, null)
+    assert.deepEqual(stored.parts, [{ position: 1, tip: '12.0000', fee: '2.0000' }])
+  } finally {
+    await cleanup()
+  }
+})
+
+test('a tip removal that derives the close-out from the tenders succeeds', async () => {
+  const { orgId, saleId, bankId, cleanup } = await closeoutFixture()
+  try {
+    const saved = await patchDoc(orgId, saleId, {
+      expectedUpdatedAt: await revision(orgId, saleId),
+      custom: {
+        tenders: [{ kind: 'card', accountId: bankId, amount: '110', tipAmount: '12', feeAmount: '2' }],
+        closeout: { overShort: '0', serverPartyId: null },
+      },
+    })
+    assert.equal(saved.status, 200, JSON.stringify(saved.json))
+    // The drawer reseeds the close-out as its draft shape (no stated
+    // totals), so the writer derives the emptied close-out from the fresh
+    // tenders and the wedged draft recovers through the UI.
+    const revert = await patchDoc(orgId, saleId, {
+      expectedUpdatedAt: await revision(orgId, saleId),
+      custom: {
+        tenders: [{ kind: 'card', accountId: bankId, amount: '100' }],
+        closeout: { overShort: '0.0000' },
+      },
+    })
+    assert.equal(revert.status, 200, JSON.stringify(revert.json))
+    assert.ok(!('closeout' in (await storedCustom(orgId, saleId))), 'the emptied close-out must clear')
+  } finally {
+    await cleanup()
+  }
+})

@@ -158,9 +158,12 @@ test("a recorded drop toasts the transfer number and clears the form", async (t)
   });
   await tick();
   await tick();
-  assert.equal(calls.length, 1, "one drop POST must fire");
+  // The section loads the recorded drops with a GET on mount and again
+  // after a write, so only the POST calls count as drop writes.
+  const posts = calls.filter((call) => typeof call.body.amount === "string");
+  assert.equal(posts.length, 1, "one drop POST must fire");
   assert.deepEqual(
-    calls[0]?.body,
+    posts[0]?.body,
     { amount: "50.00", date: "2026-10-05", bankAccountId: BANK_A, slipNumber: "SLIP-1" },
     "the drop carries amount, date, destination and slip — and no source choice for a single till",
   );
@@ -246,5 +249,8 @@ test("two till accounts offer the source choice and send it", async (t) => {
   });
   await tick();
   await tick();
-  assert.equal(calls[0]?.body?.sourceAccountId, "till-2", "the chosen till account must ride the drop");
+  // The section loads the recorded drops with a GET on mount, so the drop
+  // write is the POST call, not necessarily the first fetch.
+  const post = calls.find((call) => typeof call.body.amount === "string");
+  assert.equal(post?.body?.sourceAccountId, "till-2", "the chosen till account must ride the drop");
 });
