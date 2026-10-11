@@ -168,7 +168,11 @@
     "close-reopen-requests": "Solicitudes de reapertura",
     "intercompany": "Intercompañía",
     "intercompany-netting": "Compensación intercompañía",
-    "amortization": "Amortización de gastos"
+    "amortization": "Amortización de gastos",
+    "asset-proposals": "Propuestas de activos",
+    "asset-construction": "Obras en curso",
+    "asset-maintenance": "Mantenimiento de activos",
+    "asset-insurance": "Seguros de activos"
   },
   "modulesShort": {
     "hrm-performance-cycles": "Gestionar evaluaciones",

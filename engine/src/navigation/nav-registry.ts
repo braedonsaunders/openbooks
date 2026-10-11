@@ -691,6 +691,22 @@ export const NAV_MODULES: NavModule[] = [
     featureKey: 'expenseAmortization', recordTarget: { kind: 'query', param: 'schedule' },
   },
   {
+    key: 'asset-proposals', href: '/assets/proposals', label: 'Asset Proposals', iconKey: 'inbox',
+    group: 'accounting', subgroup: 'assets', requiredPermission: 'assets.read', featureKey: 'assetProposals',
+  },
+  {
+    key: 'asset-construction', href: '/assets/construction', label: 'Construction in Progress', iconKey: 'building',
+    group: 'accounting', subgroup: 'assets', requiredPermission: 'assets.read', featureKey: 'constructionInProgress',
+  },
+  {
+    key: 'asset-maintenance', href: '/assets/maintenance', label: 'Asset Maintenance', iconKey: 'wrench',
+    group: 'accounting', subgroup: 'assets', requiredPermission: 'assets.read', featureKey: 'assetMaintenance',
+  },
+  {
+    key: 'asset-insurance', href: '/assets/insurance', label: 'Asset Insurance', iconKey: 'shield',
+    group: 'accounting', subgroup: 'assets', requiredPermission: 'assets.read', featureKey: 'assetInsurance',
+  },
+  {
     // Subsequent-measurement register (lease/asset/revenue/consolidation).
     // Not ASC 250 / IAS 8. Sits with Period Close, not Journals.
     key: 'accounting-changes', href: '/accounting/changes', label: 'Accounting events', iconKey: 'git-branch',
@@ -1157,6 +1173,10 @@ const LOCAL_DESTINATION_LABELS: Record<string, string> = {
   "/assets?tab=tax-depreciation": "Tax Depreciation",
   "/assets/leases": "Lessee Leases",
   "/assets/equipment": "Equipment",
+  "/assets/proposals": "Asset Proposals",
+  "/assets/construction": "Construction in Progress",
+  "/assets/maintenance": "Asset Maintenance",
+  "/assets/insurance": "Asset Insurance",
   "/compliance": "Overview",
   "/compliance/vendors": "Subcontractors",
   "/compliance/lien-waivers": "Lien Waivers",

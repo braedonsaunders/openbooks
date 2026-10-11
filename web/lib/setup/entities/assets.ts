@@ -1,7 +1,29 @@
 /** Setup-registry assets entities (split from registry.ts; pure moves only). */
-import type { SetupEntity } from '../types'
-import { POOL_METHODS, TAX_DEPRECIATION_MODELS, MACRS_SYSTEMS, MACRS_METHODS, TAX_DEPRECIATION_CONVENTIONS, DEPRECIATION_METHODS, DEPRECIATION_CONVENTIONS, END_OF_LIFE } from '../options'
+import type { SetupEntity, SetupEntityValidationHook } from '../types'
+import { POOL_METHODS, TAX_DEPRECIATION_MODELS, MACRS_SYSTEMS, MACRS_METHODS, TAX_DEPRECIATION_CONVENTIONS, DEPRECIATION_METHODS, CAPITALIZATION_MATCH_KINDS, DEPRECIATION_CONVENTIONS, END_OF_LIFE } from '../options'
 import { MAX_DEPRECIATION_PERIODS } from '@openbooks/engine/assets/depreciation-limits'
+
+/**
+ * A capitalization rule names exactly one match target for its kind: an
+ * account, an item, or an item category. The table's checks enforce the same
+ * shape; this names the remedy before the write.
+ */
+const validateCapitalizationRuleWrite: SetupEntityValidationHook = async ({ body, rowId }) => {
+  if (rowId) return null
+  const kind = String(body.matchKind ?? '')
+  const present = (key: string) => body[key] !== undefined && body[key] !== null && String(body[key]).trim() !== ''
+  if (kind === 'account' && (!present('accountId') || present('itemId') || present('itemCategory'))) {
+    return 'An account rule names the account only; clear the item and item category.'
+  }
+  if (kind === 'item' && (!present('itemId') || present('accountId') || present('itemCategory'))) {
+    return 'An item rule names the item only; clear the account and item category.'
+  }
+  if (kind === 'item_category' && (!present('itemCategory') || present('accountId') || present('itemId'))) {
+    return 'An item-category rule names the category only; clear the account and item.'
+  }
+  if (!['account', 'item', 'item_category'].includes(kind)) return 'Choose what the rule matches: an account, an item or an item category.'
+  return null
+}
 
 export const ASSET_ENTITIES: SetupEntity[] = [
   // --- Assets --------------------------------------------------------------
@@ -198,6 +220,44 @@ export const ASSET_ENTITIES: SetupEntity[] = [
       { key: 'ratePercent', kind: 'percent' },
       { key: 'unitsTotal', kind: 'decimal' },
       { key: 'convention', kind: 'select', options: DEPRECIATION_CONVENTIONS, keepDefault: true },
+    ],
+  },
+  {
+    // Which posted purchase lines become asset proposals: one account, item
+    // or item category, an optional legal entity, and the minimum amount to
+    // capitalize, effective-dated. Terms are immutable once written; end a
+    // rule and add a new one to change policy from a date forward.
+    key: 'asset-capitalization-rules',
+    table: 'asset_capitalization_rules',
+    actorCols: true,
+    groupKey: 'assets',
+    featureKey: 'assetProposals',
+    iconKey: 'landmark',
+    orgScoped: true,
+    orderBy: 'effective_from desc, name',
+    hasActive: true,
+    allowDelete: false,
+    docSlug: 'fixed-assets-depreciation',
+    validateWrite: validateCapitalizationRuleWrite,
+    columns: [
+      { key: 'name', kind: 'text' },
+      { key: 'matchKind', kind: 'text' },
+      { key: 'minimumAmount', kind: 'number' },
+      { key: 'effectiveFrom', kind: 'date' },
+      { key: 'isActive', kind: 'badge-active' },
+    ],
+    fields: [
+      { key: 'name', kind: 'text', required: true },
+      { key: 'matchKind', kind: 'select', options: CAPITALIZATION_MATCH_KINDS, required: true, lockedOnEdit: true },
+      { key: 'accountId', kind: 'ref', ref: 'accounts', lockedOnEdit: true },
+      { key: 'itemId', kind: 'ref', ref: 'items', lockedOnEdit: true },
+      { key: 'itemCategory', kind: 'text', lockedOnEdit: true },
+      { key: 'subsidiaryId', kind: 'ref', ref: 'subsidiaries', lockedOnEdit: true },
+      { key: 'assetCategoryId', kind: 'ref', ref: 'asset-categories' },
+      { key: 'minimumAmount', kind: 'decimal', decimalScale: 4, defaultValue: '0', required: true, lockedOnEdit: true },
+      { key: 'effectiveFrom', kind: 'date', required: true, lockedOnEdit: true },
+      { key: 'effectiveTo', kind: 'date' },
+      { key: 'isActive', kind: 'boolean' },
     ],
   },
 ]

@@ -168,7 +168,11 @@
     "close-reopen-requests": "再オープン申請",
     "intercompany": "会社間",
     "intercompany-netting": "法人間相殺",
-    "amortization": "費用の期間配分"
+    "amortization": "費用の期間配分",
+    "asset-proposals": "資産計上候補",
+    "asset-construction": "建設仮勘定",
+    "asset-maintenance": "資産保守",
+    "asset-insurance": "資産保険"
   },
   "groups": {
     "manufacturing": "製造",

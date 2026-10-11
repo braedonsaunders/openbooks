@@ -247,6 +247,10 @@ export const LOCAL_NAVIGATION: LocalNavigationSet[] = [
     { href: '/assets?tab=tax-depreciation', ns: 'nav', key: 'modules.tax-depreciation', permission: 'assets.read', feature: 'fixedAssets' },
     { href: '/assets/leases', ns: 'nav', key: 'modules.leases', permission: 'assets.read', feature: 'fixedAssets', prefix: true },
     { href: '/assets/equipment', ns: 'nav', key: 'modules.equipment', permission: 'assets.read', feature: 'equipment' },
+    { href: '/assets/proposals', ns: 'nav', key: 'modules.asset-proposals', permission: 'assets.read', feature: 'assetProposals' },
+    { href: '/assets/construction', ns: 'nav', key: 'modules.asset-construction', permission: 'assets.read', feature: 'constructionInProgress' },
+    { href: '/assets/maintenance', ns: 'nav', key: 'modules.asset-maintenance', permission: 'assets.read', feature: 'assetMaintenance' },
+    { href: '/assets/insurance', ns: 'nav', key: 'modules.asset-insurance', permission: 'assets.read', feature: 'assetInsurance' },
   ] },
   // Pairing rides Intercompany transactions; netting runs and transfers ride
   // Intercompany netting. No set-level feature: either switch alone keeps

@@ -458,6 +458,10 @@
     "prepaid-amortized": {
       "title": "Amortize prepaid expenses",
       "description": "Post every amortization period of active prepaid and deferred expense schedules that ends by period end."
+    },
+    "asset-capitalization-reviewed": {
+      "title": "Review asset capitalization",
+      "description": "Decide pending asset proposals and reconcile construction in progress to its GL accounts."
     }
   },
   "setup": {

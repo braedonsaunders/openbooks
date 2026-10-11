@@ -67,6 +67,8 @@ export const PROJECT_REFS: readonly (readonly [table: string, column: string])[]
   ["documents", "project_id"],
   ["encumbrances", "project_id"],
   ["fixed_assets", "project_id"],
+  ["asset_proposals", "project_id"],
+  ["asset_cip_costs", "project_id"],
   ["budget_lines", "project_id"],
   ["functional_mappings", "project_id"],
   ["project_tasks", "project_id"],

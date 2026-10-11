@@ -30,7 +30,8 @@
     "opening": "期首",
     "bookOpening": "帳簿期首",
     "expenseAmortization": "費用の期間配分",
-    "accountMerge": "勘定の統合"
+    "accountMerge": "勘定の統合",
+    "assetCapitalization": "資産計上"
   },
   "detail": {
     "notFound": "仕訳が見つかりません",

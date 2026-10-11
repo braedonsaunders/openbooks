@@ -1462,7 +1462,9 @@
     "intercompany_approve": "审批或拒绝公司间抵销结算批次",
     "gl_post_book_specific": "过账账簿专用日记账",
     "amortization_read": "查看摊销计划和报表",
-    "amortization_manage": "运行摊销并变更摊销计划"
+    "amortization_manage": "运行摊销并变更摊销计划",
+    "assets_capitalize": "接受资产建议并将在建工程资本化",
+    "assets_maintain": "管理资产维护计划和保险单"
   },
   "ai": {
     "metaTitle": "AI 设置",
@@ -3797,6 +3799,11 @@
       "segment-value-dependencies": {
         "title": "依赖关系",
         "description": "此段的值仅允许与控制段的指定值组合。每行允许一个控制值；没有任何行的值不受限制。"
+      },
+      "asset-capitalization-rules": {
+        "title": "资本化规则",
+        "singularTitle": "资本化规则",
+        "description": "确定哪些已过账采购明细行生成资产建议：按科目、物料或物料类别设定最低金额，并按生效日期管理。"
       }
     },
     "fields": {
@@ -4460,7 +4467,10 @@
       "localizedName": "本地化名称",
       "valueId": "值",
       "controllingSegmentId": "控制段",
-      "allowedValueId": "允许搭配"
+      "allowedValueId": "允许搭配",
+      "matchKind": "匹配依据",
+      "minimumAmount": "资本化最低金额",
+      "assetCategoryId": "建议资产类别"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "最新可用汇率距期末的天数超过此值时，重估和合并将拒绝该汇率。期末汇率从期末即期汇率的日期起算；平均汇率从计入平均的最新报价日期起算。未设置政策时的默认值：31 天。",
@@ -5496,6 +5506,11 @@
       "amortizationTermSource": {
         "template": "模板期间",
         "service_dates": "行服务日期"
+      },
+      "capitalizationMatch": {
+        "account": "科目",
+        "item": "物料",
+        "itemCategory": "物料类别"
       }
     },
     "payroll": {
@@ -8308,6 +8323,26 @@
     "segmentDependencies": {
       "title": "段依赖关系",
       "description": "仅允许某段值与另一段的指定值组合使用，例如某类别仅限特定部门；在保存和过账单据时强制执行。"
+    },
+    "assetComponents": {
+      "title": "组合资产",
+      "description": "将组成部分资产归入上级资产，各自拥有独立的成本、使用寿命和折旧，按账簿汇总并一并处置。"
+    },
+    "assetProposals": {
+      "title": "资产建议",
+      "description": "将符合资本化规则的已过账采购明细行转为建议，可接受为资产、组成部分或在建工程。"
+    },
+    "constructionInProgress": {
+      "title": "在建工程",
+      "description": "在在建工程记录上归集成本，与总账对账，并在完工时资本化为资产。"
+    },
+    "assetMaintenance": {
+      "title": "资产维护",
+      "description": "按时间或计量表读数安排维护，按支付账单记录已完成工作，并接收到期和逾期提醒。"
+    },
+    "assetInsurance": {
+      "title": "资产保险",
+      "description": "记录承保资产的保险单，接收续保提醒，并比较保险价值与净账面价值。"
     }
   },
   "backupsManager": {

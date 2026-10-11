@@ -168,7 +168,11 @@
     "close-reopen-requests": "Reopen Requests",
     "intercompany": "Intercompany",
     "intercompany-netting": "Intercompany Netting",
-    "amortization": "Amortization"
+    "amortization": "Amortization",
+    "asset-proposals": "Asset Proposals",
+    "asset-construction": "Construction in Progress",
+    "asset-maintenance": "Asset Maintenance",
+    "asset-insurance": "Asset Insurance"
   },
   "modulesShort": {
     "hrm-performance-cycles": "Manage reviews",

@@ -458,6 +458,10 @@
     "prepaid-amortized": {
       "title": "前払費用を配分",
       "description": "期間末日までに終わる有効な配分スケジュールの期間をすべて記帳します。"
+    },
+    "asset-capitalization-reviewed": {
+      "title": "資産計上の確認",
+      "description": "保留中の資産計上候補を処理し、建設仮勘定を総勘定元帳の勘定と照合します。"
     }
   },
   "setup": {

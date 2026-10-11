@@ -30,7 +30,8 @@
     "opening": "Apertura",
     "bookOpening": "Apertura de libro",
     "expenseAmortization": "Amortización de gastos",
-    "accountMerge": "Fusión de cuentas"
+    "accountMerge": "Fusión de cuentas",
+    "assetCapitalization": "Capitalización de activos"
   },
   "detail": {
     "notFound": "Asiento no encontrado",

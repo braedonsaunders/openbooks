@@ -71,6 +71,19 @@ const DEFAULT_STEPS = [
     evidence: true,
   },
   {
+    // Proposals from the period's purchases decided and construction in
+    // progress reconciled to its GL accounts, before the variance review.
+    key: "asset-capitalization-reviewed",
+    title: "close.defaultSteps.asset-capitalization-reviewed.title",
+    description: "close.defaultSteps.asset-capitalization-reviewed.description",
+    workstream: "assets",
+    taskType: "reconciliation",
+    completionMode: "manual",
+    gateType: "hard",
+    offset: 2,
+    evidence: true,
+  },
+  {
     key: "recognition-posted",
     title: "close.defaultSteps.recognition-posted.title",
     description: "close.defaultSteps.recognition-posted.description",
@@ -247,6 +260,7 @@ const DEFAULT_DEPENDENCIES: Array<[string, string]> = [
   ["ar-cutoff", "drafts-cleared"],
   ["ap-cutoff", "drafts-cleared"],
   ["depreciation-posted", "drafts-cleared"],
+  ["asset-capitalization-reviewed", "drafts-cleared"],
   ["recognition-posted", "drafts-cleared"],
   ["unbilled-revenue-accrued", "drafts-cleared"],
   ["prepaid-amortized", "drafts-cleared"],
@@ -262,6 +276,7 @@ const DEFAULT_DEPENDENCIES: Array<[string, string]> = [
   ["variance-review", "ap-cutoff"],
   ["variance-review", "bank-reconciled"],
   ["variance-review", "depreciation-posted"],
+  ["variance-review", "asset-capitalization-reviewed"],
   ["variance-review", "recognition-posted"],
   ["variance-review", "unbilled-revenue-accrued"],
   ["variance-review", "prepaid-amortized"],

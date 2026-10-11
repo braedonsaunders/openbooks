@@ -71,7 +71,8 @@
       "allocations": "Asignaciones",
       "aiGovernance": "Gobernanza de IA",
       "other": "Otros informes",
-      "resourcing": "Recursos"
+      "resourcing": "Recursos",
+      "fixedAssets": "Activos fijos"
     },
     "customStudio": {
       "title": "Constructor de informes",
@@ -1152,6 +1153,34 @@
       "prepaid_amortization_reconciliation": {
         "label": "Conciliación de gastos anticipados",
         "description": "Movimientos de las cuentas de diferimiento en el libro mayor junto a los calendarios que los explican; sumados hasta una fecha, la diferencia es cero cuando coinciden."
+      },
+      "fixed_asset_register": {
+        "label": "Registro de activos fijos por libro",
+        "description": "Todos los activos fijos de cada libro activo —incluidas las obras en curso y los activos componentes— con estado, activo principal, costo, depreciación acumulada y valor en libros a hoy."
+      },
+      "fixed_asset_rollforward": {
+        "label": "Movimiento de activos fijos",
+        "description": "Costo y depreciación acumulada al cierre de cada mes por activo y libro: saldo inicial, adiciones, traspasos, bajas, obras capitalizadas, depreciación, revaluación y saldo final. Resuma por libro y categoría para obtener el movimiento."
+      },
+      "fixed_asset_depreciation_forecast": {
+        "label": "Previsión de depreciación",
+        "description": "Depreciación planificada aún no contabilizada, por activo, libro y período, según el cronograma actual de cada activo."
+      },
+      "asset_proposals": {
+        "label": "Propuestas de activos",
+        "description": "Líneas de compra contabilizadas propuestas para capitalización, con su origen, proveedor, cuenta, regla, importe y decisión."
+      },
+      "asset_maintenance_due": {
+        "label": "Mantenimiento de activos pendiente",
+        "description": "Planes de mantenimiento activos con su próxima fecha de vencimiento y valor del contador, la última lectura y si cada uno está programado, pendiente o vencido en la fecha del informe."
+      },
+      "asset_insured_values": {
+        "label": "Valor asegurado frente a valor en libros neto",
+        "description": "Todos los activos cubiertos por una póliza vigente en la fecha del informe, con su valor asegurado y de reposición frente a su valor en libros en el libro principal, y la diferencia."
+      },
+      "asset_cip_costs": {
+        "label": "Costos de obras en curso",
+        "description": "Todas las líneas del libro mayor vinculadas a un registro de obras en curso —facturas, asientos y costos de proyecto— con su registro, cuenta, proyecto e importe, para cuadrar el libro auxiliar con las cuentas de obras en curso."
       }
     },
     "columns": {
@@ -2790,6 +2819,119 @@
         "difference": "Diferencia",
         "account_id": "ID de la cuenta",
         "book_id": "ID del libro"
+      },
+      "fixed_asset_register": {
+        "book_id": "Clave de libro",
+        "book": "Libro",
+        "asset_number": "Número de activo",
+        "name": "Nombre",
+        "status": "Estado",
+        "category": "Categoría",
+        "parent_asset": "Activo principal",
+        "subsidiary": "Entidad legal",
+        "base_currency": "Moneda funcional",
+        "acquired_on": "Adquirido el",
+        "in_service_on": "En servicio desde",
+        "cost": "Costo",
+        "accumulated_depreciation": "Depreciación acumulada",
+        "carrying_value": "Valor en libros",
+        "id": "Clave de activo"
+      },
+      "fixed_asset_rollforward": {
+        "book_id": "Clave de libro",
+        "book": "Libro",
+        "month": "Mes",
+        "asset_number": "Número de activo",
+        "name": "Nombre",
+        "status": "Estado",
+        "category": "Categoría",
+        "subsidiary": "Entidad legal",
+        "base_currency": "Moneda funcional",
+        "cost_opening": "Costo inicial",
+        "additions": "Adiciones",
+        "transfers": "Traspasos y bajas parciales",
+        "disposals": "Bajas",
+        "capitalized": "Obras capitalizadas",
+        "cost_closing": "Costo final",
+        "accumulated_opening": "Depreciación acumulada inicial",
+        "depreciation": "Depreciación",
+        "remeasurement": "Deterioro y revaluación",
+        "accumulated_other": "Depreciación acumulada de adiciones, traspasos y bajas",
+        "accumulated_closing": "Depreciación acumulada final",
+        "asset_id": "Clave de activo"
+      },
+      "fixed_asset_depreciation_forecast": {
+        "book_id": "Clave de libro",
+        "book": "Libro",
+        "period": "Período",
+        "period_ends_on": "Fin del período",
+        "asset_number": "Número de activo",
+        "name": "Nombre",
+        "category": "Categoría",
+        "subsidiary": "Entidad legal",
+        "base_currency": "Moneda funcional",
+        "posted": "Contabilizado",
+        "planned": "Depreciación planificada",
+        "asset_id": "Clave de activo"
+      },
+      "asset_proposals": {
+        "posting_date": "Contabilizado el",
+        "source": "Origen",
+        "description": "Descripción",
+        "vendor": "Proveedor",
+        "account": "Cuenta",
+        "rule": "Regla",
+        "status": "Estado",
+        "subsidiary": "Entidad legal",
+        "base_currency": "Moneda funcional",
+        "amount": "Importe",
+        "resolution_reason": "Nota de la decisión",
+        "id": "Clave de propuesta"
+      },
+      "asset_maintenance_due": {
+        "asset_number": "Número de activo",
+        "asset": "Activo",
+        "task": "Tarea",
+        "vendor": "Proveedor",
+        "next_due_on": "Próximo vencimiento",
+        "next_due_usage": "Próximo vencimiento según contador",
+        "current_usage": "Última lectura del contador",
+        "usage_unit": "Unidad del contador",
+        "standing": "Situación",
+        "is_active": "Activo",
+        "subsidiary": "Entidad legal",
+        "base_currency": "Moneda funcional",
+        "estimated_cost": "Costo estimado",
+        "id": "Clave del plan"
+      },
+      "asset_insured_values": {
+        "policy_number": "Póliza",
+        "insurer": "Aseguradora",
+        "coverage_ends_on": "Fin de la cobertura",
+        "asset_number": "Número de activo",
+        "asset": "Activo",
+        "subsidiary": "Entidad legal",
+        "base_currency": "Moneda funcional",
+        "insured_value": "Valor asegurado",
+        "replacement_value": "Valor de reposición",
+        "net_book_value": "Valor en libros neto",
+        "gap": "Valor asegurado menos valor en libros neto",
+        "asset_id": "Clave de activo"
+      },
+      "asset_cip_costs": {
+        "cip_number": "Registro de obra",
+        "cip_name": "Nombre de la obra",
+        "cip_status": "Estado del registro",
+        "account": "Cuenta",
+        "entry_number": "Asiento",
+        "posting_date": "Contabilizado el",
+        "project": "Proyecto",
+        "memo": "Nota",
+        "link_status": "Estado de vinculación",
+        "subsidiary": "Entidad legal",
+        "base_currency": "Moneda funcional",
+        "amount": "Importe",
+        "id": "Clave de costo"
       }
     },
     "enumValues": {
@@ -2916,7 +3058,15 @@
       "insufficient_funds": "Fondos insuficientes",
       "needs_authentication": "Requiere autenticación",
       "primary": "Método principal",
-      "backup": "Método de respaldo"
+      "backup": "Método de respaldo",
+      "construction": "Obras en curso",
+      "capitalized": "Capitalizado",
+      "accepted": "Aceptada",
+      "scheduled": "Programado",
+      "due": "Pendiente",
+      "overdue": "Vencido",
+      "linked": "Vinculado",
+      "unlinked": "Desvinculado"
     }
   },
   "operators": {
@@ -3205,7 +3355,8 @@
       "opening": "Apertura",
       "book_opening": "Saldos de apertura del libro",
       "expense_amortization": "Amortización de gastos",
-      "account_merge": "Fusión de cuentas"
+      "account_merge": "Fusión de cuentas",
+      "asset_capitalization": "Capitalización de activos"
     },
     "columns": {
       "detail": "Tercero / nota"

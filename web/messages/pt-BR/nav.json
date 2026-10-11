@@ -168,7 +168,11 @@
     "close-reopen-requests": "Solicitações de reabertura",
     "intercompany": "Entre empresas",
     "intercompany-netting": "Compensação entre empresas",
-    "amortization": "Apropriação de despesas"
+    "amortization": "Apropriação de despesas",
+    "asset-proposals": "Propostas de Ativos",
+    "asset-construction": "Imobilizado em Andamento",
+    "asset-maintenance": "Manutenção de Ativos",
+    "asset-insurance": "Seguro de Ativos"
   },
   "groups": {
     "manufacturing": "Manufatura",

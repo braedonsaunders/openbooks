@@ -3772,6 +3772,16 @@ const COGNATES = new Set<string>([
   'pt-BR:scheduling.distribution.editor.link|Link',
   'pt-BR:sync.drawer.entityMappings.fields.fax|Fax',
   'pt-BR:sync.drawer.entityMappings.fields.status|Status',
+  // “Status” is spelled identically in German: fixed-asset workspace and report columns.
+  'de:assets.components.columns.status|Status',
+  'de:assets.proposals.columns.status|Status',
+  'de:assets.construction.columns.status|Status',
+  'de:assets.insurance.columns.status|Status',
+  'de:reports.catalog.columns.fixed_asset_register.status|Status',
+  'de:reports.catalog.columns.fixed_asset_rollforward.status|Status',
+  'de:reports.catalog.columns.asset_proposals.status|Status',
+  // “Item” is the Portuguese word for a catalog item.
+  'pt-BR:admin.setup.options.capitalizationMatch.item|Item',
 ])
 // Official payment provider names and SFTP keep their shared spelling across locales.
 for (const locale of ['de', 'es', 'fr', 'ja', 'pt-BR', 'zh']) {

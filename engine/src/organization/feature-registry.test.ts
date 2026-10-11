@@ -55,6 +55,27 @@ test("contract costs are opt-in billing subordinate to revenue recognition", () 
   );
 });
 
+test("fixed-asset depth features are opt-in children of Fixed Assets", () => {
+  for (const [key, navModules] of [
+    ["assetComponents", []],
+    ["assetProposals", ["asset-proposals"]],
+    ["constructionInProgress", ["asset-construction"]],
+    ["assetMaintenance", ["asset-maintenance"]],
+    ["assetInsurance", ["asset-insurance"]],
+  ] as const) {
+    const def = FEATURE_BY_KEY.get(key);
+    assert.ok(def, `${key} must be registered before its routes gate on it`);
+    assert.equal(def.defaultEnabled, false);
+    assert.equal(def.category, "finance");
+    assert.equal(def.group, "assets");
+    assert.equal(def.parentKey, "fixedAssets");
+    assert.deepEqual(def.navModules ?? [], navModules);
+    assert.equal(featureEnabled({}, key), false);
+    assert.equal(featureEnabled({ [key]: true }, key), true, "the default-on parent admits an enabled child");
+    assert.equal(featureEnabled({ fixedAssets: false, [key]: true }, key), false, "a disabled parent switches the child off");
+  }
+});
+
 test("allocation binding-moment gates are subordinate to the parent", () => {
   for (const key of ["allocationsAtEntry", "allocationsAtPosting"]) {
     const def = FEATURE_BY_KEY.get(key);

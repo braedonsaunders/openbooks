@@ -30,7 +30,8 @@
     "opening": "Abertura",
     "bookOpening": "Abertura de livro",
     "expenseAmortization": "Apropriação de despesas",
-    "accountMerge": "Mesclagem de contas"
+    "accountMerge": "Mesclagem de contas",
+    "assetCapitalization": "Capitalização de ativo"
   },
   "detail": {
     "notFound": "Lançamento não encontrado",

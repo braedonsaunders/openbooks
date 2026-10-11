@@ -1462,7 +1462,9 @@
     "intercompany_approve": "Aprobar o rechazar ejecuciones de compensación intercompañía",
     "gl_post_book_specific": "Registrar asientos específicos de un libro",
     "amortization_read": "Ver calendarios de amortización e informes",
-    "amortization_manage": "Ejecutar la amortización y modificar calendarios"
+    "amortization_manage": "Ejecutar la amortización y modificar calendarios",
+    "assets_capitalize": "Aceptar propuestas de activos y capitalizar obras en curso",
+    "assets_maintain": "Gestionar planes de mantenimiento de activos y pólizas de seguro"
   },
   "ai": {
     "metaTitle": "Proveedores de IA",
@@ -3722,6 +3724,11 @@
       "segment-value-dependencies": {
         "title": "Dependencias",
         "description": "Valores de este segmento permitidos solo con valores indicados de un segmento de control. Cada fila permite un valor de control; un valor sin filas no tiene restricciones."
+      },
+      "asset-capitalization-rules": {
+        "title": "Reglas de capitalización",
+        "singularTitle": "Regla de capitalización",
+        "description": "Qué líneas de compra contabilizadas se convierten en propuestas de activos: una cuenta, un artículo o una categoría de artículos con un importe mínimo, con fecha de vigencia."
       }
     },
     "fields": {
@@ -4385,7 +4392,10 @@
       "localizedName": "Nombre localizado",
       "valueId": "Valor",
       "controllingSegmentId": "Segmento de control",
-      "allowedValueId": "Permitido con"
+      "allowedValueId": "Permitido con",
+      "matchKind": "Coincide por",
+      "minimumAmount": "Importe mínimo para capitalizar",
+      "assetCategoryId": "Categoría de activo sugerida"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Días entre el tipo utilizable más reciente y el cierre del período a partir de los cuales la revaluación y la consolidación rechazan el tipo. Los tipos de cierre se cuentan desde la fecha del tipo al contado de cierre; los promedio, desde la cotización más reciente promediada. Valor predeterminado sin política: 31 días.",
@@ -5421,6 +5431,11 @@
       "amortizationTermSource": {
         "template": "Períodos de la plantilla",
         "service_dates": "Fechas de servicio de la línea"
+      },
+      "capitalizationMatch": {
+        "account": "Cuenta",
+        "item": "Artículo",
+        "itemCategory": "Categoría de artículos"
       }
     },
     "laborCosting": {
@@ -8308,6 +8323,26 @@
     "segmentDependencies": {
       "title": "Dependencias de segmentos",
       "description": "Permita un valor de segmento solo con valores indicados de otro segmento, como una clase solo con ciertos departamentos; se aplica al guardar y contabilizar documentos."
+    },
+    "assetComponents": {
+      "title": "Activos compuestos",
+      "description": "Agrupe activos componentes bajo un activo principal, cada uno con su propio costo, vida útil y depreciación, consolidados por libro y dados de baja en conjunto."
+    },
+    "assetProposals": {
+      "title": "Propuestas de activos",
+      "description": "Convierta las líneas de compra contabilizadas que cumplen sus reglas de capitalización en propuestas para aceptar como activos, componentes u obras en curso."
+    },
+    "constructionInProgress": {
+      "title": "Obras en curso",
+      "description": "Acumule costos en registros de obras en curso, concílielos con el libro mayor y capitalícelos en activos al finalizar."
+    },
+    "assetMaintenance": {
+      "title": "Mantenimiento de activos",
+      "description": "Programe el mantenimiento por tiempo o por contador, registre el trabajo contra las facturas que lo pagaron y reciba alertas de vencimientos pendientes y atrasados."
+    },
+    "assetInsurance": {
+      "title": "Seguros de activos",
+      "description": "Registre las pólizas de seguro que cubren los activos, reciba recordatorios de renovación y compare el valor asegurado con el valor en libros neto."
     }
   },
   "backupsManager": {

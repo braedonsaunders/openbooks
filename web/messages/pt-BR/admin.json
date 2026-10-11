@@ -1462,7 +1462,9 @@
     "intercompany_approve": "Aprovar ou rejeitar compensações entre empresas",
     "gl_post_book_specific": "Lançar diários específicos de um livro",
     "amortization_read": "Ver cronogramas de apropriação e relatórios",
-    "amortization_manage": "Executar a apropriação e alterar cronogramas"
+    "amortization_manage": "Executar a apropriação e alterar cronogramas",
+    "assets_capitalize": "Aceitar propostas de ativos e capitalizar imobilizado em andamento",
+    "assets_maintain": "Manter planos de manutenção de ativos e apólices de seguro"
   },
   "ai": {
     "metaTitle": "Configurações de IA",
@@ -3797,6 +3799,11 @@
       "segment-value-dependencies": {
         "title": "Dependências",
         "description": "Valores deste segmento permitidos apenas com valores listados de um segmento de controle. Cada linha permite um valor de controle; um valor sem linhas permanece irrestrito."
+      },
+      "asset-capitalization-rules": {
+        "title": "Regras de capitalização",
+        "singularTitle": "Regra de capitalização",
+        "description": "Quais linhas de compra contabilizadas se tornam propostas de ativos: uma conta, item ou categoria de item com valor mínimo, com data de vigência."
       }
     },
     "fields": {
@@ -4460,7 +4467,10 @@
       "localizedName": "Nome localizado",
       "valueId": "Valor",
       "controllingSegmentId": "Segmento de controle",
-      "allowedValueId": "Permitido com"
+      "allowedValueId": "Permitido com",
+      "matchKind": "Corresponde a",
+      "minimumAmount": "Valor mínimo para capitalizar",
+      "assetCategoryId": "Categoria de ativo sugerida"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Dias entre a taxa utilizável mais recente e o fim do período a partir dos quais a reavaliação e a consolidação recusam a taxa. Taxas de fechamento contam a partir da data da taxa à vista de fim de período; taxas médias, a partir da cotação mais recente incluída na média. Padrão sem política: 31 dias.",
@@ -5496,6 +5506,11 @@
       "amortizationTermSource": {
         "template": "Períodos do modelo",
         "service_dates": "Datas de serviço da linha"
+      },
+      "capitalizationMatch": {
+        "account": "Conta",
+        "item": "Item",
+        "itemCategory": "Categoria de item"
       }
     },
     "payroll": {
@@ -8308,6 +8323,26 @@
     "segmentDependencies": {
       "title": "Dependências de segmentos",
       "description": "Permita um valor de segmento apenas com valores listados de outro segmento, como uma classe somente com determinados departamentos; aplicado ao salvar e lançar documentos."
+    },
+    "assetComponents": {
+      "title": "Ativos compostos",
+      "description": "Agrupe ativos componentes sob um ativo principal, cada um com custo, vida útil e depreciação próprios, consolidados por livro e baixados em conjunto."
+    },
+    "assetProposals": {
+      "title": "Propostas de ativos",
+      "description": "Transforme linhas de compra contabilizadas que atendem às suas regras de capitalização em propostas a serem aceitas como ativos, componentes ou imobilizado em andamento."
+    },
+    "constructionInProgress": {
+      "title": "Imobilizado em andamento",
+      "description": "Acumule custos em registros de imobilizado em andamento, concilie-os com o razão geral e capitalize-os em ativos quando concluídos."
+    },
+    "assetMaintenance": {
+      "title": "Manutenção de ativos",
+      "description": "Programe manutenções por tempo ou por medidor, registre os serviços vinculados às contas a pagar que os quitaram e receba alertas de vencimento e atraso."
+    },
+    "assetInsurance": {
+      "title": "Seguro de ativos",
+      "description": "Registre apólices de seguro que cobrem ativos, receba lembretes de renovação e compare o valor segurado com o valor contábil líquido."
     }
   },
   "backupsManager": {

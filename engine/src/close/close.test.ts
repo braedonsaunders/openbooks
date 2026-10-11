@@ -232,6 +232,9 @@ test("an explicitly disabled feature stays off in the close context even when it
   assert.equal(defaultCloseStepEnabled("fx-revalued", ctx), false);
   assert.equal(ctx.salesChannels, true, "an explicit on keeps the commerce proof");
   assert.equal(defaultCloseStepEnabled("commerce-complete", ctx), true);
+  assert.equal(ctx.assetCapitalization, false, "no capitalization review without proposals or construction in progress");
+  assert.equal(defaultCloseStepEnabled("asset-capitalization-reviewed", ctx), false);
+  assert.equal(defaultCloseStepEnabled("asset-capitalization-reviewed", { ...ctx, assetCapitalization: true }), true);
 });
 
 function errorChainMatches(error: unknown, pattern: RegExp): boolean {

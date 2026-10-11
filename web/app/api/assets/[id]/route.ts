@@ -626,6 +626,38 @@ export const PATCH = defineRoute({
     if (basisConflict)
       return NextResponse.json({ error: basisConflict }, { status: 409 });
 
+    // An asset capitalized from posted transactions carries exactly the cost
+    // its reclassification moved into its category's account; cost, category,
+    // account and legal entity change only by reversing that acceptance or
+    // capitalization (the database refuses the same edit).
+    const capitalized = (await db.execute<{ category_id: string; asset_account_id: string | null; category_account_id: string | null }>(sql`
+    select a.category_id, a.asset_account_id, c.asset_account_id as category_account_id
+      from fixed_assets a join asset_categories c on c.org_id = a.org_id and c.id = a.category_id
+     where a.org_id = ${user.orgId} and a.id = ${id} and (
+       exists (select 1 from asset_proposal_allocations al
+                 join asset_proposal_acceptances ac on ac.org_id = al.org_id and ac.id = al.acceptance_id and ac.status = 'posted'
+                where al.org_id = a.org_id and al.asset_id = a.id and al.cip_cost_id is null)
+       or exists (select 1 from asset_cip_capitalization_lines cl
+                 join asset_cip_capitalizations k on k.org_id = cl.org_id and k.id = cl.capitalization_id and k.status = 'posted'
+                where cl.org_id = a.org_id and cl.asset_id = a.id))`)).rows[0];
+    if (
+      capitalized &&
+      ((cost !== undefined && cmp(cost, existing.acquisition_cost) !== 0) ||
+        (categoryId !== undefined && categoryId !== capitalized.category_id) ||
+        (subsidiaryId !== undefined && subsidiaryId !== existing.subsidiary_id) ||
+        (assetAccountId !== undefined &&
+          (assetAccountId ?? capitalized.category_account_id) !==
+            (capitalized.asset_account_id ?? capitalized.category_account_id)))
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "This asset was capitalized from posted transactions. Reverse its proposal acceptance (Fixed Assets → Proposals) or construction-in-progress capitalization to change its cost, category, account or legal entity.",
+        },
+        { status: 409 },
+      );
+    }
+
     if (
       (method !== undefined && method !== existing.depreciation_method) ||
       (depreciationMethodId !== undefined &&
@@ -883,6 +915,24 @@ export const DELETE = defineRoute({
         {
           error:
             "This asset has lifecycle history and cannot be deleted. Reverse the lifecycle event instead.",
+        },
+        { status: 409 },
+      );
+    }
+
+    // A draft created by an accepted proposal or a capitalization carries
+    // cost a posted reclassification moved into its account; it leaves only
+    // by reversing that acceptance or capitalization.
+    const capitalized = await db.execute(sql`
+    select 1 from asset_proposal_allocations where org_id = ${user.orgId} and asset_id = ${id}
+    union all
+    select 1 from asset_cip_capitalization_lines where org_id = ${user.orgId} and asset_id = ${id}
+     limit 1`);
+    if (capitalized.rows[0]) {
+      return NextResponse.json(
+        {
+          error:
+            "This asset was capitalized from posted transactions. Reverse its proposal acceptance (Fixed Assets → Proposals) or construction-in-progress capitalization instead.",
         },
         { status: 409 },
       );

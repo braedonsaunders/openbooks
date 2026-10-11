@@ -1462,7 +1462,9 @@
     "intercompany_approve": "Approve or reject intercompany netting runs",
     "gl_post_book_specific": "Post book-specific journals",
     "amortization_read": "View amortization schedules and reports",
-    "amortization_manage": "Run amortization and change schedules"
+    "amortization_manage": "Run amortization and change schedules",
+    "assets_capitalize": "Accept asset proposals and capitalize construction in progress",
+    "assets_maintain": "Maintain asset maintenance schedules and insurance policies"
   },
   "ai": {
     "metaTitle": "AI providers",
@@ -3797,6 +3799,11 @@
       "segment-value-dependencies": {
         "title": "Dependencies",
         "description": "Values of this segment allowed only with listed values of a controlling segment. Each row allows one controlling value; a value without rows stays unrestricted."
+      },
+      "asset-capitalization-rules": {
+        "title": "Capitalization rules",
+        "singularTitle": "Capitalization rule",
+        "description": "Which posted purchase lines become asset proposals: an account, item or item category with a minimum amount, effective-dated."
       }
     },
     "fields": {
@@ -4460,7 +4467,10 @@
       "localizedName": "Localized name",
       "valueId": "Value",
       "controllingSegmentId": "Controlling segment",
-      "allowedValueId": "Allowed with"
+      "allowedValueId": "Allowed with",
+      "matchKind": "Matches on",
+      "minimumAmount": "Minimum amount to capitalize",
+      "assetCategoryId": "Suggested asset category"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Days between the newest usable rate and the period end beyond which revaluation and consolidation refuse the rate. Closing rates count from the date of the period-end spot rate; average rates from the newest quote averaged. Default when no policy is set: 31 days.",
@@ -5496,6 +5506,11 @@
       "amortizationTermSource": {
         "template": "Template periods",
         "service_dates": "Line service dates"
+      },
+      "capitalizationMatch": {
+        "account": "Account",
+        "item": "Item",
+        "itemCategory": "Item category"
       }
     },
     "payroll": {
@@ -8308,6 +8323,26 @@
     "segmentDependencies": {
       "title": "Segment dependencies",
       "description": "Allow a segment value only with listed values of another segment, such as a class only with certain departments, enforced when documents are saved and posted."
+    },
+    "assetComponents": {
+      "title": "Compound assets",
+      "description": "Group component assets under a parent, each with its own cost, life and depreciation, rolled up per book and disposed together."
+    },
+    "assetProposals": {
+      "title": "Asset proposals",
+      "description": "Turn posted purchase lines that match your capitalization rules into proposals to accept as assets, components or construction in progress."
+    },
+    "constructionInProgress": {
+      "title": "Construction in progress",
+      "description": "Accumulate costs on construction-in-progress records, reconcile them to the GL and capitalize them into assets when complete."
+    },
+    "assetMaintenance": {
+      "title": "Asset maintenance",
+      "description": "Schedule maintenance by time or meter, record work against the bills that paid for it, and get due and overdue alerts."
+    },
+    "assetInsurance": {
+      "title": "Asset insurance",
+      "description": "Record insurance policies covering assets, get renewal reminders and compare insured value with net book value."
     }
   },
   "backupsManager": {

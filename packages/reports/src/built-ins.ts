@@ -14,6 +14,7 @@ import { SALES_REPORT_ENTITIES } from './sales-entities'
 import { BANKING_REPORT_ENTITIES } from './banking-entities'
 import { CONTRACT_COST_REPORT_ENTITIES } from './contract-cost-entities'
 import { AMORTIZATION_REPORT_ENTITIES } from './amortization-entities'
+import { FIXED_ASSET_REPORT_ENTITIES } from './fixed-asset-entities'
 import { BILLING_IMPORT_REPORT_ENTITIES } from './billing-import-entities'
 import { DEMAND_REPORT_ENTITIES } from './demand-entities'
 import { defaultRowsQuery } from './custom-query'
@@ -324,7 +325,111 @@ const SAAS_METRICS_BUILT_IN_REPORTS: BuiltInReportDefinition[] = [
   },
 ]
 
+/** Fixed-asset built-ins: the register, roll-forward and forecast, and the depth workspaces' queues. */
+const fixedAssetEntity = (key: string) => {
+  const entity = FIXED_ASSET_REPORT_ENTITIES.find((candidate) => candidate.key === key)
+  if (!entity) throw new Error(`fixed-asset report entity ${key} is not registered`)
+  return entity
+}
+const FIXED_ASSET_REPORTS: BuiltInReportDefinition[] = [
+  {
+    slug: 'fixed-asset-register',
+    name: 'Fixed asset register by book',
+    description: 'Assets by status, book and category, including construction in progress.',
+    query: defaultRowsQuery(fixedAssetEntity('fixed_asset_register')),
+  },
+  {
+    slug: 'fixed-asset-roll-forward',
+    name: 'Fixed asset roll-forward',
+    description: 'Opening, additions, transfers, disposals and closing asset cost by book.',
+    query: {
+      entity: 'fixed_asset_rollforward',
+      mode: 'summarize',
+      columns: [],
+      breakouts: [{ column: 'book' }, { column: 'category' }, { column: 'base_currency' }],
+      measures: [
+        { fn: 'opening', column: 'cost_opening', key: 'cost_opening', label: 'Opening cost' },
+        { fn: 'sum', column: 'additions', key: 'additions', label: 'Additions' },
+        { fn: 'sum', column: 'transfers', key: 'transfers', label: 'Transfers and partial disposals' },
+        { fn: 'sum', column: 'disposals', key: 'disposals', label: 'Disposals' },
+        { fn: 'sum', column: 'capitalized', key: 'capitalized', label: 'Construction capitalized' },
+        { fn: 'closing', column: 'cost_closing', key: 'cost_closing', label: 'Closing cost' },
+      ],
+      filters: { combinator: 'and', rules: [{ field: 'month', op: 'period_preset', value: 'this_fiscal_year' }] },
+      groupBy: null,
+      limit: 1000,
+    },
+  },
+  {
+    slug: 'depreciation-roll-forward',
+    name: 'Depreciation roll-forward',
+    description: 'Opening, charge, remeasurement, disposals and closing accumulated depreciation by book.',
+    query: {
+      entity: 'fixed_asset_rollforward',
+      mode: 'summarize',
+      columns: [],
+      breakouts: [{ column: 'book' }, { column: 'category' }, { column: 'base_currency' }],
+      measures: [
+        { fn: 'opening', column: 'accumulated_opening', key: 'accumulated_opening', label: 'Opening accumulated depreciation' },
+        { fn: 'sum', column: 'depreciation', key: 'depreciation', label: 'Depreciation' },
+        { fn: 'sum', column: 'remeasurement', key: 'remeasurement', label: 'Impairment and revaluation' },
+        { fn: 'sum', column: 'accumulated_other', key: 'accumulated_other', label: 'Disposals and transfers' },
+        { fn: 'closing', column: 'accumulated_closing', key: 'accumulated_closing', label: 'Closing accumulated depreciation' },
+      ],
+      filters: { combinator: 'and', rules: [{ field: 'month', op: 'period_preset', value: 'this_fiscal_year' }] },
+      groupBy: null,
+      limit: 1000,
+    },
+  },
+  {
+    slug: 'depreciation-forecast',
+    name: 'Depreciation forecast',
+    description: 'Planned depreciation not yet posted, by book and month.',
+    query: {
+      entity: 'fixed_asset_depreciation_forecast',
+      mode: 'summarize',
+      columns: [],
+      breakouts: [{ column: 'book' }, { column: 'period_ends_on', bin: 'month' }, { column: 'base_currency' }],
+      measures: [{ fn: 'sum', column: 'planned', key: 'planned', label: 'Planned depreciation' }],
+      filters: null,
+      groupBy: null,
+      limit: 1000,
+    },
+  },
+  {
+    slug: 'asset-proposals-pending',
+    name: 'Asset proposals pending',
+    description: 'Purchase lines awaiting a capitalization decision.',
+    query: {
+      ...defaultRowsQuery(fixedAssetEntity('asset_proposals')),
+      filters: { combinator: 'and', rules: [{ field: 'status', op: 'eq', value: 'pending' }] },
+    },
+  },
+  {
+    slug: 'asset-maintenance-due',
+    name: 'Asset maintenance due',
+    description: 'Maintenance schedules due or overdue on the report date.',
+    query: {
+      ...defaultRowsQuery(fixedAssetEntity('asset_maintenance_due')),
+      filters: { combinator: 'and', rules: [{ field: 'standing', op: 'in', value: ['due', 'overdue'] }] },
+    },
+  },
+  {
+    slug: 'insured-value-vs-net-book-value',
+    name: 'Insured value vs net book value',
+    description: 'Covered assets with insured value, net book value and the gap between them.',
+    query: defaultRowsQuery(fixedAssetEntity('asset_insured_values')),
+  },
+  {
+    slug: 'construction-in-progress-costs',
+    name: 'Construction-in-progress costs',
+    description: 'GL lines linked to construction in progress, by record and account.',
+    query: defaultRowsQuery(fixedAssetEntity('asset_cip_costs')),
+  },
+]
+
 export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
+  ...FIXED_ASSET_REPORTS,
   ...PORTFOLIO_SUMMARY_REPORTS,
   ...SALES_REPORT_ENTITIES.map(entity => ({ slug: entity.key.replaceAll('_','-'), name: entity.label, description: entity.description, query: defaultRowsQuery(entity) })),
   ...BANKING_REPORT_ENTITIES.map(entity => ({ slug: entity.key.replaceAll('_','-'), name: entity.label, description: entity.description, query: defaultRowsQuery(entity) })),

@@ -49,13 +49,14 @@
       ]
     },
     "assets": {
-      "description": "Fixed-asset lifecycle and book depreciation.",
+      "description": "Fixed-asset lifecycle and book depreciation; compound assets, proposals from purchases, construction in progress, maintenance and insurance.",
       "dependsOn": [
         "journal",
         "money",
         "organization",
         "periods",
-        "platform"
+        "platform",
+        "records"
       ]
     },
     "automations": {
@@ -418,6 +419,7 @@
       "dependsOn": [
         "allocations",
         "amortization",
+        "assets",
         "compliance",
         "contractor-withholding",
         "crm",

@@ -71,7 +71,8 @@
       "allocations": "Zuordnungen",
       "aiGovernance": "KI-Governance",
       "other": "Weitere Berichte",
-      "resourcing": "Ressourcenplanung"
+      "resourcing": "Ressourcenplanung",
+      "fixedAssets": "Anlagevermögen"
     },
     "customStudio": {
       "title": "Benutzerdefinierter Berichtsgenerator",
@@ -1152,6 +1153,34 @@
       "prepaid_amortization_reconciliation": {
         "label": "Abstimmung der aktiven Rechnungsabgrenzung",
         "description": "Bewegungen der Abgrenzungskonten im Hauptbuch neben den Plänen, die sie erklären; bis zu einem Datum summiert ist die Differenz null, wenn beide übereinstimmen."
+      },
+      "fixed_asset_register": {
+        "label": "Anlagenregister je Buch",
+        "description": "Jede Anlage in jedem aktiven Buch — einschließlich Anlagen im Bau und Komponentenanlagen — mit Status, übergeordneter Anlage, Anschaffungskosten, kumulierter Abschreibung und aktuellem Buchwert."
+      },
+      "fixed_asset_rollforward": {
+        "label": "Anlagenspiegel",
+        "description": "Anschaffungskosten und kumulierte Abschreibung zum Monatsende je Anlage und Buch: Anfangsstand, Zugänge, Umbuchungen, Abgänge, aktivierte Anlagen im Bau, Abschreibung, Neubewertung und Endstand. Fassen Sie nach Buch und Kategorie zusammen, um den Anlagenspiegel zu erhalten."
+      },
+      "fixed_asset_depreciation_forecast": {
+        "label": "Abschreibungsvorschau",
+        "description": "Geplante, noch nicht gebuchte Abschreibung je Anlage, Buch und Periode aus dem aktuellen Plan jeder Anlage."
+      },
+      "asset_proposals": {
+        "label": "Anlagenvorschläge",
+        "description": "Zur Aktivierung vorgeschlagene gebuchte Einkaufszeilen mit Quelle, Lieferant, Konto, Regel, Betrag und Entscheidung."
+      },
+      "asset_maintenance_due": {
+        "label": "Fällige Anlagenwartungen",
+        "description": "Aktive Wartungspläne mit nächstem Fälligkeitsdatum und Zählerwert, dem letzten Zählerstand und der Angabe, ob jeder Plan zum Berichtsdatum geplant, fällig oder überfällig ist."
+      },
+      "asset_insured_values": {
+        "label": "Versicherungssumme im Vergleich zum Nettobuchwert",
+        "description": "Jede Anlage, die durch eine zum Berichtsdatum gültige Police versichert ist, mit Versicherungssumme und Wiederbeschaffungswert im Vergleich zu ihrem Buchwert im Primärbuch und der Differenz."
+      },
+      "asset_cip_costs": {
+        "label": "Kosten für Anlagen im Bau",
+        "description": "Jede Hauptbuchzeile, die mit einem Datensatz für Anlagen im Bau verknüpft ist — Eingangsrechnungen, Journale und Projektkosten — mit Datensatz, Konto, Projekt und Betrag, zur Abstimmung des Nebenbuchs mit den Konten für Anlagen im Bau."
       }
     },
     "columns": {
@@ -2790,6 +2819,119 @@
         "difference": "Differenz",
         "account_id": "Konto-ID",
         "book_id": "Buch-ID"
+      },
+      "fixed_asset_register": {
+        "book_id": "Buchschlüssel",
+        "book": "Buch",
+        "asset_number": "Anlagennummer",
+        "name": "Bezeichnung",
+        "status": "Status",
+        "category": "Kategorie",
+        "parent_asset": "Übergeordnete Anlage",
+        "subsidiary": "Rechtsträger",
+        "base_currency": "Basiswährung",
+        "acquired_on": "Angeschafft am",
+        "in_service_on": "In Betrieb seit",
+        "cost": "Anschaffungskosten",
+        "accumulated_depreciation": "Kumulierte Abschreibung",
+        "carrying_value": "Buchwert",
+        "id": "Anlagenschlüssel"
+      },
+      "fixed_asset_rollforward": {
+        "book_id": "Buchschlüssel",
+        "book": "Buch",
+        "month": "Monat",
+        "asset_number": "Anlagennummer",
+        "name": "Bezeichnung",
+        "status": "Status",
+        "category": "Kategorie",
+        "subsidiary": "Rechtsträger",
+        "base_currency": "Basiswährung",
+        "cost_opening": "Anschaffungskosten Anfangsstand",
+        "additions": "Zugänge",
+        "transfers": "Umbuchungen und Teilabgänge",
+        "disposals": "Abgänge",
+        "capitalized": "Aktivierte Anlagen im Bau",
+        "cost_closing": "Anschaffungskosten Endstand",
+        "accumulated_opening": "Kumulierte Abschreibung Anfangsstand",
+        "depreciation": "Abschreibung",
+        "remeasurement": "Wertminderung und Neubewertung",
+        "accumulated_other": "Kumulierte Abschreibung auf Zugänge, Umbuchungen und Abgänge",
+        "accumulated_closing": "Kumulierte Abschreibung Endstand",
+        "asset_id": "Anlagenschlüssel"
+      },
+      "fixed_asset_depreciation_forecast": {
+        "book_id": "Buchschlüssel",
+        "book": "Buch",
+        "period": "Periode",
+        "period_ends_on": "Periodenende",
+        "asset_number": "Anlagennummer",
+        "name": "Bezeichnung",
+        "category": "Kategorie",
+        "subsidiary": "Rechtsträger",
+        "base_currency": "Basiswährung",
+        "posted": "Gebucht",
+        "planned": "Geplante Abschreibung",
+        "asset_id": "Anlagenschlüssel"
+      },
+      "asset_proposals": {
+        "posting_date": "Gebucht am",
+        "source": "Quelle",
+        "description": "Beschreibung",
+        "vendor": "Lieferant",
+        "account": "Konto",
+        "rule": "Regel",
+        "status": "Status",
+        "subsidiary": "Rechtsträger",
+        "base_currency": "Basiswährung",
+        "amount": "Betrag",
+        "resolution_reason": "Entscheidungsnotiz",
+        "id": "Vorschlagsschlüssel"
+      },
+      "asset_maintenance_due": {
+        "asset_number": "Anlagennummer",
+        "asset": "Anlage",
+        "task": "Aufgabe",
+        "vendor": "Lieferant",
+        "next_due_on": "Nächste Fälligkeit am",
+        "next_due_usage": "Nächste Fälligkeit bei Zählerstand",
+        "current_usage": "Letzter Zählerstand",
+        "usage_unit": "Zählereinheit",
+        "standing": "Fälligkeitsstand",
+        "is_active": "Aktiv",
+        "subsidiary": "Rechtsträger",
+        "base_currency": "Basiswährung",
+        "estimated_cost": "Geschätzte Kosten",
+        "id": "Planschlüssel"
+      },
+      "asset_insured_values": {
+        "policy_number": "Police",
+        "insurer": "Versicherer",
+        "coverage_ends_on": "Versicherungsende",
+        "asset_number": "Anlagennummer",
+        "asset": "Anlage",
+        "subsidiary": "Rechtsträger",
+        "base_currency": "Basiswährung",
+        "insured_value": "Versicherungssumme",
+        "replacement_value": "Wiederbeschaffungswert",
+        "net_book_value": "Nettobuchwert",
+        "gap": "Versicherungssumme abzüglich Nettobuchwert",
+        "asset_id": "Anlagenschlüssel"
+      },
+      "asset_cip_costs": {
+        "cip_number": "Anlage im Bau",
+        "cip_name": "Bezeichnung der Anlage im Bau",
+        "cip_status": "Datensatzstatus",
+        "account": "Konto",
+        "entry_number": "Buchung Nr.",
+        "posting_date": "Gebucht am",
+        "project": "Projekt",
+        "memo": "Notiz",
+        "link_status": "Verknüpfungsstatus",
+        "subsidiary": "Rechtsträger",
+        "base_currency": "Basiswährung",
+        "amount": "Betrag",
+        "id": "Kostenschlüssel"
       }
     },
     "enumValues": {
@@ -2916,7 +3058,15 @@
       "insufficient_funds": "Unzureichende Deckung",
       "needs_authentication": "Authentifizierung erforderlich",
       "primary": "Primäre Methode",
-      "backup": "Ersatzmethode"
+      "backup": "Ersatzmethode",
+      "construction": "Anlage im Bau",
+      "capitalized": "Aktiviert",
+      "accepted": "Übernommen",
+      "scheduled": "Geplant",
+      "due": "Fällig",
+      "overdue": "Überfällig",
+      "linked": "Verknüpft",
+      "unlinked": "Nicht verknüpft"
     }
   },
   "operators": {
@@ -3225,7 +3375,8 @@
       "opening": "Eröffnung",
       "book_opening": "Eröffnungssalden des Buchs",
       "expense_amortization": "Aufwandsabgrenzung",
-      "account_merge": "Kontenzusammenführung"
+      "account_merge": "Kontenzusammenführung",
+      "asset_capitalization": "Anlagenaktivierung"
     },
     "columns": {
       "detail": "Geschäftspartner / Notiz"

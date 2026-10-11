@@ -30,7 +30,8 @@
     "opening": "Eröffnung",
     "bookOpening": "Buch-Eröffnung",
     "expenseAmortization": "Aufwandsabgrenzung",
-    "accountMerge": "Kontenzusammenführung"
+    "accountMerge": "Kontenzusammenführung",
+    "assetCapitalization": "Anlagenaktivierung"
   },
   "detail": {
     "notFound": "Buchung nicht gefunden",

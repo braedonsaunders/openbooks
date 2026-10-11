@@ -458,6 +458,10 @@
     "prepaid-amortized": {
       "title": "Aktive Rechnungsabgrenzung auflösen",
       "description": "Jede bis zum Periodenende fällige Auflösungsperiode aktiver Abgrenzungspläne buchen."
+    },
+    "asset-capitalization-reviewed": {
+      "title": "Aktivierung von Anlagen prüfen",
+      "description": "Offene Anlagenvorschläge entscheiden und Anlagen im Bau mit ihren Hauptbuchkonten abstimmen."
     }
   },
   "setup": {

@@ -1462,7 +1462,9 @@
     "intercompany_approve": "Konzerninterne Verrechnungsläufe genehmigen oder ablehnen",
     "gl_post_book_specific": "Buchspezifische Journale buchen",
     "amortization_read": "Abgrenzungspläne und Berichte anzeigen",
-    "amortization_manage": "Auflösung ausführen und Pläne ändern"
+    "amortization_manage": "Auflösung ausführen und Pläne ändern",
+    "assets_capitalize": "Anlagenvorschläge übernehmen und Anlagen im Bau aktivieren",
+    "assets_maintain": "Wartungspläne und Versicherungspolicen für Anlagen pflegen"
   },
   "ai": {
     "metaTitle": "KI-Einstellungen",
@@ -3850,6 +3852,11 @@
       "segment-value-dependencies": {
         "title": "Abhängigkeiten",
         "description": "Werte dieses Segments, die nur mit bestimmten Werten eines steuernden Segments zulässig sind. Jede Zeile erlaubt einen steuernden Wert; ein Wert ohne Zeilen bleibt uneingeschränkt."
+      },
+      "asset-capitalization-rules": {
+        "title": "Aktivierungsregeln",
+        "singularTitle": "Aktivierungsregel",
+        "description": "Welche gebuchten Einkaufszeilen zu Anlagenvorschlägen werden: ein Konto, Artikel oder eine Artikelkategorie mit einem Mindestbetrag, mit Gültigkeitsdatum."
       }
     },
     "fields": {
@@ -4513,7 +4520,10 @@
       "localizedName": "Lokalisierte Bezeichnung",
       "valueId": "Wert",
       "controllingSegmentId": "Steuerndes Segment",
-      "allowedValueId": "Zulässig mit"
+      "allowedValueId": "Zulässig mit",
+      "matchKind": "Abgleich nach",
+      "minimumAmount": "Mindestbetrag für die Aktivierung",
+      "assetCategoryId": "Vorgeschlagene Anlagenkategorie"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Tage zwischen dem neuesten verwendbaren Kurs und dem Periodenende, ab denen Bewertung und Konsolidierung den Kurs ablehnen. Stichtagskurse zählen ab dem Datum des Kassakurses zum Periodenende, Durchschnittskurse ab der neuesten einbezogenen Notierung. Standard ohne Richtlinie: 31 Tage.",
@@ -5549,6 +5559,11 @@
       "amortizationTermSource": {
         "template": "Vorlagenperioden",
         "service_dates": "Leistungsdaten der Position"
+      },
+      "capitalizationMatch": {
+        "account": "Konto",
+        "item": "Artikel",
+        "itemCategory": "Artikelkategorie"
       }
     },
     "bankFeeds": {
@@ -8308,6 +8323,26 @@
     "segmentDependencies": {
       "title": "Segmentabhängigkeiten",
       "description": "Einen Segmentwert nur zusammen mit bestimmten Werten eines anderen Segments zulassen, etwa eine Klasse nur mit bestimmten Abteilungen; geprüft beim Speichern und Buchen von Belegen."
+    },
+    "assetComponents": {
+      "title": "Zusammengesetzte Anlagen",
+      "description": "Fassen Sie Komponentenanlagen unter einer übergeordneten Anlage zusammen, jede mit eigenen Anschaffungskosten, eigener Nutzungsdauer und Abschreibung, verdichtet je Buch und gemeinsam abgegangen."
+    },
+    "assetProposals": {
+      "title": "Anlagenvorschläge",
+      "description": "Machen Sie aus gebuchten Einkaufszeilen, die Ihren Aktivierungsregeln entsprechen, Vorschläge zur Übernahme als Anlagen, Komponenten oder Anlagen im Bau."
+    },
+    "constructionInProgress": {
+      "title": "Anlagen im Bau",
+      "description": "Sammeln Sie Kosten auf Datensätzen für Anlagen im Bau, stimmen Sie sie mit dem Hauptbuch ab und aktivieren Sie sie nach Fertigstellung in Anlagen."
+    },
+    "assetMaintenance": {
+      "title": "Anlagenwartung",
+      "description": "Planen Sie Wartungen nach Zeit oder Zählerstand, erfassen Sie Arbeiten zu den Eingangsrechnungen, mit denen sie bezahlt wurden, und erhalten Sie Hinweise zu fälligen und überfälligen Wartungen."
+    },
+    "assetInsurance": {
+      "title": "Anlagenversicherung",
+      "description": "Erfassen Sie Versicherungspolicen für Anlagen, erhalten Sie Verlängerungserinnerungen und vergleichen Sie die Versicherungssumme mit dem Nettobuchwert."
     }
   },
   "extensions": {

@@ -1462,7 +1462,9 @@
     "intercompany_approve": "法人間相殺処理を承認または却下",
     "gl_post_book_specific": "帳簿固有の仕訳を計上",
     "amortization_read": "配分スケジュールとレポートを表示",
-    "amortization_manage": "配分を実行しスケジュールを変更"
+    "amortization_manage": "配分を実行しスケジュールを変更",
+    "assets_capitalize": "資産計上候補の承認と建設仮勘定の資産計上",
+    "assets_maintain": "資産の保守スケジュールと保険契約の管理"
   },
   "ai": {
     "metaTitle": "AI設定",
@@ -3850,6 +3852,11 @@
       "segment-value-dependencies": {
         "title": "依存関係",
         "description": "制御セグメントの指定値とのみ使用できるこのセグメントの値。各行で1つの制御値を許可し、行のない値は制限されません。"
+      },
+      "asset-capitalization-rules": {
+        "title": "資産計上ルール",
+        "singularTitle": "資産計上ルール",
+        "description": "どの転記済み購買明細を資産計上候補とするかを定めます。勘定、品目、または品目カテゴリと最低金額を、適用日付きで指定します。"
       }
     },
     "fields": {
@@ -4513,7 +4520,10 @@
       "localizedName": "ローカライズ名称",
       "valueId": "値",
       "controllingSegmentId": "制御セグメント",
-      "allowedValueId": "許可する組み合わせ"
+      "allowedValueId": "許可する組み合わせ",
+      "matchKind": "一致条件",
+      "minimumAmount": "資産計上の最低金額",
+      "assetCategoryId": "推奨資産カテゴリ"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "使用可能な最新レートから期末までの日数がこれを超えると、再評価と連結はそのレートを拒否します。期末レートは期末スポットレートの日付から、平均レートは平均に含まれる最新の相場の日付から数えます。ポリシー未設定時の既定値: 31日。",
@@ -5549,6 +5559,11 @@
       "amortizationTermSource": {
         "template": "テンプレートの期間",
         "service_dates": "明細の役務日付"
+      },
+      "capitalizationMatch": {
+        "account": "勘定",
+        "item": "品目",
+        "itemCategory": "品目カテゴリ"
       }
     },
     "invoicing": {
@@ -8308,6 +8323,26 @@
     "segmentDependencies": {
       "title": "セグメントの依存関係",
       "description": "あるセグメント値を別のセグメントの指定値とのみ組み合わせられるようにします（例：特定の部門でのみ使えるクラス）。伝票の保存時と転記時に適用されます。"
+    },
+    "assetComponents": {
+      "title": "複合資産",
+      "description": "構成資産を親資産の下にまとめます。各構成資産は独自の取得原価、耐用年数、減価償却を持ち、帳簿ごとに集計され、一括で除却されます。"
+    },
+    "assetProposals": {
+      "title": "資産計上候補",
+      "description": "資産計上ルールに一致する転記済みの購買明細を候補に変換し、資産、構成資産、または建設仮勘定として承認できるようにします。"
+    },
+    "constructionInProgress": {
+      "title": "建設仮勘定",
+      "description": "建設仮勘定レコードに原価を累積し、総勘定元帳と照合して、完成時に資産へ振り替えて資産計上します。"
+    },
+    "assetMaintenance": {
+      "title": "資産保守",
+      "description": "期間またはメーターに基づいて保守を計画し、支払いに充てた請求書に対して作業を記録し、期日到来・期日超過のアラートを受け取ります。"
+    },
+    "assetInsurance": {
+      "title": "資産保険",
+      "description": "資産を対象とする保険契約を記録し、更新リマインダーを受け取り、保険価額と正味帳簿価額を比較します。"
     }
   },
   "extensions": {

@@ -201,6 +201,11 @@ export const PERMISSION_CATALOGUE = [
   // Fixed assets & depreciation
   "assets.read",
   "assets.manage",
+  // Turning posted purchases and construction in progress into assets: accept
+  // or reverse proposals and capitalize CIP, each of which posts a reclass.
+  "assets.capitalize",
+  // Maintenance schedules, work records, meter readings and insurance policies.
+  "assets.maintain",
   // Time tracking & timesheets. time.self is the timekeeper's own time: list,
   // read, enter and submit the weeks of the person linked to the login and
   // nobody else's (enforced where every timesheet command locks its week).
@@ -706,6 +711,8 @@ export const PERMISSION_GROUPS: {
     permissions: [
       { key: "assets.read", labelKey: permissionLabelKey("assets.read") },
       { key: "assets.manage", labelKey: permissionLabelKey("assets.manage") },
+      { key: "assets.capitalize", labelKey: permissionLabelKey("assets.capitalize") },
+      { key: "assets.maintain", labelKey: permissionLabelKey("assets.maintain") },
     ],
   },
   {
@@ -1194,6 +1201,8 @@ export const BUILT_IN_ROLES: Record<
       "compliance.file",
       "assets.read",
       "assets.manage",
+      "assets.capitalize",
+      "assets.maintain",
       "time.read",
       "time.manage",
       "time.approve",
@@ -1319,6 +1328,8 @@ export const BUILT_IN_ROLES: Record<
       "compliance.manage",
       "assets.read",
       "assets.manage",
+      "assets.capitalize",
+      "assets.maintain",
       "time.read",
       "time.manage",
       // HR-20 begin: field time — self clock plus crew entry and kiosks.

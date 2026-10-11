@@ -458,6 +458,10 @@
     "prepaid-amortized": {
       "title": "Étaler les charges constatées d’avance",
       "description": "Comptabiliser chaque période d’étalement des échéanciers actifs qui se termine avant la fin de la période."
+    },
+    "asset-capitalization-reviewed": {
+      "title": "Contrôler l’immobilisation des actifs",
+      "description": "Statuer sur les propositions d’immobilisation en attente et rapprocher les immobilisations en cours de leurs comptes du grand livre."
     }
   },
   "setup": {

@@ -1684,6 +1684,26 @@ export async function completeRequestedDocumentVoid(
           );
         }
 
+        // Capitalized cost depends on this posting: an accepted asset proposal
+        // or a construction-in-progress link must be reversed first. Pending
+        // proposals need nothing here; the reversal voids them.
+        const capitalized = (await tx.execute<{ accepted: boolean; linked: boolean }>(sql`
+          select exists (select 1 from asset_proposals p
+                          where p.org_id = ${orgId} and p.source_entry_id = ${entryId} and p.status = 'accepted') as accepted,
+                 exists (select 1 from asset_cip_costs c
+                          where c.org_id = ${orgId} and c.source_entry_id = ${entryId} and c.status = 'linked') as linked
+        `)).rows[0];
+        if (capitalized?.accepted) {
+          throw new DocumentVoidError(
+            "this transaction was capitalized through an accepted fixed-asset proposal — reverse the acceptance from Fixed Assets → Proposals (Reverse acceptance), then void the transaction",
+          );
+        }
+        if (capitalized?.linked) {
+          throw new DocumentVoidError(
+            "this transaction carries a cost linked to construction in progress — unlink the cost from Fixed Assets → Construction in progress, then void the transaction",
+          );
+        }
+
         const entryResult = (await tx.execute<Record<string, unknown>>(sql`
           select * from journal_entries
            where id = ${entryId} and org_id = ${orgId}

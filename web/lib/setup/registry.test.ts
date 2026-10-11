@@ -133,7 +133,7 @@ test('re-homed entities stay in the CRUD registry but leave the setup rail', () 
   // effective-dated cycle-count policies. Everything rehomed stays off the rail.
   assert.deepEqual(byGroup.get('inventory')?.map((entity) => entity.key), ['restocking-fee-policies', 'inventory-count-policies', 'purchase-over-receipt-tolerances'])
   assert.deepEqual(byGroup.get('sales')?.map((entity) => entity.key), ['promotions'])
-  assert.deepEqual(byGroup.get('assets')?.map((entity) => entity.key), ['asset-categories'])
+  assert.deepEqual(byGroup.get('assets')?.map((entity) => entity.key), ['asset-categories', 'asset-capitalization-rules'])
 })
 
 test('labor pricing setup entities follow the Projects parent gate', () => {

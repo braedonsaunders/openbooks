@@ -8,6 +8,8 @@ export type DefaultCloseFeatureContext = {
   advancedClose: boolean;
   banking: boolean;
   fixedAssets: boolean;
+  /** Asset proposals or construction in progress: capitalization to review at close. */
+  assetCapitalization: boolean;
   revenueRecognition: boolean;
   multiCurrency: boolean;
   multiSubsidiary: boolean;
@@ -43,6 +45,7 @@ export async function defaultCloseFeatureContext(
     advancedClose: featureEnabled(features, "flows") && features.advancedClose === true,
     banking: featureEnabled(features, "banking"),
     fixedAssets: featureEnabled(features, "fixedAssets"),
+    assetCapitalization: featureEnabled(features, "assetProposals") || featureEnabled(features, "constructionInProgress"),
     revenueRecognition: featureEnabled(features, "revenueRecognition"),
     multiCurrency: await dataDependentFeatureDefault(executor, orgId, "multiCurrency", features),
     multiSubsidiary: await dataDependentFeatureDefault(executor, orgId, "multiSubsidiary", features),
@@ -65,6 +68,7 @@ export function defaultCloseStepEnabled(
   if (key === "bank-reconciled") return features.banking;
   if (key === "commerce-complete") return features.salesChannels;
   if (key === "depreciation-posted") return features.fixedAssets;
+  if (key === "asset-capitalization-reviewed") return features.assetCapitalization;
   if (key === "recognition-posted") return features.revenueRecognition;
   if (key === "unbilled-revenue-accrued") return features.unbilledRevenueAccrual;
   if (key === "period-end-journals") return features.periodEndJournals;

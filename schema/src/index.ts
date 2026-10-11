@@ -126,3 +126,5 @@ export * from "./intercompany";
 export * from "./period-end-journals";
 export * from "./multibook";
 export * from "./expense-amortization";
+export * from "./asset-capitalization";
+export * from "./asset-maintenance";

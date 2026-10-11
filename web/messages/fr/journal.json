@@ -30,7 +30,8 @@
     "opening": "Ouverture",
     "bookOpening": "Ouverture de livre",
     "expenseAmortization": "Étalement des charges",
-    "accountMerge": "Fusion de comptes"
+    "accountMerge": "Fusion de comptes",
+    "assetCapitalization": "Immobilisation d’actifs"
   },
   "detail": {
     "notFound": "Écriture introuvable",

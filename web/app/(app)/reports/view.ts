@@ -155,7 +155,9 @@ export async function reportsHubFor(
   const hrmDefinitions = hrmEnabled
     ? builtInDefinitions.filter((row) => entityCategory(row) === 'hrm')
     : []
+  const fixedAssetDefinitions = builtInDefinitions.filter((row) => entityCategory(row) === 'fixed_assets')
   const classifiedBuiltInIds = new Set([
+    ...fixedAssetDefinitions,
     ...receivablesPayablesDefinitions,
     ...allocationDefinitions,
     ...ledgerDefinitions,
@@ -346,6 +348,12 @@ export async function reportsHubFor(
       label: t('hub.groups.hrm'),
       accent: 'teal',
       cards: definitionCards(hrmDefinitions, 'Users', t('hub.cards.hrmDescription')),
+    } satisfies HubGroup] : []),
+    ...(fixedAssetDefinitions.length > 0 ? [{
+      key: 'fixedAssets',
+      label: t('hub.groups.fixedAssets'),
+      accent: 'slate',
+      cards: definitionCards(fixedAssetDefinitions, 'Landmark', t('hub.cards.builtInDescription')),
     } satisfies HubGroup] : []),
     ...(otherBuiltInDefinitions.length > 0 ? [{
       key: 'otherBuiltIns',

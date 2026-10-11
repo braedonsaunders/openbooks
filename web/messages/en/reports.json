@@ -71,7 +71,8 @@
       "allocations": "Allocations",
       "aiGovernance": "AI governance",
       "other": "Other reports",
-      "resourcing": "Resourcing"
+      "resourcing": "Resourcing",
+      "fixedAssets": "Fixed assets"
     },
     "customStudio": {
       "title": "Custom report builder",
@@ -1152,6 +1153,34 @@
       "prepaid_amortization_reconciliation": {
         "label": "Prepaid expense reconciliation",
         "description": "Deferral account movements in the general ledger beside the schedules that account for them; summed through a date, the difference is zero when they agree."
+      },
+      "fixed_asset_register": {
+        "label": "Fixed asset register by book",
+        "description": "Every fixed asset in every active book — including construction in progress and component assets — with status, parent, cost, accumulated depreciation and carrying value today."
+      },
+      "fixed_asset_rollforward": {
+        "label": "Fixed asset roll-forward",
+        "description": "Month-end cost and accumulated depreciation per asset and book: opening, additions, transfers, disposals, construction capitalized, depreciation, remeasurement and closing. Summarize by book and category for the roll-forward."
+      },
+      "fixed_asset_depreciation_forecast": {
+        "label": "Depreciation forecast",
+        "description": "Planned depreciation not yet posted, per asset, book and period, from each asset's current schedule."
+      },
+      "asset_proposals": {
+        "label": "Asset proposals",
+        "description": "Posted purchase lines proposed for capitalization, with their source, vendor, account, rule, amount and decision."
+      },
+      "asset_maintenance_due": {
+        "label": "Asset maintenance due",
+        "description": "Active maintenance schedules with their next due date and meter value, the latest reading, and whether each is scheduled, due or overdue on the report date."
+      },
+      "asset_insured_values": {
+        "label": "Insured value against net book value",
+        "description": "Every asset covered by a policy in force on the report date, with its insured and replacement value against its primary-book carrying value and the gap."
+      },
+      "asset_cip_costs": {
+        "label": "Construction-in-progress costs",
+        "description": "Every GL line linked to a construction-in-progress record — bills, journals and project costs — with its record, account, project and amount, for tying the subledger to the CIP accounts."
       }
     },
     "columns": {
@@ -2790,6 +2819,119 @@
         "difference": "Difference",
         "account_id": "Account (id)",
         "book_id": "Book (id)"
+      },
+      "fixed_asset_register": {
+        "book_id": "Book key",
+        "book": "Book",
+        "asset_number": "Asset number",
+        "name": "Name",
+        "status": "Status",
+        "category": "Category",
+        "parent_asset": "Parent asset",
+        "subsidiary": "Legal entity",
+        "base_currency": "Base currency",
+        "acquired_on": "Acquired on",
+        "in_service_on": "In service on",
+        "cost": "Cost",
+        "accumulated_depreciation": "Accumulated depreciation",
+        "carrying_value": "Carrying value",
+        "id": "Asset key"
+      },
+      "fixed_asset_rollforward": {
+        "book_id": "Book key",
+        "book": "Book",
+        "month": "Month",
+        "asset_number": "Asset number",
+        "name": "Name",
+        "status": "Status",
+        "category": "Category",
+        "subsidiary": "Legal entity",
+        "base_currency": "Base currency",
+        "cost_opening": "Opening cost",
+        "additions": "Additions",
+        "transfers": "Transfers and partial disposals",
+        "disposals": "Disposals",
+        "capitalized": "Construction capitalized",
+        "cost_closing": "Closing cost",
+        "accumulated_opening": "Opening accumulated depreciation",
+        "depreciation": "Depreciation",
+        "remeasurement": "Impairment and revaluation",
+        "accumulated_other": "Accumulated depreciation on additions, transfers and disposals",
+        "accumulated_closing": "Closing accumulated depreciation",
+        "asset_id": "Asset key"
+      },
+      "fixed_asset_depreciation_forecast": {
+        "book_id": "Book key",
+        "book": "Book",
+        "period": "Period",
+        "period_ends_on": "Period ends",
+        "asset_number": "Asset number",
+        "name": "Name",
+        "category": "Category",
+        "subsidiary": "Legal entity",
+        "base_currency": "Base currency",
+        "posted": "Posted",
+        "planned": "Planned depreciation",
+        "asset_id": "Asset key"
+      },
+      "asset_proposals": {
+        "posting_date": "Posted on",
+        "source": "Source",
+        "description": "Description",
+        "vendor": "Vendor",
+        "account": "Account",
+        "rule": "Rule",
+        "status": "Status",
+        "subsidiary": "Legal entity",
+        "base_currency": "Base currency",
+        "amount": "Amount",
+        "resolution_reason": "Decision note",
+        "id": "Proposal key"
+      },
+      "asset_maintenance_due": {
+        "asset_number": "Asset number",
+        "asset": "Asset",
+        "task": "Task",
+        "vendor": "Vendor",
+        "next_due_on": "Next due on",
+        "next_due_usage": "Next due at meter",
+        "current_usage": "Latest meter reading",
+        "usage_unit": "Meter unit",
+        "standing": "Standing",
+        "is_active": "Active",
+        "subsidiary": "Legal entity",
+        "base_currency": "Base currency",
+        "estimated_cost": "Estimated cost",
+        "id": "Schedule key"
+      },
+      "asset_insured_values": {
+        "policy_number": "Policy",
+        "insurer": "Insurer",
+        "coverage_ends_on": "Coverage ends",
+        "asset_number": "Asset number",
+        "asset": "Asset",
+        "subsidiary": "Legal entity",
+        "base_currency": "Base currency",
+        "insured_value": "Insured value",
+        "replacement_value": "Replacement value",
+        "net_book_value": "Net book value",
+        "gap": "Insured less net book value",
+        "asset_id": "Asset key"
+      },
+      "asset_cip_costs": {
+        "cip_number": "Construction record",
+        "cip_name": "Construction name",
+        "cip_status": "Record status",
+        "account": "Account",
+        "entry_number": "Journal",
+        "posting_date": "Posted on",
+        "project": "Project",
+        "memo": "Memo",
+        "link_status": "Link status",
+        "subsidiary": "Legal entity",
+        "base_currency": "Base currency",
+        "amount": "Amount",
+        "id": "Cost key"
       }
     },
     "enumValues": {
@@ -2916,7 +3058,15 @@
       "insufficient_funds": "Insufficient funds",
       "needs_authentication": "Needs authentication",
       "primary": "Primary method",
-      "backup": "Backup method"
+      "backup": "Backup method",
+      "construction": "Construction in progress",
+      "capitalized": "Capitalized",
+      "accepted": "Accepted",
+      "scheduled": "Scheduled",
+      "due": "Due",
+      "overdue": "Overdue",
+      "linked": "Linked",
+      "unlinked": "Unlinked"
     }
   },
   "operators": {
@@ -3225,7 +3375,8 @@
       "opening": "Opening",
       "book_opening": "Book opening balances",
       "expense_amortization": "Expense amortization",
-      "account_merge": "Account merge"
+      "account_merge": "Account merge",
+      "asset_capitalization": "Asset capitalization"
     },
     "columns": {
       "detail": "Party / memo"

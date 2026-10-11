@@ -23,6 +23,7 @@ import { RESOURCING_REPORT_ENTITIES } from './resourcing-entities'
 import { BENEFITS_REPORT_ENTITIES } from './benefits-entities'
 import { SHIPPING_REPORT_ENTITIES } from './shipping-entities'
 import { STORED_VALUE_REPORT_ENTITIES } from './stored-value-entities'
+import { FIXED_ASSET_REPORT_ENTITIES } from './fixed-asset-entities'
 import { RECOVERY_REPORT_ENTITIES } from './recovery-entities'
 import { BANKING_REPORT_ENTITIES } from './banking-entities'
 
@@ -31,6 +32,7 @@ export { HRM_REPORT_ENTITIES } from './hrm-entities'
 export { CONTRACT_COST_REPORT_ENTITIES } from './contract-cost-entities'
 export { AMORTIZATION_REPORT_ENTITIES } from './amortization-entities'
 export { STORED_VALUE_REPORT_ENTITIES } from './stored-value-entities'
+export { FIXED_ASSET_REPORT_ENTITIES } from './fixed-asset-entities'
 export { RECOVERY_REPORT_ENTITIES } from './recovery-entities'
 
 export type ReportColumnKind =
@@ -1620,6 +1622,9 @@ export const REPORT_ENTITIES: ReportEntity[] = [
   // orders they shipped, without growing this file.
   ...SHIPPING_REPORT_ENTITIES,
   ...STORED_VALUE_REPORT_ENTITIES,
+  // Fixed-asset subledger: register, roll-forward, depreciation forecast,
+  // proposals, maintenance, insurance and construction in progress.
+  ...FIXED_ASSET_REPORT_ENTITIES,
   ...RECOVERY_REPORT_ENTITIES,
   ...BANKING_REPORT_ENTITIES,
   ...DEMAND_REPORT_ENTITIES,

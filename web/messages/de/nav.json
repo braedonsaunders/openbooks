@@ -168,7 +168,11 @@
     "close-reopen-requests": "Wiedereröffnungsanträge",
     "intercompany": "Konzernverrechnung",
     "intercompany-netting": "Konzerninterne Verrechnung",
-    "amortization": "Abgrenzungen"
+    "amortization": "Abgrenzungen",
+    "asset-proposals": "Anlagenvorschläge",
+    "asset-construction": "Anlagen im Bau",
+    "asset-maintenance": "Anlagenwartung",
+    "asset-insurance": "Anlagenversicherung"
   },
   "groups": {
     "manufacturing": "Fertigung",

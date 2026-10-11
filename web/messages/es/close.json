@@ -458,6 +458,10 @@
     "prepaid-amortized": {
       "title": "Amortizar gastos anticipados",
       "description": "Contabilizar cada período de amortización de los calendarios activos que termina antes del cierre del período."
+    },
+    "asset-capitalization-reviewed": {
+      "title": "Revisar la capitalización de activos",
+      "description": "Resolver las propuestas de activos pendientes y conciliar las obras en curso con sus cuentas del libro mayor."
     }
   },
   "setup": {

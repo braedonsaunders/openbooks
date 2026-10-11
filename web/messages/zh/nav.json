@@ -168,7 +168,11 @@
     "close-reopen-requests": "重新打开申请",
     "intercompany": "公司间",
     "intercompany-netting": "公司间抵销结算",
-    "amortization": "费用摊销"
+    "amortization": "费用摊销",
+    "asset-proposals": "资产建议",
+    "asset-construction": "在建工程",
+    "asset-maintenance": "资产维护",
+    "asset-insurance": "资产保险"
   },
   "groups": {
     "manufacturing": "制造",

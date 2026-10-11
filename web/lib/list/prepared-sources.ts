@@ -900,6 +900,18 @@ const SOURCES = {
     rowKeyField: 'stagingLocationId',
     mode: 'loaded',
   },
+  // Fixed-asset depth workspaces: each reader returns its authorized, bounded rows.
+  asset_proposals: { route: '/assets/proposals', rowsField: 'rows', rowKeyField: 'id', mode: 'loaded' },
+  asset_cip_records: { route: '/assets/construction', rowsField: 'rows', rowKeyField: 'id', mode: 'loaded' },
+  asset_cip_costs: { route: '/assets/construction', rowsField: 'selected.costs', rowKeyField: 'id', mode: 'loaded' },
+  asset_cip_candidates: { route: '/assets/construction', rowsField: 'selected.candidates', rowKeyField: 'journalLineId', mode: 'loaded' },
+  asset_cip_reconciliation: { route: '/assets/construction', rowsField: 'reconciliation', rowKeyField: 'accountId', mode: 'loaded' },
+  asset_maintenance_schedules: { route: '/assets/maintenance', rowsField: 'rows', rowKeyField: 'scheduleId', mode: 'loaded' },
+  asset_maintenance_records: { route: '/assets/maintenance', rowsField: 'selected.records', rowKeyField: 'id', mode: 'loaded' },
+  asset_insurance_policies: { route: '/assets/insurance', rowsField: 'rows', rowKeyField: 'id', mode: 'loaded' },
+  asset_insurance_coverages: { route: '/assets/insurance', rowsField: 'selected.coverages', rowKeyField: 'assetId', mode: 'loaded' },
+  asset_insured_values: { route: '/assets/insurance', rowsField: 'comparison', rowKeyField: 'assetId', mode: 'loaded' },
+  asset_components: { route: '/assets', rowsField: 'members', rowKeyField: 'id', mode: 'loaded' },
 } satisfies Record<string, PreparedListSource>
 
 export type PreparedListSourceKey = keyof typeof SOURCES
