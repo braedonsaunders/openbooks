@@ -154,7 +154,7 @@ async function emptyAssemblyItem(f: Fixture) {
   throw new Error("the scratch catalog carries no line-free assembly-capable item");
 }
 
-async function activeRoute(f: Fixture, itemId: string, from: string, departmentId: string) {
+async function activeRoute(f: Fixture, itemId: string, from: string, departmentId: string, operations: Array<{ sequence: number; backflushAt: "none" | "start" | "finish" }> = [{ sequence: 10, backflushAt: "none" }]) {
   const code = `WC-${randomUUID()}`;
   const center = await run((tx) => createWorkCenter(tx, f.org.orgId, f.actorId, {
     code, name: code, kind: "machine", capacityHoursPerDay: "8", efficiencyPct: "100", absorbsOverhead: false, departmentId,
@@ -163,12 +163,16 @@ async function activeRoute(f: Fixture, itemId: string, from: string, departmentI
     producedItemId: itemId, code: `RT-${randomUUID()}`, name: "Assembly route", effectiveFrom: from,
     defaultIssueLocationId: f.org.stockLocationId, defaultReceiptLocationId: f.org.stockLocationId2, overheadBasis: "units",
   }));
-  await run((tx) => createRoutingOperation(tx, f.org.orgId, f.actorId, String(routing.id), {
-    sequence: 10, name: "Assemble", workCenterId: String(center.id), setupMinutes: "5", runMinutesPerUnit: "1",
-  }));
+  for (const operation of operations) {
+    await run((tx) => createRoutingOperation(tx, f.org.orgId, f.actorId, String(routing.id), {
+      sequence: operation.sequence, name: `Assemble ${operation.sequence}`, workCenterId: String(center.id),
+      setupMinutes: "5", runMinutesPerUnit: "1", backflushAt: operation.backflushAt,
+    }));
+  }
   await run((tx) => activateRoutingDirect(tx, f.org.orgId, f.actorId, String(routing.id), {
     subsidiaryId: f.org.subsidiaryId, reason: "Activate the configured production revision", idempotencyKey: randomUUID(),
   }));
+  return routing;
 }
 
 function backdatedLines(f: Fixture, itemId: string, from: string) {
@@ -363,6 +367,104 @@ test("back-dated revision refuses naming an applied standard-cost roll-up", { sk
         { componentItemId: f.org.items.fifo, quantityPer: "1", effectiveFrom: past, effectiveTo: null, operationSeq: null, scrapPct: null, isByproduct: false },
       ],
     })), (error: unknown) => error instanceof BomPolicyError && error.code === "bom_backdated_revision" && /roll-up/.test(error.message) && error.message.includes(today));
+  } finally { await dropScratchOrg(f.org.orgId); }
+});
+
+test("recipe revision round-trips per-line fields through propose, submit and apply", { skip: !DB }, async () => {
+  const f = await setup();
+  try {
+    const itemId = await emptyAssemblyItem(f);
+    const today = await run((tx) => businessTodayInTx(tx, f.org.orgId));
+    const [firstComponent, secondComponent] = [f.org.items.component, f.org.items.standard, f.org.items.fifo, f.org.items.movingAvg].filter((id) => id !== itemId);
+    const components = [
+      { componentItemId: firstComponent!, quantityPer: "2", effectiveFrom: today, effectiveTo: null, operationSeq: 10, scrapPct: "5", isByproduct: false },
+      { componentItemId: secondComponent!, quantityPer: "1", effectiveFrom: today, effectiveTo: null, operationSeq: 20, scrapPct: null, isByproduct: true, quantityBasis: "per_unit" as const, formulaOutputQuantity: "1", outputCostWeight: "2" },
+    ];
+    const proposal = await run((tx) => saveBomPolicy(tx, f.org.orgId, f.actorId, {
+      assemblyItemId: itemId, expectedVersion: null, reason: "Approve the next material requirement with joint output",
+      subsidiaryId: f.org.subsidiaryId, requestKey: randomUUID(), components,
+    }));
+    assert.ok("changeId" in proposal);
+    const changeId = proposal.changeId as string;
+    const frozen = (await changeRow(f, changeId))?.payload as { components: Array<Record<string, unknown>> };
+    assert.equal(frozen.components[0]?.operationSeq, 10);
+    assert.equal(Number(frozen.components[0]?.scrapPct), 5);
+    assert.equal(frozen.components[1]?.operationSeq, 20);
+    assert.equal(frozen.components[1]?.isByproduct, true);
+    assert.equal(Number(frozen.components[1]?.outputCostWeight), 2);
+    await withBypassContext(() => submitBomRevision(f.org.orgId, f.actorId, changeId));
+    assert.equal((await changeRow(f, changeId))?.status, "applied");
+    const stored = (await run((tx) => tx.execute<{
+      componentItemId: string; operationSeq: number | null; scrap: string | null; basis: string; formula: string; byproduct: boolean; weight: string | null;
+    }>(sql`select component_item_id as "componentItemId", operation_seq as "operationSeq", scrap_pct::text as scrap,
+      quantity_basis as basis, formula_output_quantity::text as formula, is_byproduct as byproduct, output_cost_weight::text as weight
+      from bom_components where org_id=${f.org.orgId} and assembly_item_id=${itemId} order by sort_order`))).rows;
+    assert.equal(stored.length, 2);
+    assert.deepEqual([stored[0]?.operationSeq, Number(stored[0]?.scrap), stored[0]?.basis, stored[0]?.byproduct, stored[0]?.weight],
+      [10, 5, "per_unit", false, null]);
+    assert.deepEqual([stored[1]?.operationSeq, stored[1]?.scrap, stored[1]?.basis, Number(stored[1]?.formula), stored[1]?.byproduct, Number(stored[1]?.weight)],
+      [20, null, "per_unit", 1, true, 2]);
+    const audit = await run((tx) => tx.execute<{ after: Array<Record<string, unknown>> }>(sql`select changes->'after' as after from audit_log where org_id=${f.org.orgId} and table_name='bom_components' and row_id=${itemId} order by id desc limit 1`));
+    assert.equal(audit.rows[0]?.after.length, 2);
+    assert.equal(audit.rows[0]?.after[0]?.operationSeq, 10);
+    assert.equal(Number(audit.rows[0]?.after[1]?.outputCostWeight), 2);
+  } finally { await dropScratchOrg(f.org.orgId); }
+});
+
+test("re-added line defaults its operation sequence from a single consuming operation", { skip: !DB }, async () => {
+  const f = await setup();
+  try {
+    const departmentId = await releaseReady(f);
+    const itemId = await emptyAssemblyItem(f);
+    const today = await run((tx) => businessTodayInTx(tx, f.org.orgId));
+    await activeRoute(f, itemId, pastDate(today, 60), departmentId, [{ sequence: 10, backflushAt: "finish" }]);
+    const proposal = await run((tx) => saveBomPolicy(tx, f.org.orgId, f.actorId, {
+      assemblyItemId: itemId, expectedVersion: null, reason: "Approve the next material requirement",
+      subsidiaryId: f.org.subsidiaryId, requestKey: randomUUID(),
+      components: [{ componentItemId: f.org.items.component, quantityPer: "1", effectiveFrom: today, effectiveTo: null, operationSeq: null, scrapPct: null, isByproduct: false }],
+    }));
+    assert.ok("changeId" in proposal);
+    const changeId = proposal.changeId as string;
+    assert.equal(((await changeRow(f, changeId))?.payload as { components: Array<{ operationSeq: number | null }> }).components[0]?.operationSeq, 10);
+    await withBypassContext(() => submitBomRevision(f.org.orgId, f.actorId, changeId));
+    const stored = (await run((tx) => tx.execute<{ operationSeq: number | null }>(sql`select operation_seq as "operationSeq" from bom_components where org_id=${f.org.orgId} and assembly_item_id=${itemId}`))).rows;
+    assert.deepEqual(stored.map((row) => row.operationSeq), [10]);
+  } finally { await dropScratchOrg(f.org.orgId); }
+});
+
+test("blank operation sequence is refused with several consuming operations", { skip: !DB }, async () => {
+  const f = await setup();
+  try {
+    const departmentId = await releaseReady(f);
+    const itemId = await emptyAssemblyItem(f);
+    const today = await run((tx) => businessTodayInTx(tx, f.org.orgId));
+    const routing = await activeRoute(f, itemId, pastDate(today, 60), departmentId, [{ sequence: 10, backflushAt: "finish" }, { sequence: 20, backflushAt: "start" }]);
+    const version = await run((tx) => readBomPolicyVersion(tx, f.org.orgId, itemId));
+    await assert.rejects(run((tx) => saveBomPolicy(tx, f.org.orgId, f.actorId, {
+      assemblyItemId: itemId, expectedVersion: version, reason: "Approve the next material requirement",
+      subsidiaryId: f.org.subsidiaryId, requestKey: randomUUID(),
+      components: [{ componentItemId: f.org.items.component, quantityPer: "1", effectiveFrom: today, effectiveTo: null, operationSeq: null, scrapPct: null, isByproduct: false }],
+    })), (error: unknown) => error instanceof BomPolicyError && error.code === "bom_operation_seq_required"
+      && error.message.includes(String((routing as unknown as { code: string }).code)) && /10.*20/.test(error.message));
+  } finally { await dropScratchOrg(f.org.orgId); }
+});
+
+test("blank operation sequence stands without a consuming operation", { skip: !DB }, async () => {
+  const f = await setup();
+  try {
+    const departmentId = await releaseReady(f);
+    const itemId = await emptyAssemblyItem(f);
+    const today = await run((tx) => businessTodayInTx(tx, f.org.orgId));
+    await activeRoute(f, itemId, pastDate(today, 60), departmentId);
+    const proposal = await run((tx) => saveBomPolicy(tx, f.org.orgId, f.actorId, {
+      assemblyItemId: itemId, expectedVersion: null, reason: "Approve the next material requirement",
+      subsidiaryId: f.org.subsidiaryId, requestKey: randomUUID(),
+      components: [{ componentItemId: f.org.items.component, quantityPer: "1", effectiveFrom: today, effectiveTo: null, operationSeq: null, scrapPct: null, isByproduct: false }],
+    }));
+    assert.ok("changeId" in proposal);
+    await withBypassContext(() => submitBomRevision(f.org.orgId, f.actorId, proposal.changeId as string));
+    const stored = (await run((tx) => tx.execute<{ operationSeq: number | null }>(sql`select operation_seq as "operationSeq" from bom_components where org_id=${f.org.orgId} and assembly_item_id=${itemId}`))).rows;
+    assert.deepEqual(stored.map((row) => row.operationSeq), [null]);
   } finally { await dropScratchOrg(f.org.orgId); }
 });
 

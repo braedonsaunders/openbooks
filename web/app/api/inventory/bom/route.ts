@@ -132,6 +132,22 @@ export const GET = defineRoute({
      order by line.sort_order, line.component_item_id, line.operation_seq nulls first,
               line.is_byproduct, line.effective_from nulls first, line.effective_to nulls first`)
   const version = await readBomPolicyVersion(db,gate.user.orgId,assemblyItemId)
+  // The editor places a re-added line on the routing's single consuming
+  // operation instead of leaving its sequence blank: the reader carries the
+  // active routing's operations (sequence, name, backflush point) so the
+  // workspace can prefill exactly what the revision command defaults to
+  // server-side. Zero or several candidate routings leave the list empty
+  // and the command governs, exactly like the release-time checks.
+  const routingOperations = manufacturingEnabled ? (await db.execute<{ sequence: number; name: string; backflushAt: string }>(sql`
+    select operation.sequence, operation.name, operation.backflush_at as "backflushAt"
+      from mfg_routing_operations operation
+      join mfg_routings routing on routing.org_id = operation.org_id and routing.id = operation.routing_id
+     where operation.org_id = ${gate.user.orgId} and routing.produced_item_id = ${assemblyItemId} and routing.status = 'active'
+       and routing.effective_from <= ${today}::date and (routing.effective_to is null or ${today}::date < routing.effective_to)
+       and (select count(*) from mfg_routings candidate
+             where candidate.org_id = ${gate.user.orgId} and candidate.produced_item_id = ${assemblyItemId} and candidate.status = 'active'
+               and candidate.effective_from <= ${today}::date and (candidate.effective_to is null or ${today}::date < candidate.effective_to)) = 1
+     order by operation.sequence`)).rows : []
   // Editor choices mirror the set PUT accepts (active inventory items with
   // costing profiles), so the picker can only stage a recipe the save keeps.
   const validItems = await db.execute<{ id: string; code: string | null; name: string | null }>(sql`
@@ -146,7 +162,7 @@ export const GET = defineRoute({
     assemblyItemId,
     kind:assembly.rows[0].kind,
     version,
-    today,canProposeRevision,subsidiaries,
+    today,canProposeRevision,subsidiaries,routingOperations,
     components: components.rows.map((line) => ({
       ...line,
       operationSeq: manufacturingEnabled ? line.operationSeq : null,

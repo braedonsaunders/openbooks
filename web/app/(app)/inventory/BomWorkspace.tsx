@@ -180,6 +180,7 @@ export function BomDrawer({
   const [subsidiaryId,setSubsidiaryId] = useState('')
   const [loadedVersion,setLoadedVersion] = useState<string|null>(assembly?.version ?? null)
   const [today,setToday] = useState('')
+  const [routingOperations,setRoutingOperations] = useState<Array<{sequence:number;name:string;backflushAt:string}>>([])
   const requestRef = useRef<{body:string;key:string}|null>(null)
   const [assemblyItemId, setAssemblyItemId] = useState(fixedAssemblyItemId ?? assembly?.assemblyItemId ?? '')
   const [lines, setLines] = useState<EditableBomLine[]>(() =>
@@ -211,6 +212,7 @@ export function BomDrawer({
           canProposeRevision?: boolean
           subsidiaries?: Array<{id:string;name:string}>
           today?: string
+          routingOperations?: Array<{sequence:number;name:string;backflushAt:string}>
         }
         if (!current) return
         setManufacturingEnabled(data.manufacturingEnabled === true)
@@ -220,6 +222,7 @@ export function BomDrawer({
         setSubsidiaryId(current => (data.subsidiaries ?? []).some(entity=>entity.id===current) ? current : data.subsidiaries?.length===1 ? data.subsidiaries[0]!.id : '')
         setLoadedVersion(data.version ?? null)
         setToday(data.today ?? '')
+        setRoutingOperations(data.routingOperations ?? [])
         if (assembly || data.components?.length) {
           const loaded = data.components?.map((line) => editableLine(line)) ?? []
           const nextLines = loaded.length > 0 ? loaded : [editableLine()]
@@ -245,6 +248,13 @@ export function BomDrawer({
   })
 
   const showManufacturing = manufacturingEnabled && parentKind !== 'kit' && !hideManufacturingFields
+  // A re-added line keeps its operation instead of going blank: with exactly
+  // one backflushing operation the revision command places it there
+  // server-side, so new rows prefill the same sequence; with several
+  // consuming operations the sequence stays a required explicit choice.
+  const consumingOperations = routingOperations.filter((op) => op.backflushAt === 'start' || op.backflushAt === 'finish')
+  const defaultOperationSeq = showManufacturing && consumingOperations.length === 1 ? String(consumingOperations[0]!.sequence) : ''
+  const operationSeqRequired = showManufacturing && consumingOperations.length > 1
   const usedAssemblies = new Set(assemblies.map((candidate) => candidate.assemblyItemId))
   // A recipe parent must be something the BOM service accepts as an
   // assembly: raw materials and packaging never qualify, so they never
@@ -301,6 +311,7 @@ export function BomDrawer({
         type: 'decimal' as const,
         decimalScale: 0,
         align: 'right' as const,
+        required: operationSeqRequired,
       },
     ] : []),
     {
@@ -325,7 +336,7 @@ export function BomDrawer({
       },
       {key:'outputCostWeight',label:tInventory('bom.columns.outputCostWeight'),width:'150px',type:'decimal' as const,decimalScale:4,align:'right' as const},
     ] : []),
-  ], [componentOptions, showManufacturing, tInventory, tSetup])
+  ], [componentOptions, showManufacturing, operationSeqRequired, tInventory, tManufacturing, tSetup])
 
   async function save() {
     const clean = lines.filter((line) => line.componentItemId || line.quantityPer)
@@ -335,6 +346,12 @@ export function BomDrawer({
     }
     if (!assemblyItemId || clean.length === 0 || clean.some((line) => !line.componentItemId || !line.quantityPer)) {
       const message = tSetup('validation.required', { field: tSetup('fields.componentItemId') })
+      setSaveError(message)
+      toast.error(message)
+      return
+    }
+    if (operationSeqRequired && clean.some((line) => !line.operationSeq.trim())) {
+      const message = tSetup('validation.required', { field: tInventory('bom.columns.operationSeq') })
       setSaveError(message)
       toast.error(message)
       return
@@ -459,7 +476,7 @@ export function BomDrawer({
           rows={lines}
           onRowsChange={setLines}
           readOnly={busy || !detailReady || showManufacturing && !canProposeRevision}
-          emptyRow={() => editableLine(showManufacturing && today ? {effectiveFrom:today} : undefined)}
+          emptyRow={() => editableLine(showManufacturing && today ? {effectiveFrom:today, ...(defaultOperationSeq ? {operationSeq:Number(defaultOperationSeq)} : {})} : undefined)}
         />
         {showManufacturing?<p className="text-xs text-slate-500">{tInventory('bom.jointOutputNote')}</p>:null}
         <div className="space-y-1.5">

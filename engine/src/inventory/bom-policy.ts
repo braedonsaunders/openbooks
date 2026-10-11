@@ -117,6 +117,33 @@ async function preserveHistory(tx: SqlExecutor, orgId: string, assemblyItemId: s
   }
 }
 
+/** Operation-sequence defaulting for manufacturing recipe lines. A blank
+ * sequence is ambiguous only when several routing operations consume
+ * material: with exactly one backflushing operation on the assembly's
+ * active routing the line can only be consumed there, so the revision
+ * carries that sequence instead of a blank. With several consuming
+ * operations the operator names the operation explicitly; without a single
+ * active routing the blank stands and release-time checks govern. */
+async function defaultOperationSequences(tx: SqlExecutor, orgId: string, assemblyItemId: string, lines: BomPolicyLine[], asOf: string): Promise<BomPolicyLine[]> {
+  if (!lines.some((line) => line.operationSeq === null)) return lines;
+  const routings = (await tx.execute<{ id: string; code: string }>(sql`
+    select id, code from mfg_routings where org_id=${orgId} and produced_item_id=${assemblyItemId} and status='active'
+      and effective_from <= ${asOf}::date and (effective_to is null or ${asOf}::date < effective_to)
+     order by version desc, id`)).rows;
+  if (routings.length !== 1) return lines;
+  const routing = routings[0]!;
+  const consuming = (await tx.execute<{ sequence: number }>(sql`
+    select sequence from mfg_routing_operations where org_id=${orgId} and routing_id=${routing.id}
+      and backflush_at in ('start','finish') order by sequence`)).rows;
+  if (consuming.length === 0) return lines;
+  if (consuming.length === 1) {
+    const only = consuming[0]!.sequence;
+    return lines.map((line) => line.operationSeq === null ? { ...line, operationSeq: only } : line);
+  }
+  const blank = lines.findIndex((line) => line.operationSeq === null);
+  throw new BomPolicyError(`Choose the consuming operation for recipe line ${blank + 1}: routing ${routing.code} consumes material at operations ${consuming.map((op) => op.sequence).join(", ")}, so a blank operation sequence cannot be placed. Enter the operation sequence explicitly.`, 422, "bom_operation_seq_required");
+}
+
 /** Production evidence for a back-dated recipe: released or completed
  * work orders, posted finished builds, and applied standard-cost roll-ups
  * on or after the requested start each refuse the back-date, naming what
@@ -183,14 +210,18 @@ export async function saveBomPolicy(tx: SqlExecutor, orgId: string, actorId: str
     if (!(await tx.execute(sql`select id from subsidiaries where org_id=${orgId} and id=${input.subsidiaryId} and is_active and not is_elimination for share`)).rows.length) throw new ScopeNotFoundError();
     const retained = (await tx.execute<{effective_on:string}>(sql`select effective_on::text from financial_changes where org_id=${orgId} and idempotency_key=${input.requestKey}`)).rows[0];
     const directEvidence = !(await financialChangeFlowConfigured(tx,orgId));
+    const effectiveOn = retained?.effective_on ?? await businessTodayInTx(tx,orgId);
+    // A re-added line carries a blank sequence until the routing places it;
+    // defaulting precedes the history match so a retained line still matches.
+    const routed = await defaultOperationSequences(tx,orgId,input.assemblyItemId,lines,effectiveOn);
     const proposal = {orgId,actorId,subsidiaryId:input.subsidiaryId,domain:"manufacturing" as const,subjectId:input.assemblyItemId,operation:MANUFACTURING_BOM_APPROVAL_OPERATION,
-      effectiveOn:retained?.effective_on ?? await businessTodayInTx(tx,orgId),reason:input.reason,idempotencyKey:input.requestKey,payload:{assemblyItemId:input.assemblyItemId,expectedVersion:input.expectedVersion,components:lines,requiredSubsidiaryIds:[input.subsidiaryId],...(directEvidence ? {decision:{mode:"automatic",policy:{flowConfigured:false}}} : {})}};
+      effectiveOn,reason:input.reason,idempotencyKey:input.requestKey,payload:{assemblyItemId:input.assemblyItemId,expectedVersion:input.expectedVersion,components:routed,requiredSubsidiaryIds:[input.subsidiaryId],...(directEvidence ? {decision:{mode:"automatic",policy:{flowConfigured:false}}} : {})}};
     // Replays remain available after application, with current authority still required.
     const prior = await existingFinancialChange(tx,proposal);
     if (prior) return {changeId:prior,approvalRequired:true as const};
     if (before.version!==input.expectedVersion) throw new BomPolicyError("This recipe changed after you opened it; reopen it and use its current revision.",409,"bom_revision_changed");
-    await preserveHistory(tx,orgId,input.assemblyItemId,before.lines,lines,proposal.effectiveOn);
-    await validateReferences(tx,orgId,input.assemblyItemId,lines);
+    await preserveHistory(tx,orgId,input.assemblyItemId,before.lines,routed,proposal.effectiveOn);
+    await validateReferences(tx,orgId,input.assemblyItemId,routed);
     return {changeId:await proposeFinancialChange(tx,{...proposal,beforeState:before}),approvalRequired:true as const};
   }
   if (before.version!==input.expectedVersion) throw new BomPolicyError("This recipe changed after you opened it; reopen it and use its current revision.",409,"bom_revision_changed");
@@ -217,9 +248,10 @@ export async function applyBomRevision(orgId: string, actorId: string, changeId:
 
 async function applyApprovedBomRevision(tx: SqlExecutor, orgId: string, actorId: string, change: FinancialChange, before: Awaited<ReturnType<typeof snapshot>>) {
   const input = {assemblyItemId:change.subject_id,expectedVersion:change.payload.expectedVersion as string|null,reason:change.reason,components:change.payload.components as BomPolicyLine[]};
-  const lines = normalize(input);
+  const today = await businessTodayInTx(tx,orgId);
+  const lines = await defaultOperationSequences(tx,orgId,change.subject_id,normalize(input),today);
   if (before.kind==="kit") throw new BomPolicyError("Virtual kit recipes use the inventory editor, not manufacturing revision approval.");
-  await preserveHistory(tx,orgId,change.subject_id,before.lines,lines,await businessTodayInTx(tx,orgId));
+  await preserveHistory(tx,orgId,change.subject_id,before.lines,lines,today);
   await validateReferences(tx,orgId,change.subject_id,lines);
   const result = await replace(tx,orgId,actorId,input,before,lines,change.id);
   await completeFinancialChange(tx,orgId,change.id,actorId,result);
