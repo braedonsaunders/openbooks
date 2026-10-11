@@ -226,6 +226,11 @@ export async function loadPurchaseOrders(
               .map((target) => target.kind)
               .filter((target) => can(authz, purchaseOrderConversionPermission(target))
                 && (target !== 'purchase_receipt' || !inventoryEnabled || can(authz, 'items.post'))),
+            // Receipt void takes the receiving grant plus the reversal grant
+            // when Inventory is on — the same authority the void route
+            // enforces for purchase receipts.
+            canVoidReceipt: can(authz, 'goods_receipts.create')
+              && (!inventoryEnabled || can(authz, 'items.reverse')),
             layout: resolvedForm?.layout,
             dropShipping,
             dropShipLines,

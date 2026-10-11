@@ -28,6 +28,7 @@ registerHooks({
 
 const { OrderDrawer } = await import('./OrderDrawer')
 const messages = (await import('../../../messages/en')).default as Record<string, unknown>
+const { act } = await import('react')
 
 type Toast = { kind: string; message: string }
 
@@ -79,7 +80,7 @@ function receiptLink(overrides: Record<string, unknown> = {}): Record<string, un
   }
 }
 
-async function mountPo() {
+async function mountPo(canVoidReceipt = true) {
   return mountDashboard(
     <OrderDrawer
       order={{ doc: poDoc(), lines: [], links: [receiptLink()] } as unknown as OrderPayload}
@@ -96,10 +97,48 @@ async function mountPo() {
       subsidiaries={[]}
       segments={[]}
       canManage
+      canVoidReceipt={canVoidReceipt || undefined}
       closeHref="/purchase-orders"
     />,
     messages,
   )
+}
+
+function voidDialog(): HTMLElement | null {
+  return document.querySelector('[aria-label="Void this transaction?"]')
+}
+
+async function typeVoidReason(value: string) {
+  const area = voidDialog()?.querySelector('#void-reason') as HTMLTextAreaElement | null
+  assert.ok(area, 'the void dialog asks for a reason')
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!
+  await act(async () => {
+    setter.call(area, value)
+    area.dispatchEvent(new window.Event('input', { bubbles: true }))
+    await tick()
+  })
+  await tick()
+}
+
+async function confirmVoidDialog() {
+  const confirm = [...(voidDialog()?.querySelectorAll('button') ?? [])].find(
+    (b) => b.textContent?.trim() === 'Void' && !(b as HTMLButtonElement).disabled,
+  ) as HTMLButtonElement | undefined
+  assert.ok(confirm, 'the void dialog confirms explicitly')
+  await click(confirm)
+  await tick()
+  await tick()
+  await tick()
+}
+
+async function openVoidDialog() {
+  await openRelatedTab()
+  const voids = buttonsNamed('Void')
+  assert.equal(voids.length, 1, 'the approved receipt link offers Void')
+  await click(voids[0]!)
+  await tick()
+  await tick()
+  assert.ok(voidDialog(), 'Void opens the governed dialog, not a blind post')
 }
 
 async function openRelatedTab() {
@@ -150,17 +189,9 @@ test('voiding a linked goods receipt posts with its revision and toasts its numb
   t.after(unmount)
   await tick()
   await tick()
-  ;(globalThis as unknown as { __promptAnswers: unknown[] }).__promptAnswers = [
-    'phantom full-quantity receipt from the blind convert',
-    '2026-08-01',
-  ]
-  await openRelatedTab()
-  const voids = buttonsNamed('Void')
-  assert.equal(voids.length, 1, 'the approved receipt link offers Void')
-  await click(voids[0]!)
-  await tick()
-  await tick()
-  await tick()
+  await openVoidDialog()
+  await typeVoidReason('phantom full-quantity receipt from the blind convert')
+  await confirmVoidDialog()
   assert.equal(posts.length, 1, 'the void posts once')
   assert.deepEqual(posts[0], {
     reason: 'phantom full-quantity receipt from the blind convert',
@@ -188,18 +219,10 @@ test('a refused receipt void pins the refusal and keeps the link', async (t) => 
   t.after(unmount)
   await tick()
   await tick()
-  ;(globalThis as unknown as { __promptAnswers: unknown[] }).__promptAnswers = [
-    'phantom full-quantity receipt from the blind convert',
-    '2026-08-01',
-  ]
-  await openRelatedTab()
-  const voids = buttonsNamed('Void')
-  assert.equal(voids.length, 1, 'the approved receipt link offers Void')
-  await click(voids[0]!)
-  await tick()
-  await tick()
-  await tick()
-  assert.ok(document.querySelector('[role="alert"]'), 'the refusal pins as an alert')
+  await openVoidDialog()
+  await typeVoidReason('phantom full-quantity receipt from the blind convert')
+  await confirmVoidDialog()
+  assert.ok(voidDialog()?.querySelector('[role="alert"]'), 'the refusal renders in the open dialog')
   assert.ok(
     document.body.textContent?.includes('downstream consumption'),
     'the refusal names the real blocker',
@@ -209,5 +232,57 @@ test('a refused receipt void pins the refusal and keeps the link', async (t) => 
     0,
     'a refused void toasts nothing',
   )
-  assert.equal(buttonsNamed('Void').length, 1, 'the receipt link stays voidable')
+  assert.equal(
+    buttonsNamed('Void').filter((b) => !voidDialog()?.contains(b)).length,
+    1,
+    'the receipt link stays voidable',
+  )
+})
+
+test('a denied receipt void keeps the dialog open with the grant to ask for', async (t) => {
+  window.sessionStorage.clear()
+  const restoreFetch = mockVoidEndpoints(t, () =>
+    Response.json({ error: 'missing permission: goods_receipts.create' }, { status: 403 }),
+  )
+  t.after(restoreFetch)
+  const { unmount } = await mountPo()
+  t.after(unmount)
+  await tick()
+  await tick()
+  await openVoidDialog()
+  await typeVoidReason('phantom full-quantity receipt from the blind convert')
+  await confirmVoidDialog()
+  assert.ok(voidDialog(), 'a denied void never closes the dialog')
+  assert.match(
+    voidDialog()?.textContent ?? '',
+    /missing permission: goods_receipts\.create/,
+    'the denial renders its message in the dialog',
+  )
+  assert.match(
+    voidDialog()?.textContent ?? '',
+    /Ask your administrator/,
+    'the denial names the grant to ask for',
+  )
+  assert.equal(
+    toasts().filter((toast) => toast.kind === 'success').length,
+    0,
+    'a denied void toasts nothing',
+  )
+})
+
+test('a viewer without the void grant gets the hint instead of Void', async (t) => {
+  window.sessionStorage.clear()
+  const restoreFetch = mockVoidEndpoints(t, () => Response.json({ ok: true }))
+  t.after(restoreFetch)
+  const { unmount } = await mountPo(false)
+  t.after(unmount)
+  await tick()
+  await tick()
+  await openRelatedTab()
+  assert.equal(buttonsNamed('Void').length, 0, 'no live Void is offered without the grant')
+  assert.match(
+    document.body.textContent ?? '',
+    /Ask your administrator/,
+    'the link carries the shared missing-grant hint',
+  )
 })

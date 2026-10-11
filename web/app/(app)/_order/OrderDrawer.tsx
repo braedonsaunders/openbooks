@@ -25,11 +25,12 @@ import { SendButton } from '../../../components/send-button'
 import { confirmDialog } from '../../../lib/confirm'
 import { isDocumentRevisionToken } from '@/lib/api/registry-data'
 import { promptDialog } from '../../../lib/prompt'
-import { promptVoidReversalPeriod } from '../../../lib/void-reversal-period'
+import { PermissionHint } from '../../../components/permission-hint'
 import { FlowManualButtons } from '../../../components/flow-manual-buttons'
 import { ApprovalActions } from '../../../components/approval-actions'
 import { AssignWarehousePanel } from './AssignWarehousePanel'
 import { GoodsReceiptForm } from './GoodsReceiptForm'
+import { VoidReceiptDialog } from './VoidReceiptDialog'
 import { ApprovalHistory } from '../../../components/approval-history'
 import { DropShipAssessmentButton } from './DropShipAssessmentButton'
 import { OrderBackorders } from './OrderBackorders'
@@ -579,6 +580,7 @@ export function OrderDrawer({
   createMode = false,
   closeHref,
   initialReceiveOpen = false,
+  canVoidReceipt = false,
   orgId,
   backorders = false,
   pickLists = false,
@@ -641,6 +643,14 @@ export function OrderDrawer({
    * viewer may receive; anything else opens the drawer normally.
    */
   initialReceiveOpen?: boolean
+  /**
+   * The viewer holds the receipt-void grant (receiving plus reversal when
+   * Inventory is on — the same authority the void route enforces, resolved
+   * by the page). Without it the receipt link offers no live Void, only
+   * the shared missing-grant hint. Defaults off: a caller that never
+   * resolves the grant cannot surface a Void that only fails.
+   */
+  canVoidReceipt?: boolean
   /**
    * Calling organization for unsaved-draft retention (sessionStorage is
    * keyed by org + kind + record). Absent means no retention: the drawer
@@ -759,6 +769,10 @@ export function OrderDrawer({
   const [receiveOpen, setReceiveOpen] = useState(
     initialReceiveOpen && kind === 'purchase_order' && doc.status === 'approved',
   )
+  // Governed receipt void: the dialog carries reason, reversal date and the
+  // refusal in one place and closes only on an ok response — never silently
+  // on a denial.
+  const [voidTarget, setVoidTarget] = useState<{ id: string; number: string } | null>(null)
   // Unsaved-draft retention state lives below, next to the dirty tracker.
   const [dropShipRoutes, setDropShipRoutes] = useState<DropShipRoute[]>(dropShipLines)
   const [dropShipVendorId, setDropShipVendorId] = useState('')
@@ -1555,57 +1569,15 @@ export function OrderDrawer({
   /**
    * Void a linked goods receipt: the phantom full-quantity receipts a blind
    * convert posted are corrected from the order's Related tab, where the
-   * receipt link and its status show. Reason plus the reversal date the
-   * server suggests (the receipt's own date, or the first open period when
-   * that period closed) ride the governed void; the kernel reverses the
-   * receipt's movements and journals, restores the order's received
-   * quantities, and refuses by name when stock was consumed or billed.
+   * receipt link and its status show. The VoidReceiptDialog carries the
+   * reason, the server-suggested reversal date (the receipt's own date, or
+   * the first open period when that period closed) and any refusal in one
+   * place; the kernel reverses the receipt's movements and journals,
+   * restores the order's received quantities, and refuses by name when
+   * stock was consumed or billed.
    */
-  async function voidReceipt(receiptId: string, receiptNumber: string) {
-    const reason = await promptDialog({
-      title: tCommon('amendment.voidTitle'),
-      label: tCommon('amendment.reason'),
-      placeholder: tCommon('amendment.voidPlaceholder'),
-      confirmLabel: tCommon('actions.void'),
-    })
-    if (!reason) return
-    const reversal = await promptVoidReversalPeriod(receiptId, {
-      title: tCommon('amendment.voidReversalPeriodTitle'),
-      dateLabel: tCommon('amendment.voidReversalDateLabel'),
-      summaryOriginal: tCommon('amendment.voidReversalSummaryOriginal'),
-      summaryReversal: tCommon('amendment.voidReversalSummaryReversal'),
-      fiscalYear: tCommon('amendment.voidReversalFiscalYear'),
-      fallbackNotice: tCommon('amendment.voidReversalFallbackNotice'),
-      closedNotice: tCommon('amendment.voidReversalClosedNotice'),
-      label: tCommon('amendment.voidReversalPeriodLabel'),
-      regularOption: tCommon('amendment.voidReversalPeriodRegular'),
-      confirm: tCommon('actions.void'),
-      cancel: tCommon('confirm.cancel'),
-    })
-    if (reversal.cancelled) return
-    if (!reversal.revision) {
-      refuse(null, t('voidReceiptFailed'))
-      return
-    }
-    await execute(
-      () => fetchAction(`/api/documents/${receiptId}/void`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          reason,
-          expectedUpdatedAt: reversal.revision,
-          ...(reversal.reversalDate ? { reversalDate: reversal.reversalDate } : {}),
-          ...(reversal.reversalPeriodId ? { reversalPeriodId: reversal.reversalPeriodId } : {}),
-        }),
-      }),
-      {
-        fallbackMessage: t('voidReceiptFailed'),
-        onOk: () => {
-          toast.success(t('voidReceiptDone', { number: receiptNumber }))
-          router.refresh()
-        },
-      },
-    )
+  function closeVoidDialog() {
+    setVoidTarget(null)
   }
 
   async function remove() {
@@ -2089,16 +2061,18 @@ export function OrderDrawer({
                     <Badge variant={STATUS_VARIANT[l.status] ?? 'secondary'}>
                       {statusLabel(l.status)}
                     </Badge>
-                    {canManage && l.kind === 'purchase_receipt' && l.status === 'approved' ? (
+                    {canManage && canVoidReceipt && l.kind === 'purchase_receipt' && l.status === 'approved' ? (
                       <Button
                         variant="outline"
                         size="sm"
                         className="h-7 px-2 text-xs"
                         disabled={busy}
-                        onClick={() => void voidReceipt(l.id, l.document_number)}
+                        onClick={() => setVoidTarget({ id: String(l.id), number: String(l.document_number) })}
                       >
                         {tCommon('actions.void')}
                       </Button>
+                    ) : canManage && !canVoidReceipt && l.kind === 'purchase_receipt' && l.status === 'approved' ? (
+                      <PermissionHint permission="goods_receipts.create" action={tCommon('actions.void')} />
                     ) : null}
                   </div>
                 ))}
@@ -2351,6 +2325,17 @@ export function OrderDrawer({
           warehouses={stockLocations}
           onSubmit={submitReceipt}
           onClose={() => setReceiveOpen(false)}
+        />
+      ) : null}
+      {voidTarget ? (
+        <VoidReceiptDialog
+          receiptId={voidTarget.id}
+          onClose={closeVoidDialog}
+          onVoided={() => {
+            toast.success(t('voidReceiptDone', { number: voidTarget.number }))
+            closeVoidDialog()
+            router.refresh()
+          }}
         />
       ) : null}
     </TransactionDrawer>
