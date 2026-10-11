@@ -1795,13 +1795,10 @@ export function OrderDrawer({
     }, {
       fallbackMessage: t('convertFailed'),
       onOk: async (data) => {
-        if (!data || typeof data !== 'object' || typeof (data as { kind?: unknown }).kind !== 'string' || typeof (data as { id?: unknown }).id !== 'string' || !(data as { id?: string }).id) {
-          // Success trusts the status, but navigation needs a destination:
-          // a malformed success body pins instead of bouncing anywhere.
-          refuse(null, t('convertFailed'))
-          return
-        }
-        if ('creditOverrideNeeded' in data) {
+        // The override marker rides the success path but carries no
+        // kind/id: decide it before the malformed-success guard below, or a
+        // credit-limit refusal pins convertFailed instead of prompting.
+        if (data !== null && typeof data === 'object' && 'creditOverrideNeeded' in data) {
           const overrideReason = await promptDialog({
             title: t('creditOverrideTitle'),
             label: t('creditOverrideReasonLabel'),
@@ -1809,6 +1806,12 @@ export function OrderDrawer({
             confirmLabel: t('creditOverrideConfirm'),
           })
           if (overrideReason) await convert(targetKind, label, overrideReason)
+          return
+        }
+        if (!data || typeof data !== 'object' || typeof (data as { kind?: unknown }).kind !== 'string' || typeof (data as { id?: unknown }).id !== 'string' || !(data as { id?: string }).id) {
+          // Success trusts the status, but navigation needs a destination:
+          // a malformed success body pins instead of bouncing anywhere.
+          refuse(null, t('convertFailed'))
           return
         }
         const withheld = data.withheldLines ?? []
