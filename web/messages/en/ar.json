@@ -89,6 +89,9 @@
     "tillDifferenceFirst": "Till count through {through}: drops differ from recorded cash by {difference}.",
     "tillDifferenceApply": "Apply to this sale",
     "depositHistory": "Recorded drops",
+    "dropScope": "Drop scope",
+    "dropScopeTill": "Till drop (covers every sale since the last drop)",
+    "dropScopeSale": "This sale's cash only",
     "refundAction": "Refund",
     "postTitle": "Post this receipt?",
     "postBody": "{number}: receive {total}.\n{tenders}",
@@ -230,6 +233,11 @@
         "dueDate": "Due date",
         "overduePush": "Overdue push",
         "globalAverage": "Global average"
+      },
+      "overduePush": {
+        "assumption": "Assumes overdue balances are collected on their forecast date.",
+        "basis": "{count, plural, one {# invoice} other {# invoices}} aged {minDays}–{maxDays} days past due · {amount} in total",
+        "basisSameAge": "{count, plural, one {# invoice} other {# invoices}} aged {days} days past due · {amount} in total"
       }
     },
     "model": {

@@ -89,6 +89,9 @@
     "tillDifferenceFirst": "收银台截至 {through} 的清点：解款与已记录现金相差 {difference}。",
     "tillDifferenceApply": "应用到此销售",
     "depositHistory": "已记录的存款",
+    "dropScope": "存入范围",
+    "dropScopeTill": "收银存入（涵盖上次存入以来的所有销售）",
+    "dropScopeSale": "仅本次销售的现金",
     "refundAction": "退款",
     "postTitle": "过账这张小票？",
     "postBody": "{number}：收款 {total}。\n{tenders}",
@@ -230,6 +233,11 @@
         "dueDate": "到期日",
         "overduePush": "逾期顺延",
         "globalAverage": "全局平均"
+      },
+      "overduePush": {
+        "assumption": "假设逾期余额会在预测日收回。",
+        "basis": "{count} 张发票 · 逾期 {minDays}–{maxDays} 天 · 合计 {amount}",
+        "basisSameAge": "{count} 张发票 · 逾期 {days} 天 · 合计 {amount}"
       }
     },
     "model": {

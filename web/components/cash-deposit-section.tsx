@@ -43,7 +43,8 @@ export function CashDepositSection({
   defaultDate,
   bankOptions,
   sourceOptions,
-  mode = 'sale',
+  mode: initialMode = 'sale',
+  modes,
 }: {
   saleId: string
   currency: string
@@ -51,8 +52,13 @@ export function CashDepositSection({
   bankOptions: CashDepositAccountOption[]
   sourceOptions: CashDepositAccountOption[]
   mode?: 'sale' | 'till'
+  /** Drop scopes the operator may choose between; a single scope shows no choice. */
+  modes?: readonly ('sale' | 'till')[]
 }) {
   const t = useTranslations('ar')
+  // A bank drop usually covers several days of a till's cash, so a posted
+  // sale offers the till-level drop beside the drop of its own cash.
+  const [mode, setMode] = useState<'sale' | 'till'>(initialMode)
   const [amount, setAmount] = useState('')
   const [date, setDate] = useState(defaultDate)
   const [bankAccountId, setBankAccountId] = useState(bankOptions[0]?.value ?? '')
@@ -201,6 +207,16 @@ export function CashDepositSection({
               />
             </div>
           </div>
+          {modes && modes.length > 1 ? (
+            <div role="radiogroup" aria-label={t('tenders.dropScope')} className="flex flex-wrap gap-3 text-xs text-slate-700 dark:text-slate-300">
+              {modes.map((option) => (
+                <label key={option} className="flex items-center gap-1.5">
+                  <input type="radio" name={`drop-scope-${saleId}`} checked={mode === option} onChange={() => setMode(option)} />
+                  {t(option === 'till' ? 'tenders.dropScopeTill' : 'tenders.dropScopeSale')}
+                </label>
+              ))}
+            </div>
+          ) : null}
           {mode === 'till' && tillWindow ? (
             <p className="text-xs text-slate-600 dark:text-slate-300">
               {t(tillWindow.after ? 'tenders.tillWindow' : 'tenders.tillWindowFirst', {

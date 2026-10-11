@@ -89,6 +89,9 @@
     "tillDifferenceFirst": "Conteo de caja hasta {through}: los retiros difieren del efectivo registrado en {difference}.",
     "tillDifferenceApply": "Aplicar a esta venta",
     "depositHistory": "Depósitos registrados",
+    "dropScope": "Alcance del depósito",
+    "dropScopeTill": "Depósito de caja (todas las ventas desde el último depósito)",
+    "dropScopeSale": "Solo el efectivo de esta venta",
     "refundAction": "Reembolsar",
     "postTitle": "¿Contabilizar este recibo?",
     "postBody": "{number}: recibir {total}.\n{tenders}",
@@ -230,6 +233,11 @@
         "dueDate": "Fecha de vencimiento",
         "overduePush": "Aplazamiento por atraso",
         "globalAverage": "Promedio global"
+      },
+      "overduePush": {
+        "assumption": "Supone que los saldos vencidos se cobran en su fecha prevista.",
+        "basis": "{count, plural, one {# factura} other {# facturas}} · {minDays}–{maxDays} días vencidas · {amount} en total",
+        "basisSameAge": "{count, plural, one {# factura} other {# facturas}} · {days} días vencidas · {amount} en total"
       }
     },
     "model": {

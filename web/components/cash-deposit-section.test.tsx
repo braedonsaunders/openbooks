@@ -67,6 +67,8 @@ function scriptFetch(handler: (url: string, init?: RequestInit) => Response | nu
 async function mount(props: {
   bankOptions: { value: string; label: string }[];
   sourceOptions?: { value: string; label: string }[];
+  mode?: "sale" | "till";
+  modes?: ("sale" | "till")[];
 }) {
   globalThis.__drawerRouter = { push() {}, refresh() {} };
   globalThis.__drawerToasts = [];
@@ -82,6 +84,8 @@ async function mount(props: {
           defaultDate="2026-10-05"
           bankOptions={props.bankOptions}
           sourceOptions={props.sourceOptions ?? []}
+          {...(props.mode ? { mode: props.mode } : {})}
+          {...(props.modes ? { modes: props.modes } : {})}
         />
       </NextIntlClientProvider>,
     );
@@ -253,4 +257,33 @@ test("two till accounts offer the source choice and send it", async (t) => {
   // write is the POST call, not necessarily the first fetch.
   const post = calls.find((call) => typeof call.body.amount === "string");
   assert.equal(post?.body?.sourceAccountId, "till-2", "the chosen till account must ride the drop");
+});
+
+test("a posted sale's till drop records against the till window, not the sale's own cash", async (t) => {
+  const { calls, restore } = scriptFetch((url, init) => {
+    if (url === "/api/cash-sales/till-drops" && init?.method === "POST") {
+      return Response.json({ id: "transfer-3", documentNumber: "TRF-00009", posted: true }, { status: 201 });
+    }
+    return null;
+  });
+  t.after(restore);
+  const { host, root } = await mount({
+    bankOptions: [{ value: BANK_A, label: "1100 · Operating" }],
+    sourceOptions: [{ value: "till-1", label: "1000 · Till 1" }],
+    mode: "till",
+    modes: ["till", "sale"],
+  });
+  t.after(async () => { await act(async () => { root.unmount(); }); host.remove(); });
+  const scopes = [...host.querySelectorAll('input[type="radio"]')];
+  assert.equal(scopes.length, 2, "a posted sale offers the till drop beside its own cash");
+  setInput(host, messages.ar.tenders.depositAmount, "1009.50");
+  await tick();
+  await act(async () => {
+    recordButton(host).dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    await tick();
+  });
+  await tick();
+  await tick();
+  const post = calls.find((call) => call.url === "/api/cash-sales/till-drops" && typeof call.body.amount === "string");
+  assert.equal(post?.body?.tillAccountId, "till-1", "a multi-day drop records against the till");
 });

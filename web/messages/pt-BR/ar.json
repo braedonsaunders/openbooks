@@ -89,6 +89,9 @@
     "tillDifferenceFirst": "Contagem do caixa até {through}: as sangrias diferem do dinheiro registrado em {difference}.",
     "tillDifferenceApply": "Aplicar a esta venda",
     "depositHistory": "Depósitos registrados",
+    "dropScope": "Abrangência do depósito",
+    "dropScopeTill": "Depósito do caixa (todas as vendas desde o último depósito)",
+    "dropScopeSale": "Somente o dinheiro desta venda",
     "refundAction": "Reembolsar",
     "postTitle": "Lançar este recibo?",
     "postBody": "{number}: receber {total}.\n{tenders}",
@@ -230,6 +233,11 @@
         "dueDate": "Data de vencimento",
         "overduePush": "Adiamento por atraso",
         "globalAverage": "Média global"
+      },
+      "overduePush": {
+        "assumption": "Pressupõe que os saldos vencidos serão recebidos na data prevista.",
+        "basis": "{count, plural, one {# fatura} other {# faturas}} · {minDays}–{maxDays} dias em atraso · {amount} no total",
+        "basisSameAge": "{count, plural, one {# fatura} other {# faturas}} · {days} dias em atraso · {amount} no total"
       }
     },
     "model": {

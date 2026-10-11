@@ -89,6 +89,9 @@
     "tillDifferenceFirst": "Kassenzählung bis {through}: Abschöpfungen weichen um {difference} vom erfassten Bargeld ab.",
     "tillDifferenceApply": "Auf diesen Verkauf anwenden",
     "depositHistory": "Erfasste Einzahlungen",
+    "dropScope": "Umfang der Einzahlung",
+    "dropScopeTill": "Kasseneinzahlung (alle Verkäufe seit der letzten Einzahlung)",
+    "dropScopeSale": "Nur das Bargeld dieses Verkaufs",
     "refundAction": "Erstatten",
     "postTitle": "Diesen Beleg buchen?",
     "postBody": "{number}: {total} einnehmen.\n{tenders}",
@@ -230,6 +233,11 @@
         "dueDate": "Fälligkeitsdatum",
         "overduePush": "Überfälligkeitsaufschub",
         "globalAverage": "Globaler Durchschnitt"
+      },
+      "overduePush": {
+        "assumption": "Geht davon aus, dass überfällige Salden an ihrem Prognosedatum eingehen.",
+        "basis": "{count, plural, one {# Rechnung} other {# Rechnungen}} · {minDays}–{maxDays} Tage überfällig · {amount} insgesamt",
+        "basisSameAge": "{count, plural, one {# Rechnung} other {# Rechnungen}} · {days} Tage überfällig · {amount} insgesamt"
       }
     },
     "model": {

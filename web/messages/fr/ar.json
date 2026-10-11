@@ -89,6 +89,9 @@
     "tillDifferenceFirst": "Comptage de caisse jusqu’au {through} : les remises diffèrent des espèces enregistrées de {difference}.",
     "tillDifferenceApply": "Appliquer à cette vente",
     "depositHistory": "Dépôts enregistrés",
+    "dropScope": "Portée du dépôt",
+    "dropScopeTill": "Dépôt de caisse (toutes les ventes depuis le dernier dépôt)",
+    "dropScopeSale": "Uniquement les espèces de cette vente",
     "refundAction": "Rembourser",
     "postTitle": "Comptabiliser ce reçu ?",
     "postBody": "{number} : encaisser {total}.\n{tenders}",
@@ -230,6 +233,11 @@
         "dueDate": "Date d’échéance",
         "overduePush": "Report de retard",
         "globalAverage": "Moyenne globale"
+      },
+      "overduePush": {
+        "assumption": "Suppose que les soldes échus sont encaissés à leur date prévue.",
+        "basis": "{count, plural, one {# facture} other {# factures}} · {minDays}–{maxDays} jours de retard · {amount} au total",
+        "basisSameAge": "{count, plural, one {# facture} other {# factures}} · {days} jours de retard · {amount} au total"
       }
     },
     "model": {

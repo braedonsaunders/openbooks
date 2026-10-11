@@ -89,6 +89,9 @@
     "tillDifferenceFirst": "{through} までのレジ集計：ドロップ額が記録済み現金と {difference} 異なります。",
     "tillDifferenceApply": "この販売に適用",
     "depositHistory": "記録済みの入金",
+    "dropScope": "入金の範囲",
+    "dropScopeTill": "レジ入金（前回の入金以降のすべての販売）",
+    "dropScopeSale": "この販売の現金のみ",
     "refundAction": "返金",
     "postTitle": "このレシートを記帳しますか？",
     "postBody": "{number}: {total} を受領します。\n{tenders}",
@@ -230,6 +233,11 @@
         "dueDate": "支払期日",
         "overduePush": "延滞繰延",
         "globalAverage": "全体平均"
+      },
+      "overduePush": {
+        "assumption": "期日超過残高は予測日に回収されると仮定します。",
+        "basis": "請求書 {count} 件 · 期日超過 {minDays}〜{maxDays} 日 · 合計 {amount}",
+        "basisSameAge": "請求書 {count} 件 · 期日超過 {days} 日 · 合計 {amount}"
       }
     },
     "model": {
