@@ -948,11 +948,7 @@ export async function submitChangeRequest(query: SubmitChangeRequestQuery): Prom
       // actor recorded) instead of refusing. A configured-but-silent flow
       // still owns the submission — configure it to gate or to permit
       // automatic application before saving.
-      const enabledFlows = (await db.execute<{ n: number }>(sql`
-        select count(*)::int as n from flows
-         where org_id = ${orgId} and subject_kind = ${HRM_CHANGE_REQUEST_SUBJECT_KIND} and enabled
-      `)).rows[0]?.n ?? 0;
-      if (enabledFlows > 0) {
+      if (await employmentChangeFlowsEnabled(orgId)) {
         throw new HrmChangeRequestError(
           "NO_FLOW",
           "no enabled approval flow produced an approval gate for employment change requests or explicitly permitted automatic application — configure a flow with approval steps or the apply-without-approval outcome before saving",
@@ -1013,6 +1009,19 @@ export async function submitChangeRequest(query: SubmitChangeRequestQuery): Prom
     }
     return toDTO(submitted);
   });
+}
+
+/**
+ * Whether an enabled Flow governs employment change requests. With none, a
+ * submission applies directly on save; surfaces describe the path the
+ * organization actually takes from this one answer.
+ */
+export async function employmentChangeFlowsEnabled(orgId: string): Promise<boolean> {
+  const row = (await db.execute<{ n: number }>(sql`
+    select count(*)::int as n from flows
+     where org_id = ${orgId} and subject_kind = ${HRM_CHANGE_REQUEST_SUBJECT_KIND} and enabled
+  `)).rows[0];
+  return (row?.n ?? 0) > 0;
 }
 
 /**

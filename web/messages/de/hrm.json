@@ -1629,6 +1629,7 @@
       "noEmployment": "Für Ihre Person ist noch kein Beschäftigungsdatensatz vorhanden, daher kann diese Änderung an nichts geknüpft werden. Bitten Sie Ihre Administration, Ihre Einstellung über die HRM-Aktion Einstellen zu erfassen, und reichen Sie diese Änderung danach erneut ein.",
       "dialogTitle": "Profil bearbeiten",
       "dialogDescription": "Änderungen werden als Anfrage eingereicht — die Genehmigung aktualisiert den Datensatz.",
+      "dialogDescriptionDirect": "Ihre Änderungen gelten beim Speichern und werden in Ihrer Beschäftigungshistorie festgehalten.",
       "pendingTitle": "Offene Profilanfrage",
       "pendingMessage": "Eine Profiländerung ist {status}. Die Genehmigung aktualisiert den Datensatz."
     },
@@ -1922,6 +1923,7 @@
     "bank": {
       "title": "Direktüberweisung",
       "description": "Das Bankkonto, auf das Ihr Gehalt geht. Änderungen werden als Antrag erfasst — die Personalabteilung genehmigt vor jeder Aktualisierung, und Ihre hinterlegte E-Mail wird über jede Änderung benachrichtigt.",
+      "descriptionDirect": "Das Bankkonto, auf das Ihr Gehalt überwiesen wird. Änderungen gelten beim Speichern, und Ihre bisherige E-Mail-Adresse wird über jede Änderung informiert.",
       "noBank": "Keine Bankverbindung hinterlegt",
       "edit": "Gehaltskonto aktualisieren",
       "noGrant": "Für die Aktualisierung des Gehaltskontos ist die Berechtigung hrm.self.request erforderlich — bitten Sie einen Administrator, sie unter Admin → Rollen zu gewähren.",

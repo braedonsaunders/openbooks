@@ -1629,6 +1629,7 @@
       "noEmployment": "Your person has no employment record yet, so this change has nothing to file against. Ask your administrator to record your hire with the HRM Hire action, then file this change again.",
       "dialogTitle": "Edit profile",
       "dialogDescription": "Changes file as a request — HR approves before anything updates.",
+      "dialogDescriptionDirect": "Your changes apply when you save and are recorded in your employment history.",
       "pendingTitle": "Pending profile request",
       "pendingMessage": "A profile change is {status}. HR approval updates the record."
     },
@@ -1922,6 +1923,7 @@
     "bank": {
       "title": "Direct deposit",
       "description": "The bank account your pay goes to. Changes file as a request — HR approves before anything updates, and your existing email is notified of every change.",
+      "descriptionDirect": "The bank account your pay goes to. Changes apply when you save, and your existing email is notified of every change.",
       "noBank": "No bank details on file",
       "edit": "Update direct deposit",
       "noGrant": "Updating direct deposit needs the hrm.self.request permission — ask an administrator to grant it in Admin → Roles.",

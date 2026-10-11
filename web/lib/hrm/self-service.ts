@@ -18,6 +18,7 @@ import {
 import { getTeamView, type TeamView } from '@openbooks/engine/src/hrm/self-service/team-read.ts'
 import { listOwnBankAccounts } from '@openbooks/engine/src/hrm/self-service/bank-changes.ts'
 import { HrmAuthorizationError } from '@openbooks/engine/src/hrm/authorization.ts'
+import { employmentChangeFlowsEnabled } from '@openbooks/engine/src/hrm/change-requests.ts'
 import { SelfServiceError } from '@openbooks/engine/src/hrm/self-service/actor.ts'
 import { can, type Authz } from '../authz'
 import type { DirectoryItem } from '../../components/module-home/ui'
@@ -688,12 +689,16 @@ export async function loadMeProfile(
     hasPending: false,
   }
   try {
-    const [profile, requests, bankAccounts] = await Promise.all([
+    const [profile, requests, bankAccounts, changesNeedApproval] = await Promise.all([
       getMyProfile({ orgId, actorId: authz.user.id }),
       getMyRequests({ orgId, actorId: authz.user.id }),
       // A failed bank read degrades to an honest error fact, never a
       // silent empty list pretending no details exist.
       listOwnBankAccounts({ orgId, actorId: authz.user.id }).catch((): null => null),
+      // Dialog copy names the organization's actual path: approval only
+      // when an enabled Flow governs employment changes. An unreadable
+      // answer keeps the cautious approval wording.
+      employmentChangeFlowsEnabled(orgId).catch(() => true),
     ])
     const pending = requests.find((row) => row.kind === 'profile_change' && (row.status === 'draft' || row.status === 'pending_approval'))
     const address = profile.address
@@ -743,7 +748,7 @@ export async function loadMeProfile(
       bankDialog: sp.bank !== undefined
         ? {
             title: t('me.bank.title'),
-            description: t('me.bank.description'),
+            description: t(changesNeedApproval ? 'me.bank.description' : 'me.bank.descriptionDirect'),
             employments: profile.employments.map((summary) => ({
               value: summary.employmentId,
               label: `${summary.employerName} — ${statusLabel(t, 'me.employmentStatus', summary.status)}`,
@@ -768,7 +773,7 @@ export async function loadMeProfile(
       dialog: sp.edit !== undefined
         ? {
             title: t('me.profile.dialogTitle'),
-            description: t('me.profile.dialogDescription'),
+            description: t(changesNeedApproval ? 'me.profile.dialogDescription' : 'me.profile.dialogDescriptionDirect'),
             employments: profile.employments.map((summary) => ({
               value: summary.employmentId,
               label: `${summary.employerName} — ${statusLabel(t, 'me.employmentStatus', summary.status)}`,

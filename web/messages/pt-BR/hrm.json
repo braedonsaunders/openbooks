@@ -1629,6 +1629,7 @@
       "noEmployment": "Sua pessoa ainda não tem registro de emprego, então esta alteração não tem contra o que ser apresentada. Peça ao administrador para registrar sua contratação com a ação Contratar do RH e apresente esta alteração novamente.",
       "dialogTitle": "Editar perfil",
       "dialogDescription": "Alterações são apresentadas como solicitação — a aprovação atualiza o registro.",
+      "dialogDescriptionDirect": "Suas alterações são aplicadas ao salvar e registradas no seu histórico de emprego.",
       "pendingTitle": "Solicitação de perfil pendente",
       "pendingMessage": "Uma alteração de perfil está {status}. A aprovação atualiza o registro."
     },
@@ -1922,6 +1923,7 @@
     "bank": {
       "title": "Depósito direto",
       "description": "A conta bancária que recebe seu salário. Alterações são apresentadas como solicitação — o RH aprova antes de atualizar, e seu e-mail cadastrado é avisado de cada alteração.",
+      "descriptionDirect": "A conta bancária para a qual seu salário é pago. As alterações são aplicadas ao salvar e seu e-mail atual é notificado de cada alteração.",
       "noBank": "Sem dados bancários registrados",
       "edit": "Atualizar depósito direto",
       "noGrant": "Atualizar o depósito direto requer a permissão hrm.self.request — peça a um administrador para concedê-la em Admin → Funções.",

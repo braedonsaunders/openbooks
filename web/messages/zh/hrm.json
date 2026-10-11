@@ -1629,6 +1629,7 @@
       "noEmployment": "您的人员尚无雇用记录，因此此变更没有可依附的对象。请让人事管理员使用人力资源「聘用」操作记录您的聘用，然后重新提交此变更。",
       "dialogTitle": "编辑档案",
       "dialogDescription": "修改将作为申请提交 — 审批通过后更新记录。",
+      "dialogDescriptionDirect": "您的更改在保存时生效，并记录在您的雇佣历史中。",
       "pendingTitle": "待处理的档案申请",
       "pendingMessage": "档案变更状态为{status}。审批通过后更新记录。"
     },
@@ -1922,6 +1923,7 @@
     "bank": {
       "title": "工资直存账户",
       "description": "接收您工资的银行账户。变更将作为申请提交 — 人事部批准后才会更新，您的预留邮箱会收到每次变更的通知。",
+      "descriptionDirect": "您的工资发放银行账户。更改在保存时生效，每次更改都会通知您现有的电子邮箱。",
       "noBank": "未登记银行账户",
       "edit": "更新直存账户",
       "noGrant": "更新直存账户需要 hrm.self.request 权限 — 请管理员在 Admin → 角色中授予。",

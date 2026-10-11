@@ -1629,6 +1629,7 @@
       "noEmployment": "Votre personne n'a pas encore de dossier d'emploi, cette modification n'a donc rien à quoi se rattacher. Demandez à votre administrateur d'enregistrer votre embauche avec l'action Embaucher du SIRH, puis déposez à nouveau cette modification.",
       "dialogTitle": "Modifier le profil",
       "dialogDescription": "Les modifications sont déposées en demande — l'approbation met à jour la fiche.",
+      "dialogDescriptionDirect": "Vos modifications s’appliquent à l’enregistrement et sont consignées dans votre historique d’emploi.",
       "pendingTitle": "Demande de profil en cours",
       "pendingMessage": "Une modification de profil est {status}. L'approbation met à jour la fiche."
     },
@@ -1922,6 +1923,7 @@
     "bank": {
       "title": "Virement direct",
       "description": "Le compte bancaire qui reçoit votre paie. Les modifications sont déposées comme demande — les RH approuvent avant toute mise à jour, et votre courriel enregistré est avisé de chaque changement.",
+      "descriptionDirect": "Le compte bancaire sur lequel votre paie est versée. Les modifications s’appliquent à l’enregistrement et votre adresse e-mail actuelle est avertie de chaque changement.",
       "noBank": "Aucune coordonnée bancaire enregistrée",
       "edit": "Mettre à jour le virement direct",
       "noGrant": "La mise à jour du virement direct nécessite l'autorisation hrm.self.request — demandez à un administrateur de l'accorder dans Admin → Rôles.",
