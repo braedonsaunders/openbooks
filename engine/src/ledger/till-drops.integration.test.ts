@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrg } from "../platform/db.ts";
 import { postDocument } from "./posting-document.ts";
 import { toUnits } from "../money/money.ts";
-import { CashDepositError, readTillDropWindow, recordCashDeposit, recordTillDrop } from "./cash-deposits.ts";
+import { CashDepositError, readSaleTillWindow, readTillDropWindow, recordCashDeposit, recordTillDrop } from "./cash-deposits.ts";
 import {
   createScratchOrg,
   createScratchUser,
@@ -58,8 +58,9 @@ async function setup(): Promise<{ org: ScratchOrg; actorId: string; tillId: stri
 test("a till drop records by till and date before its sales are posted, and windows reconcile", { skip: !DB }, async () => {
   const { org, actorId, tillId } = await setup();
   try {
-    await draftSale(org, tillId, "2026-07-10", "120.0000");
-    await draftSale(org, tillId, "2026-07-11", "80.0000");
+    const firstSale = await draftSale(org, tillId, "2026-07-10", "120.0000");
+    const secondSale = await draftSale(org, tillId, "2026-07-11", "80.0000");
+    assert.equal(await readSaleTillWindow(org.orgId, secondSale), null, "no drop has closed the window yet");
     const before = await readTillDropWindow(org.orgId, tillId, "2026-07-12");
     assert.deepEqual(
       { after: before.after, sales: before.salesCount, tendered: before.tendered, dropped: before.dropped },
@@ -76,6 +77,11 @@ test("a till drop records by till and date before its sales are posted, and wind
        where l.org_id = ${org.orgId} and l.entry_id = ${first.entryId}`))).rows;
     assert.ok(lines.some((line) => line.account_id === org.accounts.bank && toUnits(line.amount) === toUnits("200")), "bank debited");
     assert.ok(lines.some((line) => line.account_id === tillId && toUnits(line.amount) === toUnits("-200")), "till credited");
+
+    const closing = await readSaleTillWindow(org.orgId, secondSale);
+    assert.equal(closing?.lastSale, true, "the window's last sale carries its over/short");
+    assert.equal(closing?.window.through, "2026-07-12");
+    assert.equal((await readSaleTillWindow(org.orgId, firstSale))?.lastSale, false, "an earlier sale in the window does not");
 
     // The next window starts after the first drop: a later sale and drop
     // reconcile on their own, and an over-count needs its reason.

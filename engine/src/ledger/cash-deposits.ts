@@ -656,3 +656,51 @@ export async function recordTillDrop(
     return { ...result, window: await readTillDropWindow(orgId, input.tillAccountId, input.date) };
   });
 }
+
+/**
+ * The till window a cash sale falls in, for its close-out: the window the
+ * till's first drop on or after the sale date closes. `lastSale` is true
+ * when no later cash sale on the same till falls in that window — the sale
+ * whose close-out carries the window's over/short. Null while no drop has
+ * closed the sale's window yet. Advice only: the operator confirms any
+ * over/short on the sale itself.
+ */
+export async function readSaleTillWindow(
+  orgId: string,
+  saleId: string,
+  allowedSubsidiaryIds?: ReadonlySet<string> | null,
+): Promise<{ window: TillDropWindow; lastSale: boolean } | null> {
+  if (!isUuid(saleId)) return null;
+  return withOrg(orgId, async () => {
+    const sale = (await db.execute<{ date: string; tillAccountId: string | null; subsidiaryId: string | null }>(sql`
+      select d.document_date::text as date, d.subsidiary_id as "subsidiaryId",
+             (select t.account_id from document_tenders t
+               where t.org_id = d.org_id and t.document_id = d.id and t.kind = 'cash'
+               order by t.position limit 1) as "tillAccountId"
+        from documents d
+       where d.org_id = ${orgId} and d.id = ${saleId} and d.kind = 'cash_sale' and d.status <> 'voided'`)).rows[0];
+    if (!sale) {
+      throw depositError("The till window names no cash sale in this organization.", 404, "Reopen the cash sale.");
+    }
+    if (allowedSubsidiaryIds && (sale.subsidiaryId === null || !allowedSubsidiaryIds.has(sale.subsidiaryId))) {
+      throw depositError("The till window names no cash sale in this organization.", 404, "Reopen the cash sale.");
+    }
+    if (!sale.tillAccountId) return null;
+    const closingDrop = (await db.execute<{ date: string | null }>(sql`
+      select min(drop.document_date)::text as date
+        from (${tillDropsSql(orgId, sale.tillAccountId)}) drop
+       where drop.document_date >= ${sale.date}::date`)).rows[0]?.date ?? null;
+    if (!closingDrop) return null;
+    const window = await readTillDropWindow(orgId, sale.tillAccountId, closingDrop);
+    const later = (await db.execute<{ id: string }>(sql`
+      select d.id from documents d
+        join document_tenders t on t.org_id = d.org_id and t.document_id = d.id
+       where d.org_id = ${orgId} and d.kind = 'cash_sale' and d.status <> 'voided' and d.id <> ${saleId}
+         and t.kind = 'cash' and t.account_id = ${sale.tillAccountId}::uuid
+         and d.document_date <= ${closingDrop}::date
+         ${window.after ? sql`and d.document_date > ${window.after}::date` : sql``}
+         and (d.document_date > ${sale.date}::date or (d.document_date = ${sale.date}::date and d.id > ${saleId}))
+       limit 1`)).rows;
+    return { window, lastSale: later.length === 0 };
+  });
+}

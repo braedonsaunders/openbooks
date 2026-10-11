@@ -159,6 +159,7 @@ export function CashTendersSection({
   closeoutValue,
   onCloseoutChange,
   serverOptions,
+  tillSuggestion,
 }: {
   value: unknown
   onChange: (next: TenderDraft[]) => void
@@ -176,6 +177,10 @@ export function CashTendersSection({
   onCloseoutChange?: (next: CloseoutDraft) => void
   /** Staff the tips belong to; empty pools them for the house split. */
   serverOptions?: TenderAccountOption[]
+  /** The till window this sale closes (it is the window's last sale), when
+   *  a drop has closed it: dropped minus tendered cash, offered as the
+   *  close-out over/short for the operator to confirm. */
+  tillSuggestion?: { difference: string; after: string | null; through: string; tillAccountId: string } | null
 }) {
   const t = useTranslations('ar')
   const { money } = useMoney()
@@ -510,6 +515,37 @@ export function CashTendersSection({
             </div>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400">{t('tenders.overShortHint')}</p>
+          {tillSuggestion && !isZeroDecimal(tillSuggestion.difference) ? (
+            <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50/70 px-2 py-1.5 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200">
+              <span>
+                {t(tillSuggestion.after ? 'tenders.tillDifference' : 'tenders.tillDifferenceFirst', {
+                  after: tillSuggestion.after ?? '',
+                  through: tillSuggestion.through,
+                  difference: money(tillSuggestion.difference, { currency }),
+                })}
+              </span>
+              {editable ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    // The count is the till's cash: raise this sale's cash
+                    // tender to the till by the window difference and carry
+                    // the same amount as over/short, so the sale cross-foots.
+                    const index = tenders.findIndex((tender) => tender.kind === 'cash' && tender.accountId === tillSuggestion.tillAccountId)
+                    if (index < 0) return
+                    const current = canonicalDecimal(tenders[index]!.amount ?? '0', 4) ?? '0'
+                    onChange(tenders.map((tender, i) => i === index ? { ...tender, amount: add(current, tillSuggestion.difference) } : tender))
+                    const priorOverShort = closeout.overShort !== '' ? (canonicalDecimal(closeout.overShort, 4) ?? '0') : '0'
+                    onCloseoutChange({ ...closeout, overShort: add(priorOverShort, tillSuggestion.difference) })
+                  }}
+                >
+                  {t('tenders.tillDifferenceApply')}
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
           <p className="text-xs text-slate-500 dark:text-slate-400">{t('tenders.closeoutHint')}</p>
         </div>
       ) : null}

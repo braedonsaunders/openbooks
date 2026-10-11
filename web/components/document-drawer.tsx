@@ -1385,6 +1385,30 @@ export function DocumentDrawer({
     return [...seen].map(([value, label]) => ({ value, label }))
   })()
 
+  // The till window this unposted sale closes, when a drop has closed it
+  // and this is its last sale: the close-out offers the window's
+  // dropped-minus-tendered difference as over/short for the operator.
+  const [tillSuggestion, setTillSuggestion] = useState<{ difference: string; after: string | null; through: string; tillAccountId: string } | null>(null)
+  const tillWindowSaleId = config.kind === 'cash_sale' && !isCreate && !isPosted && doc.status !== 'voided' ? String(doc.id) : null
+  useEffect(() => {
+    if (!tillWindowSaleId) {
+      setTillSuggestion(null)
+      return
+    }
+    let live = true
+    fetch(`/api/cash-sales/${tillWindowSaleId}/till-window`, { headers: { accept: 'application/json' } })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body) => {
+        if (!live) return
+        const till = (body as { till?: { lastSale?: boolean; window?: { difference: string; after: string | null; through: string; tillAccountId: string } } | null } | null)?.till
+        setTillSuggestion(till?.lastSale && till.window ? till.window : null)
+      })
+      .catch(() => { if (live) setTillSuggestion(null) })
+    return () => {
+      live = false
+    }
+  }, [tillWindowSaleId])
+
   const resolveStoredValueCode = useCallback(async (code: string) => {
     const response = await fetch(`/api/stored-value/lookup?code=${encodeURIComponent(code)}`, {
       headers: { accept: 'application/json' },
@@ -3571,6 +3595,7 @@ export function DocumentDrawer({
                 ? (next) => setCustomValues((c) => ({ ...c, closeout: next }))
                 : undefined}
               serverOptions={serverOptions}
+              tillSuggestion={tillSuggestion}
             />
             {/* Till drop beside the settled cash: a posted sale's cashier
                 records the bank drop against the sale; before posting the
