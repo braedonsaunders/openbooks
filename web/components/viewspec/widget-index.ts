@@ -563,6 +563,7 @@ export const WIDGET_FAMILY: Readonly<Record<string, WidgetFamily>> = {
   'setup-description': 'setup',
   'setup-drawer': 'setup',
   'setup-fx': 'setup',
+  'setup-payroll-statutory-holidays': 'setup',
   'setup-readiness-check-card': 'setup',
   'setup-readiness-hero': 'setup',
   'setup-section': 'setup',

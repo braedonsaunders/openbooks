@@ -1867,6 +1867,20 @@
     "actionLimits": "アシスタント操作のレビュー"
   },
   "setup": {
+    "businessCalendarTabs": {
+      "calendars": "カレンダー",
+      "payrollHolidays": "給与の法定休日"
+    },
+    "payrollStatutoryHolidays": {
+      "title": "給与の法定休日",
+      "description": "従業員に給与を支払う各管轄区域について、給与計算が法定休日として扱う日を、各カレンダーの根拠とともに表示します。読み取り専用で、国別パックが管理します。",
+      "yearNavigation": "休日の年",
+      "previousYear": "前年",
+      "nextYear": "翌年",
+      "empty": "給与の管轄区域はまだありません。有効な従業員に給与プロファイルが設定されると、法定休日がここに表示されます。",
+      "note": "国別パックが管理しており、ここでは編集できません。任意の休日と会社の休業は、給与の休日タブで選択します。",
+      "noteLink": "給与の休日を開く"
+    },
     "builder": {
       "active": "有効",
       "inactive": "無効",

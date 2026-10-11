@@ -535,6 +535,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'setup-description': { props: ['description', 'docHref', 'learnMore'] },
   'setup-drawer': { props: ['entityKey', 'sp'] },
   'setup-fx': { props: [] },
+  'setup-payroll-statutory-holidays': { props: ['sp'] },
   'setup-readiness-check-card': { props: ['action', 'description', 'href', 'indexLabel', 'state', 'stateLabel', 'title'] },
   'setup-readiness-hero': { props: ['badgeLabel', 'badgeReady', 'description', 'kicker', 'progressLabel', 'progressMax', 'progressMin', 'progressNow', 'progressOf', 'progressPercent', 'title'] },
   'setup-section': { props: ['basePath', 'entityKey', 'paramPrefix', 'rowParam', 'sp'] },

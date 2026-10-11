@@ -21,8 +21,10 @@ import {
   type PayrollHolidayPayEdition,
   type PayrollHolidayPayRule,
   type PayrollHolidayRule,
+  type PayrollJurisdiction,
   type PayrollWorkTriggeredHoliday,
 } from "./packs.ts";
+import { PayrollPackError } from "./payroll-error.ts";
 import {
   describeWorkSchedule,
   isScheduledOn,
@@ -441,6 +443,128 @@ export async function observedHolidays(
 /** The observed dates as a set — the shape the business-day pair consumes. */
 export const holidayDateSet = (holidays: readonly ObservedHoliday[]): ReadonlySet<string> =>
   new Set(holidays.map((holiday) => holiday.date));
+
+// ---------------------------------------------------------------------------
+// Statutory calendars as the payroll engine applies them
+// ---------------------------------------------------------------------------
+
+/** The fields of one payroll profile that select the statutory calendar it runs under. */
+export interface PayrollHolidayProfileScope {
+  country: string;
+  province: string | null;
+  labourJurisdiction: string | null;
+}
+
+/**
+ * The distinct statutory holiday calendars the profiles fall under, keyed the
+ * way payroll resolves them for each employee (`jurisdictionKey`: the labour
+ * jurisdiction when one is declared, otherwise the work region). Sorted and
+ * deduplicated; pure over the rows it is given.
+ */
+export function payrollHolidayJurisdictionKeys(profiles: readonly PayrollHolidayProfileScope[]): string[] {
+  return [...new Set(profiles.map((profile) => jurisdictionKey(profile.country, profile.province, profile.labourJurisdiction)))].sort();
+}
+
+export interface StatutoryHolidayCalendar {
+  jurisdiction: string;
+  /** The pack's display name for the calendar. */
+  name: string;
+  /** The statute that lists the holidays (`PayrollJurisdiction.citation`). */
+  citation: string;
+  /** Observed days in the year, in date order: pack days, elected optional days and company closures. */
+  holidays: ObservedHoliday[];
+}
+
+export interface StatutoryHolidayCalendarRefusal {
+  jurisdiction: string;
+  /** Names the calendar that cannot be read and why. */
+  message: string;
+}
+
+export interface StatutoryHolidayCalendarReading {
+  calendars: StatutoryHolidayCalendar[];
+  refusals: StatutoryHolidayCalendarRefusal[];
+}
+
+/**
+ * The observed holiday calendar of each jurisdiction for one civil year, read
+ * through the resolver that holiday pay and remittance due dates use. A
+ * jurisdiction the pack cannot answer for is a refusal by name, never an empty
+ * calendar: an empty calendar reads as "this employer works every day".
+ */
+export function statutoryHolidayCalendarsFor(input: {
+  jurisdictions: readonly string[];
+  year: number;
+  overrides: readonly HolidayOverride[];
+}): StatutoryHolidayCalendarReading {
+  const from = `${input.year}-01-01`;
+  const to = `${input.year}-12-31`;
+  const calendars: StatutoryHolidayCalendar[] = [];
+  const refusals: StatutoryHolidayCalendarRefusal[] = [];
+  for (const jurisdiction of input.jurisdictions) {
+    let declaration: PayrollJurisdiction;
+    try {
+      declaration = payrollJurisdiction(jurisdiction);
+    } catch (error) {
+      if (!(error instanceof PayrollPackError)) throw error;
+      refusals.push({ jurisdiction, message: error.message });
+      continue;
+    }
+    if (declaration.scope !== "employment") {
+      refusals.push({
+        jurisdiction,
+        message: `"${jurisdiction}" is not an employment calendar, so payroll applies no statutory holidays to its employees`,
+      });
+      continue;
+    }
+    if (declaration.holidays.length === 0) {
+      refusals.push({
+        jurisdiction,
+        message: `The statutory holiday calendar for "${jurisdiction}" is not transcribed yet, so payroll cannot list its holidays`,
+      });
+      continue;
+    }
+    try {
+      const holidays = resolveObservedHolidays({ jurisdiction, from, to, overrides: input.overrides });
+      calendars.push({ jurisdiction, name: declaration.name, citation: declaration.citation, holidays });
+    } catch (error) {
+      if (!(error instanceof PayrollHolidayError)) throw error;
+      refusals.push({ jurisdiction, message: error.message });
+    }
+  }
+  return { calendars, refusals };
+}
+
+/**
+ * The statutory holiday calendars the organization's active payroll profiles
+ * run under, read for one year. `subsidiaryIds` limits the profiles to
+ * employers the caller may see (null: unrestricted); profiles without a
+ * linked employment have no employer to match, so a restricted read omits them.
+ */
+export async function statutoryHolidayCalendarsOf(input: {
+  orgId: string;
+  year: number;
+  subsidiaryIds: readonly string[] | null;
+  tx?: Pick<typeof db, "execute">;
+}): Promise<StatutoryHolidayCalendarReading> {
+  const tx = input.tx ?? db;
+  if (input.subsidiaryIds !== null && input.subsidiaryIds.length === 0) return { calendars: [], refusals: [] };
+  const scope = input.subsidiaryIds === null
+    ? sql``
+    : sql`and e.employer_subsidiary_id in (${sql.join(input.subsidiaryIds.map((id) => sql`${id}`), sql`, `)})`;
+  const profiles = (await tx.execute<{
+    country: string; province: string | null; labourJurisdiction: string | null;
+  }>(sql`
+    select distinct prof.country, prof.province, prof.labour_jurisdiction as "labourJurisdiction"
+      from employee_payroll_profiles prof
+      left join worker_employments e on e.org_id = prof.org_id and e.id = prof.employment_id
+     where prof.org_id = ${input.orgId} and prof.is_active ${scope}`)).rows;
+  const jurisdictions = payrollHolidayJurisdictionKeys(profiles);
+  const overrides = (await Promise.all(
+    jurisdictions.map((jurisdiction) => loadHolidayOverrides(tx, input.orgId, jurisdiction)),
+  )).flat();
+  return statutoryHolidayCalendarsFor({ jurisdictions, year: input.year, overrides });
+}
 
 // ---------------------------------------------------------------------------
 // Business days

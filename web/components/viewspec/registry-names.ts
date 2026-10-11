@@ -550,6 +550,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'setup-description',
   'setup-drawer',
   'setup-fx',
+  'setup-payroll-statutory-holidays',
   'setup-readiness-check-card',
   'setup-readiness-hero',
   'setup-section',

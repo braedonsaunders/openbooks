@@ -96,6 +96,12 @@ export interface SetupEntityData {
   isPeriodClose: boolean
   isFxProvider: boolean
   isTaxProvider: boolean
+  /** Business calendars offer a read-only payroll view beside the versions list. */
+  hasCalendarTabs: boolean
+  calendarTabs: { href: string; label: string; active: boolean }[]
+  onPayrollHolidays: boolean
+  /** The registry list (search, table, pagination) is the active body. */
+  showRecords: boolean
   isRegistryList: boolean
   canReopen: boolean
   currentParams: Record<string, string | string[] | undefined>
@@ -206,6 +212,12 @@ export async function loadSetupEntity(
     notFound()
   }
   const features = await resolvedFeatureState(orgId)
+  // The payroll view reads payroll data, so it needs the payroll feature and the
+  // payroll read permission; without both the versions list stays the only body.
+  const payrollHolidaysAvailable = entityKey === 'business-calendars'
+    && featureEnabled(features, 'payroll')
+    && can(authz, 'payroll.read')
+  const onPayrollHolidays = payrollHolidaysAvailable && pickString(sp.view) === 'payroll-holidays'
   // One authoritative gate stands between the loader and its rows. A
   // single-key entity keeps the feature-required redirect naming its key; an
   // any-of gate with every member off has no single feature to name, so the
@@ -299,7 +311,16 @@ export async function loadSetupEntity(
     docHref: entity?.docSlug ? `/docs/${entity.docSlug}` : null,
     learnMore: t('learnMore'),
     newLabel: t('new'),
-    canCreate: entity?.allowCreate !== false && !entity?.readOnly,
+    canCreate: entity?.allowCreate !== false && !entity?.readOnly && !onPayrollHolidays,
+    hasCalendarTabs: payrollHolidaysAvailable,
+    calendarTabs: payrollHolidaysAvailable
+      ? [
+          { href: mergeHref(basePath, sp, { view: undefined, row: undefined, holidayYear: undefined }), label: t('businessCalendarTabs.calendars'), active: !onPayrollHolidays },
+          { href: mergeHref(basePath, sp, { view: 'payroll-holidays', row: undefined }), label: t('businessCalendarTabs.payrollHolidays'), active: onPayrollHolidays },
+        ]
+      : [],
+    onPayrollHolidays,
+    showRecords: !onPayrollHolidays,
     showLibrary: entity?.key === 'tax-return-forms',
     libraryPacks: TAX_RETURN_PACKS.map(({ code, name, country }) => ({ code, name, country })),
     libraryInstalled: installedPackRows.rows.map((row: { code: string }) => row.code),
@@ -334,7 +355,7 @@ export async function loadSetupEntity(
     total: Number((countRes.rows[0] as { n?: unknown } | undefined)?.n ?? 0),
     currentPage: list.page,
     perPage: list.perPage,
-    drawerOpen: isRegistryList && rowParam !== undefined,
+    drawerOpen: isRegistryList && rowParam !== undefined && !onPayrollHolidays,
   }
 }
 
@@ -442,7 +463,8 @@ export function setupEntitySpec(data: SetupEntityData): PageSpec {
               widgetBlock('new-setup-button', { entityKey: data.entityKey, label: data.newLabel }, f('canCreate')),
             ]),
           ]),
-          grid('flex flex-wrap items-center gap-2', [
+          { ...widgetBlock('module-home-tabs', { tabs: data.calendarTabs }), when: f('hasCalendarTabs') },
+          { ...grid('flex flex-wrap items-center gap-2', [
             widgetBlock('search-input', { placeholder: data.searchPlaceholder }),
             widgetBlock(
               'show-inactives-toggle',
@@ -452,8 +474,8 @@ export function setupEntitySpec(data: SetupEntityData): PageSpec {
               },
               f('hasActiveToggle'),
             ),
-          ]),
-          grid(
+          ]), when: f('showRecords') },
+          { ...grid(
             'rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900',
             [
               table({
@@ -464,19 +486,20 @@ export function setupEntitySpec(data: SetupEntityData): PageSpec {
                 columns: data.columns.map((col, index) => setupColumn(col, index === 0)),
               }),
             ],
-          ),
-          pagination({
+          ), when: f('showRecords') },
+          { ...pagination({
             basePath: data.basePath,
             total: f('total'),
             page: f('currentPage'),
             perPage: f('perPage'),
             bare: true,
-          }),
+          }), when: f('showRecords') },
           widgetBlock(
             'setup-drawer',
             { entityKey: data.entityKey, sp: data.currentParams },
             f('drawerOpen'),
           ),
+          { ...widgetBlock('setup-payroll-statutory-holidays', { sp: data.currentParams }), when: f('onPayrollHolidays') },
         ]),
         when: f('isRegistryList'),
       },

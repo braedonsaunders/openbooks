@@ -41,7 +41,7 @@ import { AllocationsDriversTabSlot, AllocationsRuleDrawerSlot, AllocationsRulesT
 import { SetupReadinessCheckCard, SetupReadinessHero } from '../../app/(app)/admin/setup/readiness/sections'
 import { FlowNameCell, FlowLastRunCell, FlowRowActionsCell, NewFlowButton as NewFlowListButton, QuickApprovalButton as QuickApprovalListButton } from '../../app/(app)/admin/flows/sections'
 import { AutomationLastRunCell, AutomationNameCell, AutomationApprovalSettingsSection, AutomationRowActionsCell, NewAutomationListButton } from '../../app/(app)/admin/automations/sections'
-import { SetupBadgeLinkCell, SetupCloseSlot, SetupCodeCell, SetupCompanySlot, SetupDescription, SetupDrawerSlot, SetupFxSlot, SetupTaxProviderSlot } from '../../app/(app)/admin/setup/[entity]/sections'
+import { SetupBadgeLinkCell, SetupCloseSlot, SetupCodeCell, SetupCompanySlot, SetupDescription, SetupDrawerSlot, SetupFxSlot, SetupPayrollStatutoryHolidaysSlot, SetupTaxProviderSlot } from '../../app/(app)/admin/setup/[entity]/sections'
 import { CustomizationTabs, FormDefaultCell, ViewScopeCell } from '../../app/(app)/admin/customization/sections'
 import { BookOpen } from 'lucide-react'
 import { Button } from '@openbooks/ui'
@@ -537,5 +537,8 @@ export const SETUP_WIDGETS = {
     />
   ),
   'setup-fx': () => <SetupFxSlot />,
+  'setup-payroll-statutory-holidays': (props) => (
+    <SetupPayrollStatutoryHolidaysSlot sp={(props.sp as Record<string, string | string[] | undefined>) ?? {}} />
+  ),
   'setup-tax-provider': () => <SetupTaxProviderSlot />,
 } satisfies Record<string, WidgetRenderer>

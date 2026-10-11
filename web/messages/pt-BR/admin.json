@@ -1867,6 +1867,20 @@
     "actionLimits": "Revisões de ações do assistente"
   },
   "setup": {
+    "businessCalendarTabs": {
+      "calendars": "Calendários",
+      "payrollHolidays": "Feriados legais da folha"
+    },
+    "payrollStatutoryHolidays": {
+      "title": "Feriados legais da folha",
+      "description": "Os dias que a folha trata como feriados legais em cada jurisdição em que seus funcionários são pagos, com a fonte citada por cada calendário. Somente leitura: o pacote do país mantém esses dias.",
+      "yearNavigation": "Ano dos feriados",
+      "previousYear": "Ano anterior",
+      "nextYear": "Próximo ano",
+      "empty": "Ainda não há jurisdições de folha. Os feriados legais aparecem aqui assim que um funcionário ativo tiver um perfil de folha.",
+      "note": "Mantido pelo pacote do país e não editável aqui. Feriados opcionais e fechamentos da empresa são escolhidos na aba Feriados da folha.",
+      "noteLink": "Abrir feriados da folha"
+    },
     "builder": {
       "active": "Ativo",
       "inactive": "Inativo",

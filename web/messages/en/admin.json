@@ -1867,6 +1867,20 @@
     "actionLimits": "Assistant action reviews"
   },
   "setup": {
+    "businessCalendarTabs": {
+      "calendars": "Calendars",
+      "payrollHolidays": "Payroll statutory holidays"
+    },
+    "payrollStatutoryHolidays": {
+      "title": "Payroll statutory holidays",
+      "description": "The days payroll treats as statutory holidays in each jurisdiction your employees are paid under, with the source each calendar cites. Read-only: the country pack maintains these days.",
+      "yearNavigation": "Holiday year",
+      "previousYear": "Previous year",
+      "nextYear": "Next year",
+      "empty": "No payroll jurisdictions yet. Statutory holidays appear here once an active employee has a payroll profile.",
+      "note": "Maintained by the country pack and not editable here. Optional days and company closures are elected on the payroll Holidays tab.",
+      "noteLink": "Open payroll holidays"
+    },
     "builder": {
       "active": "Active",
       "inactive": "Inactive",

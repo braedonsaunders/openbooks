@@ -36,6 +36,9 @@ import { setupRecordTabs } from './SetupEntitySection'
 import { TaxReturnBoxesTab, type TaxReturnBoxRow } from './TaxReturnBoxesTab'
 import { TaxRatesTab, type TaxRateRow } from './TaxRatesTab'
 import { SegmentValuesTab, type SegmentValueRow } from './SegmentValuesTab'
+import { PayrollStatutoryHolidaysSection } from './PayrollStatutoryHolidays'
+import { statutoryHolidayCalendarsOf } from '@openbooks/engine/payroll/holidays'
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
 
 /**
  * Composite cells and slots for the generic setup-entity list.
@@ -557,4 +560,43 @@ export async function SetupFxSlot() {
 export async function SetupTaxProviderSlot() {
   const authz = await requirePermission('admin.setup.manage')
   return <TaxProviderPage orgId={authz.user.orgId} />
+}
+
+/**
+ * Payroll statutory holidays beside the business calendars. Read-only: the
+ * country pack maintains them. The year comes from the URL and defaults to the
+ * organization's current business year.
+ */
+export async function SetupPayrollStatutoryHolidaysSlot({
+  sp,
+}: {
+  sp: Record<string, string | string[] | undefined>
+}) {
+  const authz = await requirePermission('payroll.read')
+  const { orgId } = authz.user
+  await requireFeatureEnabled(orgId, 'payroll')
+  const requested = pickString(sp.holidayYear)
+  const thisYear = Number((await businessToday(orgId)).slice(0, 4))
+  const requestedYear = requested && /^\d{4}$/.test(requested) ? Number(requested) : NaN
+  const year = requestedYear >= 1900 && requestedYear <= 2999 ? requestedYear : thisYear
+  const reading = await statutoryHolidayCalendarsOf({
+    orgId,
+    year,
+    subsidiaryIds: authz.allowedSubsidiaryIds,
+  })
+  const yearHref = (target: number) => mergeHref('/admin/setup/business-calendars', sp, {
+    view: 'payroll-holidays',
+    row: undefined,
+    holidayYear: String(target),
+  })
+  return (
+    <PayrollStatutoryHolidaysSection
+      year={year}
+      calendars={reading.calendars}
+      refusals={reading.refusals}
+      previousYearHref={yearHref(year - 1)}
+      nextYearHref={yearHref(year + 1)}
+      payrollHolidaysHref="/admin/setup/payroll?tab=holidays"
+    />
+  )
 }

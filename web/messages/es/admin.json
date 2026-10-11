@@ -1867,6 +1867,20 @@
     "actionLimits": "Revisión de acciones del asistente"
   },
   "setup": {
+    "businessCalendarTabs": {
+      "calendars": "Calendarios",
+      "payrollHolidays": "Días festivos legales de nómina"
+    },
+    "payrollStatutoryHolidays": {
+      "title": "Días festivos legales de nómina",
+      "description": "Los días que la nómina trata como festivos legales en cada jurisdicción en la que se paga a sus empleados, con la fuente que cita cada calendario. Solo lectura: el paquete del país mantiene estos días.",
+      "yearNavigation": "Año de festivos",
+      "previousYear": "Año anterior",
+      "nextYear": "Año siguiente",
+      "empty": "Aún no hay jurisdicciones de nómina. Los festivos legales aparecen aquí cuando un empleado activo tiene un perfil de nómina.",
+      "note": "Los mantiene el paquete del país y no se pueden editar aquí. Los días opcionales y los cierres de la empresa se eligen en la pestaña Días festivos de nómina.",
+      "noteLink": "Abrir días festivos de nómina"
+    },
     "builder": {
       "active": "Activo",
       "inactive": "Inactivo",

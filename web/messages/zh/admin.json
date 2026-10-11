@@ -1867,6 +1867,20 @@
     "actionLimits": "助手操作审核"
   },
   "setup": {
+    "businessCalendarTabs": {
+      "calendars": "日历",
+      "payrollHolidays": "薪资法定假日"
+    },
+    "payrollStatutoryHolidays": {
+      "title": "薪资法定假日",
+      "description": "薪资计算对员工所在各司法辖区视为法定假日的日期，并附每份日历的依据来源。仅供查看：这些日期由国家包维护。",
+      "yearNavigation": "假日年份",
+      "previousYear": "上一年",
+      "nextYear": "下一年",
+      "empty": "尚无薪资司法辖区。当有效员工拥有薪资档案后，法定假日会显示在此处。",
+      "note": "由国家包维护，此处不可编辑。可选假日和公司停业日请在薪资的假日标签页中选择。",
+      "noteLink": "打开薪资假日"
+    },
     "builder": {
       "active": "启用",
       "inactive": "停用",

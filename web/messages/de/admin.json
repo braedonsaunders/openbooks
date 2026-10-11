@@ -1867,6 +1867,20 @@
     "actionLimits": "Aktionsprüfungen des Assistenten"
   },
   "setup": {
+    "businessCalendarTabs": {
+      "calendars": "Kalender",
+      "payrollHolidays": "Gesetzliche Feiertage der Lohnabrechnung"
+    },
+    "payrollStatutoryHolidays": {
+      "title": "Gesetzliche Feiertage der Lohnabrechnung",
+      "description": "Die Tage, die die Lohnabrechnung in jeder Jurisdiktion, in der Ihre Mitarbeitenden bezahlt werden, als gesetzliche Feiertage behandelt, mit der Quelle jedes Kalenders. Nur lesbar: Die Länderregelung pflegt diese Tage.",
+      "yearNavigation": "Feiertagsjahr",
+      "previousYear": "Vorjahr",
+      "nextYear": "Folgejahr",
+      "empty": "Noch keine Lohn-Jurisdiktionen. Gesetzliche Feiertage erscheinen hier, sobald einer aktiven Person ein Lohnprofil zugeordnet ist.",
+      "note": "Von der Länderregelung gepflegt und hier nicht bearbeitbar. Optionale Tage und Betriebsschließungen werden auf dem Reiter Feiertage der Lohnabrechnung festgelegt.",
+      "noteLink": "Lohn-Feiertage öffnen"
+    },
     "builder": {
       "active": "Aktiv",
       "inactive": "Inaktiv",

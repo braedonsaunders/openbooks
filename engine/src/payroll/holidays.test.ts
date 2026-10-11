@@ -12,6 +12,8 @@ import {
   emptyLookbackEarnings,
   holidayDateSet,
   isBusinessDay,
+  payrollHolidayJurisdictionKeys,
+  statutoryHolidayCalendarsFor,
   lookbackWindow,
   nextBusinessDay,
   PayrollHolidayError,
@@ -1504,4 +1506,63 @@ test("adding a time dimension re-dated nothing: every other rule answers for any
   // And the two answers that are not a formula are still not a formula.
   assert.equal(statutoryHolidayPayRule("US-TX", "2019-07-04"), null);
   assert.throws(() => statutoryHolidayPayRule("CA-ZZ", "2019-07-01"), PayrollPackError);
+});
+
+test("a profile runs under its declared labour jurisdiction, otherwise under its work region", () => {
+  assert.deepEqual(
+    payrollHolidayJurisdictionKeys([
+      { country: "CA", province: "AB", labourJurisdiction: null },
+      { country: "CA", province: "AB", labourJurisdiction: null },
+      { country: "CA", province: "ON", labourJurisdiction: "CA-AB" },
+      { country: "CA", province: "ON", labourJurisdiction: null },
+    ]),
+    ["CA-AB", "CA-ON"],
+  );
+  assert.deepEqual(payrollHolidayJurisdictionKeys([]), []);
+});
+
+test("Alberta's 2026 calendar lists its general holidays from the Code and omits the optional days", () => {
+  const reading = statutoryHolidayCalendarsFor({ jurisdictions: ["CA-AB"], year: 2026, overrides: [] });
+  assert.deepEqual(reading.refusals, []);
+  const [calendar] = reading.calendars;
+  assert.ok(calendar);
+  assert.equal(calendar.jurisdiction, "CA-AB");
+  assert.equal(calendar.citation, payrollJurisdiction("CA-AB").citation);
+  const dates = calendar.holidays.map((holiday) => holiday.date);
+  // Hand-worked: Family Day is the third Monday of February, Good Friday is two
+  // days before Easter Sunday (April 5, 2026), Victoria Day is the Monday before May 25.
+  for (const date of ["2026-01-01", "2026-02-16", "2026-04-03", "2026-05-18", "2026-07-01", "2026-09-07", "2026-10-12", "2026-11-11", "2026-12-25"]) {
+    assert.ok(dates.includes(date), `${date} is an Alberta general holiday`);
+  }
+  // Boxing Day, Heritage Day and Easter Monday are optional in Alberta and stay off until elected.
+  for (const date of ["2026-12-26", "2026-08-03", "2026-04-06"]) {
+    assert.ok(!dates.includes(date), `${date} is not observed by default`);
+  }
+});
+
+test("an Alberta optional day is listed as elected, on its observed date, once the employer elects it", () => {
+  const reading = statutoryHolidayCalendarsFor({
+    jurisdictions: ["CA-AB"],
+    year: 2026,
+    overrides: [override({ jurisdiction: "CA-AB", packKey: "heritage_day", isObserved: true })],
+  });
+  const heritage = reading.calendars[0]?.holidays.find((holiday) => holiday.key === "heritage_day");
+  assert.equal(heritage?.date, "2026-08-03");
+  assert.equal(heritage?.elected, true);
+  assert.equal(heritage?.source, "pack");
+});
+
+test("a jurisdiction no pack declares is refused by name without blanking the calendars that can be read", () => {
+  const reading = statutoryHolidayCalendarsFor({ jurisdictions: ["XX-QQ", "CA-AB"], year: 2026, overrides: [] });
+  assert.deepEqual(reading.calendars.map((calendar) => calendar.jurisdiction), ["CA-AB"]);
+  assert.equal(reading.refusals.length, 1);
+  assert.equal(reading.refusals[0]?.jurisdiction, "XX-QQ");
+  assert.match(reading.refusals[0]?.message ?? "", /XX-QQ/);
+});
+
+test("no payroll profile means there is no calendar to read", () => {
+  assert.deepEqual(
+    statutoryHolidayCalendarsFor({ jurisdictions: [], year: 2026, overrides: [] }),
+    { calendars: [], refusals: [] },
+  );
 });

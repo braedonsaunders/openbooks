@@ -1867,6 +1867,20 @@
     "actionLimits": "Révisions des actions de l’assistant"
   },
   "setup": {
+    "businessCalendarTabs": {
+      "calendars": "Calendriers",
+      "payrollHolidays": "Jours fériés légaux de la paie"
+    },
+    "payrollStatutoryHolidays": {
+      "title": "Jours fériés légaux de la paie",
+      "description": "Les jours que la paie traite comme jours fériés légaux dans chaque juridiction où vos employés sont payés, avec la source citée pour chaque calendrier. Lecture seule : le paquet pays maintient ces jours.",
+      "yearNavigation": "Année des jours fériés",
+      "previousYear": "Année précédente",
+      "nextYear": "Année suivante",
+      "empty": "Aucune juridiction de paie pour l'instant. Les jours fériés légaux apparaissent ici dès qu'un employé actif a un profil de paie.",
+      "note": "Maintenus par le paquet pays et non modifiables ici. Les jours optionnels et les fermetures d'entreprise se choisissent dans l'onglet Jours fériés de la paie.",
+      "noteLink": "Ouvrir les jours fériés de la paie"
+    },
     "builder": {
       "active": "Actif",
       "inactive": "Inactif",
