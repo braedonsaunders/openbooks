@@ -208,6 +208,7 @@
     },
     "worklist": {
       "overdueToChase": "Overdue to chase",
+      "unappliedCredits": "Unapplied credits",
       "expectedThisWeek": "Expected this week",
       "customer": "Customer",
       "prediction": "Prediction",

@@ -6,7 +6,7 @@ import { db, withBypassContext, withOrgContext } from '@openbooks/engine/platfor
 import { postDocument } from '@openbooks/engine/documents'
 import { createScratchOrg, dropScratchOrg, assertDedicatedFixtureDatabase } from '@openbooks/engine/testing/fixtures'
 import { openItems } from '../cash/open-items'
-import { buildWeekGrid, compareMoney, overdueItemCount, subtractMoney, summariseSide, ZERO_MONEY } from '../cash/core'
+import { buildWeekGrid, collectionsBalances } from '../cash/core'
 
 type Org = Awaited<ReturnType<typeof createScratchOrg>>
 
@@ -75,14 +75,13 @@ test('the AR home overdue count and amount come from the same open-item row set'
           '1', 'same_currency', 'T4-PROBE', ${actor}, ${actor})`)
     })
     await withOrgContext(org.orgId, async () => {
-      // The AR home card's own computation: open items, the overdue count,
+      // The AR position's collections figures: open items, the overdue count,
       // and the overdue amount off the same row set.
       const grid = buildWeekGrid('2026-07-15', 4)
       const items = await openItems(org.orgId, 'ar', grid.asOfIso)
-      const summary = summariseSide(items, grid.asOf, ZERO_MONEY, null)
-      const current = summary.buckets.find((b) => b.index === 0)?.amount ?? ZERO_MONEY
-      const count = overdueItemCount(items, grid.asOf)
-      const amount = compareMoney(summary.outstanding, current) > 0 ? subtractMoney(summary.outstanding, current) : ZERO_MONEY
+      const balances = collectionsBalances(items, grid.asOf)
+      const count = balances.overdueCount
+      const amount = balances.overdue
       const docs = await db.execute(sql`select d.id from documents d
         where d.org_id = ${org.orgId} and d.kind = 'customer_invoice' and d.status = 'posted'`)
       assert.equal(docs.rows.length, 7)

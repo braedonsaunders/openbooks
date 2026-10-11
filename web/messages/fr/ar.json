@@ -208,6 +208,7 @@
     },
     "worklist": {
       "overdueToChase": "Retards à relancer",
+      "unappliedCredits": "Avoirs non imputés",
       "expectedThisWeek": "Prévu cette semaine",
       "customer": "Client",
       "prediction": "Prévision",

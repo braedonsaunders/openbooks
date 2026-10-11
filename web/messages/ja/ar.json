@@ -208,6 +208,7 @@
     },
     "worklist": {
       "overdueToChase": "督促対象の延滞額",
+      "unappliedCredits": "未消込のクレジット",
       "expectedThisWeek": "今週の回収見込",
       "customer": "顧客",
       "prediction": "予測",

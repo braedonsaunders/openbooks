@@ -208,6 +208,7 @@
     },
     "worklist": {
       "overdueToChase": "待催收逾期款",
+      "unappliedCredits": "未核销贷项",
       "expectedThisWeek": "本周预计收款",
       "customer": "客户",
       "prediction": "预测方式",

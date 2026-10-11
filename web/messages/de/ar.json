@@ -208,6 +208,7 @@
     },
     "worklist": {
       "overdueToChase": "Überfällig zur Nachverfolgung",
+      "unappliedCredits": "Nicht verrechnete Gutschriften",
       "expectedThisWeek": "Diese Woche erwartet",
       "customer": "Kunde",
       "prediction": "Prognose",

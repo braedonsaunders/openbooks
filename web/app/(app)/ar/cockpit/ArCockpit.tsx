@@ -5,7 +5,7 @@ import { useMoney } from '@/components/money-provider'
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
-import { cmp as compareMoney } from '@openbooks/engine/money/money'
+import { add as addMoney, cmp as compareMoney } from '@openbooks/engine/money/money'
 import { overdueOpenPct } from './overdue-pct'
 import {
   Wallet,
@@ -81,7 +81,10 @@ export function ArCockpit({
 
   // Bare number on purpose: the overdueSub message already appends "%",
   // so formatExactPercent's suffixed value rendered "100%%".
-  const overduePct = overdueOpenPct(data.overdue, data.outstanding);
+  // The overdue share is taken of gross open invoices: the overdue figure
+  // excludes credits, so the denominator adds them back to the net outstanding.
+  const grossOpen = addMoney(data.outstanding, data.unappliedCredits.total);
+  const overduePct = overdueOpenPct(data.overdue, grossOpen);
   const customerQuery = (search.get("customerQ") ?? "")
     .trim()
     .toLocaleLowerCase();
@@ -180,6 +183,7 @@ export function ArCockpit({
             entries={data.worklist}
             overdueTotal={data.overdue}
             expectedThisWeek={data.expectedThisWeek}
+            unappliedCredits={data.unappliedCredits}
             canCollect={canCollect}
           />
         </CockpitPanel>

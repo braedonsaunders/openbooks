@@ -6,7 +6,7 @@ import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useFormatter, useTranslations } from "next-intl";
 import { cmp as compareMoney, sum as sumMoney } from '@openbooks/engine/money/money'
-import { ArrowRight, TriangleAlert, CalendarClock } from "lucide-react";
+import { ArrowRight, TriangleAlert, CalendarClock, Receipt } from "lucide-react";
 import { Badge, Button, cn } from "@openbooks/ui";
 
 import { SearchInput } from "../../../../components/search-input";
@@ -39,11 +39,14 @@ export function CollectionsWorklist({
   entries,
   overdueTotal,
   expectedThisWeek,
+  unappliedCredits,
   canCollect,
 }: {
   entries: WorklistEntry[];
   overdueTotal: string;
   expectedThisWeek: string;
+  /** Unapplied customer credits: reported beside the chase total, never chased. */
+  unappliedCredits: { count: number; total: string };
   /** ar.pay — gates the collection-run handoff. */
   canCollect: boolean;
 }) {
@@ -107,7 +110,7 @@ export function CollectionsWorklist({
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* chase strip */}
-      <div className="grid shrink-0 grid-cols-2 divide-x divide-slate-100 border-b border-slate-100 dark:divide-slate-800 dark:border-slate-800">
+      <div className="grid shrink-0 grid-cols-3 divide-x divide-slate-100 border-b border-slate-100 dark:divide-slate-800 dark:border-slate-800">
         <div className="px-4 py-2.5">
           <p className="flex items-center gap-1 text-[11px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">
             <TriangleAlert size={11} /> {t("overdueToChase")}
@@ -129,6 +132,14 @@ export function CollectionsWorklist({
           </p>
           <p className="text-lg font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
             {moneyCompact(expectedThisWeek)}
+          </p>
+        </div>
+        <div className="px-4 py-2.5">
+          <p className="flex items-center gap-1 text-[11px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">
+            <Receipt size={11} /> {t("unappliedCredits")}
+          </p>
+          <p className="text-lg font-bold tabular-nums text-slate-900 dark:text-slate-100">
+            {moneyCompact(unappliedCredits.total)}
           </p>
         </div>
       </div>

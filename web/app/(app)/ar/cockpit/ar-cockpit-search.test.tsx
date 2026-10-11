@@ -48,6 +48,7 @@ function position(byCustomer: { partyId: string; partyName: string; amount: stri
     outstanding: "100000.0000",
     overdue: "10000.0000",
     overdueCount: 2,
+    unappliedCredits: { count: 0, total: "0.0000" },
     expectedThisWeek: "5000.0000",
     expectedNext30: "20000.0000",
     dso: 30,

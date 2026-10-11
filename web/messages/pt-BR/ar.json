@@ -208,6 +208,7 @@
     },
     "worklist": {
       "overdueToChase": "Vencido para cobrar",
+      "unappliedCredits": "Créditos não aplicados",
       "expectedThisWeek": "Previsto nesta semana",
       "customer": "Cliente",
       "prediction": "Previsão",

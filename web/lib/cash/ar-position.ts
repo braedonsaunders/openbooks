@@ -5,18 +5,19 @@ import {
   bankBalances,
   buildWeekGrid,
   cashflowModel,
+  chaseableEntries,
+  collectionsBalances,
   forecastCategoryOrUnavailable,
   compareMoney,
   daysBetween,
+  isUnappliedCredit,
   loadCategories,
   openItems,
-  overdueItemCount,
   sumMoney,
   paymentStats,
   resolveAsOf,
   scheduleForecast,
   summariseSide,
-  subtractMoney,
   toISO,
   ZERO_MONEY,
   refusedCategories,
@@ -53,9 +54,13 @@ export interface CustomerReceivable {
 export interface ArPosition {
   asOf: string;
   horizonWeeks: number;
+  /** Net open receivables: invoices less unapplied credits. */
   outstanding: string;
+  /** Gross past-due receivables; unapplied credits are excluded. */
   overdue: string;
   overdueCount: number;
+  /** Unapplied customer credits as a positive magnitude; never overdue or chaseable. */
+  unappliedCredits: { count: number; total: string };
   /** Predicted to be collected in the first horizon week. */
   expectedThisWeek: string;
   /** Predicted to be collected within 30 days. */
@@ -95,17 +100,21 @@ export function groupByCustomer(items: OpenItem[], asOf: Date): CustomerReceivab
       { partyId: it.partyId, partyName: it.partyName, amount: ZERO_MONEY, count: 0, overdue: ZERO_MONEY, oldestDue: null as string | null };
     cur.amount = addMoney(cur.amount, it.remaining);
     cur.count += 1;
-    // Past-due follows the shared aging rule: an item with no due date ages
-    // from its posting date, exactly like the overdue tiles — the customer
-    // lines and the tiles cannot disagree on what "past due" means.
-    const basis = agingBasisDate({ dueDate: it.dueDate, postingDate: it.tranDate });
-    if (basis && daysBetween(basis, asOf) > 0) cur.overdue = addMoney(cur.overdue, it.remaining);
-    // The oldest date the customer has owed money — the aging basis, not
-    // the due date alone, so an overdue untermed line sets it instead of
-    // leaving overdue money with a null oldest date.
-    if (basis) {
-      const iso = toISO(basis);
-      if (!cur.oldestDue || iso < cur.oldestDue) cur.oldestDue = iso;
+    // An unapplied credit nets into the customer's open balance above, but it
+    // is not owed money: it is never past due and never sets the oldest date.
+    if (!isUnappliedCredit(it)) {
+      // Past-due follows the shared aging rule: an item with no due date ages
+      // from its posting date, exactly like the overdue tiles — the customer
+      // lines and the tiles cannot disagree on what "past due" means.
+      const basis = agingBasisDate({ dueDate: it.dueDate, postingDate: it.tranDate });
+      if (basis && daysBetween(basis, asOf) > 0) cur.overdue = addMoney(cur.overdue, it.remaining);
+      // The oldest date the customer has owed money — the aging basis, not
+      // the due date alone, so an overdue untermed line sets it instead of
+      // leaving overdue money with a null oldest date.
+      if (basis) {
+        const iso = toISO(basis);
+        if (!cur.oldestDue || iso < cur.oldestDue) cur.oldestDue = iso;
+      }
     }
     map.set(key, cur);
   }
@@ -169,9 +178,10 @@ export async function arPosition(
   });
 
   const summary = summariseSide(arItems, grid.asOf, ar.scheduled, arStats.globalAvg, ar.unplaced);
-  const current = summary.buckets.find((b) => b.index === 0)?.amount ?? ZERO_MONEY;
-  const overdue = compareMoney(summary.outstanding, current) > 0 ? subtractMoney(summary.outstanding, current) : ZERO_MONEY;
-  const overdueCount = overdueItemCount(arItems, grid.asOf);
+  // Overdue is the gross past-due receivable balance. The aging buckets above
+  // stay net of unapplied credits, so they reconcile to the aging report;
+  // the collections figures never let a credit read as an overdue receivable.
+  const balances = collectionsBalances(arItems, grid.asOf);
 
   const weeks: ArWeek[] = grid.weekStarts.map((k, i) => {
     const entries = (ar.byWeek.get(k) ?? []).slice().sort((a, b) => compareMoney(b.amount, a.amount));
@@ -195,8 +205,8 @@ export async function arPosition(
   const cutoffSchedule = scheduleForecast(arItems, arStats, grid.asOf, grid.start, addDays(grid.asOf, 30), model);
   const expectedNext30 = sumMoney(cutoffSchedule.entries.filter((e) => e.predictedDate <= cutoff30).map((e) => e.amount));
 
-  // Collections worklist: most overdue first, then largest.
-  const worklist = ar.entries
+  // Collections worklist: receivables only, most overdue first, then largest.
+  const worklist = chaseableEntries(ar.entries)
     .slice()
     .sort((a, b) => {
       if (b.daysOverdue !== a.daysOverdue) return b.daysOverdue - a.daysOverdue;
@@ -207,8 +217,9 @@ export async function arPosition(
     asOf: asOfIso,
     horizonWeeks,
     outstanding: summary.outstanding,
-    overdue,
-    overdueCount,
+    overdue: balances.overdue,
+    overdueCount: balances.overdueCount,
+    unappliedCredits: { count: balances.unappliedCreditCount, total: balances.unappliedCredits },
     expectedThisWeek,
     expectedNext30,
     dso: arStats.globalAvg,

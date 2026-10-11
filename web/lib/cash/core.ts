@@ -2088,6 +2088,49 @@ export function overdueItemCount(items: OpenItem[], asOf: Date): number {
   return items.filter((it) => agingBucketIndex(daysPastDue(it, asOf)) > 0).length;
 }
 
+/**
+ * An open receivable item with a negative balance is an unapplied customer
+ * credit. It nets against the customer's open balance, but it is not a
+ * receivable: it is never past due and never a collection to chase.
+ */
+export function isUnappliedCredit(item: OpenItem): boolean {
+  return compareMoney(item.remaining, ZERO_MONEY) < 0;
+}
+
+/**
+ * Collections figures for one AR open-item population. `overdue` is the gross
+ * past-due receivable balance, so unapplied credits neither reduce it nor
+ * count toward it. Credits are reported separately as a positive magnitude.
+ */
+export function collectionsBalances(items: OpenItem[], asOf: Date): {
+  overdue: Money;
+  overdueCount: number;
+  unappliedCredits: Money;
+  unappliedCreditCount: number;
+} {
+  let overdue = ZERO_MONEY;
+  let overdueCount = 0;
+  let unappliedCredits = ZERO_MONEY;
+  let unappliedCreditCount = 0;
+  for (const it of items) {
+    if (isUnappliedCredit(it)) {
+      unappliedCredits = addMoney(unappliedCredits, absMoney(it.remaining));
+      unappliedCreditCount += 1;
+      continue;
+    }
+    if (agingBucketIndex(daysPastDue(it, asOf)) > 0) {
+      overdue = addMoney(overdue, it.remaining);
+      overdueCount += 1;
+    }
+  }
+  return { overdue, overdueCount, unappliedCredits, unappliedCreditCount };
+}
+
+/** Collections worklist rows: scheduled receivables only. A credit is never a chase row. */
+export function chaseableEntries(entries: readonly ForecastEntry[]): ForecastEntry[] {
+  return entries.filter((entry) => compareMoney(entry.amount, ZERO_MONEY) > 0);
+}
+
 export function summariseSide(
   items: OpenItem[],
   asOf: Date,

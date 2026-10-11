@@ -39,7 +39,7 @@ test('invoice drill-down leaves Collections mounted with its search and selectio
     } })
     if (url !== '/api/collections/worklist') return Response.json({})
     loads += 1
-    return Response.json({ asOf: '2026-10-01', overdue: '120.3400', expectedThisWeek: '0.0000', canCollect: true,
+    return Response.json({ asOf: '2026-10-01', overdue: '120.3400', expectedThisWeek: '0.0000', unappliedCredits: { count: 0, total: '0.0000' }, canCollect: true,
       rows: [{ id: invoiceId, docId: invoiceId, docKind: 'customer_invoice', docNumber: 'INV-1042', partyName: 'Meridian', amount: '120.3400', dueDate: '2026-09-01', predictedDate: '2026-10-02', daysOverdue: 30, method: 'Overdue push' }] })
   }) as typeof fetch
   const host = document.createElement('div'); document.body.append(host)

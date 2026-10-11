@@ -19,7 +19,8 @@ export interface CollectionsQueueRow {
   amount: string; dueDate: string | null; predictedDate: string; daysOverdue: number; method: string;
 }
 interface QueueData {
-  rows: CollectionsQueueRow[]; asOf: string; overdue: string; expectedThisWeek: string; canCollect: boolean;
+  rows: CollectionsQueueRow[]; asOf: string; overdue: string; expectedThisWeek: string;
+  unappliedCredits: { count: number; total: string }; canCollect: boolean;
 }
 
 export function CollectionsQueue() {
@@ -53,6 +54,7 @@ export function CollectionsQueue() {
     {data && <KpiStrip items={[
       { label: t('overdueToChase'), value: money(data.overdue), tone: 'bad' },
       { label: t('expectedThisWeek'), value: money(data.expectedThisWeek), tone: 'good' },
+      { label: t('unappliedCredits'), value: money(data.unappliedCredits.total) },
     ]} />}
     <PagedTable source="collections_worklist" rows={rows} rowKey={(row) => row.id} searchable
       empty={data ? t('empty') : error ? common('feedback.loadFailed') : common('feedback.loading')}

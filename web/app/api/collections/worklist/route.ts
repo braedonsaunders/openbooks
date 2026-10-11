@@ -21,6 +21,7 @@ export const GET = defineRoute({
     }, undefined, authz.allowedSubsidiaryIds, locale)
     return NextResponse.json({
       asOf: position.asOf, overdue: position.overdue, expectedThisWeek: position.expectedThisWeek,
+      unappliedCredits: position.unappliedCredits,
       canCollect: can(authz, 'ar.pay'),
       rows: position.worklist.filter((entry) => entry.docId && entry.docKind === 'customer_invoice').map((entry) => ({
         id: entry.id, docId: entry.docId, docKind: entry.docKind, docNumber: entry.docNumber,
