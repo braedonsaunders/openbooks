@@ -299,16 +299,29 @@ const TABS = [
 type Tab = (typeof TABS)[number];
 const MODULES = ["ar", "ap", "banking", "assets", "tax", "gl"] as const;
 
-async function post(body: Record<string, unknown>, fallback: string) {
-  return apiJson<Record<string, unknown>>(
-    "/api/admin/close",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    },
-    fallback,
-  );
+async function post(body: Record<string, unknown>, fallback: string, timeoutMessage?: string) {
+  // Close writes run sequential module transitions behind one advisory
+  // fence: on a loaded host the answer can take a while, but a request that
+  // never answers must not wedge the drawer with a busy button and no
+  // feedback. The timeout turns a hang into a visible error that releases
+  // the form; the message tells the operator to review the locks before
+  // retrying, since a timed-out write may still have committed.
+  try {
+    return await apiJson<Record<string, unknown>>(
+      "/api/admin/close",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(60_000),
+      },
+      fallback,
+    );
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError")
+      throw new ApiResponseError(timeoutMessage ?? fallback, 0);
+    throw error;
+  }
 }
 
 function dataText(
@@ -1342,8 +1355,23 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
     action?.state === "reopen" &&
     action.module !== "gl" &&
     (row?.locks?.["gl"]?.state ?? "open") === "closed";
+  // A submit that sends nothing must still say why: a dead form with no
+  // feedback reads as a broken close. The checks stay inline (not in a
+  // helper) so the row and book narrow for the post below.
   async function apply() {
-    if (!row || !selectedBook || !action || !reason.trim()) return;
+    if (!action) return;
+    if (!row || !selectedBook) {
+      const message = t("periods.closeUnavailable");
+      setActionError(message);
+      toast.error(message);
+      return;
+    }
+    if (!reason.trim()) {
+      const message = t("periods.reasonRequired");
+      setActionError(message);
+      toast.error(message);
+      return;
+    }
     setBusy(true);
     setActionError(null);
     try {
@@ -1362,6 +1390,7 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
             reason,
           },
           t("errors.actionFailed"),
+          t("periods.requestTimedOut"),
         );
       else
         await post(
@@ -1374,6 +1403,7 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
             reason,
           },
           t("errors.actionFailed"),
+          t("periods.requestTimedOut"),
         );
       toast.success(
         t(
@@ -1403,7 +1433,18 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
   // (GL last, each transition audited). Per-module results stay in the panel:
   // a partial run names the failed module and skips the rest explicitly.
   async function applyCloseAll() {
-    if (!row || !selectedBook || !closeAllReason.trim()) return;
+    if (!row || !selectedBook) {
+      const message = t("periods.closeUnavailable");
+      setActionError(message);
+      toast.error(message);
+      return;
+    }
+    if (!closeAllReason.trim()) {
+      const message = t("periods.reasonRequired");
+      setActionError(message);
+      toast.error(message);
+      return;
+    }
     setBusy(true);
     setActionError(null);
     try {
@@ -1419,6 +1460,7 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
           ...(Object.keys(overrides).length > 0 ? { moduleReasons: overrides } : {}),
         },
         t("errors.actionFailed"),
+        t("periods.requestTimedOut"),
       )) as { ok?: unknown; results?: { module: string; ok: boolean; error?: string }[] };
       const results = Array.isArray(data.results) ? data.results : [];
       setCloseAllResults(results);
