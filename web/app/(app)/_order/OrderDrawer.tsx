@@ -1515,13 +1515,16 @@ export function OrderDrawer({
     // the assign panel — while the form stays open on its own state, so Save
     // retries with the same idempotency key and replays instead of doubling.
     let outcome: { ok: true } | { ok: false; message: string } = { ok: false, message: t('receive.receiptFailed') }
+    setRnbRemedy(null)
     await execute<ConvertedDocument>(async () => {
       const res = await fetch(`${apiBase}/${doc.id}/receive`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Idempotency-Key': input.idempotencyKey },
         body: JSON.stringify({ receiptDate: input.receiptDate, lines: input.lines }),
       })
+      const remedy = await readRnbRemedyTarget(res)
       const result = await readActionResult<ConvertedDocument>(res)
+      if (!result.ok && remedy) setRnbRemedy(remedy)
       outcome = result.ok ? { ok: true } : { ok: false, message: result.error.displayMessage(t('receive.receiptFailed')) }
       return result
     }, {
