@@ -544,6 +544,112 @@ export async function importStatement(
  * (clear those flags first). Every removed row is audited with its
  * before-image; nothing posts.
  */
+
+export interface StatementBalanceCorrection {
+  /** Signed decimal string; null clears the balance; undefined leaves it. */
+  openingBalance?: string | null;
+  /** Signed decimal string; null clears the balance; undefined leaves it. */
+  closingBalance?: string | null;
+}
+
+/**
+ * Set the opening/closing balances on an imported statement — the CSV path,
+ * which unlike OFX carries no bank-reported balances. Only before any match:
+ * matched lines already footed sessions against these figures (unmatch
+ * first), and never inside signed-off history. Every change is audited with
+ * its before/after image; nothing posts.
+ */
+export async function correctStatementBalances(
+  statementId: string,
+  patch: StatementBalanceCorrection,
+  ctx: BankingContext,
+): Promise<{ openingBalance: string | null; closingBalance: string | null }> {
+  const next: { openingBalance?: string | null; closingBalance?: string | null } = {};
+  if (patch.openingBalance !== undefined) {
+    next.openingBalance = patch.openingBalance === null
+      ? null
+      : normalizeAmount(patch.openingBalance, "Opening balance");
+  }
+  if (patch.closingBalance !== undefined) {
+    next.closingBalance = patch.closingBalance === null
+      ? null
+      : normalizeAmount(patch.closingBalance, "Closing balance");
+  }
+  if (next.openingBalance === undefined && next.closingBalance === undefined) {
+    throw new BankingError("No balance supplied: set the opening balance, the closing balance, or both");
+  }
+  const statement = (await db.execute<{ id: string; account_id: string }>(sql`
+    select s.id, s.account_id
+      from bank_statements s
+     where s.id = ${statementId} and s.org_id = ${ctx.orgId}
+  `)).rows[0];
+  if (!statement) throw new ScopeNotFoundError();
+  const account = await loadReconcilableAccount(ctx.orgId, statement.account_id, ctx.allowedSubsidiaryIds);
+  return db.transaction(async (tx) => {
+    await lockReconciliationAccount(tx, ctx.orgId, account.id);
+    await lockBankAccountInScope(tx, ctx.orgId, account.id, ctx.allowedSubsidiaryIds);
+    const before = (await tx.execute<{ opening_balance: string | null; closing_balance: string | null }>(sql`
+      select s.opening_balance::text as opening_balance, s.closing_balance::text as closing_balance
+        from bank_statements s
+       where s.id = ${statementId} and s.org_id = ${ctx.orgId}
+       for update
+    `)).rows[0]!;
+    const matched = (await tx.execute<{ count: number }>(sql`
+      select count(*)::int as count from reconciliation_matches m
+       join bank_statement_lines l on l.id = m.statement_line_id and l.org_id = m.org_id
+       where l.statement_id = ${statementId} and l.org_id = ${ctx.orgId}
+    `)).rows[0]!.count;
+    if (matched > 0) {
+      throw new BankingError(
+        `This import has ${matched} matched line(s) — unmatch them first`,
+      );
+    }
+    // Signed-off history is immutable (the import fence): balances feed the
+    // opening carry and the closing-balance check, so they must not move
+    // under a closed session.
+    const signedThrough = (await tx.execute<{ through_date: string }>(sql`
+      select through_date::text as through_date from reconciliations
+       where org_id = ${ctx.orgId} and account_id = ${account.id} and status = 'signed_off'
+       order by through_date desc limit 1
+    `)).rows[0];
+    if (signedThrough) {
+      const inside = (await tx.execute<{ count: number }>(sql`
+        select count(*)::int as count from bank_statement_lines l
+         where l.statement_id = ${statementId} and l.org_id = ${ctx.orgId}
+           and l.posted_on <= ${signedThrough.through_date}
+      `)).rows[0]!.count;
+      if (inside > 0) {
+        throw new BankingError(
+          `This import reaches on or before the signed-off reconciliation through ${signedThrough.through_date} — signed-off history is immutable`,
+        );
+      }
+    }
+    const after = {
+      openingBalance: next.openingBalance !== undefined ? next.openingBalance : before.opening_balance,
+      closingBalance: next.closingBalance !== undefined ? next.closingBalance : before.closing_balance,
+    };
+    if (after.openingBalance === before.opening_balance && after.closingBalance === before.closing_balance) return after;
+    await tx.execute(sql`
+      update bank_statements
+         set opening_balance = ${after.openingBalance},
+             closing_balance = ${after.closingBalance}
+       where id = ${statementId} and org_id = ${ctx.orgId}
+    `);
+    await tx.execute(sql`
+      insert into audit_log
+        (org_id, table_name, row_id, action, changes, actor_id)
+      values
+        (${ctx.orgId}, 'bank_statements', ${statementId}, 'update',
+         ${JSON.stringify({
+           operation: "correct_balances",
+           before: { openingBalance: before.opening_balance, closingBalance: before.closing_balance },
+           after,
+         })}::jsonb,
+         ${ctx.userId})
+    `);
+    return after;
+  });
+}
 export async function deleteStatementImport(
   statementId: string,
   ctx: BankingContext,

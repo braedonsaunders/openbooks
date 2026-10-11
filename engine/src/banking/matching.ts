@@ -1,6 +1,6 @@
 /** Auto/manual matching. Split from banking.ts (pure moves only). */
 import { BankingError, statementComparisonSign, statementTotalsAgree, type BankingContext, subsidiaryScopeSql } from "./banking-core"
-import { requireSessionRowInScope, requireBankAccountInScope, lockBankAccountInScope, requireStatementLineAccountInScope, lockReconciliationAccount } from "./reconcilable-account"
+import { loadReconcilableAccount, requireSessionRowInScope, requireBankAccountInScope, lockBankAccountInScope, requireStatementLineAccountInScope, lockReconciliationAccount } from "./reconcilable-account"
 import { type ReconciliationRow, firstReconciliationCarry, type ReconciliationTotals, type BankingTransaction, reconciliationBookId, refreshStatus } from "./reconciliation"
 import { sql } from "drizzle-orm"
 import { randomUUID } from "node:crypto"
@@ -466,12 +466,10 @@ export async function createGlClearingGroup(
         "One or more journal lines are unavailable, outside the cutoff, already reconciled, or already matched",
       );
     }
-    const carryStart = (await firstReconciliationCarry(tx, recon, ctx, bookId))?.startDate ?? null;
-    if (carryStart && gl.rows.some((line) => line.posting_date < carryStart)) {
-      throw new BankingError(
-        "One or more journal lines predate the carried statement opening balance and cannot be cleared",
-      );
-    }
+    // No carried-opening cutoff here, unlike statement matching: a zero-sum
+    // group nets to nothing, so clearing pre-carry book lines (a book
+    // opening entry with no bank line) cannot double-count the opening the
+    // carry proves. The carry proof sums the same history either way.
     // Exact zero in the account currency and in exact units — a cent apart
     // is a refusal naming the total, never a silent rounding.
     const total = sum(gl.rows.map((line) => line.amount));
@@ -576,6 +574,106 @@ export async function unmatchGlClearingGroup(
          ${ctx.userId})
     `);
     return refreshStatus(recon, ctx, tx);
+  });
+}
+
+/**
+ * Unmatch every group touching an import's lines — the "Unmatch all" behind
+ * a blocked import delete. Groups are removed whole (journals shared with
+ * other lines release with them, exactly as unmatching by line), each in
+ * its own session. Any group already inside a signed-off session refuses
+ * the whole verb naming that session's cutoff: signed-off history is
+ * immutable. Every released line is audited; nothing posts.
+ */
+export async function unmatchStatementImport(
+  statementId: string,
+  ctx: BankingContext,
+): Promise<{ unmatchedGroups: number; unmatchedLines: number }> {
+  const statement = (await db.execute<{ id: string; account_id: string }>(sql`
+    select s.id, s.account_id
+      from bank_statements s
+     where s.id = ${statementId} and s.org_id = ${ctx.orgId}
+  `)).rows[0];
+  if (!statement) throw new ScopeNotFoundError();
+  const account = await loadReconcilableAccount(ctx.orgId, statement.account_id, ctx.allowedSubsidiaryIds);
+  return db.transaction(async (tx) => {
+    await lockBankAccountInScope(tx, ctx.orgId, account.id, ctx.allowedSubsidiaryIds);
+    // No row locks here (DISTINCT forbids FOR UPDATE): the account lock
+    // above plus each session's FOR UPDATE below serialize with sign-off,
+    // and match rows are deleted, never updated, further down.
+    const groups = (await tx.execute<{ reconciliation_id: string; group_id: string }>(sql`
+      select distinct m.reconciliation_id, m.group_id
+        from reconciliation_matches m
+        join bank_statement_lines l on l.id = m.statement_line_id and l.org_id = m.org_id
+       where l.statement_id = ${statementId} and l.org_id = ${ctx.orgId}
+       order by m.reconciliation_id, m.group_id
+    `));
+    if (groups.rows.length === 0) return { unmatchedGroups: 0, unmatchedLines: 0 };
+    const sessions = new Map<string, ReconciliationRow & { subsidiary_id: string | null }>();
+    for (const group of groups.rows) {
+      if (!sessions.has(group.reconciliation_id)) {
+        const recon = (await tx.execute<ReconciliationRow & { subsidiary_id: string | null }>(sql`
+          select r.id, r.account_id, r.through_date, r.currency, r.statement_balance, r.status, a.subsidiary_id
+            from reconciliations r
+            join accounts a on a.id = r.account_id and a.org_id = r.org_id
+           where r.id = ${group.reconciliation_id} and r.org_id = ${ctx.orgId} and r.account_id = ${account.id}
+           for update of r
+        `)).rows[0];
+        if (!recon) throw new ScopeNotFoundError();
+        requireSessionRowInScope(recon, ctx.allowedSubsidiaryIds);
+        if (recon.status === "signed_off") {
+          throw new BankingError(
+            `This import has matches in the signed-off reconciliation through ${recon.through_date} — signed-off history is immutable`,
+          );
+        }
+        sessions.set(group.reconciliation_id, recon);
+      }
+    }
+    let unmatchedLines = 0;
+    for (const group of groups.rows) {
+      const deleted = (await tx.execute<{ statement_line_id: string; journal_line_id: string }>(sql`
+        delete from reconciliation_matches m
+         where m.reconciliation_id = ${group.reconciliation_id}
+           and m.group_id = ${group.group_id}
+           and m.org_id = ${ctx.orgId}
+        returning m.statement_line_id, m.journal_line_id
+      `));
+      const releasedLineIds = [...new Set(deleted.rows.map((row) => row.statement_line_id))];
+      await tx.execute(sql`
+        update bank_statement_lines l
+           set match_status = 'unmatched', updated_at = now(), updated_by = ${ctx.userId}
+         where l.id = any(${sql.param(releasedLineIds)}::uuid[]) and l.org_id = ${ctx.orgId}
+           and not exists (
+             select 1 from reconciliation_matches m where m.statement_line_id = l.id and m.org_id = l.org_id
+           )
+      `);
+      for (const releasedLineId of releasedLineIds) {
+        await tx.execute(sql`
+          insert into audit_log
+            (org_id, table_name, row_id, action, changes, actor_id)
+          values
+            (${ctx.orgId}, 'bank_statement_lines', ${releasedLineId}, 'update',
+             ${JSON.stringify({
+               operation: "unmatch",
+               reconciliationId: group.reconciliation_id,
+               groupIds: [group.group_id],
+               journalLineIds: [...new Set(
+                 deleted.rows
+                   .filter((row) => row.statement_line_id === releasedLineId)
+                   .map((row) => row.journal_line_id),
+               )],
+               before: { matchStatus: "matched" },
+               after: { matchStatus: "unmatched" },
+             })}::jsonb,
+             ${ctx.userId})
+        `);
+      }
+      unmatchedLines += releasedLineIds.length;
+    }
+    for (const recon of sessions.values()) {
+      await refreshStatus(recon, ctx, tx);
+    }
+    return { unmatchedGroups: groups.rows.length, unmatchedLines };
   });
 }
 
