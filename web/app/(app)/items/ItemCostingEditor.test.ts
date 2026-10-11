@@ -214,6 +214,47 @@ test('a malformed conversion row is refused inline before the costing PUT', asyn
   assert.match(document.querySelector('[role="alert"]')?.textContent ?? '', /conversionFactorInvalid|conversionsBlocked/)
 })
 
+test('a conversion row adds, edits, removes, and persists through the costing PUT', async (t) => {
+  const requests = await mountEditingEditor(t, [], { profile: storedProfile() })
+  const setInput = (element: HTMLInputElement, value: string) => {
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
+    setter.call(element, value)
+    element.dispatchEvent(new window.Event('input', { bubbles: true }))
+  }
+  const rowInputs = () => ({
+    unit: [...document.querySelectorAll('input[aria-label="conversionUnit"]')].at(-1) as HTMLInputElement,
+    factor: [...document.querySelectorAll('input[aria-label="conversionFactor"]')].at(-1) as HTMLInputElement,
+  })
+  const puts = () => requests.filter((request) => request.method === 'PUT')
+
+  await act(async () => {
+    ([...document.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'addConversion') as HTMLButtonElement).click()
+  })
+  // Add box=12, edit it to 24, add case=6, then remove box: one save
+  // carries the add, the edit, and the removal together.
+  await act(async () => {
+    const { unit, factor } = rowInputs()
+    setInput(unit, 'box')
+    setInput(factor, '12')
+  })
+  await act(async () => setInput(rowInputs().factor, '24'))
+  await act(async () => {
+    ([...document.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'addConversion') as HTMLButtonElement).click()
+  })
+  await act(async () => {
+    const { unit, factor } = rowInputs()
+    setInput(unit, 'case')
+    setInput(factor, '6')
+  })
+  await act(async () => {
+    const removeButtons = [...document.querySelectorAll('button')].filter((button) => button.textContent?.trim() === 'removeConversion')
+    assert.equal(removeButtons.length, 2, 'both added rows offer remove')
+    ;(removeButtons[0] as HTMLButtonElement).click()
+  })
+  assert.deepEqual(await saveRecord(), { ok: true }, 'the added, edited, and removed rows save')
+  assert.deepEqual(puts().at(-1)?.body?.unitConversions, { case: 6 }, 'the PUT carries the edit and the removal')
+})
+
 const NEWCOGS = '66666666-6666-4666-8666-666666666666'
 
 function storedProfile() {
