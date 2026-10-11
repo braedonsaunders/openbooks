@@ -521,7 +521,8 @@ async function budgetData(target: Extract<ReportDrillTarget, { kind: 'budget' }>
                a.number, a.name as account, coalesce(l.memo, e.memo) as detail,
                case when a.type in ('income', 'income_other') then -l.amount else l.amount end as amount,
                e.id as entry_id, d.kind as doc_kind, d.id as doc_id,
-               sub.base_currency as func, e.posting_date as late
+               -- The entry's book may carry the subsidiary in its own currency.
+               public.accounting_book_currency(l.org_id, e.book_id, l.subsidiary_id) as func, e.posting_date as late
           from journal_lines l
           join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
           join accounts a on a.id = l.account_id and a.org_id = l.org_id
