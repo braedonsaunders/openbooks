@@ -6,6 +6,7 @@ import { sql } from "drizzle-orm"
 import { db, schema, type SqlExecutor, withOrgTransaction } from "../platform/db.ts"
 import { fromUnits, isZero, toUnits } from "../money/money.ts"
 import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts"
+import { resolveCoveringPeriod } from "../periods/period-resolution.ts"
 
 export type ReconciliationRow = {
   id: string;
@@ -772,6 +773,131 @@ export async function discardReconciliation(reconciliationId: string, ctx: Banki
          })}::jsonb,
          ${ctx.userId})
     `);
+  });
+}
+
+/**
+ * Withdraw the newest sign-off on an account so its period can be corrected.
+ * Signed history is otherwise permanent; this is the governed exception for
+ * a period Banking has been reopened for (or never closed): late entries
+ * dated inside it, or bank lines that arrived after sign-off, can then be
+ * matched at their true dates and the session signed off again.
+ *
+ * Sign-offs unwind newest first, and only while no unsigned session builds
+ * on them. The session returns to an unsigned state with its matches intact,
+ * the reconciliation stamp it placed on journal lines is released, and the
+ * audit log keeps the reason and the withdrawn sign-off's evidence.
+ */
+export async function withdrawReconciliationSignOff(
+  reconciliationId: string,
+  reason: string,
+  ctx: BankingContext,
+): Promise<{ journalLinesReleased: number; status: "in_progress" | "balanced" }> {
+  const stated = reason.trim();
+  if (stated.length < 10 || stated.length > 500) {
+    throw new BankingError("Withdrawing a sign-off requires a 10-500 character reason");
+  }
+  return db.transaction(async (tx) => {
+    const head = (await tx.execute<{ account_id: string; subsidiary_id: string | null }>(sql`
+      select r.account_id, a.subsidiary_id
+        from reconciliations r
+        join accounts a on a.id = r.account_id and a.org_id = r.org_id
+       where r.id = ${reconciliationId} and r.org_id = ${ctx.orgId}
+    `)).rows[0];
+    requireSessionRowInScope(head, ctx.allowedSubsidiaryIds);
+    await lockReconciliationAccount(tx, ctx.orgId, head.account_id);
+    const recon = (await tx.execute<ReconciliationRow & {
+      subsidiary_id: string | null; signed_off_by: string | null; signed_off_at: string | null;
+    }>(sql`
+      select r.id, r.account_id, r.through_date::text as through_date, r.currency,
+             r.statement_balance::text as statement_balance, r.status, a.subsidiary_id,
+             r.signed_off_by, r.signed_off_at::text as signed_off_at
+        from reconciliations r
+        join accounts a on a.id = r.account_id and a.org_id = r.org_id
+       where r.id = ${reconciliationId} and r.org_id = ${ctx.orgId}
+       for update of r
+    `)).rows[0];
+    requireSessionRowInScope(recon, ctx.allowedSubsidiaryIds);
+    if (recon.status !== "signed_off") {
+      throw new BankingError("Only a signed-off reconciliation can be withdrawn");
+    }
+    const later = (await tx.execute<{ through_date: string }>(sql`
+      select through_date::text as through_date from reconciliations
+       where org_id = ${ctx.orgId} and account_id = ${recon.account_id}
+         and status = 'signed_off' and id <> ${recon.id}
+         and through_date >= ${recon.through_date}::date
+       order by through_date desc limit 1
+    `)).rows[0];
+    if (later) {
+      throw new BankingError(
+        `Withdraw the later sign-off through ${later.through_date} first — sign-offs are withdrawn newest first`,
+      );
+    }
+    const open = (await tx.execute<{ through_date: string }>(sql`
+      select through_date::text as through_date from reconciliations
+       where org_id = ${ctx.orgId} and account_id = ${recon.account_id} and status <> 'signed_off'
+       limit 1
+    `)).rows[0];
+    if (open) {
+      throw new BankingError(
+        `Discard the open reconciliation through ${open.through_date} first — it continues from this sign-off`,
+      );
+    }
+    const period = await resolveCoveringPeriod(tx, ctx.orgId, recon.through_date);
+    if (period) {
+      const bookId = await reconciliationBookId(tx, ctx.orgId);
+      const blocked = (await tx.execute<{ blocked: boolean }>(sql`
+        select period_module_blocks_write(
+          ${ctx.orgId}, ${period.id}, ${bookId}, ${recon.subsidiary_id}, 'banking', false
+        ) as blocked
+      `)).rows[0]?.blocked;
+      if (blocked) {
+        throw new BankingError(
+          `Banking is closed for ${period.name} — request a controlled reopen of Banking for that period, then withdraw the sign-off`,
+        );
+      }
+    }
+    const withdrawn = (await tx.execute<{ id: string }>(sql`
+      update reconciliations
+         set status = 'in_progress', signed_off_by = null, signed_off_at = null,
+             updated_at = now(), updated_by = ${ctx.userId}
+       where id = ${recon.id} and org_id = ${ctx.orgId} and status = 'signed_off'
+      returning id
+    `)).rows;
+    if (withdrawn.length !== 1) {
+      throw new BankingError("The sign-off changed while it was being withdrawn — reload and retry");
+    }
+    // The journal-line guard admits clearing exactly this reconciliation's
+    // stamp while the marker names it, for this transaction only.
+    await tx.execute(sql`select set_config('app.reconciliation_withdrawal', ${recon.id}, true)`);
+    const released = (await tx.execute<{ id: string }>(sql`
+      update journal_lines
+         set reconciled_at = null, reconciliation_id = null
+       where org_id = ${ctx.orgId} and reconciliation_id = ${recon.id}
+      returning id
+    `)).rows;
+    await tx.execute(sql`select set_config('app.reconciliation_withdrawal', '', true)`);
+    const totals = await refreshStatus({ ...recon, status: "in_progress" }, ctx, tx);
+    const status = isZero(totals.difference) ? "balanced" as const : "in_progress" as const;
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${ctx.orgId}, 'reconciliations', ${recon.id}, 'update',
+        ${JSON.stringify({
+          operation: "withdraw_sign_off",
+          reason: stated,
+          releasedJournalLines: released.length,
+          before: {
+            status: "signed_off",
+            signedOffBy: recon.signed_off_by,
+            signedOffAt: recon.signed_off_at,
+            throughDate: recon.through_date,
+            statementBalance: fromUnits(toUnits(recon.statement_balance)),
+            currency: recon.currency,
+          },
+          after: { status },
+        })}::jsonb, ${ctx.userId})
+    `);
+    return { journalLinesReleased: released.length, status };
   });
 }
 

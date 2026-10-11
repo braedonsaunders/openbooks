@@ -457,7 +457,7 @@ export async function importStatement(
       const late = fresh.filter((line) => line.postedOn <= signedThrough.through_date);
       if (late.length > 0) {
         throw new BankingError(
-          `Cannot import: ${late.length} statement line(s) dated on or before the signed-off reconciliation through ${signedThrough.through_date} — signed-off history is immutable; import only lines dated after ${signedThrough.through_date}`,
+          `Cannot import: ${late.length} statement line(s) dated on or before the signed-off reconciliation through ${signedThrough.through_date} — signed-off history is immutable; import only lines dated after ${signedThrough.through_date}, or reopen Banking for that period and withdraw the sign-off (newest first) to import them at their true dates`,
         );
       }
     }

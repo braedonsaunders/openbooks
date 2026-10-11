@@ -573,11 +573,16 @@
     "postedBy": "Gebucht von",
     "postedAt": "Gebucht am",
     "reversal": "Storno {number} am {date}",
-    "remedy": "Gleichen Sie diese Zeilen in der nächsten Abstimmungssitzung ab — sie erscheinen dort als offene Hauptbuchzeilen.",
+    "remedy": "Gleichen Sie diese Zeilen in der nächsten Abstimmungssitzung ab — sie erscheinen dort als offene Hauptbuchzeilen. Um diese Periode stattdessen zu ihren tatsächlichen Daten zu korrigieren, öffnen Sie Banking für sie erneut und ziehen Sie die Abzeichnung zurück.",
     "openingEffect": "{amount} aus Buchungen in {period} nach deren Abzeichnung"
   },
   "workspace": {
     "signedOffAlert": "Diese Abstimmung ist abgezeichnet — die unten zugeordneten Journalzeilen sind dauerhaft als abgestimmt gekennzeichnet.",
+    "withdrawSignOff": "Abzeichnung zurückziehen",
+    "withdrawSignOffTitle": "Diese Abzeichnung zurückziehen",
+    "withdrawSignOffMessage": "Die Sitzung wird mit ihren Zuordnungen wieder offen, und ihre Journalzeilen werden freigegeben, damit die Periode korrigiert und erneut abgezeichnet werden kann. Abzeichnungen werden von der neuesten an zurückgezogen, und Banking muss für diese Periode geöffnet sein. Der Grund und die zurückgezogene Abzeichnung bleiben im Prüfprotokoll.",
+    "withdrawSignOffReason": "Grund (10–500 Zeichen)",
+    "withdrawnToast": "Abzeichnung zurückgezogen",
     "autoMatch": "Automatisch zuordnen",
     "adjust": "Anpassen",
     "discardSession": "Sitzung verwerfen",

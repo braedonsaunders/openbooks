@@ -573,11 +573,16 @@
     "postedBy": "Contabilizado por",
     "postedAt": "Contabilizado el",
     "reversal": "Reversión {number} el {date}",
-    "remedy": "Concilie estas líneas en la próxima sesión de conciliación — aparecen como líneas pendientes del libro mayor.",
+    "remedy": "Concilie estas líneas en la próxima sesión de conciliación — aparecen como líneas pendientes del libro mayor. Para corregir este período en sus fechas reales, reabra Banca para él y retire la aprobación.",
     "openingEffect": "{amount} de asientos contabilizados en {period} después de su aprobación"
   },
   "workspace": {
     "signedOffAlert": "Esta conciliación está aprobada — las líneas de diario conciliadas a continuación quedan marcadas de forma permanente como conciliadas.",
+    "withdrawSignOff": "Retirar la aprobación",
+    "withdrawSignOffTitle": "Retirar esta aprobación",
+    "withdrawSignOffMessage": "La sesión vuelve a quedar sin aprobar con sus conciliaciones, y sus líneas de diario se liberan para corregir el período y aprobarlo de nuevo. Las aprobaciones se retiran de la más reciente a la más antigua, y Banca debe estar abierta para este período. El motivo y la aprobación retirada quedan en el registro de auditoría.",
+    "withdrawSignOffReason": "Motivo (10–500 caracteres)",
+    "withdrawnToast": "Aprobación retirada",
     "autoMatch": "Conciliación automática",
     "adjust": "Ajustar",
     "discardSession": "Descartar sesión",

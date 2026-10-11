@@ -573,11 +573,16 @@
     "postedBy": "Comptabilisé par",
     "postedAt": "Comptabilisé le",
     "reversal": "Contre-passation {number} le {date}",
-    "remedy": "Rapprochez ces lignes lors de la prochaine session de rapprochement — elles y figurent comme lignes comptables en suspens.",
+    "remedy": "Rapprochez ces lignes lors de la prochaine session de rapprochement — elles y figurent comme lignes comptables en suspens. Pour corriger plutôt cette période à leurs dates réelles, rouvrez la Banque pour celle-ci et retirez la validation.",
     "openingEffect": "{amount} d’écritures comptabilisées en {period} après son approbation"
   },
   "workspace": {
     "signedOffAlert": "Ce rapprochement bancaire est approuvé — les lignes de journal appariées ci-dessous sont marquées définitivement comme rapprochées.",
+    "withdrawSignOff": "Retirer la validation",
+    "withdrawSignOffTitle": "Retirer cette validation",
+    "withdrawSignOffMessage": "La session redevient non validée avec ses rapprochements, et ses lignes de journal sont libérées afin de corriger la période et de la valider à nouveau. Les validations se retirent de la plus récente à la plus ancienne, et la Banque doit être ouverte pour cette période. Le motif et la validation retirée restent dans le journal d’audit.",
+    "withdrawSignOffReason": "Motif (10 à 500 caractères)",
+    "withdrawnToast": "Validation retirée",
     "autoMatch": "Appariement automatique",
     "adjust": "Ajuster",
     "discardSession": "Abandonner la session",

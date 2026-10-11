@@ -573,11 +573,16 @@
     "postedBy": "过账人",
     "postedAt": "过账时间",
     "reversal": "冲销 {number}（{date}）",
-    "remedy": "请在下一次对账会话中核对这些行 — 它们显示为未达账项。",
+    "remedy": "请在下一次对账会话中核对这些行 — 它们显示为未达账项。 若要按实际日期更正该期间，请为该期间重新开启银行模块并撤回签核。",
     "openingEffect": "在签核后计入 {period} 的分录共 {amount}"
   },
   "workspace": {
     "signedOffAlert": "此对账已签核 — 下方已匹配的日记账明细被永久标记为已对账。",
+    "withdrawSignOff": "撤回签核",
+    "withdrawSignOffTitle": "撤回此签核",
+    "withdrawSignOffMessage": "会话将保留其匹配并恢复为未签核，其日记账行将被释放，以便更正该期间并重新签核。签核须从最新的开始撤回，且该期间的银行模块必须处于开启状态。原因和被撤回的签核会保留在审计日志中。",
+    "withdrawSignOffReason": "原因（10–500 个字符）",
+    "withdrawnToast": "已撤回签核",
     "autoMatch": "自动匹配",
     "adjust": "调整",
     "discardSession": "放弃本次会话",

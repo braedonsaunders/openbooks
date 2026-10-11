@@ -418,6 +418,21 @@ function ReconcileWorkspaceForId({
     router.refresh()
   }
 
+  async function withdrawSignOff() {
+    const reason = await promptDialog({
+      title: t('withdrawSignOffTitle'),
+      message: t('withdrawSignOffMessage'),
+      label: t('withdrawSignOffReason'),
+      multiline: true,
+      confirmLabel: t('withdrawSignOff'),
+    })
+    if (!reason) return
+    const data = await call('POST', `/api/banking/reconciliations/${reconciliation.id}/withdraw-sign-off`, { reason })
+    if (!data) return
+    toast.success(t('withdrawnToast'))
+    router.refresh()
+  }
+
   async function excludeStatementLine(id: string) {
     const reason = await promptDialog({
       title: tMatch('excludeReasonTitle'),
@@ -461,7 +476,16 @@ function ReconcileWorkspaceForId({
   return (
     <div className="space-y-6">
       {signedOff ? (
-        <Alert variant="success">{t('signedOffAlert')}</Alert>
+        <Alert variant="success">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="flex-1">{t('signedOffAlert')}</span>
+            {canReconcile ? (
+              <Button variant="outline" size="sm" disabled={busy} onClick={withdrawSignOff}>
+                {t('withdrawSignOff')}
+              </Button>
+            ) : null}
+          </div>
+        </Alert>
       ) : (
         canReconcile && (
           <div className="flex flex-wrap items-center gap-2">

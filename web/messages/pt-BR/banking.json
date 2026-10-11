@@ -573,11 +573,16 @@
     "postedBy": "Lançado por",
     "postedAt": "Lançado em",
     "reversal": "Estorno {number} em {date}",
-    "remedy": "Concilie estas linhas na próxima sessão de conciliação — elas aparecem como linhas pendentes do razão.",
+    "remedy": "Concilie estas linhas na próxima sessão de conciliação — elas aparecem como linhas pendentes do razão. Para corrigir este período nas datas reais, reabra Bancos para ele e retire a aprovação.",
     "openingEffect": "{amount} de lançamentos em {period} após sua finalização"
   },
   "workspace": {
     "signedOffAlert": "Esta conciliação está finalizada — as linhas de lançamento correspondidas abaixo estão permanentemente marcadas como conciliadas.",
+    "withdrawSignOff": "Retirar a aprovação",
+    "withdrawSignOffTitle": "Retirar esta aprovação",
+    "withdrawSignOffMessage": "A sessão volta a ficar sem aprovação com suas conciliações, e suas linhas de diário são liberadas para que o período seja corrigido e aprovado novamente. As aprovações são retiradas da mais recente para a mais antiga, e Bancos deve estar aberto para este período. O motivo e a aprovação retirada ficam no registro de auditoria.",
+    "withdrawSignOffReason": "Motivo (10–500 caracteres)",
+    "withdrawnToast": "Aprovação retirada",
     "autoMatch": "Correspondência automática",
     "adjust": "Ajustar",
     "discardSession": "Descartar sessão",
