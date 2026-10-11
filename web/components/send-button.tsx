@@ -9,6 +9,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { RotateCcw, Send } from 'lucide-react'
 import { Button, Input, Label, Popover } from '@openbooks/ui'
+import { refusalMessageFromBody } from '@/lib/api-error'
 
 /**
  * Opaque machine codes the record-PDF send boundary can answer (the uniform
@@ -73,7 +74,10 @@ export function SendButton({ recordType, recordId, baseUrl }: { recordType: stri
       // error body (proxy page) must surface the localized failure, never a
       // SyntaxError or an empty throw.
       const d = (await res.json().catch(() => ({}))) as { to?: string; error?: string }
-      if (!res.ok) throw new Error(typeof d.error === 'string' ? d.error : '')
+      // The refusal carries the shared reader's message (with remedy and
+      // code text) so actionable server sentences still read verbatim; the
+      // catch below still maps opaque machine codes to the localized failure.
+      if (!res.ok) throw new Error(refusalMessageFromBody(d, { fallback: typeof d.error === 'string' ? d.error : '' }) ?? '')
       toast.success(t('send.sent', { to: d.to ?? to.trim() }))
       setOpen(false)
       setMessage('')

@@ -17,7 +17,7 @@ import { toast } from 'sonner'
 import { useTranslations } from 'next-intl'
 import { Button } from '@openbooks/ui'
 import { TriangleAlert, Users } from 'lucide-react'
-import { readApiErrorMessage } from '../lib/api-error'
+import { readApiErrorMessage, refusalMessageFromBody } from '../lib/api-error'
 import { promptDialog } from '../lib/prompt'
 import type { RecordApprovalState } from '../app/api/flows/record-state/route'
 
@@ -185,7 +185,9 @@ export function ApprovalActions({
       if (res.status === 409) {
         toast.info(t('approvalFlow.alreadyDecided'))
       } else if (!res.ok) {
-        toast.error(data.error ?? t('approvalFlow.decisionFailed'))
+        // The refusal reads through the shared helper so message, remedy and
+        // code render instead of the bare `error` field.
+        toast.error(refusalMessageFromBody(data, { fallback: t('approvalFlow.decisionFailed') }) ?? t('approvalFlow.decisionFailed'))
       } else if (data.resumed === null) {
         toast.success(t('approvalFlow.waitingOthers'))
       } else {
@@ -205,9 +207,10 @@ export function ApprovalActions({
     try {
       const res = await fetch(`/api/flows/runs/${run.id}/retry`, { method: 'POST' })
       const data = await res.json().catch(() => ({}))
+      // The refusal reads through the shared helper (see the decide branch).
       if (!res.ok) {
         toast.error(
-          typeof data.error === 'string' && data.error ? data.error : t('approvalFlow.retryFailed'),
+          refusalMessageFromBody(data, { fallback: t('approvalFlow.retryFailed') }) ?? t('approvalFlow.retryFailed'),
         )
       } else {
         toast.success(t('approvalFlow.retried'))
@@ -232,10 +235,11 @@ export function ApprovalActions({
       })
       // Check the status before parsing: the refusal rides in the body, and
       // parsing an error body first turns refusals into parse errors.
+      // The refusal reads through the shared helper (see the decide branch).
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
         toast.error(
-          typeof data.error === 'string' && data.error ? data.error : t('approvalFlow.submitFailed'),
+          refusalMessageFromBody(data, { fallback: t('approvalFlow.submitFailed') }) ?? t('approvalFlow.submitFailed'),
         )
       } else {
         toast.success(t('approvalFlow.submitted'))
@@ -269,9 +273,10 @@ export function ApprovalActions({
         body: JSON.stringify({ action: 'withdraw', documentId: withdrawDocumentId, reason }),
       })
       const data = await res.json().catch(() => ({}))
+      // The refusal reads through the shared helper (see the decide branch).
       if (!res.ok) {
         toast.error(
-          typeof data.error === 'string' && data.error ? data.error : t('approvalFlow.withdrawFailed'),
+          refusalMessageFromBody(data, { fallback: t('approvalFlow.withdrawFailed') }) ?? t('approvalFlow.withdrawFailed'),
         )
       } else {
         toast.success(t('approvalFlow.withdrawn'))

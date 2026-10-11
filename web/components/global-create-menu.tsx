@@ -25,6 +25,7 @@ import {
 import { Popover, cn, useMenuTrigger } from '@openbooks/ui'
 import { toast } from 'sonner'
 import { documentCreateHref } from '../lib/document-kinds'
+import { refusalMessageFromBody } from '../lib/api-error'
 
 export interface GlobalCreatePermissions {
   accountsReceivable: boolean
@@ -151,8 +152,10 @@ export function GlobalCreateMenu({ permissions }: { permissions: GlobalCreatePer
         ...(action.body ? { body: JSON.stringify(action.body) } : {}),
       })
       const data = await response.json().catch(() => ({}))
+      // The refusal reads through the shared helper so message, remedy and
+      // code render instead of the bare `error` field.
       if (!response.ok || typeof data.id !== 'string') {
-        throw new Error(typeof data.error === 'string' ? data.error : t('createFailed'))
+        throw new Error(refusalMessageFromBody(data, { fallback: t('createFailed') }) ?? t('createFailed'))
       }
       router.push(action.destination!(data.id) as never)
       router.refresh()

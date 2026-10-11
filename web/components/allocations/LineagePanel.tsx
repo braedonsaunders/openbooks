@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { buildLineageQuery, shortId, type LineageAnchorInput } from './lineage-helpers'
+import { readApiErrorMessage } from '../../lib/api-error'
 
 interface LineageRow {
   id: string
@@ -65,8 +66,10 @@ export function LineagePanel({
     fetch(buildLineageQuery(anchor, { limit: pageSize, offset })).then(
       async (res) => {
         if (cancelled) return
+        // The refusal reads through the shared helper so the server's reason
+        // renders instead of a bare fallback.
         if (!res.ok) {
-          setError(t('loadFailed'))
+          setError(await readApiErrorMessage(res, t('loadFailed')))
           setRows([])
           return
         }

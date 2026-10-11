@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Badge, Button, Select } from "@openbooks/ui";
+import { readApiErrorMessage } from "../lib/api-error";
 
 type Link = {
   id: string;
@@ -66,10 +67,11 @@ export function PaymentLinksPanel({ documentId, canManage }: { documentId: strin
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ documentId, provider }),
     });
-    const json = (await res.json().catch(() => ({}))) as { error?: string };
+    // The refusal reads through the shared helper so message, remedy and
+    // code render instead of the bare status text.
     setBusy(false);
     if (!res.ok) {
-      setError(json.error ?? res.statusText);
+      setError(await readApiErrorMessage(res, res.statusText));
       return;
     }
     await load();

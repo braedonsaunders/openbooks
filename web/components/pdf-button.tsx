@@ -10,6 +10,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { FileText } from 'lucide-react'
 import { Button, ContextMenu, useContextMenu, type ContextMenuEntry } from '@openbooks/ui'
+import { readApiErrorMessage } from '@/lib/api-error'
 
 export function PdfButton({
   recordType,
@@ -38,8 +39,10 @@ export function PdfButton({
       setBusy(true)
       try {
         const res = await fetch(`/api/record-pdf/${encodeURIComponent(recordType)}/options`)
+        // The refusal reads through the shared helper so the server's reason
+        // renders instead of a bare fallback.
         if (!res.ok) {
-          toast.error(t('pdfButton.failed'))
+          toast.error(await readApiErrorMessage(res, t('pdfButton.failed')))
           return
         }
         const data = (await res.json()) as { rows: { id: string; name: string; isDefault: boolean }[] }

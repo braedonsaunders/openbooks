@@ -15,6 +15,7 @@ import { useTranslations } from 'next-intl'
 import { Button } from '@openbooks/ui'
 import { confirmDialog } from '../lib/confirm'
 import { refreshApprovalState } from './approval-actions'
+import { readApiErrorMessage, refusalMessageFromBody } from '../lib/api-error'
 
 interface ManualButton {
   buttonId: string
@@ -68,14 +69,15 @@ export function FlowManualButtons({
       // The refusal is in the body, so check the status BEFORE parsing: parsing
       // an error body first turns refusals with unparsable bodies into parse
       // errors instead of the operator-visible message.
+      // The refusal reads through the shared helper so message, remedy and
+      // code render instead of a bare fallback.
       if (!res.ok) {
-        const errData = await res.json().catch(() => ({}))
-        toast.error(errData.error ?? tc('feedback.somethingWentWrong'))
+        toast.error(await readApiErrorMessage(res, tc('feedback.somethingWentWrong')))
         return
       }
       const data = await res.json().catch(() => ({}))
       if (data.ok === false) {
-        toast.error(data.error ?? tc('feedback.somethingWentWrong'))
+        toast.error(refusalMessageFromBody(data, { fallback: tc('feedback.somethingWentWrong') }) ?? tc('feedback.somethingWentWrong'))
         return
       }
       toast.success(tc('feedback.flowActionDone'))

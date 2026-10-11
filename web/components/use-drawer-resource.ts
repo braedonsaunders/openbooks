@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useEffectEvent, useState } from 'react'
+import { refusalMessageFromBody } from '../lib/api-error'
 
 /** A detail request depends only on its URL. Navigation callbacks and other
  * overlay state may change without discarding a record already being read. */
@@ -13,9 +14,13 @@ export function useDrawerResource<T>(url: string | null, onError: (error: Error)
     const controller = new AbortController()
     fetch(url, { signal: controller.signal, cache: 'no-store' })
       .then(async (response) => {
+        // The refusal reads through the shared helper so the server's reason
+        // renders; the fallback keeps its exact wording (status included)
+        // because callers pin it verbatim.
         if (!response.ok) {
-          const body = await response.json().catch(() => null) as { error?: unknown } | null
-          throw new Error(typeof body?.error === 'string' ? body.error : `Unable to load the record (${response.status}).`)
+          const body = await response.json().catch(() => null)
+          const fallback = `Unable to load the record (${response.status}).`
+          throw new Error(refusalMessageFromBody(body, { fallback }) ?? fallback)
         }
         return await response.json() as T
       })

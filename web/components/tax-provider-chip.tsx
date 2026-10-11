@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Badge, Button } from '@openbooks/ui'
 import { confirmDialog } from '@/lib/confirm'
+import { readApiErrorMessage } from '@/lib/api-error'
 
 export interface TaxProviderChipRow {
   id: string
@@ -64,9 +65,10 @@ export function TaxProviderStatusChip({
     setError(null)
     try {
       const res = await fetch(`/api/tax/provider-transactions/${row.id}/retry`, { method: 'POST' })
+      // The refusal reads through the shared helper so message, remedy and
+      // code render instead of a bare fallback.
       if (!res.ok) {
-        const body = await res.json().catch(() => null)
-        setError((body?.error as string | undefined) ?? t('retryFailed'))
+        setError(await readApiErrorMessage(res, t('retryFailed')))
         return
       }
       toast.success(t('retryStarted'))

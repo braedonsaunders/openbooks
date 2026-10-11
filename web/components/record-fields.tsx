@@ -27,6 +27,7 @@ import {
 } from '../lib/record-schema'
 import { useMoney } from './money-provider'
 import { ReadOnlyValue } from './read-only-value'
+import { readApiErrorMessage } from '@/lib/api-error'
 
 // --- /api/forms/options cache ------------------------------------------------
 
@@ -43,7 +44,9 @@ function fetchOptions(source: 'gl_accounts' | 'parties', partyKind?: PartyPicker
     if (source === 'parties' && partyKind && partyKind !== 'any') qs.set('partyKind', partyKind)
     cached = fetch(`/api/forms/options?${qs}`)
       .then(async (res) => {
-        if (!res.ok) throw new Error('options request failed')
+        // The refusal carries the server's reason through the shared helper
+        // instead of a bare fallback.
+        if (!res.ok) throw new Error(await readApiErrorMessage(res, 'options request failed'))
         const data = (await res.json()) as { options: SelectOption[] }
         return data.options
       })

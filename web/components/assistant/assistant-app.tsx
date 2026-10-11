@@ -32,6 +32,7 @@ import {
 import type { ConversationScope } from '@/lib/assistant/conversation-scopes'
 import { Button, Drawer, EmptyState, cn, useMediaQuery } from '@openbooks/ui'
 import { confirmDialog } from '@/lib/confirm'
+import { readApiErrorMessage } from '@/lib/api-error'
 import { MessageParts } from './message-parts'
 import {
   forgetDeletedConversation,
@@ -393,14 +394,16 @@ export function AssistantApp({
       const res = await fetch(
         scopedUrl(`/api/assistant/conversations/${currentId}?before=${encodeURIComponent(first.id)}&limit=${MESSAGE_PAGE_SIZE}`, scope),
       )
-      if (!res.ok) throw new Error()
+      // The refusal carries the server's reason through the shared helper
+      // instead of a bare fallback.
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, t('loadEarlierFailed')))
       const body = (await res.json()) as { messages: StoredMessage[]; hasOlder: boolean }
       const older = body.messages.map(toChatMessage)
       setMessages((prev) => [...older, ...prev])
       setHasOlder(body.hasOlder)
-    } catch {
+    } catch (e) {
       prependAnchorRef.current = null
-      setError(t('loadEarlierFailed'))
+      setError(e instanceof Error && e.message ? e.message : t('loadEarlierFailed'))
     } finally {
       setLoadingOlder(false)
     }
@@ -744,10 +747,12 @@ export function AssistantApp({
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ title: clean }),
       })
-      if (!res.ok) throw new Error()
+      // The refusal carries the server's reason through the shared helper
+      // instead of a bare fallback.
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, t('errors.renameFailed')))
       setConvos((items) => renameConversationRow(items, id, clean))
-    } catch {
-      setError(t('errors.renameFailed'))
+    } catch (e) {
+      setError(e instanceof Error && e.message ? e.message : t('errors.renameFailed'))
     }
   }
 
@@ -763,8 +768,10 @@ export function AssistantApp({
     setConvos((items) => removeConversationRow(items, id))
     try {
       const res = await fetch(scopedUrl(`/api/assistant/conversations/${id}`, scope), { method: 'DELETE' })
-      if (!res.ok) throw new Error()
-    } catch {
+      // The refusal carries the server's reason through the shared helper
+      // instead of a bare fallback.
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, t('errors.deleteFailed')))
+    } catch (e) {
       // Restore-on-failure: forget the tombstone first so the next sync or
       // refetch may show the row again, then splice it back where it was.
       forgetDeletedConversation(id)
@@ -776,7 +783,7 @@ export function AssistantApp({
           return next
         })
       }
-      setError(t('errors.deleteFailed'))
+      setError(e instanceof Error && e.message ? e.message : t('errors.deleteFailed'))
       return
     }
     // Drop the provisional pin too, so the end-of-turn reconcile cannot

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { FileCode } from 'lucide-react'
 import { Button, Input, Label, Popover, Select } from '@openbooks/ui'
+import { readApiErrorMessage, refusalMessageFromBody } from '@/lib/api-error'
 
 type Finding = { ruleId: string; severity: 'fatal' | 'warning'; message: string }
 type EInvoiceMetadata = {
@@ -37,8 +38,10 @@ export function EInvoiceButton({ documentId }: { documentId: string }) {
     if (!response.ok) {
       if (response.status === 403 || response.status === 404) { setAvailable(false); return }
       setAvailable(true)
+      // The refusal reads through the shared helper so message, remedy and
+      // code render instead of the bare `error` field.
       const failure = await response.json().catch(() => null) as { error?: string } | null
-      throw new Error(failure?.error || t('failed'))
+      throw new Error(refusalMessageFromBody(failure, { fallback: t('failed') }) ?? t('failed'))
     }
     const data = await response.json() as EInvoiceMetadata
     setMetadata(data)
@@ -63,9 +66,10 @@ export function EInvoiceButton({ documentId }: { documentId: string }) {
     try {
       const query = new URLSearchParams({ profile, validate: '1', buyerReference: reference.trim() })
       const response = await fetch(`${base}?${query}`)
+      // The refusal reads through the shared helper so the server's reason
+      // renders instead of a bare fallback.
       if (!response.ok) {
-        const failure = await response.json().catch(() => null) as { error?: string } | null
-        throw new Error(failure?.error || t('failed'))
+        throw new Error(await readApiErrorMessage(response, t('failed')))
       }
       const data = await response.json() as EInvoiceMetadata
       setMetadata(data)
@@ -82,10 +86,11 @@ export function EInvoiceButton({ documentId }: { documentId: string }) {
     try {
       const response = await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ profile, buyerReference: reference.trim() || null }) })
+      // The refusal reads through the shared helper (see refresh above).
       if (!response.ok) {
         const failure = await response.json().catch(() => null) as { error?: string; findings?: Finding[] } | null
         setPreview({ valid: false, findings: failure?.findings ?? [] })
-        throw new Error(failure?.error || t('failed'))
+        throw new Error(refusalMessageFromBody(failure, { fallback: t('failed') }) ?? t('failed'))
       }
       const issued = await response.json() as { id: string }
       await refresh()
