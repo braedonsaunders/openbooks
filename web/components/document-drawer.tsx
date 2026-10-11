@@ -3249,7 +3249,14 @@ export function DocumentDrawer({
           <>
             <FieldLabel fieldName={label}>{label}</FieldLabel>
             {canOfferPostingDate ? (
-              <Input type="date" value={postingDate} onChange={(e) => setPostingDate(e.target.value)} />
+              <>
+                <Input type="date" value={postingDate} onChange={(e) => setPostingDate(e.target.value)} />
+                {!postingDate && /^\d{4}-\d{2}-\d{2}$/.test(documentDate) && !isPosted ? (
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    {tCommon('documentDefaults.postingDateFallback', { date: documentDate })}
+                  </p>
+                ) : null}
+              </>
             ) : (<p className="text-sm">{doc.posting_date ?? '—'}</p>)}
           </>
         )

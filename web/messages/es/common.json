@@ -375,6 +375,7 @@
     "queued": "Reintento en cola."
   },
   "documentDefaults": {
-    "failed": "No se pudieron cargar la cuenta y el código de impuesto del artículo ni la fecha de vencimiento según las condiciones de pago. Introdúzcalos manualmente o vuelva a intentarlo."
+    "failed": "No se pudieron cargar la cuenta y el código de impuesto del artículo ni la fecha de vencimiento según las condiciones de pago. Introdúzcalos manualmente o vuelva a intentarlo.",
+    "postingDateFallback": "Contabiliza el {date} si está vacío"
   }
 }

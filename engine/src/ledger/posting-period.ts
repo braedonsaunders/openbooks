@@ -50,7 +50,9 @@ export async function resolvePostingPeriod(
   }
   const period = await resolveCoveringPeriod(runner, doc.orgId, postingDate);
   if (!period) {
-    throw new PostingError(`no accounting period covers ${postingDate}`);
+    throw new PostingError(
+      `no accounting period covers ${postingDate} — generate the period covering that date, then post again`,
+    );
   }
   return { id: period.id };
 }

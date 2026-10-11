@@ -375,6 +375,7 @@
     "queued": "Nouvelle tentative mise en file d’attente."
   },
   "documentDefaults": {
-    "failed": "Le compte et le code de taxe de l’article ainsi que la date d’échéance selon les conditions de paiement n’ont pas pu être chargés. Saisissez-les vous-même ou réessayez."
+    "failed": "Le compte et le code de taxe de l’article ainsi que la date d’échéance selon les conditions de paiement n’ont pas pu être chargés. Saisissez-les vous-même ou réessayez.",
+    "postingDateFallback": "Comptabilisé le {date} si vide"
   }
 }

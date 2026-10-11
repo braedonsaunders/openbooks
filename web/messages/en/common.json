@@ -375,6 +375,7 @@
     "queued": "Retry queued."
   },
   "documentDefaults": {
-    "failed": "The item's account and tax code and the payment-terms due date could not be loaded. Enter them yourself or try again."
+    "failed": "The item's account and tax code and the payment-terms due date could not be loaded. Enter them yourself or try again.",
+    "postingDateFallback": "Posts {date} when empty"
   }
 }

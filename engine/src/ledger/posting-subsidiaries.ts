@@ -4,7 +4,7 @@ import { normalizeDecimal } from "../money/money.ts";
 import { mulMoneyRate, type Money } from "../money/brands.ts";
 import { lookupSpotRate } from "../fx/spot-rate.ts";
 import { absorbFxRoundingResidual, intercompanyBalancingLegs, loadSubsidiaryContext, SubsidiaryError, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
-import { type Doc, type KernelLine, PostingError } from "../journal/posting-contracts.ts";
+import { type Doc, type KernelLine, PostingError, effectivePostingDate } from "../journal/posting-contracts.ts";
 import { collectBalancingLegs } from "../journal/balancing-hooks.ts";
 import { applyWithholdingCarrying, stampPaymentWithholdingCurrency } from "../contractor-withholding/remittance-carrying.ts";
 import { ContractorWithholdingError } from "../contractor-withholding/scheme.ts";
@@ -80,7 +80,7 @@ export async function applySubsidiaries(
     const origin = ctx.byId.get(docSubId);
     if (!origin)
       throw new SubsidiaryError(`subsidiary ${docSubId} does not exist`);
-    const postingDate = doc.postingDate ?? doc.documentDate;
+    const postingDate = effectivePostingDate(doc);
     const rateCache = new Map<string, string>();
 
     const functionalRate = async (targetCurrency: string): Promise<string> => {

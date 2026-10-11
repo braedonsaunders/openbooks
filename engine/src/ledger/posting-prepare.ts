@@ -29,7 +29,7 @@ import { assertCustomerCreditInventoryReturnsPostable } from "../inventory/docum
 
 import { assertBillPostingAllowed, ComplianceError } from "../compliance/compliance.ts";
 
-import { type KernelLine, type PostingDeps, PostingError } from "../journal/posting-contracts.ts";
+import { type KernelLine, type PostingDeps, PostingError, effectivePostingDate } from "../journal/posting-contracts.ts";
 import { resolveMarketplaceClearingForDocument, validateTaxControlAccounts } from "./posting-tax-policy.ts";
 import { RULES } from "./posting-rules.ts";
 import { assertFinalKernelBalance, assertCreditMemoDirection } from "../journal/posting-invariants.ts";
@@ -554,7 +554,7 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
         driverResolver: postDriverResolver,
         actorId: options.audit?.actorId ?? null,
       },
-      { postingDate: effectiveDoc.postingDate ?? effectiveDoc.documentDate },
+      { postingDate: effectivePostingDate(effectiveDoc) },
     );
   } catch (error) {
     if (error instanceof PostAllocationError) throw new PostingError(error.message);
@@ -639,7 +639,7 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
         partyId: effectiveDoc.partyId,
         projectId: effectiveDoc.projectId ?? null,
         documentNumber: effectiveDoc.documentNumber,
-        asOf: effectiveDoc.postingDate ?? effectiveDoc.documentDate,
+        asOf: effectivePostingDate(effectiveDoc),
       });
     } catch (error) {
       if (error instanceof ComplianceError)
@@ -728,6 +728,6 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
     ? null
     : await resolveShipToSnapshot(effectiveDoc, postingLines);
 
-  const postingDate = effectiveDoc.postingDate ?? effectiveDoc.documentDate;
+  const postingDate = effectivePostingDate(effectiveDoc);
   return { documentId, deps, doc, postingLines, effectiveDoc, kernelLines, postContrib, primaryContrib, unionLines, subApplied, scriptLines, postingDate, shipToSnapshot, controlAccountStamp };
 }

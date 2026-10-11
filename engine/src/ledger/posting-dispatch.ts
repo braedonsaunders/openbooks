@@ -1,5 +1,6 @@
 import { and, asc, eq } from "drizzle-orm";
 import { db, schema } from "../platform/db.ts";
+import { effectivePostingDate } from "../journal/posting-contracts.ts";
 import { resolveScriptUser, runTriggerScripts, type ScriptContext } from "../scripting/scripting.ts";
 import { emitStatusChange, runRecordFlows } from "../flows/run.ts";
 import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
@@ -121,7 +122,10 @@ export async function runPostDocumentEffects(
     // Each service is idempotent by document line, so a retry repairs a
     // post-commit interruption without duplicating inventory or obligations.
     const effectActorId = options.actorId ?? claimed?.actor_id ?? null;
-    const postingDate = doc.postingDate ?? claimed?.posting_date ?? doc.documentDate;
+    const postingDate = effectivePostingDate({
+      postingDate: doc.postingDate ?? claimed?.posting_date,
+      documentDate: doc.documentDate,
+    });
     const entryId = doc.postedEntryId ?? claimed?.entry_id ?? null;
     await applyPostedInventoryEffects(doc, postingDate, entryId, effectActorId);
     if (doc.kind === "customer_invoice" || doc.kind === "cash_sale") {

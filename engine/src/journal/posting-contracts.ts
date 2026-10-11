@@ -27,6 +27,19 @@ export type PostingDocumentLine = typeof schema.documentLines.$inferSelect;
 export type Doc = PostingDocument;
 export type DocLine = PostingDocumentLine;
 
+/**
+ * The date a posting belongs to, for every kind and every creation path: an
+ * explicit posting date is honoured, an empty one falls back to the document
+ * date. Never substitute today — a November invoice posted in October belongs
+ * to November. An empty string is not a date either, so it falls back too.
+ */
+export function effectivePostingDate(doc: {
+  postingDate: string | null | undefined;
+  documentDate: string;
+}): string {
+  return doc.postingDate ? doc.postingDate : doc.documentDate;
+}
+
 export interface KernelLine {
   /** Expense-only payroll source identity, preserved through aggregation for rule matching. */
   payrollExpense?: boolean;

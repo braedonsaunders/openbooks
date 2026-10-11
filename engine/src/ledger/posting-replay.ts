@@ -11,7 +11,7 @@ import { lockApplicationEvidence } from "../records/application-lock.ts";
 import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
 import { authorizeConnectorReplay } from "../journal/replay-authorization.ts";
 import { transferCorrectionApplications } from "./posting-replay-applications.ts";
-import { type PostingDeps, PostingError } from "../journal/posting-contracts.ts";
+import { type PostingDeps, PostingError, effectivePostingDate } from "../journal/posting-contracts.ts";
 import { assertFinalKernelBalance } from "../journal/posting-invariants.ts";
 import { resolveDeferralAccounts, resolveTaxAccounts, resolveExpenseReceivableDeps, resolveOrgTaxAccounts, resolveTaxComponents, validateRequiredDimensions, resolveOpenItemAccounts } from "./posting-accounts.ts";
 import { resolveStoredValueLiabilityByLine, resolveStoreCreditLiability } from "../stored-value/posting-accounts.ts";
@@ -236,7 +236,7 @@ export async function regenerateGlImpactTx(
   const kernelLines = subApplied.lines;
   assertFinalKernelBalance(kernelLines);
   await validateRequiredDimensions(tx, doc.orgId, kernelLines);
-  const postingDate = doc.postingDate ?? doc.documentDate;
+  const postingDate = effectivePostingDate(doc);
 
   const period = await resolvePostingPeriod(tx, doc, postingDate);
 
