@@ -632,7 +632,17 @@
     "clearingsTitle": "Grupos de compensación de mayor",
     "clearingsCount": "{count, plural, one {# grupo} other {# grupos}}",
     "openWorkspace": "Abrir el espacio de conciliación",
-    "signOffWorkspaceNote": "La aprobación se realiza en el espacio de conciliación, donde se cuadra la diferencia y se listan las líneas que bloquean."
+    "signOffWorkspaceNote": "La aprobación se realiza en el espacio de conciliación, donde se cuadra la diferencia y se listan las líneas que bloquean.",
+    "openingTitle": "Saldo inicial",
+    "openingDescription": "Esta es la primera conciliación de esta cuenta y el extracto importado no indica saldo inicial. Confirme el saldo contable arrastrado como apertura del extracto, con un motivo: el asiento de apertura pasa a ser la posición inicial de la sesión en lugar de una partida pendiente.",
+    "openingBookBalance": "Saldo contable arrastrado (antes del {date})",
+    "openingAmountLabel": "Apertura del extracto",
+    "openingReasonLabel": "Motivo",
+    "openingReasonPlaceholder": "p. ej. Saldo inicial del cierre del año anterior, confirmado con los registros del banco",
+    "openingConfirm": "Confirmar apertura",
+    "openingConfirmedToast": "Apertura {amount} confirmada",
+    "openingConfirmedNote": "Apertura {amount} confirmada — {reason}",
+    "openingStaleNote": "La apertura confirmada ya no coincide con el saldo contable arrastrado — revise el libro mayor y confirme de nuevo la apertura."
   },
   "sftp": {
     "title": "Servidores SFTP",

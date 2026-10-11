@@ -639,7 +639,17 @@
     "clearingsTitle": "GL clearing groups",
     "clearingsCount": "{count, plural, one {# group} other {# groups}}",
     "openWorkspace": "Open reconciliation workspace",
-    "signOffWorkspaceNote": "Sign-off happens in the reconciliation workspace, where the difference is footed and blocking lines are listed."
+    "signOffWorkspaceNote": "Sign-off happens in the reconciliation workspace, where the difference is footed and blocking lines are listed.",
+    "openingTitle": "Opening balance",
+    "openingDescription": "This is the first reconciliation of this account and the imported statement states no opening balance. Confirm the book balance carried in as the statement opening, with a reason: the opening journal becomes the session's opening position instead of an outstanding item.",
+    "openingBookBalance": "Book balance carried in (before {date})",
+    "openingAmountLabel": "Statement opening",
+    "openingReasonLabel": "Reason",
+    "openingReasonPlaceholder": "e.g. Opening balance from the prior-year close, confirmed to the bank records",
+    "openingConfirm": "Confirm opening",
+    "openingConfirmedToast": "Opening {amount} confirmed",
+    "openingConfirmedNote": "Opening {amount} confirmed — {reason}",
+    "openingStaleNote": "The confirmed opening no longer matches the book balance carried in — review the ledger and confirm the opening again."
   },
   "sftp": {
     "title": "SFTP",

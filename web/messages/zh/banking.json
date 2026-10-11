@@ -632,7 +632,17 @@
     "clearingsTitle": "总账结清组",
     "clearingsCount": "{count, plural, other {# 个组}}",
     "openWorkspace": "打开对账工作区",
-    "signOffWorkspaceNote": "签核在对账工作区中进行，差额将在该处轧平，并列出阻止中的明细。"
+    "signOffWorkspaceNote": "签核在对账工作区中进行，差额将在该处轧平，并列出阻止中的明细。",
+    "openingTitle": "期初余额",
+    "openingDescription": "这是该账户的首次对账，且导入的对账单没有期初余额。请将结转的账面余额确认为对账单期初余额，并填写原因：期初分录将成为本会话的期初头寸，而不是未清项目。",
+    "openingBookBalance": "结转的账面余额（{date} 之前）",
+    "openingAmountLabel": "对账单期初余额",
+    "openingReasonLabel": "原因",
+    "openingReasonPlaceholder": "例如：上年决算的期初余额，已与银行记录核对",
+    "openingConfirm": "确认期初余额",
+    "openingConfirmedToast": "期初余额 {amount} 已确认",
+    "openingConfirmedNote": "期初余额 {amount} 已确认 — {reason}",
+    "openingStaleNote": "已确认的期初余额与结转的账面余额不再一致 — 请检查分类账并重新确认期初余额。"
   },
   "sftp": {
     "title": "SFTP",

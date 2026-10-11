@@ -151,6 +151,7 @@ export const BANKING_WIDGETS = {
       glClearings={(props.glClearings as ComponentProps<typeof ReconcileWorkspace>['glClearings']) ?? []}
       stale={(props.stale as ComponentProps<typeof ReconcileWorkspace>['stale']) ?? null}
       priorEffects={(props.priorEffects as ComponentProps<typeof ReconcileWorkspace>['priorEffects']) ?? []}
+      opening={(props.opening as ComponentProps<typeof ReconcileWorkspace>['opening']) ?? null}
     />
   ),
 

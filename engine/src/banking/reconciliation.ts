@@ -341,7 +341,7 @@ export interface OpeningPosition {
 export async function openingPosition(
   reconciliationId: string,
   ctx: BankingContext,
-): Promise<OpeningPosition | null> {
+): Promise<OpeningPosition> {
   return withOrgTransaction(ctx.orgId, async () => {
     const recon = await loadReconciliation(ctx.orgId, reconciliationId, ctx.allowedSubsidiaryIds);
     const bookId = await reconciliationBookId(db, ctx.orgId);

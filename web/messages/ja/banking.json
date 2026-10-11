@@ -632,7 +632,17 @@
     "clearingsTitle": "総勘定クリアリンググループ",
     "clearingsCount": "{count, plural, other {# 件のグループ}}",
     "openWorkspace": "照合作業画面を開く",
-    "signOffWorkspaceNote": "承認は照合作業画面で行います。差額の照合とブロック中の明細一覧はそちらに表示されます。"
+    "signOffWorkspaceNote": "承認は照合作業画面で行います。差額の照合とブロック中の明細一覧はそちらに表示されます。",
+    "openingTitle": "期首残高",
+    "openingDescription": "この口座の最初の照合であり、インポートされた明細書に期首残高がありません。繰り越された帳簿残高を明細書の期首残高として理由とともに確認してください。開始仕訳は未処理項目ではなく、セッションの期首残高となります。",
+    "openingBookBalance": "繰り越された帳簿残高（{date} より前）",
+    "openingAmountLabel": "明細書の期首残高",
+    "openingReasonLabel": "理由",
+    "openingReasonPlaceholder": "例：前期決算の期首残高、銀行記録と確認済み",
+    "openingConfirm": "期首残高を確認",
+    "openingConfirmedToast": "期首残高 {amount} を確認しました",
+    "openingConfirmedNote": "期首残高 {amount} を確認済み — {reason}",
+    "openingStaleNote": "確認済みの期首残高が繰り越された帳簿残高と一致しなくなりました — 元帳を確認し、期首残高を再度確認してください。"
   },
   "sftp": {
     "title": "SFTP",

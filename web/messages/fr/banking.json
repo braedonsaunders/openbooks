@@ -632,7 +632,17 @@
     "clearingsTitle": "Groupes de compensation comptable",
     "clearingsCount": "{count, plural, one {# groupe} other {# groupes}}",
     "openWorkspace": "Ouvrir l’espace de rapprochement",
-    "signOffWorkspaceNote": "L’approbation a lieu dans l’espace de rapprochement, où l’écart est totalisé et les lignes bloquantes sont listées."
+    "signOffWorkspaceNote": "L’approbation a lieu dans l’espace de rapprochement, où l’écart est totalisé et les lignes bloquantes sont listées.",
+    "openingTitle": "Solde d'ouverture",
+    "openingDescription": "Il s'agit du premier rapprochement de ce compte et le relevé importé n'indique aucun solde d'ouverture. Confirmez le solde comptable reporté comme ouverture du relevé, avec un motif : l'écriture d'ouverture devient la position d'ouverture de la session plutôt qu'un élément en suspens.",
+    "openingBookBalance": "Solde comptable reporté (avant le {date})",
+    "openingAmountLabel": "Ouverture du relevé",
+    "openingReasonLabel": "Motif",
+    "openingReasonPlaceholder": "p. ex. Solde d'ouverture de la clôture de l'exercice précédent, confirmé avec les relevés bancaires",
+    "openingConfirm": "Confirmer l'ouverture",
+    "openingConfirmedToast": "Ouverture {amount} confirmée",
+    "openingConfirmedNote": "Ouverture {amount} confirmée — {reason}",
+    "openingStaleNote": "L'ouverture confirmée ne correspond plus au solde comptable reporté — vérifiez le grand livre et confirmez de nouveau l'ouverture."
   },
   "sftp": {
     "title": "Serveurs SFTP",

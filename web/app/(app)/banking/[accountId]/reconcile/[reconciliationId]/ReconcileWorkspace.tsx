@@ -116,6 +116,24 @@ interface SignOffBlocker {
   description: string | null
 }
 
+interface OpeningConfirmationState {
+  amount: string
+  startDate: string
+  reason: string
+  confirmedAt: string
+  confirmedByName: string | null
+}
+
+interface OpeningPositionState {
+  isFirst: boolean
+  statementOpening: string | null
+  coverageStart: string | null
+  bookBalance: string
+  confirmation: OpeningConfirmationState | null
+  carryApplies: boolean
+  carryStart: string | null
+}
+
 // The blockers endpoint returns the engine's camelCase SignOffBlocker;
 // normalize once so the list below never renders a blank date.
 function blockerPostedOn(line: SignOffBlocker & { posted_on?: string }): string {
@@ -163,6 +181,7 @@ type ReconcileWorkspaceProps = {
   glClearings?: GlClearing[]
   stale?: Staleness | null
   priorEffects?: string[]
+  opening?: OpeningPositionState | null
 }
 
 export function ReconcileWorkspace(props: ReconcileWorkspaceProps) {
@@ -190,6 +209,7 @@ function ReconcileWorkspaceForId({
   glClearings = [],
   stale = null,
   priorEffects = [],
+  opening = null,
 }: ReconcileWorkspaceProps) {
   const { money: formatMoney } = useMoney(reconciliation.currency)
   const money = (value: MoneyValue) => formatMoney(value, { maximumFractionDigits: 4 })
@@ -216,6 +236,13 @@ function ReconcileWorkspaceForId({
   const [adjustOpen, setAdjustOpen] = useState(false)
   const adjustThroughDateId = useId()
   const adjustStatementBalanceId = useId()
+  // A first reconciliation from a balance-less statement names its opening
+  // explicitly: the amount starts at the book balance carried in — the only
+  // value the service will accept — and the reason is the audit trail.
+  const [openingAmount, setOpeningAmount] = useState(() => opening?.bookBalance ?? '')
+  const [openingReason, setOpeningReason] = useState('')
+  const openingAmountId = useId()
+  const openingReasonId = useId()
   const [throughDate, setThroughDate] = useState(reconciliation.throughDate)
   const [statementBalance, setStatementBalance] = useState(() =>
     reconciliation.statementBalance,
@@ -325,6 +352,20 @@ function ReconcileWorkspaceForId({
     if (!data) return
     toast.success(t('clearedToast'))
     setSelectedGl(new Set())
+    router.refresh()
+  }
+
+  async function confirmOpening() {
+    // The refusal reads through the shared helper like every other
+    // workspace mutation: a confirmation the ledger does not prove toasts
+    // the typed message with its remedy instead of failing silently.
+    const data = await call('POST', `/api/banking/reconciliations/${reconciliation.id}/opening`, {
+      openingBalance: openingAmount,
+      reason: openingReason.trim(),
+    })
+    if (!data) return
+    toast.success(t('openingConfirmedToast', { amount: money(openingAmount) }))
+    setOpeningReason('')
     router.refresh()
   }
 
@@ -445,6 +486,66 @@ function ReconcileWorkspaceForId({
           </div>
         )
       )}
+
+      {/* -------- opening position: first reconciliation, balance-less statement -------- */}
+      {/* A balance-less first statement states no opening of its own, so the
+          operator confirms the book balance carried in as the statement
+          opening, with a reason. The confirmed opening foots the cleared
+          balance and later sessions chain from the sign-off; a confirmation
+          the ledger moved away from reads stale and confirms again. */}
+      {!signedOff && canReconcile && opening?.isFirst && !opening.statementOpening ? (
+        opening.confirmation && opening.carryApplies ? (
+          <Alert variant="success">
+            {t('openingConfirmedNote', {
+              amount: money(opening.confirmation.amount),
+              reason: opening.confirmation.reason,
+            })}
+          </Alert>
+        ) : (
+          <section className="space-y-3 rounded-md border border-slate-200 p-3 dark:border-slate-800" aria-label={t('openingTitle')}>
+            <div className="space-y-1">
+              <h2 className={paneTitle}>{t('openingTitle')}</h2>
+              <p className="text-sm text-slate-600 dark:text-slate-300">{t('openingDescription')}</p>
+              <p className="text-sm tabular-nums">
+                {t('openingBookBalance', { date: opening.coverageStart ?? reconciliation.throughDate })}:{' '}
+                <span className="font-medium">{money(opening.bookBalance)}</span>
+              </p>
+              {opening.confirmation && !opening.carryApplies ? (
+                <p className="text-sm text-amber-700 dark:text-amber-300">{t('openingStaleNote')}</p>
+              ) : null}
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor={openingAmountId}>{t('openingAmountLabel')}</Label>
+                <Input
+                  id={openingAmountId}
+                  disabled={busy}
+                  inputMode="decimal"
+                  value={openingAmount}
+                  onChange={(e) => setOpeningAmount(e.target.value)}
+                  className="text-right tabular-nums"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor={openingReasonId}>{t('openingReasonLabel')}</Label>
+                <Input
+                  id={openingReasonId}
+                  disabled={busy}
+                  value={openingReason}
+                  placeholder={t('openingReasonPlaceholder')}
+                  onChange={(e) => setOpeningReason(e.target.value)}
+                />
+              </div>
+            </div>
+            <Button
+              disabled={busy || canonicalDecimal(openingAmount, 4) === null || openingReason.trim().length < 5}
+              onClick={confirmOpening}
+            >
+              {t('openingConfirm')}
+            </Button>
+          </section>
+        )
+      ) : null}
 
       {stale ? (
         <Alert variant="warning">

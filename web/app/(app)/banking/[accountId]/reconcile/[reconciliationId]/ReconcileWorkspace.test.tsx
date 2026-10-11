@@ -83,6 +83,15 @@ async function mountWorkspace(
       reversed: { entryNumber: string; postingDate: string; amount: string; reversal: string | null }[];
     } | null;
     priorEffects?: string[];
+    opening?: {
+      isFirst: boolean;
+      statementOpening: string | null;
+      coverageStart: string | null;
+      bookBalance: string;
+      confirmation: { amount: string; startDate: string; reason: string; confirmedAt: string; confirmedByName: string | null } | null;
+      carryApplies: boolean;
+      carryStart: string | null;
+    } | null;
   } = {},
 ): Promise<void> {
   const prior = globalThis.fetch
@@ -126,6 +135,7 @@ async function mountWorkspace(
             glClearings={override.glClearings ?? []}
             stale={override.stale ?? null}
             priorEffects={override.priorEffects ?? []}
+            opening={override.opening ?? null}
           />
         </MoneyProvider>
       </NextIntlClientProvider>,
@@ -469,5 +479,140 @@ test('an unsigned session explains its opening difference from earlier late peri
   assert.ok(
     text.includes('-920.00 from entries posted into 2026-07-15 after its sign-off'),
     'the workspace carries the earlier period effect into the opening difference explanation',
+  )
+})
+
+test('a gl-clearing refusal on a lone opening line surfaces its message', async (t) => {
+  // The book opening journal has no bank line by nature: clearing it alone
+  // 422s (a clearing group must sum to zero) and the typed refusal — not
+  // silence — is what the operator must see.
+  await mountWorkspace(t, (async () => Response.json(
+    { error: 'Selected journal lines total 63412.5500, not zero — a GL clearing group must sum exactly to zero' },
+    { status: 422 },
+  )) as typeof fetch, {
+    glRows: [{ id: 'gl-opening', posting_date: '2026-07-01', entry_number: 'JE-OPEN', amount: '63412.55', memo: 'Opening balance', party: null }],
+    glTotal: 1,
+    glOutstandingTotal: '63412.55',
+  })
+  const boxes = [...document.querySelectorAll('input[type="checkbox"]')] as HTMLInputElement[]
+  assert.equal(boxes.length, 1, 'the opening ledger line offers a checkbox')
+  await act(async () => {
+    boxes[0]!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    for (let i = 0; i < 6; i++) await tick()
+  })
+  const clear = [...document.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === 'Clear selected') as HTMLButtonElement | undefined
+  assert.ok(clear, 'the workspace offers Clear selected')
+  assert.equal(clear.disabled, false, 'a GL-only selection enables Clear selected')
+  await act(async () => {
+    clear.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    for (let i = 0; i < 6; i++) await tick()
+  })
+  assert.ok(
+    script.toasts.some((toast) => toast.kind === 'error' && toast.message.includes('must sum exactly to zero')),
+    `the clearing refusal must surface, got ${JSON.stringify(script.toasts)}`,
+  )
+  assert.equal(clear.disabled, false, 'the workspace must not wedge busy after a clearing refusal')
+})
+
+const balanceLessOpening = {
+  isFirst: true,
+  statementOpening: null,
+  coverageStart: '2026-07-02',
+  bookBalance: '63412.5500',
+  confirmation: null,
+  carryApplies: false,
+  carryStart: null,
+}
+
+test('a balance-less first reconciliation offers to confirm its opening', async (t) => {
+  const calls: { url: string; body?: string }[] = []
+  await mountWorkspace(t, (async (_input: unknown, init?: RequestInit) => {
+    if (String(_input).includes('/opening') && init?.method === 'POST') {
+      calls.push({ url: String(_input), body: String(init.body) })
+    }
+    return Response.json({ ok: true, totals: { difference: '0.00' } })
+  }) as typeof fetch, { opening: balanceLessOpening })
+  const text = document.body.textContent ?? ''
+  assert.ok(text.includes('Opening balance'), 'the workspace names the opening position')
+  assert.ok(text.includes('63,412.55') || text.includes('63412.55'), `the workspace shows the book balance carried in, got ${JSON.stringify(text.slice(0, 2000))}`)
+  const amount = document.querySelector('input[inputmode="decimal"]') as HTMLInputElement | null
+  assert.ok(amount, 'the opening amount is editable')
+  assert.ok((amount.value ?? '').includes('63412.55'), 'the amount starts at the book balance carried in')
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set
+  const reason = [...document.querySelectorAll('input')].find((input) => input.getAttribute('placeholder')?.includes('Opening balance from')) as HTMLInputElement | undefined
+  assert.ok(reason, 'the opening reason is prompted')
+  await act(async () => {
+    setter?.call(reason, 'Opening balance from the prior-year close, confirmed to the bank records')
+    reason.dispatchEvent(new window.Event('input', { bubbles: true }))
+    for (let i = 0; i < 4; i++) await tick()
+  })
+  const confirm = [...document.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === 'Confirm opening') as HTMLButtonElement | undefined
+  assert.ok(confirm, 'the workspace offers Confirm opening')
+  assert.equal(confirm.disabled, false, 'a reasoned confirmation enables Confirm opening')
+  await act(async () => {
+    confirm.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    for (let i = 0; i < 6; i++) await tick()
+  })
+  const posted = calls.find((c) => c.url.includes('/opening'))
+  assert.ok(posted, 'confirming must POST the session opening route')
+  const body = JSON.parse(posted.body ?? '{}') as { openingBalance?: string; reason?: string }
+  assert.equal(body.openingBalance, '63412.5500', 'the confirmed opening posts as exact decimal text')
+  assert.ok((body.reason ?? '').length >= 5, 'the reason posts with the confirmation')
+  assert.ok(
+    script.toasts.some((toast) => toast.kind === 'success'),
+    `confirming must toast success, got ${JSON.stringify(script.toasts)}`,
+  )
+})
+
+test('an unproven opening confirmation surfaces the refusal', async (t) => {
+  await mountWorkspace(t, (async () => Response.json(
+    { error: 'The confirmed opening 63000.0000 does not match the book balance carried in (63412.5500 through 2026-07-02) — correct the amount or post the missing book entries first' },
+    { status: 422 },
+  )) as typeof fetch, { opening: balanceLessOpening })
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set
+  const amount = document.querySelector('input[inputmode="decimal"]') as HTMLInputElement | null
+  const reason = [...document.querySelectorAll('input')].find((input) => input.getAttribute('placeholder')?.includes('Opening balance from')) as HTMLInputElement | undefined
+  assert.ok(amount && reason, 'the opening form renders')
+  await act(async () => {
+    setter?.call(amount, '63000')
+    amount.dispatchEvent(new window.Event('input', { bubbles: true }))
+    setter?.call(reason, 'Opening balance from the prior-year close, confirmed to the bank records')
+    reason.dispatchEvent(new window.Event('input', { bubbles: true }))
+    for (let i = 0; i < 4; i++) await tick()
+  })
+  const confirm = [...document.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === 'Confirm opening') as HTMLButtonElement | undefined
+  assert.ok(confirm && !confirm.disabled, 'the edited confirmation is submittable')
+  await act(async () => {
+    confirm.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    for (let i = 0; i < 6; i++) await tick()
+  })
+  assert.ok(
+    script.toasts.some((toast) => toast.kind === 'error' && toast.message.includes('does not match the book balance carried in')),
+    `the confirmation refusal must surface with its remedy, got ${JSON.stringify(script.toasts)}`,
+  )
+})
+
+test('a confirmed opening reads as the session opening position', async (t) => {
+  await mountWorkspace(t, (async () => Response.json({})) as typeof fetch, {
+    opening: {
+      ...balanceLessOpening,
+      confirmation: {
+        amount: '63412.5500',
+        startDate: '2026-07-02',
+        reason: 'Opening balance from the prior-year close, confirmed to the bank records',
+        confirmedAt: '2026-07-15T10:00:00Z',
+        confirmedByName: 'Bank reviewer',
+      },
+      carryApplies: true,
+      carryStart: '2026-07-02',
+    },
+  })
+  const text = document.body.textContent ?? ''
+  assert.ok(text.includes('confirmed'), 'the workspace states the opening is confirmed')
+  assert.ok(text.includes('Opening balance from the prior-year close'), 'the workspace shows the confirmation reason')
+  assert.equal(
+    [...document.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === 'Confirm opening'),
+    undefined,
+    'a carried confirmation offers no second confirmation',
   )
 })

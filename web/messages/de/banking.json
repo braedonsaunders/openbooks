@@ -632,7 +632,17 @@
     "clearingsTitle": "GL-Ausgleichsgruppen",
     "clearingsCount": "{count, plural, one {# Gruppe} other {# Gruppen}}",
     "openWorkspace": "Abstimmungsarbeitsbereich öffnen",
-    "signOffWorkspaceNote": "Das Abzeichnen erfolgt im Abstimmungsarbeitsbereich — dort wird die Differenz aufgerechnet und blockierende Zeilen werden aufgelistet."
+    "signOffWorkspaceNote": "Das Abzeichnen erfolgt im Abstimmungsarbeitsbereich — dort wird die Differenz aufgerechnet und blockierende Zeilen werden aufgelistet.",
+    "openingTitle": "Anfangssaldo",
+    "openingDescription": "Dies ist die erste Abstimmung dieses Kontos, und der importierte Auszug nennt keinen Anfangssaldo. Bestätigen Sie den übernommenen Buchsaldo als Auszugseröffnung – mit Begründung: Die Eröffnungsbuchung wird zur Eröffnungsposition der Sitzung statt zu einem offenen Posten.",
+    "openingBookBalance": "Übernommener Buchsaldo (vor {date})",
+    "openingAmountLabel": "Auszugseröffnung",
+    "openingReasonLabel": "Begründung",
+    "openingReasonPlaceholder": "z. B. Anfangssaldo aus dem Vorjahresabschluss, mit den Bankunterlagen abgeglichen",
+    "openingConfirm": "Eröffnung bestätigen",
+    "openingConfirmedToast": "Eröffnung {amount} bestätigt",
+    "openingConfirmedNote": "Eröffnung {amount} bestätigt — {reason}",
+    "openingStaleNote": "Die bestätigte Eröffnung stimmt nicht mehr mit dem übernommenen Buchsaldo überein — prüfen Sie das Hauptbuch und bestätigen Sie die Eröffnung erneut."
   },
   "sftp": {
     "title": "SFTP",

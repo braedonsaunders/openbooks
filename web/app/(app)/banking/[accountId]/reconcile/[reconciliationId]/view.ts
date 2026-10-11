@@ -6,7 +6,7 @@ import { getLocale, getTranslations } from 'next-intl/server'
 import { formatCivilDate } from '@/lib/format'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { reconciliationBookId, reconciliationTotals, reconciliationStaleness, priorPeriodLateEffect } from '@openbooks/engine/src/banking/banking.ts'
+import { reconciliationBookId, reconciliationTotals, reconciliationStaleness, priorPeriodLateEffect, openingPosition, type OpeningPosition } from '@openbooks/engine/src/banking/banking.ts'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission, subsidiaryScopeAllows } from '../../../../../../lib/authz'
 import { openingCarryStartDate } from '../../../../../../lib/banking-accounts'
@@ -190,6 +190,12 @@ export interface ReconciliationData {
   stale: ReconcileStaleness | null
   /** Late effects from earlier signed-off periods, for unsigned sessions. */
   priorEffects: string[]
+  /**
+   * Opening position for a first reconciliation from a balance-less
+   * statement: whether the operator must confirm the book balance carried
+   * in, and the confirmation standing behind the cleared balance.
+   */
+  opening: OpeningPosition | null
 }
 
 export async function loadReconciliation(
@@ -284,9 +290,13 @@ export async function loadReconciliation(
     perPage: 15,
     allowedSorts: ['date', 'amount', 'entry'] as const,
   })
-  // Lines covered by a signed opening carry are cleared by that carry, not
-  // by matching — hide them here exactly as the engine excludes them.
-  const carryStart = await openingCarryStartDate(ctx.orgId, accountId)
+  // Lines covered by an opening carry are cleared by that carry, not by
+  // matching — hide them here exactly as the engine excludes them. A first
+  // session's own confirmed opening applies before anything is signed off,
+  // so its pre-carry book lines stop reading as outstanding items.
+  const opening = await openingPosition(reconciliationId, ctx)
+  const signedCarryStart = await openingCarryStartDate(ctx.orgId, accountId)
+  const carryStart = signedCarryStart ?? (opening?.carryApplies ? opening.carryStart : null)
   const glWhere = sql`jl.account_id = ${accountId} and jl.org_id = ${ctx.orgId}
     and je.book_id = ${bookId} and jl.currency = ${recon.currency}
     and je.status in ('posted', 'reversed') and je.posting_date <= ${recon.through_date}
@@ -478,6 +488,7 @@ export async function loadReconciliation(
     glClearings,
     stale,
     priorEffects,
+    opening,
   }
 }
 
@@ -536,6 +547,7 @@ export function reconcileSpec(data: ReconciliationData): PageSpec {
         glClearings: data.glClearings,
         stale: data.stale,
         priorEffects: data.priorEffects,
+        opening: data.opening,
       }),
     ],
   })

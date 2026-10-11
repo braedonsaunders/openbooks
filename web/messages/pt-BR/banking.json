@@ -632,7 +632,17 @@
     "clearingsTitle": "Grupos de compensação contábil",
     "clearingsCount": "{count, plural, one {# grupo} other {# grupos}}",
     "openWorkspace": "Abrir o espaço de conciliação",
-    "signOffWorkspaceNote": "A finalização acontece no espaço de conciliação, onde a diferença é conferida e as linhas que bloqueiam são listadas."
+    "signOffWorkspaceNote": "A finalização acontece no espaço de conciliação, onde a diferença é conferida e as linhas que bloqueiam são listadas.",
+    "openingTitle": "Saldo inicial",
+    "openingDescription": "Esta é a primeira conciliação desta conta e o extrato importado não informa saldo inicial. Confirme o saldo contábil transportado como abertura do extrato, com um motivo: o lançamento de abertura passa a ser a posição inicial da sessão em vez de um item pendente.",
+    "openingBookBalance": "Saldo contábil transportado (antes de {date})",
+    "openingAmountLabel": "Abertura do extrato",
+    "openingReasonLabel": "Motivo",
+    "openingReasonPlaceholder": "ex. Saldo inicial do fechamento do ano anterior, confirmado com os registros do banco",
+    "openingConfirm": "Confirmar abertura",
+    "openingConfirmedToast": "Abertura {amount} confirmada",
+    "openingConfirmedNote": "Abertura {amount} confirmada — {reason}",
+    "openingStaleNote": "A abertura confirmada não corresponde mais ao saldo contábil transportado — revise o razão e confirme a abertura novamente."
   },
   "sftp": {
     "title": "SFTP",
