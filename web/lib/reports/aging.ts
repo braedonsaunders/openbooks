@@ -7,6 +7,7 @@ import { mulDecimal } from "@openbooks/engine/money/money";
 // bare @openbooks/* to the main checkout, so a new engine module would not
 // resolve until merge; a relative import binds this checkout everywhere.
 import { AP_OPEN_ITEM_KINDS, AR_OPEN_ITEM_KINDS } from "@openbooks/engine/records/open-item-kinds";
+import { appliedLegAmountExpr } from "@openbooks/engine/records/balance-due";
 import { resolveOrgId } from "../org-scope";
 import { presentationCurrency, presentationRates, presentationSpotRatesSql, presentationAmountSql } from "../fx-presentation";
 import { decimalAdd, decimalCmp, decimalNeg, type ExactDecimal } from "../statement-format";
@@ -273,15 +274,15 @@ function openDocumentsSql(
                * (sum(dl.txn_gross) - coalesce(sum(al.applied_txn), 0)) as open_txn
         from doc_lines dl
         left join lateral (
-          -- applications.amount is the base-currency carrying amount (the same
-          -- denomination as the base leg above); the source/target transaction
-          -- legs are the same denomination as the txn leg. No FX re-translation
-          -- on either side. OR on from/to uses the existing line-id indexes.
+          -- Each leg consumes its own carrying columns (the shared engine
+          -- helper, the same caps app_check_open enforces): the to-leg settles
+          -- the target line in amount / target_transaction_amount, the from-leg
+          -- consumes the source line in source_amount / source_transaction_amount.
+          -- No FX re-translation on either side. OR on from/to uses the existing
+          -- line-id indexes.
           select
-            coalesce(sum(a.amount), 0) as applied_base,
-            coalesce(sum(case when a.from_line_id = dl.line_id
-                              then a.source_transaction_amount
-                              else a.target_transaction_amount end), 0) as applied_txn
+            coalesce(sum(${appliedLegAmountExpr("a", sql`dl.line_id`, "base")}), 0) as applied_base,
+            coalesce(sum(${appliedLegAmountExpr("a", sql`dl.line_id`, "transaction")}), 0) as applied_txn
           from applications a
           where a.org_id = ${orgId}
             and a.applied_on <= ${asOf}
