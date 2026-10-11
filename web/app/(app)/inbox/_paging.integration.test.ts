@@ -256,3 +256,55 @@ test("paged worklist agrees with the full worklist the tile counts", { skip: !DB
     await withBypass(() => dropScratchOrg(org.orgId));
   }
 });
+
+test("mine bubble counts the rows its tab lists, not the badge legs", { skip: !DB }, async () => {
+  // Direct timesheet approvals ride the inbox badge (inboxCounts folds them
+  // into approvals) but the union table never lists them: wiring the badge
+  // figure into the mine bubble showed waiting work on an empty tab. The
+  // bubble reads the union totals beside its rows.
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const submitter = (await withBypass(() => createScratchUser(org.orgId, "Bubble Submitter", "accountant"))) as unknown as string;
+    const approver = (await withBypass(() => createScratchUser(org.orgId, "Bubble Approver", "approver"))) as unknown as string;
+    await withBypass(async () => {
+      await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'), '{features,flows}', 'true') where id = ${org.orgId}`);
+      await db.execute(sql`update orgs set settings = settings || '{"features": {"timeTracking": true}}'::jsonb where id = ${org.orgId}`);
+      await db.execute(sql`update app_roles set permissions = '["flows.approve", "time.approve"]'::jsonb where org_id = ${org.orgId} and key = 'approver'`);
+      const flowId = randomUUID();
+      const runId = randomUUID();
+      await db.execute(sql`insert into flows (id, org_id, name, subject_kind, enabled, graph)
+        values (${flowId}, ${org.orgId}, 'Bubble flow', 'timesheet_week', true, '{}'::jsonb)`);
+      const gatedWeek = randomUUID();
+      const gatedEmployee = randomUUID();
+      await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
+        values (${gatedEmployee}, ${org.orgId}, 'employee', 'Bubble Gated', ${org.subsidiaryId}, true, '{}'::jsonb)`);
+      await db.execute(sql`insert into timesheet_weeks (id, org_id, employee_party_id, week_start, status, created_by, updated_by)
+        values (${gatedWeek}, ${org.orgId}, ${gatedEmployee}, '2026-07-12', 'submitted', ${submitter}, ${submitter})`);
+      await db.execute(sql`insert into flow_runs (id, org_id, flow_id, subject_kind, subject_id, trigger, status)
+        values (${runId}, ${org.orgId}, ${flowId}, 'timesheet_week', ${gatedWeek}, 'on_submit', 'waiting')`);
+      await db.execute(sql`insert into flow_gates
+        (id, org_id, flow_id, run_id, node_id, subject_kind, subject_id, title, assignee_user_id, group_key, quorum, status, created_at)
+        values (${randomUUID()}, ${org.orgId}, ${flowId}, ${runId}, 'node-0', 'timesheet_week', ${gatedWeek},
+                'Bubble gate', ${approver}, 'g-0', 'any', 'pending', now())`);
+      // Gateless submitted week: counted by the inbox badge, never a union row.
+      const directEmployee = randomUUID();
+      await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
+        values (${directEmployee}, ${org.orgId}, 'employee', 'Bubble Direct', ${org.subsidiaryId}, true, '{}'::jsonb)`);
+      await db.execute(sql`insert into timesheet_weeks (id, org_id, employee_party_id, week_start, status, submitted_at, created_by, updated_by)
+        values (${randomUUID()}, ${org.orgId}, ${directEmployee}, '2026-07-19', 'submitted', now(), ${submitter}, ${submitter})`);
+    });
+    state.authz = {
+      ...authzFor(org.orgId, approver),
+      permissions: new Set(["flows.approve", "ap.approve", "ar.approve", "time.approve"]),
+    };
+    const data = await withOrgContext(org.orgId, () => loadApprovals({}));
+    assert.ok(data, "loader returns data");
+    assert.equal(data!.total, 1, "union lists only the gated week");
+    assert.equal(data!.unfilteredTotal, 1, "union totals match the rows");
+    assert.equal(data!.approvalRows.length, 1, "one actionable row");
+    const mineTab = data!.tabs.find((t) => t.key === "mine");
+    assert.equal(mineTab?.count, 1, "mine bubble ties the listed rows, not the badge legs");
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});

@@ -227,10 +227,12 @@ export async function loadApprovals(
   const canManageFlows = can(authz, 'flows.manage')
   const canSeeAll = canManageFlows
 
-  // The badge and the tab counts come from the same native counts. With no
-  // tab chosen, the inbox opens where the waiting work is: My approvals when
-  // anything awaits a decision, otherwise My tasks when tasks are waiting —
-  // never an "all clear" page beside a badge that counts tasks.
+  // The nav badge and the default-tab landing come from the same native
+  // counts. With no tab chosen, the inbox opens where the waiting work is:
+  // My approvals when anything awaits a decision, otherwise My tasks when
+  // tasks are waiting — never an "all clear" page beside a badge that
+  // counts tasks. The mine bubble itself reads the union totals beside the
+  // rows, never the badge figure.
   const ctx = await inboxContext(authz)
   const [counts, approvalFlowsConfigured] = await Promise.all([
     inboxCounts(authz, ctx),
@@ -695,8 +697,14 @@ export async function loadApprovals(
     showTasks && taskRows.length === 0 && failedSourceNotices.length === 0
   const filterCount = (key: InboxFilter): number => taskFilters[key].length
 
+  // The mine bubble counts exactly the rows its tab lists: the union totals
+  // from the same paged reader as the rows below (one predicate for count
+  // and list). inboxCounts.approvals additionally folds in direct timesheet
+  // approvals, which the union table never lists — wiring it here let the
+  // badge outrun both tabs. The nav badge keeps inboxCounts (it covers the
+  // whole inbox, not this tab).
   const tabs: { key: Tab; label: string; count?: number }[] = [
-    { key: 'mine', label: t('tabs.mine'), count: counts.approvals },
+    { key: 'mine', label: t('tabs.mine'), count: unfilteredTotal },
     { key: 'tasks', label: ti('filters.myTasks'), count: counts.tasks },
     { key: 'submitted', label: t('tabs.submitted') },
     ...(canSeeAll ? [{ key: 'all' as Tab, label: t('tabs.all') }] : []),
