@@ -1453,7 +1453,9 @@
     "purchase_orders_read": "View purchase orders and receipts",
     "purchase_orders_create": "Create, change and void purchase orders",
     "goods_receipts_create": "Receive goods against purchase orders",
-    "time_self": "Enter and submit own time"
+    "time_self": "Enter and submit own time",
+    "assets_capitalize": "Accept asset proposals and capitalize construction in progress",
+    "assets_maintain": "Maintain asset maintenance schedules and insurance policies"
   },
   "ai": {
     "metaTitle": "AI providers",
@@ -3740,6 +3742,11 @@
         "title": "Job descriptions",
         "singularTitle": "Job description",
         "description": "Reusable posting content a new requisition starts from: title, employment type, pay range and description."
+      },
+      "asset-capitalization-rules": {
+        "title": "Capitalization rules",
+        "singularTitle": "Capitalization rule",
+        "description": "Which posted purchase lines become asset proposals: an account, item or item category with a minimum amount, effective-dated."
       }
     },
     "fields": {
@@ -4367,7 +4374,10 @@
       "compensationMin": "Pay minimum",
       "compensationMax": "Pay maximum",
       "compensationCurrency": "Pay currency",
-      "compensationBasis": "Pay basis"
+      "compensationBasis": "Pay basis",
+      "matchKind": "Matches on",
+      "minimumAmount": "Minimum amount to capitalize",
+      "assetCategoryId": "Suggested asset category"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Days between the newest usable rate and the period end beyond which revaluation and consolidation refuse the rate. Closing rates count from the date of the period-end spot rate; average rates from the newest quote averaged. Default when no policy is set: 31 days.",
@@ -5356,6 +5366,11 @@
       "schedulePdfColorTreatment": {
         "subtle": "Subtle accents",
         "strong": "Strong fills"
+      },
+      "capitalizationMatch": {
+        "account": "Account",
+        "item": "Item",
+        "itemCategory": "Item category"
       }
     },
     "payroll": {
@@ -8055,6 +8070,26 @@
     "manufacturingSubcontract": {
       "title": "External manufacturing",
       "description": "Send components to a vendor, record processing services and return production onto the work order."
+    },
+    "assetComponents": {
+      "title": "Compound assets",
+      "description": "Group component assets under a parent, each with its own cost, life and depreciation, rolled up per book and disposed together."
+    },
+    "assetProposals": {
+      "title": "Asset proposals",
+      "description": "Turn posted purchase lines that match your capitalization rules into proposals to accept as assets, components or construction in progress."
+    },
+    "constructionInProgress": {
+      "title": "Construction in progress",
+      "description": "Accumulate costs on construction-in-progress records, reconcile them to the GL and capitalize them into assets when complete."
+    },
+    "assetMaintenance": {
+      "title": "Asset maintenance",
+      "description": "Schedule maintenance by time or meter, record work against the bills that paid for it, and get due and overdue alerts."
+    },
+    "assetInsurance": {
+      "title": "Asset insurance",
+      "description": "Record insurance policies covering assets, get renewal reminders and compare insured value with net book value."
     }
   },
   "backupsManager": {

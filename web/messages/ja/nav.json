@@ -165,7 +165,11 @@
     "manufacturing-mrp": "MRP実行",
     "manufacturing-time": "製造工数",
     "manufacturing-quality": "品質",
-    "close-reopen-requests": "再オープン申請"
+    "close-reopen-requests": "再オープン申請",
+    "asset-proposals": "資産計上候補",
+    "asset-construction": "建設仮勘定",
+    "asset-maintenance": "資産保守",
+    "asset-insurance": "資産保険"
   },
   "groups": {
     "manufacturing": "製造",

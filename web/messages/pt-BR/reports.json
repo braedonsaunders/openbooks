@@ -67,7 +67,8 @@
       "allocations": "Alocações",
       "aiGovernance": "Governança de IA",
       "other": "Outros relatórios",
-      "resourcing": "Alocação de recursos"
+      "resourcing": "Alocação de recursos",
+      "fixedAssets": "Ativos imobilizados"
     },
     "customStudio": {
       "title": "Construtor de relatórios personalizados",
@@ -1140,6 +1141,34 @@
       "managed_property_portfolio": {
         "label": "Imóveis administrados",
         "description": "Ciclo de vida atual da carteira, limitado às entidades jurídicas autorizadas para o usuário."
+      },
+      "fixed_asset_register": {
+        "label": "Registro de ativos imobilizados por livro",
+        "description": "Todos os ativos imobilizados em todos os livros ativos — incluindo imobilizado em andamento e ativos componentes — com situação, ativo principal, custo, depreciação acumulada e valor contábil atual."
+      },
+      "fixed_asset_rollforward": {
+        "label": "Movimentação do ativo imobilizado",
+        "description": "Custo e depreciação acumulada no fim do mês por ativo e livro: saldo inicial, adições, transferências, baixas, obras capitalizadas, depreciação, remensuração e saldo final. Resuma por livro e categoria para obter a movimentação."
+      },
+      "fixed_asset_depreciation_forecast": {
+        "label": "Previsão de depreciação",
+        "description": "Depreciação planejada ainda não contabilizada, por ativo, livro e período, com base no cronograma atual de cada ativo."
+      },
+      "asset_proposals": {
+        "label": "Propostas de ativos",
+        "description": "Linhas de compra contabilizadas propostas para capitalização, com origem, fornecedor, conta, regra, valor e decisão."
+      },
+      "asset_maintenance_due": {
+        "label": "Manutenções de ativos a vencer",
+        "description": "Planos de manutenção ativos com a próxima data de vencimento e o valor do medidor, a última leitura e se cada um está programado, a vencer ou vencido na data do relatório."
+      },
+      "asset_insured_values": {
+        "label": "Valor segurado em relação ao valor contábil líquido",
+        "description": "Todos os ativos cobertos por uma apólice vigente na data do relatório, com valor segurado e valor de reposição comparados ao valor contábil do livro principal e a diferença."
+      },
+      "asset_cip_costs": {
+        "label": "Custos de imobilizado em andamento",
+        "description": "Todas as linhas do razão geral vinculadas a um registro de imobilizado em andamento — contas a pagar, lançamentos e custos de projeto — com registro, conta, projeto e valor, para conciliar o razão auxiliar com as contas de imobilizado em andamento."
       }
     },
     "columns": {
@@ -2750,6 +2779,119 @@
         "code": "Código do imóvel",
         "name": "Imóvel",
         "status": "Situação"
+      },
+      "fixed_asset_register": {
+        "book_id": "ID do livro",
+        "book": "Livro contábil",
+        "asset_number": "Número do ativo",
+        "name": "Nome",
+        "status": "Situação",
+        "category": "Categoria",
+        "parent_asset": "Ativo principal",
+        "subsidiary": "Entidade jurídica",
+        "base_currency": "Moeda funcional",
+        "acquired_on": "Adquirido em",
+        "in_service_on": "Em uso desde",
+        "cost": "Custo",
+        "accumulated_depreciation": "Depreciação acumulada",
+        "carrying_value": "Valor contábil",
+        "id": "ID do ativo"
+      },
+      "fixed_asset_rollforward": {
+        "book_id": "ID do livro",
+        "book": "Livro contábil",
+        "month": "Mês",
+        "asset_number": "Número do ativo",
+        "name": "Nome",
+        "status": "Situação",
+        "category": "Categoria",
+        "subsidiary": "Entidade jurídica",
+        "base_currency": "Moeda funcional",
+        "cost_opening": "Custo inicial",
+        "additions": "Adições",
+        "transfers": "Transferências e baixas parciais",
+        "disposals": "Baixas",
+        "capitalized": "Obras capitalizadas",
+        "cost_closing": "Custo final",
+        "accumulated_opening": "Depreciação acumulada inicial",
+        "depreciation": "Depreciação",
+        "remeasurement": "Redução ao valor recuperável e reavaliação",
+        "accumulated_other": "Depreciação acumulada sobre adições, transferências e baixas",
+        "accumulated_closing": "Depreciação acumulada final",
+        "asset_id": "ID do ativo"
+      },
+      "fixed_asset_depreciation_forecast": {
+        "book_id": "ID do livro",
+        "book": "Livro contábil",
+        "period": "Período",
+        "period_ends_on": "Fim do período",
+        "asset_number": "Número do ativo",
+        "name": "Nome",
+        "category": "Categoria",
+        "subsidiary": "Entidade jurídica",
+        "base_currency": "Moeda funcional",
+        "posted": "Contabilizado",
+        "planned": "Depreciação planejada",
+        "asset_id": "ID do ativo"
+      },
+      "asset_proposals": {
+        "posting_date": "Contabilizado em",
+        "source": "Origem",
+        "description": "Descrição",
+        "vendor": "Fornecedor",
+        "account": "Conta",
+        "rule": "Regra",
+        "status": "Situação",
+        "subsidiary": "Entidade jurídica",
+        "base_currency": "Moeda funcional",
+        "amount": "Valor",
+        "resolution_reason": "Observação da decisão",
+        "id": "ID da proposta"
+      },
+      "asset_maintenance_due": {
+        "asset_number": "Número do ativo",
+        "asset": "Ativo",
+        "task": "Tarefa",
+        "vendor": "Fornecedor",
+        "next_due_on": "Próximo vencimento em",
+        "next_due_usage": "Próximo vencimento no medidor",
+        "current_usage": "Última leitura do medidor",
+        "usage_unit": "Unidade do medidor",
+        "standing": "Posição",
+        "is_active": "Ativo",
+        "subsidiary": "Entidade jurídica",
+        "base_currency": "Moeda funcional",
+        "estimated_cost": "Custo estimado",
+        "id": "ID do plano"
+      },
+      "asset_insured_values": {
+        "policy_number": "Apólice",
+        "insurer": "Seguradora",
+        "coverage_ends_on": "Fim da cobertura",
+        "asset_number": "Número do ativo",
+        "asset": "Ativo",
+        "subsidiary": "Entidade jurídica",
+        "base_currency": "Moeda funcional",
+        "insured_value": "Valor segurado",
+        "replacement_value": "Valor de reposição",
+        "net_book_value": "Valor contábil líquido",
+        "gap": "Valor segurado menos valor contábil líquido",
+        "asset_id": "ID do ativo"
+      },
+      "asset_cip_costs": {
+        "cip_number": "Registro de obra",
+        "cip_name": "Nome da obra",
+        "cip_status": "Situação do registro",
+        "account": "Conta",
+        "entry_number": "Lançamento",
+        "posting_date": "Contabilizado em",
+        "project": "Projeto",
+        "memo": "Memorando",
+        "link_status": "Situação do vínculo",
+        "subsidiary": "Entidade jurídica",
+        "base_currency": "Moeda funcional",
+        "amount": "Valor",
+        "id": "ID do custo"
       }
     },
     "enumValues": {
@@ -2876,7 +3018,15 @@
       "insufficient_funds": "Fundos insuficientes",
       "needs_authentication": "Requer autenticação",
       "primary": "Método principal",
-      "backup": "Método reserva"
+      "backup": "Método reserva",
+      "construction": "Imobilizado em andamento",
+      "capitalized": "Capitalizado",
+      "accepted": "Aceito",
+      "scheduled": "Programado",
+      "due": "A vencer",
+      "overdue": "Vencido",
+      "linked": "Vinculado",
+      "unlinked": "Desvinculado"
     }
   },
   "operators": {
@@ -3173,7 +3323,8 @@
       "gift": "Doação",
       "grant": "Subvenção",
       "release": "Liberação de restrições",
-      "manufacturing": "Manufatura"
+      "manufacturing": "Manufatura",
+      "asset_capitalization": "Capitalização de ativo"
     },
     "columns": {
       "detail": "Parte / memorando"

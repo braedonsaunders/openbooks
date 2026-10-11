@@ -1453,7 +1453,9 @@
     "purchase_orders_read": "Consulter les bons de commande et les réceptions",
     "purchase_orders_create": "Créer, modifier et annuler des bons de commande",
     "goods_receipts_create": "Réceptionner des marchandises sur bons de commande",
-    "time_self": "Saisir et soumettre son propre temps"
+    "time_self": "Saisir et soumettre son propre temps",
+    "assets_capitalize": "Accepter les propositions d’immobilisation et immobiliser les immobilisations en cours",
+    "assets_maintain": "Gérer les plans d’entretien et les polices d’assurance des immobilisations"
   },
   "ai": {
     "metaTitle": "Fournisseurs d'IA",
@@ -3665,6 +3667,11 @@
         "title": "Descriptions de poste",
         "singularTitle": "Description de poste",
         "description": "Contenu d'annonce réutilisable pour les nouvelles demandes : intitulé, type d'emploi, fourchette de rémunération et description."
+      },
+      "asset-capitalization-rules": {
+        "title": "Règles d’immobilisation",
+        "singularTitle": "Règle d’immobilisation",
+        "description": "Lignes d’achat comptabilisées qui deviennent des propositions d’immobilisation : un compte, un article ou une catégorie d’articles avec un montant minimal, avec date d’effet."
       }
     },
     "fields": {
@@ -4292,7 +4299,10 @@
       "compensationMin": "Rémunération minimale",
       "compensationMax": "Rémunération maximale",
       "compensationCurrency": "Devise de rémunération",
-      "compensationBasis": "Base de rémunération"
+      "compensationBasis": "Base de rémunération",
+      "matchKind": "Critère de correspondance",
+      "minimumAmount": "Montant minimal à immobiliser",
+      "assetCategoryId": "Catégorie d’immobilisations suggérée"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Nombre de jours entre le taux utilisable le plus récent et la fin de période au-delà duquel la réévaluation et la consolidation refusent le taux. Les taux de clôture se comptent depuis la date du taux comptant de fin de période ; les taux moyens depuis la cotation la plus récente incluse dans la moyenne. Valeur par défaut sans politique : 31 jours.",
@@ -5281,6 +5291,11 @@
       "schedulePdfColorTreatment": {
         "subtle": "Accents discrets",
         "strong": "Aplats soutenus"
+      },
+      "capitalizationMatch": {
+        "account": "Compte",
+        "item": "Article",
+        "itemCategory": "Catégorie d’articles"
       }
     },
     "laborCosting": {
@@ -8055,6 +8070,26 @@
     "manufacturingSubcontract": {
       "title": "Fabrication externe",
       "description": "Envoyez des composants à un fournisseur, enregistrez les services et retournez la production sur l’ordre."
+    },
+    "assetComponents": {
+      "title": "Immobilisations à composants",
+      "description": "Regroupez des immobilisations composantes sous une immobilisation parente, chacune avec son propre coût, sa durée d’utilisation et son amortissement, consolidées par livre et cédées ensemble."
+    },
+    "assetProposals": {
+      "title": "Propositions d’immobilisation",
+      "description": "Transformez les lignes d’achat comptabilisées qui correspondent à vos règles d’immobilisation en propositions à accepter comme immobilisations, composants ou immobilisations en cours."
+    },
+    "constructionInProgress": {
+      "title": "Immobilisations en cours",
+      "description": "Accumulez les coûts sur des dossiers d’immobilisations en cours, rapprochez-les du grand livre et immobilisez-les une fois achevés."
+    },
+    "assetMaintenance": {
+      "title": "Entretien des immobilisations",
+      "description": "Planifiez l’entretien par durée ou par compteur, enregistrez les travaux en regard des factures qui les ont réglés et recevez des alertes d’échéance et de retard."
+    },
+    "assetInsurance": {
+      "title": "Assurance des immobilisations",
+      "description": "Enregistrez les polices d’assurance couvrant les immobilisations, recevez des rappels de renouvellement et comparez la valeur assurée à la valeur nette comptable."
     }
   },
   "backupsManager": {

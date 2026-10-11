@@ -165,7 +165,11 @@
     "manufacturing-mrp": "Execuções de MRP",
     "manufacturing-time": "Tempo de produção",
     "manufacturing-quality": "Qualidade",
-    "close-reopen-requests": "Solicitações de reabertura"
+    "close-reopen-requests": "Solicitações de reabertura",
+    "asset-proposals": "Propostas de Ativos",
+    "asset-construction": "Imobilizado em Andamento",
+    "asset-maintenance": "Manutenção de Ativos",
+    "asset-insurance": "Seguro de Ativos"
   },
   "groups": {
     "manufacturing": "Manufatura",

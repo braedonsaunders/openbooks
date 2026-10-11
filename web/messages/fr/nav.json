@@ -165,7 +165,11 @@
     "manufacturing-mrp": "Calculs MRP",
     "manufacturing-time": "Temps de production",
     "manufacturing-quality": "Qualité",
-    "close-reopen-requests": "Demandes de réouverture"
+    "close-reopen-requests": "Demandes de réouverture",
+    "asset-proposals": "Propositions d’immobilisation",
+    "asset-construction": "Immobilisations en cours",
+    "asset-maintenance": "Entretien des immobilisations",
+    "asset-insurance": "Assurance des immobilisations"
   },
   "modulesShort": {
     "hrm-performance-cycles": "Gérer les évaluations",

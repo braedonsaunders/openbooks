@@ -25,7 +25,8 @@
     "fxSettlement": "Währungsausgleich",
     "translation": "Umrechnung",
     "migration": "Migration",
-    "manufacturing": "Fertigung"
+    "manufacturing": "Fertigung",
+    "assetCapitalization": "Anlagenaktivierung"
   },
   "detail": {
     "notFound": "Buchung nicht gefunden",

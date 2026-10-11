@@ -1453,7 +1453,9 @@
     "purchase_orders_read": "Bestellungen und Wareneingänge anzeigen",
     "purchase_orders_create": "Bestellungen erstellen, ändern und stornieren",
     "goods_receipts_create": "Wareneingänge zu Bestellungen buchen",
-    "time_self": "Eigene Zeit erfassen und einreichen"
+    "time_self": "Eigene Zeit erfassen und einreichen",
+    "assets_capitalize": "Anlagenvorschläge übernehmen und Anlagen im Bau aktivieren",
+    "assets_maintain": "Wartungspläne und Versicherungspolicen für Anlagen pflegen"
   },
   "ai": {
     "metaTitle": "KI-Einstellungen",
@@ -3793,6 +3795,11 @@
         "title": "Stellenbeschreibungen",
         "singularTitle": "Stellenbeschreibung",
         "description": "Wiederverwendbare Ausschreibungsinhalte für neue Stellenanforderungen: Titel, Beschäftigungsart, Gehaltsspanne und Beschreibung."
+      },
+      "asset-capitalization-rules": {
+        "title": "Aktivierungsregeln",
+        "singularTitle": "Aktivierungsregel",
+        "description": "Welche gebuchten Einkaufszeilen zu Anlagenvorschlägen werden: ein Konto, Artikel oder eine Artikelkategorie mit einem Mindestbetrag, mit Gültigkeitsdatum."
       }
     },
     "fields": {
@@ -4420,7 +4427,10 @@
       "compensationMin": "Gehalt Minimum",
       "compensationMax": "Gehalt Maximum",
       "compensationCurrency": "Gehaltswährung",
-      "compensationBasis": "Gehaltsbasis"
+      "compensationBasis": "Gehaltsbasis",
+      "matchKind": "Abgleich nach",
+      "minimumAmount": "Mindestbetrag für die Aktivierung",
+      "assetCategoryId": "Vorgeschlagene Anlagenkategorie"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Tage zwischen dem neuesten verwendbaren Kurs und dem Periodenende, ab denen Bewertung und Konsolidierung den Kurs ablehnen. Stichtagskurse zählen ab dem Datum des Kassakurses zum Periodenende, Durchschnittskurse ab der neuesten einbezogenen Notierung. Standard ohne Richtlinie: 31 Tage.",
@@ -5409,6 +5419,11 @@
       "schedulePdfColorTreatment": {
         "subtle": "Dezente Akzente",
         "strong": "Kräftige Flächen"
+      },
+      "capitalizationMatch": {
+        "account": "Konto",
+        "item": "Artikel",
+        "itemCategory": "Artikelkategorie"
       }
     },
     "bankFeeds": {
@@ -8055,6 +8070,26 @@
     "manufacturingSubcontract": {
       "title": "Externe Fertigung",
       "description": "Komponenten an Lieferanten senden, Bearbeitungsleistungen erfassen und Produktion auf den Fertigungsauftrag zurücknehmen."
+    },
+    "assetComponents": {
+      "title": "Zusammengesetzte Anlagen",
+      "description": "Fassen Sie Komponentenanlagen unter einer übergeordneten Anlage zusammen, jede mit eigenen Anschaffungskosten, eigener Nutzungsdauer und Abschreibung, verdichtet je Buch und gemeinsam abgegangen."
+    },
+    "assetProposals": {
+      "title": "Anlagenvorschläge",
+      "description": "Machen Sie aus gebuchten Einkaufszeilen, die Ihren Aktivierungsregeln entsprechen, Vorschläge zur Übernahme als Anlagen, Komponenten oder Anlagen im Bau."
+    },
+    "constructionInProgress": {
+      "title": "Anlagen im Bau",
+      "description": "Sammeln Sie Kosten auf Datensätzen für Anlagen im Bau, stimmen Sie sie mit dem Hauptbuch ab und aktivieren Sie sie nach Fertigstellung in Anlagen."
+    },
+    "assetMaintenance": {
+      "title": "Anlagenwartung",
+      "description": "Planen Sie Wartungen nach Zeit oder Zählerstand, erfassen Sie Arbeiten zu den Eingangsrechnungen, mit denen sie bezahlt wurden, und erhalten Sie Hinweise zu fälligen und überfälligen Wartungen."
+    },
+    "assetInsurance": {
+      "title": "Anlagenversicherung",
+      "description": "Erfassen Sie Versicherungspolicen für Anlagen, erhalten Sie Verlängerungserinnerungen und vergleichen Sie die Versicherungssumme mit dem Nettobuchwert."
     }
   },
   "extensions": {

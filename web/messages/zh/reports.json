@@ -67,7 +67,8 @@
       "allocations": "分配",
       "aiGovernance": "AI 治理",
       "other": "其他报表",
-      "resourcing": "资源规划"
+      "resourcing": "资源规划",
+      "fixedAssets": "固定资产"
     },
     "customStudio": {
       "title": "自定义报表构建器",
@@ -1140,6 +1141,34 @@
       "managed_property_portfolio": {
         "label": "管理物业",
         "description": "当前物业组合的生命周期，仅涵盖用户获准访问的法律实体。"
+      },
+      "fixed_asset_register": {
+        "label": "按账簿列示的固定资产登记簿",
+        "description": "所有启用账簿中的每项固定资产（包括在建工程和组成部分资产），列示状态、上级资产、成本、累计折旧及当前账面价值。"
+      },
+      "fixed_asset_rollforward": {
+        "label": "固定资产变动表",
+        "description": "按资产和账簿列示的月末成本与累计折旧：期初、增加、转移、处置、在建工程转入、折旧、重新计量和期末。按账簿和类别汇总即可得到变动表。"
+      },
+      "fixed_asset_depreciation_forecast": {
+        "label": "折旧预测",
+        "description": "根据每项资产的当前折旧计划，按资产、账簿和期间列示尚未过账的计划折旧。"
+      },
+      "asset_proposals": {
+        "label": "资产建议",
+        "description": "建议资本化的已过账采购明细行，列示其来源、供应商、科目、规则、金额和处理决定。"
+      },
+      "asset_maintenance_due": {
+        "label": "资产维护到期",
+        "description": "启用的维护计划及其下次到期日和计量读数、最新读数，以及在报表日期是否为已计划、到期或逾期。"
+      },
+      "asset_insured_values": {
+        "label": "保险价值与净账面价值对比",
+        "description": "在报表日期由有效保险单承保的每项资产，列示其保险价值和重置价值与主账簿账面价值的对比及差额。"
+      },
+      "asset_cip_costs": {
+        "label": "在建工程成本",
+        "description": "关联到在建工程记录的每条总账明细行（账单、日记账和项目成本），列示其记录、科目、项目和金额，用于核对明细账与在建工程科目。"
       }
     },
     "columns": {
@@ -2750,6 +2779,119 @@
         "code": "物业代码",
         "name": "物业",
         "status": "状态"
+      },
+      "fixed_asset_register": {
+        "book_id": "账簿键",
+        "book": "会计账簿",
+        "asset_number": "资产编号",
+        "name": "名称",
+        "status": "状态",
+        "category": "类别",
+        "parent_asset": "上级资产",
+        "subsidiary": "法人实体",
+        "base_currency": "本位币",
+        "acquired_on": "购置日期",
+        "in_service_on": "启用日期",
+        "cost": "成本",
+        "accumulated_depreciation": "累计折旧",
+        "carrying_value": "账面价值",
+        "id": "资产键"
+      },
+      "fixed_asset_rollforward": {
+        "book_id": "账簿键",
+        "book": "会计账簿",
+        "month": "月份",
+        "asset_number": "资产编号",
+        "name": "名称",
+        "status": "状态",
+        "category": "类别",
+        "subsidiary": "法人实体",
+        "base_currency": "本位币",
+        "cost_opening": "期初成本",
+        "additions": "增加",
+        "transfers": "转移及部分处置",
+        "disposals": "处置",
+        "capitalized": "在建工程转入",
+        "cost_closing": "期末成本",
+        "accumulated_opening": "期初累计折旧",
+        "depreciation": "折旧",
+        "remeasurement": "减值与重估",
+        "accumulated_other": "增加、转移及处置相关累计折旧",
+        "accumulated_closing": "期末累计折旧",
+        "asset_id": "资产键"
+      },
+      "fixed_asset_depreciation_forecast": {
+        "book_id": "账簿键",
+        "book": "会计账簿",
+        "period": "期间",
+        "period_ends_on": "期间截止日",
+        "asset_number": "资产编号",
+        "name": "名称",
+        "category": "类别",
+        "subsidiary": "法人实体",
+        "base_currency": "本位币",
+        "posted": "已过账",
+        "planned": "计划折旧",
+        "asset_id": "资产键"
+      },
+      "asset_proposals": {
+        "posting_date": "过账日期",
+        "source": "来源",
+        "description": "描述",
+        "vendor": "供应商",
+        "account": "科目",
+        "rule": "规则",
+        "status": "状态",
+        "subsidiary": "法人实体",
+        "base_currency": "本位币",
+        "amount": "金额",
+        "resolution_reason": "处理说明",
+        "id": "建议键"
+      },
+      "asset_maintenance_due": {
+        "asset_number": "资产编号",
+        "asset": "资产",
+        "task": "任务",
+        "vendor": "供应商",
+        "next_due_on": "下次到期日",
+        "next_due_usage": "下次到期计量读数",
+        "current_usage": "最新计量读数",
+        "usage_unit": "计量单位",
+        "standing": "状况",
+        "is_active": "启用",
+        "subsidiary": "法人实体",
+        "base_currency": "本位币",
+        "estimated_cost": "预计成本",
+        "id": "计划键"
+      },
+      "asset_insured_values": {
+        "policy_number": "保险单",
+        "insurer": "保险公司",
+        "coverage_ends_on": "保险终止日",
+        "asset_number": "资产编号",
+        "asset": "资产",
+        "subsidiary": "法人实体",
+        "base_currency": "本位币",
+        "insured_value": "保险价值",
+        "replacement_value": "重置价值",
+        "net_book_value": "净账面价值",
+        "gap": "保险价值减净账面价值",
+        "asset_id": "资产键"
+      },
+      "asset_cip_costs": {
+        "cip_number": "在建工程记录",
+        "cip_name": "在建工程名称",
+        "cip_status": "记录状态",
+        "account": "科目",
+        "entry_number": "日记账",
+        "posting_date": "过账日期",
+        "project": "项目",
+        "memo": "备注",
+        "link_status": "关联状态",
+        "subsidiary": "法人实体",
+        "base_currency": "本位币",
+        "amount": "金额",
+        "id": "成本键"
       }
     },
     "enumValues": {
@@ -2876,7 +3018,15 @@
       "insufficient_funds": "余额不足",
       "needs_authentication": "需要验证",
       "primary": "首选方式",
-      "backup": "备用方式"
+      "backup": "备用方式",
+      "construction": "在建工程",
+      "capitalized": "已资本化",
+      "accepted": "已接受",
+      "scheduled": "已计划",
+      "due": "到期",
+      "overdue": "逾期",
+      "linked": "已关联",
+      "unlinked": "未关联"
     }
   },
   "operators": {
@@ -3173,7 +3323,8 @@
       "gift": "捐赠",
       "grant": "资助",
       "release": "解除用途限制",
-      "manufacturing": "生产制造"
+      "manufacturing": "生产制造",
+      "asset_capitalization": "资产资本化"
     },
     "columns": {
       "detail": "往来方 / 备注"

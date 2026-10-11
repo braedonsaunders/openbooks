@@ -25,7 +25,8 @@
     "fxSettlement": "Règlement de change",
     "translation": "Conversion",
     "migration": "Migration",
-    "manufacturing": "Fabrication"
+    "manufacturing": "Fabrication",
+    "assetCapitalization": "Immobilisation d’actifs"
   },
   "detail": {
     "notFound": "Écriture introuvable",

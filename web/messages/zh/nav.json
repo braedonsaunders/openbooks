@@ -165,7 +165,11 @@
     "manufacturing-mrp": "MRP运行",
     "manufacturing-time": "生产工时",
     "manufacturing-quality": "质量",
-    "close-reopen-requests": "重新打开申请"
+    "close-reopen-requests": "重新打开申请",
+    "asset-proposals": "资产建议",
+    "asset-construction": "在建工程",
+    "asset-maintenance": "资产维护",
+    "asset-insurance": "资产保险"
   },
   "groups": {
     "manufacturing": "制造",

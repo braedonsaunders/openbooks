@@ -165,7 +165,11 @@
     "manufacturing-mrp": "MRP-Läufe",
     "manufacturing-time": "Produktionszeiten",
     "manufacturing-quality": "Qualität",
-    "close-reopen-requests": "Wiedereröffnungsanträge"
+    "close-reopen-requests": "Wiedereröffnungsanträge",
+    "asset-proposals": "Anlagenvorschläge",
+    "asset-construction": "Anlagen im Bau",
+    "asset-maintenance": "Anlagenwartung",
+    "asset-insurance": "Anlagenversicherung"
   },
   "groups": {
     "manufacturing": "Fertigung",

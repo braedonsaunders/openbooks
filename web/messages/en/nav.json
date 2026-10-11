@@ -165,7 +165,11 @@
     "manufacturing-mrp": "MRP runs",
     "manufacturing-time": "Production time",
     "manufacturing-quality": "Quality",
-    "close-reopen-requests": "Reopen Requests"
+    "close-reopen-requests": "Reopen Requests",
+    "asset-proposals": "Asset Proposals",
+    "asset-construction": "Construction in Progress",
+    "asset-maintenance": "Asset Maintenance",
+    "asset-insurance": "Asset Insurance"
   },
   "modulesShort": {
     "hrm-performance-cycles": "Manage reviews",
