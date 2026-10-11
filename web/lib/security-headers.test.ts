@@ -246,3 +246,19 @@ test("the root layout omits the script nonce when the request carries none", asy
   assert.equal(layoutState.scripts[0]!.nonce, undefined);
   assert.doesNotMatch(html, /nonce="/);
 });
+
+test("only inline file-content previews may be framed, and only by the app's own origin", async () => {
+  const { buildContentSecurityPolicy } = await import("./content-security-policy.ts");
+  const { isFramableContentRequest } = await import("./framable-content.ts");
+  const id = "019f5ea3-44c5-72c0-ad3b-ef34c19c8763";
+
+  assert.match(buildContentSecurityPolicy("test-nonce-123456", false, { framableBySameOrigin: true }), /frame-ancestors 'self'/);
+  assert.equal(isFramableContentRequest(`/api/file-cabinet/files/${id}/download`, "GET"), true);
+  assert.equal(isFramableContentRequest(`/api/ap-capture/${id}/file`, "GET"), true);
+
+  // Mutations, other file routes, malformed ids and app pages keep refusing every frame.
+  assert.equal(isFramableContentRequest(`/api/file-cabinet/files/${id}/download`, "POST"), false);
+  assert.equal(isFramableContentRequest(`/api/file-cabinet/files/${id}/replace`, "GET"), false);
+  assert.equal(isFramableContentRequest("/api/file-cabinet/files/not-an-id/download", "GET"), false);
+  assert.equal(isFramableContentRequest("/documents", "GET"), false);
+});

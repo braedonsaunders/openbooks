@@ -7,6 +7,7 @@ import {
   createContentSecurityPolicyNonce,
 } from "./lib/content-security-policy";
 import { APP_DOCUMENT_CSP, isAppDocumentRequest } from './lib/apps/document-policy';
+import { isFramableContentRequest } from './lib/framable-content';
 import { isPublicPath, isCsrfExemptPath } from "./lib/proxy-policy";
 import { hasTrustedOrigin, isUnsafeMethod } from "./lib/csrf";
 
@@ -45,9 +46,11 @@ export async function proxy(req: NextRequest) {
   const requestId = crypto.randomUUID();
   const nonce = createContentSecurityPolicyNonce();
   const appDocument = isAppDocumentRequest(pathname, req.method);
+  const framableContent = isFramableContentRequest(pathname, req.method);
   const contentSecurityPolicy = appDocument ? APP_DOCUMENT_CSP : buildContentSecurityPolicy(
     nonce,
     process.env.NODE_ENV === "development",
+    { framableBySameOrigin: framableContent },
   );
   const requestHeaders = new Headers(req.headers);
   requestHeaders.set("x-nonce", nonce);
@@ -62,6 +65,8 @@ export async function proxy(req: NextRequest) {
     if (appDocument) {
       response.headers.set("X-Frame-Options", "SAMEORIGIN");
       response.headers.set("Referrer-Policy", "no-referrer");
+    } else if (framableContent) {
+      response.headers.set("X-Frame-Options", "SAMEORIGIN");
     }
     return response;
   };

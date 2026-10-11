@@ -4,8 +4,32 @@ const withNextIntl = createNextIntlPlugin("./i18n/request.ts");
 const retainDevelopmentCompilation = process.env.NODE_ENV === "development"
   && process.env.OPENBOOKS_DEV_KEEP_COMPILE_CACHE === "1";
 
+import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+
+/**
+ * Version-skew protection. Each production build carries its own deployment
+ * id, so a browser tab left open across a deploy gets a full reload on its
+ * next navigation or server action instead of calling code the new build no
+ * longer has. An explicit NEXT_DEPLOYMENT_ID wins; otherwise the source
+ * commit, otherwise a build stamp shared with the build's worker processes.
+ */
+function productionDeploymentId() {
+  if (process.env.NODE_ENV !== "production") return undefined;
+  const explicit = process.env.NEXT_DEPLOYMENT_ID?.trim();
+  if (explicit) return explicit;
+  try {
+    const commit = execFileSync("git", ["rev-parse", "--short=12", "HEAD"], {
+      cwd: dirname(fileURLToPath(import.meta.url)),
+      stdio: ["ignore", "pipe", "ignore"],
+    }).toString().trim();
+    if (/^[0-9a-f]{12}$/.test(commit)) return (process.env.NEXT_DEPLOYMENT_ID = commit);
+  } catch {
+    // Builds from an exported tree have no repository; fall through to a stamp.
+  }
+  return (process.env.NEXT_DEPLOYMENT_ID = `build-${Date.now().toString(36)}`);
+}
 
 export const securityHeaders = [
   { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
@@ -83,6 +107,7 @@ const config = {
   // Docker image: self-contained server bundle. The tracing root is the
   // monorepo root so workspace deps (@openbooks/*) land in the output.
   output: "standalone",
+  deploymentId: productionDeploymentId(),
   // Local blue/green rebuilds: build into a staging dir (NEXT_DIST_DIR=.next-stage)
   // while `next start` keeps serving the live .next, then swap. Unset = default.
   distDir: process.env.NEXT_DIST_DIR || ".next",

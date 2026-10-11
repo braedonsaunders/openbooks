@@ -5,7 +5,11 @@ const NONCE_PATTERN = /^[A-Za-z0-9_-]{16,128}$/;
  * deliberately validated before interpolation so a future caller cannot turn
  * a header value into a policy injection primitive.
  */
-export function buildContentSecurityPolicy(nonce: string, development: boolean): string {
+export function buildContentSecurityPolicy(
+  nonce: string,
+  development: boolean,
+  options: { framableBySameOrigin?: boolean } = {},
+): string {
   if (!NONCE_PATTERN.test(nonce)) {
     throw new Error("CSP nonce must be an unpadded base64url value");
   }
@@ -21,7 +25,9 @@ export function buildContentSecurityPolicy(nonce: string, development: boolean):
     "default-src 'self'",
     "base-uri 'self'",
     "form-action 'self'",
-    "frame-ancestors 'none'",
+    // Only same-origin previews of stored file bytes may be framed, and only
+    // by this application; everything else refuses all framing.
+    options.framableBySameOrigin ? "frame-ancestors 'self'" : "frame-ancestors 'none'",
     "object-src 'none'",
     `script-src ${scriptSources.join(" ")}`,
     // React component style attributes and several embedded editors currently
