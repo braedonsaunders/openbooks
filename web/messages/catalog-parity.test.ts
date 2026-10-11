@@ -3991,6 +3991,11 @@ COGNATES.add('pt-BR:crm.sales.latitude|Latitude')
 // Commerce checkpoint: Spanish keeps the loanword Manual, the interjection No,
 // the networking Error and the identical Plan.
 COGNATES.add('es:admin.setup.no|No')
+COGNATES.add('es:intercompany.netting.cashNo|No')
+// Decimal-entry examples retain the canonical decimal point accepted by the API.
+for (const locale of ['de', 'es', 'pt-BR']) {
+  COGNATES.add(`${locale}:tax.adjustments.amountPlaceholder|0.00`)
+}
 COGNATES.add('es:admin.setup.options.benefitFrequency.manual|Manual')
 COGNATES.add('es:admin.setup.options.contractCostLifeSource.manual|Manual')
 COGNATES.add('es:hrm.portfolio.frequencies.manual|Manual')

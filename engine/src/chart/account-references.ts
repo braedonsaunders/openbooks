@@ -259,7 +259,10 @@ export const ACCOUNT_REFERENCE_RULES: Readonly<Record<string, AccountReferenceRu
   "tax_codes.collected_account_id": config("Tax codes (collected)"),
   "tax_codes.paid_account_id": config("Tax codes (paid)"),
   "tax_codes.withholding_account_id": config("Tax codes (withholding)"),
-  "wip_prebill_lines.income_account_id": config("Pre-bill lines"),
+  "prebill_lines.income_account_id": retained("Pre-bill lines", sql`exists (
+    select 1 from prebills p where p.org_id = r.org_id and p.id = r.prebill_id
+      and p.status in ('draft', 'review', 'approved', 'customer_review'))`,
+    "Convert the prebill to an invoice, or void it and create a new prebill after correcting the source income account. Prebill pricing and accounting snapshots remain unchanged."),
   "promotions.discount_account_id": config("Promotions"),
   "restocking_fee_policies.income_account_id": config("Restocking fee policies"),
   "sales_channel_account_maps.account_id": config("Sales channel account maps"),

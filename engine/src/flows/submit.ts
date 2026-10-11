@@ -1,4 +1,5 @@
 import { and, eq, sql } from "drizzle-orm";
+import type { FlowEventSource } from "@openbooks/forms-core";
 import { db, schema, withOrgTransaction } from "../platform/db.ts";
 import { resolveScriptUser, runTriggerScripts, type ScriptContext } from "../scripting/scripting.ts";
 import { assertDocumentMutationRefsOwned } from "../records/mutation-refs.ts";
@@ -66,6 +67,7 @@ export async function submitForApproval(
   _targetKind: string,
   targetId: string,
   actorId?: string | null,
+  options: { source?: FlowEventSource } = {},
 ): Promise<SubmitResult> {
   // Resolve the tenant before opening the transaction. The transaction then
   // locks the document row and keeps that lock through flow planning, gate
@@ -74,13 +76,14 @@ export async function submitForApproval(
   // pending-approval status is committed and refuses the delete.
   const [candidate] = await db.select().from(schema.documents).where(eq(schema.documents.id, targetId));
   if (!candidate) throw new Error("target document not found");
-  return withOrgTransaction(candidate.orgId, () => submitForApprovalLocked(targetId, actorId, candidate.orgId));
+  return withOrgTransaction(candidate.orgId, () => submitForApprovalLocked(targetId, actorId, candidate.orgId, options));
 }
 
 async function submitForApprovalLocked(
   targetId: string,
   actorId: string | null | undefined,
   orgId: string,
+  options: { source?: FlowEventSource },
 ): Promise<SubmitResult> {
   const [doc] = await db
     .select()
@@ -161,7 +164,7 @@ async function submitForApprovalLocked(
   // pending_approval and the flow run id stands in for the request id (the
   // caller only round-trips it as an opaque string). A flow that matched but
   // created no gates (pure automation) already ran its actions.
-  const flowResult = await runRecordFlows({ kind: "on_submit" }, doc.kind, doc.id, {
+  const flowResult = await runRecordFlows({ kind: "on_submit", source: options.source }, doc.kind, doc.id, {
     orgId: doc.orgId,
     userId: actorId ?? doc.createdBy,
   });
@@ -224,6 +227,8 @@ export async function submitAndReleaseIfUngated(
   targetKind: string,
   targetId: string,
   actorId: string | null,
+  /** Provenance set by the server command, never taken from a request body. */
+  options: { source?: FlowEventSource } = {},
 ): Promise<SubmissionReleaseResult> {
   const [candidate] = await db
     .select({ orgId: schema.documents.orgId })
@@ -235,7 +240,7 @@ export async function submitAndReleaseIfUngated(
   // Otherwise a deletion could wait for the submit transaction, observe the
   // still-draft status, and remove the document before this final transition.
   return withOrgTransaction(candidate.orgId, async () => {
-    const result = await submitForApproval(targetKind, targetId, actorId);
+    const result = await submitForApproval(targetKind, targetId, actorId, options);
     if (result.gated || result.flowError) {
       return { ...result, autoApproved: false, approvalRequired: false };
     }

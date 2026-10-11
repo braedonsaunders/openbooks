@@ -4,6 +4,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withOrgContext, withOrgTransaction } from "../platform/db.ts";
 import { createScratchOrg, dropScratchOrg, grantScratchPermissions, seedFlowActors, seedPostingAccount } from "../testing/fixtures.ts";
+import { sum, toUnits, fromUnits, neg } from "../money/money.ts";
 import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
 import { AssetRefusal } from "./asset-refusal.ts";
 import {
@@ -65,7 +66,7 @@ async function setup(org: Org) {
 
 /** A posted purchase: debit the clearing account (one line above, one below the threshold), credit AP. */
 async function postPurchase(org: Org, clearing: string, amounts: string[]): Promise<{ entryId: string; lineIds: string[] }> {
-  const total = amounts.reduce((sum, amount) => sum + Number(amount), 0).toFixed(2);
+  const total = sum(amounts);
   const posted = await withOrgContext(org.orgId, () => postEntry(db, {
     orgId: org.orgId,
     bookId: org.bookId,
@@ -141,7 +142,7 @@ test(
       const accepted = await acceptAssetProposals(org.orgId, request, { actorId: actors.adminId });
       assert.equal(accepted.replayed, false);
       assert.ok(accepted.reclassEntryId);
-      assert.deepEqual(accepted.assets.map((asset) => asset.amount).sort(), ["2000.0000", "3000.0000"]);
+      assert.deepEqual(accepted.assets.map((asset) => fromUnits(toUnits(asset.amount))).sort(), ["2000.0000", "3000.0000"]);
       assert.equal(await balance(org, clearing), "0.0000", "the purchase left clearing exactly once");
       assert.equal(await balance(org, equipment), "5000.0000", "the asset account holds the purchase, not twice");
 
@@ -219,7 +220,18 @@ test(
       // Reversing the merged acceptance first, the source can then be reversed;
       // the still-pending proposals on it are voided by the fence.
       await reverseAssetProposalAcceptance(org.orgId, { acceptanceId: merged.acceptanceId, date: org.date, reason: "Bill voided", actorId: actors.adminId });
-      await withOrgTransaction(org.orgId, () => markEntryReversed(db, { orgId: org.orgId, entryId: purchase.entryId, actorId: actors.adminId }));
+      await withOrgTransaction(org.orgId, async () => {
+        const original = (await db.execute<{ account_id: string; amount: string; line_number: number }>(sql`
+          select account_id, amount::text, line_number from journal_lines
+           where org_id = ${org.orgId} and entry_id = ${purchase.entryId} order by line_number`)).rows;
+        await postEntry(db, {
+          orgId: org.orgId, bookId: org.bookId, subsidiaryId: org.subsidiaryId,
+          entryNumber: `PUR-REV-${randomUUID()}`, postingDate: org.date, periodId: org.periodId,
+          origin: "manual", reversesEntryId: purchase.entryId, actorId: actors.adminId,
+          lines: original.map((line) => ({ accountId: line.account_id, amount: neg(line.amount), lineNumber: line.line_number })),
+        });
+        await markEntryReversed(db, { orgId: org.orgId, entryId: purchase.entryId, actorId: actors.adminId });
+      });
       const statuses = (await withOrgContext(org.orgId, () => db.execute<{ status: string }>(sql`
         select distinct status from asset_proposals where org_id = ${org.orgId}`))).rows.map((row) => row.status);
       assert.deepEqual(statuses, ["voided"]);

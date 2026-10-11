@@ -6,6 +6,7 @@ import { db, withBypass, withOrgContext, withOrgTransaction } from "../platform/
 import { toUnits } from "../money/money.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import { postDocument } from "./posting-document.ts";
+import { createScriptJournal } from "./journal-writes.ts";
 import {
   mergeBeforePostCustomMutation,
   runBulkScript,
@@ -16,10 +17,50 @@ import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
+  seedApprovalFlow,
+  seedFlowActors,
   type ScratchOrg,
 } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
+
+test("script journal submission keeps its provenance while ordinary submissions retain their approval gate", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await withOrgContext(org.orgId, async () => {
+      const actors = await seedFlowActors(org.orgId);
+      await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,flows}', 'true'::jsonb) where id = ${org.orgId}`);
+      const seeded = await seedApprovalFlow(org.orgId, {
+        subjectKind: "journal", assignees: [{ type: "user", userId: actors.approver1Id }], mode: "any",
+      });
+      const graph = (await db.execute<{ graph: { nodes: unknown[]; edges: unknown[] } }>(sql`
+        select graph from flows where org_id = ${org.orgId} and id = ${seeded.flowId}`)).rows[0]!.graph;
+      graph.nodes.push({ id: "source", position: { x: 110, y: 0 }, data: {
+        kind: "condition", rule: { op: "eq", field: "event_source", value: "api", valueType: "string" },
+      } });
+      graph.edges = [
+        { id: "source-trigger", source: "trigger", target: "source", sourceHandle: "next" },
+        { id: "source-gate", source: "source", target: seeded.gateNodeId, sourceHandle: "then" },
+      ];
+      const changed = await db.execute(sql`update flows set graph = ${JSON.stringify(graph)}::jsonb
+        where org_id = ${org.orgId} and id = ${seeded.flowId} returning id`);
+      assert.equal(changed.rows.length, 1);
+      const scripted = await createScriptJournal(org.orgId, actors.adminId, {
+        documentDate: org.date, lines: [
+          { accountId: org.accounts.bank, amount: "10" },
+          { accountId: org.accounts.cogs, amount: "-10" },
+        ],
+      }, { post: true, allowedSubsidiaryIds: null });
+      assert.ok(scripted.entryId, "the configured API-only gate does not intercept script provenance");
+      const ordinary = await seedBalancedDraftJournal(org, `MANUAL-${randomUUID()}`, actors.adminId);
+      const submitted = await submitAndReleaseIfUngated("journal", ordinary, actors.adminId);
+      assert.equal(submitted.gated, true);
+      assert.equal(submitted.autoApproved, false);
+    });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
 /** Seed a balanced two-line draft journal and return its id. */
 async function seedBalancedDraftJournal(

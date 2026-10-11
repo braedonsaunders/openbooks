@@ -557,6 +557,7 @@ export async function createScriptJournal(
       // rather than inventing an identity, and any submitter-based approval
       // target resolves empty so the submission fails closed.
       actorId,
+      { source: "script" },
     );
     if (submission.flowError) {
       throw new JournalWriteError(`approval could not be routed: ${submission.flowError}`);

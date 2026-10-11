@@ -78,8 +78,8 @@ test(
 
       const otherSubsidiary = randomUUID();
       await withOrgContext(org.orgId, () => db.execute(sql`
-        insert into subsidiaries (id, org_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
-        values (${otherSubsidiary}, ${org.orgId}, 'Second Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`));
+        insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+        values (${otherSubsidiary}, ${org.orgId}, ${org.subsidiaryId}, 'Second Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`));
       const foreign = await asset("FOREIGN", "1000", otherSubsidiary);
       await refusedWith("component_cross_subsidiary", () => attachAssetComponent(org.orgId, { parentAssetId: truck, componentAssetId: foreign, actorId: actors.adminId }));
       // The database refuses the same shape even for a direct write.

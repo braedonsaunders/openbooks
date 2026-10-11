@@ -20,6 +20,14 @@ function publishedAccountForeignKeys(): Set<string> {
   const found = new Set<string>();
   for (const file of readdirSync(MIGRATIONS).filter((name) => name.endsWith(".sql")).sort()) {
     const source = readFileSync(new URL(file, MIGRATIONS), "utf8");
+    for (const rename of source.matchAll(/ALTER TABLE (?:ONLY )?(?:public\.)?([a-z_0-9]+)\s+RENAME TO ([a-z_0-9]+)\s*;/gi)) {
+      for (const key of [...found]) {
+        if (key.startsWith(`${rename[1]}.`)) {
+          found.delete(key);
+          found.add(`${rename[2]}.${key.slice(rename[1]!.length + 1)}`);
+        }
+      }
+    }
     for (const statement of source.matchAll(/ALTER TABLE (?:ONLY )?(?:public\.)?([a-z_0-9]+)\s+([\s\S]*?);/gi)) {
       for (const fk of statement[2]!.matchAll(/FOREIGN KEY\s*\(([^)]*)\)\s*REFERENCES (?:public\.)?accounts\s*\(/gi)) {
         for (const column of fk[1]!.split(",").map((part) => part.trim())) {

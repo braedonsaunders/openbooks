@@ -169,8 +169,8 @@ test(
       const foreignAsset = randomUUID();
       await withOrgContext(org.orgId, async () => {
         await db.execute(sql`
-          insert into subsidiaries (id, org_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
-          values (${otherSubsidiary}, ${org.orgId}, 'Second Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`);
+          insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+          values (${otherSubsidiary}, ${org.orgId}, ${org.subsidiaryId}, 'Second Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`);
         await db.execute(sql`
           insert into fixed_assets (id, org_id, subsidiary_id, category_id, asset_number, name, status, acquisition_cost, salvage_value, custom)
           select ${foreignAsset}, org_id, ${otherSubsidiary}, category_id, 'GEN-2', 'Second generator', 'draft', 1000, 0, '{}'::jsonb
