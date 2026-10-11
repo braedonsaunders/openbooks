@@ -16,6 +16,7 @@ import { add, cmp, neg, sum } from "../money/money.ts";
 import { calculateT4127 } from "./canada/t4127.ts";
 import { calculateTp1015 } from "./canada/quebec/tp1015.ts";
 import { setPackSlotAccount } from "./packs.ts";
+import { upsertPayrollEmployerFact } from "./employer-fact-store.ts";
 import { yearEndFiling } from "./filing-registry.ts";
 import { rl1Population } from "./canada/quebec/rl1.ts";
 import { createRemittanceBill, payrollRemittanceSummary } from "./remittance.ts";
@@ -81,9 +82,17 @@ describe("quebec", () => {
               // here (TPZ-1015.R), never to the CRA vendor above.
               rqRemittancePartyId: rqVendorId,
             });
+        const filingAccountId = randomUUID();
         await db.execute(sql`insert into payroll_filing_accounts
           (id, org_id, country, program_type, account_number, name, remitter_type, is_default, created_by, updated_by)
-          values (${randomUUID()}, ${org.orgId}, 'CA', 'ca_rp', '123456789RP0001', 'CRA payroll', 'regular', true, ${actorId}, ${actorId})`);
+          values (${filingAccountId}, ${org.orgId}, 'CA', 'ca_rp', '123456789RP0001', 'CRA payroll', 'regular', true, ${actorId}, ${actorId})`);
+
+        // The July scenario predates the account row's creation: the standard
+        // 1.4 multiple covers the pay date, recorded the way an operator with
+        // the statutory rate would record it in Employer facts.
+        await upsertPayrollEmployerFact({ orgId: org.orgId, actorId, filingAccountId, country: "CA",
+          factKey: "ei_employer_multiplier", effectiveFrom: "2026-01-01", value: "1.4",
+          changeReason: "Standard employer EI multiple for the declared CRA account" });
 
         await seedPayrollComponents(org.orgId, actorId, "CA");
         // The QC slot gets its own liability account so the projection credits
@@ -346,9 +355,17 @@ describe("quebec-hsf", () => {
               // (TPZ-1015.R), never to the CRA vendor above.
               rqRemittancePartyId: rqVendorId,
             });
+        const filingAccountId = randomUUID();
         await db.execute(sql`insert into payroll_filing_accounts
           (id, org_id, country, program_type, account_number, name, remitter_type, is_default, created_by, updated_by)
-          values (${randomUUID()}, ${org.orgId}, 'CA', 'ca_rp', '123456789RP0001', 'CRA payroll', 'regular', true, ${actorId}, ${actorId})`);
+          values (${filingAccountId}, ${org.orgId}, 'CA', 'ca_rp', '123456789RP0001', 'CRA payroll', 'regular', true, ${actorId}, ${actorId})`);
+
+        // The July scenario predates the account row's creation: the standard
+        // 1.4 multiple covers the pay date, recorded the way an operator with
+        // the statutory rate would record it in Employer facts.
+        await upsertPayrollEmployerFact({ orgId: org.orgId, actorId, filingAccountId, country: "CA",
+          factKey: "ei_employer_multiplier", effectiveFrom: "2026-01-01", value: "1.4",
+          changeReason: "Standard employer EI multiple for the declared CRA account" });
 
         await seedPayrollComponents(org.orgId, actorId, "CA");
         await setPackSlotAccount(org.orgId, actorId, "CA", "qc_income_tax", qcPayable);
