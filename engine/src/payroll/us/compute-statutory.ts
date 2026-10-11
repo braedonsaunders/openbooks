@@ -35,7 +35,10 @@ import { requireUsFederalAlienStatus } from "./employee-facts.ts";
 import { paUcEmployeeWithholding } from "./states/pa.ts";
 import { caEttWithholding, caSdiWithholding } from "./states/ca.ts";
 import { coFamliWithholding } from "./states/co.ts";
-import { waCaresWithholding, waPfmlWithholding, type WaPfmlEmployerSize } from "./states/wa.ts";
+import {
+  waCaresWithholding, waPackCoversYear, waPfmlWithholding,
+  type WaBackfillRates, type WaPfmlEmployerSize,
+} from "./states/wa.ts";
 import { dcOpflWithholding } from "./states/dc.ts";
 import { ctPaidLeaveWithholding } from "./states/ct.ts";
 
@@ -727,10 +730,36 @@ export async function computeUsStatutory(
         + "(50 or more employees, or fewer) — record it in Payroll Setup → Employer facts",
       );
     }
-    const pfml = waPfmlWithholding(run.pay_date!, sum([income, nonPeriodic]), ytd.fica, employerSize);
+    // The pack's transcribed table wins wherever one is published; a year it
+    // has not shipped prices from the operator-entered back-fill (Payroll
+    // Setup → Statutory rates), and refuses with that remedy when no row was
+    // entered — never with silence, and never by inventing figures.
+    const year = Number(run.pay_date!.slice(0, 4));
+    const entered = waPackCoversYear(year) ? undefined : config.waBackfill("WA");
+    if (!waPackCoversYear(year) && !entered) {
+      throw new PayrollError(
+        `${employeeName}: Washington PFML and WA Cares have no rates for ${year} in this pack `
+        + `version — enter the year's published rates in Payroll Setup → Statutory rates `
+        + `(US · Washington PFML back-fill) with the official Employment Security Department citation, `
+        + `or contact support. This run priced no Washington PFML or WA Cares.`,
+      );
+    }
+    // Every field is required at the write boundary, so a stored row carries
+    // all five; the non-null assertions below name that contract, and the
+    // back-fill validator re-checks shape before a cent prices.
+    const backfill: WaBackfillRates | undefined = entered
+      ? {
+        pfmlTotalRate: entered.totalRate!,
+        pfmlEmployeeShare: entered.employeeShare!,
+        pfmlEmployerShare: entered.employerShare!,
+        pfmlWageBase: entered.wageBase!,
+        caresRate: entered.caresRate!,
+      }
+      : undefined;
+    const pfml = waPfmlWithholding(run.pay_date!, sum([income, nonPeriodic]), ytd.fica, employerSize, backfill);
     pushStatutory("wa_pfml_employee", "deduction", "Washington PFML (employee)", pfml.employee, 144);
     pushStatutory("wa_pfml_employer", "employer_contribution", "Washington PFML (employer)", pfml.employer, 253);
-    const cares = waCaresWithholding(run.pay_date!, sum([income, nonPeriodic]));
+    const cares = waCaresWithholding(run.pay_date!, sum([income, nonPeriodic]), backfill);
     pushStatutory("wa_cares_employee", "deduction", "Washington WA Cares (employee)", cares, 146);
     factors = {
       ...factors,

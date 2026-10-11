@@ -44,7 +44,19 @@
 import { D, max0, mulRateCents, mulRatioCents, U, bmin } from "../../../money/payroll-decimal.ts";
 import { PayrollError } from "../../error.ts";
 
-const RATES_MODULE = "engine/src/payroll/us/states/wa.ts";
+/**
+ * Operator-entered rates for a year the pack has not shipped, read off the
+ * US pack's "us_wa_pfml" statutory-rate slot (Payroll Setup → Statutory
+ * rates). Same five figures as a transcribed edition, so the money path
+ * prices a back-fill exactly as it prices the pack's own table.
+ */
+export interface WaBackfillRates {
+  pfmlTotalRate: string;
+  pfmlEmployeeShare: string;
+  pfmlEmployerShare: string;
+  pfmlWageBase: string;
+  caresRate: string;
+}
 
 export interface WaYearRates {
   year: number;
@@ -142,18 +154,65 @@ export function waPackCoversYear(year: number): boolean {
   return WA_EDITIONS_BY_YEAR[year]?.status === "published";
 }
 
-/** The transcribed rates for a pay date's year, or a refusal naming the transcription. */
-export function waRatesForPayDate(payDate: string): WaYearRates {
+/**
+ * The rates for a pay date's year: the pack's transcribed table wins wherever
+ * one is published; an operator-entered back-fill covers a year the pack has
+ * not shipped. Anything else refuses with the operator's remedy — entering
+ * the year's published figures through Payroll Setup → Statutory rates, or
+ * contacting support. (Developer note: shipping a year means transcribing
+ * its Employment Security Department premium announcement into
+ * WA_EDITIONS_BY_YEAR above with the announcement's citation — the refusal
+ * below deliberately carries none of that.)
+ */
+export function waRatesForPayDate(payDate: string, backfill?: WaBackfillRates): WaYearRates {
   const year = Number(payDate.slice(0, 4));
   const rates = WA_EDITIONS_BY_YEAR[year];
-  if (!rates || rates.status !== "published") {
+  if (rates && rates.status === "published") return rates;
+  if (backfill && Number.isInteger(year)) {
+    assertBackfillShares(backfill);
+    return { year, status: "published", ...backfill };
+  }
+  throw new PayrollError(
+    `Washington PFML and WA Cares have no rates for ${Number.isInteger(year) ? year : payDate} `
+    + `in this pack version — enter the year's published rates in Payroll Setup → Statutory rates `
+    + `(US · Washington PFML back-fill) with the official Employment Security Department citation, `
+    + `or contact support. Refused by name.`,
+  );
+}
+
+/**
+ * A back-fill row is only usable when its two shares price exactly the total
+ * they split: legs that drift a cent from the accrued liability cannot tie
+ * to the ESD remittance. The write boundary already holds every field to its
+ * scale and range; this is the one cross-field invariant it cannot state, so
+ * the money path enforces it before pricing a cent.
+ */
+function assertBackfillShares(backfill: WaBackfillRates): void {
+  const remedy = "correct the shares in Payroll Setup → Statutory rates "
+    + "(US · Washington PFML back-fill) so employee and employer sum to exactly 100%";
+  for (const [key, value] of Object.entries(backfill)) {
+    if (typeof value !== "string" || value.trim() === "") {
+      throw new PayrollError(
+        `Washington PFML back-fill refused: "${key}" is missing — ${remedy}.`,
+      );
+    }
+  }
+  let employee: { num: bigint; den: bigint };
+  let employer: { num: bigint; den: bigint };
+  try {
+    employee = shareRatio(backfill.pfmlEmployeeShare);
+    employer = shareRatio(backfill.pfmlEmployerShare);
+  } catch {
     throw new PayrollError(
-      `Washington PFML and WA Cares have no transcribed rates for ${Number.isInteger(year) ? year : payDate}. `
-      + `Transcribe the year's Employment Security Department premium announcement into ${RATES_MODULE} `
-      + `before calculating — refused by name`,
+      `Washington PFML back-fill refused: the entered shares are not plain decimals — ${remedy}.`,
     );
   }
-  return rates;
+  if (employee.num * employer.den + employer.num * employee.den !== employee.den * employer.den) {
+    throw new PayrollError(
+      `Washington PFML back-fill refused: the entered employee and employer shares do not sum `
+      + `to exactly 100% of the total premium — ${remedy}.`,
+    );
+  }
 }
 
 /**
@@ -187,8 +246,9 @@ export function waPfmlWithholding(
   coveredWages: string,
   ytdCoveredWages: string,
   employerSize: WaPfmlEmployerSize,
+  backfill?: WaBackfillRates,
 ): { total: string; employee: string; employer: string } {
-  const rates = waRatesForPayDate(payDate);
+  const rates = waRatesForPayDate(payDate, backfill);
   const room = max0(U(rates.pfmlWageBase) - U(ytdCoveredWages));
   const priced = D(bmin(U(coveredWages), room));
   const total = mulRateCents(U(priced), rates.pfmlTotalRate);
@@ -202,8 +262,8 @@ export function waPfmlWithholding(
  * WA Cares Fund employee premium — 0.58% of gross wages, no wage-base cap,
  * withheld beside income tax, never folded into it.
  */
-export function waCaresWithholding(payDate: string, coveredWages: string): string {
-  const rates = waRatesForPayDate(payDate);
+export function waCaresWithholding(payDate: string, coveredWages: string, backfill?: WaBackfillRates): string {
+  const rates = waRatesForPayDate(payDate, backfill);
   return D(mulRateCents(U(coveredWages), rates.caresRate));
 }
 

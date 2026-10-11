@@ -4568,12 +4568,54 @@ test("WA 2024 back-fill prices the 0.74% total 71.43/28.57 to the 2024 base", ()
   assert.equal(waCaresWithholding("2024-06-15", "10000.00"), money("58.00"));
 });
 
+test("WA back-fill prices an unshipped year from operator-entered rates, pack winning when present", () => {
+  // 2027 has no transcribed table: the entered announcement figures price
+  // exactly through the same engine the run calls. $10,000 at a 1.00%
+  // total, 70/30 split, $180,000 base prices $100.00 ($70.00/$30.00);
+  // Cares prices the entered 0.58% ($58.00).
+  const backfill = {
+    pfmlTotalRate: "0.01", pfmlEmployeeShare: "0.70", pfmlEmployerShare: "0.30",
+    pfmlWageBase: "180000", caresRate: "0.0058",
+  };
+  const pfml = waPfmlWithholding("2027-03-15", "10000.00", "0", "fifty_or_more", backfill);
+  assert.equal(pfml.total, money("100.00"));
+  assert.equal(pfml.employee, money("70.00"));
+  assert.equal(pfml.employer, money("30.00"));
+  assert.equal(waCaresWithholding("2027-03-15", "10000.00", backfill), money("58.00"));
+  // The pack wins wherever one is published: 2026 with a back-fill attached
+  // still prices the transcribed 1.13% and 0.58%, never the entered 1.00%
+  // and 0.99%.
+  const otherYear = { ...backfill, caresRate: "0.0099" };
+  const packed = waPfmlWithholding("2026-03-06", "10000.00", "0", "fifty_or_more", otherYear);
+  assert.equal(packed.total, money("113.00"));
+  assert.equal(packed.employee, money("80.72"));
+  assert.equal(waCaresWithholding("2026-03-06", "10000.00", otherYear), money("58.00"));
+});
+
+test("WA back-fill with shares that do not sum to 100% refuses before pricing", () => {
+  // 70% + 20% prices legs that drift from the accrued total, so the money
+  // path refuses with the Statutory-rates correction remedy — never a source
+  // path — before a cent prices.
+  const bad = {
+    pfmlTotalRate: "0.01", pfmlEmployeeShare: "0.70", pfmlEmployerShare: "0.20",
+    pfmlWageBase: "180000", caresRate: "0.0058",
+  };
+  assert.throws(
+    () => waPfmlWithholding("2027-03-15", "10000.00", "0", "fifty_or_more", bad),
+    /do not sum to exactly 100%.*Statutory rates/,
+  );
+  assert.throws(
+    () => waRatesForPayDate("2027-03-15", bad),
+    /do not sum to exactly 100%/,
+  );
+});
+
 test("WA levies refuse pay dates outside the transcribed years", () => {
   assert.equal(waRatesForPayDate("2024-01-01").year, 2024);
   assert.equal(waRatesForPayDate("2025-01-01").year, 2025);
   assert.equal(waRatesForPayDate("2026-01-01").year, 2026);
   assert.ok(waPackCoversYear(2024) && waPackCoversYear(2025) && waPackCoversYear(2026));
   assert.ok(!waPackCoversYear(2023) && !waPackCoversYear(2027));
-  assert.throws(() => waPfmlWithholding("2023-12-31", "10000.00", "0", "fifty_or_more"), /no transcribed rates for 2023/);
-  assert.throws(() => waCaresWithholding("2027-01-15", "10000.00"), /no transcribed rates for 2027/);
+  assert.throws(() => waPfmlWithholding("2023-12-31", "10000.00", "0", "fifty_or_more"), /no rates for 2023.*Statutory rates/);
+  assert.throws(() => waCaresWithholding("2027-01-15", "10000.00"), /no rates for 2027.*contact support/);
 });

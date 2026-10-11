@@ -10,6 +10,12 @@ export interface UsPayrollConfig {
   sui(state: string, filingAccountId: string | null): { rate: string; wageBase: string } | undefined;
   /** The employer's UI reserve account balance for ETT eligibility, when entered. */
   ettReserveBalance(state: string): string | null;
+  /**
+   * The operator-entered Washington PFML / WA Cares back-fill for a year the
+   * pack has not shipped, when one is entered — undefined otherwise, and
+   * never read for a year the pack's own table covers.
+   */
+  waBackfill(state: string): Record<string, string> | undefined;
   subRegionRates(
     rateKey: string, region: string, subRegion: string,
   ): Record<string, string> | undefined;
@@ -30,6 +36,7 @@ export async function usPayrollConfig(
     },
     ettReserveBalance: (state) =>
       rates.values("us_ca_ett", { region: state })?.reserveBalance ?? null,
+    waBackfill: (state) => rates.values("us_wa_pfml", { region: state }) ?? undefined,
     subRegionRates: (rateKey, region, subRegion) =>
       rates.values(rateKey, { region, subRegion }) ?? undefined,
   };

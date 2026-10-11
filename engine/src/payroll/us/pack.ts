@@ -12,7 +12,7 @@ import {
 } from "./opening-ytd.ts";
 import { PUB15T_FACTOR_LABELS } from "./pub15t.ts";
 import { NO_WITHHOLDING_STATES, US_PACK_RATES, US_STATES, US_TAX_YEARS } from "./rates.ts";
-import { WA_FACTOR_LABELS } from "./states/wa.ts";
+import { WA_FACTOR_LABELS, waPackCoversYear } from "./states/wa.ts";
 import { implementedUsStates, supportedUsStates, usStateWithholding } from "./states/index.ts";
 import { AL_FACTOR_LABELS } from "./states/al.ts";
 import { AR_FACTOR_LABELS } from "./states/ar.ts";
@@ -632,8 +632,16 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
   ],
   computeStatutory: computeUsStatutory,
   // A recorded non-contributory SUI account prices no SUI, so the run must
-  // not demand its rate notice. Nothing recorded waives nothing.
-  waivedRateSlots: (tx, input) => usWaivedSuiRateSlots(tx, input),
+  // not demand its rate notice. Nothing recorded waives nothing. The
+  // Washington back-fill slot stands down the same way wherever the pack's
+  // own transcribed table covers the pay-date year: the pack wins, so no
+  // covered run may demand — or read — a row the operator must not enter.
+  waivedRateSlots: async (tx, input) => [
+    ...(await usWaivedSuiRateSlots(tx, input)),
+    ...(input.region === "WA" && waPackCoversYear(Number(input.payDate.slice(0, 4)))
+      ? ["us_wa_pfml"]
+      : []),
+  ],
   statutoryEngineLabel: "Pub 15-T",
   // Pack-declared trace labels, aggregated from the modules that trace
   // them: Pub 15-T, one map per state engine, the local-rate dispatch, and

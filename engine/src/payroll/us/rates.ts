@@ -526,10 +526,77 @@ const US_CA_ETT_SLOT: PayrollStatutoryRateSlot = {
   ],
 };
 
+/**
+ * Washington PFML / WA Cares back-fill for a year the pack has not shipped.
+ *
+ * The published statewide figures are pack CONSTANTS (transcribed per year in
+ * ./states/wa.ts) — this slot is not a second source of truth for them. It
+ * exists for exactly one case: a year the pack lacks, where the alternative
+ * is refusing every Washington run until the next pack release. The money
+ * path reads the pack's table first and reaches this slot only for an
+ * uncovered year; the rate-slot waiver stands the slot down wherever the
+ * pack covers, so no covered run is ever nagged for a row it must not enter.
+ * The two shares must sum to exactly 100% of the total — the money path
+ * refuses a row that does not, because split legs that drift from the total
+ * accrue a liability no remittance can tie to.
+ */
+const US_WA_PFML_SLOT: PayrollStatutoryRateSlot = {
+  key: "us_wa_pfml",
+  label: "Washington PFML back-fill rate",
+  scope: "region",
+  systemKeys: ["wa_pfml_employee", "wa_pfml_employer", "wa_cares_employee"],
+  regions: ["WA"],
+  // The pack is primary: an uncovered year with no entered row refuses in
+  // the money path with the back-fill remedy, never as silence. Covered
+  // years never reach for a row at all (see the waiver in ./pack.ts).
+  whenUnconfigured: "zero",
+  citation:
+    "WA Employment Security Department annual Paid Leave premium announcement (RCW 50A.10); "
+    + "WA Cares Fund employer guidance, 0.58% of gross wages, no cap (RCW 50B.04.080)",
+  variesBecause:
+    "The statewide PFML premium and the WA Cares premium are published once a year, after the "
+    + "pack's transcribed table for that year may have shipped. A back-fill row carries an "
+    + "unshipped year's announcement figures — with its official citation — until the pack "
+    + "transcribes the year, at which point the pack's table wins and the row goes inert.",
+  fields: [
+    {
+      key: "totalRate", label: "PFML total premium rate", kind: "rate", decimals: 4,
+      min: "0", max: "0.2", required: true,
+      help: "The year's announced total PFML premium as a decimal, exactly as ESD states it: "
+        + "0.0092 is 0.92%. Applies to gross wages up to the wage base below.",
+    },
+    {
+      key: "employeeShare", label: "Employee share of the total", kind: "rate", decimals: 4,
+      min: "0", max: "1", required: true,
+      help: "The employee's share of the total premium as a decimal: 0.7152 is 71.52%. "
+        + "Employee and employer shares must sum to exactly 1.",
+    },
+    {
+      key: "employerShare", label: "Employer share of the total", kind: "rate", decimals: 4,
+      min: "0", max: "1", required: true,
+      help: "The employer (50 or more employees) share of the total premium as a decimal: "
+        + "0.2848 is 28.48%. Smaller employers owe no employer share but still withhold the "
+        + "employee share — that exemption is the recorded employer size, not this row.",
+    },
+    {
+      key: "wageBase", label: "PFML taxable wage base", kind: "amount", decimals: 2,
+      min: "0", max: "10000000", required: true,
+      help: "The year's federal Social Security (OASDI) wage base in dollars: PFML applies "
+        + "up to it. WA Cares has no cap and needs no base.",
+    },
+    {
+      key: "caresRate", label: "WA Cares employee premium rate", kind: "rate", decimals: 4,
+      min: "0", max: "0.2", required: true,
+      help: "The WA Cares employee premium as a decimal: 0.0058 is 0.58%, of all gross wages "
+        + "with no cap.",
+    },
+  ],
+};
+
 export const US_PACK_RATES: PayrollPackRates = {
   country: "US",
   // The local slots (Ohio's municipalities, Michigan's cities) are declared in
   // engine/src/payroll/us/states/local-rates.ts, beside the engines that read
   // them and the reasoning for why their rates cannot be pack constants.
-  slots: [US_FUTA_SLOT, US_SUI_SLOT, US_CA_ETT_SLOT, US_PA_LOCAL_EIT_SLOT, ...US_LOCAL_RATE_SLOTS],
+  slots: [US_FUTA_SLOT, US_SUI_SLOT, US_CA_ETT_SLOT, US_PA_LOCAL_EIT_SLOT, US_WA_PFML_SLOT, ...US_LOCAL_RATE_SLOTS],
 };

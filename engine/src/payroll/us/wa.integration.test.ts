@@ -10,6 +10,9 @@ import { createPayRun } from "../run-lifecycle.ts";
 import { seedPayrollComponents } from "../run-setup.ts";
 import { upsertPayrollEmployerFact } from "../employer-fact-store.ts";
 import { US_PACK_RATES } from "./rates.ts";
+import { usPayrollConfig } from "./config.ts";
+import { waPackCoversYear, waPfmlWithholding } from "./states/wa.ts";
+import { payrollPack } from "../packs.ts";
 import { upsertStatutoryRate } from "../statutory-rates.ts";
 import {
   createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment,
@@ -356,6 +359,70 @@ describe("washington-obligation-derived-mappings", { skip: !DB }, () => {
       assert.equal(amount("wa_pfml_employee"), "13.1600");
       assert.equal(amount("wa_pfml_employer"), undefined);
       assert.equal(amount("wa_cares_employee"), "11.6000");
+    } finally {
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  });
+
+  test("an operator-entered 2027 back-fill resolves and prices through the pack engine", async () => {
+    // A year the pack has not shipped prices from the entered row: the write
+    // boundary canonicalizes the figures, the config resolves them at the
+    // Washington scope point, and the pack engine prices them exactly —
+    // while the pack keeps winning wherever its own table is published.
+    const fx = await waPayrollOrg();
+    try {
+      await upsertStatutoryRate({
+        orgId: fx.orgId, actorId: fx.actorId, rates: US_PACK_RATES, rateKey: "us_wa_pfml",
+        region: "WA", filingAccountId: null, taxYear: 2027,
+        values: {
+          totalRate: "0.01", employeeShare: "0.70", employerShare: "0.30",
+          wageBase: "180000", caresRate: "0.0058",
+        },
+      });
+      const config = await usPayrollConfig(fx.orgId, 2027, "2027-03-15");
+      const entered = config.waBackfill("WA");
+      assert.deepEqual(entered, {
+        totalRate: "0.0100", employeeShare: "0.7000", employerShare: "0.3000",
+        wageBase: "180000.00", caresRate: "0.0058",
+      });
+      assert.ok(!waPackCoversYear(2027));
+      const pfml = waPfmlWithholding("2027-03-15", "10000.00", "0", "fifty_or_more", {
+        pfmlTotalRate: entered!.totalRate, pfmlEmployeeShare: entered!.employeeShare,
+        pfmlEmployerShare: entered!.employerShare, pfmlWageBase: entered!.wageBase,
+        caresRate: entered!.caresRate,
+      });
+      assert.equal(pfml.total, "100.0000");
+      assert.equal(pfml.employee, "70.0000");
+      assert.equal(pfml.employer, "30.0000");
+      // No row was entered for a covered year, and none is read there.
+      const covered = await usPayrollConfig(fx.orgId, 2026, "2026-07-21");
+      assert.equal(covered.waBackfill("WA"), undefined);
+      assert.ok(waPackCoversYear(2026));
+    } finally {
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  });
+
+  test("the back-fill slot stands down wherever the pack covers the year", async () => {
+    // The waiver is the pack winning, stated once: a covered pay date
+    // waives the slot (no advisory, no demand), an uncovered one keeps it
+    // live, and other states never see it.
+    const fx = await waPayrollOrg();
+    try {
+      const pack = payrollPack("US");
+      assert.ok(pack.waivedRateSlots);
+      const covered = await pack.waivedRateSlots!(db, {
+        orgId: fx.orgId, region: "WA", filingAccountId: null, payDate: "2026-07-21",
+      });
+      assert.ok(covered.includes("us_wa_pfml"));
+      const uncovered = await pack.waivedRateSlots!(db, {
+        orgId: fx.orgId, region: "WA", filingAccountId: null, payDate: "2027-03-15",
+      });
+      assert.ok(!uncovered.includes("us_wa_pfml"));
+      const otherState = await pack.waivedRateSlots!(db, {
+        orgId: fx.orgId, region: "CA", filingAccountId: null, payDate: "2026-07-21",
+      });
+      assert.ok(!otherState.includes("us_wa_pfml"));
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }

@@ -85,7 +85,7 @@ test("every declared rate slot answers whenUnconfigured explicitly", () => {
   );
   assert.deepEqual(
     [...answers.entries()].filter(([, answer]) => answer === "zero").map(([key]) => key).sort(),
-    ["FR/fr_allocfam", "GB/gb_employment_allowance", "US/us_futa", "US/us_pa_lst", "US/us_vt_ccce"],
+    ["FR/fr_allocfam", "GB/gb_employment_allowance", "US/us_futa", "US/us_pa_lst", "US/us_vt_ccce", "US/us_wa_pfml"],
   );
 });
 
