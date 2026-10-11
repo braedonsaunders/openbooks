@@ -11,6 +11,7 @@ import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from
 import { loadJournalDoc } from "./journals";
 import { isUuid } from "./list-params";
 import { segmentRegistry, validateExtraDims } from "./segments";
+import { JournalBookError, resolveJournalBookTarget } from "./journal-book";
 
 /**
  * The only first-party writer for a new manual journal with lines.
@@ -57,6 +58,8 @@ export const journalCreateBody = z.object({
   referenceNumber: z.string().nullable().optional(),
   memo: z.string().nullable().optional(),
   subsidiaryId: nullableUuidId.optional(),
+  /** Book-specific journal target; omitted or null posts to every book. */
+  accountingBookId: nullableUuidId.optional(),
   extraDims: z.record(z.string(), z.string().nullable()).optional(),
   custom: z.record(z.string(), z.unknown()).optional(),
   lines: z.array(journalLineInput).optional(),
@@ -88,6 +91,8 @@ export async function createManualJournal(input: {
   allowedSubsidiaryIds: ReadonlySet<string> | null;
   idempotencyKey: string;
   body: JournalCreateBody;
+  /** Whether the caller holds gl.post_book_specific. */
+  canPostBookSpecific?: boolean;
 }): Promise<{ created: boolean; journal: NonNullable<Awaited<ReturnType<typeof loadJournalDoc>>> }> {
   if (!isUuid(input.idempotencyKey)) fail("invalid_idempotency_key", undefined, 400);
 
@@ -128,6 +133,19 @@ export async function createManualJournal(input: {
     if (allowed.length === 0) fail("no_available_subsidiary", undefined, 409);
     if (allowed.length !== 1) fail("subsidiary_selection_required", "subsidiaryId", 409);
     subsidiary = allowed[0]!;
+  }
+
+  let bookTarget: Awaited<ReturnType<typeof resolveJournalBookTarget>>;
+  try {
+    bookTarget = await resolveJournalBookTarget({
+      orgId,
+      requested: body.accountingBookId ?? null,
+      subsidiaryId: subsidiary.id,
+      canPostBookSpecific: input.canPostBookSpecific === true,
+    });
+  } catch (error) {
+    if (error instanceof JournalBookError) fail(error.message, "accountingBookId", error.status);
+    throw error;
   }
 
   const [headerDefs, lineDefs, segments] = await Promise.all([
@@ -256,6 +274,7 @@ export async function createManualJournal(input: {
     referenceNumber: body.referenceNumber ?? null,
     memo: body.memo ?? null,
     subsidiaryId: body.subsidiaryId ?? null,
+    ...(body.accountingBookId ? { accountingBookId: body.accountingBookId } : {}),
     extraDims: body.extraDims ?? null,
     custom: body.custom ?? null,
     lines: body.lines ?? [],
@@ -267,7 +286,8 @@ export async function createManualJournal(input: {
     kind: "journal",
     subsidiary_id: subsidiary.id,
     document_date: documentDate,
-    currency: subsidiary.base_currency,
+    currency: bookTarget.currency,
+    accounting_book_id: bookTarget.accountingBookId,
     party_id: partyId,
     reference_number: referenceNumber,
     memo,
@@ -306,11 +326,11 @@ export async function createManualJournal(input: {
       const inserted = (await tx.execute<{ id: string }>(sql`
         insert into documents
           (id, org_id, kind, status, subsidiary_id, document_number, document_date,
-           currency, party_id, reference_number, memo, extra_dims, custom,
+           currency, accounting_book_id, party_id, reference_number, memo, extra_dims, custom,
            subtotal, tax_total, total, created_by, updated_by)
         values
           (${requestId}, ${orgId}, 'journal', 'draft', ${subsidiary.id}, ${documentNumber},
-           ${documentDate}, ${subsidiary.base_currency}, ${partyId}, ${referenceNumber}, ${memo},
+           ${documentDate}, ${bookTarget.currency}, ${bookTarget.accountingBookId}, ${partyId}, ${referenceNumber}, ${memo},
            ${JSON.stringify(headerDims.cleaned)}::jsonb, ${JSON.stringify(headerCustomResult.cleaned)}::jsonb,
            ${totalDebits}, '0', ${totalDebits}, ${userId}, ${userId})
         -- Lost insert race or a foreign/global UUID collision: the re-read

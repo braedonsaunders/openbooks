@@ -420,6 +420,7 @@
     "journal": {
       "description": "Double-entry journal kernel: postEntry/markEntryReversed, posting contracts and kernel balance invariants. No document orchestration.",
       "dependsOn": [
+        "fx",
         "money",
         "organization",
         "periods",
@@ -873,6 +874,17 @@
         "money",
         "organization",
         "platform"
+      ]
+    },
+    "multibook": {
+      "description": "Multi-book accounting: a secondary book's currency per subsidiary and account mappings, governed activation, catch-up and deactivation of full replication with opening balances, and replication status.",
+      "dependsOn": [
+        "journal",
+        "money",
+        "organization",
+        "periods",
+        "platform",
+        "records"
       ]
     }
   },

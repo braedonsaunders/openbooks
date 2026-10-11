@@ -14,6 +14,7 @@ export type DefaultCloseFeatureContext = {
   salesChannels: boolean;
   unbilledRevenueAccrual: boolean;
   periodEndJournals: boolean;
+  multiBookAccounting?: boolean;
 };
 
 /**
@@ -47,6 +48,7 @@ export async function defaultCloseFeatureContext(
     salesChannels: featureEnabled(features, "salesChannels"),
     unbilledRevenueAccrual: featureEnabled(features, "unbilledRevenueAccrual"),
     periodEndJournals: featureEnabled(features, "periodEndJournals"),
+    multiBookAccounting: featureEnabled(features, "multiBookAccounting"),
   };
 }
 
@@ -64,6 +66,7 @@ export function defaultCloseStepEnabled(
   if (key === "recognition-posted") return features.revenueRecognition;
   if (key === "unbilled-revenue-accrued") return features.unbilledRevenueAccrual;
   if (key === "period-end-journals") return features.periodEndJournals;
+  if (key === "book-replication-complete") return features.multiBookAccounting === true;
   if (["fx-ready", "fx-revalued"].includes(key)) return features.multiCurrency;
   if (["intercompany-balanced", "consolidation"].includes(key)) return features.multiSubsidiary;
   return true;

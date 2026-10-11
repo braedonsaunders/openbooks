@@ -118,6 +118,11 @@ export const documents = pgTable(
     workCompletedOn: date("work_completed_on"),
     /** Accounting treatment of an internal_billing document. */
     internalBillingRuleId: uuid("internal_billing_rule_id"),
+    /**
+     * Book-specific journal target (journals only). Null posts to the primary
+     * book and replicates into full books; a book id posts to that book only.
+     */
+    accountingBookId: uuid("accounting_book_id"),
     /** Explicit adjustment-period override for the void's reversal journals (0333); null resolves by date. */
     voidReversalPeriodId: uuid("void_reversal_period_id"),
     reversalEntryId: uuid("reversal_entry_id"),

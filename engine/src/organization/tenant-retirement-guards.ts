@@ -8,6 +8,27 @@ export const TENANT_RETIREMENT_GUARDS = [
     "patch": true
   },
   {
+    "name": "accounting_book_account_map_guard",
+    "source": "0682_accounting_book_currency_and_account_maps.sql",
+    "sha256": "1441263ecb10f36afe08b60ae0c5b5477f0fa9658bb9ec6c00c76ac6ec42b628",
+    "newSha256": "1441263ecb10f36afe08b60ae0c5b5477f0fa9658bb9ec6c00c76ac6ec42b628",
+    "patch": false
+  },
+  {
+    "name": "accounting_book_currency_guard",
+    "source": "0682_accounting_book_currency_and_account_maps.sql",
+    "sha256": "8e9382dc8a72bf44a64cd5a175655648c6ea43da57a4e37e75c7d5591a75e3a8",
+    "newSha256": "8e9382dc8a72bf44a64cd5a175655648c6ea43da57a4e37e75c7d5591a75e3a8",
+    "patch": false
+  },
+  {
+    "name": "accounting_book_replication_run_immutable",
+    "source": "0682_accounting_book_currency_and_account_maps.sql",
+    "sha256": "2602a805edc008997535fa1a1c461a06eaa7e09e39b6520df3750acb773f7c15",
+    "newSha256": "2602a805edc008997535fa1a1c461a06eaa7e09e39b6520df3750acb773f7c15",
+    "patch": false
+  },
+  {
     "name": "aging_bucket_policies_history_guard",
     "source": "0564_aging_bucket_policies.sql",
     "sha256": "4067b502751ace3e857d9c6ea7817d9f3bcb9f721be2b42ff26e529aac1d013d",
@@ -769,6 +790,13 @@ export const TENANT_RETIREMENT_GUARDS = [
     "sha256": "30d1141683f1e822b46e6c7e64a734234572a56345e699a4543f991050e28427",
     "newSha256": "100716d7f7ec0b3343e3fea8ee2c0b83a060783207991e5b30a9d0081361c58e",
     "patch": true
+  },
+  {
+    "name": "multibook_evidence_immutable",
+    "source": "0682_accounting_book_currency_and_account_maps.sql",
+    "sha256": "57cfe6f0bffa374dcdb2958ae7cec3b0ec01c68b0e5ac31f54e3c8657d73bdd7",
+    "newSha256": "57cfe6f0bffa374dcdb2958ae7cec3b0ec01c68b0e5ac31f54e3c8657d73bdd7",
+    "patch": false
   },
   {
     "name": "net_investment_configuration_guard",
@@ -1569,6 +1597,24 @@ export const TENANT_RETIREMENT_GUARD_ATTRIBUTES = [
     "config": []
   },
   {
+    "name": "accounting_book_account_map_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "accounting_book_currency_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "accounting_book_replication_run_immutable",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
     "name": "aging_bucket_policies_history_guard",
     "config": [
       "search_path=public,pg_catalog"
@@ -2049,6 +2095,12 @@ export const TENANT_RETIREMENT_GUARD_ATTRIBUTES = [
   {
     "name": "lease_schedule_history_guard",
     "config": []
+  },
+  {
+    "name": "multibook_evidence_immutable",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
   },
   {
     "name": "net_investment_configuration_guard",
@@ -2604,6 +2656,21 @@ export const TENANT_RETIREMENT_GUARD_ATTRIBUTES = [
 
 export const TENANT_RETIREMENT_TRIGGER_CONTRACTS = [
   {
+    "table": "accounting_book_account_maps",
+    "trigger": "accounting_book_account_map_guard",
+    "function": "accounting_book_account_map_guard"
+  },
+  {
+    "table": "accounting_book_currencies",
+    "trigger": "accounting_book_currency_guard",
+    "function": "accounting_book_currency_guard"
+  },
+  {
+    "table": "accounting_book_replication_runs",
+    "trigger": "accounting_book_replication_runs_immutable",
+    "function": "accounting_book_replication_run_immutable"
+  },
+  {
     "table": "ap_capture_corrections",
     "trigger": "ap_capture_corrections_append_only",
     "function": "openbooks_guard_ap_capture_evidence"
@@ -2622,6 +2689,11 @@ export const TENANT_RETIREMENT_TRIGGER_CONTRACTS = [
     "table": "ap_capture_runs",
     "trigger": "ap_capture_runs_immutable",
     "function": "openbooks_guard_finished_ap_capture_run"
+  },
+  {
+    "table": "book_entry_replications",
+    "trigger": "book_entry_replications_immutable",
+    "function": "multibook_evidence_immutable"
   },
   {
     "table": "file_blobs",

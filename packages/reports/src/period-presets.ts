@@ -162,7 +162,7 @@ export const DEFAULT_PERIOD_PRESET = 'this_fiscal_year'
  */
 export const AS_OF_DEFAULT_PERIOD_PRESET = 'this_fiscal_year_to_date'
 /** Statement kinds whose figures are balances as of the window end. */
-export const AS_OF_STATEMENT_KINDS: readonly string[] = ['balance-sheet', 'trial-balance', 'intercompany-reconciliation']
+export const AS_OF_STATEMENT_KINDS: readonly string[] = ['balance-sheet', 'trial-balance', 'intercompany-reconciliation', 'book-differences']
 export function isPeriodPreset(id: unknown): id is string {
   return typeof id === 'string' && PERIOD_PRESET_IDS.includes(id)
 }

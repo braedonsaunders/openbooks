@@ -226,6 +226,10 @@
     "period-end-journals-pending": {
       "title": "Abschlussbuchungen sind nicht aktuell",
       "message": "{count, plural, one {Für # Gesellschaft oder Richtlinienbedingung müssen die Abschlussbuchungen erzeugt oder berichtigt werden.} other {Für # Gesellschaften oder Richtlinienbedingungen müssen die Abschlussbuchungen erzeugt oder berichtigt werden.}}"
+    },
+    "book-replication-incomplete": {
+      "title": "Vollständigen Büchern fehlen Buchungen",
+      "message": "{count, plural, one {# Buchung wurde nicht in ein vollständiges Buch übernommen. Erfassen Sie unter Buchübernahme eine Aktualisierung.} other {# Buchungen wurden nicht in ein vollständiges Buch übernommen. Erfassen Sie unter Buchübernahme eine Aktualisierung.}}"
     }
   },
   "severity": {
@@ -442,6 +446,10 @@
     "period-end-journals": {
       "title": "Abschlussbuchungen zum Periodenende buchen",
       "description": "Die Ertrags- und Aufwandskonten des Geschäftsjahres mit expliziten Abschlussbuchungen in die Gewinnrücklagen abschließen und das Folgejahr eröffnen, wenn die Richtlinie es verlangt."
+    },
+    "book-replication-complete": {
+      "title": "Vollständigkeit der vollständigen Bücher bestätigen",
+      "description": "Jede Buchung bis zum Periodenende ist in jedes Buch mit vollständiger Übernahme übernommen."
     }
   },
   "setup": {

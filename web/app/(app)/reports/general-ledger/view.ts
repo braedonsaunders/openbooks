@@ -152,7 +152,7 @@ export async function loadGeneralLedger(
   let currencyBasisBlocked: CurrencyBasisNotice | null = null
   let gl: Awaited<ReturnType<typeof generalLedger>> | null = null
   try {
-    subView = await reportSubsidiaryView(q.subsidiaryId, period.to)
+    subView = await reportSubsidiaryView(q.subsidiaryId, period.to, selectedBook.id)
     gl = await generalLedger(period.from, period.to, {
       accountId: isReportUuidParam(sp.account) ? sp.account : undefined,
       dims: { ...q.dims, subsidiaryIds: subView.subsidiary?.ids },

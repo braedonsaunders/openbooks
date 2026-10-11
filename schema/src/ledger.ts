@@ -98,6 +98,7 @@ export const journalEntries = pgTable(
         "opening",
         "migration",
         "tax_provision",
+        "book_opening",
       ],
     })
       .notNull()

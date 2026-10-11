@@ -52,7 +52,9 @@
       "statementBatchesTitle": "明細一括送信",
       "statementBatchesDescription": "残高のあるすべての得意先に明細を送信し、各送信の完了まで追跡します。",
       "intercompanyReconciliationTitle": "法人間残高照合",
-      "intercompanyReconciliationDescription": "各法人の帳簿における法人間残高を通貨別に表示し、照合が必要な差額を確認します。"
+      "intercompanyReconciliationDescription": "各法人の帳簿における法人間残高を通貨別に表示し、照合が必要な差額を確認します。",
+      "bookDifferencesTitle": "帳簿間差異",
+      "bookDifferencesDescription": "主帳簿の各勘定科目を副帳簿と並べ、差異を表示"
     },
     "groups": {
       "financial": "財務諸表",
@@ -3176,7 +3178,8 @@
       "grant": "助成金",
       "release": "使途制限の解除",
       "manufacturing": "製造",
-      "opening": "期首"
+      "opening": "期首",
+      "book_opening": "帳簿の期首残高"
     },
     "columns": {
       "detail": "取引先／摘要"
@@ -3334,6 +3337,23 @@
       "originalPrice": "当初価格",
       "currentPrice": "現行価格",
       "invoicedToDate": "請求済額"
+    }
+  },
+  "bookDifferences": {
+    "title": "帳簿間差異",
+    "asOf": "{primary} と {compare} の比較 · {date} 時点",
+    "compareBook": "比較対象",
+    "empty": "どちらの帳簿にも選択条件の残高はありません。",
+    "unavailableTitle": "比較する帳簿がありません",
+    "setupBooks": "会計帳簿",
+    "currencyNote": "主帳簿はこのビューを {primary}、比較帳簿は {compare} で表示するため、差異は計算されません。",
+    "retainedEarningsPrior": "利益剰余金（前年度以前）",
+    "columns": {
+      "accountNumber": "勘定科目",
+      "accountName": "名称",
+      "primary": "{book}残高（{currency}）",
+      "compare": "{book}残高（{currency}）",
+      "difference": "差異"
     }
   }
 }

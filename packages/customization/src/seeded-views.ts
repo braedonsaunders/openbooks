@@ -90,7 +90,7 @@ export function configMatchesSeedShape(
     // A legal-entity column's default depends on the organization's
     // Multi-subsidiary state, so its stored visibility is not evidence of
     // an edit either way.
-    if (!registered.legalEntity && stored.visible !== !registered.defaultHidden) return false;
+    if (!registered.legalEntity && !registered.accountingBook && stored.visible !== !registered.defaultHidden) return false;
     if ((stored.width ?? null) !== (registered.defaultWidth ?? null)) return false;
     if (stored.labelOverride != null) return false;
   }

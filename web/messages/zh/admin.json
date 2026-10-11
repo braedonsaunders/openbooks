@@ -1458,7 +1458,8 @@
     "intercompany_read": "查看公司间配对、抵销结算批次、资金划转和对账",
     "intercompany_manage": "创建、关联及解除公司间配对；提出和取消抵销结算方案",
     "intercompany_settle": "过账和冲销公司间抵销结算及资金划转",
-    "intercompany_approve": "审批或拒绝公司间抵销结算批次"
+    "intercompany_approve": "审批或拒绝公司间抵销结算批次",
+    "gl_post_book_specific": "过账账簿专用日记账"
   },
   "ai": {
     "metaTitle": "AI 设置",
@@ -3758,6 +3759,21 @@
         "title": "期末结账分录",
         "singular": "期末结账分录政策",
         "description": "年末结账如何过账其分录：留存收益科目、可选的本年利润汇总科目、资产负债表结账分录和开账分录、过账期间，以及结账行保留的维度。每个版本适用于在其生效日期或之后结束的会计年度。"
+      },
+      "accounting-book-currencies": {
+        "title": "账簿币种",
+        "description": "辅助账簿为每个子公司保留的本位币和折算汇率类型（按生效日期）。",
+        "singularTitle": "账簿币种"
+      },
+      "accounting-book-account-maps": {
+        "title": "账簿科目映射",
+        "description": "辅助账簿记录科目表中某科目所用的科目（按生效日期，可选按子公司）。",
+        "singularTitle": "科目映射"
+      },
+      "accounting-book-replication": {
+        "title": "账簿复制",
+        "description": "启用、补齐或停止将每笔交易复制到辅助账簿，并保留每次变更的历史。",
+        "singularTitle": "复制变更"
       }
     },
     "fields": {
@@ -5818,7 +5834,9 @@
         "draftInformationReturns": "{count, plural, one {# 份进行中的信息申报表} other {# 份进行中的信息申报表}}",
         "unfiledInformationReturns": "{count, plural, one {# 份已定稿未报送的信息申报表} other {# 份已定稿未报送的信息申报表}}",
         "activeAllocationRules": "{count, plural, one {# 条有效分摊规则} other {# 条有效分摊规则}}",
-        "previewedAllocationRuns": "{count, plural, one {# 次已预览分摊运行} other {# 次已预览分摊运行}}"
+        "previewedAllocationRuns": "{count, plural, one {# 次已预览分摊运行} other {# 次已预览分摊运行}}",
+        "fullReplicationBooks": "复制每笔交易的账簿",
+        "bookSpecificJournals": "账簿专用日记账"
       },
       "errors": {
         "blocked": "此功能无法关闭 — 其数据是总账的结构性支撑。",
@@ -7399,6 +7417,62 @@
       "4": "星期四",
       "5": "星期五",
       "6": "星期六"
+    },
+    "multiBook": {
+      "currencyFormDescription": "辅助账簿可以用自己的本位币记录子公司。过入该账簿的分录按其日期以所选汇率类型折算。版本不会在账簿已有分录之下变更；如需更改汇率类型，请添加从较晚日期开始的新版本。",
+      "mapFormDescription": "在某一账簿中将科目表科目记为另一科目。映射保持报表类别、遵守币种限制，并自开始日期起适用于复制或生成到该账簿的每笔分录。",
+      "replicationFormDescription": "每次变更都会连同原因记录。启用会在同一步骤中复制自开始日期起的每笔交易，并将之前的历史作为期初余额或完整历史带入。",
+      "fields": {
+        "bookId": "账簿",
+        "subsidiaryId": "子公司",
+        "mapSubsidiaryId": "子公司（可选）",
+        "currency": "账簿币种",
+        "rateType": "汇率类型",
+        "effectiveFrom": "生效日期",
+        "effectiveTo": "失效日期",
+        "reason": "原因",
+        "sourceAccountId": "科目表科目",
+        "targetAccountId": "账簿科目",
+        "kind": "变更",
+        "modeAfter": "模式",
+        "replicationMode": "复制",
+        "replicationFrom": "复制起始日期",
+        "replicatedCount": "已复制分录",
+        "createdAt": "记录时间",
+        "openingStrategy": "之前的历史",
+        "currencyDifferenceAccountId": "汇兑差额科目"
+      },
+      "help": {
+        "bookId": "辅助账簿。主账簿是正式账簿，不接受账簿配置。",
+        "currency": "一个账簿对每个子公司只使用一种币种。",
+        "rateType": "即期汇率使用过账日期当日或之前的最新汇率；月平均汇率使用当月即期汇率的平均值。",
+        "effectiveTo": "留空以保持该版本有效。不能早于账簿在此版本下已有的分录而结束。",
+        "reason": "与变更一起记录在审计轨迹中。",
+        "targetAccountId": "必须保持该科目的报表类别和币种限制。",
+        "mapSubsidiaryId": "留空则对所有子公司映射该科目；子公司映射优先于全组织映射。",
+        "kind": "启用开始完整复制；补齐填补缺口；停用停止复制；设置更改汇兑差额科目。",
+        "replicationFrom": "账簿接收的第一个过账日期。一经设定不可更改。",
+        "openingStrategy": "期初余额会过账开始日期前各科目的余额；完整历史要求主账簿在此之前没有分录。",
+        "currencyDifferenceAccountId": "用于记录多币种分录折算为账簿币种后剩余差额的收入、费用或权益科目。"
+      },
+      "rateTypes": {
+        "spot": "即期",
+        "month_average": "月平均"
+      },
+      "changeKinds": {
+        "activation": "启用完整复制",
+        "catch_up": "补齐",
+        "deactivation": "停用复制",
+        "settings": "更改设置"
+      },
+      "openingStrategies": {
+        "opening_balances": "期初余额",
+        "full_history": "完整历史"
+      },
+      "modes": {
+        "adjustment_only": "仅调整",
+        "full": "完整"
+      }
     }
   },
   "flows": {
@@ -8138,6 +8212,10 @@
     "periodEndJournals": {
       "title": "期末结账分录",
       "description": "为要求结账分录的司法辖区过账明确的年末结账分录：将收入和费用结转至留存收益，可选择经由本年利润汇总科目，并可选过账资产负债表结账分录及下一年度的开账分录。无论是否启用，报表都会计算留存收益。"
+    },
+    "multiBookAccounting": {
+      "title": "多账簿会计",
+      "description": "为每个子公司以各自的本位币维护辅助账簿，按账簿映射科目，将每笔交易复制到完整账簿，过账账簿专用日记账，并并排比较账簿。"
     }
   },
   "backupsManager": {

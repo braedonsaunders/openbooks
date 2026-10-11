@@ -226,6 +226,10 @@
     "period-end-journals-pending": {
       "title": "期末決算仕訳が最新ではありません",
       "message": "{count, plural, other {#件の法人またはポリシー条件で、期末決算仕訳の作成または修正が必要です。}}"
+    },
+    "book-replication-incomplete": {
+      "title": "フル帳簿に取引の欠落があります",
+      "message": "{count, plural, other {# 件の取引がフル帳簿に複製されていません。帳簿の複製で追いつきを記録してください。}}"
     }
   },
   "severity": {
@@ -442,6 +446,10 @@
     "period-end-journals": {
       "title": "期末決算仕訳を計上",
       "description": "明示的な締め仕訳で会計年度の収益・費用勘定を利益剰余金へ締め、ポリシーが求める場合は翌年度を開始します。"
+    },
+    "book-replication-complete": {
+      "title": "フル帳簿の完全性を確認",
+      "description": "期末までのすべての取引が、完全複製の各帳簿に複製されています。"
     }
   },
   "setup": {

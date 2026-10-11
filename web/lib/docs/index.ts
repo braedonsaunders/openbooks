@@ -5,6 +5,7 @@
 import type { DocArticle, DocCategory, DocSection } from './types'
 import { allocations } from './articles/allocations'
 import { intercompany } from './articles/intercompany'
+import { multiBookAccounting } from './articles/multi-book-accounting'
 import { welcome } from './articles/welcome'
 import { projectTypes } from './articles/project-types'
 import { overheadCosting } from './articles/overhead-costing'
@@ -335,6 +336,7 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   fixedAssetsDepreciation,
   allocations,
   intercompany,
+  multiBookAccounting,
   salesWorkflow,
   electronicInvoicing,
   purchasingWorkflow,

@@ -11,7 +11,8 @@
     "columns": {
       "entry": "Entry",
       "origin": "Origin",
-      "debits": "Debits"
+      "debits": "Debits",
+      "book": "Book"
     }
   },
   "origins": {
@@ -26,7 +27,8 @@
     "translation": "Translation",
     "migration": "Migration",
     "manufacturing": "Manufacturing",
-    "opening": "Opening"
+    "opening": "Opening",
+    "bookOpening": "Book opening"
   },
   "detail": {
     "notFound": "Entry not found",
@@ -45,7 +47,8 @@
       "debit": "Debit",
       "credit": "Credit",
       "openItem": "Open item"
-    }
+    },
+    "book": "Book {book}"
   },
   "newButton": {
     "label": "New journal",
@@ -85,5 +88,12 @@
     },
     "budgetaryControlWarning": "Budget {scenario} is over appropriation for {account}, fund {fund}, {subsidiary}{dimensions}: available {available}, over by {amountOver}.",
     "budgetaryControlRemedy": "Revise the budget through its approval flow: copy the approved budget to a draft, raise this account's amount for the fund in the worksheet, approve the copy and archive the superseded budget. Or link this actual to the open encumbrance that reserved it."
+  },
+  "book": {
+    "label": "Accounting book",
+    "primary": "primary",
+    "allBooks": "All books",
+    "allBooksHint": "Posts to the primary book and replicates into every full book.",
+    "specificHint": "Book-specific: posts to this book only, in the currency it keeps for the journal’s subsidiary."
   }
 }

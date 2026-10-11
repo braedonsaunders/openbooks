@@ -722,6 +722,9 @@ async function applyDimensionReclass(
      where entry.org_id = ${ctx.orgId} and entry.source_document_id = ${plan.sourceId}
        -- Live entries only: a reversed entry cannot be corrected again
        and entry.status = 'posted'
+       -- A full book's copy follows the primary reclass through replication.
+       and not exists (select 1 from book_entry_replications replica
+                        where replica.org_id = entry.org_id and replica.replica_entry_id = entry.id)
      order by entry.book_id, line.line_number, line.id
   `)).rows;
   const subsidiaryId = plan.source.subsidiaryId ??

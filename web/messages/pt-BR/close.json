@@ -226,6 +226,10 @@
     "period-end-journals-pending": {
       "title": "Os lançamentos de encerramento não estão atualizados",
       "message": "{count, plural, one {# entidade legal ou condição da política precisa gerar ou corrigir seus lançamentos de encerramento.} other {# entidades legais ou condições da política precisam gerar ou corrigir seus lançamentos de encerramento.}}"
+    },
+    "book-replication-incomplete": {
+      "title": "Faltam transações nos livros completos",
+      "message": "{count, plural, one {# transação não foi replicada em um livro completo. Registre uma atualização em Replicação de livros.} other {# transações não foram replicadas em um livro completo. Registre uma atualização em Replicação de livros.}}"
     }
   },
   "severity": {
@@ -442,6 +446,10 @@
     "period-end-journals": {
       "title": "Registrar os lançamentos de encerramento do exercício",
       "description": "Encerrar as contas de receitas e despesas do exercício contra lucros acumulados com lançamentos de encerramento explícitos e abrir o exercício seguinte quando a política exigir."
+    },
+    "book-replication-complete": {
+      "title": "Confirmar que os livros completos estão completos",
+      "description": "Cada transação até o fim do período está replicada em cada livro com replicação completa."
     }
   },
   "setup": {

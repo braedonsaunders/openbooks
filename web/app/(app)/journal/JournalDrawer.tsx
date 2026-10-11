@@ -38,6 +38,7 @@ import {
   type PersistedDocumentSnapshot,
 } from '../../../components/document-drawer'
 import { FlowManualButtons } from '../../../components/flow-manual-buttons'
+import { JournalBookField, type JournalBookOption } from './JournalBookField'
 import { ApprovalActions } from '../../../components/approval-actions'
 import { ApprovalHistory } from '../../../components/approval-history'
 import {
@@ -301,6 +302,8 @@ function JournalDrawerBody({
   departments,
   projects,
   subsidiaries,
+  books,
+  canPostBookSpecific = false,
   segments = EMPTY_SEGMENTS,
   headerDefs,
   lineDefs,
@@ -325,6 +328,10 @@ function JournalDrawerBody({
   /** The org's subsidiaries (depth-first tree order). Only passed in
    *  multi-subsidiary orgs — empty/undefined renders NO subsidiary UI. */
   subsidiaries?: SubsidiaryOpt[]
+  /** Active posting books; passed only when Multi-book accounting is on. */
+  books?: JournalBookOption[]
+  /** Whether the viewer may choose a book-specific target. */
+  canPostBookSpecific?: boolean
   segments?: SegmentOpt[]
   headerDefs: CustomFieldDefClient[]
   /** The viewer's custom-field visibility from the server; omitted shows only open fields. */
@@ -384,6 +391,8 @@ function JournalDrawerBody({
   const [referenceNumber, setReferenceNumber] = useState<string>(doc.reference_number ?? '')
   const [memo, setMemo] = useState<string>(doc.memo ?? '')
   const [subsidiaryId, setSubsidiaryId] = useState<string>(doc.subsidiary_id ?? '')
+  const bookUi = (books?.length ?? 0) > 1
+  const [accountingBookId, setAccountingBookId] = useState<string>(typeof journal.doc.accounting_book_id === 'string' ? journal.doc.accounting_book_id : '')
   const [customValues, setCustomValues] = useState<Record<string, unknown>>(doc.custom ?? {})
   const [extraDims, setExtraDims] = useState<Record<string, string | null>>(doc.extra_dims ?? {})
   const [rows, setRows] = useState<LineRow[]>(
@@ -454,6 +463,8 @@ function JournalDrawerBody({
       memo,
       // Only sent in multi-subsidiary orgs (undefined drops out of the JSON body).
       subsidiaryId: multiSub ? subsidiaryId || null : undefined,
+      // Only sent when Multi-book accounting offers a choice.
+      accountingBookId: bookUi && canPostBookSpecific ? accountingBookId || null : undefined,
       extraDims,
       custom: customValues,
       // Every contentful row rides — including one missing its account —
@@ -482,7 +493,7 @@ function JournalDrawerBody({
           }]
         }),
     }),
-    [partyId, documentDate, referenceNumber, memo, subsidiaryId, multiSub, customValues, extraDims, rows, lineDefs, segments],
+    [partyId, documentDate, referenceNumber, memo, subsidiaryId, multiSub, accountingBookId, bookUi, canPostBookSpecific, customValues, extraDims, rows, lineDefs, segments],
   )
   // Track unsaved edits (no autosave — Save is an explicit button). Adjusted
   // during render (same committed value, no extra render). `editable` is read
@@ -1175,6 +1186,9 @@ function JournalDrawerBody({
             {warning}
           </p>
         ))}
+        {bookUi ? (
+          <JournalBookField books={books!} value={accountingBookId} onChange={setAccountingBookId} editable={editable && canPostBookSpecific} />
+        ) : null}
         {layout ? <HeaderFields layout={layout} editable={editable} renderField={renderHeaderField} /> : <><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className={field}>
             <Label>{tc('labels.date')}{editable ? <span className="text-red-500"> *</span> : null}</Label>

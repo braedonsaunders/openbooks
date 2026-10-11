@@ -81,6 +81,13 @@ export const FEATURES: FeatureDef[] = [
   // revaluation, and realized/unrealized gain-loss. Data-dependent default (see
   // resolveMultiCurrency), NOT the static flag below.
   { key: 'multiCurrency', defaultEnabled: false, category: 'finance', group: 'structure' },
+  // Multi-book accounting: secondary books with their own base currency per
+  // subsidiary, account mappings, full replication of ordinary
+  // transactions, book-specific journals and book-to-book comparison. Off
+  // by default; existing secondary books keep receiving their own
+  // depreciation, recognition, allocation and revaluation entries either
+  // way. It cannot be switched off while a book replicates in full.
+  { key: 'multiBookAccounting', defaultEnabled: false, category: 'finance', group: 'structure' },
   { key: 'banking', defaultEnabled: true, category: 'finance', group: 'cash', navModules: ['banking', 'banking-cash', 'banking-transactions', 'banking-psp-settlements', 'banking-payouts', 'banking-match', 'banking-recons', 'banking-rules', 'banking-imports'] },
   // Automated bank connectivity (SFTP file drops + Plaid/GoCardless/TrueLayer
   // live feeds). Off by default — manual OFX/CSV import always works without it.

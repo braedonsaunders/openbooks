@@ -1458,7 +1458,8 @@
     "intercompany_read": "Consulter les paires, compensations, transferts et rapprochements intercompagnies",
     "intercompany_manage": "Créer, associer et dissocier des paires ; proposer et annuler des compensations",
     "intercompany_settle": "Comptabiliser et contrepasser les compensations et transferts intercompagnies",
-    "intercompany_approve": "Approuver ou rejeter les compensations intercompagnies"
+    "intercompany_approve": "Approuver ou rejeter les compensations intercompagnies",
+    "gl_post_book_specific": "Passer des écritures propres à un livre"
   },
   "ai": {
     "metaTitle": "Fournisseurs d'IA",
@@ -3683,6 +3684,21 @@
         "title": "Écritures de clôture de l'exercice",
         "singular": "politique d'écritures de clôture",
         "description": "Comment la clôture annuelle passe ses écritures : le compte de report à nouveau, un compte de résultat récapitulatif facultatif, les écritures de clôture du bilan et de réouverture, la période de comptabilisation et les axes conservés sur les lignes de clôture. Chaque version régit les exercices se terminant à sa date d'effet ou après."
+      },
+      "accounting-book-currencies": {
+        "title": "Devises des livres",
+        "description": "La devise de base et le type de taux de conversion qu’un livre secondaire tient pour chaque filiale, par date d’effet.",
+        "singularTitle": "Devise de livre"
+      },
+      "accounting-book-account-maps": {
+        "title": "Correspondances de comptes par livre",
+        "description": "Le compte sous lequel un livre secondaire porte un compte du plan, par date d’effet et éventuellement par filiale.",
+        "singularTitle": "Correspondance de compte"
+      },
+      "accounting-book-replication": {
+        "title": "Réplication des livres",
+        "description": "Activez, rattrapez ou arrêtez la réplication de chaque transaction dans un livre secondaire, avec l’historique de chaque changement.",
+        "singularTitle": "Changement de réplication"
       }
     },
     "fields": {
@@ -5745,7 +5761,9 @@
         "scheduledTasks": "{count, plural, one {# activité planifiée} other {# activités planifiées}}",
         "securityDepositTransactions": "{count, plural, one {# opération de dépôt de garantie} other {# opérations de dépôt de garantie}}",
         "submittedTimeEntries": "{count, plural, one {# saisie de temps soumise en attente de révision} other {# saisies de temps soumises en attente de révision}}",
-        "subsidiaryTxns": "{count, plural, one {# filiale a} other {# filiales ont}} des transactions comptabilisées"
+        "subsidiaryTxns": "{count, plural, one {# filiale a} other {# filiales ont}} des transactions comptabilisées",
+        "fullReplicationBooks": "Livres qui répliquent chaque transaction",
+        "bookSpecificJournals": "Écritures propres à un livre"
       },
       "runWizard": "Lancer l'assistant de configuration",
       "errors": {
@@ -7399,6 +7417,62 @@
       "4": "Jeudi",
       "5": "Vendredi",
       "6": "Samedi"
+    },
+    "multiBook": {
+      "currencyFormDescription": "Un livre secondaire peut tenir une filiale dans sa propre devise de base. Les écritures du livre sont converties au type de taux choisi à leur date. Une version ne change jamais sous les écritures déjà présentes ; changez le type de taux en ajoutant une version à une date ultérieure.",
+      "mapFormDescription": "Portez un compte du plan comme un autre compte dans un livre. La correspondance conserve la classe d’état financier, respecte les restrictions de devise et s’applique à chaque écriture répliquée ou générée dans le livre à partir de sa date de début.",
+      "replicationFormDescription": "Chaque changement est enregistré avec son motif. L’activation réplique chaque transaction depuis la date de début dans la même étape et reprend l’historique antérieur en soldes d’ouverture ou en historique complet.",
+      "fields": {
+        "bookId": "Livre",
+        "subsidiaryId": "Filiale",
+        "mapSubsidiaryId": "Filiale (facultatif)",
+        "currency": "Devise du livre",
+        "rateType": "Type de taux",
+        "effectiveFrom": "En vigueur du",
+        "effectiveTo": "En vigueur jusqu’au",
+        "reason": "Motif",
+        "sourceAccountId": "Compte du plan",
+        "targetAccountId": "Compte dans le livre",
+        "kind": "Changement",
+        "modeAfter": "Mode de réplication",
+        "replicationMode": "Réplication",
+        "replicationFrom": "Répliquer à partir du",
+        "replicatedCount": "Écritures répliquées",
+        "createdAt": "Enregistré",
+        "openingStrategy": "Historique antérieur",
+        "currencyDifferenceAccountId": "Compte d’écarts de change"
+      },
+      "help": {
+        "bookId": "Un livre secondaire. Le livre principal est le livre de référence et ne prend aucune configuration de livre.",
+        "currency": "Un livre tient une devise par filiale.",
+        "rateType": "Le comptant utilise le dernier taux à la date de comptabilisation ou avant ; la moyenne mensuelle utilise la moyenne des taux comptant du mois.",
+        "effectiveTo": "Laissez vide pour garder la version en vigueur. Elle ne peut pas se terminer avant des écritures déjà présentes sous elle.",
+        "reason": "Enregistré dans la piste d’audit avec le changement.",
+        "targetAccountId": "Doit conserver la classe d’état financier et la restriction de devise du compte.",
+        "mapSubsidiaryId": "Laissez vide pour toutes les filiales ; une correspondance par filiale l’emporte sur une correspondance de l’organisation.",
+        "kind": "Activer lance la réplication complète ; rattraper comble les écarts ; désactiver arrête la réplication ; paramètres change le compte d’écarts de change.",
+        "replicationFrom": "La première date de comptabilisation reçue par le livre. Fixe une fois définie.",
+        "openingStrategy": "Les soldes d’ouverture comptabilisent le solde de chaque compte avant la date de début ; l’historique complet exige que le livre principal n’ait rien d’antérieur.",
+        "currencyDifferenceAccountId": "Un compte de produits, de charges ou de capitaux propres pour les écarts restant lors de la conversion d’une écriture multidevise dans la devise du livre."
+      },
+      "rateTypes": {
+        "spot": "Comptant",
+        "month_average": "Moyenne mensuelle"
+      },
+      "changeKinds": {
+        "activation": "Activer la réplication complète",
+        "catch_up": "Rattraper",
+        "deactivation": "Désactiver la réplication",
+        "settings": "Modifier les paramètres"
+      },
+      "openingStrategies": {
+        "opening_balances": "Soldes d’ouverture",
+        "full_history": "Historique complet"
+      },
+      "modes": {
+        "adjustment_only": "Ajustements seulement",
+        "full": "Complet"
+      }
     }
   },
   "flows": {
@@ -8138,6 +8212,10 @@
     "periodEndJournals": {
       "title": "Écritures de clôture de l'exercice",
       "description": "Passez des écritures explicites de clôture de l'exercice dans les juridictions qui les exigent : produits et charges vers le report à nouveau, éventuellement via un compte de résultat récapitulatif, avec en option des écritures de clôture du bilan et de réouverture de l'exercice suivant. Les états financiers calculent le report à nouveau dans tous les cas."
+    },
+    "multiBookAccounting": {
+      "title": "Comptabilité multi-livres",
+      "description": "Tenez des livres secondaires dans leur propre devise de base par filiale, faites correspondre les comptes par livre, répliquez chaque transaction dans les livres complets, passez des écritures propres à un livre et comparez les livres côte à côte."
     }
   },
   "backupsManager": {

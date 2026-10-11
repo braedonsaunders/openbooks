@@ -18,6 +18,8 @@ export const PERMISSION_CATALOGUE = [
   "gl.read",
   "gl.manage",
   "gl.post",
+  // Book-specific journals adjust one accounting book only (multi-book).
+  "gl.post_book_specific",
   // Period configuration and close operations are independent duties.
   "periods.manage",
   "close.read",
@@ -440,6 +442,7 @@ export const PERMISSION_GROUPS: {
       { key: "gl.read", labelKey: permissionLabelKey("gl.read") },
       { key: "gl.manage", labelKey: permissionLabelKey("gl.manage") },
       { key: "gl.post", labelKey: permissionLabelKey("gl.post") },
+      { key: "gl.post_book_specific", labelKey: permissionLabelKey("gl.post_book_specific") },
     ],
   },
   {
@@ -1074,6 +1077,7 @@ export const BUILT_IN_ROLES: Record<
       "gl.read",
       "gl.manage",
       "gl.post",
+      "gl.post_book_specific",
       "periods.manage",
       "close.read",
       "close.run",

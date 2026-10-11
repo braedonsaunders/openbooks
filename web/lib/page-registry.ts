@@ -2596,6 +2596,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/reports/book-differences': {
+    route: '/reports/book-differences',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/reports/book-differences/view')
+      return {
+        load: (input) => m.loadBookDifferences(input.searchParams ?? {}),
+        spec: (data) => m.bookDifferencesSpec(data as never),
+      }
+    },
+  },
   '/reports/budget': {
     route: '/reports/budget',
     segments: [],

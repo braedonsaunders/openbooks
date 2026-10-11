@@ -52,7 +52,9 @@
       "statementBatchesTitle": "Sammelversand",
       "statementBatchesDescription": "Kontoauszüge an alle Kunden mit Saldo senden und jeden Versand nachverfolgen.",
       "intercompanyReconciliationTitle": "Konzernabstimmung",
-      "intercompanyReconciliationDescription": "Die Salden jedes konzerninternen Paars nach Währung in den Hauptbüchern beider Gesellschaften und die noch abzustimmende Differenz."
+      "intercompanyReconciliationDescription": "Die Salden jedes konzerninternen Paars nach Währung in den Hauptbüchern beider Gesellschaften und die noch abzustimmende Differenz.",
+      "bookDifferencesTitle": "Buchdifferenzen",
+      "bookDifferencesDescription": "Jedes Konto im Hauptbuch neben einem Nebenbuch, mit der Differenz"
     },
     "groups": {
       "financial": "Finanzberichte",
@@ -3176,7 +3178,8 @@
       "grant": "Zuschuss",
       "release": "Freigabe aus Zweckbindungen",
       "manufacturing": "Fertigung",
-      "opening": "Eröffnung"
+      "opening": "Eröffnung",
+      "book_opening": "Eröffnungssalden des Buchs"
     },
     "columns": {
       "detail": "Geschäftspartner / Notiz"
@@ -3334,6 +3337,23 @@
       "originalPrice": "Ursprünglicher Preis",
       "currentPrice": "Aktueller Preis",
       "invoicedToDate": "Bisher fakturiert"
+    }
+  },
+  "bookDifferences": {
+    "title": "Buchdifferenzen",
+    "asOf": "{primary} verglichen mit {compare} · Stand {date}",
+    "compareBook": "Vergleichen mit",
+    "empty": "Keines der Bücher weist für die Auswahl einen Saldo aus.",
+    "unavailableTitle": "Kein Buch zum Vergleichen",
+    "setupBooks": "Bücher",
+    "currencyNote": "Das Hauptbuch weist diese Ansicht in {primary} aus und das Vergleichsbuch in {compare}; daher wird keine Differenz berechnet.",
+    "retainedEarningsPrior": "Gewinnvortrag (Vorjahre)",
+    "columns": {
+      "accountNumber": "Konto",
+      "accountName": "Kontobezeichnung",
+      "primary": "Saldo {book} ({currency})",
+      "compare": "Saldo {book} ({currency})",
+      "difference": "Differenz"
     }
   }
 }

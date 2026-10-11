@@ -4,6 +4,7 @@ import { payrollSupportReportData } from './payroll-support-report'
 import { PayrollSupportReportRefusal } from './payroll-support-report-contract'
 import { trueCostExportData } from './analytics/true-cost-report'
 import { earnedValueExportData } from './earned-value-report'
+import { bookDifferenceSelection, bookDifferencesExportData, BookDifferenceSelectionError } from './book-differences-report'
 import { projectBudgetExportData } from './project-budget-report'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
@@ -103,6 +104,7 @@ export const REPORT_KINDS = [
   'project-profitability',
   'project-budget-vs-actual',
   'earned-value',
+  'book-differences',
   'true-cost',
   'availability',
   'replenishment',
@@ -155,6 +157,8 @@ export function statementPageHref(statement: { kind?: string; params?: Record<st
       return '/reports/project-budget-vs-actual'
     case 'earned-value':
       return '/reports/earned-value'
+    case 'book-differences':
+      return '/reports/book-differences'
     case 'true-cost':
       return '/reports/true-cost'
     case 'intercompany-reconciliation':
@@ -332,7 +336,12 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
       requiredPermissions: ['resourcing.read'],
     }
   }
-  const subView = await resolveSubsidiaryView(q.subsidiaryId, period.to, authz.allowedSubsidiaryIds)
+  // A secondary book presents each subsidiary in its own currency; an
+  // explicit book that fails validation refuses below, before any figures.
+  const presentationBook = kind === 'budget' || p.get('book') == null
+    ? undefined
+    : (await reportBookSelection(orgId, p.get('book'))).selectedBook.id
+  const subView = await resolveSubsidiaryView(q.subsidiaryId, period.to, authz.allowedSubsidiaryIds, presentationBook)
   const dims: DimFilter = {
     departmentId: q.dims.departmentId,
     projectId: q.dims.projectId,
@@ -495,6 +504,26 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
   switch (kind) {
     case 'trial-balance':
       return { render: 'data', data: trialBalanceExportData(await trialBalance(asOf, dims, orgId, detailBookId), asOf, t) }
+    case 'book-differences': {
+      try {
+        // Each book states the view in its own currency for the subsidiaries in it.
+        const selection = await bookDifferenceSelection(orgId, p.get('compareBook'))
+        const primaryView = await resolveSubsidiaryView(q.subsidiaryId, asOf, authz.allowedSubsidiaryIds, selection.primary.id)
+        const compareView = await resolveSubsidiaryView(q.subsidiaryId, asOf, authz.allowedSubsidiaryIds, selection.compare.id)
+        const base = (await db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${orgId}`)).rows[0]?.base_currency ?? ''
+        return {
+          render: 'data',
+          data: await bookDifferencesExportData({
+            orgId, asOf, dims, compareBook: selection.compare.id,
+            primaryCurrency: primaryView.currency ?? base,
+            compareCurrency: compareView.currency ?? base,
+          }),
+        }
+      } catch (error) {
+        if (error instanceof BookDifferenceSelectionError) throw new ReportResolutionError(error.message)
+        throw error
+      }
+    }
     case 'partners': {
       // `kind` is the one partners param end to end (seeded Receivables /
       // Payables declarations, schedule snapshots, the page toggle and

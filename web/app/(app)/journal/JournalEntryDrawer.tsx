@@ -96,7 +96,7 @@ function LoadedJournal({ data, closeHref, onRefresh }: { data: PostedJournal; cl
     currentEntryId={data.currentEntryId ?? undefined}
     onLedgerRefresh={onRefresh}
     ledgerTotals={currencies.map((currency) => ({ currency, ...entryTotals(lines.filter((line) => line.functional_currency === currency)) }))}
-    ledgerDescription={[origin, entry.reverses_number ? t('detail.reverses', { number: entry.reverses_number }) : null].filter(Boolean).join(' · ')}
+    ledgerDescription={[origin, entry.book_code ? t('detail.book', { book: entry.book_code }) : null, entry.reverses_number ? t('detail.reverses', { number: entry.reverses_number }) : null].filter(Boolean).join(' · ')}
     parties={lines.filter((line) => line.party).map((line) => ({ id: `party:${line.line_number}`, display_name: line.party! }))}
     accounts={lines.map((line) => ({ id: line.account_id, number: line.account_number ?? undefined, name: line.account_name }))}
     departments={lines.filter((line) => line.department).map((line) => ({ id: `department:${line.line_number}`, name: line.department! }))}

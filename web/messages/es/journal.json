@@ -11,7 +11,8 @@
     "columns": {
       "entry": "Asiento",
       "origin": "Origen",
-      "debits": "Débitos"
+      "debits": "Débitos",
+      "book": "Libro"
     }
   },
   "origins": {
@@ -26,7 +27,8 @@
     "translation": "Conversión de moneda",
     "migration": "Migración",
     "manufacturing": "Fabricación",
-    "opening": "Apertura"
+    "opening": "Apertura",
+    "bookOpening": "Apertura de libro"
   },
   "detail": {
     "notFound": "Asiento no encontrado",
@@ -45,7 +47,8 @@
       "ruleGroup": "Regla: {name}",
       "scriptGroup": "Script: {name}",
       "otherGroup": "{kind}: {name}"
-    }
+    },
+    "book": "Libro {book}"
   },
   "newButton": {
     "label": "Nuevo asiento",
@@ -85,5 +88,12 @@
     },
     "budgetaryControlWarning": "El presupuesto {scenario} supera la asignación para {account}, fondo {fund}, {subsidiary}{dimensions}: disponible {available}, exceso de {amountOver}.",
     "budgetaryControlRemedy": "Revise el presupuesto mediante su flujo de aprobación: copie el presupuesto aprobado como borrador, aumente el importe de esta cuenta para el fondo en la hoja de trabajo, apruebe la copia y archive el presupuesto sustituido. O vincule este importe al compromiso abierto que lo reservó."
+  },
+  "book": {
+    "label": "Libro contable",
+    "primary": "principal",
+    "allBooks": "Todos los libros",
+    "allBooksHint": "Se registra en el libro principal y se replica en cada libro completo.",
+    "specificHint": "Específico del libro: se registra solo en este libro, en la moneda que mantiene para la subsidiaria del asiento."
   }
 }

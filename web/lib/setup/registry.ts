@@ -25,6 +25,7 @@ import { CALENDAR_ENTITIES } from './entities/calendars'
 import { WORK_CALENDARS_ENTITY } from './entities/work-calendars'
 import { ACCOUNTING_ENTITIES } from './entities/accounting'
 import { INTERNAL_BILLING_RULES_ENTITY } from './entities/internal-billing'
+import { MULTI_BOOK_ENTITIES } from './entities/multibook'
 import { TAX_ENTITIES } from './entities/taxes'
 import { DIMENSION_ENTITIES } from './entities/dimensions'
 import { BILLING_ENTITIES } from './entities/billing'
@@ -61,6 +62,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
   ...COMPANY_ENTITIES,
   ...ACCOUNTING_ENTITIES,
   INTERNAL_BILLING_RULES_ENTITY,
+  ...MULTI_BOOK_ENTITIES,
   ...CALENDAR_ENTITIES,
   WORK_CALENDARS_ENTITY,
   ...TAX_ENTITIES,

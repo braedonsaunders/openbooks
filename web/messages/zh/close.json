@@ -226,6 +226,10 @@
     "period-end-journals-pending": {
       "title": "期末结账分录不是最新的",
       "message": "{count, plural, other {# 个法人实体或政策条件需要生成或更正期末结账分录。}}"
+    },
+    "book-replication-incomplete": {
+      "title": "完整账簿缺少交易",
+      "message": "{count, plural, other {# 笔交易尚未复制到完整账簿。请在账簿复制中记录补齐。}}"
     }
   },
   "severity": {
@@ -442,6 +446,10 @@
     "period-end-journals": {
       "title": "过账期末结账分录",
       "description": "通过明确的结账分录将会计年度的收入和费用科目结转至留存收益，并在政策要求时开立下一年度。"
+    },
+    "book-replication-complete": {
+      "title": "确认完整账簿已齐全",
+      "description": "截至期末的每笔交易都已复制到每个完整复制的账簿。"
     }
   },
   "setup": {

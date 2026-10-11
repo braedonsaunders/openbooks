@@ -635,6 +635,7 @@ function closeExceptionActionHref(code: string, run: CloseRunRow): string | null
     "fx-missing": "/admin/setup/fx-rates",
     "fx-unrevalued": "/admin/setup/fx-rates",
     "fx-reversal-period-missing": "/admin/setup/fx-rates",
+    "book-replication-incomplete": "/admin/setup/accounting-book-replication",
     "intercompany-residual": "/reports/trial-balance",
     "intercompany-unreconciled": "/reports/intercompany-reconciliation",
     "consolidated-rates-missing": "/reports/trial-balance",

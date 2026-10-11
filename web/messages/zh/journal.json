@@ -11,7 +11,8 @@
     "columns": {
       "entry": "分录",
       "origin": "来源",
-      "debits": "借方"
+      "debits": "借方",
+      "book": "账簿"
     }
   },
   "origins": {
@@ -26,7 +27,8 @@
     "translation": "折算",
     "migration": "迁移",
     "manufacturing": "生产制造",
-    "opening": "期初"
+    "opening": "期初",
+    "bookOpening": "账簿期初"
   },
   "detail": {
     "notFound": "未找到分录",
@@ -45,7 +47,8 @@
       "ruleGroup": "规则：{name}",
       "scriptGroup": "脚本：{name}",
       "otherGroup": "{kind}：{name}"
-    }
+    },
+    "book": "账簿 {book}"
   },
   "newButton": {
     "label": "新建日记账",
@@ -85,5 +88,12 @@
     },
     "budgetaryControlWarning": "预算{scenario}超出拨款：{account}、基金{fund}、{subsidiary}{dimensions}，可用额度{available}，超支{amountOver}。",
     "budgetaryControlRemedy": "请通过预算审批流程修改预算：将已批准的预算复制为草稿，在工作表中提高该基金下此科目的金额，批准副本并归档被取代的预算。或将该实际数关联至预留它的未结预留款。"
+  },
+  "book": {
+    "label": "会计账簿",
+    "primary": "主账簿",
+    "allBooks": "所有账簿",
+    "allBooksHint": "过账到主账簿并复制到每个完整账簿。",
+    "specificHint": "账簿专用：仅过账到此账簿，使用该账簿为日记账所属子公司保留的币种。"
   }
 }

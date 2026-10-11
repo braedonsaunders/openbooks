@@ -105,6 +105,10 @@ export async function reportsHubFor(
   // Intercompany reconciliation reads every multi-entity ledger.
   const multiSubsidiaryEnabled = authz ? await isFeatureEnabled(authz.user.orgId, 'multiSubsidiary') : false
   const intercompanyReportVisible = multiSubsidiaryEnabled && Boolean(authz && can(authz, 'intercompany.read'))
+  // Multi-book accounting gates the book-to-book comparison.
+  const multiBookEnabled = authz && can(authz, 'gl.read')
+    ? await isFeatureEnabled(authz.user.orgId, 'multiBookAccounting')
+    : false
   // Projects → Progress tracking gates the Earned value report.
   const progressEnabled = projectsEnabled && authz && can(authz, 'projects.read')
     ? await isFeatureEnabled(authz.user.orgId, 'projectProgress')
@@ -219,6 +223,7 @@ export async function reportsHubFor(
         card('cashFlow', '/reports/cash-flow', 'Waves', 'statement'),
         card('cashFlowIndirect', '/reports/cash-flow-indirect', 'Waves', 'statement'),
         card('trialBalance', '/reports/trial-balance', 'ClipboardList', 'ledger'),
+        ...(multiBookEnabled ? [card('bookDifferences', '/reports/book-differences', 'BookOpen', 'ledger')] : []),
       ],
     },
     {
@@ -375,6 +380,7 @@ export async function reportsHubFor(
             resourcing: resourcingEnabled,
             payroll: payrollEnabled && Boolean(authz && can(authz, 'payroll.read')),
             multiSubsidiary: intercompanyReportVisible,
+            multiBookAccounting: multiBookEnabled,
           }),
         ).map((s) => {
           const qs = new URLSearchParams(s.params ?? {}).toString()

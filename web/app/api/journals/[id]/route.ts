@@ -25,6 +25,8 @@ import {
 import { extraDimsSubsidiaryError, segmentRegistry, validateExtraDims } from '../../../../lib/segments'
 import { exactMoney, isoDate, nullableUuidId } from '../../../../lib/api/json'
 import { notFound } from "@/lib/api/responses";
+import { can } from "@/lib/authz-core";
+import { JournalBookError, resolveJournalBookTarget } from "@/lib/journal-book";
 
 
 type RouteTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
@@ -105,6 +107,8 @@ const journalPatchBody = z.object({
   memo: z.string().nullable().optional(),
   /** null = org root (posting resolves it). Only sent by multi-subsidiary orgs. */
   subsidiaryId: nullableUuidId.optional(),
+  /** Book-specific journal target; null posts to every book. */
+  accountingBookId: nullableUuidId.optional(),
   extraDims: z.record(z.string(), z.string().nullable()).optional(),
   custom: z.record(z.string(), z.json()).optional(),
   lines: z.array(journalLineInput).optional(),
@@ -333,7 +337,7 @@ export const PATCH = defineRoute({
     try {
       await runDocumentVersionedTransaction<
         RouteTransaction,
-        { status: string; updatedAt: string; subsidiaryId: string | null; extraDims: unknown },
+        { status: string; updatedAt: string; subsidiaryId: string | null; extraDims: unknown; accountingBookId: string | null },
         void
       >({
         expectedRevision,
@@ -341,10 +345,11 @@ export const PATCH = defineRoute({
         // The row lock and exact revision comparison are the first operations in
         // the write transaction: a concurrent writer cannot slip between the
         // check and the header/line replacement.
-        lock: async (tx) => (await tx.execute<{ status: string; updatedAt: string; subsidiaryId: string | null; extraDims: unknown }>(sql`
+        lock: async (tx) => (await tx.execute<{ status: string; updatedAt: string; subsidiaryId: string | null; extraDims: unknown; accountingBookId: string | null }>(sql`
           select status,
                  ${documentRevisionCounterSql(sql.raw('revision_seq'))} as "updatedAt",
-                 subsidiary_id as "subsidiaryId", extra_dims as "extraDims"
+                 subsidiary_id as "subsidiaryId", extra_dims as "extraDims",
+                 accounting_book_id as "accountingBookId"
             from documents
            where id = ${id} and kind = 'journal' and org_id = ${user.orgId}
            for update
@@ -419,6 +424,28 @@ export const PATCH = defineRoute({
             totalDebits = null
           }
 
+          // A book target (or a rehomed book-specific journal) restates the
+          // journal's entry currency as the book's currency for its subsidiary.
+          let bookTarget: Awaited<ReturnType<typeof resolveJournalBookTarget>> | null = null
+          const requestedBook = body.accountingBookId !== undefined ? body.accountingBookId : locked.accountingBookId
+          if (body.accountingBookId !== undefined || (locked.accountingBookId && body.subsidiaryId !== undefined)) {
+            const bookSubsidiaryId = targetSubsidiaryId ?? (await tx.execute<{ id: string }>(sql`
+              select id from subsidiaries where org_id = ${user.orgId} and parent_id is null`)).rows[0]?.id
+            if (!bookSubsidiaryId) throw new DocumentEditError(422, 'journal requires a subsidiary')
+            try {
+              bookTarget = await resolveJournalBookTarget({
+                orgId: user.orgId,
+                requested: requestedBook,
+                subsidiaryId: bookSubsidiaryId,
+                canPostBookSpecific: can(gate, 'gl.post_book_specific'),
+                executor: tx,
+              })
+            } catch (error) {
+              if (error instanceof JournalBookError) throw new DocumentEditError(error.status, error.message)
+              throw error
+            }
+          }
+
           const auditBefore = await captureTransactionAuditSnapshot(tx, id, user.orgId)
           if (!auditBefore) throw new Error(`journal ${id} disappeared before update`)
 
@@ -444,6 +471,8 @@ export const PATCH = defineRoute({
               reference_number = ${body.referenceNumber !== undefined ? body.referenceNumber : sql`reference_number`},
               memo = ${body.memo !== undefined ? body.memo : sql`memo`},
               subsidiary_id = ${body.subsidiaryId !== undefined ? body.subsidiaryId : sql`subsidiary_id`},
+              accounting_book_id = ${bookTarget ? bookTarget.accountingBookId : sql`accounting_book_id`},
+              currency = ${bookTarget ? bookTarget.currency : sql`currency`},
               extra_dims = ${headerDims ? JSON.stringify(headerDims.cleaned) : sql`extra_dims`}::jsonb,
               custom = coalesce(${headerCustom ? JSON.stringify(headerCustom) : null}::jsonb, custom),
               subtotal = coalesce(${totalDebits}, subtotal),

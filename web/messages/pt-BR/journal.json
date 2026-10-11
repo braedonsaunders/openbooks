@@ -11,7 +11,8 @@
     "columns": {
       "entry": "Lançamento",
       "origin": "Origem",
-      "debits": "Débitos"
+      "debits": "Débitos",
+      "book": "Livro"
     }
   },
   "origins": {
@@ -26,7 +27,8 @@
     "migration": "Migração",
     "translation": "Conversão",
     "manufacturing": "Manufatura",
-    "opening": "Abertura"
+    "opening": "Abertura",
+    "bookOpening": "Abertura de livro"
   },
   "detail": {
     "notFound": "Lançamento não encontrado",
@@ -45,7 +47,8 @@
       "ruleGroup": "Regra: {name}",
       "scriptGroup": "Script: {name}",
       "otherGroup": "{kind}: {name}"
-    }
+    },
+    "book": "Livro {book}"
   },
   "newButton": {
     "label": "Novo lançamento",
@@ -85,5 +88,12 @@
     },
     "budgetaryControlWarning": "O orçamento {scenario} excede a dotação para {account}, fundo {fund}, {subsidiary}{dimensions}: disponível {available}, excesso de {amountOver}.",
     "budgetaryControlRemedy": "Revise o orçamento pelo seu fluxo de aprovação: copie o orçamento aprovado como rascunho, aumente o valor desta conta para o fundo na planilha, aprove a cópia e arquive o orçamento substituído. Ou vincule este valor ao empenho aberto que o reservou."
+  },
+  "book": {
+    "label": "Livro contábil",
+    "primary": "principal",
+    "allBooks": "Todos os livros",
+    "allBooksHint": "Lança no livro principal e replica em cada livro completo.",
+    "specificHint": "Específico do livro: lança somente neste livro, na moeda que ele mantém para a subsidiária do diário."
   }
 }

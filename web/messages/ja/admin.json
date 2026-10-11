@@ -1458,7 +1458,8 @@
     "intercompany_read": "法人間伝票の組、相殺、振替、残高照合を閲覧",
     "intercompany_manage": "法人間伝票の組を作成・関連付け・解除し、相殺処理を提案・取消",
     "intercompany_settle": "法人間相殺と資金振替を計上・反対仕訳",
-    "intercompany_approve": "法人間相殺処理を承認または却下"
+    "intercompany_approve": "法人間相殺処理を承認または却下",
+    "gl_post_book_specific": "帳簿固有の仕訳を計上"
   },
   "ai": {
     "metaTitle": "AI設定",
@@ -3811,6 +3812,21 @@
         "title": "期末決算仕訳",
         "singular": "期末決算仕訳ポリシー",
         "description": "年度末の締めが仕訳を計上する方法：利益剰余金勘定、任意の損益集計勘定、貸借対照表の締め仕訳と開始仕訳、計上期間、締め仕訳の明細が保持するディメンション。各バージョンは発効日以降に終了する会計年度に適用されます。"
+      },
+      "accounting-book-currencies": {
+        "title": "帳簿通貨",
+        "description": "副帳簿が子会社ごとに保持する基準通貨と換算レートの種類（適用日別）。",
+        "singularTitle": "帳簿通貨"
+      },
+      "accounting-book-account-maps": {
+        "title": "帳簿別の勘定科目マッピング",
+        "description": "副帳簿が勘定科目表の科目を計上する勘定科目（適用日別、任意で子会社別）。",
+        "singularTitle": "勘定科目マッピング"
+      },
+      "accounting-book-replication": {
+        "title": "帳簿の複製",
+        "description": "副帳簿へのすべての取引の複製を有効化・追いつき・停止し、各変更の履歴を残します。",
+        "singularTitle": "複製の変更"
       }
     },
     "fields": {
@@ -5889,7 +5905,9 @@
         "submittedTimeEntries": "{count, plural, one {確認待ちの提出済み工数 # 件} other {確認待ちの提出済み工数 # 件}}",
         "subsidiaryTxns": "{count, plural, one {記帳済み取引のある子会社 # 社} other {記帳済み取引のある子会社 # 社}}",
         "trackedVendors": "{count, plural, one {管理中の下請業者 # 社} other {管理中の下請業者 # 社}}",
-        "unfiledInformationReturns": "{count, plural, one {確定済み未提出の情報申告書 # 件} other {確定済み未提出の情報申告書 # 件}}"
+        "unfiledInformationReturns": "{count, plural, one {確定済み未提出の情報申告書 # 件} other {確定済み未提出の情報申告書 # 件}}",
+        "fullReplicationBooks": "すべての取引を複製している帳簿",
+        "bookSpecificJournals": "帳簿固有の仕訳"
       },
       "title": "機能",
       "groups": {
@@ -7399,6 +7417,62 @@
       "4": "木曜日",
       "5": "金曜日",
       "6": "土曜日"
+    },
+    "multiBook": {
+      "currencyFormDescription": "副帳簿は子会社を独自の基準通貨で保持できます。帳簿への計上は、その日付に選択したレートの種類で換算されます。バージョンは帳簿に既にある仕訳の下では変更されません。レートの種類を変更するには、後日からのバージョンを追加してください。",
+      "mapFormDescription": "勘定科目表の科目を、ある帳簿では別の科目として計上します。マッピングは財務諸表区分を維持し、通貨制限に従い、開始日以降に帳簿へ複製・生成されるすべての仕訳に適用されます。",
+      "replicationFormDescription": "各変更は理由とともに記録されます。有効化では開始日以降のすべての取引を同じ手順で複製し、それ以前の履歴を期首残高または全履歴として取り込みます。",
+      "fields": {
+        "bookId": "帳簿",
+        "subsidiaryId": "子会社",
+        "mapSubsidiaryId": "子会社（任意）",
+        "currency": "帳簿通貨",
+        "rateType": "レートの種類",
+        "effectiveFrom": "適用開始日",
+        "effectiveTo": "適用終了日",
+        "reason": "理由",
+        "sourceAccountId": "勘定科目表の科目",
+        "targetAccountId": "帳簿の勘定科目",
+        "kind": "変更",
+        "modeAfter": "モード",
+        "replicationMode": "複製",
+        "replicationFrom": "複製開始日",
+        "replicatedCount": "複製された仕訳",
+        "createdAt": "記録日",
+        "openingStrategy": "それ以前の履歴",
+        "currencyDifferenceAccountId": "為替差額勘定"
+      },
+      "help": {
+        "bookId": "副帳簿。主帳簿は正式な帳簿であり、帳簿固有の設定はありません。",
+        "currency": "1つの帳簿は子会社ごとに1つの通貨を保持します。",
+        "rateType": "直物は計上日以前の最新レートを、月平均はその月の直物レートの平均を使用します。",
+        "effectiveTo": "空欄のままにするとバージョンは有効なままです。既にこのバージョンで計上された仕訳より前に終了することはできません。",
+        "reason": "変更とともに監査証跡に記録されます。",
+        "targetAccountId": "勘定科目の財務諸表区分と通貨制限を維持する必要があります。",
+        "mapSubsidiaryId": "空欄にするとすべての子会社に適用されます。子会社別のマッピングが組織全体のマッピングより優先されます。",
+        "kind": "有効化で完全複製を開始、追いつきで欠落を補完、無効化で複製を停止、設定で為替差額勘定を変更します。",
+        "replicationFrom": "帳簿が受け取る最初の計上日。一度設定すると変更できません。",
+        "openingStrategy": "期首残高は開始日前の各勘定残高を計上します。全履歴の場合、主帳簿にそれ以前の仕訳がない必要があります。",
+        "currencyDifferenceAccountId": "複数通貨の仕訳を帳簿通貨に換算した際に残る差額を計上する収益・費用・資本の勘定科目。"
+      },
+      "rateTypes": {
+        "spot": "直物",
+        "month_average": "月平均"
+      },
+      "changeKinds": {
+        "activation": "完全複製を有効化",
+        "catch_up": "追いつき",
+        "deactivation": "複製を無効化",
+        "settings": "設定を変更"
+      },
+      "openingStrategies": {
+        "opening_balances": "期首残高",
+        "full_history": "全履歴"
+      },
+      "modes": {
+        "adjustment_only": "調整のみ",
+        "full": "完全"
+      }
     }
   },
   "flows": {
@@ -8138,6 +8212,10 @@
     "periodEndJournals": {
       "title": "期末決算仕訳",
       "description": "決算仕訳を義務付ける法域向けに、明示的な年度末の締め仕訳を計上します。収益と費用を利益剰余金へ振り替え（任意で損益集計勘定を経由）、任意で貸借対照表の締め仕訳と翌期の開始仕訳も計上します。財務諸表はいずれの場合も利益剰余金を計算します。"
+    },
+    "multiBookAccounting": {
+      "title": "マルチブック会計",
+      "description": "子会社ごとに独自の基準通貨で副帳簿を管理し、帳簿ごとに勘定科目をマッピングし、すべての取引をフル帳簿に複製し、帳簿固有の仕訳を計上し、帳簿を並べて比較します。"
     }
   },
   "extensions": {

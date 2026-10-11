@@ -11,7 +11,8 @@
     "columns": {
       "entry": "Buchung",
       "origin": "Herkunft",
-      "debits": "Soll"
+      "debits": "Soll",
+      "book": "Buch"
     }
   },
   "origins": {
@@ -26,7 +27,8 @@
     "translation": "Umrechnung",
     "migration": "Migration",
     "manufacturing": "Fertigung",
-    "opening": "Eröffnung"
+    "opening": "Eröffnung",
+    "bookOpening": "Buch-Eröffnung"
   },
   "detail": {
     "notFound": "Buchung nicht gefunden",
@@ -45,7 +47,8 @@
       "ruleGroup": "Regel: {name}",
       "scriptGroup": "Skript: {name}",
       "otherGroup": "{kind}: {name}"
-    }
+    },
+    "book": "Buch {book}"
   },
   "newButton": {
     "label": "Neue Buchung",
@@ -85,5 +88,12 @@
     },
     "budgetaryControlWarning": "Budget {scenario} überschreitet die Zuweisung für {account}, Fonds {fund}, {subsidiary}{dimensions}: verfügbar {available}, überschritten um {amountOver}.",
     "budgetaryControlRemedy": "Das Budget über seinen Genehmigungsablauf anpassen: das genehmigte Budget als Entwurf kopieren, den Betrag dieses Kontos für den Fonds im Arbeitsblatt erhöhen, die Kopie genehmigen und das ersetzte Budget archivieren. Oder den Ist-Betrag mit der offenen Verpflichtung verknüpfen, die ihn reserviert hat."
+  },
+  "book": {
+    "label": "Buch",
+    "primary": "Hauptbuch",
+    "allBooks": "Alle Bücher",
+    "allBooksHint": "Bucht ins Hauptbuch und wird in jedes vollständige Buch übernommen.",
+    "specificHint": "Buchspezifisch: wird nur in dieses Buch gebucht, in der Währung, die es für die Tochtergesellschaft des Journals führt."
   }
 }

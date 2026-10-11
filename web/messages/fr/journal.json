@@ -11,7 +11,8 @@
     "columns": {
       "entry": "Écriture",
       "origin": "Origine",
-      "debits": "Débits"
+      "debits": "Débits",
+      "book": "Livre"
     }
   },
   "origins": {
@@ -26,7 +27,8 @@
     "translation": "Conversion",
     "migration": "Migration",
     "manufacturing": "Fabrication",
-    "opening": "Ouverture"
+    "opening": "Ouverture",
+    "bookOpening": "Ouverture de livre"
   },
   "detail": {
     "notFound": "Écriture introuvable",
@@ -45,7 +47,8 @@
       "ruleGroup": "Règle : {name}",
       "scriptGroup": "Script : {name}",
       "otherGroup": "{kind} : {name}"
-    }
+    },
+    "book": "Livre {book}"
   },
   "newButton": {
     "label": "Nouvelle écriture",
@@ -85,5 +88,12 @@
     },
     "budgetaryControlWarning": "Le budget {scenario} dépasse la dotation pour {account}, fonds {fund}, {subsidiary}{dimensions} : disponible {available}, dépassement de {amountOver}.",
     "budgetaryControlRemedy": "Révisez le budget par son circuit d''approbation : copiez le budget approuvé en brouillon, augmentez le montant de ce compte pour le fonds dans la feuille de calcul, approuvez la copie et archivez le budget remplacé. Ou liez ce montant à l''engagement ouvert qui l''a réservé."
+  },
+  "book": {
+    "label": "Livre comptable",
+    "primary": "principal",
+    "allBooks": "Tous les livres",
+    "allBooksHint": "Comptabilisé dans le livre principal et répliqué dans chaque livre complet.",
+    "specificHint": "Propre au livre : comptabilisé uniquement dans ce livre, dans la devise qu’il tient pour la filiale de l’écriture."
   }
 }

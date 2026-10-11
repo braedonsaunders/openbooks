@@ -226,6 +226,10 @@
     "period-end-journals-pending": {
       "title": "Los asientos de cierre no están al día",
       "message": "{count, plural, one {# entidad legal o condición de la política necesita generar o corregir sus asientos de cierre.} other {# entidades legales o condiciones de la política necesitan generar o corregir sus asientos de cierre.}}"
+    },
+    "book-replication-incomplete": {
+      "title": "A los libros completos les faltan transacciones",
+      "message": "{count, plural, one {# transacción no se ha replicado en un libro completo. Registre una puesta al día en Replicación de libros.} other {# transacciones no se han replicado en un libro completo. Registre una puesta al día en Replicación de libros.}}"
     }
   },
   "severity": {
@@ -442,6 +446,10 @@
     "period-end-journals": {
       "title": "Registrar los asientos de cierre del ejercicio",
       "description": "Cerrar las cuentas de ingresos y gastos del ejercicio contra resultados acumulados con asientos de cierre explícitos, y abrir el ejercicio siguiente cuando la política lo exige."
+    },
+    "book-replication-complete": {
+      "title": "Confirmar que los libros completos están completos",
+      "description": "Cada transacción hasta el cierre del período está replicada en cada libro con replicación completa."
     }
   },
   "setup": {

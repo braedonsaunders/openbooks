@@ -226,6 +226,10 @@
     "period-end-journals-pending": {
       "title": "Les écritures de clôture ne sont pas à jour",
       "message": "{count, plural, one {# entité juridique ou condition de politique doit générer ou corriger ses écritures de clôture.} other {# entités juridiques ou conditions de politique doivent générer ou corriger leurs écritures de clôture.}}"
+    },
+    "book-replication-incomplete": {
+      "title": "Des transactions manquent dans les livres complets",
+      "message": "{count, plural, one {# transaction n’a pas été répliquée dans un livre complet. Enregistrez un rattrapage dans Réplication des livres.} other {# transactions n’ont pas été répliquées dans un livre complet. Enregistrez un rattrapage dans Réplication des livres.}}"
     }
   },
   "severity": {
@@ -442,6 +446,10 @@
     "period-end-journals": {
       "title": "Passer les écritures de clôture de l'exercice",
       "description": "Solder les comptes de produits et de charges de l'exercice vers le report à nouveau par des écritures de clôture explicites, et rouvrir l'exercice suivant lorsque la politique l'exige."
+    },
+    "book-replication-complete": {
+      "title": "Confirmer que les livres complets sont exhaustifs",
+      "description": "Chaque transaction jusqu’à la fin de période est répliquée dans chaque livre en réplication complète."
     }
   },
   "setup": {

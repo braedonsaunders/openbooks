@@ -787,6 +787,7 @@
     "./worker/runtime": "./src/worker/index.ts",
     "./worker/shutdown": "./src/worker/shutdown.ts",
     "./inbox/kinds": "./src/inbox/kinds.ts",
-    "./delivery/report-delivery": "./src/delivery/report-delivery.ts"
+    "./delivery/report-delivery": "./src/delivery/report-delivery.ts",
+    "./multibook": "./src/multibook/public.ts"
   }
 }

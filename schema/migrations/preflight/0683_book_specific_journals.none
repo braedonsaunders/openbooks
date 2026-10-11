@@ -1,0 +1,1 @@
+Additive: documents gains a nullable journal book column with a check every existing row satisfies, plus an index and an update guard.

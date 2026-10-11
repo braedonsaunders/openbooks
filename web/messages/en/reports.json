@@ -52,7 +52,9 @@
       "statementBatchesTitle": "Statement batches",
       "statementBatchesDescription": "Send statements to every customer with a balance, then follow each batch to delivered.",
       "intercompanyReconciliationTitle": "Intercompany reconciliation",
-      "intercompanyReconciliationDescription": "Each intercompany pair's balances by currency in both entities' ledgers and the difference left to reconcile."
+      "intercompanyReconciliationDescription": "Each intercompany pair's balances by currency in both entities' ledgers and the difference left to reconcile.",
+      "bookDifferencesTitle": "Book Differences",
+      "bookDifferencesDescription": "Each account in the primary book beside a secondary book, with the difference"
     },
     "groups": {
       "financial": "Financial Statements",
@@ -3176,7 +3178,8 @@
       "grant": "Grant",
       "release": "Restriction release",
       "manufacturing": "Manufacturing",
-      "opening": "Opening"
+      "opening": "Opening",
+      "book_opening": "Book opening balances"
     },
     "columns": {
       "detail": "Party / memo"
@@ -3334,6 +3337,23 @@
       "originalPrice": "Original price",
       "currentPrice": "Current price",
       "invoicedToDate": "Invoiced to date"
+    }
+  },
+  "bookDifferences": {
+    "title": "Book Differences",
+    "asOf": "{primary} compared with {compare} · as of {date}",
+    "compareBook": "Compare with",
+    "empty": "Neither book holds a balance for the selection.",
+    "unavailableTitle": "No book to compare",
+    "setupBooks": "Accounting books",
+    "currencyNote": "The primary book states this view in {primary} and the compared book in {compare}, so no difference is computed.",
+    "retainedEarningsPrior": "Retained earnings (prior years)",
+    "columns": {
+      "accountNumber": "Account",
+      "accountName": "Name",
+      "primary": "{book} balance ({currency})",
+      "compare": "{book} balance ({currency})",
+      "difference": "Difference"
     }
   }
 }

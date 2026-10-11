@@ -1458,7 +1458,8 @@
     "intercompany_read": "Konzerninterne Paare, Verrechnungsläufe, Überweisungen und Abstimmung anzeigen",
     "intercompany_manage": "Konzerninterne Paare erstellen, verknüpfen und trennen; Verrechnungsläufe vorschlagen und abbrechen",
     "intercompany_settle": "Verrechnungsläufe und konzerninterne Überweisungen buchen und stornieren",
-    "intercompany_approve": "Konzerninterne Verrechnungsläufe genehmigen oder ablehnen"
+    "intercompany_approve": "Konzerninterne Verrechnungsläufe genehmigen oder ablehnen",
+    "gl_post_book_specific": "Buchspezifische Journale buchen"
   },
   "ai": {
     "metaTitle": "KI-Einstellungen",
@@ -3811,6 +3812,21 @@
         "title": "Abschlussbuchungen zum Periodenende",
         "singular": "Richtlinie für Abschlussbuchungen",
         "description": "Wie der Jahresabschluss seine Buchungen erzeugt: das Konto für Gewinnrücklagen, ein optionales Ergebnissammelkonto, Schlussbilanz- und Eröffnungsbuchungen, die Buchungsperiode und die Dimensionen, die Abschlusszeilen behalten. Jede Version gilt für Geschäftsjahre, die an oder nach ihrem Gültigkeitsdatum enden."
+      },
+      "accounting-book-currencies": {
+        "title": "Buchwährungen",
+        "description": "Die Basiswährung und der Umrechnungskurstyp, die ein Nebenbuch je Tochtergesellschaft führt, nach Gültigkeitsdatum.",
+        "singularTitle": "Buchwährung"
+      },
+      "accounting-book-account-maps": {
+        "title": "Kontenzuordnungen je Buch",
+        "description": "Das Konto, auf dem ein Nebenbuch ein Konto des Kontenplans führt, nach Gültigkeitsdatum und optional je Tochtergesellschaft.",
+        "singularTitle": "Kontenzuordnung"
+      },
+      "accounting-book-replication": {
+        "title": "Buchübernahme",
+        "description": "Aktivieren, aktualisieren oder beenden Sie die Übernahme aller Buchungen in ein Nebenbuch, mit dem Verlauf jeder Änderung.",
+        "singularTitle": "Übernahmeänderung"
       }
     },
     "fields": {
@@ -5886,7 +5902,9 @@
         "submittedTimeEntries": "{count, plural, one {# eingereichte Zeiterfassung wartet auf Prüfung} other {# eingereichte Zeiterfassungen warten auf Prüfung}}",
         "subsidiaryTxns": "{count, plural, one {# Tochtergesellschaft mit} other {# Tochtergesellschaften mit}} gebuchten Buchungen",
         "trackedVendors": "{count, plural, one {# erfasster Nachunternehmer} other {# erfasste Nachunternehmer}}",
-        "unfiledInformationReturns": "{count, plural, one {# finalisierte Informationsmeldung, die nicht eingereicht wurde} other {# finalisierte Informationsmeldungen, die nicht eingereicht wurden}}"
+        "unfiledInformationReturns": "{count, plural, one {# finalisierte Informationsmeldung, die nicht eingereicht wurde} other {# finalisierte Informationsmeldungen, die nicht eingereicht wurden}}",
+        "fullReplicationBooks": "Bücher mit vollständiger Übernahme aller Buchungen",
+        "bookSpecificJournals": "Buchspezifische Journale"
       },
       "title": "Funktionen",
       "groups": {
@@ -7399,6 +7417,62 @@
       "4": "Donnerstag",
       "5": "Freitag",
       "6": "Samstag"
+    },
+    "multiBook": {
+      "currencyFormDescription": "Ein Nebenbuch kann eine Tochtergesellschaft in eigener Basiswährung führen. Buchungen in das Buch werden zum gewählten Kurstyp an ihrem Datum umgerechnet. Eine Version ändert sich nie unter bereits gebuchten Einträgen; ändern Sie den Kurstyp mit einer Version ab einem späteren Datum.",
+      "mapFormDescription": "Führen Sie ein Konto des Kontenplans in einem Buch als anderes Konto. Die Zuordnung behält die Abschlussklasse bei, beachtet Währungsbeschränkungen und gilt ab ihrem Startdatum für jede in das Buch übernommene oder erzeugte Buchung.",
+      "replicationFormDescription": "Jede Änderung wird mit ihrem Grund festgehalten. Die Aktivierung übernimmt im selben Schritt jede Buchung ab dem Startdatum und übernimmt frühere Historie als Eröffnungssalden oder vollständig.",
+      "fields": {
+        "bookId": "Buch",
+        "subsidiaryId": "Tochtergesellschaft",
+        "mapSubsidiaryId": "Tochtergesellschaft (optional)",
+        "currency": "Buchwährung",
+        "rateType": "Kurstyp",
+        "effectiveFrom": "Gültig ab",
+        "effectiveTo": "Gültig bis",
+        "reason": "Grund",
+        "sourceAccountId": "Konto des Kontenplans",
+        "targetAccountId": "Konto im Buch",
+        "kind": "Änderung",
+        "modeAfter": "Modus",
+        "replicationMode": "Übernahme",
+        "replicationFrom": "Übernehmen ab",
+        "replicatedCount": "Übernommene Buchungen",
+        "createdAt": "Erfasst",
+        "openingStrategy": "Frühere Historie",
+        "currencyDifferenceAccountId": "Konto für Währungsdifferenzen"
+      },
+      "help": {
+        "bookId": "Ein Nebenbuch. Das Hauptbuch ist das maßgebliche Buch und hat keine buchspezifische Konfiguration.",
+        "currency": "Ein Buch führt je Tochtergesellschaft eine Währung.",
+        "rateType": "Kassakurs verwendet den letzten Kurs am oder vor dem Buchungsdatum; Monatsdurchschnitt den Mittelwert der Kassakurse des Monats.",
+        "effectiveTo": "Leer lassen, damit die Version gültig bleibt. Sie kann nicht vor bereits gebuchten Einträgen enden.",
+        "reason": "Wird mit der Änderung im Prüfpfad festgehalten.",
+        "targetAccountId": "Muss die Abschlussklasse und Währungsbeschränkung des Kontos beibehalten.",
+        "mapSubsidiaryId": "Leer lassen, um das Konto für alle Tochtergesellschaften zuzuordnen; eine Zuordnung je Tochtergesellschaft hat Vorrang.",
+        "kind": "Aktivieren startet die vollständige Übernahme; Aktualisieren schließt Lücken; Deaktivieren beendet die Übernahme; Einstellungen ändern das Konto für Währungsdifferenzen.",
+        "replicationFrom": "Das erste Buchungsdatum, das das Buch erhält. Nach dem Festlegen unveränderlich.",
+        "openingStrategy": "Eröffnungssalden buchen den Saldo jedes Kontos vor dem Startdatum; vollständige Historie setzt voraus, dass das Hauptbuch nichts Früheres enthält.",
+        "currencyDifferenceAccountId": "Ein Ertrags-, Aufwands- oder Eigenkapitalkonto für Differenzen, die bei der Umrechnung gemischter Währungen in die Buchwährung verbleiben."
+      },
+      "rateTypes": {
+        "spot": "Kassakurs",
+        "month_average": "Monatsdurchschnitt"
+      },
+      "changeKinds": {
+        "activation": "Vollständige Übernahme aktivieren",
+        "catch_up": "Aktualisieren",
+        "deactivation": "Übernahme deaktivieren",
+        "settings": "Einstellungen ändern"
+      },
+      "openingStrategies": {
+        "opening_balances": "Eröffnungssalden",
+        "full_history": "Vollständige Historie"
+      },
+      "modes": {
+        "adjustment_only": "Nur Anpassungen",
+        "full": "Vollständig"
+      }
     }
   },
   "flows": {
@@ -8138,6 +8212,10 @@
     "periodEndJournals": {
       "title": "Abschlussbuchungen zum Periodenende",
       "description": "Explizite Jahresabschlussbuchungen für Rechtsordnungen, die sie verlangen: Erträge und Aufwendungen in die Gewinnrücklagen, wahlweise über ein Ergebnissammelkonto, optional mit Schlussbilanz- und Eröffnungsbuchungen für das Folgejahr. Die Berichte berechnen die Gewinnrücklagen in jedem Fall."
+    },
+    "multiBookAccounting": {
+      "title": "Mehrbuchhaltung (Multi-Book)",
+      "description": "Führen Sie Nebenbücher je Tochtergesellschaft in eigener Basiswährung, ordnen Sie Konten je Buch zu, übernehmen Sie jede Buchung in vollständige Bücher, buchen Sie buchspezifische Journale und vergleichen Sie Bücher nebeneinander."
     }
   },
   "extensions": {

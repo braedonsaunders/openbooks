@@ -30,6 +30,7 @@ import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
 
 import { applySubsidiaries } from "./posting-subsidiaries.ts";
 import { resolvePostingPeriod, assertPayRunConsolidatedRateCoverage } from "./posting-period.ts";
+import { mapBookContributionAccounts, replicateDocumentEntry, resolveDocumentPostingBook } from "./book-posting.ts";
 
 import type { PostDocumentOptions } from "../journal/posting-contracts.ts";
 import type { prepareDocumentPosting } from "./posting-prepare.ts";
@@ -61,7 +62,9 @@ export async function commitDocumentPosting(prepared: Awaited<ReturnType<typeof 
     `)).rows;
     if (books.length !== 1 || !books[0]!.is_active || !books[0]!.posts_gl)
       throw new PostingError("posting requires exactly one active primary posting book");
-    const book = books[0]!;
+    // A book-specific journal posts to its target book only; every other
+    // document posts to the primary book and replicates into full books.
+    const book = await resolveDocumentPostingBook(tx, doc, books[0]!, options.audit?.actorId ?? null);
     const period = await resolvePostingPeriod(tx, effectiveDoc, postingDate);
     // A foreign-subsidiary pay run posts face amounts no statement can
     // translate without the period's derived rates — refuse with the trial
@@ -468,7 +471,8 @@ export async function commitDocumentPosting(prepared: Awaited<ReturnType<typeof 
         const secApplied = await applySubsidiaries(
           tx,
           effectiveDoc,
-          bookLines.map((l) => ({ ...l, amount: parseMoney(l.amount) })),
+          await mapBookContributionAccounts(tx, effectiveDoc, { id: bookId, code: book.code }, postingDate,
+            bookLines.map((l) => ({ ...l, amount: parseMoney(l.amount) }))),
           { bookId, regeneration: false, withholdingCarrying: false },
         );
         assertFinalKernelBalance(secApplied.lines);
@@ -550,6 +554,8 @@ export async function commitDocumentPosting(prepared: Awaited<ReturnType<typeof 
     if (lineageRows.length > 0) {
       await tx.insert(schema.allocationLineage).values(lineageRows);
     }
+    // Full books receive the primary posting in this transaction.
+    await replicateDocumentEntry(tx, doc, book, entry.id, options.audit?.actorId ?? null);
 
     if (options.audit && auditBefore) {
       const auditAfter = await captureTransactionAuditSnapshot(tx, documentId, doc.orgId);

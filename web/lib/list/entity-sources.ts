@@ -863,6 +863,7 @@ const SOURCES: Record<string, EntityListSource> = {
     quickFilters: [
       { paramKey: 'origin', filterKey: 'origin' },
       { paramKey: 'status', filterKey: 'status' },
+      { paramKey: 'book', filterKey: 'book' },
     ],
     where: journalEntryWhere,
     readPermission: 'gl.read',

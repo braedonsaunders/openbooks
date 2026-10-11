@@ -52,7 +52,9 @@
       "statementBatchesTitle": "Envios de extratos",
       "statementBatchesDescription": "Envie extratos a todos os clientes com saldo e acompanhe cada envio até a entrega.",
       "intercompanyReconciliationTitle": "Conciliação entre empresas",
-      "intercompanyReconciliationDescription": "Saldos de cada par de empresas por moeda nos livros das duas entidades e diferença a conciliar."
+      "intercompanyReconciliationDescription": "Saldos de cada par de empresas por moeda nos livros das duas entidades e diferença a conciliar.",
+      "bookDifferencesTitle": "Diferenças entre livros",
+      "bookDifferencesDescription": "Cada conta do livro principal ao lado de um livro secundário, com a diferença"
     },
     "groups": {
       "financial": "Demonstrações Financeiras",
@@ -3176,7 +3178,8 @@
       "grant": "Subvenção",
       "release": "Liberação de restrições",
       "manufacturing": "Manufatura",
-      "opening": "Abertura"
+      "opening": "Abertura",
+      "book_opening": "Saldos de abertura do livro"
     },
     "columns": {
       "detail": "Parte / memorando"
@@ -3334,6 +3337,23 @@
       "originalPrice": "Preço original",
       "currentPrice": "Preço atual",
       "invoicedToDate": "Faturado até a data"
+    }
+  },
+  "bookDifferences": {
+    "title": "Diferenças entre livros",
+    "asOf": "{primary} comparado com {compare} · em {date}",
+    "compareBook": "Comparar com",
+    "empty": "Nenhum dos livros tem saldo para a seleção.",
+    "unavailableTitle": "Nenhum livro para comparar",
+    "setupBooks": "Livros contábeis",
+    "currencyNote": "O livro principal apresenta esta visão em {primary} e o livro comparado em {compare}, portanto nenhuma diferença é calculada.",
+    "retainedEarningsPrior": "Lucros acumulados (anos anteriores)",
+    "columns": {
+      "accountNumber": "Conta",
+      "accountName": "Nome",
+      "primary": "Saldo {book} ({currency})",
+      "compare": "Saldo {book} ({currency})",
+      "difference": "Diferença"
     }
   }
 }
