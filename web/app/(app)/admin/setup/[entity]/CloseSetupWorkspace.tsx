@@ -1438,7 +1438,13 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
       clearedEffect: string | null;
     }[];
     issues: unknown[];
+    unmatchedStatementLines: number | null;
   } | null>(null);
+  // Arming the close confirm: the first Confirm click names the module and
+  // its consequences (plus live Banking counts) instead of posting, so a
+  // tap on the wrong module row can still be cancelled. Resets whenever the
+  // pending action changes.
+  const [closeArmed, setCloseArmed] = useState(false);
   const [bankingUnavailable, setBankingUnavailable] = useState(false);
   const bankingClosePending =
     (action?.module === "banking" &&
@@ -1461,10 +1467,13 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
     )
       .then((data) => {
         if (!live) return;
-        const accounts = (data as { accounts?: BankingReconAccount[] }).accounts;
+        const status = data as { accounts?: BankingReconAccount[]; unmatchedStatementLines?: unknown };
+        const accounts = status.accounts;
         setBankingStatus({
           accounts: Array.isArray(accounts) ? (accounts as BankingReconAccount[]) : [],
           issues: [],
+          unmatchedStatementLines:
+            typeof status.unmatchedStatementLines === "number" ? status.unmatchedStatementLines : null,
         });
         setBankingUnavailable(false);
       })
@@ -1477,6 +1486,11 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
       live = false;
     };
   }, [bankingClosePending, row?.id, selectedBook?.id]);
+  // The armed close confirm belongs to one pending module action: changing
+  // the module or the target state disarms it.
+  useEffect(() => {
+    setCloseArmed(false);
+  }, [action?.module, action?.state]);
   const [closeAllOverrides, setCloseAllOverrides] = useState<Record<string, string>>({});
   const [closeAllResults, setCloseAllResults] = useState<{ module: string; ok: boolean; error?: string }[] | null>(null);
   async function generate() {
@@ -1512,6 +1526,33 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
     action?.state === "reopen" &&
     action.module !== "gl" &&
     (row?.locks?.["gl"]?.state ?? "open") === "closed";
+  // Live Banking counts for the close confirm, read from the same
+  // readiness data as the acknowledgement panel — never a second checker.
+  const bankingInProgress =
+    bankingStatus?.accounts.filter((account) => account.status === "in_progress").length ?? null;
+  const bankingUnmatched = bankingStatus?.unmatchedStatementLines ?? null;
+  const bankingConfirmDetail =
+    action?.module === "banking" &&
+    (action.state === "closed" || action.state === "soft_closed") &&
+    bankingStatus !== null &&
+    ((bankingInProgress ?? 0) > 0 || (bankingUnmatched ?? 0) > 0)
+      ? t("periods.bankingCloseConfirmDetail", {
+        inProgress: bankingInProgress ?? 0,
+        unmatched: bankingUnmatched ?? 0,
+      })
+      : null;
+  // The first Confirm click arms the summary (module, consequences, live
+  // Banking counts); only the second posts. A tap on the wrong module row
+  // still cancels here instead of closing the wrong books.
+  const actionCloses =
+    action?.state === "closed" || action?.state === "soft_closed";
+  function confirmAction() {
+    if (actionCloses && !closeArmed) {
+      setCloseArmed(true);
+      return;
+    }
+    void apply();
+  }
   // A submit that sends nothing must still say why: a dead form with no
   // feedback reads as a broken close. The checks stay inline (not in a
   // helper) so the row and book narrow for the post below.
@@ -1955,19 +1996,50 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
                 {t("periods.reopenIncludeGl")}
               </Check>
             ) : null}
+            {actionCloses && closeArmed ? (
+              <div
+                role="alertdialog"
+                aria-label={t("periods.closeConfirmTitle", {
+                  module: t(`modules.${action.module}`),
+                  period: row.name,
+                })}
+                className="space-y-1.5 rounded-md border border-amber-300 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/40"
+              >
+                <p className="text-sm font-medium text-amber-900 dark:text-amber-100">
+                  {t("periods.closeConfirmTitle", {
+                    module: t(`modules.${action.module}`),
+                    period: row.name,
+                  })}
+                </p>
+                <p className="text-sm text-amber-800 dark:text-amber-200">
+                  {t("periods.closeConfirmBody", {
+                    module: t(`modules.${action.module}`),
+                  })}
+                </p>
+                {bankingConfirmDetail ? (
+                  <p className="text-sm font-medium text-amber-900 dark:text-amber-100">
+                    {bankingConfirmDetail}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
             <div className="flex justify-end gap-2">
               <Button
                 variant="outline"
                 onClick={() => {
+                  if (closeArmed) {
+                    setCloseArmed(false);
+                    return;
+                  }
                   setAction(null);
                   setReason("");
                   setIncludeGl(true);
                   setBankingAck("");
                 }}
               >
-                {t("actions.cancel")}
+                {closeArmed ? t("actions.back") : t("actions.cancel")}
               </Button>
-              <Button disabled={busy || !reason.trim()} onClick={apply}>
+              <Button disabled={busy || !reason.trim()} onClick={confirmAction}>
                 {action.state === "reopen"
                   ? t("actions.requestReopen")
                   : action.state === "open"
@@ -2054,20 +2126,40 @@ function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
   const [conflicts, setConflicts] = useState<
     { kind: string; count: number; examples: string[] }[] | null
   >(null);
-  // Conflict-of-interest notice for the viewer: the same scan the approval
-  // path enforces, read before deciding so a conflicted approver sees why
-  // Approve will refuse and can route to someone else instead.
+  // Decision posture for the viewer: the same scan the approval path
+  // enforces, plus whether the engine will demand an independent approver
+  // or accept a self-approval attestation. Approve mirrors that decision
+  // instead of rendering enabled and refusing on click.
+  const [decisionPreview, setDecisionPreview] = useState<{
+    ownRequest: boolean;
+    independenceRequired: boolean;
+    selfApprovalAllowed: boolean;
+  } | null>(null);
+  const [selfAttestation, setSelfAttestation] = useState("");
+  const [selfAttested, setSelfAttested] = useState(false);
   useEffect(() => {
     if (row.status !== "requested") return;
     let live = true;
     post({ action: "reopen-conflicts", requestId: row.id }, t("errors.actionFailed"))
       .then((data) => {
         if (!live) return;
-        const found = (data as { conflicts?: { kind: string; count: number; examples: string[] }[] }).conflicts;
-        setConflicts(Array.isArray(found) ? found : []);
+        const preview = data as {
+          conflicts?: { kind: string; count: number; examples: string[] }[];
+          ownRequest?: boolean;
+          independenceRequired?: boolean;
+          selfApprovalAllowed?: boolean;
+        };
+        setConflicts(Array.isArray(preview.conflicts) ? preview.conflicts : []);
+        setDecisionPreview({
+          ownRequest: preview.ownRequest === true,
+          independenceRequired: preview.independenceRequired === true,
+          selfApprovalAllowed: preview.selfApprovalAllowed === true,
+        });
       })
       .catch(() => {
-        if (live) setConflicts([]);
+        if (!live) return;
+        setConflicts([]);
+        setDecisionPreview(null);
       });
     return () => {
       live = false;
@@ -2078,6 +2170,16 @@ function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
     .flatMap((item) => item.examples)
     .slice(0, 3)
     .join(", ");
+  // Approve will refuse when the viewer is conflicted and independence
+  // applies, or when the viewer requested it and independence applies: in
+  // both cases the button stays disabled with the reason. A sole eligible
+  // approver deciding their own request attests instead.
+  const ownRequest = decisionPreview?.ownRequest ?? false;
+  const approveBlocked =
+    (conflictTotal > 0 || ownRequest) &&
+    (decisionPreview?.independenceRequired ?? false);
+  const selfApproval = ownRequest && (decisionPreview?.selfApprovalAllowed ?? false);
+  const selfAttestationReady = selfAttested && selfAttestation.trim().length >= 10;
   // An approved window can be ended early or extended/widened instead of
   // opening an overlapping request. Both carry their own reason and are
   // audited server-side; the server refuses a third party ending the
@@ -2092,7 +2194,12 @@ function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
     setActionError(null);
     try {
       await post(
-        { action: "decide-reopen", requestId: row.id, approve },
+        {
+          action: "decide-reopen",
+          requestId: row.id,
+          approve,
+          ...(approve && selfApproval ? { attestation: selfAttestation.trim() } : {}),
+        },
         t("errors.actionFailed"),
       );
       toast.success(
@@ -2191,7 +2298,17 @@ function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
             >
               {t("actions.reject")}
             </Button>
-            <Button disabled={busy} onClick={() => decide(true)}>
+            <Button
+              disabled={busy || approveBlocked || (selfApproval && !selfAttestationReady)}
+              title={
+                approveBlocked
+                  ? ownRequest
+                    ? t("periods.reopenOwnRequestNote")
+                    : t("periods.reopenConflictNotice", { count: conflictTotal, examples: conflictExamples })
+                  : undefined
+              }
+              onClick={() => decide(true)}
+            >
               {t("actions.approve")}
             </Button>
           </div>
@@ -2211,6 +2328,27 @@ function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
               examples: conflictExamples,
             })}
           </p>
+        ) : null}
+        {ownRequest && decisionPreview && !selfApproval ? (
+          <p role="note" className="rounded-md border border-slate-300 bg-slate-50 p-2.5 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+            {t("periods.reopenOwnRequestNote")}
+          </p>
+        ) : null}
+        {selfApproval ? (
+          <div className="space-y-2 rounded-md border border-teal-300 bg-teal-50/50 p-3 dark:border-teal-800 dark:bg-teal-950/20">
+            <p role="note" className="text-sm text-slate-700 dark:text-slate-200">
+              {t("periods.reopenSelfApprovalNotice")}
+            </p>
+            <Field label={t("periods.reopenSelfAttestationLabel")}>
+              <Textarea
+                value={selfAttestation}
+                onChange={(e) => setSelfAttestation(e.target.value)}
+              />
+            </Field>
+            <Check checked={selfAttested} onChange={setSelfAttested}>
+              {t("periods.reopenSelfAttestationConfirm")}
+            </Check>
+          </div>
         ) : null}
         <div>
           <Label>{t("fields.reason")}</Label>
