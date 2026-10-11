@@ -139,6 +139,15 @@ export {
 } from "./payment-runs-adapter.ts";
 export { lintFlowGraphForSubject } from "./lint.ts";
 export {
+  QUICK_APPROVAL_FLOW_DESCRIPTION,
+  buildQuickApprovalGraph,
+  quickApprovalAmountField,
+  type QuickApprovalApprover,
+  type QuickApprovalInput,
+  type QuickSetupRefusalCode,
+  type QuickSetupResult,
+} from "./quick-setup.ts";
+export {
   BUILT_IN_ROLE_NAMES,
   DOCUMENT_FLOW_KINDS,
   DOCUMENT_STATUSES,
