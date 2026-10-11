@@ -26,3 +26,6 @@ export {
 export { runExpenseAmortization, type AmortizationRunResult, type AmortizationRunProblem } from "./run.ts";
 export { reconcileDeferralAccounts, dueUnpostedAmortization, type ReconciliationRow } from "./reconciliation.ts";
 export { loadScheduleDetail, type ScheduleDetail } from "./read-model.ts";
+
+export { amortizationLineRefusal, type AmortizationLineFields } from "./source-fields.ts";
+export { validateSavedAmortizationLines } from "./source-posting.ts";

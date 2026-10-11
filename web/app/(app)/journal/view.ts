@@ -1,3 +1,4 @@
+import { listCurrentTemplates } from "@openbooks/engine/amortization";
 import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
@@ -175,6 +176,11 @@ export async function loadJournal(
   const books = (openJournal || newJournalPayload) && pickers && await isFeatureEnabled(authz.user.orgId, 'multiBookAccounting')
     ? await journalBookOptions(authz.user.orgId)
     : []
+  const selectedJournal = newJournalPayload ?? openJournal
+  const hasStoredAmortization = selectedJournal?.lines.some(line => typeof line.amortization_template_id === 'string') ?? false
+  const amortizationTemplates = selectedJournal && (hasStoredAmortization || await isFeatureEnabled(authz.user.orgId, 'expenseAmortization'))
+    ? (await listCurrentTemplates(db, authz.user.orgId, String(selectedJournal.doc.document_date), selectedJournal.lines.flatMap(line => typeof line.amortization_template_id === 'string' ? [line.amortization_template_id] : []))).map(template => ({ id: template.id, label: `${template.code} · ${template.name}` }))
+    : undefined
   const drawer: JournalDrawerProps | null =
     (openJournal || newJournalPayload) && pickers
       ? {
@@ -187,6 +193,7 @@ export async function loadJournal(
           subsidiaries: pickers[6] ?? undefined,
           books: books.length > 1 ? books : undefined,
           canPostBookSpecific: can(authz, 'gl.post_book_specific'),
+          amortizationTemplates,
           headerDefs: visibleCustomFieldDefs(pickers[4], customFieldViewerFor(authz)) as unknown as import('../../../components/custom-field-inputs').CustomFieldDefClient[],
           customFieldViewer: customFieldViewerFor(authz),
           lineDefs: pickers[5] as unknown as import('../../../components/custom-field-inputs').CustomFieldDefClient[],

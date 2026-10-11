@@ -173,17 +173,25 @@ export async function validateTemplateWrite(
   return null;
 }
 
-/** Active templates for pickers: the current version of each code. */
+/** Effective template choices, retaining referenced versions so saved lines remain visible. */
 export async function listCurrentTemplates(
   runner: SqlExecutor,
   orgId: string,
   onDate: string,
+  retainedIds: readonly string[] = [],
 ): Promise<{ id: string; code: string; name: string; method: AmortizationMethod; termSource: AmortizationTermSource }[]> {
   const rows = (await runner.execute<{ id: string; code: string; name: string; method: string; term_source: string }>(sql`
-    select distinct on (code) id, code, name, method, term_source
-      from expense_amortization_templates
-     where org_id = ${orgId} and is_active and effective_from <= ${onDate}
-     order by code, effective_from desc`)).rows;
+    with current_versions as (
+      select distinct on (code) id, code, name, method, term_source
+        from expense_amortization_templates
+       where org_id = ${orgId} and is_active and effective_from <= ${onDate}
+       order by code, effective_from desc
+    )
+    select * from current_versions
+    ${retainedIds.length > 0 ? sql`union
+      select id, code, name, method, term_source from expense_amortization_templates
+      where org_id = ${orgId} and id in (${sql.join(retainedIds.map(id => sql`${id}::uuid`), sql`, `)})` : sql``}
+    order by code, id`)).rows;
   return rows.map((row) => ({
     id: row.id,
     code: row.code,

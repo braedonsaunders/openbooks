@@ -1,5 +1,7 @@
 'use client'
 
+import { amortizationLineColumns } from './transaction-form/amortization-columns'
+
 import { apportionWithholdingMaterialsCost, collapseWithholdingLineMetadata } from '@openbooks/engine/allocations/withholding-cost'
 
 import { CLEAR_SEGMENT, INHERIT_SEGMENT, segmentCellValue, segmentAssignmentsFromCells } from '../lib/segment-assignments'
@@ -2932,20 +2934,7 @@ export function DocumentDrawer({
 
   // -- line amortization (vendor bills, while the feature is on) ------------
   const amortizationColumns = useMemo<LineGridColumn<LineRow>[]>(() => {
-    if (config.kind !== 'vendor_bill' || !amortizationTemplates) return []
-    const hasTemplate = (row: LineRow) => String(row.amortizationTemplateId ?? '') !== ''
-    return [
-      {
-        key: 'amortizationTemplateId',
-        label: tAmortization('lineTemplate'),
-        help: tAmortization('lineTemplateHelp'),
-        width: '170px',
-        type: 'select',
-        options: [{ value: '', label: tAmortization('lineNoTemplate') }, ...amortizationTemplates.map((template) => ({ value: template.id, label: template.label }))],
-      },
-      { key: 'amortizationStartOn', label: tAmortization('lineServiceStart'), width: '130px', type: 'text', placeholder: 'YYYY-MM-DD', isCellEditable: hasTemplate },
-      { key: 'amortizationEndOn', label: tAmortization('lineServiceEnd'), width: '130px', type: 'text', placeholder: 'YYYY-MM-DD', isCellEditable: hasTemplate },
-    ]
+    return config.kind === 'vendor_bill' ? amortizationLineColumns<LineRow>(amortizationTemplates, tAmortization) : []
   }, [config.kind, amortizationTemplates, tAmortization])
 
   // -- grid columns (line-based kinds; transfer uses its own fields) --------

@@ -1,3 +1,5 @@
+import { validateSavedAmortizationLines } from "@openbooks/engine/amortization";
+import { journalAmortizationFields } from "@/lib/journal-amortization";
 import "server-only";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
@@ -42,6 +44,7 @@ const journalLineInput = z
     // refuse them with the line number (a bare uuid failure names neither
     // the line nor the remedy).
     accountId: z.string().nullable().optional(),
+    ...journalAmortizationFields,
     description: z.string().nullable().optional(),
     amount: exactMoney(),
     partyId: nullableUuidId.optional(),
@@ -225,6 +228,9 @@ export async function createManualJournal(input: {
   }
 
   const preparedLines: {
+    amortizationTemplateId: string | null;
+    amortizationStartOn: string | null;
+    amortizationEndOn: string | null;
     accountId: string;
     description: string | null;
     amount: string;
@@ -256,6 +262,9 @@ export async function createManualJournal(input: {
       accountId: checkedAccountIds[i]!,
       description: line.description ?? null,
       amount: line.amount,
+      amortizationTemplateId: line.amortizationTemplateId ?? null,
+      amortizationStartOn: line.amortizationStartOn ?? null,
+      amortizationEndOn: line.amortizationEndOn ?? null,
       partyId: line.partyId ?? null,
       departmentId: line.departmentId ?? null,
       projectId: line.projectId ?? null,
@@ -299,6 +308,9 @@ export async function createManualJournal(input: {
     lines: preparedLines.map((line, index) => ({
       line_number: index + 1,
       account_id: line.accountId,
+      amortization_template_id: line.amortizationTemplateId,
+      amortization_start_on: line.amortizationStartOn,
+      amortization_end_on: line.amortizationEndOn,
       description: line.description,
       amount: line.amount,
       party_id: line.partyId,
@@ -347,16 +359,18 @@ export async function createManualJournal(input: {
       }
       for (let i = 0; i < preparedLines.length; i++) {
         const line = preparedLines[i]!;
-        await tx.execute(sql`
+        const savedLine = await tx.execute<{ id: string }>(sql`
           insert into document_lines (org_id, document_id, line_number, account_id, description,
                                       quantity, unit_price, amount, party_id, department_id, project_id,
-                                      subsidiary_id, extra_dims, custom)
+                                      subsidiary_id, extra_dims, custom, amortization_template_id, amortization_start_on, amortization_end_on)
           values (${orgId}, ${requestId}, ${i + 1}, ${line.accountId}, ${line.description},
                   '1', ${line.amount}, ${line.amount}, ${line.partyId}, ${line.departmentId}, ${line.projectId},
-                  ${line.subsidiaryId}, ${JSON.stringify(line.extraDims)}::jsonb, ${JSON.stringify(line.custom)}::jsonb)`);
+                  ${line.subsidiaryId}, ${JSON.stringify(line.extraDims)}::jsonb, ${JSON.stringify(line.custom)}::jsonb, ${line.amortizationTemplateId}, ${line.amortizationStartOn}, ${line.amortizationEndOn}) returning id`);
+        if (savedLine.rows.length !== 1) throw new JournalCreateError(`Line ${i + 1} could not be saved`, 409);
       }
       // Segment value dependencies on the saved lines, as posting will read them.
       await assertDocumentSegmentDependencies(tx, orgId, requestId);
+      await validateSavedAmortizationLines(tx, orgId, requestId);
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
         values (${orgId}, 'documents', ${requestId}, 'insert',

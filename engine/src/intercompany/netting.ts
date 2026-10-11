@@ -1,3 +1,4 @@
+import { excludePeriodEndJournals } from "../records/period-end-origins.ts";
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
@@ -323,6 +324,7 @@ async function loadPositions(
      where jl.org_id = ${input.orgId}
        and je.posting_date <= ${input.asOfDate}
        and je.origin not in ('fx_revaluation', 'fx_settlement')
+       and ${excludePeriodEndJournals(sql`je.origin`)}
        and exists (
          select 1 from unnest(${uuidArray(subs)}::uuid[], ${uuidArray(accounts)}::uuid[]) as k(sub, acct)
           where k.sub = jl.subsidiary_id and k.acct = jl.account_id)

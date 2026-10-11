@@ -12,7 +12,7 @@
  */
 import { sql } from "drizzle-orm";
 import { fromUnits, toUnits } from "../money/money.ts";
-import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
+import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import type { SqlExecutor } from "../platform/db.ts";
 import { AMORTIZATION_FEATURE_KEY, AMORTIZATION_FEATURE_REMEDY, AmortizationError } from "./errors.ts";
 import {
@@ -26,7 +26,8 @@ import { buildAmortizationPlan, planQuantum, resolveAmortizationTerm, termWeight
 import { assertDeferralAccount, assertDestinationAccount, resolveTemplateVersion } from "./templates.ts";
 
 /** Document kinds whose lines can defer through an amortization template. */
-export const AMORTIZABLE_DOCUMENT_KINDS: ReadonlySet<string> = new Set(["vendor_bill", "journal", "expense_report"]);
+export { AMORTIZABLE_LINE_KINDS as AMORTIZABLE_DOCUMENT_KINDS } from "./source-fields.ts";
+import { AMORTIZABLE_LINE_KINDS as AMORTIZABLE_DOCUMENT_KINDS, amortizationLineRefusal } from "./source-fields.ts";
 
 export interface AmortizationSourceLine {
   id: string;
@@ -77,7 +78,7 @@ export async function resolveAmortizationRouting(
       },
     );
   }
-  if (!(await orgFeatureEnabled(doc.orgId, AMORTIZATION_FEATURE_KEY, runner))) {
+  if (!(await lockAndCheckOrgFeature(runner, doc.orgId, AMORTIZATION_FEATURE_KEY))) {
     throw new AmortizationError(
       `Line ${templated[0]!.lineNumber} names an amortization template, but Expense amortization is off.`,
       {
@@ -309,4 +310,22 @@ export async function scheduledDeferralByLine(
     select source_line_id, deferral_account_id from expense_amortization_schedules
      where org_id = ${orgId} and source_document_id = ${documentId} and source_line_id is not null`)).rows;
   return new Map(rows.map((row) => [row.source_line_id, { deferralAccountId: row.deferral_account_id }]));
+}
+
+/** Validate the persisted draft through the same policy resolver used by posting. */
+export async function validateSavedAmortizationLines(runner: SqlExecutor, orgId: string, documentId: string): Promise<void> {
+  const document = (await runner.execute<{ kind: string; transactionDate: string }>(sql`
+    select kind, document_date::text as "transactionDate" from documents
+    where org_id = ${orgId} and id = ${documentId}`)).rows[0];
+  if (!document) throw new AmortizationError("Document not found.", { status: 404 });
+  const lines = (await runner.execute<AmortizationSourceLine>(sql`
+    select id, line_number as "lineNumber", account_id as "accountId", amount::text as amount,
+           amortization_template_id as "amortizationTemplateId", amortization_start_on::text as "amortizationStartOn",
+           amortization_end_on::text as "amortizationEndOn"
+    from document_lines where org_id = ${orgId} and document_id = ${documentId} order by line_number`)).rows;
+  for (const line of lines) {
+    const refusal = amortizationLineRefusal(document.kind, line);
+    if (refusal) throw new AmortizationError(`Line ${line.lineNumber}: ${refusal}`);
+  }
+  await resolveAmortizationRouting(runner, { orgId, ...document }, lines);
 }

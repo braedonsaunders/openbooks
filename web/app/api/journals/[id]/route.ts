@@ -1,3 +1,5 @@
+import { validateSavedAmortizationLines } from "@openbooks/engine/amortization";
+import { journalAmortizationFields } from "@/lib/journal-amortization";
 import { assertWithholdingDepositEdit, assertWithholdingRemittanceEdit, ContractorWithholdingError } from "@openbooks/engine/contractor-withholding";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
@@ -86,6 +88,7 @@ const journalLineInput = z
     // refuse them with the line number (a bare uuid failure names neither
     // the line nor the remedy).
     accountId: z.string().nullable().optional(),
+    ...journalAmortizationFields,
     description: z.string().nullable().optional(),
     amount: exactMoney(),
     partyId: nullableUuidId.optional(),
@@ -264,7 +267,7 @@ export const PATCH = defineRoute({
     // fields and segments are org-configured and validated against live defs.
     // journal totals = sum of debits (positive line amounts); tax never applies
     let totalDebits: string | null = null
-    let preparedLines: { accountId: string; description: string | null; amount: string; partyId: string | null; departmentId: string | null; projectId: string | null; subsidiaryId: string | null; extraDims: Record<string, string | null>; custom: Record<string, unknown> }[] | null = null
+    let preparedLines: { amortizationTemplateId: string | null; amortizationStartOn: string | null; amortizationEndOn: string | null; accountId: string; description: string | null; amount: string; partyId: string | null; departmentId: string | null; projectId: string | null; subsidiaryId: string | null; extraDims: Record<string, string | null>; custom: Record<string, unknown> }[] | null = null
     if (body.lines) {
       const submitted = body.lines
       totalDebits = sum(submitted.map((line) => (toUnits(line.amount) > 0n ? line.amount : '0')))
@@ -307,6 +310,9 @@ export const PATCH = defineRoute({
           accountId,
           description: l.description ?? null,
           amount: l.amount,
+          amortizationTemplateId: l.amortizationTemplateId ?? null,
+          amortizationStartOn: l.amortizationStartOn ?? null,
+          amortizationEndOn: l.amortizationEndOn ?? null,
           partyId: l.partyId ?? null,
           departmentId: l.departmentId ?? null,
           projectId: l.projectId ?? null,
@@ -454,18 +460,19 @@ export const PATCH = defineRoute({
             await tx.execute(sql`delete from document_lines where document_id = ${id} and org_id = ${user.orgId}`)
             for (let i = 0; i < preparedLines.length; i++) {
               const l = preparedLines[i]!
-              await tx.execute(sql`
+              const savedLine = await tx.execute<{ id: string }>(sql`
                 insert into document_lines (org_id, document_id, line_number, account_id, description,
                                             quantity, unit_price, amount, party_id, department_id, project_id,
-                                            subsidiary_id, extra_dims, custom)
+                                            subsidiary_id, extra_dims, custom, amortization_template_id, amortization_start_on, amortization_end_on)
                 values (${user.orgId}, ${id}, ${i + 1}, ${l.accountId}, ${l.description},
                         '1', ${l.amount}, ${l.amount}, ${l.partyId}, ${l.departmentId}, ${l.projectId},
-                        ${l.subsidiaryId}, ${JSON.stringify(l.extraDims)}::jsonb, ${JSON.stringify(l.custom)})
+                        ${l.subsidiaryId}, ${JSON.stringify(l.extraDims)}::jsonb, ${JSON.stringify(l.custom)}, ${l.amortizationTemplateId}, ${l.amortizationStartOn}, ${l.amortizationEndOn}) returning id
               `)
+              if (savedLine.rows.length !== 1) throw new DocumentEditError(409, `Line ${i + 1} could not be saved`)
             }
           }
 
-          await tx.execute(sql`
+          const savedDocument = await tx.execute<{ id: string }>(sql`
             update documents set
               party_id = ${body.partyId !== undefined ? body.partyId : sql`party_id`},
               document_date = coalesce(${body.documentDate ?? null}, document_date),
@@ -484,10 +491,13 @@ export const PATCH = defineRoute({
               ),
               updated_by = ${user.id}
             where id = ${id} and org_id = ${user.orgId}
+            returning id
           `)
+          if (savedDocument.rows.length !== 1) throw new DocumentEditError(409, 'Journal could not be saved')
 
           // Segment value dependencies on the saved lines, as posting will read them.
           await assertDocumentSegmentDependencies(tx, user.orgId, id)
+          await validateSavedAmortizationLines(tx, user.orgId, id)
 
           const auditAfter = await captureTransactionAuditSnapshot(tx, id, user.orgId)
           if (!auditAfter) throw new Error(`journal ${id} disappeared during update`)

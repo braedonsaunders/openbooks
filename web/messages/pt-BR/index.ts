@@ -43,6 +43,7 @@ import home from './home.json'
 import hrm from './hrm.json'
 import inbox from './inbox.json'
 import insights from './insights.json'
+import intercompany from './intercompany.json'
 import internalBilling from './internalBilling.json'
 import inventory from './inventory.json'
 import items from './items.json'
@@ -125,6 +126,7 @@ export default {
   hrm,
   inbox,
   insights,
+  intercompany,
   internalBilling,
   inventory,
   items,

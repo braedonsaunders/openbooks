@@ -144,7 +144,9 @@ export async function loadJournalDoc(
     if (!doc.rows[0]) return null
     const lines = await db.execute<Record<string, unknown>>(sql`
       select l.id, l.line_number, l.account_id, l.description, l.amount,
-             l.party_id, l.department_id, l.project_id, l.subsidiary_id, l.extra_dims, l.custom
+             l.party_id, l.department_id, l.project_id, l.subsidiary_id, l.extra_dims, l.custom,
+             l.amortization_template_id, l.amortization_start_on::text as amortization_start_on,
+             l.amortization_end_on::text as amortization_end_on
         from document_lines l
        where l.document_id = ${id} and l.org_id = ${resolvedOrgId}
        order by l.line_number

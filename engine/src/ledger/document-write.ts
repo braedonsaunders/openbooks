@@ -1,3 +1,4 @@
+import { amortizationLineRefusal } from "../amortization/source-fields.ts";
 import { WithholdingMaterialsCostError } from "../allocations/withholding-cost.ts";
 import { assertWithholdingDepositEdit } from "../contractor-withholding/deposits.ts";
 import { assertWithholdingRemittanceEdit, ContractorWithholdingError } from "../contractor-withholding/service.ts";
@@ -393,28 +394,6 @@ type DocumentTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
  *
  * Pure — unit-tested directly in documents.test.ts.
  */
-/** Kinds whose lines may name an amortization template. */
-const AMORTIZABLE_LINE_KINDS = new Set(['vendor_bill', 'journal', 'expense_report'])
-
-/**
- * Shape of a line's amortization fields: only amortizable kinds take a
- * template, service dates need a template, and the window is ordered. The
- * template, its version and the term are resolved again at posting.
- */
-function amortizationLineRefusal(kind: string, line: DocumentLineInput): string | null {
-  const templateId = line.amortizationTemplateId ?? null
-  const start = line.amortizationStartOn ?? null
-  const end = line.amortizationEndOn ?? null
-  if (templateId === null) {
-    return start !== null || end !== null ? 'choose an amortization template for the service dates, or clear the dates' : null
-  }
-  if (!AMORTIZABLE_LINE_KINDS.has(kind)) return 'only vendor bill, journal and expense report lines can amortize'
-  if (start !== null && !isIsoCalendarDate(start)) return 'the service start date must be a valid YYYY-MM-DD date'
-  if (end !== null && !isIsoCalendarDate(end)) return 'the service end date must be a valid YYYY-MM-DD date'
-  if (start !== null && end !== null && end < start) return 'the service end date is before the service start date'
-  return null
-}
-
 export function validateEditableDocumentLines(lines: DocumentLineInput[]): DocumentLineInput[] {
   const amounts: string[] = []
   const out = lines.map((l, i) => {

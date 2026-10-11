@@ -308,11 +308,11 @@ export async function loadApBills(
       .map((code) => ({ code }))
     : []
 
-  // Deferred bill lines name an amortization template: the loader offers
-  // the version of each template in effect today while the feature is on.
+  // Retain saved template choices while offering policy versions for the bill date.
+  const retainedTemplateIds = drawerPayload?.lines.flatMap(line => typeof line.amortization_template_id === 'string' ? [line.amortization_template_id] : []) ?? []
   const amortizationTemplates = drawerOpen && drawerKind === 'vendor_bill'
-    && await isFeatureEnabled(authz.user.orgId, 'expenseAmortization')
-    ? (await listCurrentTemplates(db, authz.user.orgId, await businessToday(authz.user.orgId)))
+    && (retainedTemplateIds.length > 0 || await isFeatureEnabled(authz.user.orgId, 'expenseAmortization'))
+    ? (await listCurrentTemplates(db, authz.user.orgId, String(drawerPayload?.doc.document_date ?? await businessToday(authz.user.orgId)), retainedTemplateIds))
         .map((template) => ({ id: template.id, label: `${template.code} · ${template.name}` }))
     : undefined
 

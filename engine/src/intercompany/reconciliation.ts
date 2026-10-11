@@ -1,3 +1,4 @@
+import { excludePeriodEndJournals } from "../records/period-end-origins.ts";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { isIsoCalendarDate } from "../platform/business-date.ts";
@@ -75,6 +76,7 @@ export async function intercompanyReconciliation(
        and je.status in ('posted', 'reversed') and je.book_id = ${bookId}
      where jl.org_id = ${orgId} and je.posting_date <= ${input.asOfDate}
        and je.origin not in ('fx_revaluation', 'fx_settlement')
+       and ${excludePeriodEndJournals(sql`je.origin`)}
        and exists (
          select 1 from unnest(${uuidArray(keys.map((k) => k.subsidiaryId))}::uuid[], ${uuidArray(keys.map((k) => k.accountId))}::uuid[]) as k(sub, acct)
           where k.sub = jl.subsidiary_id and k.acct = jl.account_id)
