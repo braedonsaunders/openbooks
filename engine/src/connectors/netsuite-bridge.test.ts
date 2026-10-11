@@ -552,9 +552,23 @@ test("bridge version comparison is numeric and refuses malformed versions", () =
   assert.equal(bridgeVersionSatisfies("1.4.0-beta", "1.4.0"), false);
 });
 
-test("the bridge shipped in this repository satisfies the engine's minimum version", () => {
-  const source = readSuiteScript("integrations/netsuite-bridge/src/FileCabinet/SuiteScripts/OpenBooks/openbooks_bridge_restlet.js");
-  const shipped = /const BRIDGE_VERSION = '([^']+)'/.exec(source)?.[1];
-  assert.ok(shipped, "bridge source declares BRIDGE_VERSION");
-  assert.equal(bridgeVersionSatisfies(shipped, NETSUITE_BRIDGE_MIN_VERSION), true);
+test("the shipped bridge reports a version the engine's minimum admits", () => {
+  type Restlet = { post: (input: Record<string, unknown>) => unknown };
+  let restlet: Restlet | undefined;
+  const runtime = {
+    accountId: "TEST",
+    envType: "SANDBOX",
+    getCurrentScript: () => ({ getRemainingUsage: () => 5000 }),
+    getCurrentUser: () => ({ role: "3", roleId: "Administrator" }),
+    isFeatureInEffect: () => false,
+  };
+  const query = { runSuiteQL: () => ({ asMappedResults: () => [{ now: "2026-10-10 12:00:00" }] }) };
+  runInNewContext(readSuiteScript("integrations/netsuite-bridge/src/FileCabinet/SuiteScripts/OpenBooks/openbooks_bridge_restlet.js"), {
+    define: (_dependencies: string[], factory: (...modules: unknown[]) => Restlet) => {
+      restlet = factory({}, {}, query, {}, runtime, {}, {});
+    },
+  });
+  const response = JSON.parse(JSON.stringify(restlet!.post({ action: "health" }))) as { ok: boolean; bridgeVersion: string };
+  assert.equal(response.ok, true);
+  assert.equal(bridgeVersionSatisfies(response.bridgeVersion, NETSUITE_BRIDGE_MIN_VERSION), true);
 });

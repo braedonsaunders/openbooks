@@ -5,7 +5,9 @@ import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
 
 // Render proof for the shared feature-unavailable presentation as a list body
 // uses it: real en catalogs, the real page layout and header, and the real
-// header-action rule from globals.css evaluated by the DOM's selector engine.
+// withdrawal rule from globals.css, loaded into the DOM as a stylesheet and
+// read back through the CSS object model — the selector the tests evaluate
+// is the rule the browser would apply, never text parsed out of the file.
 // Only translation lookup, links and navigation hooks are scripted.
 
 const root = new URL('../../', import.meta.url)
@@ -42,9 +44,22 @@ const { FeatureUnavailable } = await import('./feature-unavailable')
 /** The globals.css selector that withdraws header actions above a disabled body. */
 function withdrawnActionsSelector(): string {
   const css = readFileSync(new URL('web/app/globals.css', root), 'utf8')
-  const rule = css.split('}').find((block) => block.includes('[data-route-placement="section"]'))
-  assert.ok(rule, 'globals.css carries the header-action rule for a disabled body')
-  return rule.slice(rule.lastIndexOf('*/') + 2, rule.indexOf('{')).trim()
+  const host = document.createElement('style')
+  host.textContent = css
+  document.head.appendChild(host)
+  try {
+    const sheets = [...document.styleSheets]
+    const sheet = sheets[sheets.length - 1]!
+    const rules = [...sheet.cssRules]
+    const rule = rules.find((candidate) => {
+      const selector = (candidate as { selectorText?: unknown }).selectorText
+      return typeof selector === 'string' && selector.includes('[data-route-placement="section"]')
+    }) as { selectorText?: unknown } | undefined
+    assert.ok(rule && typeof rule.selectorText === 'string', 'globals.css carries the header-action rule for a disabled body')
+    return rule.selectorText
+  } finally {
+    host.remove()
+  }
 }
 
 async function listPage(canManageFeatures: boolean): Promise<Element> {
