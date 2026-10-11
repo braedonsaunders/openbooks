@@ -44,6 +44,7 @@ import {
   assertHrmEnabled,
   db,
   requireActorId,
+  requireCivilDate,
   requireId,
   requireOneRow,
   requireOrgId,
@@ -78,6 +79,8 @@ export interface PreviewIncentiveSettlementQuery {
   readonly programId: string;
   readonly periodFrom: string;
   readonly periodTo: string;
+  /** Project-margin programs: measure revenue recorded on or before this date (default: the business date). */
+  readonly asOf?: string;
 }
 
 export type SettleIncentivePeriodQuery = PreviewIncentiveSettlementQuery;
@@ -95,7 +98,7 @@ export interface IncentivePreview {
   readonly payableAfter: string;
   readonly currency: string;
   readonly minorUnits: number;
-  readonly measured: MoneySourceSnapshot | HoursSourceSnapshot | TransactionSettlementSnapshot;
+  readonly measured: MoneySourceSnapshot | HoursSourceSnapshot | TransactionSettlementSnapshot | ProjectMarginSnapshot;
   readonly computation: IncentiveComputation;
   /** Recipient rows the actor may see (subsidiary scope fences the rest). */
   readonly visibleRecipients: ReadonlyArray<IncentiveComputation["recipients"][number]>;
@@ -389,6 +392,7 @@ async function measureAndCompute(
   ctx: SettlementContext,
   periodFrom: string,
   periodTo: string,
+  asOf?: string,
 ): Promise<{
   measured: IncentiveMeasured;
   computation: IncentiveComputation;
@@ -406,7 +410,7 @@ async function measureAndCompute(
   }
   if (metric === "project_margin") {
     const result = await measureProjectMarginSettlement({ orgId, program, members: ctx.members, minorUnits: ctx.minorUnits, basis: ctx.basis, periodFrom, periodTo,
-      revenueAccountIds: ctx.revenueAccountIds, expenseAccountIds: ctx.expenseAccountIds });
+      revenueAccountIds: ctx.revenueAccountIds, expenseAccountIds: ctx.expenseAccountIds, asOf: asOf ?? await businessTodayInTx(db, orgId) });
     return { ...result, moneySnapshot: null, hoursSnapshot: null };
   }
   const eligible = eligibleMembers(ctx.members, periodFrom, periodTo);
@@ -555,7 +559,7 @@ export async function previewIncentiveSettlement(
     const scope = await requireAggregateBenefitsRead(db, orgId, actorId);
     await assertHrmEnabled(db, orgId);
     const ctx = await loadSettlementContext(orgId, actorId, programId, scope, false);
-    const result = await measureAndCompute(orgId, actorId, ctx, query.periodFrom, query.periodTo);
+    const result = await measureAndCompute(orgId, actorId, ctx, query.periodFrom, query.periodTo, query.asOf === undefined ? undefined : requireCivilDate(query.asOf, "asOf"));
     return buildPreviewResult(orgId, scope, ctx, query, result);
   });
 }
@@ -570,13 +574,14 @@ async function buildPreviewResult(
     moneySnapshot: MoneySourceSnapshot | null;
     hoursSnapshot: HoursSourceSnapshot | null;
   transactionSnapshot?: TransactionSettlementSnapshot;
+    projectMarginSnapshot?: ProjectMarginSnapshot;
     excluded: string[];
   },
 ): Promise<IncentivePreview> {
   const visible = scope === null
     ? [...result.computation.recipients]
     : await fenceRecipients(orgId, scope, result.computation);
-  const measured = result.transactionSnapshot ?? result.moneySnapshot ?? result.hoursSnapshot;
+  const measured = result.projectMarginSnapshot ?? result.transactionSnapshot ?? result.moneySnapshot ?? result.hoursSnapshot;
   if (!measured) {
     throw new BenefitsError(
       "REFUSED",
@@ -701,7 +706,7 @@ export async function settleIncentivePeriod(query: SettleIncentivePeriodQuery): 
         `period ends ${query.periodTo} (today ${today}) — settle closed periods only; preview this span as an estimate until it closes`,
       );
     }
-    const result = await measureAndCompute(orgId, actorId, ctx, query.periodFrom, query.periodTo);
+    const result = await measureAndCompute(orgId, actorId, ctx, query.periodFrom, query.periodTo, query.asOf === undefined ? undefined : requireCivilDate(query.asOf, "asOf"));
     const { computation } = result;
     if (computation.totalAwarded === "0.0000") {
       throw new BenefitsError(
