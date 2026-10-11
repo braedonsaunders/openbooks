@@ -239,3 +239,65 @@ test('the remainder route corrects a phantom over-delivery while the receipt sta
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }
 })
+
+test('the remainder route corrects a consumed line to its delivered quantity', async () => {
+  const { org, actor } = await seedOrg()
+  try {
+    const po = await seedPo(org, actor, 'PO-M38-W4')
+    const receipt = await receiveFull(org, actor, po.orderId, po.lineId)
+    await seedFulfillment(org, actor)
+    const line = await withBypassContext(() => db.execute<{ id: string }>(sql`
+      select id from document_lines where document_id = ${receipt.id} and org_id = ${org.orgId}`))
+    const response = await withOrgContext(org.orgId, () =>
+      correctRemainder(
+        new Request(`http://probe.local/api/documents/${receipt.id}/receipt-remainder`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            reason: 'supplier short-shipped three units against the packing slip',
+            date: org.date,
+            lines: [{ receiptLineId: line.rows[0]!.id, correctedQuantity: '7' }],
+          }),
+        }),
+        { params: Promise.resolve({ id: receipt.id }) }))
+    assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
+    const body = await response.json() as { ok: boolean; adjustedQuantity: string }
+    assert.equal(body.ok, true)
+    assert.equal(toUnits(body.adjustedQuantity), toUnits('3'))
+    const facts = await withBypassContext(() => db.execute<{ status: string; received: string; line: string }>(sql`
+      select (select status from documents where id = ${receipt.id}) as status,
+             (select quantity_fulfilled::text from document_lines where id = ${po.lineId}) as received,
+             (select quantity::text from document_lines where id = ${line.rows[0]!.id}) as line`))
+    assert.equal(facts.rows[0]!.status, 'approved')
+    assert.equal(toUnits(facts.rows[0]!.received), toUnits('7'))
+    assert.equal(toUnits(facts.rows[0]!.line), toUnits('10'), 'the receipt line quantity is never edited')
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
+
+test('the remainder route refuses a correction past the unconsumed remainder', async () => {
+  const { org, actor } = await seedOrg()
+  try {
+    const po = await seedPo(org, actor, 'PO-M38-W5')
+    const receipt = await receiveFull(org, actor, po.orderId, po.lineId)
+    await seedFulfillment(org, actor)
+    const line = await withBypassContext(() => db.execute<{ id: string }>(sql`
+      select id from document_lines where document_id = ${receipt.id} and org_id = ${org.orgId}`))
+    const response = await withOrgContext(org.orgId, () =>
+      correctRemainder(
+        new Request(`http://probe.local/api/documents/${receipt.id}/receipt-remainder`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            reason: 'supplier short-shipped seven units against the packing slip',
+            date: org.date,
+            lines: [{ receiptLineId: line.rows[0]!.id, correctedQuantity: '3' }],
+          }),
+        }),
+        { params: Promise.resolve({ id: receipt.id }) }))
+    assert.equal(response.status, 422)
+    const body = await response.json() as { error: string }
+    assert.match(body.error, /remains unconsumed/)
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
