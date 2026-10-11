@@ -39,6 +39,8 @@ interface Fixture {
   scheduleId: string;
   camille: string;
   idriss: string;
+  filingAccountId: string;
+  filingAccountNumber: string;
 }
 
 async function frPayrollOrg(): Promise<Fixture> {
@@ -83,9 +85,10 @@ async function frPayrollOrg(): Promise<Fixture> {
   // missing-regime employers refuse by name instead.
   await seedFrRecapEmployerFixture(org.orgId, actorId, org.subsidiaryId);
   const filingAccountId = randomUUID();
+  const filingAccountNumber = "73282932000074";
   await db.execute(sql`insert into payroll_filing_accounts
     (id,org_id,subsidiary_id,country,program_type,account_number,name,is_default,created_by,updated_by)
-    values(${filingAccountId},${org.orgId},${org.subsidiaryId},'FR','fr_siret','73282932000074',
+    values(${filingAccountId},${org.orgId},${org.subsidiaryId},'FR','fr_siret',${filingAccountNumber},
       'French establishment',true,${actorId},${actorId})`);
   // The declared ten-person establishment is below the eleven-person
   // mobility threshold; record its explicit zero on its own SIRET account.
@@ -134,7 +137,7 @@ async function frPayrollOrg(): Promise<Fixture> {
   };
   const camille = await employee("Camille Martin", "24000");
   const idriss = await employee("Idriss Bernard", "36000");
-  return { orgId: org.orgId, actorId, scheduleId, camille, idriss };
+  return { orgId: org.orgId, actorId, scheduleId, camille, idriss, filingAccountId, filingAccountNumber };
 }
 
 async function runAndCommit(fx: Fixture, periodStart: string, periodEnd: string): Promise<string> {
@@ -209,12 +212,14 @@ test(
         "the July draft contributes no month",
       );
 
-      // Every row id round-trips through the declared grammar.
+      // Every row id round-trips through the declared grammar. The fixture
+      // files under one default SIRET establishment, so every versement
+      // carries its account leg rather than the unassigned aggregate.
       for (const row of population.rows) {
         const scope = parseFrRecapRowId(String(row.rowId));
         assert.ok(scope, `${String(row.rowId)} parses`);
         assert.equal(scope!.employees.length, 1);
-        assert.deepEqual(scope!.accounts, []);
+        assert.deepEqual(scope!.accounts, [fx.filingAccountId]);
       }
       assert.equal(parseFrRecapRowId("not-an-fr-row"), null);
 
@@ -264,7 +269,8 @@ test(
       assert.equal(box("PAS"), camilleMarch!.pas);
       assert.equal(box("NET_PAYE"), camilleMarch!.netPaye);
       assert.ok(
-        slip.headerFields.some((h) => h.label === "SIRET (établissement)" && h.value === "Unassigned"),
+        slip.headerFields.some((h) => h.label === "SIRET (établissement)" && h.value === fx.filingAccountNumber),
+        "the slip names the SIRET establishment the versements filed under",
       );
       assert.ok(slip.notes!.some((n) => n.includes("DSN")));
     } finally {
