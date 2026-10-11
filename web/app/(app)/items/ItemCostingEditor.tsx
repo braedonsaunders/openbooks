@@ -564,6 +564,7 @@ export function ItemCostingEditor({
             <Detail label={t('assetAccount')} value={accountLabel(profile.asset_account_id)} />
             <Detail label={t('cogsAccount')} value={accountLabel(profile.cogs_account_id)} />
             <Detail label={t('adjustmentAccount')} value={accountLabel(profile.adjustment_account_id)} />
+            <Detail label={t('varianceAccount')} value={accountLabel(profile.variance_account_id)} />
             <Detail label={t('receivedNotBilledAccount')} value={profile.received_not_billed_account_id ? accountLabel(profile.received_not_billed_account_id) : companyReceivedNotBilledAccountId ? t('usesCompanyDefault', { account: accountLabel(companyReceivedNotBilledAccountId) }) : '—'} />
             <Detail label={t('standardCost')} value={profile.standard_cost ?? '—'} />
             <Detail label={t('reorderPoint')} value={profile.reorder_point ?? '—'} />
