@@ -347,8 +347,15 @@ export interface MigrationSource {
    */
   entities?(since?: Date | null): Promise<EntityStream[]>;
 
-  /** Complete transaction-link inventory with incremental file-byte imports. */
-  syncAttachments?(options: { orgId: string; connectionId: string; actorId: string | null }): Promise<ImportSummary>;
+  /** Transaction-file inventory with incremental byte imports. With `changes`,
+   * only transactions pulled since the watermark or whose files changed since
+   * it are inventoried; without it, every imported transaction is. */
+  syncAttachments?(options: {
+    orgId: string;
+    connectionId: string;
+    actorId: string | null;
+    changes?: { since: Date; sourceRefs: readonly string[] };
+  }): Promise<ImportSummary>;
 
   /** Human-readable source field/value choices for connection-owned overrides. */
   mappingOptions?(field: string, parent?: string): Promise<{ value: string; label: string }[]>;

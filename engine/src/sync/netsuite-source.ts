@@ -893,10 +893,13 @@ export class NetSuiteSource implements MigrationSource {
     return result;
   }
 
-  async syncAttachments(options: { orgId: string; connectionId: string; actorId: string | null }) {
+  async syncAttachments(options: {
+    orgId: string; connectionId: string; actorId: string | null;
+    changes?: { since: Date; sourceRefs: readonly string[] };
+  }) {
     return importNetSuiteAttachments({
       org: options.orgId, connectionId: options.connectionId, actorId: options.actorId,
-      execute: true, concurrency: 4,
+      execute: true, concurrency: 4, changes: options.changes,
     });
   }
 

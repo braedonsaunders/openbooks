@@ -126,7 +126,7 @@ export interface NativeDocument {
 
 /** Live progress emitted during a sync so the UI can show a real bar. */
 export interface SyncProgress {
-  phase: "starting" | "entities" | "pull" | "post" | "applications" | "source-evidence" | "verify" | "done";
+  phase: "starting" | "entities" | "pull" | "post" | "applications" | "source-evidence" | "operational-records" | "attachments" | "project-financials" | "verify" | "done";
   message: string;
   /** X of Y for the current phase (omit when not countable). */
   current?: number;

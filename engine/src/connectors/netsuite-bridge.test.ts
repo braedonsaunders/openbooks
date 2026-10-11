@@ -19,7 +19,7 @@ const creds: NetSuiteCreds = {
   tokenSecret: "secret",
 };
 
-const compatibleHealth = (version = "1.4.0") => ({
+const compatibleHealth = (version = "1.5.0") => ({
   ok: true, schemaVersion: 1, bridgeVersion: version, accountId: "TEST", environment: "SANDBOX",
   role: { id: "3", name: "Administrator" }, serverTime: "2026-10-10 12:00:00", features: {}, remainingUsage: 5000,
 });
@@ -495,7 +495,7 @@ test("an outdated installed bridge refuses before any export starts, naming its 
   });
   await assert.rejects(
     () => client.bulkQuery([{ id: "a", sql: "SELECT 1 AS id FROM DUAL" }]),
-    /version 1\.3\.0; this release requires 1\.4\.0 or later\. Deploy the SuiteCloud project in integrations\/netsuite-bridge/,
+    /version 1\.3\.0; this release requires 1\.5\.0 or later\. Deploy the SuiteCloud project in integrations\/netsuite-bridge/,
   );
   assert.deepEqual(actions, ["health"]);
 });

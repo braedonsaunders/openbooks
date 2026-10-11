@@ -5,7 +5,7 @@
  */
 define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N/task'],
   (file, format, query, record, runtime, search, task) => {
-    const BRIDGE_VERSION = '1.4.0';
+    const BRIDGE_VERSION = '1.5.0';
     const SCHEMA_VERSION = 1;
     const MARKER_PATH = 'SuiteScripts/OpenBooks/Jobs/bridge-marker.json';
     const EXPORT_SCRIPT_ID = 'customscript_openbooks_export_mr';
@@ -14,6 +14,7 @@ define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N
     const MAX_PARTITIONS = 250;
     const MAX_ATTACHMENT_RECORDS = 50;
     const MAX_ATTACHMENT_BYTES = 9 * 1024 * 1024;
+    const MAX_ATTACHMENT_CHANGES = 100000;
 
     const text = (value) => value == null ? '' : String(value);
     const assert = (condition, message) => {
@@ -227,6 +228,31 @@ define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N
       return { ok: true, schemaVersion: SCHEMA_VERSION, records };
     };
 
+    // Transactions whose attached files were added or modified on or after a
+    // date. Attaching a file does not change the transaction itself, so an
+    // incremental sync needs this to see files added to older transactions.
+    const attachmentChanges = (input) => {
+      const since = text(input.since);
+      assert(/^\d{4}-\d{2}-\d{2}$/.test(since), 'since must be a calendar date (YYYY-MM-DD)');
+      const parts = since.split('-').map(Number);
+      const onOrAfter = format.format({ value: new Date(parts[0], parts[1] - 1, parts[2]), type: format.Type.DATE });
+      const transactionId = search.createColumn({ name: 'internalid', summary: search.Summary.GROUP, sort: search.Sort.ASC });
+      const changed = search.create({
+        type: search.Type.TRANSACTION,
+        filters: [['file.modified', 'onorafter', onOrAfter]],
+        columns: [transactionId],
+      }).runPaged({ pageSize: 1000 });
+      assert(changed.count <= MAX_ATTACHMENT_CHANGES, 'attachment changes exceed the incremental limit; run a full attachment sync');
+      const transactions = [];
+      changed.pageRanges.forEach((page) => {
+        changed.fetch({ index: page.index }).data.forEach((result) => {
+          const id = text(result.getValue(transactionId));
+          if (/^\d+$/.test(id)) transactions.push(id);
+        });
+      });
+      return { ok: true, schemaVersion: SCHEMA_VERSION, since, transactions };
+    };
+
     const attachmentContent = (input) => {
       const fileId = text(input.fileId);
       assert(/^\d+$/.test(fileId), 'fileId must be numeric');
@@ -391,6 +417,7 @@ define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N
         if (action === 'paymentTerms') return paymentTerms();
         if (action === 'deleted') return deletedRecords(input);
         if (action === 'attachmentInventory') return attachmentInventory(input);
+        if (action === 'attachmentChanges') return attachmentChanges(input);
         if (action === 'attachmentContent') return attachmentContent(input);
         if (action === 'startExport') return startExport(input);
         if (action === 'exportTaskStatus') return exportTaskStatus(input);

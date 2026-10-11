@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  ATTACHMENT_FULL_SWEEP_INTERVAL_MS,
+  attachmentChangesScope,
   canonicalNativeDocumentKey,
   collisionSafeSourceDocumentNumber,
   effectiveSourceDocumentNumber,
@@ -478,4 +480,23 @@ test("project input parity refuses source deletions left only in the target", ()
     missingTargetTimeEntries: 0, targetOnlyTimeEntries: 1, sourceProjects: 0, targetProjects: 0,
     exactProjects: 0, changedProjects: 0, missingTargetProjects: 0, targetOnlyProjects: 0, applied: false,
   } })).join("; "), /1 target-only time entries/);
+});
+
+test("mirror attachment scope is incremental only between recent full sweeps", () => {
+  const now = new Date("2026-10-10T12:00:00Z");
+  const since = new Date("2026-10-09T12:00:00Z");
+  const recentSweep = new Date("2026-10-08T12:00:00Z");
+  const base = { kind: "incremental", since, lastFullSweepAt: recentSweep, now, pulledRefs: ["7", "7", "9"] };
+
+  // The earlier of sweep and watermark bounds change detection; pulled refs dedupe.
+  assert.deepEqual(attachmentChangesScope(base), { since: recentSweep, sourceRefs: ["7", "9"] });
+  const sweptAfterWatermark = new Date("2026-10-10T00:00:00Z");
+  assert.deepEqual(attachmentChangesScope({ ...base, lastFullSweepAt: sweptAfterWatermark })?.since, since);
+
+  // Full reconciliation: never swept, sweep too old, no watermark, or not a mirror.
+  assert.equal(attachmentChangesScope({ ...base, lastFullSweepAt: null }), null);
+  const staleSweep = new Date(now.getTime() - ATTACHMENT_FULL_SWEEP_INTERVAL_MS - 1);
+  assert.equal(attachmentChangesScope({ ...base, lastFullSweepAt: staleSweep }), null);
+  assert.equal(attachmentChangesScope({ ...base, since: null }), null);
+  assert.equal(attachmentChangesScope({ ...base, kind: "full_migration" }), null);
 });

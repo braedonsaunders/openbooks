@@ -630,6 +630,44 @@ export class SyncTaxCodeError extends Error {
   }
 }
 
+/** Longest an incremental mirror relies on change detection alone before it
+ * re-inventories every imported transaction's files. */
+export const ATTACHMENT_FULL_SWEEP_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Incremental attachment scope for a mirror run, or null for a full sweep.
+ * Full migrations, runs without a watermark and connections with no recent
+ * successful full sweep reconcile every transaction; otherwise only the
+ * transactions pulled since the watermark (plus those whose files the source
+ * reports changed since it) are inventoried. A failed attachment step fails
+ * the run, so the watermark never advances past unimported files.
+ */
+export function attachmentChangesScope(input: {
+  kind: string;
+  since: Date | null;
+  lastFullSweepAt: Date | null;
+  now: Date;
+  pulledRefs: readonly string[];
+}): { since: Date; sourceRefs: string[] } | null {
+  if (input.kind !== "incremental" || !input.since || !input.lastFullSweepAt) return null;
+  if (input.now.getTime() - input.lastFullSweepAt.getTime() > ATTACHMENT_FULL_SWEEP_INTERVAL_MS) return null;
+  // A sweep that finished before the watermark cannot vouch for files attached
+  // between them, so change detection starts at the earlier of the two.
+  const since = input.lastFullSweepAt < input.since ? input.lastFullSweepAt : input.since;
+  return { since, sourceRefs: [...new Set(input.pulledRefs.map(String))] };
+}
+
+async function lastFullAttachmentSweepAt(orgId: string, connectionId: string): Promise<Date | null> {
+  const row = (await db.execute<{ at: string | Date | null }>(sql`
+    select max(finished_at) as at
+      from sync_runs
+     where org_id = ${orgId} and connection_id = ${connectionId} and status = 'ok'
+       and ((kind in ('incremental', 'full_migration') and stats->'attachments'->>'scope' = 'all')
+         or (kind = 'attachments' and stats->>'scope' = 'all'))
+  `)).rows[0];
+  return row?.at ? new Date(row.at) : null;
+}
+
 /** One-click migration: master data, then every native transaction, verified. */
 export function runFullMigration(
   source: MigrationSource,
@@ -2456,8 +2494,14 @@ export async function runSync(
         docsNew, docsAmended, docsUnchanged, docsFailed, ordersNew,
       }, true);
       try {
+        const lastFullSweepAt = kind === "incremental" && since ? await lastFullAttachmentSweepAt(org.id, connectionId) : null;
+        const changesScope = attachmentChangesScope({
+          kind, since, lastFullSweepAt, now: new Date(),
+          pulledRefs: changes.documents.map((document) => document.sourceRef),
+        });
         supplemental.attachments = await source.syncAttachments({
           orgId: org.id, connectionId, actorId: isUuid(triggeredBy) ? triggeredBy : null,
+          ...(changesScope ? { changes: changesScope } : {}),
         });
       } catch (error) {
         if (error instanceof AttachmentImportError) supplemental.attachments = error.summary;

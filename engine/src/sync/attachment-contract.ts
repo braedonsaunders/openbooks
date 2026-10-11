@@ -4,7 +4,11 @@ export interface AttachmentImportFailure {
 }
 
 export interface ImportSummary {
-  scope: "all" | "source_file_ids";
+  /** all: every imported transaction; changes: the incremental mirror scope;
+   * source_file_ids: an operator retry of named files. */
+  scope: "all" | "changes" | "source_file_ids";
+  /** Watermark of an incremental ("changes") scope. */
+  changedSince?: string;
   requestedSourceFileIds: string[];
   sourceDocuments: number;
   sourceDocumentsWithoutId: number;

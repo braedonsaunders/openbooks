@@ -48,6 +48,10 @@ export interface ImportOptions {
    * Indexed source joins resolve only these files and their transaction links;
    * no unrelated transaction inventory or file bytes are read. */
   sourceFileIds?: string[];
+  /** Incremental scope: inventory only transactions the mirror pulled since the
+   * watermark plus those whose attached files changed on or after it. Omitted
+   * for a full reconciliation of every imported transaction. */
+  changes?: { since: Date; sourceRefs: readonly string[] };
 }
 
 /**
@@ -192,15 +196,17 @@ async function resolveContext(options: ImportOptions): Promise<{
   };
 }
 
-async function sourceDocuments(orgId: string, connectionId: string, limit?: number): Promise<{
+async function sourceDocuments(orgId: string, connectionId: string, limit?: number, sourceRefs?: readonly string[]): Promise<{
   documents: SourceDocument[];
   withoutSourceId: number;
 }> {
+  if (sourceRefs && sourceRefs.length === 0) return { documents: [], withoutSourceId: 0 };
   const result = (await db.execute<{ id: string; kind: SourceKind; nsId: string | null }>(sql`
     select id, kind, custom->>'nsId' as "nsId"
       from documents
      where org_id = ${orgId} and custom->>'nsId' is not null
        and (custom->>'connectionId' is null or custom->>'connectionId'=${connectionId})
+       ${sourceRefs ? sql`and custom->>'nsId' = any(${`{${sourceRefs.join(",")}}`}::text[])` : sql``}
      order by kind, id
      ${limit ? sql`limit ${limit}` : sql``}
   `));
@@ -410,6 +416,34 @@ export async function fetchSourceFileModified(
   return modified;
 }
 
+/**
+ * Source transactions whose attached files changed on or after the watermark's
+ * calendar day (the source filters by date), unioned with the transactions the
+ * mirror itself pulled. Re-inventorying a transaction is idempotent, so the
+ * day-granular overlap only costs a few redundant lookups.
+ */
+export async function changedAttachmentTransactions(
+  since: Date,
+  pulledRefs: readonly string[],
+  creds: NetSuiteCreds,
+  bridge: { script: string; deploy: string },
+): Promise<string[]> {
+  const day = new Date(since.getTime() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const response = await netsuiteRestlet<{ ok?: boolean; error?: string; transactions?: unknown }>(
+    bridge.script, bridge.deploy, { action: "attachmentChanges", since: day }, creds, "POST",
+  );
+  if (response.ok !== true || !Array.isArray(response.transactions)) {
+    throw new Error(response.error || "attachment change lookup failed");
+  }
+  const refs = new Set(pulledRefs.map(String));
+  for (const id of response.transactions) {
+    const ref = String(id);
+    if (!/^\d+$/.test(ref)) throw new Error("attachment change lookup returned a malformed transaction id");
+    refs.add(ref);
+  }
+  return Array.from(refs).filter((ref) => /^\d+$/.test(ref)).sort((a, b) => Number(a) - Number(b));
+}
+
 export function attachmentNeedsDownload(input: {
   sourceModifiedMs: number;
   storedModifiedMs: number | null;
@@ -422,6 +456,9 @@ export async function importNetSuiteAttachments(options: ImportOptions): Promise
   const requestedSourceFileIds = normalizeSourceFileIds(options.sourceFileIds ?? []);
   if (requestedSourceFileIds.length > 0 && options.limit !== undefined) {
     throw new Error("targeted source-file retries cannot be combined with a document limit");
+  }
+  if (options.changes && (requestedSourceFileIds.length > 0 || options.limit !== undefined)) {
+    throw new Error("an incremental attachment sync cannot be combined with file ids or a document limit");
   }
   const { orgId, connectionId, actorId, creds, bridge, soapEndpointVersion } = await resolveContext(options);
   const otherConnection = (await db.execute(sql`select id from connections where org_id=${orgId} and source='netsuite' and id<>${connectionId} limit 1`)).rows[0];
@@ -452,7 +489,10 @@ export async function importNetSuiteAttachments(options: ImportOptions): Promise
       `[inventory] resolved ${requestedSourceFileIds.length} requested files directly across ${documents.length} source transactions`,
     );
   } else {
-    const source = await sourceDocuments(orgId, connectionId, options.limit);
+    const scopedRefs = options.changes
+      ? await changedAttachmentTransactions(options.changes.since, options.changes.sourceRefs, creds, bridge)
+      : undefined;
+    const source = await sourceDocuments(orgId, connectionId, options.limit, scopedRefs);
     documents = source.documents;
     withoutSourceId = source.withoutSourceId;
     console.log(
@@ -467,7 +507,8 @@ export async function importNetSuiteAttachments(options: ImportOptions): Promise
   }
   const sourceLinks = Array.from(fileToDocuments.values()).reduce((sum, ids) => sum + ids.size, 0);
   const summary: ImportSummary = {
-    scope: requestedSourceFileIds.length > 0 ? "source_file_ids" : "all",
+    scope: requestedSourceFileIds.length > 0 ? "source_file_ids" : options.changes ? "changes" : "all",
+    ...(options.changes ? { changedSince: options.changes.since.toISOString() } : {}),
     requestedSourceFileIds,
     sourceDocuments: documents.length,
     sourceDocumentsWithoutId: withoutSourceId,
@@ -577,6 +618,6 @@ export async function importNetSuiteAttachments(options: ImportOptions): Promise
     }
   });
   if (summary.failures) throw new AttachmentImportError(summary);
-  await verifyTransactionFiles(orgId, SOURCE_SYSTEM, fileToDocuments, requestedSourceFileIds.length > 0);
+  await verifyTransactionFiles(orgId, SOURCE_SYSTEM, fileToDocuments, requestedSourceFileIds.length > 0 || Boolean(options.changes));
   return summary;
 }
