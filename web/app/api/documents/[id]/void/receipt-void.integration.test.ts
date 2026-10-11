@@ -92,10 +92,12 @@ async function receiptFacts(orgId: string, receiptId: string, lineId: string) {
                join document_lines line on line.id = movement.document_line_id and line.org_id = movement.org_id
               where movement.org_id = ${orgId} and line.document_id = ${receiptId}
                 and movement.kind = 'receipt' and movement.status = 'posted') as movements,
-             (select count(*)::int from inventory_movements movement
+             (select count(*)::int from inventory_movements reversal
+               join inventory_movements movement
+                 on movement.id = reversal.reverses_movement_id and movement.org_id = reversal.org_id
                join document_lines line on line.id = movement.document_line_id and line.org_id = movement.org_id
-              where movement.org_id = ${orgId} and line.document_id = ${receiptId}
-                and movement.kind = 'return' and movement.status = 'posted') as reversals
+              where reversal.org_id = ${orgId} and line.document_id = ${receiptId}
+                and reversal.kind = 'return' and reversal.status = 'posted') as reversals
     `)
   ).rows[0]!;
   return rows;
@@ -105,13 +107,25 @@ async function receiptFacts(orgId: string, receiptId: string, lineId: string) {
 async function receiptGlNetsToZero(orgId: string, receiptId: string): Promise<void> {
   const rows = (
     await db.execute<{ account: string; net: string }>(sql`
+      with receipt_movements as (
+        select movement.id, movement.journal_entry_id
+          from inventory_movements movement
+          join document_lines docline
+            on docline.id = movement.document_line_id and docline.org_id = movement.org_id
+         where movement.org_id = ${orgId} and docline.document_id = ${receiptId}
+      ),
+      void_entries as (
+        select journal_entry_id as entry_id from receipt_movements
+        union
+        select reversal.journal_entry_id
+          from inventory_movements reversal
+          join receipt_movements movement on movement.id = reversal.reverses_movement_id
+         where reversal.org_id = ${orgId}
+      )
       select line.account_id::text as account, sum(line.amount)::text as net
         from journal_lines line
-        join inventory_movements movement
-          on movement.journal_entry_id = line.entry_id and movement.org_id = line.org_id
-        join document_lines docline
-          on docline.id = movement.document_line_id and docline.org_id = movement.org_id
-       where line.org_id = ${orgId} and docline.document_id = ${receiptId}
+        join void_entries on void_entries.entry_id = line.entry_id
+       where line.org_id = ${orgId}
        group by line.account_id`)
   ).rows;
   assert.ok(rows.length > 0, "the receipt and its reversal must leave journal evidence");
@@ -296,20 +310,25 @@ test("a closed receipt period moves the void default to the first open period", 
       reason: REASON,
     });
     assert.equal(outcome.status, "voided");
+    // The reservation date is consumed on completion: the reversal rows
+    // carry the evidence instead.
     const stored = (
       await db.execute<{ reversalDate: string; postingDate: string }>(sql`
-        select d.void_reversal_date::text as "reversalDate",
-               (select e.posting_date::text from journal_entries e
-                 join inventory_movements movement
-                   on movement.journal_entry_id = e.id and movement.org_id = e.org_id
-                 join document_lines line
-                   on line.id = movement.document_line_id and line.org_id = movement.org_id
-                where e.org_id = ${org.orgId} and line.document_id = ${receipt.id}
-                  and movement.kind = 'return'
-                limit 1) as "postingDate"
-          from documents d where d.id = ${receipt.id} and d.org_id = ${org.orgId}
+        select reversal.moved_at::date::text as "reversalDate",
+               entry.posting_date::date::text as "postingDate"
+          from inventory_movements reversal
+          join inventory_movements movement
+            on movement.id = reversal.reverses_movement_id and movement.org_id = reversal.org_id
+          join document_lines line
+            on line.id = movement.document_line_id and line.org_id = movement.org_id
+          join journal_entries entry
+            on entry.id = reversal.journal_entry_id and entry.org_id = reversal.org_id
+         where reversal.org_id = ${org.orgId} and line.document_id = ${receipt.id}
+           and reversal.kind = 'return'
+         limit 1
       `)
     ).rows[0]!;
+    assert.ok(stored, "the reversal movement and journal exist");
     assert.equal(stored.reversalDate, "2026-08-01");
     assert.equal(stored.postingDate, "2026-08-01", "the reversal posts in the open period");
   } finally {
