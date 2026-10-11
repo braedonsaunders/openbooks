@@ -366,6 +366,7 @@ test(
       await db.execute(sql`
         update documents
            set posting_date = ${org.date},
+               status = 'approved',
                posting_period_id = null,
                updated_at = '2026-07-15 12:02:00+00'
         where id = ${unassignedDocumentId}

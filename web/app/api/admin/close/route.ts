@@ -611,6 +611,7 @@ export const POST = defineRoute({
   },
   feature: { none: "Close has no route-wide feature gate; the handler enforces per-action permission, close scope, and the Advanced close feature." },
   body: requestBodySchema,
+  invalidBodyStatus: 422,
   handler: async ({ body: parsedBody, authz: routeAuthz }) => {
     const body = parsedBody as Body;
 

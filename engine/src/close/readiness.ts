@@ -250,7 +250,8 @@ export async function readinessChecks(
             -- before they can ever take one, so they stay open-draft work
             -- here instead of vanishing from the gate.
             and (d.posting_period_id = ${ctx.period_id}
-              or (d.posting_period_id is null and d.status in ('draft','pending_approval')))
+              or (d.posting_period_id is null and d.status in ('draft','pending_approval')
+                and d.document_date between ${ctx.starts_on} and ${ctx.ends_on}))
             and ${documentScope}) as count`),
       db.execute(sql`
       select count(*) as count

@@ -8,6 +8,7 @@ import { toUnits } from "@openbooks/engine/money/money";
 import { postDocument } from "@openbooks/engine/ledger/posting-document";
 import { openItemsForParty } from "@openbooks/engine/payments/payment-queries";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "@openbooks/engine/testing/fixtures";
+import { ensurePartyRoleRow } from "../../../lib/party-roles";
 
 const state = { user: { orgId: "", id: "" } };
 Object.assign(globalThis, { __receiptOverpaymentAuth: state });
@@ -40,6 +41,7 @@ test("a receipt larger than its applications keeps the excess on account", { ski
   try {
     const actorId = await createScratchUser(org.orgId, "AR Clerk", "admin");
     state.user = { orgId: org.orgId, id: actorId };
+    await ensurePartyRoleRow(db, { orgId: org.orgId, partyId: org.customerId, kind: 'customer', actorId });
     const invoiceId = randomUUID();
     await db.execute(sql`
       insert into documents (id, org_id, kind, status, document_number, subsidiary_id, party_id,

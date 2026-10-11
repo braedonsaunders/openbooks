@@ -114,6 +114,21 @@ test('posting-period-missing ignores period-less documents dated outside the run
   } finally {await dropScratchOrg(org.orgId);}
 });
 
+test('open drafts without a posting period belong only to their document-date review window', {skip:!enabled}, async () => {
+  const {org,actor}=await setup();
+  try {
+    for (const status of ['draft', 'pending_approval']) {
+      const outside=randomUUID(), inside=randomUUID();
+      await db.execute(sql`insert into documents (id,org_id,subsidiary_id,kind,status,document_number,document_date,currency,subtotal,tax_total,total)
+        values (${outside},${org.orgId},${org.subsidiaryId},'vendor_bill',${status},${outside},'2026-01-15','CAD',10,0,10),
+               (${inside},${org.orgId},${org.subsidiaryId},'vendor_bill',${status},${inside},${org.date},'CAD',10,0,10)`);
+    }
+    const got=await counts(org.orgId,await run(org,actor));
+    assert.equal(got['drafts-open'],2,'only the in-period draft and pending approval need review');
+    assert.equal(got['posting-period-missing']??0,0,'unapproved documents cannot be assigned a posting period');
+  } finally {await dropScratchOrg(org.orgId);}
+});
+
 test('posting-period-missing counts the assignment row set while drafts-open keeps unapproved work', {skip:!enabled}, async () => {
   const {org,actor}=await setup();
   try {
