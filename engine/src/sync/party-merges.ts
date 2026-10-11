@@ -133,6 +133,10 @@ const SIMPLE_PARTY_REFS: readonly (readonly [table: string, column: string])[] =
   ["field_ticket_policies", "customer_party_id"],
   ["field_tickets", "foreman_party_id"],
   ["fixed_assets", "custodian_party_id"],
+  ["asset_proposals", "vendor_party_id"],
+  ["asset_maintenance_schedules", "vendor_party_id"],
+  ["asset_maintenance_records", "vendor_party_id"],
+  ["asset_insurance_policies", "insurer_party_id"],
   ["grants", "sponsor_party_id"],
   ["gifts", "donor_party_id"],
   ["gifts", "tribute_notify_party_id"],
@@ -384,6 +388,19 @@ const GUARDED_PARTY_REFS: readonly GuardedPartyRef[] = [
     table: "party_subsidiaries",
     column: "party_id",
     conflict: "s.subsidiary_id = d.subsidiary_id",
+  },
+  {
+    // A party represents at most one subsidiary as its active customer. A
+    // survivor that already represents one keeps it; the absorbed party's
+    // representation stays with the absorbed party for review.
+    table: "intercompany_representing_parties",
+    column: "customer_party_id",
+    conflict: "s.org_id = d.org_id and s.is_active and d.is_active",
+  },
+  {
+    table: "intercompany_representing_parties",
+    column: "vendor_party_id",
+    conflict: "s.org_id = d.org_id and s.is_active and d.is_active",
   },
   {
     table: "pay_run_adjustments",

@@ -54,6 +54,7 @@ export const GET = defineRoute({
     const e = (await db.execute<Record<string, unknown>>(sql`
         select e.id, e.entry_number, e.posting_date::text as date, e.memo, e.origin, e.status,
                e.source_document_id, e.subsidiary_id, ${journalDrawer ? sql`e.custom,` : sql``}
+               (select book.code from accounting_books book where book.org_id = e.org_id and book.id = e.book_id) as book_code,
                re.entry_number as reverses_number,
                d.id as doc_id, d.kind as doc_kind, d.document_number as doc_number
           from journal_entries e
@@ -71,7 +72,9 @@ export const GET = defineRoute({
     if (!entry) return notFound("record")
     const lines = (await db.execute<Record<string, unknown>>(sql`
         select l.line_number, l.amount, l.memo, l.is_open_item,
-               l.subsidiary_id, sub.name as subsidiary, sub.base_currency as functional_currency,
+               l.subsidiary_id, sub.name as subsidiary,
+               -- The entry's book measures the line: a secondary book may carry the subsidiary in its own currency.
+               public.accounting_book_currency(l.org_id, e.book_id, l.subsidiary_id) as functional_currency,
                l.extra_dims, ${journalDrawer ? sql`l.custom,` : sql``}
                l.contributor_kind, l.contributor_ref,
                coalesce(ar.name, us.name) as contributor_name,

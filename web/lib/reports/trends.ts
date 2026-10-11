@@ -2,6 +2,7 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import { db } from "@openbooks/engine/platform/db";
+import { excludePeriodEndJournals } from "@openbooks/engine/records/period-end-origins";
 import { statementBookExpr } from "../gl-summary";
 
 export type FinancialTrendRow = {
@@ -64,6 +65,7 @@ export async function financialTrends(
         from recent p
         left join journal_entries e on e.org_id = ${orgId} and e.status in ('posted', 'reversed')
           and e.book_id = ${book}
+          and ${excludePeriodEndJournals(sql`e.origin`)}
           and e.period_id = p.id
         left join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id${scope(sql`l.subsidiary_id`)}
         left join accounts a on a.id = l.account_id and a.org_id = l.org_id
@@ -79,6 +81,7 @@ export async function financialTrends(
                from journal_lines jl
                join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status in ('posted', 'reversed')
                 and je.book_id = ${book}
+                and ${excludePeriodEndJournals(sql`je.origin`)}
                join accounting_periods ep on ep.id = je.period_id and ep.org_id = je.org_id
                join accounts ba on ba.id = jl.account_id and ba.org_id = jl.org_id and ba.type = 'asset_bank'
               where jl.org_id = ${orgId} and ep.ends_on <= p.ends_on${scope(sql`jl.subsidiary_id`)}

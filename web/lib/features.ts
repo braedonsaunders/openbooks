@@ -188,6 +188,21 @@ const FEATURE_DISABLE_CHECKS: Record<string, (orgId: string) => Promise<FeatureD
        where jl.org_id = ${orgId} and je.book_id = ${bookId} and jl.fx_rate <> 1`)
     return { blocked: n > 0, impacts: n > 0 ? [{ labelKey: 'foreignTxns', count: n }] : [] }
   },
+  // Accounting integrity: a full book receives every primary posting in the
+  // posting transaction. Switching the module off while a book replicates
+  // would leave that book silently incomplete, so its replication must be
+  // deactivated (a recorded, reasoned change) first. Book configuration and
+  // book-specific journals stay as history either way.
+  multiBookAccounting: async (orgId) => {
+    const [fullBooks, bookJournals] = await sequential([
+      () => countRows(sql`select count(*)::int as n from accounting_books where org_id = ${orgId} and replication_mode = 'full'`),
+      () => countRows(sql`select count(*)::int as n from documents where org_id = ${orgId} and kind = 'journal' and accounting_book_id is not null`),
+    ])
+    const impacts: FeatureImpact[] = []
+    if (fullBooks) impacts.push({ labelKey: 'fullReplicationBooks', count: fullBooks })
+    if (bookJournals) impacts.push({ labelKey: 'bookSpecificJournals', count: bookJournals })
+    return { blocked: fullBooks > 0, impacts }
+  },
   banking: async (orgId) => {
     const [recons, statements] = await sequential([
       () => countRows(sql`select count(*)::int as n from reconciliations where org_id = ${orgId}`),

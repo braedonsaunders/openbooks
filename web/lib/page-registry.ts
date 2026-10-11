@@ -76,6 +76,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/accounting/amortization': {
+    route: '/accounting/amortization',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/accounting/amortization/view')
+      return {
+        load: (input) => m.loadAmortization(input.searchParams ?? {}),
+        spec: (data) => m.amortizationSpec(data as never),
+      }
+    },
+  },
   '/accounts': {
     route: '/accounts',
     segments: [],
@@ -1888,6 +1900,42 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/intercompany': {
+    route: '/intercompany',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/intercompany/view')
+      return {
+        load: (input) => m.loadIntercompanyPairingPage(input.searchParams ?? {}),
+        spec: (data) => m.intercompanyPairingSpec(data as never),
+      }
+    },
+  },
+  '/intercompany/netting': {
+    route: '/intercompany/netting',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/intercompany/netting/view')
+      return {
+        load: (input) => m.loadNettingPage(input.searchParams ?? {}),
+        spec: (data) => m.nettingSpec(data as never),
+      }
+    },
+  },
+  '/intercompany/transfers': {
+    route: '/intercompany/transfers',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/intercompany/transfers/view')
+      return {
+        load: (input) => m.loadTransfersPage(input.searchParams ?? {}),
+        spec: (data) => m.transfersSpec(data as never),
+      }
+    },
+  },
   '/internal-billing': {
     route: '/internal-billing',
     segments: [],
@@ -2572,6 +2620,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/reports/book-differences': {
+    route: '/reports/book-differences',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/reports/book-differences/view')
+      return {
+        load: (input) => m.loadBookDifferences(input.searchParams ?? {}),
+        spec: (data) => m.bookDifferencesSpec(data as never),
+      }
+    },
+  },
   '/reports/budget': {
     route: '/reports/budget',
     segments: [],
@@ -2677,6 +2737,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       return {
         load: (input) => m.loadGeneralLedger(input.searchParams ?? {}),
         spec: (data) => m.generalLedgerSpec(data as never),
+      }
+    },
+  },
+  '/reports/intercompany-reconciliation': {
+    route: '/reports/intercompany-reconciliation',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/reports/intercompany-reconciliation/view')
+      return {
+        load: (input) => m.loadIntercompanyReconciliation(input.searchParams ?? {}),
+        spec: (data) => m.intercompanyReconciliationSpec(data as never),
       }
     },
   },

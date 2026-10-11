@@ -1875,10 +1875,17 @@ export function OrderDrawer({
       label: tCommon('labels.warehouse'),
       width: '150px',
       type: 'select',
-      options: [{ value: '', label: '—' }, ...stockLocations.map((l) => ({ value: l.id, label: l.code ?? '' }))],
+      // A warehouse owned by another entity names that entity: shipping from
+      // it is a cross-subsidiary fulfillment by its owner.
+      options: [{ value: '', label: '—' }, ...stockLocations.map((l) => {
+        const owner = l.subsidiaryId && subsidiaryId && l.subsidiaryId !== subsidiaryId
+          ? subsidiaries.find((subsidiary) => subsidiary.id === l.subsidiaryId)?.name
+          : null
+        return { value: l.id, label: owner ? `${l.code ?? ''} · ${owner}` : (l.code ?? '') }
+      })],
       isCellEditable: (row) => stockedItemIds.has(String(row.itemId ?? '')),
     }
-  }, [stockLocations, rows, stockedItemIds, tCommon])
+  }, [stockLocations, rows, stockedItemIds, tCommon, subsidiaries, subsidiaryId])
 
   // Discount lines applied from a promotion carry its code; the column shows
   // only when a row actually carries one, so ordinary orders keep their grid.

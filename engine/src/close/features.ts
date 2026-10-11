@@ -8,11 +8,16 @@ export type DefaultCloseFeatureContext = {
   advancedClose: boolean;
   banking: boolean;
   fixedAssets: boolean;
+  /** Asset proposals or construction in progress: capitalization to review at close. */
+  assetCapitalization: boolean;
   revenueRecognition: boolean;
   multiCurrency: boolean;
   multiSubsidiary: boolean;
   salesChannels: boolean;
   unbilledRevenueAccrual: boolean;
+  periodEndJournals: boolean;
+  multiBookAccounting?: boolean;
+  expenseAmortization: boolean;
 };
 
 /**
@@ -40,11 +45,15 @@ export async function defaultCloseFeatureContext(
     advancedClose: featureEnabled(features, "flows") && features.advancedClose === true,
     banking: featureEnabled(features, "banking"),
     fixedAssets: featureEnabled(features, "fixedAssets"),
+    assetCapitalization: featureEnabled(features, "assetProposals") || featureEnabled(features, "constructionInProgress"),
     revenueRecognition: featureEnabled(features, "revenueRecognition"),
     multiCurrency: await dataDependentFeatureDefault(executor, orgId, "multiCurrency", features),
     multiSubsidiary: await dataDependentFeatureDefault(executor, orgId, "multiSubsidiary", features),
     salesChannels: featureEnabled(features, "salesChannels"),
     unbilledRevenueAccrual: featureEnabled(features, "unbilledRevenueAccrual"),
+    periodEndJournals: featureEnabled(features, "periodEndJournals"),
+    multiBookAccounting: featureEnabled(features, "multiBookAccounting"),
+    expenseAmortization: featureEnabled(features, "expenseAmortization"),
   };
 }
 
@@ -59,8 +68,12 @@ export function defaultCloseStepEnabled(
   if (key === "bank-reconciled") return features.banking;
   if (key === "commerce-complete") return features.salesChannels;
   if (key === "depreciation-posted") return features.fixedAssets;
+  if (key === "asset-capitalization-reviewed") return features.assetCapitalization;
   if (key === "recognition-posted") return features.revenueRecognition;
   if (key === "unbilled-revenue-accrued") return features.unbilledRevenueAccrual;
+  if (key === "period-end-journals") return features.periodEndJournals;
+  if (key === "book-replication-complete") return features.multiBookAccounting === true;
+  if (key === "prepaid-amortized") return features.expenseAmortization;
   if (["fx-ready", "fx-revalued"].includes(key)) return features.multiCurrency;
   if (["intercompany-balanced", "consolidation"].includes(key)) return features.multiSubsidiary;
   return true;

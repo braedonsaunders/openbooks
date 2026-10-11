@@ -1,3 +1,5 @@
+import { validateSavedAmortizationLines } from "@openbooks/engine/amortization";
+import { journalAmortizationFields } from "@/lib/journal-amortization";
 import "server-only";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
@@ -11,6 +13,8 @@ import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from
 import { loadJournalDoc } from "./journals";
 import { isUuid } from "./list-params";
 import { segmentRegistry, validateExtraDims } from "./segments";
+import { JournalBookError, resolveJournalBookTarget } from "./journal-book";
+import { assertDocumentSegmentDependencies } from "@openbooks/engine/organization/segment-dependencies";
 
 /**
  * The only first-party writer for a new manual journal with lines.
@@ -40,6 +44,7 @@ const journalLineInput = z
     // refuse them with the line number (a bare uuid failure names neither
     // the line nor the remedy).
     accountId: z.string().nullable().optional(),
+    ...journalAmortizationFields,
     description: z.string().nullable().optional(),
     amount: exactMoney(),
     partyId: nullableUuidId.optional(),
@@ -57,6 +62,8 @@ export const journalCreateBody = z.object({
   referenceNumber: z.string().nullable().optional(),
   memo: z.string().nullable().optional(),
   subsidiaryId: nullableUuidId.optional(),
+  /** Book-specific journal target; omitted or null posts to every book. */
+  accountingBookId: nullableUuidId.optional(),
   extraDims: z.record(z.string(), z.string().nullable()).optional(),
   custom: z.record(z.string(), z.unknown()).optional(),
   lines: z.array(journalLineInput).optional(),
@@ -88,6 +95,8 @@ export async function createManualJournal(input: {
   allowedSubsidiaryIds: ReadonlySet<string> | null;
   idempotencyKey: string;
   body: JournalCreateBody;
+  /** Whether the caller holds gl.post_book_specific. */
+  canPostBookSpecific?: boolean;
 }): Promise<{ created: boolean; journal: NonNullable<Awaited<ReturnType<typeof loadJournalDoc>>> }> {
   if (!isUuid(input.idempotencyKey)) fail("invalid_idempotency_key", undefined, 400);
 
@@ -128,6 +137,19 @@ export async function createManualJournal(input: {
     if (allowed.length === 0) fail("no_available_subsidiary", undefined, 409);
     if (allowed.length !== 1) fail("subsidiary_selection_required", "subsidiaryId", 409);
     subsidiary = allowed[0]!;
+  }
+
+  let bookTarget: Awaited<ReturnType<typeof resolveJournalBookTarget>>;
+  try {
+    bookTarget = await resolveJournalBookTarget({
+      orgId,
+      requested: body.accountingBookId ?? null,
+      subsidiaryId: subsidiary.id,
+      canPostBookSpecific: input.canPostBookSpecific === true,
+    });
+  } catch (error) {
+    if (error instanceof JournalBookError) fail(error.message, "accountingBookId", error.status);
+    throw error;
   }
 
   const [headerDefs, lineDefs, segments] = await Promise.all([
@@ -206,6 +228,9 @@ export async function createManualJournal(input: {
   }
 
   const preparedLines: {
+    amortizationTemplateId: string | null;
+    amortizationStartOn: string | null;
+    amortizationEndOn: string | null;
     accountId: string;
     description: string | null;
     amount: string;
@@ -237,6 +262,9 @@ export async function createManualJournal(input: {
       accountId: checkedAccountIds[i]!,
       description: line.description ?? null,
       amount: line.amount,
+      amortizationTemplateId: line.amortizationTemplateId ?? null,
+      amortizationStartOn: line.amortizationStartOn ?? null,
+      amortizationEndOn: line.amortizationEndOn ?? null,
       partyId: line.partyId ?? null,
       departmentId: line.departmentId ?? null,
       projectId: line.projectId ?? null,
@@ -256,6 +284,7 @@ export async function createManualJournal(input: {
     referenceNumber: body.referenceNumber ?? null,
     memo: body.memo ?? null,
     subsidiaryId: body.subsidiaryId ?? null,
+    ...(body.accountingBookId ? { accountingBookId: body.accountingBookId } : {}),
     extraDims: body.extraDims ?? null,
     custom: body.custom ?? null,
     lines: body.lines ?? [],
@@ -267,7 +296,8 @@ export async function createManualJournal(input: {
     kind: "journal",
     subsidiary_id: subsidiary.id,
     document_date: documentDate,
-    currency: subsidiary.base_currency,
+    currency: bookTarget.currency,
+    accounting_book_id: bookTarget.accountingBookId,
     party_id: partyId,
     reference_number: referenceNumber,
     memo,
@@ -278,6 +308,9 @@ export async function createManualJournal(input: {
     lines: preparedLines.map((line, index) => ({
       line_number: index + 1,
       account_id: line.accountId,
+      amortization_template_id: line.amortizationTemplateId,
+      amortization_start_on: line.amortizationStartOn,
+      amortization_end_on: line.amortizationEndOn,
       description: line.description,
       amount: line.amount,
       party_id: line.partyId,
@@ -306,11 +339,11 @@ export async function createManualJournal(input: {
       const inserted = (await tx.execute<{ id: string }>(sql`
         insert into documents
           (id, org_id, kind, status, subsidiary_id, document_number, document_date,
-           currency, party_id, reference_number, memo, extra_dims, custom,
+           currency, accounting_book_id, party_id, reference_number, memo, extra_dims, custom,
            subtotal, tax_total, total, created_by, updated_by)
         values
           (${requestId}, ${orgId}, 'journal', 'draft', ${subsidiary.id}, ${documentNumber},
-           ${documentDate}, ${subsidiary.base_currency}, ${partyId}, ${referenceNumber}, ${memo},
+           ${documentDate}, ${bookTarget.currency}, ${bookTarget.accountingBookId}, ${partyId}, ${referenceNumber}, ${memo},
            ${JSON.stringify(headerDims.cleaned)}::jsonb, ${JSON.stringify(headerCustomResult.cleaned)}::jsonb,
            ${totalDebits}, '0', ${totalDebits}, ${userId}, ${userId})
         -- Lost insert race or a foreign/global UUID collision: the re-read
@@ -326,14 +359,18 @@ export async function createManualJournal(input: {
       }
       for (let i = 0; i < preparedLines.length; i++) {
         const line = preparedLines[i]!;
-        await tx.execute(sql`
+        const savedLine = await tx.execute<{ id: string }>(sql`
           insert into document_lines (org_id, document_id, line_number, account_id, description,
                                       quantity, unit_price, amount, party_id, department_id, project_id,
-                                      subsidiary_id, extra_dims, custom)
+                                      subsidiary_id, extra_dims, custom, amortization_template_id, amortization_start_on, amortization_end_on)
           values (${orgId}, ${requestId}, ${i + 1}, ${line.accountId}, ${line.description},
                   '1', ${line.amount}, ${line.amount}, ${line.partyId}, ${line.departmentId}, ${line.projectId},
-                  ${line.subsidiaryId}, ${JSON.stringify(line.extraDims)}::jsonb, ${JSON.stringify(line.custom)}::jsonb)`);
+                  ${line.subsidiaryId}, ${JSON.stringify(line.extraDims)}::jsonb, ${JSON.stringify(line.custom)}::jsonb, ${line.amortizationTemplateId}, ${line.amortizationStartOn}, ${line.amortizationEndOn}) returning id`);
+        if (savedLine.rows.length !== 1) throw new JournalCreateError(`Line ${i + 1} could not be saved`, 409);
       }
+      // Segment value dependencies on the saved lines, as posting will read them.
+      await assertDocumentSegmentDependencies(tx, orgId, requestId);
+      await validateSavedAmortizationLines(tx, orgId, requestId);
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
         values (${orgId}, 'documents', ${requestId}, 'insert',

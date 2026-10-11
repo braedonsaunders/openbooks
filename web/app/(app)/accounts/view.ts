@@ -39,7 +39,7 @@ import { listScopedAccountOptions } from '../../../lib/scoped-options'
 import { subsidiaryUiOptions } from '../../../lib/subsidiaries'
 import { decimalAdd, decimalCmp, decimalSum } from '../../../lib/statement-format'
 import type { HierarchyAccountGroup } from './AccountsHierarchyTable'
-import type { AccountDrawer } from './AccountDrawer'
+import type { AccountDrawer, AccountDrawerMerge } from './AccountDrawer'
 
 /**
  * The chart of accounts, split into a loader and a spec.
@@ -91,6 +91,64 @@ const CLASS_KEYS: Record<string, string> = {
 const CLASS_ORDER = ['asset', 'liability', 'equity', 'income', 'expense'] as const
 
 type AccountDrawerProps = Parameters<typeof AccountDrawer>[0]
+
+/**
+ * Merge affordances for one open account: the survivors it may merge into
+ * (active, postable, unmerged accounts of the same type) and, for a merged
+ * account, its survivor, date and reason.
+ */
+async function accountMergeDrawerProps(
+  account: Record<string, unknown>,
+  input: { orgId: string; enabled: boolean; canMerge: boolean; today: string },
+): Promise<AccountDrawerMerge | null> {
+  const id = typeof account.id === 'string' ? account.id : ''
+  const mergedIntoId = typeof account.merged_into_id === 'string' ? account.merged_into_id : null
+  if (!id || (!input.enabled && !mergedIntoId)) return null
+  const [targets, survivor, proposal] = await Promise.all([
+    input.canMerge && !mergedIntoId
+      ? db.execute<{ id: string; number: string | null; name: string }>(sql`
+          select id, number, name from accounts
+           where org_id = ${input.orgId} and id <> ${id} and type = ${String(account.type ?? '')}
+             and is_active and not is_summary and merged_into_id is null
+           order by number nulls last, name`)
+      : Promise.resolve({ rows: [] as { id: string; number: string | null; name: string }[] }),
+    mergedIntoId
+      ? db.execute<{ label: string }>(sql`
+          select concat_ws(' ', number, name) as label from accounts where org_id = ${input.orgId} and id = ${mergedIntoId}`)
+      : Promise.resolve({ rows: [] as { label: string }[] }),
+    db.execute<{ id: string; status: string; effective_on: string; target_label: string | null }>(sql`
+      select f.id, f.status, f.effective_on::text as effective_on, concat_ws(' ', t.number, t.name) as target_label
+        from financial_changes f
+        left join accounts t on t.org_id = f.org_id and t.id::text = f.payload ->> 'targetAccountId'
+       where f.org_id = ${input.orgId} and f.domain = 'ledger' and f.operation = 'account_merge'
+         and f.subject_id = ${id} and f.status in ('draft', 'pending', 'approved')
+       order by f.created_at desc limit 1`),
+  ])
+  const mergedAt = account.merged_at instanceof Date
+    ? account.merged_at.toISOString().slice(0, 10)
+    : typeof account.merged_at === 'string' ? account.merged_at.slice(0, 10) : ''
+  return {
+    canMerge: input.canMerge && !mergedIntoId,
+    targets: targets.rows.map((row) => ({ value: row.id, label: `${row.number ?? ''} ${row.name}`.trim() })),
+    today: input.today,
+    proposal: proposal.rows[0]
+      ? {
+          changeId: proposal.rows[0].id,
+          status: proposal.rows[0].status as 'draft' | 'pending' | 'approved',
+          targetLabel: proposal.rows[0].target_label ?? '',
+          effectiveDate: proposal.rows[0].effective_on,
+        }
+      : null,
+    mergedInto: mergedIntoId
+      ? {
+          label: survivor.rows[0]?.label ?? mergedIntoId,
+          date: mergedAt,
+          reason: typeof account.merge_reason === 'string' ? account.merge_reason : null,
+          href: `/accounts?account=${mergedIntoId}`,
+        }
+      : null,
+  }
+}
 type CurrencyOption = { code: string; name: string }
 const FLAT_PER_PAGE = 50
 
@@ -207,7 +265,7 @@ export async function loadAccounts(
     count,
   }))
 
-  const [openAccount, subsidiaryUiEnabled, multiCurrencyEnabled, baseCurrency] = await Promise.all([
+  const [openAccount, subsidiaryUiEnabled, multiCurrencyEnabled, baseCurrency, mergesEnabled] = await Promise.all([
     accountId && isUuid(accountId)
       ? loadAccount(accountId, authz.user.orgId, authz.allowedSubsidiaryIds).then((payload) =>
           payload ? redactAccountCustomFields(payload, customFieldViewerFor(authz)) : null)
@@ -215,7 +273,16 @@ export async function loadAccounts(
     subsidiaryFeatureEnabled(authz.user.orgId),
     isFeatureEnabled(authz.user.orgId, 'multiCurrency'),
     orgInfo(authz.user.orgId).then((org) => org?.base_currency ?? ''),
+    isFeatureEnabled(authz.user.orgId, 'accountMerges'),
   ])
+  const merge = openAccount
+    ? await accountMergeDrawerProps(openAccount.account, {
+        orgId: authz.user.orgId,
+        enabled: mergesEnabled,
+        canMerge: mergesEnabled && canManageAccounts && can(authz, 'gl.post') && authz.allowedSubsidiaryIds === null,
+        today: asOf,
+      })
+    : null
   const drawerOptions =
     openAccount || creating
       ? await Promise.all([
@@ -302,6 +369,7 @@ export async function loadAccounts(
           multiCurrency: multiCurrencyEnabled,
           multiSubsidiary: subsidiaryUiEnabled,
           baseCurrency,
+          merge,
         }
       : null
 
@@ -391,6 +459,7 @@ export async function loadAccounts(
         label: t('list.views.hierarchy'),
         active: layout === 'hierarchy',
       },
+      ...(mergesEnabled ? [{ href: '/accounts/merges', label: t('merge.history'), active: false }] : []),
     ],
     onList: layout === 'list',
     onSearch: layout === 'hierarchy' && Boolean(q),

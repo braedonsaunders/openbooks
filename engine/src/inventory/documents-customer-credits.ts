@@ -19,6 +19,7 @@ import {
   subsidiaryCurrency,
 } from "./position.ts";
 import { addLayerAtCost } from "./cost-layers.ts";
+import { crossSubsidiaryFulfillmentHandler, crossSubsidiaryShipment } from "./cross-subsidiary.ts";
 import { extendCost } from "./costing.ts";
 import { stockLocationDim, postInventoryEntry, type JournalLineInput } from "./journal.ts";
 import {
@@ -335,9 +336,14 @@ async function validateCustomerReturnSource(
       `${label} references a reversed shipment; its stock was already restored by the reversal`,
     );
   }
+  // A cross-subsidiary shipment left the fulfilling entity's stock on the
+  // selling entity's order; its return is credited by the selling entity.
+  const crossShipment = source.subsidiary_id !== subsidiaryId
+    ? await crossSubsidiaryShipment(runner, orgId, source.id)
+    : null;
   if (
     source.item_id !== line.itemId ||
-    source.subsidiary_id !== subsidiaryId
+    (source.subsidiary_id !== subsidiaryId && crossShipment?.sellingSubsidiaryId !== subsidiaryId)
   ) {
     throw new InventoryError(
       `${label} source shipment must match its item and legal entity`,
@@ -522,6 +528,10 @@ async function returnCustomerCreditInventoryLine(
     line,
     true,
   );
+  // Goods return to the entity that shipped them. For a cross-subsidiary
+  // shipment that is the fulfilling entity, not the crediting one.
+  const holderId = source.subsidiary_id;
+  const crossSubsidiary = holderId !== subsidiaryId;
   if (source.total_value == null) {
     throw new InventoryError(
       `document line ${line.lineNumber} (item ${line.itemId}) source shipment carries no recorded cost; ` +
@@ -555,25 +565,27 @@ async function returnCustomerCreditInventoryLine(
   }
 
   const ctx = await loadSubsidiaryContext(runner, orgId);
-  assertMovementOwner(ctx, subsidiaryId);
+  assertMovementOwner(ctx, holderId);
   await assertStockLocationAdmitsSubsidiary(
     runner,
     orgId,
     ctx,
     line.stockLocationId,
-    subsidiaryId,
+    holderId,
     "inbound",
   );
   const periodId = await periodForDate(orgId, date, runner);
   if (!periodId) throw new InventoryError(`no accounting period for ${date}`);
   const bookId = await primaryBookId(orgId, runner);
-  const currency = await subsidiaryCurrency(orgId, subsidiaryId, runner);
+  const currency = await subsidiaryCurrency(orgId, holderId, runner);
+  // The selling entity's dimensions stay with its own cross-charge; the
+  // fulfilling entity's restore carries only its warehouse location.
   const dims = {
-    departmentId: line.departmentId,
-    projectId: line.projectId,
+    departmentId: crossSubsidiary ? null : line.departmentId,
+    projectId: crossSubsidiary ? null : line.projectId,
     // A return without an explicit line location arrives at the stock
     // location's business location, like the shipment it reverses.
-    locationId: await stockLocationDim(runner, orgId, line.stockLocationId, line.locationId),
+    locationId: await stockLocationDim(runner, orgId, line.stockLocationId, crossSubsidiary ? null : line.locationId),
   };
   // DR inventory / CR cost of sales at the restored cost: the sale's COGS is
   // relieved by exactly what it recognized for these units.
@@ -587,13 +599,13 @@ async function returnCustomerCreditInventoryLine(
   await validateSubsidiaryRestrictions(runner, {
     orgId,
     ctx,
-    docSubsidiaryId: subsidiaryId,
-    lines: journalLines.map((journalLine) => ({ ...journalLine, subsidiaryId })),
+    docSubsidiaryId: holderId,
+    lines: journalLines.map((journalLine) => ({ ...journalLine, subsidiaryId: holderId })),
   });
   const entryId = await postInventoryEntry(runner, {
     orgId,
     bookId,
-    subsidiaryId,
+    subsidiaryId: holderId,
     actorId,
     currency,
     periodId,
@@ -610,7 +622,7 @@ async function returnCustomerCreditInventoryLine(
        lot_id, serial_id, quantity, unit_cost, total_value, document_line_id,
        journal_entry_id, idempotency_key, status, memo, created_by, updated_by)
     values
-      (${orgId}, ${subsidiaryId}, ${line.itemId}, 'receipt', ${date},
+      (${orgId}, ${holderId}, ${line.itemId}, 'receipt', ${date},
        ${line.stockLocationId}, ${line.selection.lotId}, ${line.selection.serialId},
        ${quantity}, ${unitCost}, ${inventoryValue}, ${line.lineId}, ${entryId},
        ${line.kitItemId ? inventoryKitComponentReturnKey(line.lineId, line.itemId) : inventoryPostingEffectKey(line.lineId, "return")}, 'posted',
@@ -624,7 +636,7 @@ async function returnCustomerCreditInventoryLine(
   await addLayerAtCost(
     runner,
     orgId,
-    subsidiaryId,
+    holderId,
     line.itemId,
     line.stockLocationId,
     quantity,
@@ -634,6 +646,25 @@ async function returnCustomerCreditInventoryLine(
     date,
     actorId,
   );
+  if (crossSubsidiary) {
+    // The selling entity's cost of sales at the transfer price unwinds with
+    // the units, through the same intercompany cross-charge in reverse.
+    const handler = crossSubsidiaryFulfillmentHandler();
+    if (!handler) throw new InventoryError("cross-subsidiary returns are not available in this installation");
+    const credit = (await runner.execute<{ document_id: string }>(sql`
+      select document_id from document_lines where org_id = ${orgId} and id = ${line.lineId}`)).rows[0];
+    await handler.returned(runner, {
+      orgId,
+      actorId,
+      creditDocumentId: credit!.document_id,
+      creditLineId: line.lineId,
+      sourceIssueMovementId: source.id,
+      returnMovementId: movement.id,
+      quantity,
+      date,
+      sellingSubsidiaryId: subsidiaryId,
+    });
+  }
   if ((profile.tracking === "serial" || profile.tracking === "lot_serial")) {
     await runner.execute(sql`
       update serials

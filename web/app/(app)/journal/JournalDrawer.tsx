@@ -1,5 +1,7 @@
 'use client'
 
+import { amortizationLineColumns } from '@/components/transaction-form/amortization-columns'
+
 import { CLEAR_SEGMENT, INHERIT_SEGMENT, segmentCellValue, segmentAssignmentsFromCells } from '@/lib/segment-assignments'
 
 import { useMoney } from '@/components/money-provider'
@@ -38,6 +40,7 @@ import {
   type PersistedDocumentSnapshot,
 } from '../../../components/document-drawer'
 import { FlowManualButtons } from '../../../components/flow-manual-buttons'
+import { JournalBookField, type JournalBookOption } from './JournalBookField'
 import { ApprovalActions } from '../../../components/approval-actions'
 import { ApprovalHistory } from '../../../components/approval-history'
 import {
@@ -167,6 +170,9 @@ const emptyLine = (): LineRow => ({
   departmentId: '',
   projectId: '',
   subsidiaryId: '',
+  amortizationTemplateId: '',
+  amortizationStartOn: '',
+  amortizationEndOn: '',
   debit: '',
   credit: '',
 })
@@ -197,6 +203,9 @@ export function isBlankJournalLine(row: Record<string, unknown>): boolean {
     'departmentId',
     'projectId',
     'subsidiaryId',
+    'amortizationTemplateId',
+    'amortizationStartOn',
+    'amortizationEndOn',
   ]) {
     if (!isBlankJournalCell(row[key])) return false
   }
@@ -252,6 +261,9 @@ function toRow(l: Record<string, unknown>, lineDefs: CustomFieldDefClient[], seg
     departmentId: lineText(l.department_id),
     projectId: lineText(l.project_id),
     subsidiaryId: lineText(l.subsidiary_id),
+    amortizationTemplateId: lineText(l.amortization_template_id),
+    amortizationStartOn: lineText(l.amortization_start_on),
+    amortizationEndOn: lineText(l.amortization_end_on),
     functionalCurrency: lineText(l.functional_currency),
     debit: units > 0n ? formatJournalAmount(units) : '',
     credit: units < 0n ? formatJournalAmount(-units) : '',
@@ -319,6 +331,9 @@ function JournalDrawerBody({
   departments,
   projects,
   subsidiaries,
+  books,
+  canPostBookSpecific = false,
+  amortizationTemplates,
   segments = EMPTY_SEGMENTS,
   headerDefs,
   lineDefs,
@@ -343,6 +358,11 @@ function JournalDrawerBody({
   /** The org's subsidiaries (depth-first tree order). Only passed in
    *  multi-subsidiary orgs — empty/undefined renders NO subsidiary UI. */
   subsidiaries?: SubsidiaryOpt[]
+  /** Active posting books; passed only when Multi-book accounting is on. */
+  books?: JournalBookOption[]
+  /** Whether the viewer may choose a book-specific target. */
+  canPostBookSpecific?: boolean
+  amortizationTemplates?: { id: string; label: string }[]
   segments?: SegmentOpt[]
   headerDefs: CustomFieldDefClient[]
   /** The viewer's custom-field visibility from the server; omitted shows only open fields. */
@@ -375,6 +395,7 @@ function JournalDrawerBody({
   const { money } = useMoney()
   const t = useTranslations('journal.drawer')
   const tNew = useTranslations('journal.newButton')
+  const tAmortization = useTranslations('amortization.billLine')
   const tc = useTranslations('common')
   const router = useRouter()
   const propsDoc = asJournalDoc(journal.doc)
@@ -412,6 +433,8 @@ function JournalDrawerBody({
   const [referenceNumber, setReferenceNumber] = useState<string>(doc.reference_number ?? '')
   const [memo, setMemo] = useState<string>(doc.memo ?? '')
   const [subsidiaryId, setSubsidiaryId] = useState<string>(doc.subsidiary_id ?? '')
+  const bookUi = (books?.length ?? 0) > 1
+  const [accountingBookId, setAccountingBookId] = useState<string>(typeof journal.doc.accounting_book_id === 'string' ? journal.doc.accounting_book_id : '')
   const [customValues, setCustomValues] = useState<Record<string, unknown>>(doc.custom ?? {})
   const [extraDims, setExtraDims] = useState<Record<string, string | null>>(doc.extra_dims ?? {})
   const [rows, setRows] = useState<LineRow[]>(
@@ -482,6 +505,8 @@ function JournalDrawerBody({
       memo,
       // Only sent in multi-subsidiary orgs (undefined drops out of the JSON body).
       subsidiaryId: multiSub ? subsidiaryId || null : undefined,
+      // Only sent when Multi-book accounting offers a choice.
+      accountingBookId: bookUi && canPostBookSpecific ? accountingBookId || null : undefined,
       extraDims,
       custom: customValues,
       // Every contentful row rides — including one missing its account —
@@ -496,6 +521,9 @@ function JournalDrawerBody({
           if (signed === null) return []
           return [{
             accountId: r.accountId,
+            amortizationTemplateId: r.amortizationTemplateId || null,
+            amortizationStartOn: r.amortizationTemplateId ? r.amortizationStartOn || null : null,
+            amortizationEndOn: r.amortizationTemplateId ? r.amortizationEndOn || null : null,
             description: r.description,
             amount: formatJournalAmount(signed), // signed: + debit / − credit
             partyId: r.partyId || null,
@@ -510,7 +538,7 @@ function JournalDrawerBody({
           }]
         }),
     }),
-    [partyId, documentDate, referenceNumber, memo, subsidiaryId, multiSub, customValues, extraDims, rows, lineDefs, segments],
+    [partyId, documentDate, referenceNumber, memo, subsidiaryId, multiSub, accountingBookId, bookUi, canPostBookSpecific, customValues, extraDims, rows, lineDefs, segments],
   )
   // Track unsaved edits (no autosave — Save is an explicit button). Adjusted
   // during render (same committed value, no extra render). `editable` is read
@@ -1103,16 +1131,17 @@ function JournalDrawerBody({
         options: [{ value: INHERIT_SEGMENT, label: tc('labels.inheritHeader') }, { value: CLEAR_SEGMENT, label: tc('labels.noDimensionValue') }, ...segment.values.map((value) => ({ value: value.id, label: `${value.code ? `${value.code} · ` : ''}${value.name}` }))],
         placeholder: '—',
       }))
-      if (!layout) return [...Object.values(builtIn), ...segmentColumns, ...custom.values()]
+      const prepaidColumns = ledgerSnapshot ? [] : amortizationLineColumns<LineRow>(amortizationTemplates, tAmortization)
+      if (!layout) return [...Object.values(builtIn), ...segmentColumns, ...prepaidColumns, ...custom.values()]
       const configured = layout.lines.columns.flatMap((placement) => {
         if (!placement.visible) return []
         const base = isCustomFieldKey(placement.key) ? custom.get(placement.key) : builtIn[placement.key]
         if (!base) return []
         return [{ ...base, width: placement.width ?? base.width, label: placement.labelOverride?.trim() || base.label }]
       })
-      return [...configured, ...segmentColumns]
+      return [...configured, ...segmentColumns, ...prepaidColumns]
     },
-    [accounts, departments, projects, parties, multiSub, subsidiaryOpts, lineDefs, segments, layout, t, tc, ledgerSnapshot, money],
+    [accounts, departments, projects, parties, multiSub, subsidiaryOpts, lineDefs, segments, layout, t, tc, ledgerSnapshot, money, amortizationTemplates, tAmortization],
   )
 
   const field = 'space-y-1.5'
@@ -1274,6 +1303,9 @@ function JournalDrawerBody({
             {warning}
           </p>
         ))}
+        {bookUi ? (
+          <JournalBookField books={books!} value={accountingBookId} onChange={setAccountingBookId} editable={editable && canPostBookSpecific} />
+        ) : null}
         {layout ? <HeaderFields layout={layout} editable={editable} renderField={renderHeaderField} /> : <><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className={field}>
             <Label>{tc('labels.date')}{editable ? <span className="text-red-500"> *</span> : null}</Label>

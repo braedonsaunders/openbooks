@@ -47,6 +47,7 @@ import { RemeasureButton } from './RemeasureButton'
 import { ReverseEventButton } from './ReverseEventButton'
 import { RunDepreciationButton } from './RunDepreciationButton'
 import { DepreciationInputButton } from './DepreciationInputButton'
+import { AssetComponentsPanel } from './AssetComponentsPanel'
 import type { AssetPayload } from '../../api/assets/_lib'
 import { applyCategoryDefaults, categoryDefaultFields, type AssetCategoryDefaultsSource } from './category-defaults'
 
@@ -61,7 +62,7 @@ interface TaxConfiguration { code: string; name: string; class_attribute: string
 
 const METHODS = ['straight_line', 'declining_balance', 'double_declining', 'units_of_production', 'manual'] as const
 const CONVENTIONS = ['full_month', 'mid_month', 'half_year'] as const
-type AssetTab = 'details' | 'tax' | 'schedule' | 'files'
+type AssetTab = 'details' | 'tax' | 'schedule' | 'components' | 'files'
 
 const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 'outline'> = {
   in_service: 'success',
@@ -69,6 +70,8 @@ const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 'outl
   draft: 'outline',
   disposed: 'warning',
   written_off: 'warning',
+  construction: 'warning',
+  capitalized: 'secondary',
 }
 
 // Every stable refusal code POST /api/assets can emit. The collection-route
@@ -133,6 +136,7 @@ export function AssetDrawer({
   periods,
   closeHref = '/assets',
   createMode = false,
+  componentsEnabled = false,
 }: {
   payload: AssetPayload
   categories: CategoryOpt[]
@@ -160,6 +164,8 @@ export function AssetDrawer({
    * performs one idempotent POST and routes to the persisted id.
    */
   createMode?: boolean
+  /** Compound assets are switched on: the drawer shows the Components tab. */
+  componentsEnabled?: boolean
 }) {
   const { money } = useMoney()
   const t = useTranslations('assets')
@@ -181,7 +187,7 @@ export function AssetDrawer({
   const [tab, setTab] = useState<AssetTab>(() => {
     if (createMode) return 'details'
     const requested = searchParams.get('assetTab')
-    return requested === 'schedule' || requested === 'tax' || requested === 'files' ? requested : 'details'
+    return requested === 'schedule' || requested === 'tax' || requested === 'files' || (requested === 'components' && componentsEnabled) ? requested : 'details'
   })
   const [actionsOpen, setActionsOpen] = useState(false)
   const editable = mode === 'edit' && canEditStatus && canManage
@@ -611,9 +617,9 @@ export function AssetDrawer({
     size="2xl"
     title={<span className="flex items-center gap-2.5"><span className="font-mono text-sm text-slate-500 dark:text-slate-400">{assetNumber || a.asset_number}</span><span>{displayName}</span><Badge variant={STATUS_VARIANT[status] ?? 'secondary'}>{t(`status.${status}`)}</Badge></span>}
     description={createMode ? t('create.description') : mode === 'edit' ? t('drawer.editing') : (payload.category?.name ?? undefined)}
-    subtabs={<DrawerTabStrip ariaLabel={t('drawer.tabsAria')} activeKey={tab} onSelect={setTab} tabs={(['details', ...(taxConfigurations.length ? ['tax' as const] : []), 'schedule', ...(!createMode ? ['files' as const] : [])] as const).map((item) => ({
+    subtabs={<DrawerTabStrip ariaLabel={t('drawer.tabsAria')} activeKey={tab} onSelect={setTab} tabs={(['details', ...(taxConfigurations.length ? ['tax' as const] : []), 'schedule', ...(!createMode && componentsEnabled ? ['components' as const] : []), ...(!createMode ? ['files' as const] : [])] as const).map((item) => ({
       key: item,
-      label: item === 'details' ? tCommon('auditTrail.tabs.details') : item === 'tax' ? t('drawer.taxDepreciation') : item === 'files' ? tCommon('labels.attachments') : t('drawer.schedule'),
+      label: item === 'details' ? tCommon('auditTrail.tabs.details') : item === 'tax' ? t('drawer.taxDepreciation') : item === 'files' ? tCommon('labels.attachments') : item === 'components' ? t('components.tab') : t('drawer.schedule'),
     }))} />}
     headerActions={mode === 'edit' ? <div className="flex items-center gap-1.5">
       <Button size="sm" variant="outline" disabled={busy} onClick={cancel}>{tCommon('actions.cancel')}</Button>
@@ -678,6 +684,7 @@ export function AssetDrawer({
     </Table>}
       <Pagination basePath={pathname} currentParams={currentParams} total={payload.schedulePage.total} page={payload.schedulePage.page} perPage={payload.schedulePage.perPage} pageParamKey="deprpage" />
     </div> : null}
+    {tab === 'components' && !createMode && componentsEnabled ? <AssetComponentsPanel assetId={a.id} canManage={canManage} categories={categories} accountOptions={accountOptions} /> : null}
     {tab === 'files' && !createMode ? <AttachmentPanel targetTable="fixed_assets" targetId={a.id} canEdit={canManage} /> : null}
   </UrlDrawer>
 }

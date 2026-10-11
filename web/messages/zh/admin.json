@@ -1283,7 +1283,9 @@
       "purchasing": "采购",
       "parties": "人员和公司",
       "banking": "银行业务",
-      "expenses": "费用报告"
+      "expenses": "费用报告",
+      "intercompany": "公司间",
+      "amortization": "费用摊销"
     },
     "gl_read": "查看日记账和余额",
     "gl_manage": "管理会计科目表",
@@ -1461,7 +1463,16 @@
     "purchase_orders_read": "查看采购订单和收货单",
     "purchase_orders_create": "创建、修改和作废采购订单",
     "goods_receipts_create": "按采购订单收货",
-    "time_self": "录入并提交本人工时"
+    "time_self": "录入并提交本人工时",
+    "intercompany_read": "查看公司间配对、抵销结算批次、资金划转和对账",
+    "intercompany_manage": "创建、关联及解除公司间配对；提出和取消抵销结算方案",
+    "intercompany_settle": "过账和冲销公司间抵销结算及资金划转",
+    "intercompany_approve": "审批或拒绝公司间抵销结算批次",
+    "gl_post_book_specific": "过账账簿专用日记账",
+    "amortization_read": "查看摊销计划和报表",
+    "amortization_manage": "运行摊销并变更摊销计划",
+    "assets_capitalize": "接受资产建议并将在建工程资本化",
+    "assets_maintain": "管理资产维护计划和保险单"
   },
   "ai": {
     "metaTitle": "AI 设置",
@@ -3754,6 +3765,59 @@
         "title": "职位描述",
         "singularTitle": "职位描述",
         "description": "新招聘申请可复用的发布内容：职位名称、雇用类型、薪酬范围和说明。"
+      },
+      "intercompany-representing-parties": {
+        "title": "公司间代表往来方",
+        "description": "在与其他法人交易时代表各法人的客户和供应商。"
+      },
+      "intercompany-transfer-pricing": {
+        "title": "公司间转移定价",
+        "description": "为另一法人交付货物的有效期价格策略：价格等级或成本加成。"
+      },
+      "period-end-journal-policies": {
+        "title": "期末结账分录",
+        "singular": "期末结账分录政策",
+        "description": "年末结账如何过账其分录：留存收益科目、可选的本年利润汇总科目、资产负债表结账分录和开账分录、过账期间，以及结账行保留的维度。每个版本适用于在其生效日期或之后结束的会计年度。"
+      },
+      "accounting-book-currencies": {
+        "title": "账簿币种",
+        "description": "辅助账簿为每个子公司保留的本位币和折算汇率类型（按生效日期）。",
+        "singularTitle": "账簿币种"
+      },
+      "accounting-book-account-maps": {
+        "title": "账簿科目映射",
+        "description": "辅助账簿记录科目表中某科目所用的科目（按生效日期，可选按子公司）。",
+        "singularTitle": "科目映射"
+      },
+      "accounting-book-replication": {
+        "title": "账簿复制",
+        "description": "启用、补齐或停止将每笔交易复制到辅助账簿，并保留每次变更的历史。",
+        "singularTitle": "复制变更"
+      },
+      "expense-amortization-templates": {
+        "title": "摊销模板",
+        "description": "预付及递延费用转入费用的方式：方法、期限、递延科目和默认转入科目。按代码设定生效日期。"
+      },
+      "accounting-contexts": {
+        "title": "会计上下文",
+        "description": "命名的上下文（例如当地法定科目表），报表可按其本地化科目编号和名称运行。"
+      },
+      "accounting-context-defaults": {
+        "title": "默认设置",
+        "description": "除非报表指定其他上下文，否则按此上下文报告的子公司（或某国家的所有子公司）。"
+      },
+      "account-localizations": {
+        "title": "本地化科目",
+        "description": "按科目设置带生效日期的本地化编号和名称，可选限定某子公司。每个范围和期间内，一个本地化编号只能属于一个科目。"
+      },
+      "segment-value-dependencies": {
+        "title": "依赖关系",
+        "description": "此段的值仅允许与控制段的指定值组合。每行允许一个控制值；没有任何行的值不受限制。"
+      },
+      "asset-capitalization-rules": {
+        "title": "资本化规则",
+        "singularTitle": "资本化规则",
+        "description": "确定哪些已过账采购明细行生成资产建议：按科目、物料或物料类别设定最低金额，并按生效日期管理。"
       }
     },
     "fields": {
@@ -4381,7 +4445,46 @@
       "compensationMin": "薪酬下限",
       "compensationMax": "薪酬上限",
       "compensationCurrency": "薪酬币种",
-      "compensationBasis": "薪酬基准"
+      "compensationBasis": "薪酬基准",
+      "customerPartyId": "代表客户",
+      "vendorPartyId": "代表供应商",
+      "fromReceivableAccountId": "起始法人的公司间应收款",
+      "fromPayableAccountId": "起始法人的公司间应付款",
+      "toReceivableAccountId": "对应法人的公司间应收款",
+      "toPayableAccountId": "对应法人的公司间应付款",
+      "sellerSubsidiaryId": "销售法人",
+      "buyerSubsidiaryId": "采购法人",
+      "markupPercent": "加价率（%）",
+      "revenueAccountId": "公司间收入科目",
+      "costAccountId": "公司间成本科目",
+      "closingMethod": "结账方式",
+      "retainedEarningsAccountId": "留存收益科目",
+      "incomeSummaryAccountId": "本年利润汇总科目",
+      "balanceSheetJournals": "资产负债表结账分录和开账分录",
+      "postingPeriod": "过账期间",
+      "preserveDepartments": "保留部门",
+      "preserveClasses": "保留类别",
+      "preserveLocations": "保留地点",
+      "preserveProjects": "保留项目",
+      "preserveSegments": "保留自定义分段",
+      "amortizationMethod": "摊销方法",
+      "amortizationTermSource": "期限依据",
+      "amortizationPeriodCount": "期间数",
+      "amortizationPercentages": "比例表",
+      "amortizationPeriodRow": "期间 {number}",
+      "amortizationAddPeriod": "添加期间",
+      "amortizationPercent": "占金额的百分比",
+      "amortizationDeferralAccount": "递延科目（预付费用）",
+      "amortizationDestinationAccount": "默认转入科目",
+      "contextId": "会计上下文",
+      "localizedNumber": "本地化编号",
+      "localizedName": "本地化名称",
+      "valueId": "值",
+      "controllingSegmentId": "控制段",
+      "allowedValueId": "允许搭配",
+      "matchKind": "匹配依据",
+      "minimumAmount": "资本化最低金额",
+      "assetCategoryId": "建议资产类别"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "最新可用汇率距期末的天数超过此值时，重估和合并将拒绝该汇率。期末汇率从期末即期汇率的日期起算；平均汇率从计入平均的最新报价日期起算。未设置政策时的默认值：31 天。",
@@ -4560,7 +4663,32 @@
       "hrmJobDescriptionTitle": "求职者在职位发布中看到的职位名称。",
       "hrmJobDescriptionKind": "例如：全职、兼职、季节性或合同制。",
       "hrmJobDescriptionPay": "可选。请同时填写下限、上限、币种和基准，或四项全部留空。",
-      "hrmJobDescriptionBody": "职位发布文本。新招聘申请会复制该文本，因此在此编辑不会更改已有职位。"
+      "hrmJobDescriptionBody": "职位发布文本。新招聘申请会复制该文本，因此在此编辑不会更改已有职位。",
+      "representedSubsidiary": "这些往来方在其他法人账簿中代表的法人。",
+      "representingCustomer": "其他法人向该法人销售时向此客户开票。此客户不得已与其代表的法人自身发生交易。",
+      "representingVendor": "其他法人向该法人采购时从此供应商收票。此供应商不得已与其代表的法人自身发生交易。",
+      "transferPricingSeller": "交付货物并收费的法人。",
+      "transferPricingBuyer": "留空则适用于所有没有单独策略的采购法人。",
+      "transferPricingMarkup": "在交付法人的成本上加成。10 表示成本加 10%。",
+      "transferPricingRevenue": "交付法人的公司间收入。必须标记为合并抵销。",
+      "transferPricingCost": "销售法人按转移价格计算的成本。必须标记为合并抵销。",
+      "intercompanyControlAccount": "代表往来方的公司间销售和采购发票将未结项过账至这些科目。每个科目均须标记为合并抵销。",
+      "periodEndEffectiveFrom": "在此日期或之后结束的会计年度按此版本结账。不能追溯至已由期末结账分录结账的年度。",
+      "periodEndClosingMethod": "直接：收入和费用结转至留存收益。经由本年利润汇总科目：先结转至该科目，再由该科目结转至留存收益。",
+      "periodEndPostingPeriod": "会计年度的最后一个常规期间；若会计日历设有调整期间，则为该年度的调整期间。",
+      "periodEndBalanceSheetJournals": "同时在年末日期将所有资产负债表科目清零，并在下一会计年度第一天重新建立相同余额。",
+      "periodEndPreserveSegments": "平衡分段始终保留，使每个分段值各自保持平衡。",
+      "amortizationTemplateCode": "同一模板的各版本共用代码；以交易过账日期生效的版本为准。",
+      "amortizationEffectiveFrom": "在此日期或之后过账的交易使用此版本。已使用的版本保持其规则不变；如需变更，请添加较晚生效的版本。",
+      "amortizationMethod": "直线法按期间平均分摊；按比例法按天数分摊首末不完整月份；按实际天数法以各月服务天数加权；可变比例法按比例表分摊。",
+      "amortizationTermSource": "模板期间自行的服务开始日起按下方期间数摊销；服务日期使用行自身的开始和结束日期。",
+      "amortizationPercentages": "按顺序每个期间一个百分比，合计恰好为 100。",
+      "amortizationPeriodOffset": "开始后等待多少个期间再开始摊销；0 表示自第一个期间开始。",
+      "amortizationDeferralAccount": "费用在摊销前所记入的流动资产或其他资产科目。",
+      "amortizationDestinationAccount": "留空时，每行摊销至其自身的费用科目。",
+      "contextDefaultScope": "选择一个子公司，或留空并选择国家以涵盖该国所有子公司。",
+      "localizationSubsidiary": "留空则适用于所有子公司；特定子公司的本地化在该子公司的报表中优先。",
+      "allowedValue": "每行一个允许值。为此值可搭配使用的每个控制段值各添加一行。"
     },
     "options": {
       "withholdingCondominiumPayer": "公寓业主共同体付款人",
@@ -5370,6 +5498,33 @@
       "schedulePdfColorTreatment": {
         "subtle": "柔和强调",
         "strong": "浓色填充"
+      },
+      "transferPricingMethod": {
+        "price_level": "价格级别",
+        "cost_plus": "成本加成"
+      },
+      "periodEndClosingMethod": {
+        "retained_earnings": "直接结转至留存收益",
+        "income_summary": "经由本年利润汇总科目"
+      },
+      "periodEndPostingPeriod": {
+        "last_period": "年度最后一个期间",
+        "adjustment_period": "调整期间"
+      },
+      "amortizationMethod": {
+        "straight_line": "按期间直线法",
+        "prorated_first_last": "首末期间按比例",
+        "exact_days": "按实际天数",
+        "variable": "可变比例"
+      },
+      "amortizationTermSource": {
+        "template": "模板期间",
+        "service_dates": "行服务日期"
+      },
+      "capitalizationMatch": {
+        "account": "科目",
+        "item": "物料",
+        "itemCategory": "物料类别"
       }
     },
     "payroll": {
@@ -5801,7 +5956,9 @@
         "draftInformationReturns": "{count, plural, one {# 份进行中的信息申报表} other {# 份进行中的信息申报表}}",
         "unfiledInformationReturns": "{count, plural, one {# 份已定稿未报送的信息申报表} other {# 份已定稿未报送的信息申报表}}",
         "activeAllocationRules": "{count, plural, one {# 条有效分摊规则} other {# 条有效分摊规则}}",
-        "previewedAllocationRuns": "{count, plural, one {# 次已预览分摊运行} other {# 次已预览分摊运行}}"
+        "previewedAllocationRuns": "{count, plural, one {# 次已预览分摊运行} other {# 次已预览分摊运行}}",
+        "fullReplicationBooks": "复制每笔交易的账簿",
+        "bookSpecificJournals": "账簿专用日记账"
       },
       "errors": {
         "blocked": "此功能无法关闭 — 其数据是总账的结构性支撑。",
@@ -6373,7 +6530,9 @@
       "scheduleBoardBooking": "安排",
       "scheduleBoardBookingHelp": "全天安排按排程板时区使用这些工作时间。",
       "scheduleBoardAutomation": "自动化",
-      "scheduleBoardAutomationHelp": "在此排程板上发布安排后执行的操作。"
+      "scheduleBoardAutomationHelp": "在此排程板上发布安排后执行的操作。",
+      "intercompanyControlAccounts": "公司间应收应付科目",
+      "periodEndDimensions": "结账行保留的维度"
     },
     "constructionRateEditor": {
       "tab": "适用范围和工资率"
@@ -7382,6 +7541,75 @@
       "4": "星期四",
       "5": "星期五",
       "6": "星期六"
+    },
+    "multiBook": {
+      "currencyFormDescription": "辅助账簿可以用自己的本位币记录子公司。过入该账簿的分录按其日期以所选汇率类型折算。版本不会在账簿已有分录之下变更；如需更改汇率类型，请添加从较晚日期开始的新版本。",
+      "mapFormDescription": "在某一账簿中将科目表科目记为另一科目。映射保持报表类别、遵守币种限制，并自开始日期起适用于复制或生成到该账簿的每笔分录。",
+      "replicationFormDescription": "每次变更都会连同原因记录。启用会在同一步骤中复制自开始日期起的每笔交易，并将之前的历史作为期初余额或完整历史带入。",
+      "fields": {
+        "bookId": "账簿",
+        "subsidiaryId": "子公司",
+        "mapSubsidiaryId": "子公司（可选）",
+        "currency": "账簿币种",
+        "rateType": "汇率类型",
+        "effectiveFrom": "生效日期",
+        "effectiveTo": "失效日期",
+        "reason": "原因",
+        "sourceAccountId": "科目表科目",
+        "targetAccountId": "账簿科目",
+        "kind": "变更",
+        "modeAfter": "模式",
+        "replicationMode": "复制",
+        "replicationFrom": "复制起始日期",
+        "replicatedCount": "已复制分录",
+        "createdAt": "记录时间",
+        "openingStrategy": "之前的历史",
+        "currencyDifferenceAccountId": "汇兑差额科目"
+      },
+      "help": {
+        "bookId": "辅助账簿。主账簿是正式账簿，不接受账簿配置。",
+        "currency": "一个账簿对每个子公司只使用一种币种。",
+        "rateType": "即期汇率使用过账日期当日或之前的最新汇率；月平均汇率使用当月即期汇率的平均值。",
+        "effectiveTo": "留空以保持该版本有效。不能早于账簿在此版本下已有的分录而结束。",
+        "reason": "与变更一起记录在审计轨迹中。",
+        "targetAccountId": "必须保持该科目的报表类别和币种限制。",
+        "mapSubsidiaryId": "留空则对所有子公司映射该科目；子公司映射优先于全组织映射。",
+        "kind": "启用开始完整复制；补齐填补缺口；停用停止复制；设置更改汇兑差额科目。",
+        "replicationFrom": "账簿接收的第一个过账日期。一经设定不可更改。",
+        "openingStrategy": "期初余额会过账开始日期前各科目的余额；完整历史要求主账簿在此之前没有分录。",
+        "currencyDifferenceAccountId": "用于记录多币种分录折算为账簿币种后剩余差额的收入、费用或权益科目。"
+      },
+      "rateTypes": {
+        "spot": "即期",
+        "month_average": "月平均"
+      },
+      "changeKinds": {
+        "activation": "启用完整复制",
+        "catch_up": "补齐",
+        "deactivation": "停用复制",
+        "settings": "更改设置"
+      },
+      "openingStrategies": {
+        "opening_balances": "期初余额",
+        "full_history": "完整历史"
+      },
+      "modes": {
+        "adjustment_only": "仅调整",
+        "full": "完整"
+      }
+    },
+    "segmentDependencies": {
+      "navTitle": "依赖关系例外",
+      "title": "段依赖关系例外",
+      "description": "{count, plural, =0 {没有未过账单据违反依赖规则。} other {# 条未过账单据行违反其日期有效的依赖规则。}}",
+      "empty": "没有未过账单据违反依赖规则。",
+      "columns": {
+        "document": "单据",
+        "date": "日期",
+        "status": "状态",
+        "line": "行",
+        "problem": "问题"
+      }
     }
   },
   "flows": {
@@ -8105,6 +8333,66 @@
     "manufacturingSubcontract": {
       "title": "外协制造",
       "description": "向供应商发送组件，记录加工服务，并将生产数量返回生产订单。"
+    },
+    "intercompanyTransactions": {
+      "title": "公司间交易",
+      "description": "各法人的代表客户和供应商、公司间应收应付科目、配对单据及转移定价。"
+    },
+    "intercompanyNetting": {
+      "title": "公司间抵销结算",
+      "description": "经审批抵销并结算各法人之间的余额，并在各法人银行账户之间划转资金。"
+    },
+    "crossSubsidiaryFulfillment": {
+      "title": "跨法人履约",
+      "description": "从另一法人的仓库履行销售订单，并按转移价格计入公司间收费。"
+    },
+    "periodEndJournals": {
+      "title": "期末结账分录",
+      "description": "为要求结账分录的司法辖区过账明确的年末结账分录：将收入和费用结转至留存收益，可选择经由本年利润汇总科目，并可选过账资产负债表结账分录及下一年度的开账分录。无论是否启用，报表都会计算留存收益。"
+    },
+    "multiBookAccounting": {
+      "title": "多账簿会计",
+      "description": "为每个子公司以各自的本位币维护辅助账簿，按账簿映射科目，将每笔交易复制到完整账簿，过账账簿专用日记账，并并排比较账簿。"
+    },
+    "expenseAmortization": {
+      "title": "费用摊销",
+      "description": "账单、日记账和费用报销单中的预付及递延费用按摊销计划逐期摊销，并提供结账步骤及与总账的对账。"
+    },
+    "expenseAmortizationAutoRun": {
+      "title": "自动摊销",
+      "description": "由调度程序在期间结束时过账到期的摊销期间，无需手动运行。"
+    },
+    "accountMerges": {
+      "title": "科目合并",
+      "description": "将重复科目合并到保留科目：预览所有拒绝原因和影响，通过重分类凭证转移余额并一同转移配置，同时保持已过账历史不变。"
+    },
+    "accountingContexts": {
+      "title": "会计上下文",
+      "description": "按上下文（可选按子公司或国家）以本地化的科目编号和名称展示报表，例如当地法定科目表。"
+    },
+    "segmentDependencies": {
+      "title": "段依赖关系",
+      "description": "仅允许某段值与另一段的指定值组合使用，例如某类别仅限特定部门；在保存和过账单据时强制执行。"
+    },
+    "assetComponents": {
+      "title": "组合资产",
+      "description": "将组成部分资产归入上级资产，各自拥有独立的成本、使用寿命和折旧，按账簿汇总并一并处置。"
+    },
+    "assetProposals": {
+      "title": "资产建议",
+      "description": "将符合资本化规则的已过账采购明细行转为建议，可接受为资产、组成部分或在建工程。"
+    },
+    "constructionInProgress": {
+      "title": "在建工程",
+      "description": "在在建工程记录上归集成本，与总账对账，并在完工时资本化为资产。"
+    },
+    "assetMaintenance": {
+      "title": "资产维护",
+      "description": "按时间或计量表读数安排维护，按支付账单记录已完成工作，并接收到期和逾期提醒。"
+    },
+    "assetInsurance": {
+      "title": "资产保险",
+      "description": "记录承保资产的保险单，接收续保提醒，并比较保险价值与净账面价值。"
     }
   },
   "backupsManager": {

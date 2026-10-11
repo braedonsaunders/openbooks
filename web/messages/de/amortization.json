@@ -1,0 +1,185 @@
+{
+  "workspace": {
+    "title": "Abgrenzungen",
+    "description": "Vorausbezahlte und abgegrenzte Aufwendungen, die auf Rechnungsabgrenzungskonten liegen und periodenweise in den Aufwand übergehen."
+  },
+  "views": {
+    "schedules": "Pläne",
+    "run": "Lauf",
+    "reconciliation": "Abstimmung"
+  },
+  "statusFilter": {
+    "open": "Offen",
+    "draft": "Entwurf",
+    "active": "Aktiv",
+    "on_hold": "Angehalten",
+    "completed": "Abgeschlossen",
+    "cancelled": "Storniert"
+  },
+  "status": {
+    "draft": "Entwurf",
+    "active": "Aktiv",
+    "on_hold": "Angehalten",
+    "completed": "Abgeschlossen",
+    "cancelled": "Storniert"
+  },
+  "sourceKind": {
+    "vendor_bill": "Eingangsrechnung",
+    "journal": "Buchungssatz",
+    "expense_report": "Spesenabrechnung",
+    "manual": "Manuell"
+  },
+  "method": {
+    "straight_line": "Linear je Periode",
+    "prorated_first_last": "Erste und letzte Periode anteilig",
+    "exact_days": "Taggenau",
+    "variable": "Variable Prozentsätze"
+  },
+  "event": {
+    "created": "Angelegt",
+    "activated": "Aktiviert",
+    "held": "Angehalten",
+    "resumed": "Fortgesetzt",
+    "term_changed": "Laufzeit geändert",
+    "destination_changed": "Zielkonto geändert",
+    "reduced": "Um eine Gutschrift gemindert",
+    "cancelled": "Storniert",
+    "source_voided": "Beleg storniert",
+    "completed": "Vollständig aufgelöst"
+  },
+  "list": {
+    "statusFilter": "Pläne nach Stand filtern",
+    "templates": "Abgrenzungsvorlagen",
+    "waterfall": "Verlauf der aktiven Rechnungsabgrenzung",
+    "empty": "Keine passenden Pläne. Grenzen Sie eine Rechnungsposition über eine Abgrenzungsvorlage ab oder erfassen Sie einen manuellen Plan.",
+    "columns": {
+      "number": "Plan",
+      "status": "Stand",
+      "source": "Herkunft",
+      "template": "Vorlage",
+      "subsidiary": "Tochtergesellschaft",
+      "total": "Abgegrenzt",
+      "remaining": "Noch nicht aufgelöst",
+      "nextPeriod": "Nächste Periode"
+    }
+  },
+  "drawer": {
+    "total": "Abgegrenzt",
+    "amortized": "Aufgelöst",
+    "remaining": "Noch nicht aufgelöst",
+    "nextPeriod": "Nächste Periode",
+    "source": "Herkunft",
+    "line": "Position {line}",
+    "serviceWindow": "Leistungszeitraum",
+    "method": "Methode",
+    "deferralAccount": "Abgrenzungskonto",
+    "destinationAccount": "Zielkonto",
+    "subsidiary": "Tochtergesellschaft",
+    "currency": "Währung",
+    "openingAmortized": "Vor diesem Plan aufgelöst",
+    "holdReason": "Grund für das Anhalten",
+    "planTab": "Planung",
+    "historyTab": "Verlauf",
+    "changesTab": "Änderungen",
+    "period": "Periode",
+    "account": "Konto",
+    "planned": "Geplant",
+    "posted": "Gebucht",
+    "noPlan": "Es sind keine Perioden mehr geplant.",
+    "balanceChange": "Saldoänderung: {amount}",
+    "viewEntry": "Buchungssatz anzeigen"
+  },
+  "changes": {
+    "action": "Änderung",
+    "failed": "Die Änderung wurde nicht gespeichert.",
+    "saved": "Plan aktualisiert",
+    "effectivePeriod": "Wirksam ab Periode",
+    "newLastPeriod": "Neue letzte Periode",
+    "destinationAccount": "Neues Zielkonto",
+    "amount": "Gutschriftsbetrag",
+    "cancelMode": "Saldo ausgleichen durch",
+    "effectiveDate": "Wirksamkeitsdatum",
+    "reason": "Begründung",
+    "actions": {
+      "activate": "Aktivieren",
+      "hold": "Anhalten",
+      "resume": "Fortsetzen",
+      "change_term": "Laufzeit ändern",
+      "change_destination": "Zielkonto ändern",
+      "reduce": "Um Gutschrift mindern",
+      "cancel": "Plan stornieren"
+    },
+    "hints": {
+      "activate": "Startet die Auflösung eines manuellen Plans. Sein Saldo muss bereits auf dem Abgrenzungskonto stehen.",
+      "hold": "Läufe überspringen den Plan, bis er fortgesetzt wird.",
+      "resume": "Fällige Perioden werden beim nächsten Lauf gebucht.",
+      "change_term": "Verteilt jeden nicht gebuchten Betrag, auch aus früheren nie gebuchten Perioden, gleichmäßig ab der gewählten Periode bis zur neuen letzten Periode.",
+      "change_destination": "Löst ab der gewählten Periode auf das neue Konto auf.",
+      "reduce": "Erfasst eine Gutschrift zum Plan und plant die nicht gebuchten Perioden neu; zu viel aufgelöster Aufwand kehrt auf das Abgrenzungskonto zurück.",
+      "cancel": "Abschreiben bucht den nicht aufgelösten Saldo in den Aufwand; Rückbuchen gibt gebuchte Auflösungen für einen voll gutgeschriebenen Beleg zurück."
+    },
+    "modes": {
+      "write_off": "Abschreiben des nicht aufgelösten Saldos",
+      "reverse": "Rückbuchen gebuchter Auflösungen"
+    }
+  },
+  "run": {
+    "period": "Auflösen bis Periode",
+    "submit": "{count, plural, =0 {Nichts fällig} one {# Periode buchen} other {# Perioden buchen}}",
+    "description": "Bucht jede geplante Periode aktiver Pläne, die spätestens am Periodenende endet. Eine gebuchte Periode wird nie erneut gebucht.",
+    "failed": "Die Auflösung wurde nicht ausgeführt.",
+    "saved": "{posted, plural, =0 {Nichts gebucht} one {# Periode gebucht} other {# Perioden gebucht}}",
+    "empty": "Bis zu dieser Periode ist nichts fällig.",
+    "columns": {
+      "schedule": "Plan",
+      "period": "Periode",
+      "account": "Aufwandskonto",
+      "amount": "Betrag"
+    }
+  },
+  "reconciliation": {
+    "asOf": "Stichtag",
+    "report": "Abstimmungsbericht öffnen",
+    "tied": "Jedes Abgrenzungskonto stimmt mit seinen Plänen überein.",
+    "untied": "Ein Abgrenzungskonto weicht von seinen Plänen ab: Eine Buchung darauf ist durch keinen Plan erklärt.",
+    "empty": "Noch keine Abgrenzungskonten abzustimmen.",
+    "columns": {
+      "account": "Abgrenzungskonto",
+      "subsidiary": "Tochtergesellschaft",
+      "book": "Buch",
+      "ledger": "Hauptbuch",
+      "subledger": "Pläne",
+      "difference": "Differenz",
+      "openSchedules": "Offene Pläne"
+    }
+  },
+  "newSchedule": {
+    "open": "Neuer Plan",
+    "title": "Neuer manueller Plan",
+    "description": "Erfasst einen Abgrenzungssaldo, der bereits auf einem Abgrenzungskonto steht. Er wird als Entwurf gespeichert und bucht bis zur Aktivierung nichts.",
+    "noTemplates": "Legen Sie zuerst eine Abgrenzungsvorlage an:",
+    "template": "Vorlage",
+    "subsidiary": "Tochtergesellschaft",
+    "totalAmount": "Abgegrenzter Betrag",
+    "openingAmortized": "Bereits aufgelöst",
+    "serviceStart": "Leistungsbeginn",
+    "serviceEnd": "Leistungsende",
+    "amortizeFrom": "Erste aufzulösende Periode",
+    "destinationAccount": "Zielkonto",
+    "memo": "Notiz",
+    "reason": "Begründung",
+    "submit": "Entwurf speichern",
+    "saved": "Plan {number} als Entwurf gespeichert",
+    "failed": "Der Plan wurde nicht gespeichert."
+  },
+  "billLine": {
+    "lineTemplate": "Abgrenzung",
+    "lineTemplateHelp": "Grenzt diese Position auf das Abgrenzungskonto der Vorlage ab und löst sie periodenweise auf.",
+    "lineNoTemplate": "Sofort als Aufwand",
+    "lineServiceStart": "Leistungsbeginn",
+    "lineServiceEnd": "Leistungsende"
+  },
+  "common": {
+    "cancel": "Abbrechen"
+  }
+}

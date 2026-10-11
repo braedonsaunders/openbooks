@@ -287,6 +287,7 @@ async function loadCloseWizard(
     advancedClose: featureEnabled(featureState, 'advancedClose'),
     canPostGl: can(authz, 'gl.post'),
     unbilledRevenueAccrual: featureEnabled(featureState, 'unbilledRevenueAccrual'),
+    periodEndJournals: featureEnabled(featureState, 'periodEndJournals'),
   }
 }
 

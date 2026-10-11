@@ -1,4 +1,5 @@
 import 'server-only'
+import { amortizationLineRefusal, validateSavedAmortizationLines } from '@openbooks/engine/amortization'
 import { sql } from 'drizzle-orm'
 import { db, schema, withOrgTransaction, type SqlExecutor } from '@openbooks/engine/platform/db'
 import { isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
@@ -55,6 +56,9 @@ function exactMoney(v: unknown): string | 'invalid' {
 }
 
 export interface PreparedExpenseLine {
+  amortizationTemplateId: string | null
+  amortizationStartOn: string | null
+  amortizationEndOn: string | null
   accountId: string
   description: string | null
   settlementType: ExpenseSettlementType
@@ -252,6 +256,9 @@ export async function prepareExpenseEdit(
     const exactLines: typeof valid = []
     for (let i = 0; i < valid.length; i++) {
       const line = valid[i]!
+      if (line.amortizationTemplateId != null && !isUuid(line.amortizationTemplateId)) throw new DocumentEditError(422, `Line ${i + 1}: invalid amortization template`)
+      const amortizationRefusal = amortizationLineRefusal('expense_report', line)
+      if (amortizationRefusal) throw new DocumentEditError(422, `Line ${i + 1}: ${amortizationRefusal}`)
       const amount = exactMoney(line.amount)
       if (amount === 'invalid') {
         throw new DocumentEditError(
@@ -341,6 +348,9 @@ export async function prepareExpenseEdit(
         throw new DocumentEditError(422, 'Expense line tax amount is not a valid amount')
       }
       preparedLines.push({
+        amortizationTemplateId: l.amortizationTemplateId ?? null,
+        amortizationStartOn: l.amortizationStartOn ?? null,
+        amortizationEndOn: l.amortizationEndOn ?? null,
         accountId: l.accountId!,
         description: l.description ?? null,
         settlementType: l.settlementType as ExpenseSettlementType,
@@ -393,13 +403,14 @@ export async function persistExpenseEdit(
         insert into document_lines (org_id, document_id, line_number, account_id, description,
                                     quantity, unit_price, amount, tax_code_id, tax_group_id, tax_input_amount,
                                     tax_amount, tax_overridden, settlement_type,
-                                    department_id, project_id, extra_dims, custom)
+                                    department_id, project_id, extra_dims, custom, amortization_template_id, amortization_start_on, amortization_end_on)
         values (${orgId}, ${docId}, ${i + 1}, ${l.accountId}, ${l.description},
                 '1', ${l.amount}, ${l.amount}, ${l.taxCodeId}, ${l.taxGroupId}, ${l.taxInputAmount},
                 ${l.taxAmount}, ${l.taxOverridden}, ${l.settlementType},
-                ${l.departmentId}, ${l.projectId}, ${JSON.stringify(l.extraDims)}::jsonb, ${JSON.stringify(l.custom)})
+                ${l.departmentId}, ${l.projectId}, ${JSON.stringify(l.extraDims)}::jsonb, ${JSON.stringify(l.custom)}, ${l.amortizationTemplateId}, ${l.amortizationStartOn}, ${l.amortizationEndOn})
         returning id
       `))
+      if (inserted.rows.length !== 1) throw new DocumentEditError(409, `Line ${i + 1} could not be saved`)
       await persistLineTaxComponents(tx, {
         orgId,
         documentLineId: inserted.rows[0]!.id,
@@ -409,7 +420,7 @@ export async function persistExpenseEdit(
     }
   }
 
-  await tx.execute(sql`
+  const updated = await tx.execute<{ id: string }>(sql`
     update documents set
       party_id = coalesce(${args.body.partyId ?? null}, party_id),
       payment_card_id = ${args.body.paymentCardId !== undefined ? args.body.paymentCardId : sql`payment_card_id`},
@@ -426,7 +437,10 @@ export async function persistExpenseEdit(
       ),
       updated_by = ${args.userId}
     where id = ${docId} and org_id = ${orgId}
+    returning id
   `)
+  if (updated.rows.length !== 1) throw new DocumentEditError(409, 'Expense report could not be saved')
+  await validateSavedAmortizationLines(tx, orgId, docId)
 }
 
 /**
@@ -576,6 +590,9 @@ export async function createExpenseCorrectionDraft(
       // submitted body applies over it through the shared persist.
       const sourceLines = (await tx.execute<{
         lineNumber: number
+        amortizationTemplateId: string | null
+        amortizationStartOn: string | null
+        amortizationEndOn: string | null
         accountId: string
         description: string | null
         quantity: string
@@ -593,6 +610,7 @@ export async function createExpenseCorrectionDraft(
         custom: unknown
       }>(sql`
         select line_number as "lineNumber", account_id as "accountId", description,
+               amortization_template_id as "amortizationTemplateId", amortization_start_on::text as "amortizationStartOn", amortization_end_on::text as "amortizationEndOn",
                quantity::text as "quantity", unit_price::text as "unitPrice", amount::text as "amount",
                tax_code_id as "taxCodeId", tax_group_id as "taxGroupId",
                tax_input_amount::text as "taxInputAmount", tax_amount::text as "taxAmount", tax_overridden as "taxOverridden",
@@ -608,12 +626,14 @@ export async function createExpenseCorrectionDraft(
           insert into document_lines
             (org_id, document_id, line_number, account_id, description,
              quantity, unit_price, amount, tax_code_id, tax_group_id, tax_input_amount,
-             tax_amount, tax_overridden, settlement_type, department_id, project_id, extra_dims, custom)
+             tax_amount, tax_overridden, settlement_type, department_id, project_id, extra_dims, custom,
+             amortization_template_id, amortization_start_on, amortization_end_on)
           values (${ctx.orgId}, ${created.id}, ${line.lineNumber}, ${line.accountId}, ${line.description},
                   ${line.quantity}, ${line.unitPrice}, ${line.amount}, ${line.taxCodeId}, ${line.taxGroupId},
                   ${line.taxInputAmount}, ${line.taxAmount}, ${line.taxOverridden}, ${line.settlementType},
                   ${line.departmentId}, ${line.projectId},
-                  ${JSON.stringify(line.extraDims ?? {})}::jsonb, ${JSON.stringify(line.custom ?? {})}::jsonb)
+                  ${JSON.stringify(line.extraDims ?? {})}::jsonb, ${JSON.stringify(line.custom ?? {})}::jsonb,
+                  ${line.amortizationTemplateId}, ${line.amortizationStartOn}, ${line.amortizationEndOn})
           returning id
         `)).rows[0]
         if (!inserted) throw new Error(`correction line ${line.lineNumber} disappeared during initialization`)

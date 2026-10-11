@@ -24,9 +24,12 @@ import { COMPANY_ENTITIES } from './entities/company'
 import { CALENDAR_ENTITIES } from './entities/calendars'
 import { WORK_CALENDARS_ENTITY } from './entities/work-calendars'
 import { ACCOUNTING_ENTITIES } from './entities/accounting'
+import { AMORTIZATION_ENTITIES } from './entities/amortization'
 import { INTERNAL_BILLING_RULES_ENTITY } from './entities/internal-billing'
+import { MULTI_BOOK_ENTITIES } from './entities/multibook'
 import { TAX_ENTITIES } from './entities/taxes'
 import { DIMENSION_ENTITIES } from './entities/dimensions'
+import { CHART_ENTITIES } from './entities/chart'
 import { BILLING_ENTITIES } from './entities/billing'
 import { SALES_SETUP_ENTITIES } from './entities/sales'
 import { STORED_VALUE_ENTITIES } from './entities/stored-value'
@@ -60,7 +63,9 @@ export const SETUP_ENTITIES: SetupEntity[] = [
   AI_CAPABILITIES_ENTITY,
   ...COMPANY_ENTITIES,
   ...ACCOUNTING_ENTITIES,
+  ...AMORTIZATION_ENTITIES,
   INTERNAL_BILLING_RULES_ENTITY,
+  ...MULTI_BOOK_ENTITIES,
   ...CALENDAR_ENTITIES,
   WORK_CALENDARS_ENTITY,
   ...TAX_ENTITIES,
@@ -88,6 +93,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
   ...COMMERCE_ENTITIES,
   PAYROLL_COMPENSATION_PACKAGES_ENTITY, PAYROLL_COMPENSATION_VERSIONS_ENTITY, PAYROLL_COMPENSATION_ASSIGNMENTS_ENTITY,
   TRAINING_COURSES_ENTITY, TRAINING_SESSIONS_ENTITY, TRAINING_PARTICIPANTS_ENTITY,
+  ...CHART_ENTITIES,
 ]
 
 export const SETUP_ENTITY_BY_KEY = new Map(SETUP_ENTITIES.map((e) => [e.key, e]))

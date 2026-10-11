@@ -1283,7 +1283,9 @@
       "purchasing": "Achats",
       "parties": "Personnes et entreprises",
       "banking": "Banque",
-      "expenses": "Notes de frais"
+      "expenses": "Notes de frais",
+      "intercompany": "Intercompagnie",
+      "amortization": "Étalement des charges"
     },
     "gl_read": "Consulter les journaux et les soldes",
     "gl_manage": "Gérer le plan comptable",
@@ -1461,7 +1463,16 @@
     "purchase_orders_read": "Consulter les bons de commande et les réceptions",
     "purchase_orders_create": "Créer, modifier et annuler des bons de commande",
     "goods_receipts_create": "Réceptionner des marchandises sur bons de commande",
-    "time_self": "Saisir et soumettre son propre temps"
+    "time_self": "Saisir et soumettre son propre temps",
+    "intercompany_read": "Consulter les paires, compensations, transferts et rapprochements intercompagnies",
+    "intercompany_manage": "Créer, associer et dissocier des paires ; proposer et annuler des compensations",
+    "intercompany_settle": "Comptabiliser et contrepasser les compensations et transferts intercompagnies",
+    "intercompany_approve": "Approuver ou rejeter les compensations intercompagnies",
+    "gl_post_book_specific": "Passer des écritures propres à un livre",
+    "amortization_read": "Voir les échéanciers d’étalement et les rapports",
+    "amortization_manage": "Exécuter l’étalement et modifier les échéanciers",
+    "assets_capitalize": "Accepter les propositions d’immobilisation et immobiliser les immobilisations en cours",
+    "assets_maintain": "Gérer les plans d’entretien et les polices d’assurance des immobilisations"
   },
   "ai": {
     "metaTitle": "Fournisseurs d'IA",
@@ -3679,6 +3690,59 @@
         "title": "Descriptions de poste",
         "singularTitle": "Description de poste",
         "description": "Contenu d'annonce réutilisable pour les nouvelles demandes : intitulé, type d'emploi, fourchette de rémunération et description."
+      },
+      "intercompany-representing-parties": {
+        "title": "Tiers représentants intercompagnies",
+        "description": "Client et fournisseur représentant chaque filiale dans ses échanges avec les autres entités."
+      },
+      "intercompany-transfer-pricing": {
+        "title": "Prix de transfert intercompagnies",
+        "description": "Tarification datée des biens livrés par une entité pour une autre : grille tarifaire ou coût majoré."
+      },
+      "period-end-journal-policies": {
+        "title": "Écritures de clôture de l'exercice",
+        "singular": "politique d'écritures de clôture",
+        "description": "Comment la clôture annuelle passe ses écritures : le compte de report à nouveau, un compte de résultat récapitulatif facultatif, les écritures de clôture du bilan et de réouverture, la période de comptabilisation et les axes conservés sur les lignes de clôture. Chaque version régit les exercices se terminant à sa date d'effet ou après."
+      },
+      "accounting-book-currencies": {
+        "title": "Devises des livres",
+        "description": "La devise de base et le type de taux de conversion qu’un livre secondaire tient pour chaque filiale, par date d’effet.",
+        "singularTitle": "Devise de livre"
+      },
+      "accounting-book-account-maps": {
+        "title": "Correspondances de comptes par livre",
+        "description": "Le compte sous lequel un livre secondaire porte un compte du plan, par date d’effet et éventuellement par filiale.",
+        "singularTitle": "Correspondance de compte"
+      },
+      "accounting-book-replication": {
+        "title": "Réplication des livres",
+        "description": "Activez, rattrapez ou arrêtez la réplication de chaque transaction dans un livre secondaire, avec l’historique de chaque changement.",
+        "singularTitle": "Changement de réplication"
+      },
+      "expense-amortization-templates": {
+        "title": "Modèles d’étalement",
+        "description": "Comment les charges payées d’avance et différées passent en charge : méthode, durée, compte de régularisation et destination par défaut. Datés par code."
+      },
+      "accounting-contexts": {
+        "title": "Contextes comptables",
+        "description": "Contextes nommés, comme un plan comptable statutaire local, sous lesquels les rapports peuvent afficher des numéros et libellés de comptes localisés."
+      },
+      "accounting-context-defaults": {
+        "title": "Valeurs par défaut",
+        "description": "Filiales, ou toutes les filiales d’un pays, qui utilisent ce contexte sauf si un rapport en désigne un autre."
+      },
+      "account-localizations": {
+        "title": "Comptes localisés",
+        "description": "Numéro et libellé localisés par compte, avec date d’effet et éventuellement pour une filiale. Un numéro localisé appartient à un seul compte par périmètre et période."
+      },
+      "segment-value-dependencies": {
+        "title": "Dépendances",
+        "description": "Valeurs de ce segment autorisées uniquement avec certaines valeurs d’un segment de contrôle. Chaque ligne autorise une valeur de contrôle ; une valeur sans ligne reste libre."
+      },
+      "asset-capitalization-rules": {
+        "title": "Règles d’immobilisation",
+        "singularTitle": "Règle d’immobilisation",
+        "description": "Lignes d’achat comptabilisées qui deviennent des propositions d’immobilisation : un compte, un article ou une catégorie d’articles avec un montant minimal, avec date d’effet."
       }
     },
     "fields": {
@@ -4306,7 +4370,46 @@
       "compensationMin": "Rémunération minimale",
       "compensationMax": "Rémunération maximale",
       "compensationCurrency": "Devise de rémunération",
-      "compensationBasis": "Base de rémunération"
+      "compensationBasis": "Base de rémunération",
+      "customerPartyId": "Client représentant",
+      "vendorPartyId": "Fournisseur représentant",
+      "fromReceivableAccountId": "Créances intercompagnies de la filiale d'origine",
+      "fromPayableAccountId": "Dettes intercompagnies de la filiale d'origine",
+      "toReceivableAccountId": "Créances intercompagnies de la filiale destinataire",
+      "toPayableAccountId": "Dettes intercompagnies de la filiale destinataire",
+      "sellerSubsidiaryId": "Filiale vendeuse",
+      "buyerSubsidiaryId": "Filiale acheteuse",
+      "markupPercent": "Majoration %",
+      "revenueAccountId": "Compte de produits intercompagnies",
+      "costAccountId": "Compte de coûts intercompagnies",
+      "closingMethod": "Méthode de clôture",
+      "retainedEarningsAccountId": "Compte de report à nouveau",
+      "incomeSummaryAccountId": "Compte de résultat récapitulatif",
+      "balanceSheetJournals": "Écritures de clôture du bilan et de réouverture",
+      "postingPeriod": "Période de comptabilisation",
+      "preserveDepartments": "Conserver les départements",
+      "preserveClasses": "Conserver les classes",
+      "preserveLocations": "Conserver les emplacements",
+      "preserveProjects": "Conserver les projets",
+      "preserveSegments": "Conserver les segments personnalisés",
+      "amortizationMethod": "Méthode d’étalement",
+      "amortizationTermSource": "Durée issue de",
+      "amortizationPeriodCount": "Nombre de périodes",
+      "amortizationPercentages": "Table des pourcentages",
+      "amortizationPeriodRow": "Période {number}",
+      "amortizationAddPeriod": "Ajouter une période",
+      "amortizationPercent": "Pourcentage du montant",
+      "amortizationDeferralAccount": "Compte de régularisation (charges constatées d’avance)",
+      "amortizationDestinationAccount": "Compte de destination par défaut",
+      "contextId": "Contexte comptable",
+      "localizedNumber": "Numéro localisé",
+      "localizedName": "Libellé localisé",
+      "valueId": "Valeur",
+      "controllingSegmentId": "Segment de contrôle",
+      "allowedValueId": "Autorisé avec",
+      "matchKind": "Critère de correspondance",
+      "minimumAmount": "Montant minimal à immobiliser",
+      "assetCategoryId": "Catégorie d’immobilisations suggérée"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Nombre de jours entre le taux utilisable le plus récent et la fin de période au-delà duquel la réévaluation et la consolidation refusent le taux. Les taux de clôture se comptent depuis la date du taux comptant de fin de période ; les taux moyens depuis la cotation la plus récente incluse dans la moyenne. Valeur par défaut sans politique : 31 jours.",
@@ -4485,7 +4588,32 @@
       "hrmJobDescriptionTitle": "L'intitulé de poste affiché aux candidats dans l'annonce.",
       "hrmJobDescriptionKind": "Par exemple temps plein, temps partiel, saisonnier ou contractuel.",
       "hrmJobDescriptionPay": "Facultatif. Saisissez ensemble le minimum, le maximum, la devise et la base, ou laissez les quatre vides.",
-      "hrmJobDescriptionBody": "Le texte de l'annonce. Les nouvelles demandes le copient : le modifier ici ne change jamais un poste existant."
+      "hrmJobDescriptionBody": "Le texte de l'annonce. Les nouvelles demandes le copient : le modifier ici ne change jamais un poste existant.",
+      "representedSubsidiary": "Filiale représentée par ces tiers dans les livres des autres entités.",
+      "representingCustomer": "Les autres entités facturent ce client lorsqu'elles vendent à la filiale. Il ne doit pas déjà effectuer de transactions avec la filiale elle-même.",
+      "representingVendor": "Les autres entités reçoivent les factures de ce fournisseur lorsqu'elles achètent à la filiale. Il ne doit pas déjà effectuer de transactions avec la filiale elle-même.",
+      "transferPricingSeller": "Entité qui livre les biens et les facture.",
+      "transferPricingBuyer": "Laissez vide pour appliquer à toutes les entités acheteuses sans politique propre.",
+      "transferPricingMarkup": "Majoration du coût de l'entité exécutante. 10 signifie coût majoré de 10 %.",
+      "transferPricingRevenue": "Produits intercompagnies de l'entité exécutante. Doit être marqué Éliminer à la consolidation.",
+      "transferPricingCost": "Coût de l'entité vendeuse au prix de transfert. Doit être marqué Éliminer à la consolidation.",
+      "intercompanyControlAccount": "Les factures intercompagnies des tiers représentants comptabilisent leurs postes ouverts dans ces comptes. Chacun doit être marqué Éliminer à la consolidation.",
+      "periodEndEffectiveFrom": "Les exercices se terminant à cette date ou après sont clôturés selon cette version. Elle ne peut pas remonter dans un exercice déjà clôturé par des écritures de clôture.",
+      "periodEndClosingMethod": "Directement : produits et charges sont soldés vers le report à nouveau. Via un compte de résultat récapitulatif : ils sont soldés vers ce compte, lui-même soldé ensuite vers le report à nouveau.",
+      "periodEndPostingPeriod": "La dernière période ordinaire de l'exercice, ou la période d'ajustement de l'exercice lorsque le calendrier fiscal en comporte une.",
+      "periodEndBalanceSheetJournals": "Solder également chaque compte de bilan à la date de clôture et rouvrir les mêmes soldes le premier jour de l'exercice suivant.",
+      "periodEndPreserveSegments": "Les segments d'équilibrage sont toujours conservés, afin que chaque valeur de segment reste équilibrée à elle seule.",
+      "amortizationTemplateCode": "Les versions d’un modèle partagent son code ; la version en vigueur à la date comptable de l’opération s’applique.",
+      "amortizationEffectiveFrom": "Les opérations comptabilisées à partir de cette date utilisent cette version. Une version utilisée conserve ses règles ; ajoutez une version ultérieure pour les modifier.",
+      "amortizationMethod": "Le linéaire répartit à parts égales par période ; le prorata attribue aux premier et dernier mois partiels une part selon leurs jours ; au jour près pondère chaque mois par ses jours de service ; le variable suit une table de pourcentages.",
+      "amortizationTermSource": "Les périodes du modèle étalent sur le nombre de périodes ci-dessous à partir du début de service de la ligne ; les dates de service utilisent le début et la fin de la ligne.",
+      "amortizationPercentages": "Un pourcentage par période, dans l’ordre, totalisant exactement 100.",
+      "amortizationPeriodOffset": "Périodes d’attente entre le début et le premier étalement ; 0 commence dès la première période.",
+      "amortizationDeferralAccount": "Le compte d’actif circulant ou autre où la charge est portée jusqu’à son étalement.",
+      "amortizationDestinationAccount": "Vide : chaque ligne s’étale sur son propre compte de charge.",
+      "contextDefaultScope": "Choisissez une filiale, ou laissez vide et choisissez un pays pour couvrir toutes ses filiales.",
+      "localizationSubsidiary": "Laissez vide pour toutes les filiales ; une localisation propre à une filiale prévaut dans ses rapports.",
+      "allowedValue": "Une valeur autorisée par ligne. Ajoutez une ligne pour chaque valeur du segment de contrôle avec laquelle cette valeur peut être utilisée."
     },
     "options": {
       "withholdingCondominiumPayer": "Payeur : copropriété",
@@ -5295,6 +5423,33 @@
       "schedulePdfColorTreatment": {
         "subtle": "Accents discrets",
         "strong": "Aplats soutenus"
+      },
+      "transferPricingMethod": {
+        "price_level": "Niveau de prix",
+        "cost_plus": "Coût majoré"
+      },
+      "periodEndClosingMethod": {
+        "retained_earnings": "Directement vers le report à nouveau",
+        "income_summary": "Via un compte de résultat récapitulatif"
+      },
+      "periodEndPostingPeriod": {
+        "last_period": "Dernière période de l'exercice",
+        "adjustment_period": "Période d'ajustement"
+      },
+      "amortizationMethod": {
+        "straight_line": "Linéaire par période",
+        "prorated_first_last": "Première et dernière période au prorata",
+        "exact_days": "Au jour près",
+        "variable": "Pourcentages variables"
+      },
+      "amortizationTermSource": {
+        "template": "Périodes du modèle",
+        "service_dates": "Dates de service de la ligne"
+      },
+      "capitalizationMatch": {
+        "account": "Compte",
+        "item": "Article",
+        "itemCategory": "Catégorie d’articles"
       }
     },
     "laborCosting": {
@@ -5728,7 +5883,9 @@
         "scheduledTasks": "{count, plural, one {# activité planifiée} other {# activités planifiées}}",
         "securityDepositTransactions": "{count, plural, one {# opération de dépôt de garantie} other {# opérations de dépôt de garantie}}",
         "submittedTimeEntries": "{count, plural, one {# saisie de temps soumise en attente de révision} other {# saisies de temps soumises en attente de révision}}",
-        "subsidiaryTxns": "{count, plural, one {# filiale a} other {# filiales ont}} des transactions comptabilisées"
+        "subsidiaryTxns": "{count, plural, one {# filiale a} other {# filiales ont}} des transactions comptabilisées",
+        "fullReplicationBooks": "Livres qui répliquent chaque transaction",
+        "bookSpecificJournals": "Écritures propres à un livre"
       },
       "runWizard": "Lancer l'assistant de configuration",
       "errors": {
@@ -6445,7 +6602,9 @@
       "scheduleBoardBooking": "Affectation",
       "scheduleBoardBookingHelp": "Les affectations à la journée utilisent ces heures de travail dans le fuseau horaire du tableau.",
       "scheduleBoardAutomation": "Automatisation",
-      "scheduleBoardAutomationHelp": "Ce qui se passe après la publication d’une affectation sur ce tableau."
+      "scheduleBoardAutomationHelp": "Ce qui se passe après la publication d’une affectation sur ce tableau.",
+      "intercompanyControlAccounts": "Comptes de créances et dettes intercompagnies",
+      "periodEndDimensions": "Axes conservés sur les lignes de clôture"
     },
     "segmentValues": {
       "builtinLink": "Ouvrir {name}",
@@ -7382,6 +7541,75 @@
       "4": "Jeudi",
       "5": "Vendredi",
       "6": "Samedi"
+    },
+    "multiBook": {
+      "currencyFormDescription": "Un livre secondaire peut tenir une filiale dans sa propre devise de base. Les écritures du livre sont converties au type de taux choisi à leur date. Une version ne change jamais sous les écritures déjà présentes ; changez le type de taux en ajoutant une version à une date ultérieure.",
+      "mapFormDescription": "Portez un compte du plan comme un autre compte dans un livre. La correspondance conserve la classe d’état financier, respecte les restrictions de devise et s’applique à chaque écriture répliquée ou générée dans le livre à partir de sa date de début.",
+      "replicationFormDescription": "Chaque changement est enregistré avec son motif. L’activation réplique chaque transaction depuis la date de début dans la même étape et reprend l’historique antérieur en soldes d’ouverture ou en historique complet.",
+      "fields": {
+        "bookId": "Livre",
+        "subsidiaryId": "Filiale",
+        "mapSubsidiaryId": "Filiale (facultatif)",
+        "currency": "Devise du livre",
+        "rateType": "Type de taux",
+        "effectiveFrom": "En vigueur du",
+        "effectiveTo": "En vigueur jusqu’au",
+        "reason": "Motif",
+        "sourceAccountId": "Compte du plan",
+        "targetAccountId": "Compte dans le livre",
+        "kind": "Changement",
+        "modeAfter": "Mode de réplication",
+        "replicationMode": "Réplication",
+        "replicationFrom": "Répliquer à partir du",
+        "replicatedCount": "Écritures répliquées",
+        "createdAt": "Enregistré",
+        "openingStrategy": "Historique antérieur",
+        "currencyDifferenceAccountId": "Compte d’écarts de change"
+      },
+      "help": {
+        "bookId": "Un livre secondaire. Le livre principal est le livre de référence et ne prend aucune configuration de livre.",
+        "currency": "Un livre tient une devise par filiale.",
+        "rateType": "Le comptant utilise le dernier taux à la date de comptabilisation ou avant ; la moyenne mensuelle utilise la moyenne des taux comptant du mois.",
+        "effectiveTo": "Laissez vide pour garder la version en vigueur. Elle ne peut pas se terminer avant des écritures déjà présentes sous elle.",
+        "reason": "Enregistré dans la piste d’audit avec le changement.",
+        "targetAccountId": "Doit conserver la classe d’état financier et la restriction de devise du compte.",
+        "mapSubsidiaryId": "Laissez vide pour toutes les filiales ; une correspondance par filiale l’emporte sur une correspondance de l’organisation.",
+        "kind": "Activer lance la réplication complète ; rattraper comble les écarts ; désactiver arrête la réplication ; paramètres change le compte d’écarts de change.",
+        "replicationFrom": "La première date de comptabilisation reçue par le livre. Fixe une fois définie.",
+        "openingStrategy": "Les soldes d’ouverture comptabilisent le solde de chaque compte avant la date de début ; l’historique complet exige que le livre principal n’ait rien d’antérieur.",
+        "currencyDifferenceAccountId": "Un compte de produits, de charges ou de capitaux propres pour les écarts restant lors de la conversion d’une écriture multidevise dans la devise du livre."
+      },
+      "rateTypes": {
+        "spot": "Comptant",
+        "month_average": "Moyenne mensuelle"
+      },
+      "changeKinds": {
+        "activation": "Activer la réplication complète",
+        "catch_up": "Rattraper",
+        "deactivation": "Désactiver la réplication",
+        "settings": "Modifier les paramètres"
+      },
+      "openingStrategies": {
+        "opening_balances": "Soldes d’ouverture",
+        "full_history": "Historique complet"
+      },
+      "modes": {
+        "adjustment_only": "Ajustements seulement",
+        "full": "Complet"
+      }
+    },
+    "segmentDependencies": {
+      "navTitle": "Exceptions de dépendances",
+      "title": "Exceptions aux dépendances de segments",
+      "description": "{count, plural, =0 {Aucun document ouvert n’enfreint une règle de dépendance.} one {# ligne de document ouvert enfreint une règle en vigueur à sa date.} other {# lignes de documents ouverts enfreignent une règle en vigueur à leur date.}}",
+      "empty": "Aucun document ouvert n’enfreint une règle de dépendance.",
+      "columns": {
+        "document": "Pièce",
+        "date": "Date de pièce",
+        "status": "Statut",
+        "line": "Ligne",
+        "problem": "Problème"
+      }
     }
   },
   "flows": {
@@ -8105,6 +8333,66 @@
     "manufacturingSubcontract": {
       "title": "Fabrication externe",
       "description": "Envoyez des composants à un fournisseur, enregistrez les services et retournez la production sur l’ordre."
+    },
+    "intercompanyTransactions": {
+      "title": "Transactions intercompagnies",
+      "description": "Clients et fournisseurs représentants, comptes de créances et dettes intercompagnies, documents associés et prix de transfert."
+    },
+    "intercompanyNetting": {
+      "title": "Compensation intercompagnies",
+      "description": "Compensez et réglez les soldes intercompagnies après approbation et transférez des fonds entre les comptes bancaires des entités."
+    },
+    "crossSubsidiaryFulfillment": {
+      "title": "Exécution entre filiales",
+      "description": "Exécutez les commandes d'une entité depuis l'entrepôt d'une autre avec une refacturation intercompagnies au prix de transfert."
+    },
+    "periodEndJournals": {
+      "title": "Écritures de clôture de l'exercice",
+      "description": "Passez des écritures explicites de clôture de l'exercice dans les juridictions qui les exigent : produits et charges vers le report à nouveau, éventuellement via un compte de résultat récapitulatif, avec en option des écritures de clôture du bilan et de réouverture de l'exercice suivant. Les états financiers calculent le report à nouveau dans tous les cas."
+    },
+    "multiBookAccounting": {
+      "title": "Comptabilité multi-livres",
+      "description": "Tenez des livres secondaires dans leur propre devise de base par filiale, faites correspondre les comptes par livre, répliquez chaque transaction dans les livres complets, passez des écritures propres à un livre et comparez les livres côte à côte."
+    },
+    "expenseAmortization": {
+      "title": "Étalement des charges",
+      "description": "Les charges payées d’avance et différées des factures, écritures et notes de frais sont étalées par période au moyen d’échéanciers, avec une étape de clôture et un rapprochement avec le grand livre."
+    },
+    "expenseAmortizationAutoRun": {
+      "title": "Étalement automatique",
+      "description": "Comptabilise les périodes d’étalement échues dès leur fin via le planificateur, sans traitement manuel."
+    },
+    "accountMerges": {
+      "title": "Fusion de comptes",
+      "description": "Fusionnez un compte en double avec un compte conservé : prévisualisez chaque refus et conséquence, transférez le solde par une écriture de reclassement avec sa configuration, et conservez l’historique comptabilisé intact."
+    },
+    "accountingContexts": {
+      "title": "Contextes comptables",
+      "description": "Présentez les rapports avec des numéros et libellés de comptes localisés, comme un plan comptable statutaire local, par contexte et éventuellement par filiale ou pays."
+    },
+    "segmentDependencies": {
+      "title": "Dépendances de segments",
+      "description": "N’autorisez une valeur de segment qu’avec certaines valeurs d’un autre segment, par exemple une classe uniquement avec certains départements ; appliqué à l’enregistrement et à la comptabilisation des documents."
+    },
+    "assetComponents": {
+      "title": "Immobilisations à composants",
+      "description": "Regroupez des immobilisations composantes sous une immobilisation parente, chacune avec son propre coût, sa durée d’utilisation et son amortissement, consolidées par livre et cédées ensemble."
+    },
+    "assetProposals": {
+      "title": "Propositions d’immobilisation",
+      "description": "Transformez les lignes d’achat comptabilisées qui correspondent à vos règles d’immobilisation en propositions à accepter comme immobilisations, composants ou immobilisations en cours."
+    },
+    "constructionInProgress": {
+      "title": "Immobilisations en cours",
+      "description": "Accumulez les coûts sur des dossiers d’immobilisations en cours, rapprochez-les du grand livre et immobilisez-les une fois achevés."
+    },
+    "assetMaintenance": {
+      "title": "Entretien des immobilisations",
+      "description": "Planifiez l’entretien par durée ou par compteur, enregistrez les travaux en regard des factures qui les ont réglés et recevez des alertes d’échéance et de retard."
+    },
+    "assetInsurance": {
+      "title": "Assurance des immobilisations",
+      "description": "Enregistrez les polices d’assurance couvrant les immobilisations, recevez des rappels de renouvellement et comparez la valeur assurée à la valeur nette comptable."
     }
   },
   "backupsManager": {

@@ -1,5 +1,7 @@
 'use client'
 
+import { amortizationLineColumns } from '@/components/transaction-form/amortization-columns'
+
 import { CLEAR_SEGMENT, INHERIT_SEGMENT, segmentCellValue, segmentAssignmentsFromCells } from '@/lib/segment-assignments'
 
 import { useMoney } from '@/components/money-provider'
@@ -59,6 +61,9 @@ interface SegmentOpt {
 }
 interface LineRow extends Record<string, unknown> {
   accountId: string
+  amortizationTemplateId: string
+  amortizationStartOn: string
+  amortizationEndOn: string
   description: string
   departmentId: string
   projectId: string
@@ -155,6 +160,9 @@ const DEFAULT_SETTLEMENT_TYPE = 'out_of_pocket'
 
 const emptyLine = (): LineRow => ({
   accountId: '',
+  amortizationTemplateId: '',
+  amortizationStartOn: '',
+  amortizationEndOn: '',
   description: '',
   departmentId: '',
   projectId: '',
@@ -184,6 +192,9 @@ function isBlankExpenseCell(value: unknown): boolean {
 export function isBlankExpenseLine(row: Record<string, unknown>): boolean {
   for (const key of [
     'accountId',
+    'amortizationTemplateId',
+    'amortizationStartOn',
+    'amortizationEndOn',
     'description',
     'departmentId',
     'projectId',
@@ -241,6 +252,9 @@ function isLineMap(v: unknown): v is Record<string, unknown> {
 function toRow(l: Record<string, unknown>, lineDefs: CustomFieldDefClient[], segments: SegmentOpt[]): LineRow {
   const row: LineRow = {
     accountId: lineText(l.account_id),
+    amortizationTemplateId: lineText(l.amortization_template_id),
+    amortizationStartOn: lineText(l.amortization_start_on),
+    amortizationEndOn: lineText(l.amortization_end_on),
     description: lineText(l.description),
     departmentId: lineText(l.department_id),
     projectId: lineText(l.project_id),
@@ -290,6 +304,7 @@ export async function saveExpenseReport(input: ExpenseReportSaveInput): Promise<
 
 export function ExpenseDrawer({
   report,
+  amortizationTemplates,
   initialMode = 'view',
   employees,
   accounts,
@@ -309,6 +324,7 @@ export function ExpenseDrawer({
   createMode = false,
 }: {
   report: ExpensePayload
+  amortizationTemplates?: { id: string; label: string }[]
   initialMode?: DrawerMode
   employees: Opt[]
   accounts: Opt[]
@@ -332,6 +348,7 @@ export function ExpenseDrawer({
 }) {
   const { money } = useMoney()
   const t = useTranslations('expenses')
+  const tAmortization = useTranslations('amortization.billLine')
   const tCommon = useTranslations('common')
   const router = useRouter()
   const doc = asExpenseDoc(report.doc)
@@ -424,6 +441,9 @@ export function ExpenseDrawer({
         .filter((r) => !isBlankExpenseLine(r))
         .map((r) => ({
           accountId: r.accountId,
+          amortizationTemplateId: r.amortizationTemplateId || null,
+          amortizationStartOn: r.amortizationTemplateId ? r.amortizationStartOn || null : null,
+          amortizationEndOn: r.amortizationTemplateId ? r.amortizationEndOn || null : null,
           description: r.description,
           amount: r.amount,
           taxCodeId: r.taxProfileId.startsWith('code:') ? r.taxProfileId.slice(5) : null,
@@ -994,7 +1014,8 @@ export function ExpenseDrawer({
         key: `seg_${segment.key}`, label: segment.name, width: '150px', type: 'search-select',
         options: [{ value: INHERIT_SEGMENT, label: tCommon('labels.inheritHeader') }, { value: CLEAR_SEGMENT, label: tCommon('labels.noDimensionValue') }, ...segment.values.map((value) => ({ value: value.id, label: `${value.code ? `${value.code} · ` : ''}${value.name}` }))], placeholder: '—',
       }))
-      if (!layout) return [...Object.values(builtIn), ...segmentColumns, ...custom.values()]
+      const prepaidColumns = amortizationLineColumns<LineRow>(amortizationTemplates, tAmortization)
+      if (!layout) return [...Object.values(builtIn), ...segmentColumns, ...custom.values(), ...prepaidColumns]
       const configured = layout.lines.columns.flatMap((placement) => {
         if (!placement.visible) return []
         const base = isCustomFieldKey(placement.key) ? custom.get(placement.key) : builtIn[placement.key]
@@ -1005,10 +1026,10 @@ export function ExpenseDrawer({
           label: placement.labelOverride?.trim() || base.label,
         }]
       })
-      return [...configured, ...segmentColumns]
+      return [...configured, ...segmentColumns, ...prepaidColumns]
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [accounts, departments, projects, taxProfiles, lineDefs, segments, layout, t, tCommon],
+    [accounts, departments, projects, taxProfiles, lineDefs, segments, layout, t, tCommon, amortizationTemplates, tAmortization],
   )
 
   const field = 'space-y-1.5'

@@ -6,6 +6,11 @@ import {
   ExportClient,
   ImportWizard,
   InternalBillingDrawer,
+  IntercompanyLinkDrawer,
+  IntercompanyNettingDrawer,
+  IntercompanyPairDrawer,
+  IntercompanyTransferDrawer,
+  IntercompanyUnpairedActions,
   TrashList,
   FolderTree,
   FileList,
@@ -56,6 +61,35 @@ export const RECORDS_WIDGETS = {
     const drawer = props.drawer as ComponentProps<typeof InternalBillingDrawer> | null | undefined
     if (!drawer) return null
     return <InternalBillingDrawer key={drawer.detail?.document.id ?? 'new'} {...drawer} />
+  },
+
+  /* --- intercompany ------------------------------------------------------------------ */
+  /** Generate or link a counterpart for one unpaired intercompany document. */
+  'intercompany-unpaired-actions': (props) => {
+    const actions = props.actions as ComponentProps<typeof IntercompanyUnpairedActions>['actions'] | null | undefined
+    if (!actions) return null
+    return <IntercompanyUnpairedActions actions={actions} />
+  },
+  /** Keyed per pair so a record switch starts from that pair's own state. */
+  'intercompany-pair-drawer': (props) => {
+    const drawer = props.drawer as ComponentProps<typeof IntercompanyPairDrawer> | null | undefined
+    if (!drawer) return null
+    return <IntercompanyPairDrawer key={drawer.pair.id} {...drawer} />
+  },
+  'intercompany-link-drawer': (props) => {
+    const drawer = props.drawer as ComponentProps<typeof IntercompanyLinkDrawer> | null | undefined
+    if (!drawer) return null
+    return <IntercompanyLinkDrawer key={drawer.source.documentId} {...drawer} />
+  },
+  'intercompany-netting-drawer': (props) => {
+    const drawer = props.drawer as ComponentProps<typeof IntercompanyNettingDrawer> | null | undefined
+    if (!drawer) return null
+    return <IntercompanyNettingDrawer key={drawer.mode === 'view' ? drawer.run.id : 'new'} {...drawer} />
+  },
+  'intercompany-transfer-drawer': (props) => {
+    const drawer = props.drawer as ComponentProps<typeof IntercompanyTransferDrawer> | null | undefined
+    if (!drawer) return null
+    return <IntercompanyTransferDrawer key={drawer.mode === 'view' ? drawer.transfer.id : 'new'} {...drawer} />
   },
 
   /* --- document trash --------------------------------------------------------------- */

@@ -118,6 +118,11 @@ export const documents = pgTable(
     workCompletedOn: date("work_completed_on"),
     /** Accounting treatment of an internal_billing document. */
     internalBillingRuleId: uuid("internal_billing_rule_id"),
+    /**
+     * Book-specific journal target (journals only). Null posts to the primary
+     * book and replicates into full books; a book id posts to that book only.
+     */
+    accountingBookId: uuid("accounting_book_id"),
     /** Explicit adjustment-period override for the void's reversal journals (0333); null resolves by date. */
     voidReversalPeriodId: uuid("void_reversal_period_id"),
     reversalEntryId: uuid("reversal_entry_id"),
@@ -464,6 +469,17 @@ export const documentLines = pgTable(
     /** Period the charged work was performed. */
     workFrom: date("work_from"),
     workTo: date("work_to"),
+
+    /**
+     * Expense amortization (0687): the template this line defers through and
+     * its optional service window. Posting routes the line to the template's
+     * deferral account and creates its amortization schedule. The template
+     * foreign key lives in the migration so this file does not cycle into
+     * expense-amortization.ts.
+     */
+    amortizationTemplateId: uuid("amortization_template_id"),
+    amortizationStartOn: date("amortization_start_on"),
+    amortizationEndOn: date("amortization_end_on"),
 
     // Order-state denormalization (orders → fulfillment → billing chain).
     // These are commercial quantities, not posted money amounts: preserve the

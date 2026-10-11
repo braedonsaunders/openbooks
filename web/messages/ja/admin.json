@@ -1283,7 +1283,9 @@
       "purchasing": "購買",
       "parties": "人と会社",
       "banking": "銀行",
-      "expenses": "経費精算"
+      "expenses": "経費精算",
+      "intercompany": "会社間",
+      "amortization": "費用の期間配分"
     },
     "gl_read": "仕訳と残高を表示",
     "gl_manage": "会計科目表を管理",
@@ -1461,7 +1463,16 @@
     "purchase_orders_read": "発注書と入荷を表示",
     "purchase_orders_create": "発注書を作成、変更、取消",
     "goods_receipts_create": "発注書に対して入荷を記録",
-    "time_self": "自分の工数を入力および提出"
+    "time_self": "自分の工数を入力および提出",
+    "intercompany_read": "法人間伝票の組、相殺、振替、残高照合を閲覧",
+    "intercompany_manage": "法人間伝票の組を作成・関連付け・解除し、相殺処理を提案・取消",
+    "intercompany_settle": "法人間相殺と資金振替を計上・反対仕訳",
+    "intercompany_approve": "法人間相殺処理を承認または却下",
+    "gl_post_book_specific": "帳簿固有の仕訳を計上",
+    "amortization_read": "配分スケジュールとレポートを表示",
+    "amortization_manage": "配分を実行しスケジュールを変更",
+    "assets_capitalize": "資産計上候補の承認と建設仮勘定の資産計上",
+    "assets_maintain": "資産の保守スケジュールと保険契約の管理"
   },
   "ai": {
     "metaTitle": "AI設定",
@@ -3841,6 +3852,59 @@
         "title": "職務記述書",
         "singularTitle": "職務記述書",
         "description": "新しい採用申請の起点となる再利用可能な求人内容：職名、雇用形態、給与レンジ、説明。"
+      },
+      "intercompany-representing-parties": {
+        "title": "法人間代表取引先",
+        "description": "他法人との取引で各法人を代表する顧客と仕入先。"
+      },
+      "intercompany-transfer-pricing": {
+        "title": "法人間移転価格",
+        "description": "別法人向け出荷に適用する有効期間付き価格設定：価格レベルまたは原価に利益率を加算。"
+      },
+      "period-end-journal-policies": {
+        "title": "期末決算仕訳",
+        "singular": "期末決算仕訳ポリシー",
+        "description": "年度末の締めが仕訳を計上する方法：利益剰余金勘定、任意の損益集計勘定、貸借対照表の締め仕訳と開始仕訳、計上期間、締め仕訳の明細が保持するディメンション。各バージョンは発効日以降に終了する会計年度に適用されます。"
+      },
+      "accounting-book-currencies": {
+        "title": "帳簿通貨",
+        "description": "副帳簿が子会社ごとに保持する基準通貨と換算レートの種類（適用日別）。",
+        "singularTitle": "帳簿通貨"
+      },
+      "accounting-book-account-maps": {
+        "title": "帳簿別の勘定科目マッピング",
+        "description": "副帳簿が勘定科目表の科目を計上する勘定科目（適用日別、任意で子会社別）。",
+        "singularTitle": "勘定科目マッピング"
+      },
+      "accounting-book-replication": {
+        "title": "帳簿の複製",
+        "description": "副帳簿へのすべての取引の複製を有効化・追いつき・停止し、各変更の履歴を残します。",
+        "singularTitle": "複製の変更"
+      },
+      "expense-amortization-templates": {
+        "title": "配分テンプレート",
+        "description": "前払費用・繰延費用を費用に振り替える方法、期間、繰延勘定、既定の振替先。コードごとに適用日で管理します。"
+      },
+      "accounting-contexts": {
+        "title": "会計コンテキスト",
+        "description": "現地の法定勘定科目表などの名前付きコンテキスト。レポートはそのローカライズされた勘定番号と名称で実行できます。"
+      },
+      "accounting-context-defaults": {
+        "title": "既定",
+        "description": "レポートで別のコンテキストを指定しない限り、このコンテキストで報告する子会社（または国のすべての子会社）。"
+      },
+      "account-localizations": {
+        "title": "ローカライズ勘定",
+        "description": "勘定ごとの発効日付きのローカライズ番号と名称（必要に応じて子会社単位）。ローカライズ番号は範囲と期間ごとに1つの勘定にのみ属します。"
+      },
+      "segment-value-dependencies": {
+        "title": "依存関係",
+        "description": "制御セグメントの指定値とのみ使用できるこのセグメントの値。各行で1つの制御値を許可し、行のない値は制限されません。"
+      },
+      "asset-capitalization-rules": {
+        "title": "資産計上ルール",
+        "singularTitle": "資産計上ルール",
+        "description": "どの転記済み購買明細を資産計上候補とするかを定めます。勘定、品目、または品目カテゴリと最低金額を、適用日付きで指定します。"
       }
     },
     "fields": {
@@ -4468,7 +4532,46 @@
       "compensationMin": "給与下限",
       "compensationMax": "給与上限",
       "compensationCurrency": "給与通貨",
-      "compensationBasis": "給与基準"
+      "compensationBasis": "給与基準",
+      "customerPartyId": "代表顧客",
+      "vendorPartyId": "代表仕入先",
+      "fromReceivableAccountId": "起点法人の法人間債権",
+      "fromPayableAccountId": "起点法人の法人間債務",
+      "toReceivableAccountId": "相手法人の法人間債権",
+      "toPayableAccountId": "相手法人の法人間債務",
+      "sellerSubsidiaryId": "売手法人",
+      "buyerSubsidiaryId": "買手法人",
+      "markupPercent": "マークアップ率（%）",
+      "revenueAccountId": "法人間収益勘定",
+      "costAccountId": "法人間原価勘定",
+      "closingMethod": "締め方法",
+      "retainedEarningsAccountId": "利益剰余金勘定",
+      "incomeSummaryAccountId": "損益集計勘定",
+      "balanceSheetJournals": "貸借対照表の締め仕訳と開始仕訳",
+      "postingPeriod": "計上期間",
+      "preserveDepartments": "部門を保持",
+      "preserveClasses": "クラスを保持",
+      "preserveLocations": "拠点を保持",
+      "preserveProjects": "プロジェクトを保持",
+      "preserveSegments": "カスタムセグメントを保持",
+      "amortizationMethod": "配分方法",
+      "amortizationTermSource": "期間の基準",
+      "amortizationPeriodCount": "期間数",
+      "amortizationPercentages": "割合表",
+      "amortizationPeriodRow": "期間 {number}",
+      "amortizationAddPeriod": "期間を追加",
+      "amortizationPercent": "金額に対する割合",
+      "amortizationDeferralAccount": "繰延勘定（前払費用）",
+      "amortizationDestinationAccount": "既定の振替先勘定",
+      "contextId": "会計コンテキスト",
+      "localizedNumber": "ローカライズ番号",
+      "localizedName": "ローカライズ名称",
+      "valueId": "値",
+      "controllingSegmentId": "制御セグメント",
+      "allowedValueId": "許可する組み合わせ",
+      "matchKind": "一致条件",
+      "minimumAmount": "資産計上の最低金額",
+      "assetCategoryId": "推奨資産カテゴリ"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "使用可能な最新レートから期末までの日数がこれを超えると、再評価と連結はそのレートを拒否します。期末レートは期末スポットレートの日付から、平均レートは平均に含まれる最新の相場の日付から数えます。ポリシー未設定時の既定値: 31日。",
@@ -4647,7 +4750,32 @@
       "hrmJobDescriptionTitle": "求人で応募者に表示される職名。",
       "hrmJobDescriptionKind": "例：正社員、パートタイム、季節雇用、契約。",
       "hrmJobDescriptionPay": "任意。下限・上限・通貨・基準をすべて入力するか、4つとも空欄にします。",
-      "hrmJobDescriptionBody": "求人本文。新しい採用申請にコピーされるため、ここでの編集は既存の求人に影響しません。"
+      "hrmJobDescriptionBody": "求人本文。新しい採用申請にコピーされるため、ここでの編集は既存の求人に影響しません。",
+      "representedSubsidiary": "これらの取引先が他法人の帳簿で代表する法人。",
+      "representingCustomer": "他法人はこの法人への販売時にこの顧客へ請求します。顧客は代表する法人自身との既存取引がないことが必要です。",
+      "representingVendor": "他法人はこの法人からの購入時にこの仕入先から請求を受けます。仕入先は代表する法人自身との既存取引がないことが必要です。",
+      "transferPricingSeller": "商品を出荷し、その代金を請求する法人。",
+      "transferPricingBuyer": "空欄の場合、独自の方針を持たないすべての買手法人に適用します。",
+      "transferPricingMarkup": "出荷法人の原価に加算します。10 は原価に 10% を加算することを意味します。",
+      "transferPricingRevenue": "出荷法人の法人間収益。連結時消去を指定する必要があります。",
+      "transferPricingCost": "移転価格による販売法人の原価。連結時消去を指定する必要があります。",
+      "intercompanyControlAccount": "代表取引先の法人間請求書の未決済項目はこれらの勘定に計上されます。各勘定で連結時消去を指定してください。",
+      "periodEndEffectiveFrom": "この日以降に終了する会計年度はこのバージョンで締められます。期末決算仕訳で締め済みの年度に遡って適用することはできません。",
+      "periodEndClosingMethod": "直接：収益と費用を利益剰余金へ振り替えます。損益集計勘定経由：収益と費用をその勘定へ振り替え、その後利益剰余金へ振り替えます。",
+      "periodEndPostingPeriod": "会計年度の最終通常期間、または会計カレンダーに調整期間がある場合はその年度の調整期間。",
+      "periodEndBalanceSheetJournals": "さらに、年度末日にすべての貸借対照表勘定をゼロにし、翌会計年度の初日に同じ残高を再計上します。",
+      "periodEndPreserveSegments": "バランシングセグメントは常に保持され、各セグメント値が単独で貸借一致します。",
+      "amortizationTemplateCode": "テンプレートの各バージョンは同じコードを共有し、取引の記帳日に有効なバージョンが適用されます。",
+      "amortizationEffectiveFrom": "この日以降に記帳される取引はこのバージョンを使用します。使用中のバージョンは規則を変更できないため、変更するには後日付のバージョンを追加します。",
+      "amortizationMethod": "定額は期間ごとに均等に配分し、日割りは端数の初月と最終月を日数で按分し、日数按分は各月を役務日数で按分し、変動は割合表に従います。",
+      "amortizationTermSource": "テンプレート期間は明細の役務開始日から下記の期間数で配分し、役務日付は明細の開始日と終了日を使用します。",
+      "amortizationPercentages": "期間ごとに1つの割合を順に入力し、合計をちょうど100にします。",
+      "amortizationPeriodOffset": "開始から配分開始までに待つ期間数。0の場合は最初の期間から開始します。",
+      "amortizationDeferralAccount": "配分されるまで費用を計上しておく流動資産またはその他資産の勘定。",
+      "amortizationDestinationAccount": "空欄の場合、各明細は自身の費用勘定へ配分されます。",
+      "contextDefaultScope": "子会社を選択するか、空欄のまま国を選択してその国のすべての子会社を対象にします。",
+      "localizationSubsidiary": "空欄にするとすべての子会社に適用されます。子会社固有のローカライズは、その子会社のレポートで優先されます。",
+      "allowedValue": "1 行に 1 つの許可値です。この値と併用できる制御セグメントの値ごとに行を追加します。"
     },
     "options": {
       "withholdingCondominiumPayer": "集合住宅管理組合の支払者",
@@ -5457,6 +5585,33 @@
       "schedulePdfColorTreatment": {
         "subtle": "控えめなアクセント",
         "strong": "濃い背景色"
+      },
+      "transferPricingMethod": {
+        "price_level": "価格レベル",
+        "cost_plus": "原価に利益率を加算"
+      },
+      "periodEndClosingMethod": {
+        "retained_earnings": "利益剰余金へ直接",
+        "income_summary": "損益集計勘定を経由"
+      },
+      "periodEndPostingPeriod": {
+        "last_period": "年度の最終期間",
+        "adjustment_period": "調整期間"
+      },
+      "amortizationMethod": {
+        "straight_line": "期間ごとの定額",
+        "prorated_first_last": "初回と最終期間を日割り",
+        "exact_days": "日数按分",
+        "variable": "変動割合"
+      },
+      "amortizationTermSource": {
+        "template": "テンプレートの期間",
+        "service_dates": "明細の役務日付"
+      },
+      "capitalizationMatch": {
+        "account": "勘定",
+        "item": "品目",
+        "itemCategory": "品目カテゴリ"
       }
     },
     "invoicing": {
@@ -5874,7 +6029,9 @@
         "submittedTimeEntries": "{count, plural, one {確認待ちの提出済み工数 # 件} other {確認待ちの提出済み工数 # 件}}",
         "subsidiaryTxns": "{count, plural, one {記帳済み取引のある子会社 # 社} other {記帳済み取引のある子会社 # 社}}",
         "trackedVendors": "{count, plural, one {管理中の下請業者 # 社} other {管理中の下請業者 # 社}}",
-        "unfiledInformationReturns": "{count, plural, one {確定済み未提出の情報申告書 # 件} other {確定済み未提出の情報申告書 # 件}}"
+        "unfiledInformationReturns": "{count, plural, one {確定済み未提出の情報申告書 # 件} other {確定済み未提出の情報申告書 # 件}}",
+        "fullReplicationBooks": "すべての取引を複製している帳簿",
+        "bookSpecificJournals": "帳簿固有の仕訳"
       },
       "title": "機能",
       "groups": {
@@ -6445,7 +6602,9 @@
       "scheduleBoardBooking": "割り当て",
       "scheduleBoardBookingHelp": "終日の割り当てには、ボードのタイムゾーンでこの勤務時間が使われます。",
       "scheduleBoardAutomation": "自動化",
-      "scheduleBoardAutomationHelp": "このボードで割り当てが公開された後の処理。"
+      "scheduleBoardAutomationHelp": "このボードで割り当てが公開された後の処理。",
+      "intercompanyControlAccounts": "法人間債権・債務勘定",
+      "periodEndDimensions": "締め仕訳の明細に保持するディメンション"
     },
     "segmentValues": {
       "builtinLink": "{name}を開く",
@@ -7382,6 +7541,75 @@
       "4": "木曜日",
       "5": "金曜日",
       "6": "土曜日"
+    },
+    "multiBook": {
+      "currencyFormDescription": "副帳簿は子会社を独自の基準通貨で保持できます。帳簿への計上は、その日付に選択したレートの種類で換算されます。バージョンは帳簿に既にある仕訳の下では変更されません。レートの種類を変更するには、後日からのバージョンを追加してください。",
+      "mapFormDescription": "勘定科目表の科目を、ある帳簿では別の科目として計上します。マッピングは財務諸表区分を維持し、通貨制限に従い、開始日以降に帳簿へ複製・生成されるすべての仕訳に適用されます。",
+      "replicationFormDescription": "各変更は理由とともに記録されます。有効化では開始日以降のすべての取引を同じ手順で複製し、それ以前の履歴を期首残高または全履歴として取り込みます。",
+      "fields": {
+        "bookId": "帳簿",
+        "subsidiaryId": "子会社",
+        "mapSubsidiaryId": "子会社（任意）",
+        "currency": "帳簿通貨",
+        "rateType": "レートの種類",
+        "effectiveFrom": "適用開始日",
+        "effectiveTo": "適用終了日",
+        "reason": "理由",
+        "sourceAccountId": "勘定科目表の科目",
+        "targetAccountId": "帳簿の勘定科目",
+        "kind": "変更",
+        "modeAfter": "モード",
+        "replicationMode": "複製",
+        "replicationFrom": "複製開始日",
+        "replicatedCount": "複製された仕訳",
+        "createdAt": "記録日",
+        "openingStrategy": "それ以前の履歴",
+        "currencyDifferenceAccountId": "為替差額勘定"
+      },
+      "help": {
+        "bookId": "副帳簿。主帳簿は正式な帳簿であり、帳簿固有の設定はありません。",
+        "currency": "1つの帳簿は子会社ごとに1つの通貨を保持します。",
+        "rateType": "直物は計上日以前の最新レートを、月平均はその月の直物レートの平均を使用します。",
+        "effectiveTo": "空欄のままにするとバージョンは有効なままです。既にこのバージョンで計上された仕訳より前に終了することはできません。",
+        "reason": "変更とともに監査証跡に記録されます。",
+        "targetAccountId": "勘定科目の財務諸表区分と通貨制限を維持する必要があります。",
+        "mapSubsidiaryId": "空欄にするとすべての子会社に適用されます。子会社別のマッピングが組織全体のマッピングより優先されます。",
+        "kind": "有効化で完全複製を開始、追いつきで欠落を補完、無効化で複製を停止、設定で為替差額勘定を変更します。",
+        "replicationFrom": "帳簿が受け取る最初の計上日。一度設定すると変更できません。",
+        "openingStrategy": "期首残高は開始日前の各勘定残高を計上します。全履歴の場合、主帳簿にそれ以前の仕訳がない必要があります。",
+        "currencyDifferenceAccountId": "複数通貨の仕訳を帳簿通貨に換算した際に残る差額を計上する収益・費用・資本の勘定科目。"
+      },
+      "rateTypes": {
+        "spot": "直物",
+        "month_average": "月平均"
+      },
+      "changeKinds": {
+        "activation": "完全複製を有効化",
+        "catch_up": "追いつき",
+        "deactivation": "複製を無効化",
+        "settings": "設定を変更"
+      },
+      "openingStrategies": {
+        "opening_balances": "期首残高",
+        "full_history": "全履歴"
+      },
+      "modes": {
+        "adjustment_only": "調整のみ",
+        "full": "完全"
+      }
+    },
+    "segmentDependencies": {
+      "navTitle": "依存関係の例外",
+      "title": "セグメント依存関係の例外",
+      "description": "{count, plural, =0 {依存関係ルールに違反する未転記伝票はありません。} other {# 件の未転記伝票明細が、伝票日付に有効なルールに違反しています。}}",
+      "empty": "依存関係ルールに違反する未転記伝票はありません。",
+      "columns": {
+        "document": "伝票",
+        "date": "日付",
+        "status": "ステータス",
+        "line": "行",
+        "problem": "問題"
+      }
     }
   },
   "flows": {
@@ -8105,6 +8333,66 @@
     "manufacturingSubcontract": {
       "title": "外注製造",
       "description": "部品を仕入先に送り、加工サービスを記録し、生産数量を製造オーダーに戻します。"
+    },
+    "intercompanyTransactions": {
+      "title": "法人間取引",
+      "description": "各法人の代表顧客・仕入先、法人間債権債務勘定、対応付けられた伝票、移転価格。"
+    },
+    "intercompanyNetting": {
+      "title": "法人間相殺",
+      "description": "承認を経て法人間残高を相殺・決済し、各法人の銀行口座間で資金を振り替えます。"
+    },
+    "crossSubsidiaryFulfillment": {
+      "title": "法人をまたぐ出荷",
+      "description": "別法人の倉庫から販売注文を出荷し、移転価格で法人間請求を計上します。"
+    },
+    "periodEndJournals": {
+      "title": "期末決算仕訳",
+      "description": "決算仕訳を義務付ける法域向けに、明示的な年度末の締め仕訳を計上します。収益と費用を利益剰余金へ振り替え（任意で損益集計勘定を経由）、任意で貸借対照表の締め仕訳と翌期の開始仕訳も計上します。財務諸表はいずれの場合も利益剰余金を計算します。"
+    },
+    "multiBookAccounting": {
+      "title": "マルチブック会計",
+      "description": "子会社ごとに独自の基準通貨で副帳簿を管理し、帳簿ごとに勘定科目をマッピングし、すべての取引をフル帳簿に複製し、帳簿固有の仕訳を計上し、帳簿を並べて比較します。"
+    },
+    "expenseAmortization": {
+      "title": "費用の期間配分",
+      "description": "請求書・仕訳・経費精算書の前払費用と繰延費用をスケジュールで期間ごとに配分し、決算ステップと総勘定元帳との照合を備えます。"
+    },
+    "expenseAmortizationAutoRun": {
+      "title": "自動配分",
+      "description": "スケジューラーが期間の終了時に期日到来の配分を記帳し、手動の実行は不要です。"
+    },
+    "accountMerges": {
+      "title": "勘定の統合",
+      "description": "重複した勘定を存続勘定に統合します。すべての拒否理由と影響をプレビューし、残高を振替仕訳で、設定も一緒に移し、転記済みの履歴はそのまま保持します。"
+    },
+    "accountingContexts": {
+      "title": "会計コンテキスト",
+      "description": "法定の現地勘定科目表など、ローカライズした勘定番号と名称でレポートを表示します。コンテキストごと、必要に応じて子会社や国ごとに設定できます。"
+    },
+    "segmentDependencies": {
+      "title": "セグメントの依存関係",
+      "description": "あるセグメント値を別のセグメントの指定値とのみ組み合わせられるようにします（例：特定の部門でのみ使えるクラス）。伝票の保存時と転記時に適用されます。"
+    },
+    "assetComponents": {
+      "title": "複合資産",
+      "description": "構成資産を親資産の下にまとめます。各構成資産は独自の取得原価、耐用年数、減価償却を持ち、帳簿ごとに集計され、一括で除却されます。"
+    },
+    "assetProposals": {
+      "title": "資産計上候補",
+      "description": "資産計上ルールに一致する転記済みの購買明細を候補に変換し、資産、構成資産、または建設仮勘定として承認できるようにします。"
+    },
+    "constructionInProgress": {
+      "title": "建設仮勘定",
+      "description": "建設仮勘定レコードに原価を累積し、総勘定元帳と照合して、完成時に資産へ振り替えて資産計上します。"
+    },
+    "assetMaintenance": {
+      "title": "資産保守",
+      "description": "期間またはメーターに基づいて保守を計画し、支払いに充てた請求書に対して作業を記録し、期日到来・期日超過のアラートを受け取ります。"
+    },
+    "assetInsurance": {
+      "title": "資産保険",
+      "description": "資産を対象とする保険契約を記録し、更新リマインダーを受け取り、保険価額と正味帳簿価額を比較します。"
     }
   },
   "extensions": {

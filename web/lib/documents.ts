@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/database'
 import { subsidiaryVisibleFilter } from '@openbooks/engine/organization/scope'
 import { segmentRegistry } from './segments'
+import { loadSegmentDependencyRules } from '@openbooks/engine/organization/segment-dependencies'
 import { resolveOrgId } from './org-scope'
 import { bankAccountMembership } from './banking-accounts'
 import type { DocKindConfig } from './document-kinds'
@@ -110,13 +111,21 @@ export async function dimensionOptions(
     db.execute(sql`select id, name from classes where org_id = ${resolvedOrgId} and is_active ${allowedSubsidiaryIds === undefined ? sql`` : subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })} order by name`),
     segmentRegistry(resolvedOrgId, allowedSubsidiaryIds),
   ])
+  // Each segment carries the dependency rules that restrict its values, so
+  // line pickers filter by the line's other values (empty while the
+  // Segment dependencies feature is off).
+  const rules = await loadSegmentDependencyRules(db, resolvedOrgId)
+  const withDependencies = registry.map((segment) => ({
+    ...segment,
+    dependencies: rules.filter((rule) => rule.segment.id === segment.id),
+  }))
   return {
     departments: departments.rows as Opt[],
     projects: projects.rows as Opt[],
     locations: locations.rows as Opt[],
     classes: classes.rows as Opt[],
-    segments: registry.filter((segment) => segment.sourceKind === 'custom'),
-    builtinSegments: registry.filter((segment) => segment.sourceKind === 'builtin'),
+    segments: withDependencies.filter((segment) => segment.sourceKind === 'custom'),
+    builtinSegments: withDependencies.filter((segment) => segment.sourceKind === 'builtin'),
   }
 }
 

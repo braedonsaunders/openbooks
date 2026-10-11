@@ -11,7 +11,8 @@
     "columns": {
       "entry": "Lançamento",
       "origin": "Origem",
-      "debits": "Débitos"
+      "debits": "Débitos",
+      "book": "Livro"
     }
   },
   "origins": {
@@ -25,7 +26,12 @@
     "fxSettlement": "Liquidação cambial",
     "migration": "Migração",
     "translation": "Conversão",
-    "manufacturing": "Manufatura"
+    "manufacturing": "Manufatura",
+    "opening": "Abertura",
+    "bookOpening": "Abertura de livro",
+    "expenseAmortization": "Apropriação de despesas",
+    "accountMerge": "Mesclagem de contas",
+    "assetCapitalization": "Capitalização de ativo"
   },
   "detail": {
     "notFound": "Lançamento não encontrado",
@@ -44,7 +50,8 @@
       "ruleGroup": "Regra: {name}",
       "scriptGroup": "Script: {name}",
       "otherGroup": "{kind}: {name}"
-    }
+    },
+    "book": "Livro {book}"
   },
   "newButton": {
     "label": "Novo lançamento",
@@ -87,5 +94,12 @@
     "budgetaryControlRemedy": "Revise o orçamento pelo seu fluxo de aprovação: copie o orçamento aprovado como rascunho, aumente o valor desta conta para o fundo na planilha, aprove a cópia e arquive o orçamento substituído. Ou vincule este valor ao empenho aberto que o reservou.",
     "voidAwaitingApproval": "A anulação deste lançamento aguarda aprovação. O lançamento permanece contabilizado até que a aprovação seja decidida.",
     "createUnconfirmed": "O servidor não confirmou o novo lançamento. Salve novamente: a nova tentativa reutiliza a chave deste rascunho, então não pode criar um segundo lançamento."
+  },
+  "book": {
+    "label": "Livro contábil",
+    "primary": "principal",
+    "allBooks": "Todos os livros",
+    "allBooksHint": "Lança no livro principal e replica em cada livro completo.",
+    "specificHint": "Específico do livro: lança somente neste livro, na moeda que ele mantém para a subsidiária do diário."
   }
 }

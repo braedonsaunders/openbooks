@@ -18,6 +18,8 @@ export const PERMISSION_CATALOGUE = [
   "gl.read",
   "gl.manage",
   "gl.post",
+  // Book-specific journals adjust one accounting book only (multi-book).
+  "gl.post_book_specific",
   // Period configuration and close operations are independent duties.
   "periods.manage",
   "close.read",
@@ -81,6 +83,11 @@ export const PERMISSION_CATALOGUE = [
   "contract_costs.read",
   "contract_costs.manage",
   "contract_costs.approve",
+  // Expense amortization: read sees templates, schedules and their plans;
+  // manage creates manual schedules, runs amortization and records
+  // schedule changes (hold, re-forecast, reduce, cancel), each with a reason.
+  "amortization.read",
+  "amortization.manage",
   // Customer relationship management
   "crm.accounts.read",
   "crm.accounts.create",
@@ -110,6 +117,15 @@ export const PERMISSION_CATALOGUE = [
   "allocations.manage",
   "allocations.run",
   "allocations.approve",
+  // Intercompany: read sees pairing, reconciliation, netting runs and
+  // transfers; manage pairs and generates counterpart documents and proposes
+  // netting runs; settle posts and reverses netting runs and posts transfers
+  // between entities' bank accounts; approve decides a netting run's Flows
+  // approval gate when one is configured.
+  "intercompany.read",
+  "intercompany.manage",
+  "intercompany.settle",
+  "intercompany.approve",
   // Nonprofit accounting: run fund, grant, and functional-expense reports.
   "nonprofit.report",
   // Fund accounting: read fund surfaces; manage authors framework, fund
@@ -185,6 +201,11 @@ export const PERMISSION_CATALOGUE = [
   // Fixed assets & depreciation
   "assets.read",
   "assets.manage",
+  // Turning posted purchases and construction in progress into assets: accept
+  // or reverse proposals and capitalize CIP, each of which posts a reclass.
+  "assets.capitalize",
+  // Maintenance schedules, work records, meter readings and insurance policies.
+  "assets.maintain",
   // Time tracking & timesheets. time.self is the timekeeper's own time: list,
   // read, enter and submit the weeks of the person linked to the login and
   // nobody else's (enforced where every timesheet command locks its week).
@@ -431,6 +452,7 @@ export const PERMISSION_GROUPS: {
       { key: "gl.read", labelKey: permissionLabelKey("gl.read") },
       { key: "gl.manage", labelKey: permissionLabelKey("gl.manage") },
       { key: "gl.post", labelKey: permissionLabelKey("gl.post") },
+      { key: "gl.post_book_specific", labelKey: permissionLabelKey("gl.post_book_specific") },
     ],
   },
   {
@@ -531,6 +553,14 @@ export const PERMISSION_GROUPS: {
     ],
   },
   {
+    key: "amortization",
+    labelKey: "permissions.groups.amortization",
+    permissions: [
+      { key: "amortization.read", labelKey: permissionLabelKey("amortization.read") },
+      { key: "amortization.manage", labelKey: permissionLabelKey("amortization.manage") },
+    ],
+  },
+  {
     key: "reports",
     labelKey: "permissions.groups.reports",
     permissions: [
@@ -575,6 +605,16 @@ export const PERMISSION_GROUPS: {
       { key: "allocations.manage", labelKey: permissionLabelKey("allocations.manage") },
       { key: "allocations.run", labelKey: permissionLabelKey("allocations.run") },
       { key: "allocations.approve", labelKey: permissionLabelKey("allocations.approve") },
+    ],
+  },
+  {
+    key: "intercompany",
+    labelKey: "permissions.groups.intercompany",
+    permissions: [
+      { key: "intercompany.read", labelKey: permissionLabelKey("intercompany.read") },
+      { key: "intercompany.manage", labelKey: permissionLabelKey("intercompany.manage") },
+      { key: "intercompany.settle", labelKey: permissionLabelKey("intercompany.settle") },
+      { key: "intercompany.approve", labelKey: permissionLabelKey("intercompany.approve") },
     ],
   },
   {
@@ -671,6 +711,8 @@ export const PERMISSION_GROUPS: {
     permissions: [
       { key: "assets.read", labelKey: permissionLabelKey("assets.read") },
       { key: "assets.manage", labelKey: permissionLabelKey("assets.manage") },
+      { key: "assets.capitalize", labelKey: permissionLabelKey("assets.capitalize") },
+      { key: "assets.maintain", labelKey: permissionLabelKey("assets.maintain") },
     ],
   },
   {
@@ -1055,6 +1097,7 @@ export const BUILT_IN_ROLES: Record<
       "gl.read",
       "gl.manage",
       "gl.post",
+      "gl.post_book_specific",
       "periods.manage",
       "close.read",
       "close.run",
@@ -1092,6 +1135,8 @@ export const BUILT_IN_ROLES: Record<
       "contract_costs.read",
       "contract_costs.manage",
       "contract_costs.approve",
+      "amortization.read",
+      "amortization.manage",
       "crm.accounts.read",
       "crm.accounts.create",
       "crm.accounts.manage",
@@ -1115,6 +1160,10 @@ export const BUILT_IN_ROLES: Record<
       "allocations.manage",
       "allocations.run",
       "allocations.approve",
+      "intercompany.read",
+      "intercompany.manage",
+      "intercompany.settle",
+      "intercompany.approve",
       "nonprofit.report",
       "funds.read",
       "funds.manage",
@@ -1152,6 +1201,8 @@ export const BUILT_IN_ROLES: Record<
       "compliance.file",
       "assets.read",
       "assets.manage",
+      "assets.capitalize",
+      "assets.maintain",
       "time.read",
       "time.manage",
       "time.approve",
@@ -1236,6 +1287,9 @@ export const BUILT_IN_ROLES: Record<
       // impairment approval stays with the controller (maker/checker).
       "contract_costs.read",
       "contract_costs.manage",
+      // Amortization runs and schedule upkeep are bookkeeping duties.
+      "amortization.read",
+      "amortization.manage",
       "reports.read",
       "reports.create",
       "budgets.read",
@@ -1243,6 +1297,8 @@ export const BUILT_IN_ROLES: Record<
       "allocations.read",
       "allocations.manage",
       "allocations.run",
+      "intercompany.read",
+      "intercompany.manage",
       "nonprofit.report",
       "funds.read",
       "grants.read",
@@ -1272,6 +1328,8 @@ export const BUILT_IN_ROLES: Record<
       "compliance.manage",
       "assets.read",
       "assets.manage",
+      "assets.capitalize",
+      "assets.maintain",
       "time.read",
       "time.manage",
       // HR-20 begin: field time — self clock plus crew entry and kiosks.
@@ -1333,10 +1391,13 @@ export const BUILT_IN_ROLES: Record<
       "budgets.approve",
       "allocations.read",
       "allocations.approve",
+      "intercompany.read",
+      "intercompany.approve",
       // The approver reviews impairment (read + approve) without the
       // day-to-day capitalization duty.
       "contract_costs.read",
       "contract_costs.approve",
+      "amortization.read",
       "nonprofit.report",
       "funds.read",
       "grants.read",
@@ -1366,7 +1427,7 @@ export const BUILT_IN_ROLES: Record<
     name: "Viewer",
     description:
       "Read-only access to the ledger, subledgers, reports and insights. Cannot create, change, post or pay transactions.",
-    permissions: ["gl.read", "close.read", "ap.read", "purchase_orders.read", "ar.read", "estimates.read", "usage.read", "payment_methods.read", "contract_costs.read", "resourcing.read", "retainers.read", "reports.read", "budgets.read", "allocations.read", "nonprofit.report", "funds.read", "grants.read", "encumbrances.read", "insights.read", "records.read", "items.read", "assets.read", "time.read", "time.clock", "compliance.read", "assistant.use", "documents.read", "feedback.use", "data.export", "apps.use", "hrm.self.read", "hrm.self.request", "hrm.leave.request", "cash_sales.read"],
+    permissions: ["gl.read", "close.read", "ap.read", "purchase_orders.read", "ar.read", "estimates.read", "usage.read", "payment_methods.read", "contract_costs.read", "resourcing.read", "retainers.read", "reports.read", "budgets.read", "allocations.read", "intercompany.read", "nonprofit.report", "funds.read", "grants.read", "encumbrances.read", "insights.read", "records.read", "items.read", "assets.read", "time.read", "time.clock", "compliance.read", "assistant.use", "documents.read", "feedback.use", "data.export", "apps.use", "hrm.self.read", "hrm.self.request", "hrm.leave.request", "cash_sales.read", "amortization.read"],
   },
   sales_manager: {
     name: "Sales Manager",

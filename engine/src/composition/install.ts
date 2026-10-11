@@ -43,12 +43,17 @@ import {
   OUTBOUND_PAYMENT_RUN_SUBJECT_KIND,
 } from "../flows/payment-runs-adapter.ts";
 import { releasePaymentRunFlowApproval } from "../payments/flow-release.ts";
+import { INTERCOMPANY_NETTING_RUN_SUBJECT_KIND } from "../flows/intercompany-netting-runs-adapter.ts";
+import { releaseNettingRunFlowApproval } from "../intercompany/flow-release.ts";
+import { crossSubsidiaryFulfillmentHandlerImpl } from "../intercompany/fulfillment.ts";
+import { registerCrossSubsidiaryFulfillmentHandler } from "../inventory/cross-subsidiary.ts";
 import { releaseAllocationRunApproval } from "../allocations/flow-release.ts";
 import { releaseFundReleaseFlowApproval } from "../nonprofit/flow-release.ts";
 import { releaseCloseRunApproval } from "../close/flow-release.ts";
 import { registerBalancingLegProvider } from "../journal/balancing-hooks.ts";
 import { fundBalancingLegProvider } from "../nonprofit/fund-posting.ts";
 import { budgetaryControlProvider } from "../nonprofit/encumbrances.ts";
+import { mergedAccountPostingProvider, segmentDependencyPostingProvider } from "../chart/posting-policies.ts";
 import { form990ReturnInputProvider } from "../nonprofit/form990.ts";
 import { registerReturnInputProvider } from "../tax-returns/return.ts";
 import {
@@ -134,6 +139,8 @@ export function installEngineSeams(): void {
   registerFlowApprovalReleaseHandler(CHECKLIST_STEP_SUBJECT_KIND, releaseChecklistStepApproval);
   registerBalancingLegProvider("fund", fundBalancingLegProvider);
   registerBalancingLegProvider("budgetary-control", budgetaryControlProvider);
+  registerBalancingLegProvider("merged-accounts", mergedAccountPostingProvider);
+  registerBalancingLegProvider("segment-dependencies", segmentDependencyPostingProvider);
   registerReturnInputProvider("form990", form990ReturnInputProvider);
   // Engine-owned approval releases: the adapters delegate through
   // releaseFlowApproval; the handlers run inside decideGate's transaction.
@@ -151,6 +158,10 @@ export function installEngineSeams(): void {
   registerFlowApprovalReleaseHandler(WORK_ORDER_SUBJECT_KIND, releaseWorkOrderApproval);
   registerFlowApprovalReleaseHandler(OUTBOUND_PAYMENT_RUN_SUBJECT_KIND, releasePaymentRunFlowApproval);
   registerFlowApprovalReleaseHandler(INBOUND_PAYMENT_RUN_SUBJECT_KIND, releasePaymentRunFlowApproval);
+  registerFlowApprovalReleaseHandler(INTERCOMPANY_NETTING_RUN_SUBJECT_KIND, releaseNettingRunFlowApproval);
+  // Cross-subsidiary fulfillment: inventory hands a line shipped from another
+  // entity's warehouse to the intercompany handler, which sits above it.
+  registerCrossSubsidiaryFulfillmentHandler(crossSubsidiaryFulfillmentHandlerImpl);
   // Document effects: post_document and before_void completion,
   // verbatim from flows/execute.ts and flows/documents-adapter.ts. Runs
   // inline in the caller's chain, so the ambient pinned org transaction

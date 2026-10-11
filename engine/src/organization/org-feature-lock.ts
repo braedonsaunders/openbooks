@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
-import { dataDependentFeatureDefault, type DataDependentFeatureKey } from "./feature-defaults.ts";
+import { dataDependentFeatureDefault, withDataDependentDefaults, type DataDependentFeatureKey } from "./feature-defaults.ts";
 import { featureEnabled, type FeatureState } from "./feature-registry.ts";
 
 /**
@@ -63,7 +63,9 @@ export async function lockAndCheckOrgFeature(
     }
     return featureEnabled({ ...stored, [key]: true }, key);
   }
-  return featureEnabled(row.features, key);
+  // Children of a data-dependent feature resolve that parent from the org's
+  // data inside the same transaction.
+  return featureEnabled(await withDataDependentDefaults(runner, orgId, stored, [key]), key);
 }
 
 /**
@@ -98,5 +100,5 @@ export async function orgFeatureEnabled(
   ) {
     return dataDependentFeatureDefault(executor, orgId, key as DataDependentFeatureKey, stored);
   }
-  return featureEnabled(stored, key);
+  return featureEnabled(await withDataDependentDefaults(executor, orgId, stored, [key]), key);
 }

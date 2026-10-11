@@ -29,6 +29,8 @@ export type EntryData = {
     doc_number: string | null
     subsidiary_id: string
     custom?: Record<string, unknown>
+    /** Code of the accounting book the entry belongs to. */
+    book_code?: string | null
   }
   lines: {
     line_number: number

@@ -67,6 +67,9 @@ export interface KernelLine {
   memo?: string | null;
   dueDate?: string | null;
   isOpenItem?: boolean;
+  /** Document line whose cost this leg defers through an amortization
+   * template; the posting creates that line's schedule from this leg. */
+  amortizationSourceLineId?: string;
 }
 
 export interface PostingDeps {
@@ -137,6 +140,14 @@ export interface PostingDeps {
    * return journal debits carried cost here, leaving only policy variance.
    */
   inventoryReturnOffsetByLine?: Map<string, string>;
+  /**
+   * document_line id → the deferral (prepaid) account for vendor bill,
+   * journal and expense report lines that name an amortization template.
+   * Such lines debit the deferral account instead of their own account, and
+   * the posting creates their amortization schedules. Resolved by the
+   * posting coordinator.
+   */
+  amortizationByLine?: Map<string, { deferralAccountId: string }>;
   /**
    * document_line id → stored-value liability account, for customer_invoice
    * lines whose item is a gift card. Such lines credit the liability instead

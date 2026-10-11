@@ -101,16 +101,50 @@ export interface ResolvedSubsidiaryScope extends ResolvedSubsidiaryView {
   ratesError: MissingRatesError | null;
 }
 
+/**
+ * The currency an accounting book carries each subsidiary in. A secondary
+ * book may carry a subsidiary in its own base currency; statements for that
+ * book present and translate from that currency, never the functional one.
+ * Null for the primary book (every subsidiary in its functional currency).
+ */
+async function bookMeasurementCurrencies(
+  bookId: string | null | undefined,
+  subsidiaryIds: readonly string[],
+): Promise<Map<string, string> | null> {
+  if (!bookId || subsidiaryIds.length === 0) return null;
+  const rows = (await db.execute<{ id: string; currency: string | null; is_primary: boolean }>(sql`
+    select s.id, public.accounting_book_currency(s.org_id, b.id, s.id) as currency, b.is_primary
+      from subsidiaries s
+      join accounting_books b on b.org_id = s.org_id and b.id = ${bookId}
+     where s.id = any(${`{${subsidiaryIds.join(",")}}`}::uuid[])`)).rows;
+  if (rows.length === 0 || rows[0]!.is_primary) return null;
+  return new Map(rows.flatMap((row) => (row.currency ? [[row.id, row.currency] as const] : [])));
+}
+
 export async function resolveSubsidiaryScope(
   subsidiaryId: string | undefined,
   periodTo: string,
   allowed: Set<string> | null = null,
+  bookId?: string | null,
 ): Promise<ResolvedSubsidiaryScope> {
-  const all = await subsidiaryOptions(false, true);
+  const listed = await subsidiaryOptions(false, true);
+  const bookCurrencies = await bookMeasurementCurrencies(bookId, listed.map((s) => s.id));
+  const all = bookCurrencies
+    ? listed.map((s) => ({ ...s, baseCurrency: bookCurrencies.get(s.id) ?? s.baseCurrency }))
+    : listed;
   const visible = allowed ? all.filter((s) => allowed.has(s.id)) : all;
   const pickerOptions = visible.filter((s) => !s.isElimination);
-  if (allowed === null && all.filter((s) => !s.isElimination).length <= 1)
-    return { consolidated: false, options: [], ratesError: null };
+  if (allowed === null && all.filter((s) => !s.isElimination).length <= 1) {
+    // A single-entity organization presents in the book's currency for it.
+    const only = all.find((s) => !s.isElimination);
+    const listedOnly = listed.find((s) => s.id === only?.id);
+    return {
+      consolidated: false,
+      options: [],
+      ratesError: null,
+      ...(only && listedOnly && only.baseCurrency !== listedOnly.baseCurrency ? { currency: only.baseCurrency } : {}),
+    };
+  }
 
   const root = all.find((s) => s.parentId === null);
   const node =
@@ -320,8 +354,9 @@ export async function resolveSubsidiaryView(
   subsidiaryId: string | undefined,
   periodTo: string,
   allowed: Set<string> | null = null,
+  bookId?: string | null,
 ): Promise<ResolvedSubsidiaryView> {
-  const scoped = await resolveSubsidiaryScope(subsidiaryId, periodTo, allowed);
+  const scoped = await resolveSubsidiaryScope(subsidiaryId, periodTo, allowed, bookId);
   if (scoped.ratesError) throw scoped.ratesError;
   return {
     subsidiary: scoped.subsidiary,
@@ -341,8 +376,10 @@ export async function resolveSubsidiaryView(
 export async function reportSubsidiaryView(
   subsidiaryId: string | undefined,
   periodTo: string,
+  /** The statement's accounting book: a secondary book presents in its own currency per subsidiary. */
+  bookId?: string | null,
 ): Promise<ResolvedSubsidiaryView & { picker: { id: string; label: string }[] }> {
-  const scoped = await reportSubsidiaryScope(subsidiaryId, periodTo);
+  const scoped = await reportSubsidiaryScope(subsidiaryId, periodTo, bookId);
   if (scoped.ratesError) throw scoped.ratesError;
   return {
     subsidiary: scoped.subsidiary,
@@ -366,14 +403,20 @@ export async function reportSubsidiaryView(
 export async function reportSubsidiaryScope(
   subsidiaryId: string | undefined,
   periodTo: string,
+  bookId?: string | null,
 ): Promise<ResolvedSubsidiaryScope & { picker: { id: string; label: string }[] }> {
   const user = await currentUser();
   const subsidiaryUiEnabled = Boolean(user && await subsidiaryFeatureEnabled(user.orgId));
   const allowed = user ? (user.isSuperAdmin ? null : await allowedSubsidiaryIds(user.id, user.orgId)) : new Set<string>();
   if (!subsidiaryUiEnabled && allowed === null) {
-    return { consolidated: false, options: [], picker: [], ratesError: null };
+    // One entity: a secondary book may still present it in its own currency.
+    const single = bookId ? await resolveSubsidiaryScope(undefined, periodTo, null, bookId) : null;
+    return {
+      consolidated: false, options: [], picker: [], ratesError: null,
+      ...(single && !single.consolidated && single.currency ? { currency: single.currency } : {}),
+    };
   }
-  const view = await resolveSubsidiaryScope(subsidiaryId, periodTo, allowed);
+  const view = await resolveSubsidiaryScope(subsidiaryId, periodTo, allowed, bookId);
   if (!subsidiaryUiEnabled) return { ...view, picker: [] };
   const hasChildren = new Set(view.options.map((s) => s.parentId).filter(Boolean));
   const picker = view.options.map((s) => ({

@@ -63,9 +63,16 @@ export const DEMO_FEATURE_EVIDENCE: Record<string, DemoFeatureEvidence> = {
   manufacturing: workflow("bom_components", "mfg_routings", "mfg_work_orders"), manufacturingMrp: configuration("mfg_item_policies", "mfg_mrp_runs"),
   equipment: workflow("equipment_units"), expenses: workflow("documents"),
   multiSubsidiary: configuration("subsidiaries"), multiCurrency: configuration("fx_rates"),
+  intercompanyTransactions: { ...workspace("subsidiaries"), limitation: "The demonstration company operates one legal entity; designate representing customers and vendors once a second subsidiary and its intercompany pair exist." },
+  intercompanyNetting: { ...workspace("subsidiaries"), limitation: "No intercompany balances exist in the demonstration company, so the netting workspace starts empty." },
   banking: executed("bank_statements", "bank_statement_lines", "reconciliations"),
   bankFeeds: { ...configuration("bank_feed_connections"), limitation: "Disconnected synthetic feed; bank authentication requires configuration." },
   fixedAssets: workflow("asset_categories", "fixed_assets"), budgets: workflow("budget_scenarios", "budget_lines"),
+  assetComponents: { ...workspace("fixed_assets"), limitation: "Compound assets are available on the seeded register; attach components from the asset drawer." },
+  assetProposals: { ...workspace("fixed_assets"), limitation: "No capitalization rule is seeded; add one in Setup before posted purchases generate proposals." },
+  constructionInProgress: { ...workspace("fixed_assets"), limitation: "No construction-in-progress record is seeded; create one against a construction-in-progress account before linking costs." },
+  assetMaintenance: { ...workspace("fixed_assets"), limitation: "No maintenance schedule is seeded; add schedules from the maintenance workspace." },
+  assetInsurance: { ...workspace("fixed_assets"), limitation: "No insurance policy is seeded; record policies with a real insurer before relying on renewal alerts." },
   continuousClose: workspace("journal_entries"), advancedClose: configuration("close_blueprints", "close_blueprint_steps"),
   allocations: configuration("allocation_rules", "allocation_rule_versions", "allocation_rule_targets"),
   allocationsAtEntry: configuration("allocation_rules"), allocationsAtPosting: configuration("allocation_rules"),
@@ -78,6 +85,9 @@ export const DEMO_FEATURE_EVIDENCE: Record<string, DemoFeatureEvidence> = {
   automationSimulator: workspace("automations"), apps: configuration("apps", "app_versions", "app_files"), scripts: configuration("user_scripts"),
   apiAccess: configuration("api_keys"), mcpAccess: configuration("api_keys"), queryConsole: workspace("journal_entries"),
   homeAnnouncements: workspace(), aiGovernanceLedger: configuration("ai_capabilities"),
+  accountMerges: { ...workspace("accounts"), limitation: "No accounts are merged in the demonstration; preview a merge from an account to see its consequences before executing one." },
+  accountingContexts: { ...workspace("accounts"), limitation: "No statutory context is installed; create a context and its localized account numbers before running reports under it." },
+  segmentDependencies: { ...workspace("segment_definitions"), limitation: "No dependency rules are installed; segment values remain freely combinable until a rule is created." },
 };
 
 export function demoFeatureEvidence(industryKey: string): Record<string, DemoFeatureEvidence> {

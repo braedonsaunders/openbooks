@@ -9,6 +9,7 @@ import { applyInventoryReturnsForCustomerCredit } from "../inventory/documents-c
 import { applyInventoryIssuesForInvoice } from "../inventory/documents-sales.ts";
 import { applyInventoryReceiptsForBill } from "../inventory/documents-purchasing.ts";
 import { createObligationsFromInvoice } from "../revenue/recognition.ts";
+import { proposeAssetsForPostedEntry } from "../assets/asset-proposals.ts";
 import { issueStoredValueForInvoice, issueStoreCreditForCreditMemo } from "../stored-value/invoice-effects.ts";
 import { hasStoredValueTenders, settleCashRefundTenders } from "../sales/document-tenders.ts";
 import { finalizePaymentAcceptanceForDocument } from "../payments-core/acceptance-effect.ts";
@@ -154,6 +155,9 @@ export async function runPostDocumentEffects(
         await issueStoreCreditForCreditMemo(doc.id, doc.orgId, effectActorId);
       }
     }
+    // Capitalization rules turn posted purchase lines into asset proposals;
+    // idempotent per journal line and a no-op unless proposals are switched on.
+    if (entryId) await proposeAssetsForPostedEntry(doc.orgId, entryId, effectActorId);
 
     const lines = await db
       .select()

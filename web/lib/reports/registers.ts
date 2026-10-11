@@ -43,6 +43,13 @@ interface AccountRegisterSelectRow extends AccountRegisterLine {
   entry_origin: string;
 }
 
+/**
+ * An account's register: its own posted lines, its descendants', and the
+ * history of every account merged into it. A merged account's lines keep
+ * that account (posted history is never rewritten); presenting them under
+ * the survivor, with the merge reclass netting to zero across both,
+ * shows one continuous history and the same closing balance.
+ */
 export async function accountRegister(
   orgId: string,
   accountId: string,
@@ -101,7 +108,7 @@ export async function accountRegister(
   const reportDb = functionalReportReader(orgId, sql`l.account_id in (
     with recursive account_scope as (
       select id from accounts where id = ${accountId} and org_id = ${orgId}
-      union select child.id from accounts child join account_scope parent on child.parent_id = parent.id where child.org_id = ${orgId}
+      union select child.id from accounts child join account_scope parent on (child.parent_id = parent.id or child.merged_into_id = parent.id) where child.org_id = ${orgId}
     ) select id from account_scope
   ) ${dateFilter} ${searchFilter} ${subsidiaryFilter} ${bookFilter}`);
   const r = (await reportDb.execute<AccountRegisterSelectRow>(canSeePayroll === true ? sql`
@@ -110,7 +117,7 @@ export async function accountRegister(
       union
       select child.id
         from accounts child
-        join account_scope parent on child.parent_id = parent.id
+        join account_scope parent on (child.parent_id = parent.id or child.merged_into_id = parent.id)
        where child.org_id = ${orgId}
     )
     select ${reportDb.censusColumn}, e.id as entry_id, e.entry_number, e.posting_date::text as posting_date, e.memo as entry_memo,
@@ -128,7 +135,7 @@ export async function accountRegister(
     with recursive account_scope as (
       select id from accounts where id = ${accountId} and org_id = ${orgId}
       union
-      select child.id from accounts child join account_scope parent on child.parent_id = parent.id where child.org_id = ${orgId}
+      select child.id from accounts child join account_scope parent on (child.parent_id = parent.id or child.merged_into_id = parent.id) where child.org_id = ${orgId}
     ), all_lines as (
       select ${reportDb.censusColumn}, e.id as entry_id, e.entry_number, e.posting_date::text as posting_date,
              e.memo as entry_memo, l.line_number, l.amount, l.memo, p.display_name as party, l.party_id,
@@ -194,7 +201,7 @@ export async function accountRegister(
       union
       select child.id
         from accounts child
-        join account_scope parent on child.parent_id = parent.id
+        join account_scope parent on (child.parent_id = parent.id or child.merged_into_id = parent.id)
        where child.org_id = ${orgId}
     )
     select ${reportDb.censusColumn}, count(*) as n, coalesce(sum(amount),0) as bal

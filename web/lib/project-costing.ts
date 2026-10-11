@@ -5,6 +5,7 @@ import { add, fromUnits, neg, normalizeMoney, toUnits } from '@openbooks/engine/
 import { directSubcontractOpenCommitment } from './subcontract-commitments'
 import { pgTextArrayLiteral } from './pg-array'
 import { orderedNetOfCancelledSql } from '@openbooks/engine/records/order-line-remainders'
+import { excludePeriodEndJournals } from '@openbooks/engine/records/period-end-origins'
 
 /**
  * Job-costing rollup for a single project — the heart of project accounting.
@@ -109,6 +110,7 @@ async function projectCostSummaryInSnapshot(
     join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
     join accounts a on a.id = l.account_id and a.org_id = l.org_id
     where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed')
+      and ${excludePeriodEndJournals(sql`e.origin`)}
       and e.book_id = (select b.id from accounting_books b
                          where b.org_id = ${orgId} and b.is_primary and b.is_active and b.posts_gl)
       ${projectSubsidiaryFilter(sql`l.subsidiary_id`, allowedSubsidiaryIds)}
@@ -142,6 +144,7 @@ async function projectCostSummaryInSnapshot(
     join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
     join accounts a on a.id = l.account_id and a.org_id = l.org_id
     where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed')
+      and ${excludePeriodEndJournals(sql`e.origin`)}
       and e.book_id = (select b.id from accounting_books b
                          where b.org_id = ${orgId} and b.is_primary and b.is_active and b.posts_gl)
       and a.type in ${COST_SET}

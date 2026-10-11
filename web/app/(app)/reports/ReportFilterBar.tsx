@@ -40,6 +40,7 @@ export type ReportControls = {
 }
 
 type ReportFilterOption = { value: string; label: string }
+export type ReportPrimaryFilter = { paramKey: string; label: string; value: string; options: ReportFilterOption[] }
 
 /** A concrete named window (e.g. one pay period) offered atop the presets;
  *  selecting one compiles to period=custom with its exact bounds. */
@@ -102,7 +103,8 @@ export function ReportFilterBar({
   dateRange?: { from: string; to: string }
   searchPlaceholder?: string
   /** A report-specific select rendered with the same compact P&L field chrome. */
-  primaryFilter?: { paramKey: string; label: string; value: string; options: ReportFilterOption[] }
+  /** Leading selects (accounting book, accounting context); one or several. */
+  primaryFilter?: ReportPrimaryFilter | ReportPrimaryFilter[]
   /** Compact report mode controls that belong inside, never beside, the bar. */
   leading?: ReactNode
   /** First entry is the default context (the root, consolidated). */
@@ -248,20 +250,20 @@ export function ReportFilterBar({
         <SearchInput placeholder={searchPlaceholder} className="w-40 shrink-0 sm:w-44" />
       ) : null}
 
-      {primaryFilter ? (
-        <Field label={primaryFilter.label}>
+      {(Array.isArray(primaryFilter) ? primaryFilter : primaryFilter ? [primaryFilter] : []).map((filter) => (
+        <Field key={filter.paramKey} label={filter.label}>
           <Select
-            value={primaryFilter.value}
-            onChange={(e) => setParams({ [primaryFilter.paramKey]: e.target.value })}
+            value={filter.value}
+            onChange={(e) => setParams({ [filter.paramKey]: e.target.value })}
             className={cn(SELECT, 'font-semibold')}
-            aria-label={primaryFilter.label}
+            aria-label={filter.label}
           >
-            {primaryFilter.options.map((option) => (
+            {filter.options.map((option) => (
               <option key={option.value} value={option.value}>{option.label}</option>
             ))}
           </Select>
         </Field>
-      ) : null}
+      ))}
       {controls.period !== false && !controls.dateRange && (
         <Field label={controls.asOf ? t('asOf') : t('period')}>
           <Select

@@ -19,6 +19,33 @@ import {
   type CataloguePermission,
 } from "./permissions.ts";
 
+/**
+ * Fixed-asset duties: capitalize accepts proposals and capitalizes
+ * construction in progress (both post reclasses); maintain keeps the
+ * maintenance and insurance registers. Both follow assets.manage: the
+ * controller and accountant hold them, read-only duties never do.
+ */
+test("fixed-asset capitalization and maintenance permissions are catalogued and granted by duty", () => {
+  const keys: CataloguePermission[] = ["assets.capitalize", "assets.maintain"];
+  for (const perm of keys) {
+    assert.ok((PERMISSION_CATALOGUE as readonly string[]).includes(perm), `${perm} must be seeded so someone can hold it`);
+    assert.equal(permissionLabelKey(perm), `permissions.${perm.replace(/\./g, "_")}`);
+  }
+  const group = PERMISSION_GROUPS.find((entry) => entry.key === "assets");
+  assert.ok(group);
+  assert.deepEqual(group.permissions.map((entry) => entry.key), ["assets.read", "assets.manage", ...keys]);
+  const holds = (role: string, perm: string) =>
+    permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), perm);
+  for (const perm of keys) {
+    for (const role of ["admin", "controller", "accountant"]) {
+      assert.equal(holds(role, perm), true, `${role} must hold ${perm}`);
+    }
+    for (const role of ["viewer", "approver"]) {
+      assert.equal(holds(role, perm), false, `${role} must not hold ${perm}`);
+    }
+  }
+});
+
 test("stored value permissions are catalogued, grouped, and split by duty", () => {
   const keys: CataloguePermission[] = ["stored_value.read", "stored_value.manage", "stored_value.adjust"];
   for (const perm of keys) {
@@ -80,6 +107,30 @@ test("usage permissions are catalogued and granted wherever invoice creation is 
  * the accountant runs day-to-day work without approval power, the approver
  * reviews (read + approve), and the viewer only reads.
  */
+test("intercompany permissions are catalogued, grouped, and separate settlement from approval", () => {
+  const keys: CataloguePermission[] = ["intercompany.read", "intercompany.manage", "intercompany.settle", "intercompany.approve"];
+  for (const perm of keys) {
+    assert.ok((PERMISSION_CATALOGUE as readonly string[]).includes(perm), `${perm} must be seeded so someone can hold it`);
+  }
+  const group = PERMISSION_GROUPS.find((entry) => entry.key === "intercompany");
+  assert.ok(group, "intercompany needs its own catalogue group for the role picker");
+  assert.equal(group.labelKey, "permissions.groups.intercompany");
+  assert.deepEqual(group.permissions.map((entry) => entry.key), keys);
+  const holds = (role: string, perm: string) =>
+    permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), perm);
+  for (const perm of keys) assert.equal(holds("controller", perm), true, `controller must hold ${perm}`);
+  // The accountant prepares runs and pairs documents; settlement and its
+  // approval stay with the controller and the approver.
+  assert.equal(holds("accountant", "intercompany.manage"), true);
+  assert.equal(holds("accountant", "intercompany.settle"), false);
+  assert.equal(holds("accountant", "intercompany.approve"), false);
+  assert.equal(holds("approver", "intercompany.approve"), true);
+  assert.equal(holds("approver", "intercompany.settle"), false);
+  assert.equal(holds("approver", "intercompany.manage"), false);
+  assert.equal(holds("viewer", "intercompany.read"), true);
+  assert.equal(holds("viewer", "intercompany.manage"), false);
+});
+
 test("allocation permissions are catalogued, grouped, and granted by duty", () => {
   const keys: CataloguePermission[] = ["allocations.read", "allocations.manage", "allocations.run", "allocations.approve"];
   for (const perm of keys) {

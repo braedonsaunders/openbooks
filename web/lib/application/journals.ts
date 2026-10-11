@@ -6,6 +6,7 @@ import {
   type JournalCreateBody,
 } from "../journal-create";
 import { isUuid } from "../list-params";
+import { can } from "../authz-core";
 import type { ApplicationContext } from "./context";
 import { assertApplicationPermission } from "./context";
 import { ApplicationError, invalidInput } from "./errors";
@@ -41,6 +42,7 @@ export async function createApplicationJournal(
       allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds,
       idempotencyKey: input.idempotencyKey,
       body: input.body,
+      canPostBookSpecific: can(context.authz, "gl.post_book_specific"),
     });
     return {
       created: result.created,

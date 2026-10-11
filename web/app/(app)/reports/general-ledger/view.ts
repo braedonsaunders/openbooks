@@ -24,6 +24,7 @@ import { dimensionOptions, generalLedger } from '../../../../lib/reports'
 import { dimensionOptionsScope } from '../../../../lib/reports/filters'
 import { orgInfo } from '../../../../lib/data'
 import { resolveOrgId } from '../../../../lib/org-scope'
+import { AccountingContextError, accountingContextFilter, accountingContextLegend, localizeAccountRows, reportAccountingContext, type ReportAccountingContext } from '../../../../lib/reports/accounting-context'
 import { reportBookSelection } from '../../../../lib/report-books'
 import { MissingRatesError, reportSubsidiaryView, type CurrencyBasisNotice, type RatesBlockedNotice } from '../../../../lib/consolidation'
 import { ReportCurrencyBasisError } from '../../../../lib/reports/currency-basis'
@@ -116,8 +117,10 @@ export interface GeneralLedgerData {
   accounts: LedgerAccount[]
   dimensions: DimensionOptions
   subsidiaries: SubsidiaryPicker
-  /** Only rendered when the org has more than one book. */
-  primaryFilter: { paramKey: string; label: string; value: string; options: { value: string; label: string }[] } | null
+  /** Book (more than one book) and accounting context (when contexts exist). */
+  primaryFilter: { paramKey: string; label: string; value: string; options: { value: string; label: string }[] }[] | null
+  /** Set when the requested accounting context cannot label the accounts. */
+  contextBlocked: { title: string; description: string } | null
   scheduleDefId: string | null
   scheduleParams: Record<string, string>
   exportParams: Record<string, string>
@@ -152,7 +155,7 @@ export async function loadGeneralLedger(
   let currencyBasisBlocked: CurrencyBasisNotice | null = null
   let gl: Awaited<ReturnType<typeof generalLedger>> | null = null
   try {
-    subView = await reportSubsidiaryView(q.subsidiaryId, period.to)
+    subView = await reportSubsidiaryView(q.subsidiaryId, period.to, selectedBook.id)
     gl = await generalLedger(period.from, period.to, {
       accountId: isReportUuidParam(sp.account) ? sp.account : undefined,
       dims: { ...q.dims, subsidiaryIds: subView.subsidiary?.ids },
@@ -177,6 +180,14 @@ export async function loadGeneralLedger(
       }
     }
   }
+  let accountingContext: ReportAccountingContext | null = null
+  let contextBlocked: GeneralLedgerData['contextBlocked'] = null
+  try {
+    accountingContext = await reportAccountingContext(orgId, sp.ctx, { asOf: period.to, subsidiaryId: q.subsidiaryId ?? null })
+  } catch (e) {
+    if (!(e instanceof AccountingContextError)) throw e
+    contextBlocked = { title: t('accountingContext.blockedTitle'), description: `${e.message} ${e.remedy}` }
+  }
   const dims = { ...q.dims, subsidiaryIds: subView?.subsidiary?.ids }
   const optionScope = dimensionOptionsScope(dims.subsidiaryIds, authz?.allowedSubsidiaryIds)
   const [opts, org] = await Promise.all([
@@ -198,7 +209,7 @@ export async function loadGeneralLedger(
     backHref: '/reports',
     backLabel: t('hub.title'),
     company: org?.name ?? '',
-    periodPhrase: `${selectedBook.name} · ${t('pnl.dateRange', { from: period.from, to: period.to })}`,
+    periodPhrase: [selectedBook.name, t('pnl.dateRange', { from: period.from, to: period.to }), accountingContext ? accountingContextLegend(accountingContext, t) : null].filter(Boolean).join(' · '),
     periodFrom: period.from,
     periodTo: period.to,
     truncated: gl?.truncated ?? false,
@@ -214,8 +225,9 @@ export async function loadGeneralLedger(
     columnBalance: tc('labels.balance'),
     ratesBlocked,
     currencyBasisBlocked,
-    ratesReady: ratesBlocked === null && currencyBasisBlocked === null,
-    accounts: (gl?.accounts ?? []).map((a) => ({
+    ratesReady: ratesBlocked === null && currencyBasisBlocked === null && contextBlocked === null,
+    contextBlocked,
+    accounts: localizeAccountRows(gl?.accounts ?? [], accountingContext?.labels).map((a) => ({
       id: a.id,
       number: a.number,
       name: a.name,
@@ -228,6 +240,7 @@ export async function loadGeneralLedger(
         mode: 'balance',
         dims,
         bookId: selectedBook.id,
+        includePeriodEndJournals: true,
       },
       closing: m(a.closing),
       closingTone: decimalCmp(a.closing, '0') < 0 ? 'negative' : 'default',
@@ -239,6 +252,7 @@ export async function loadGeneralLedger(
         mode: 'balance',
         dims,
         bookId: selectedBook.id,
+        includePeriodEndJournals: true,
       },
       lines: a.lines.map((l, i) => ({
         key: `${l.entryId}-${i}`,
@@ -257,15 +271,20 @@ export async function loadGeneralLedger(
     })),
     dimensions: opts,
     subsidiaries: subView?.picker ?? [],
-    primaryFilter:
-      books.length > 1
-        ? {
-            paramKey: 'book',
-            label: tb('list.bookFilter'),
-            value: selectedBook?.id ?? '',
-            options: books.map((b) => ({ value: b.id, label: b.name })),
-          }
-        : null,
+    primaryFilter: (() => {
+      const filters = [
+        books.length > 1
+          ? {
+              paramKey: 'book',
+              label: tb('list.bookFilter'),
+              value: selectedBook?.id ?? '',
+              options: books.map((b) => ({ value: b.id, label: b.name })),
+            }
+          : null,
+        accountingContext ? accountingContextFilter(accountingContext, t) : null,
+      ].filter((filter) => filter !== null)
+      return filters.length > 0 ? filters : null
+    })(),
     scheduleDefId: scheduleDefId ?? null,
     scheduleParams: scheduleParamsFrom(sp),
     exportParams: stringReportParams(sp),
@@ -349,6 +368,15 @@ export function generalLedgerSpec(data: GeneralLedgerData): PageSpec {
               when: f('currencyBasisBlocked'),
             },
           ]
+        : []),
+      ...(data.contextBlocked
+        ? [{
+            ...widgetBlock('empty-state', {
+              title: data.contextBlocked.title,
+              description: data.contextBlocked.description,
+            }),
+            when: f('contextBlocked'),
+          }]
         : []),
     ],
     paper: {

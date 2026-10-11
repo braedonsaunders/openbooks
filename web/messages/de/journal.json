@@ -11,7 +11,8 @@
     "columns": {
       "entry": "Buchung",
       "origin": "Herkunft",
-      "debits": "Soll"
+      "debits": "Soll",
+      "book": "Buch"
     }
   },
   "origins": {
@@ -25,7 +26,12 @@
     "fxSettlement": "Währungsausgleich",
     "translation": "Umrechnung",
     "migration": "Migration",
-    "manufacturing": "Fertigung"
+    "manufacturing": "Fertigung",
+    "opening": "Eröffnung",
+    "bookOpening": "Buch-Eröffnung",
+    "expenseAmortization": "Aufwandsabgrenzung",
+    "accountMerge": "Kontenzusammenführung",
+    "assetCapitalization": "Anlagenaktivierung"
   },
   "detail": {
     "notFound": "Buchung nicht gefunden",
@@ -44,7 +50,8 @@
       "ruleGroup": "Regel: {name}",
       "scriptGroup": "Skript: {name}",
       "otherGroup": "{kind}: {name}"
-    }
+    },
+    "book": "Buch {book}"
   },
   "newButton": {
     "label": "Neue Buchung",
@@ -87,5 +94,12 @@
     "budgetaryControlRemedy": "Das Budget über seinen Genehmigungsablauf anpassen: das genehmigte Budget als Entwurf kopieren, den Betrag dieses Kontos für den Fonds im Arbeitsblatt erhöhen, die Kopie genehmigen und das ersetzte Budget archivieren. Oder den Ist-Betrag mit der offenen Verpflichtung verknüpfen, die ihn reserviert hat.",
     "voidAwaitingApproval": "Eine Stornierung dieses Journals wartet auf Genehmigung. Das Journal bleibt gebucht, bis über die Genehmigung entschieden ist.",
     "createUnconfirmed": "Der Server hat das neue Journal nicht bestätigt. Speichern Sie erneut: Der Wiederholungsversuch verwendet den Schlüssel dieses Entwurfs und kann daher kein zweites Journal erzeugen."
+  },
+  "book": {
+    "label": "Buch",
+    "primary": "Hauptbuch",
+    "allBooks": "Alle Bücher",
+    "allBooksHint": "Bucht ins Hauptbuch und wird in jedes vollständige Buch übernommen.",
+    "specificHint": "Buchspezifisch: wird nur in dieses Buch gebucht, in der Währung, die es für die Tochtergesellschaft des Journals führt."
   }
 }

@@ -4,9 +4,11 @@ import { db } from '@openbooks/engine/platform/db'
 import { addCalendarDays, addMonthsClamped, calendarDaysBetween } from '@openbooks/engine/platform/business-date/module'
 import { declaredPeriodColumns, declaredPeriodsCover, declaredQuarterColumns, fiscalMonthsBetween, fiscalQuartersBetween } from '@openbooks/reports'
 import { resolveOrgId } from './org-scope'
+import { excludePeriodEndJournals } from '@openbooks/engine/records/period-end-origins'
 import { glActivityBuckets, glSummaryEligibleDims, bucketSubsidiaryFilter, statementBookExpr, type ActivityBoundary } from './gl-summary'
 import { MissingRatesError } from './consolidation'
 import { ASSET_TYPES, EQUITY_TYPES, LIABILITY_TYPES, PNL_TYPES } from './account-types'
+import { localizeAccountRows, type AccountLabels } from './reports/accounting-context'
 import { fiscalStartMonth, defaultFiscalCalendarPeriods, fiscalYearStartOnDate, priorFiscalYearEndOnDate } from './fiscal'
 import {
   decimalAdd,
@@ -735,6 +737,8 @@ export async function statementMatrix(opts: {
    * original as-of — prior-years' earnings for the year-aware balance sheet.
    */
   asOfKind?: "column_end" | "prior_fiscal_year_end";
+  /** Accounting-context labels: rows show and sort by localized numbers and names. */
+  accountLabels?: AccountLabels | null;
 }): Promise<StatementMatrix> {
   const orgId = await resolveOrgId(opts.orgId);
   const breakout = opts.breakout ?? "none";
@@ -995,6 +999,7 @@ export async function statementMatrix(opts: {
       with e as materialized (
         select id, posting_date from journal_entries e
          where e.org_id = ${orgId} and e.status in ('posted', 'reversed') and ${baseDate} ${baseBook}
+           and ${excludePeriodEndJournals(sql`e.origin`)}
       )${cashCtes}
       select a.id, a.parent_id, a.number, a.name, a.type, a.is_summary, ${filterCols}
         from accounts a
@@ -1017,7 +1022,7 @@ export async function statementMatrix(opts: {
     vals: cols.map((_, i) => String(r[`c${i}`] ?? "0")),
   }));
 
-  const rows = treeifyMatrix(parsed, opts.types, showZero);
+  const rows = treeifyMatrix(localizeAccountRows(parsed, opts.accountLabels), opts.types, showZero);
 
   // Assemble display columns; append variance for a compare pair.
   const columns: StatementColumn[] = cols.map((c) => ({
@@ -1141,6 +1146,8 @@ type MatrixOpts = {
   showZero?: boolean
   /** Which accounting book to report (the org's primary book when omitted). */
   bookId?: string | null
+  /** Accounting-context labels for the account rows. */
+  accountLabels?: AccountLabels | null
 }
 
 function accountLines(matrix: StatementMatrix, types: string[]): StatementViewLine[] {

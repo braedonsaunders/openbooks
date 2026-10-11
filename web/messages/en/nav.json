@@ -165,7 +165,14 @@
     "manufacturing-mrp": "MRP runs",
     "manufacturing-time": "Production time",
     "manufacturing-quality": "Quality",
-    "close-reopen-requests": "Reopen Requests"
+    "close-reopen-requests": "Reopen Requests",
+    "intercompany": "Intercompany",
+    "intercompany-netting": "Intercompany Netting",
+    "amortization": "Amortization",
+    "asset-proposals": "Asset Proposals",
+    "asset-construction": "Construction in Progress",
+    "asset-maintenance": "Asset Maintenance",
+    "asset-insurance": "Asset Insurance"
   },
   "modulesShort": {
     "hrm-performance-cycles": "Manage reviews",
@@ -262,7 +269,8 @@
     "setup-tax-depreciation": "Tax Depreciation",
     "setup-overhead": "Overhead",
     "crm-sales": "Sales",
-    "hrm-compensation": "Compensation"
+    "hrm-compensation": "Compensation",
+    "intercompany": "Intercompany"
   },
   "moduleKeywords": {
     "receipts": "receipt, receipts, receive payment, payment, customer payment, cash receipt",

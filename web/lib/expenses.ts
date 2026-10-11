@@ -62,7 +62,8 @@ export async function loadExpenseReport(
                         l.amount::text as amount, l.tax_code_id, l.tax_group_id,
                         l.tax_input_amount::text as tax_input_amount,
                         l.tax_amount::text as tax_amount, l.tax_overridden,
-                        l.settlement_type,
+                        l.settlement_type, l.amortization_template_id,
+                        l.amortization_start_on::text as amortization_start_on, l.amortization_end_on::text as amortization_end_on,
                         l.department_id, l.project_id, l.extra_dims, l.custom
                    from document_lines l
                   where l.document_id = d.id and l.org_id = d.org_id

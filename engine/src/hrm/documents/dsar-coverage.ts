@@ -287,6 +287,10 @@ export const DSAR_EXCLUDED_TABLES: readonly DsarExcludedTable[] = [
       "asset register; the custodian link is an assignment, not a subject " +
       "record. Asset remit.",
   },
+  { table: "asset_proposals", reason: "capitalization queue; the vendor is the counterparty of a posted purchase line. Asset remit." },
+  { table: "asset_maintenance_schedules", reason: "asset maintenance plan; the vendor is the expected service provider. Asset remit." },
+  { table: "asset_maintenance_records", reason: "asset maintenance history; the vendor is the counterparty that performed the work. Asset remit." },
+  { table: "asset_insurance_policies", reason: "asset insurance contracts; the insurer is the counterparty. Asset remit." },
   {
     table: "grants",
     reason: "grant awards; sponsor counterparty. Finance remit.",
@@ -405,6 +409,10 @@ export const DSAR_EXCLUDED_TABLES: readonly DsarExcludedTable[] = [
   {
     table: "party_subsidiaries",
     reason: "org membership administration; platform remit.",
+  },
+  {
+    table: "intercompany_representing_parties",
+    reason: "intercompany configuration naming the customer and vendor that stand for a legal entity; finance remit.",
   },
 ];
 

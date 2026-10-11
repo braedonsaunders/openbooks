@@ -4,6 +4,7 @@ import { payrollSupportReportData } from './payroll-support-report'
 import { PayrollSupportReportRefusal } from './payroll-support-report-contract'
 import { trueCostExportData } from './analytics/true-cost-report'
 import { earnedValueExportData } from './earned-value-report'
+import { bookDifferenceSelection, bookDifferencesExportData, BookDifferenceSelectionError } from './book-differences-report'
 import { projectBudgetExportData } from './project-budget-report'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
@@ -74,6 +75,8 @@ import { weekStartOf } from '@openbooks/engine/resourcing/weeks'
 import { reportRunLabels } from './report-labels'
 import { runResourcingReport, type ResourcingReportKey } from './resourcing/report-facts'
 import { getTranslations } from 'next-intl/server'
+import { intercompanyReconciliationExportData } from './intercompany-report'
+import { AccountingContextError, localizeAccountRows, reportAccountingContext, type AccountLabels } from './reports/accounting-context'
 
 /**
  * The single catalog of built-in report "kinds" and the one place that turns
@@ -102,6 +105,7 @@ export const REPORT_KINDS = [
   'project-profitability',
   'project-budget-vs-actual',
   'earned-value',
+  'book-differences',
   'true-cost',
   'availability',
   'replenishment',
@@ -109,6 +113,7 @@ export const REPORT_KINDS = [
   'resourcing-bench',
   'resourcing-capacity-demand',
   'resourcing-engagement',
+  'intercompany-reconciliation',
 ] as const
 export type ReportKind = (typeof REPORT_KINDS)[number]
 
@@ -153,8 +158,12 @@ export function statementPageHref(statement: { kind?: string; params?: Record<st
       return '/reports/project-budget-vs-actual'
     case 'earned-value':
       return '/reports/earned-value'
+    case 'book-differences':
+      return '/reports/book-differences'
     case 'true-cost':
       return '/reports/true-cost'
+    case 'intercompany-reconciliation':
+      return '/reports/intercompany-reconciliation'
     case 'availability':
       return '/reports/availability'
     case 'replenishment':
@@ -205,6 +214,20 @@ export type ResolvedReport =
 const PAY_RUN_DOCUMENT_KIND = 'pay_run'
 function ledgerContentPermissions(lines: ReadonlyArray<{ docKind: string | null }>): string[] {
   return lines.some((line) => line.docKind === PAY_RUN_DOCUMENT_KIND) ? ['payroll.read'] : []
+}
+
+/**
+ * Accounting-context labels for an export or scheduled run: the same `ctx`
+ * parameter and resolution as the screen. An unknown or ambiguous context
+ * refuses with its remedy rather than exporting base labels silently.
+ */
+async function exportAccountLabels(orgId: string, p: URLSearchParams, asOf: string, subsidiaryId: string | undefined): Promise<AccountLabels | null> {
+  try {
+    return (await reportAccountingContext(orgId, p.get('ctx'), { asOf, subsidiaryId: subsidiaryId ?? null })).labels
+  } catch (error) {
+    if (error instanceof AccountingContextError) throw new ReportResolutionError(`${error.message} ${error.remedy}`)
+    throw error
+  }
 }
 
 export type ResolveReportCtx = {
@@ -328,7 +351,12 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
       requiredPermissions: ['resourcing.read'],
     }
   }
-  const subView = await resolveSubsidiaryView(q.subsidiaryId, period.to, authz.allowedSubsidiaryIds)
+  // A secondary book presents each subsidiary in its own currency; an
+  // explicit book that fails validation refuses below, before any figures.
+  const presentationBook = kind === 'budget' || p.get('book') == null
+    ? undefined
+    : (await reportBookSelection(orgId, p.get('book'))).selectedBook.id
+  const subView = await resolveSubsidiaryView(q.subsidiaryId, period.to, authz.allowedSubsidiaryIds, presentationBook)
   const dims: DimFilter = {
     departmentId: q.dims.departmentId,
     projectId: q.dims.projectId,
@@ -348,7 +376,8 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
     let title = ''
     let periodPhrase = ''
     const selectedBook = kind === 'budget' ? undefined : (await reportBookSelection(orgId, p.get('book'))).selectedBook
-    const matrixOpts = { orgId, bookId: selectedBook?.id, breakout: q.breakout, compare: q.compare, basis: q.basis, dims: q.dims, subsidiary: subView.subsidiary, showZero: q.showZero }
+    const accountLabels = kind === 'budget' ? null : await exportAccountLabels(orgId, p, period.to, q.subsidiaryId)
+    const matrixOpts = { orgId, bookId: selectedBook?.id, breakout: q.breakout, compare: q.compare, basis: q.basis, dims: q.dims, subsidiary: subView.subsidiary, showZero: q.showZero, accountLabels }
     if (kind === 'pnl') {
       title = t('pnl.title')
       periodPhrase = t('pnl.dateRange', { from: period.from, to: period.to })
@@ -429,7 +458,8 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
   const canSeePayroll = can(authz, 'payroll.read')
   switch (kind) {
     case 'general-ledger': {
-      const ledger = await generalLedger(period.from, period.to, { accountId: isReportUuidParam(p.get('account')) ? p.get('account')! : undefined, dims, orgId, bookId: detailBookId, canSeePayroll })
+      const raw = await generalLedger(period.from, period.to, { accountId: isReportUuidParam(p.get('account')) ? p.get('account')! : undefined, dims, orgId, bookId: detailBookId, canSeePayroll })
+      const ledger = { ...raw, accounts: localizeAccountRows(raw.accounts, await exportAccountLabels(orgId, p, period.to, q.subsidiaryId)) }
       return {
         render: 'data',
         data: generalLedgerExportData(ledger, t('generalLedger.title'), t),
@@ -460,6 +490,13 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
     }
     case 'true-cost':
       return { render: 'data', data: await trueCostExportData(orgId, period) }
+    case 'intercompany-reconciliation':
+      // Balances as of the window end, within the reader's legal entities.
+      return {
+        render: 'data',
+        data: await intercompanyReconciliationExportData(orgId, authz.allowedSubsidiaryIds, period.to, period.label),
+        requiredPermissions: ['intercompany.read'],
+      }
     case 'project-profitability':
       return {
         render: 'data',
@@ -483,7 +520,27 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
   const to = p.get('to') ?? period.to
   switch (kind) {
     case 'trial-balance':
-      return { render: 'data', data: trialBalanceExportData(await trialBalance(asOf, dims, orgId, detailBookId), asOf, t) }
+      return { render: 'data', data: trialBalanceExportData(localizeAccountRows(await trialBalance(asOf, dims, orgId, detailBookId), await exportAccountLabels(orgId, p, asOf, q.subsidiaryId)), asOf, t) }
+    case 'book-differences': {
+      try {
+        // Each book states the view in its own currency for the subsidiaries in it.
+        const selection = await bookDifferenceSelection(orgId, p.get('compareBook'))
+        const primaryView = await resolveSubsidiaryView(q.subsidiaryId, asOf, authz.allowedSubsidiaryIds, selection.primary.id)
+        const compareView = await resolveSubsidiaryView(q.subsidiaryId, asOf, authz.allowedSubsidiaryIds, selection.compare.id)
+        const base = (await db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${orgId}`)).rows[0]?.base_currency ?? ''
+        return {
+          render: 'data',
+          data: await bookDifferencesExportData({
+            orgId, asOf, dims, compareBook: selection.compare.id,
+            primaryCurrency: primaryView.currency ?? base,
+            compareCurrency: compareView.currency ?? base,
+          }),
+        }
+      } catch (error) {
+        if (error instanceof BookDifferenceSelectionError) throw new ReportResolutionError(error.message)
+        throw error
+      }
+    }
     case 'partners': {
       // `kind` is the one partners param end to end (seeded Receivables /
       // Payables declarations, schedule snapshots, the page toggle and

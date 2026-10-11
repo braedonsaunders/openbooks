@@ -1,0 +1,257 @@
+{
+  "title": "Konzernverrechnung",
+  "description": "Konzerninterne Aufträge, Rechnungen und Gutschriften zwischen Ihren Gesellschaften zuordnen und Belege finden, denen das Gegenstück fehlt oder die davon abweichen.",
+  "openReconciliation": "Konzernabstimmung",
+  "truncated": "Es werden die ersten {count} Belege angezeigt. Grenzen Sie die Liste nach Gesellschaft ein, um den Rest zu sehen.",
+  "tabs": {
+    "pairing": "Zuordnung",
+    "netting": "Verrechnung",
+    "transfers": "Überweisungen"
+  },
+  "views": {
+    "unpaired": "Nicht zugeordnet",
+    "mismatched": "Abweichend",
+    "paired": "Zugeordnet"
+  },
+  "empty": {
+    "unpaired": {
+      "title": "Alle konzerninternen Belege sind zugeordnet",
+      "description": "Belege an oder von einem vertretenden Kunden oder Lieferanten erscheinen hier, bis sie dem Gegenbeleg der anderen Gesellschaft zugeordnet sind."
+    },
+    "mismatched": {
+      "title": "Keine abweichenden Paare",
+      "description": "Paare, deren Belege in Währung, Summe oder Mengen voneinander abweichen oder bei denen eine Seite storniert wurde, erscheinen hier."
+    },
+    "paired": {
+      "title": "Noch keine zugeordneten Belege",
+      "description": "Erstellen Sie einen Gegenbeleg oder verknüpfen Sie einen vorhandenen Beleg in der Ansicht „Nicht zugeordnet“."
+    }
+  },
+  "columns": {
+    "document": "Beleg",
+    "kind": "Belegart",
+    "entity": "Gesellschaft",
+    "counterparty": "Gegenpartei",
+    "party": "Geschäftspartner",
+    "date": "Datum",
+    "amount": "Betrag",
+    "status": "Zustand",
+    "actions": "Aktionen",
+    "pair": "Paar",
+    "seller": "Verkäufer",
+    "buyer": "Käufer",
+    "entities": "Gesellschaften",
+    "sellerAmount": "Betrag Verkäufer",
+    "buyerAmount": "Betrag Käufer",
+    "state": "Stand",
+    "issues": "Abweichungen"
+  },
+  "kinds": {
+    "sales_order": "Kundenauftrag",
+    "purchase_order": "Bestellung",
+    "customer_invoice": "Ausgangsrechnung",
+    "vendor_bill": "Eingangsrechnung",
+    "customer_credit": "Kundengutschrift",
+    "vendor_credit": "Lieferantengutschrift"
+  },
+  "statuses": {
+    "draft": "Entwurf",
+    "pending_approval": "Genehmigung ausstehend",
+    "approved": "Genehmigt",
+    "posted": "Gebucht",
+    "voided": "Storniert"
+  },
+  "pairKinds": {
+    "order": "Auftragspaar",
+    "invoice": "Rechnung und Eingangsrechnung",
+    "credit": "Gutschriftspaar"
+  },
+  "origins": {
+    "generated": "Erzeugt",
+    "linked": "Verknüpft"
+  },
+  "states": {
+    "in_sync": "Übereinstimmend",
+    "awaiting_counterpart": "Wartet auf Gegenbeleg",
+    "mismatched": "Abweichend"
+  },
+  "mismatch": {
+    "currency": "Währung weicht ab: Verkäufer {seller}, Käufer {buyer}",
+    "amount": "Summen weichen um {difference} ab",
+    "quantity": "{item}: Menge Verkäufer {seller}, Menge Käufer {buyer}",
+    "sellerVoided": "Der Beleg des Verkäufers wurde storniert",
+    "buyerVoided": "Der Beleg des Käufers wurde storniert"
+  },
+  "actions": {
+    "generate": "Gegenbeleg erstellen",
+    "link": "Verknüpfen"
+  },
+  "errors": {
+    "generateFailed": "Der Gegenbeleg konnte nicht erstellt werden.",
+    "unlinkFailed": "Die Zuordnung des Paars konnte nicht aufgehoben werden.",
+    "linkFailed": "Die Belege konnten nicht verknüpft werden.",
+    "nettingFailed": "Der Verrechnungslauf konnte nicht aktualisiert werden.",
+    "transferFailed": "Die Überweisung konnte nicht abgeschlossen werden."
+  },
+  "pair": {
+    "unlinkTitle": "Zuordnung dieses Paars aufheben",
+    "unlinkReason": "Warum sind diese Belege nicht mehr zugeordnet?",
+    "unlinked": "Zuordnung des Paars aufgehoben",
+    "unlink": "Zuordnung aufheben",
+    "seller": "Beleg des Verkäufers",
+    "buyer": "Beleg des Käufers",
+    "linkedOn": "Verknüpft am",
+    "linkReason": "Grund der Verknüpfung"
+  },
+  "link": {
+    "title": "{document} mit einem Gegenbeleg verknüpfen",
+    "submit": "Belege verknüpfen",
+    "noCandidates": "Die andere Gesellschaft hat für diesen Geschäftspartner keinen nicht zugeordneten Beleg der passenden Art.",
+    "counterpart": "Gegenbeleg",
+    "reason": "Grund"
+  },
+  "netting": {
+    "title": "Verrechnungsläufe",
+    "description": "Konzerninterne Forderungen und Verbindlichkeiten zwischen Gesellschaften zu einem Stichtag verrechnen, den Restbetrag optional in bar ausgleichen und das Ergebnis nach Genehmigung buchen.",
+    "new": "Neuer Verrechnungslauf",
+    "empty": {
+      "title": "Noch keine Verrechnungsläufe",
+      "description": "Erstellen Sie eine Vorschau eines Verrechnungslaufs, um zu sehen, was jedes Gesellschaftspaar einander schuldet."
+    },
+    "columns": {
+      "run": "Lauf",
+      "asOf": "Stichtag",
+      "entities": "Gesellschaften",
+      "pairs": "Paare",
+      "lines": "Positionen",
+      "cash": "Barausgleich",
+      "status": "Zustand"
+    },
+    "cashYes": "Ja",
+    "cashNo": "Nein",
+    "statuses": {
+      "proposed": "Vorgeschlagen",
+      "pending_approval": "Genehmigung ausstehend",
+      "approved": "Genehmigt",
+      "rejected": "Abgelehnt",
+      "posted": "Gebucht",
+      "cancelled": "Abgebrochen",
+      "reversed": "Storniert"
+    },
+    "components": {
+      "open_item": "Offener Posten",
+      "due_position": "Position Verrechnungskonto (Forderung/Verbindlichkeit)",
+      "cash": "Bar"
+    },
+    "newTitle": "Neuer Verrechnungslauf",
+    "newDescription": "Wählen Sie die Gesellschaften und das Datum. Sehen Sie sich die Vorschau an, bevor Sie den Lauf vorschlagen; der Vorschlag wird genehmigt und gebucht.",
+    "preview": "Vorschau",
+    "propose": "Lauf vorschlagen",
+    "asOf": "Stichtag",
+    "settleCash": "Restbetrag in bar ausgleichen",
+    "subsidiaries": "Gesellschaften",
+    "bankFor": "Bankkonto für {entity}",
+    "chooseBank": "Bankkonto auswählen",
+    "reason": "Grund",
+    "previewTitle": "Vorschau: {lines} Positionen",
+    "pairColumns": {
+      "pair": "Paar",
+      "currency": "Währung",
+      "fromNet": "Netto Absendergesellschaft",
+      "toNet": "Netto Empfängergesellschaft",
+      "unreconciled": "Nicht abgestimmt",
+      "netted": "Verrechnet",
+      "cash": "Bar"
+    },
+    "cancelTitle": "Verrechnungslauf abbrechen",
+    "cancelReason": "Warum wird dieser Lauf abgebrochen?",
+    "reverseTitle": "Verrechnungslauf stornieren",
+    "reverseReason": "Warum wird dieser Lauf storniert?",
+    "submit": "Zur Genehmigung einreichen",
+    "post": "Buchen",
+    "reversalDate": "Stornodatum",
+    "reverse": "Stornieren",
+    "cancel": "Lauf abbrechen",
+    "decisionNote": "Entscheidungsvermerk",
+    "fingerprint": "Fingerabdruck des Vorschlags",
+    "pairsTitle": "Paare",
+    "linesTitle": "Positionen",
+    "lineColumns": {
+      "component": "Komponente",
+      "entity": "Gesellschaft",
+      "reference": "Referenz",
+      "open": "Offen",
+      "netted": "Verrechnet",
+      "cash": "Bar",
+      "rate": "Ausgleichskurs",
+      "realizedFx": "Realisierte Kursdifferenz"
+    },
+    "entryLink": "Buchungssatz {number}"
+  },
+  "transfers": {
+    "title": "Konzerninterne Überweisungen",
+    "description": "Geld vom Bankkonto einer Gesellschaft auf das einer anderen übertragen. Die Bücher jeder Gesellschaft gleichen sich über die Verrechnungskonten des Paars (Forderungen/Verbindlichkeiten gegenüber verbundenen Unternehmen) aus.",
+    "new": "Neue Überweisung",
+    "empty": {
+      "title": "Noch keine konzerninternen Überweisungen",
+      "description": "Überweisungen zwischen Bankkonten derselben Gesellschaft verbleiben im Bankwesen."
+    },
+    "columns": {
+      "transfer": "Überweisung",
+      "date": "Datum",
+      "route": "Von → An",
+      "amount": "Betrag",
+      "status": "Zustand"
+    },
+    "statuses": {
+      "posted": "Gebucht",
+      "reversed": "Storniert"
+    },
+    "newTitle": "Neue konzerninterne Überweisung",
+    "newDescription": "Die zahlende Gesellschaft schreibt ihrem Bankkonto gut; die empfangende Gesellschaft belastet ihr Bankkonto. Beide Konten müssen dieselbe Währung führen.",
+    "post": "Überweisung buchen",
+    "fromLegend": "Von",
+    "toLegend": "An",
+    "subsidiary": "Gesellschaft",
+    "chooseSubsidiary": "Gesellschaft auswählen",
+    "bankAccount": "Bankkonto",
+    "chooseBank": "Bankkonto auswählen",
+    "date": "Datum",
+    "amount": "Betrag",
+    "currency": "Währung",
+    "memo": "Notiz",
+    "reason": "Grund",
+    "reverseTitle": "Überweisung stornieren",
+    "reverseReason": "Warum wird diese Überweisung storniert?",
+    "reversalDate": "Stornodatum",
+    "reverse": "Stornieren",
+    "entry": "Buchungssatz",
+    "reversalEntry": "Stornobuchungssatz"
+  },
+  "reconciliation": {
+    "title": "Konzernabstimmung",
+    "description": "Die Salden jedes konzerninternen Paars nach Währung in den Hauptbüchern beider Gesellschaften sowie die noch abzustimmende Differenz.",
+    "asOf": "Stand {date}",
+    "openWorkspace": "Zuordnungsbereich öffnen",
+    "empty": "Zu diesem Datum keine konzerninternen Salden.",
+    "columns": {
+      "currency": "Währung",
+      "entity": "Gesellschaft",
+      "receivable": "Konzerninterne Forderung",
+      "payable": "Konzerninterne Verbindlichkeit",
+      "position": "Forderung/Verbindlichkeit ggü. verbundenen Unternehmen",
+      "net": "Netto",
+      "functionalNet": "Netto (funktionale Währung)"
+    },
+    "summary": {
+      "balances": "Paarsalden",
+      "unreconciled": "Nicht abgestimmt"
+    },
+    "difference": "Differenz"
+  },
+  "party": {
+    "representsAsCustomer": "Vertritt {subsidiary} als konzerninternen Kunden",
+    "representsAsVendor": "Vertritt {subsidiary} als konzerninternen Lieferanten",
+    "manageRepresentation": "Vertretende Geschäftspartner verwalten"
+  }
+}

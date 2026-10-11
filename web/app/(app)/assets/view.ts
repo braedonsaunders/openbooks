@@ -303,6 +303,7 @@ export async function loadAssets(
         explicitLayoutId: pickString(sp.form),
       })
       const editRequestedReturn = pickString(sp.drawerReturn)
+      const componentsEnabled = await isFeatureEnabled(orgId, 'assetComponents')
       drawer = {
         remountKey: String(openAsset.asset.id),
         payload: openAsset as AssetPayload,
@@ -325,6 +326,7 @@ export async function loadAssets(
           endsOn: row.ends_on,
         })),
         closeHref: editRequestedReturn?.startsWith('/assets') ? editRequestedReturn : '/assets',
+        componentsEnabled,
       }
     }
   }

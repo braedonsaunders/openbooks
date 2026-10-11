@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { SqlExecutor } from "../platform/db.ts";
-import type { FeatureState } from "./feature-registry.ts";
+import { FEATURE_BY_KEY, featureRequirements, type FeatureState } from "./feature-registry.ts";
 
 export type DataDependentFeatureKey = "multiSubsidiary" | "multiCurrency";
 
@@ -39,4 +39,52 @@ export async function dataDependentFeatureDefault(
       or exists(select 1 from fx_rates where org_id = ${orgId})
     ) as on`);
   return Boolean(r.rows[0]?.on);
+}
+
+const DATA_DEPENDENT_FEATURE_KEYS: readonly DataDependentFeatureKey[] = ["multiSubsidiary", "multiCurrency"];
+
+/**
+ * The data-dependent features a feature's requirement chain reaches
+ * (including the feature itself). A child of Multi-subsidiary resolves
+ * through its parent, so the parent's data-dependent default must be known
+ * before the pure registry check runs.
+ */
+export function dataDependentRequirementsOf(key: string): DataDependentFeatureKey[] {
+  const found = new Set<string>();
+  const seen = new Set<string>();
+  const visit = (current: string): void => {
+    if (seen.has(current)) return;
+    seen.add(current);
+    if ((DATA_DEPENDENT_FEATURE_KEYS as readonly string[]).includes(current)) found.add(current);
+    const def = FEATURE_BY_KEY.get(current);
+    if (!def) return;
+    for (const required of featureRequirements(def)) visit(required);
+  };
+  visit(key);
+  return DATA_DEPENDENT_FEATURE_KEYS.filter((candidate) => found.has(candidate));
+}
+
+/**
+ * Overlay the resolved data-dependent defaults onto a stored feature state
+ * for every data-dependent feature that `keys` reach (all of them when
+ * omitted). A stored boolean always wins; an unset one resolves from the
+ * org's own data on the caller's runner, so the pure registry check over the
+ * result agrees with the Features page for children of a data-dependent
+ * parent.
+ */
+export async function withDataDependentDefaults(
+  runner: SqlExecutor,
+  orgId: string,
+  state: FeatureState | null | undefined,
+  keys?: readonly string[],
+): Promise<FeatureState> {
+  const resolved: FeatureState = { ...(state ?? {}) };
+  const reached = keys === undefined
+    ? [...DATA_DEPENDENT_FEATURE_KEYS]
+    : [...new Set(keys.flatMap((key) => dataDependentRequirementsOf(key)))];
+  for (const key of reached) {
+    if (typeof resolved[key] === "boolean") continue;
+    resolved[key] = await dataDependentFeatureDefault(runner, orgId, key, state);
+  }
+  return resolved;
 }

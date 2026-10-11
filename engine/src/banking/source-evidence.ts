@@ -6,6 +6,7 @@ import { assertRealDate } from "./statement-parsers/shared"
 import { sql } from "drizzle-orm"
 import { db } from "../platform/db.ts"
 import { fromUnits, toUnits } from "../money/money.ts"
+import { excludePeriodEndJournals } from "../records/period-end-origins.ts"
 
 // ---------------------------------------------------------------------------
 // Source-evidenced reconciliation (0158)
@@ -148,6 +149,7 @@ export async function refreshSourceReconciliationState(
       join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
      where a.org_id = ${orgId} and a.reconcilable and a.is_active and not a.is_summary
        and je.book_id = ${bookId} and je.status in ('posted', 'reversed')
+       and ${excludePeriodEndJournals(sql`je.origin`)}
      group by a.id, a.number, a.name
     having count(*) > 0
      order by a.number nulls last, a.name
@@ -249,6 +251,7 @@ export async function signOffFromSourceEvidence(
          and je.book_id = ${bookId}
          and jl.currency = ${account.currency}
          and je.posting_date <= ${state.reconciled_through}
+         and ${excludePeriodEndJournals(sql`je.origin`)}
     `)).rows[0]!;
     const clearedLines = Number(coverage.cleared);
     const openLines = Number(coverage.open);

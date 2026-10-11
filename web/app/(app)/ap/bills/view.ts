@@ -22,6 +22,8 @@ import { loadFieldDefs } from '../../../../lib/custom-fields'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isMultiSubsidiary, subsidiaryOptions, subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { contractorWithholdingScheme } from '@openbooks/engine/country-tax-packs'
+import { sourceAmortizationOptions } from '@/lib/amortization-options'
+import { businessToday } from '@openbooks/engine/platform/business-date'
 import { returnableBillLines } from '@openbooks/engine/inventory/vendor-credit-prefill'
 import { isUuid, pickString } from '../../../../lib/list-params'
 import { resolveFormLayout } from '../../../../lib/customization/resolve'
@@ -76,6 +78,9 @@ export interface ApBillsDrawer {
   /** Active contractor-withholding scheme codes covering the bill's scope.
    *  Empty hides the drawer's withholding line columns and scheme guidance. */
   withholdingSchemes: { code: string }[]
+  /** Current amortization templates for the bill line columns; absent while
+   *  Expense amortization is off. */
+  amortizationTemplates?: { id: string; label: string }[]
   initialMode: 'edit' | 'view'
   layout: unknown
   availableLayouts: unknown
@@ -312,6 +317,10 @@ export async function loadApBills(
       .map((code) => ({ code }))
     : []
 
+  const amortizationTemplates = drawerPayload && drawerKind === 'vendor_bill'
+    ? await sourceAmortizationOptions(authz.user.orgId, drawerPayload)
+    : undefined
+
   const dimensions = pickers?.[4] as
     | {
         departments: unknown
@@ -347,6 +356,7 @@ export async function loadApBills(
           canCreate,
           canPost: can(authz, 'ap.post'),
           withholdingSchemes,
+          ...(amortizationTemplates ? { amortizationTemplates } : {}),
           allocationsEntryEnabled,
           initialMode: (isCreate || pickString(sp.mode) === 'edit' ? 'edit' : 'view') as 'edit' | 'view',
           layout: resolvedForm.layout,

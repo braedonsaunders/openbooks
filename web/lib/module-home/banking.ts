@@ -4,6 +4,7 @@ import { addCalendarDays, businessToday, weekStartsEndingOn } from '@openbooks/e
 import { db } from '@openbooks/engine/platform/db'
 import { BANK_KINDS } from "../document-kinds.ts";
 import { bankAccountMembership } from '../banking-accounts'
+import { excludePeriodEndJournals } from '@openbooks/engine/records/period-end-origins'
 import { statementBookExpr } from '../gl-summary'
 import { lineFunctional, presentationCurrency, presentationRates } from '../fx-presentation'
 import { add, cmp, mulDecimal, neg, sum, toUnits } from '@openbooks/engine/money/money'
@@ -205,6 +206,7 @@ export async function bankingHome(
         left join subsidiaries sub on sub.id = jl.subsidiary_id and sub.org_id = jl.org_id
        where a.org_id = ${orgId} and ${membership}${acctScope}${lineScope}
          and je.posting_date >= ${trendFrom}
+         and ${excludePeriodEndJournals(sql`je.origin`)}
        group by 1, 2, 3
     `),
     // Directory badges — org-wide counts for the workspace's other pages.

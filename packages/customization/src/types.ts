@@ -238,6 +238,12 @@ export interface ListColumnMeta {
    * while Multi-subsidiary is off; it stays available in the view designer.
    */
   legalEntity?: boolean
+  /**
+   * The column shows the record's accounting book. An organization without
+   * Multi-book accounting keeps one book, so the default view hides it while
+   * that module is off; it stays available in the view designer.
+   */
+  accountingBook?: boolean
   /** Default column width (px) when the view doesn't specify one. */
   defaultWidth?: number
 }
@@ -246,11 +252,14 @@ export interface ListColumnMeta {
 export interface ListViewContext {
   /** Whether Multi-subsidiary is on; unknown keeps every column's static default. */
   multiSubsidiary?: boolean
+  /** Whether Multi-book accounting is on; unknown keeps every column's static default. */
+  multiBook?: boolean
 }
 
 /** Whether a column is visible in the default view for this organization. */
-export function columnVisibleByDefault(column: Pick<ListColumnMeta, 'defaultHidden' | 'legalEntity'>, context: ListViewContext = {}): boolean {
+export function columnVisibleByDefault(column: Pick<ListColumnMeta, 'defaultHidden' | 'legalEntity' | 'accountingBook'>, context: ListViewContext = {}): boolean {
   if (column.defaultHidden) return false
+  if (column.accountingBook && context.multiBook === false) return false
   return !(column.legalEntity && context.multiSubsidiary === false)
 }
 

@@ -50,7 +50,11 @@
       "statementsTitle": "Relevés clients",
       "statementsDescription": "Choisissez un client pour ouvrir son relevé : pièces ouvertes, paiements et ancienneté de la période.",
       "statementBatchesTitle": "Envois de relevés",
-      "statementBatchesDescription": "Envoyez les relevés à tous les clients avec un solde, puis suivez chaque envoi jusqu’à sa livraison."
+      "statementBatchesDescription": "Envoyez les relevés à tous les clients avec un solde, puis suivez chaque envoi jusqu’à sa livraison.",
+      "intercompanyReconciliationTitle": "Rapprochement intercompagnies",
+      "intercompanyReconciliationDescription": "Soldes de chaque paire intercompagnies par devise dans les livres des deux entités et écart restant à rapprocher.",
+      "bookDifferencesTitle": "Écarts entre livres",
+      "bookDifferencesDescription": "Chaque compte du livre principal à côté d’un livre secondaire, avec l’écart"
     },
     "groups": {
       "financial": "États financiers",
@@ -67,7 +71,8 @@
       "allocations": "Répartitions",
       "aiGovernance": "Gouvernance de l’IA",
       "other": "Autres rapports",
-      "resourcing": "Ressources"
+      "resourcing": "Ressources",
+      "fixedAssets": "Immobilisations"
     },
     "customStudio": {
       "title": "Constructeur de rapports",
@@ -1145,6 +1150,42 @@
       "managed_property_portfolio": {
         "label": "Biens immobiliers gérés",
         "description": "Cycle de vie actuel du portefeuille, limité aux entités juridiques autorisées pour l’utilisateur."
+      },
+      "prepaid_amortization_plan": {
+        "label": "Plan d’étalement des charges constatées d’avance",
+        "description": "Chaque période prévue et étalée des échéanciers, par mois, compte et échéancier."
+      },
+      "prepaid_amortization_reconciliation": {
+        "label": "Rapprochement des charges constatées d’avance",
+        "description": "Mouvements des comptes de régularisation au grand livre à côté des échéanciers qui les expliquent ; cumulés à une date, l’écart est nul lorsqu’ils concordent."
+      },
+      "fixed_asset_register": {
+        "label": "Registre des immobilisations par livre",
+        "description": "Toutes les immobilisations de chaque livre actif — y compris les immobilisations en cours et les composants — avec leur statut, leur immobilisation parente, leur coût, leur amortissement cumulé et leur valeur comptable à ce jour."
+      },
+      "fixed_asset_rollforward": {
+        "label": "Tableau de variation des immobilisations",
+        "description": "Coût et amortissement cumulé en fin de mois par immobilisation et par livre : ouverture, acquisitions, transferts, cessions, immobilisations en cours immobilisées, amortissement, réévaluation et clôture. Synthétisez par livre et par catégorie pour obtenir le tableau de variation."
+      },
+      "fixed_asset_depreciation_forecast": {
+        "label": "Prévision d’amortissement",
+        "description": "Amortissement prévu non encore comptabilisé, par immobilisation, livre et période, selon le plan actuel de chaque immobilisation."
+      },
+      "asset_proposals": {
+        "label": "Propositions d’immobilisation",
+        "description": "Lignes d’achat comptabilisées proposées pour immobilisation, avec leur origine, leur fournisseur, leur compte, leur règle, leur montant et la décision prise."
+      },
+      "asset_maintenance_due": {
+        "label": "Entretiens d’immobilisations à échéance",
+        "description": "Plans d’entretien actifs avec leur prochaine date d’échéance et valeur de compteur, le dernier relevé, et leur situation (planifié, à échéance ou en retard) à la date du rapport."
+      },
+      "asset_insured_values": {
+        "label": "Valeur assurée et valeur nette comptable",
+        "description": "Toutes les immobilisations couvertes par une police en vigueur à la date du rapport, avec leur valeur assurée et leur valeur de remplacement comparées à leur valeur comptable dans le livre principal, et l’écart."
+      },
+      "asset_cip_costs": {
+        "label": "Coûts des immobilisations en cours",
+        "description": "Toutes les lignes du grand livre liées à un dossier d’immobilisation en cours — factures, écritures et coûts de projet — avec leur dossier, compte, projet et montant, pour rapprocher le registre auxiliaire des comptes d’immobilisations en cours."
       }
     },
     "columns": {
@@ -2755,6 +2796,147 @@
         "code": "Code du bien",
         "name": "Bien immobilier",
         "status": "Statut"
+      },
+      "prepaid_amortization_plan": {
+        "month": "Mois",
+        "schedule_number": "Échéancier",
+        "schedule_status": "État de l’échéancier",
+        "line_status": "État de la période",
+        "deferral_account": "Compte de régularisation",
+        "destination_account": "Compte de charge",
+        "subsidiary": "Filiale",
+        "currency": "Devise",
+        "amortized": "Étalé",
+        "scheduled": "Prévu",
+        "schedule_id": "Échéancier (ID)",
+        "journal_entry_id": "Écriture (ID)",
+        "book_id": "ID du livre"
+      },
+      "prepaid_amortization_reconciliation": {
+        "moved_on": "Date du mouvement",
+        "deferral_account": "Compte de régularisation",
+        "subsidiary": "Filiale",
+        "book": "Livre",
+        "currency": "Devise",
+        "source": "Origine",
+        "ledger": "Grand livre",
+        "subledger": "Échéanciers",
+        "difference": "Écart",
+        "account_id": "ID du compte",
+        "book_id": "ID du livre"
+      },
+      "fixed_asset_register": {
+        "book_id": "Clé du livre",
+        "book": "Livre comptable",
+        "asset_number": "Numéro d’immobilisation",
+        "name": "Nom",
+        "status": "Statut",
+        "category": "Catégorie",
+        "parent_asset": "Immobilisation parente",
+        "subsidiary": "Entité juridique",
+        "base_currency": "Monnaie fonctionnelle",
+        "acquired_on": "Acquise le",
+        "in_service_on": "En service le",
+        "cost": "Coût",
+        "accumulated_depreciation": "Amortissement cumulé",
+        "carrying_value": "Valeur comptable",
+        "id": "Clé de l’immobilisation"
+      },
+      "fixed_asset_rollforward": {
+        "book_id": "Clé du livre",
+        "book": "Livre comptable",
+        "month": "Mois",
+        "asset_number": "Numéro d’immobilisation",
+        "name": "Nom",
+        "status": "Statut",
+        "category": "Catégorie",
+        "subsidiary": "Entité juridique",
+        "base_currency": "Monnaie fonctionnelle",
+        "cost_opening": "Coût d’ouverture",
+        "additions": "Acquisitions",
+        "transfers": "Transferts et cessions partielles",
+        "disposals": "Cessions",
+        "capitalized": "Immobilisations en cours immobilisées",
+        "cost_closing": "Coût de clôture",
+        "accumulated_opening": "Amortissement cumulé d’ouverture",
+        "depreciation": "Amortissement",
+        "remeasurement": "Dépréciation et réévaluation",
+        "accumulated_other": "Amortissement cumulé sur acquisitions, transferts et cessions",
+        "accumulated_closing": "Amortissement cumulé de clôture",
+        "asset_id": "Clé de l’immobilisation"
+      },
+      "fixed_asset_depreciation_forecast": {
+        "book_id": "Clé du livre",
+        "book": "Livre comptable",
+        "period": "Période",
+        "period_ends_on": "Fin de période",
+        "asset_number": "Numéro d’immobilisation",
+        "name": "Nom",
+        "category": "Catégorie",
+        "subsidiary": "Entité juridique",
+        "base_currency": "Monnaie fonctionnelle",
+        "posted": "Comptabilisé",
+        "planned": "Amortissement prévu",
+        "asset_id": "Clé de l’immobilisation"
+      },
+      "asset_proposals": {
+        "posting_date": "Comptabilisée le",
+        "source": "Origine",
+        "description": "Libellé",
+        "vendor": "Fournisseur",
+        "account": "Compte",
+        "rule": "Règle",
+        "status": "Statut",
+        "subsidiary": "Entité juridique",
+        "base_currency": "Monnaie fonctionnelle",
+        "amount": "Montant",
+        "resolution_reason": "Note de décision",
+        "id": "Clé de la proposition"
+      },
+      "asset_maintenance_due": {
+        "asset_number": "Numéro d’immobilisation",
+        "asset": "Immobilisation",
+        "task": "Tâche",
+        "vendor": "Fournisseur",
+        "next_due_on": "Prochaine échéance le",
+        "next_due_usage": "Prochaine échéance au compteur",
+        "current_usage": "Dernier relevé de compteur",
+        "usage_unit": "Unité de compteur",
+        "standing": "Situation",
+        "is_active": "Actif",
+        "subsidiary": "Entité juridique",
+        "base_currency": "Monnaie fonctionnelle",
+        "estimated_cost": "Coût estimé",
+        "id": "Clé du plan"
+      },
+      "asset_insured_values": {
+        "policy_number": "Police",
+        "insurer": "Assureur",
+        "coverage_ends_on": "Fin de la couverture",
+        "asset_number": "Numéro d’immobilisation",
+        "asset": "Immobilisation",
+        "subsidiary": "Entité juridique",
+        "base_currency": "Monnaie fonctionnelle",
+        "insured_value": "Valeur assurée",
+        "replacement_value": "Valeur de remplacement",
+        "net_book_value": "Valeur nette comptable",
+        "gap": "Valeur assurée moins valeur nette comptable",
+        "asset_id": "Clé de l’immobilisation"
+      },
+      "asset_cip_costs": {
+        "cip_number": "Dossier d’immobilisation en cours",
+        "cip_name": "Nom de l’immobilisation en cours",
+        "cip_status": "Statut du dossier",
+        "account": "Compte",
+        "entry_number": "Écriture",
+        "posting_date": "Comptabilisé le",
+        "project": "Projet",
+        "memo": "Note",
+        "link_status": "Statut de liaison",
+        "subsidiary": "Entité juridique",
+        "base_currency": "Monnaie fonctionnelle",
+        "amount": "Montant",
+        "id": "Clé du coût"
       }
     },
     "enumValues": {
@@ -2881,7 +3063,15 @@
       "insufficient_funds": "Fonds insuffisants",
       "needs_authentication": "Authentification requise",
       "primary": "Méthode principale",
-      "backup": "Méthode de secours"
+      "backup": "Méthode de secours",
+      "construction": "Immobilisation en cours",
+      "capitalized": "Immobilisée",
+      "accepted": "Acceptée",
+      "scheduled": "Planifié",
+      "due": "À échéance",
+      "overdue": "En retard",
+      "linked": "Lié",
+      "unlinked": "Non lié"
     }
   },
   "operators": {
@@ -3115,6 +3305,14 @@
     "analytics-workforce-capacity": {
       "name": "Capacité des effectifs",
       "description": "Structure actuelle des effectifs : équivalents temps plein prévus, financés, pourvus et vacants."
+    },
+    "prepaid-expense-waterfall": {
+      "name": "Cascade des charges constatées d’avance",
+      "description": "Charges constatées d’avance étalées et prévues par mois, compte de régularisation et devise."
+    },
+    "prepaid-expense-reconciliation": {
+      "name": "Rapprochement des charges constatées d’avance",
+      "description": "Soldes des comptes de régularisation au grand livre face au restant à étaler de leurs échéanciers, par compte, filiale, livre et devise."
     }
   },
   "generalLedger": {
@@ -3158,7 +3356,12 @@
       "gift": "Don",
       "grant": "Subvention",
       "release": "Levée des restrictions",
-      "manufacturing": "Fabrication"
+      "manufacturing": "Fabrication",
+      "opening": "Ouverture",
+      "book_opening": "Soldes d’ouverture du livre",
+      "expense_amortization": "Étalement des charges",
+      "account_merge": "Fusion de comptes",
+      "asset_capitalization": "Immobilisation d’actifs"
     },
     "columns": {
       "detail": "Tiers / mémo"
@@ -3337,5 +3540,29 @@
       "currentPrice": "Prix actuel",
       "invoicedToDate": "Facturé à ce jour"
     }
+  },
+  "bookDifferences": {
+    "title": "Écarts entre livres",
+    "asOf": "{primary} comparé à {compare} · au {date}",
+    "compareBook": "Comparer avec",
+    "empty": "Aucun des deux livres n’a de solde pour la sélection.",
+    "unavailableTitle": "Aucun livre à comparer",
+    "setupBooks": "Livres comptables",
+    "currencyNote": "Le livre principal présente cette vue en {primary} et le livre comparé en {compare} ; aucun écart n’est donc calculé.",
+    "retainedEarningsPrior": "Résultats non distribués (exercices antérieurs)",
+    "columns": {
+      "accountNumber": "Compte",
+      "accountName": "Nom",
+      "primary": "Solde {book} ({currency})",
+      "compare": "Solde {book} ({currency})",
+      "difference": "Écart"
+    }
+  },
+  "accountingContext": {
+    "label": "Contexte comptable",
+    "default": "Par défaut de la filiale",
+    "base": "Plan comptable de base",
+    "legend": "Contexte comptable : {context} ; {marker} signale un compte affiché avec le numéro et le nom du plan de base",
+    "blockedTitle": "Ce contexte comptable ne peut pas libeller les comptes"
   }
 }

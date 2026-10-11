@@ -18,7 +18,7 @@ import {
   isCustomFieldKey,
   customFieldDefKey,
 } from "@openbooks/customization";
-import { subsidiaryFeatureEnabled } from "../features";
+import { isFeatureEnabled, subsidiaryFeatureEnabled } from "../features";
 import type { CustomFieldDef } from "../custom-fields";
 import { essentialsWorkspace } from "../workspace-presentation";
 import { essentialsFormLayout } from "./essentials-form";
@@ -313,7 +313,10 @@ export const resolveListView = cache(
     showInListDefs: CustomFieldDef[];
   }): Promise<ResolvedListView> => {
     const { orgId, userId, recordType, viewId, showInListDefs } = args;
-    const context: ListViewContext = { multiSubsidiary: await subsidiaryFeatureEnabled(orgId) };
+    const context: ListViewContext = {
+      multiSubsidiary: await subsidiaryFeatureEnabled(orgId),
+      multiBook: await isFeatureEnabled(orgId, 'multiBookAccounting'),
+    };
 
     const rows = (await db.execute<(ListViewRow & { config: unknown })>(sql`
       select id, name, record_type as "recordType", scope, owner_id as "ownerId",

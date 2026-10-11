@@ -53,6 +53,7 @@ export const STATEMENT_KIND_FEATURE: Partial<Record<string, string>> = {
   'project-budget-vs-actual': 'projects',
   'true-cost': 'projects',
   'earned-value': 'projectProgress',
+  'book-differences': 'multiBookAccounting',
   budget: 'budgets',
   availability: 'warehousing',
   replenishment: 'warehousing',
@@ -60,6 +61,7 @@ export const STATEMENT_KIND_FEATURE: Partial<Record<string, string>> = {
   'resourcing-bench': 'resourcing',
   'resourcing-capacity-demand': 'resourcing',
   'resourcing-engagement': 'resourcing',
+  'intercompany-reconciliation': 'multiSubsidiary',
 }
 
 /**
@@ -81,6 +83,7 @@ const STATEMENT_KIND_PERMISSION: Partial<Record<string, string>> = {
   'trial-balance': 'gl.read',
   'general-ledger': 'gl.read',
   journal: 'gl.read',
+  'book-differences': 'gl.read',
   budget: 'budgets.read',
   'payroll-support': 'payroll.read',
   'project-profitability': 'projects.read',
@@ -93,6 +96,7 @@ const STATEMENT_KIND_PERMISSION: Partial<Record<string, string>> = {
   'resourcing-bench': 'resourcing.read',
   'resourcing-capacity-demand': 'resourcing.read',
   'resourcing-engagement': 'resourcing.read',
+  'intercompany-reconciliation': 'intercompany.read',
 }
 
 /** Statement kinds whose grant depends on the receivable/payable side they show. */

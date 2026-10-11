@@ -50,7 +50,11 @@
       "statementsTitle": "Extratos de clientes",
       "statementsDescription": "Escolha um cliente para abrir o extrato: itens em aberto, pagamentos e saldos por vencimento no período.",
       "statementBatchesTitle": "Envios de extratos",
-      "statementBatchesDescription": "Envie extratos a todos os clientes com saldo e acompanhe cada envio até a entrega."
+      "statementBatchesDescription": "Envie extratos a todos os clientes com saldo e acompanhe cada envio até a entrega.",
+      "intercompanyReconciliationTitle": "Conciliação entre empresas",
+      "intercompanyReconciliationDescription": "Saldos de cada par de empresas por moeda nos livros das duas entidades e diferença a conciliar.",
+      "bookDifferencesTitle": "Diferenças entre livros",
+      "bookDifferencesDescription": "Cada conta do livro principal ao lado de um livro secundário, com a diferença"
     },
     "groups": {
       "financial": "Demonstrações Financeiras",
@@ -67,7 +71,8 @@
       "allocations": "Alocações",
       "aiGovernance": "Governança de IA",
       "other": "Outros relatórios",
-      "resourcing": "Alocação de recursos"
+      "resourcing": "Alocação de recursos",
+      "fixedAssets": "Ativos imobilizados"
     },
     "customStudio": {
       "title": "Construtor de relatórios personalizados",
@@ -1145,6 +1150,42 @@
       "managed_property_portfolio": {
         "label": "Imóveis administrados",
         "description": "Ciclo de vida atual da carteira, limitado às entidades jurídicas autorizadas para o usuário."
+      },
+      "prepaid_amortization_plan": {
+        "label": "Plano de apropriação de despesas antecipadas",
+        "description": "Cada período previsto e apropriado dos cronogramas, por mês, conta e cronograma."
+      },
+      "prepaid_amortization_reconciliation": {
+        "label": "Conciliação de despesas antecipadas",
+        "description": "Movimentos das contas de diferimento no razão geral ao lado dos cronogramas que os explicam; somados até uma data, a diferença é zero quando conferem."
+      },
+      "fixed_asset_register": {
+        "label": "Registro de ativos imobilizados por livro",
+        "description": "Todos os ativos imobilizados em todos os livros ativos — incluindo imobilizado em andamento e ativos componentes — com situação, ativo principal, custo, depreciação acumulada e valor contábil atual."
+      },
+      "fixed_asset_rollforward": {
+        "label": "Movimentação do ativo imobilizado",
+        "description": "Custo e depreciação acumulada no fim do mês por ativo e livro: saldo inicial, adições, transferências, baixas, obras capitalizadas, depreciação, remensuração e saldo final. Resuma por livro e categoria para obter a movimentação."
+      },
+      "fixed_asset_depreciation_forecast": {
+        "label": "Previsão de depreciação",
+        "description": "Depreciação planejada ainda não contabilizada, por ativo, livro e período, com base no cronograma atual de cada ativo."
+      },
+      "asset_proposals": {
+        "label": "Propostas de ativos",
+        "description": "Linhas de compra contabilizadas propostas para capitalização, com origem, fornecedor, conta, regra, valor e decisão."
+      },
+      "asset_maintenance_due": {
+        "label": "Manutenções de ativos a vencer",
+        "description": "Planos de manutenção ativos com a próxima data de vencimento e o valor do medidor, a última leitura e se cada um está programado, a vencer ou vencido na data do relatório."
+      },
+      "asset_insured_values": {
+        "label": "Valor segurado em relação ao valor contábil líquido",
+        "description": "Todos os ativos cobertos por uma apólice vigente na data do relatório, com valor segurado e valor de reposição comparados ao valor contábil do livro principal e a diferença."
+      },
+      "asset_cip_costs": {
+        "label": "Custos de imobilizado em andamento",
+        "description": "Todas as linhas do razão geral vinculadas a um registro de imobilizado em andamento — contas a pagar, lançamentos e custos de projeto — com registro, conta, projeto e valor, para conciliar o razão auxiliar com as contas de imobilizado em andamento."
       }
     },
     "columns": {
@@ -2755,6 +2796,147 @@
         "code": "Código do imóvel",
         "name": "Imóvel",
         "status": "Situação"
+      },
+      "prepaid_amortization_plan": {
+        "month": "Mês",
+        "schedule_number": "Cronograma",
+        "schedule_status": "Situação do cronograma",
+        "line_status": "Situação do período",
+        "deferral_account": "Conta de diferimento",
+        "destination_account": "Conta de despesa",
+        "subsidiary": "Subsidiária",
+        "currency": "Moeda",
+        "amortized": "Apropriado",
+        "scheduled": "Previsto",
+        "schedule_id": "Cronograma (ID)",
+        "journal_entry_id": "Lançamento (ID)",
+        "book_id": "ID do livro"
+      },
+      "prepaid_amortization_reconciliation": {
+        "moved_on": "Data",
+        "deferral_account": "Conta de diferimento",
+        "subsidiary": "Subsidiária",
+        "book": "Livro",
+        "currency": "Moeda",
+        "source": "Origem",
+        "ledger": "Razão geral",
+        "subledger": "Cronogramas",
+        "difference": "Diferença",
+        "account_id": "ID da conta",
+        "book_id": "ID do livro"
+      },
+      "fixed_asset_register": {
+        "book_id": "ID do livro",
+        "book": "Livro contábil",
+        "asset_number": "Número do ativo",
+        "name": "Nome",
+        "status": "Situação",
+        "category": "Categoria",
+        "parent_asset": "Ativo principal",
+        "subsidiary": "Entidade jurídica",
+        "base_currency": "Moeda funcional",
+        "acquired_on": "Adquirido em",
+        "in_service_on": "Em uso desde",
+        "cost": "Custo",
+        "accumulated_depreciation": "Depreciação acumulada",
+        "carrying_value": "Valor contábil",
+        "id": "ID do ativo"
+      },
+      "fixed_asset_rollforward": {
+        "book_id": "ID do livro",
+        "book": "Livro contábil",
+        "month": "Mês",
+        "asset_number": "Número do ativo",
+        "name": "Nome",
+        "status": "Situação",
+        "category": "Categoria",
+        "subsidiary": "Entidade jurídica",
+        "base_currency": "Moeda funcional",
+        "cost_opening": "Custo inicial",
+        "additions": "Adições",
+        "transfers": "Transferências e baixas parciais",
+        "disposals": "Baixas",
+        "capitalized": "Obras capitalizadas",
+        "cost_closing": "Custo final",
+        "accumulated_opening": "Depreciação acumulada inicial",
+        "depreciation": "Depreciação",
+        "remeasurement": "Redução ao valor recuperável e reavaliação",
+        "accumulated_other": "Depreciação acumulada sobre adições, transferências e baixas",
+        "accumulated_closing": "Depreciação acumulada final",
+        "asset_id": "ID do ativo"
+      },
+      "fixed_asset_depreciation_forecast": {
+        "book_id": "ID do livro",
+        "book": "Livro contábil",
+        "period": "Período",
+        "period_ends_on": "Fim do período",
+        "asset_number": "Número do ativo",
+        "name": "Nome",
+        "category": "Categoria",
+        "subsidiary": "Entidade jurídica",
+        "base_currency": "Moeda funcional",
+        "posted": "Contabilizado",
+        "planned": "Depreciação planejada",
+        "asset_id": "ID do ativo"
+      },
+      "asset_proposals": {
+        "posting_date": "Contabilizado em",
+        "source": "Origem",
+        "description": "Descrição",
+        "vendor": "Fornecedor",
+        "account": "Conta",
+        "rule": "Regra",
+        "status": "Situação",
+        "subsidiary": "Entidade jurídica",
+        "base_currency": "Moeda funcional",
+        "amount": "Valor",
+        "resolution_reason": "Observação da decisão",
+        "id": "ID da proposta"
+      },
+      "asset_maintenance_due": {
+        "asset_number": "Número do ativo",
+        "asset": "Ativo",
+        "task": "Tarefa",
+        "vendor": "Fornecedor",
+        "next_due_on": "Próximo vencimento em",
+        "next_due_usage": "Próximo vencimento no medidor",
+        "current_usage": "Última leitura do medidor",
+        "usage_unit": "Unidade do medidor",
+        "standing": "Posição",
+        "is_active": "Ativo",
+        "subsidiary": "Entidade jurídica",
+        "base_currency": "Moeda funcional",
+        "estimated_cost": "Custo estimado",
+        "id": "ID do plano"
+      },
+      "asset_insured_values": {
+        "policy_number": "Apólice",
+        "insurer": "Seguradora",
+        "coverage_ends_on": "Fim da cobertura",
+        "asset_number": "Número do ativo",
+        "asset": "Ativo",
+        "subsidiary": "Entidade jurídica",
+        "base_currency": "Moeda funcional",
+        "insured_value": "Valor segurado",
+        "replacement_value": "Valor de reposição",
+        "net_book_value": "Valor contábil líquido",
+        "gap": "Valor segurado menos valor contábil líquido",
+        "asset_id": "ID do ativo"
+      },
+      "asset_cip_costs": {
+        "cip_number": "Registro de obra",
+        "cip_name": "Nome da obra",
+        "cip_status": "Situação do registro",
+        "account": "Conta",
+        "entry_number": "Lançamento",
+        "posting_date": "Contabilizado em",
+        "project": "Projeto",
+        "memo": "Memorando",
+        "link_status": "Situação do vínculo",
+        "subsidiary": "Entidade jurídica",
+        "base_currency": "Moeda funcional",
+        "amount": "Valor",
+        "id": "ID do custo"
       }
     },
     "enumValues": {
@@ -2881,7 +3063,15 @@
       "insufficient_funds": "Fundos insuficientes",
       "needs_authentication": "Requer autenticação",
       "primary": "Método principal",
-      "backup": "Método reserva"
+      "backup": "Método reserva",
+      "construction": "Imobilizado em andamento",
+      "capitalized": "Capitalizado",
+      "accepted": "Aceito",
+      "scheduled": "Programado",
+      "due": "A vencer",
+      "overdue": "Vencido",
+      "linked": "Vinculado",
+      "unlinked": "Desvinculado"
     }
   },
   "operators": {
@@ -3135,6 +3325,14 @@
     "analytics-workforce-capacity": {
       "name": "Capacidade do quadro de pessoal",
       "description": "Estrutura atual do quadro de pessoal: equivalentes em tempo integral planejados, financiados, preenchidos e vagos."
+    },
+    "prepaid-expense-waterfall": {
+      "name": "Cascata de despesas antecipadas",
+      "description": "Despesas antecipadas e diferidas apropriadas e previstas por mês, conta de diferimento e moeda."
+    },
+    "prepaid-expense-reconciliation": {
+      "name": "Conciliação de despesas antecipadas",
+      "description": "Saldos das contas de diferimento no razão geral frente ao saldo a apropriar dos cronogramas, por conta, subsidiária, livro e moeda."
     }
   },
   "generalLedger": {
@@ -3178,7 +3376,12 @@
       "gift": "Doação",
       "grant": "Subvenção",
       "release": "Liberação de restrições",
-      "manufacturing": "Manufatura"
+      "manufacturing": "Manufatura",
+      "opening": "Abertura",
+      "book_opening": "Saldos de abertura do livro",
+      "expense_amortization": "Apropriação de despesas",
+      "account_merge": "Mesclagem de contas",
+      "asset_capitalization": "Capitalização de ativo"
     },
     "columns": {
       "detail": "Parte / memorando"
@@ -3337,5 +3540,29 @@
       "currentPrice": "Preço atual",
       "invoicedToDate": "Faturado até a data"
     }
+  },
+  "bookDifferences": {
+    "title": "Diferenças entre livros",
+    "asOf": "{primary} comparado com {compare} · em {date}",
+    "compareBook": "Comparar com",
+    "empty": "Nenhum dos livros tem saldo para a seleção.",
+    "unavailableTitle": "Nenhum livro para comparar",
+    "setupBooks": "Livros contábeis",
+    "currencyNote": "O livro principal apresenta esta visão em {primary} e o livro comparado em {compare}, portanto nenhuma diferença é calculada.",
+    "retainedEarningsPrior": "Lucros acumulados (anos anteriores)",
+    "columns": {
+      "accountNumber": "Conta",
+      "accountName": "Nome",
+      "primary": "Saldo {book} ({currency})",
+      "compare": "Saldo {book} ({currency})",
+      "difference": "Diferença"
+    }
+  },
+  "accountingContext": {
+    "label": "Contexto contábil",
+    "default": "Padrão da subsidiária",
+    "base": "Plano de contas base",
+    "legend": "Contexto contábil: {context}; {marker} indica uma conta exibida com o número e nome do plano base",
+    "blockedTitle": "Este contexto contábil não pode rotular as contas"
   }
 }

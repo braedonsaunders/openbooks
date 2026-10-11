@@ -4,6 +4,9 @@
 
 import type { DocArticle, DocCategory, DocSection } from './types'
 import { allocations } from './articles/allocations'
+import { intercompany } from './articles/intercompany'
+import { multiBookAccounting } from './articles/multi-book-accounting'
+import { chartOfAccountsGovernance } from './articles/chart-of-accounts-governance'
 import { welcome } from './articles/welcome'
 import { projectTypes } from './articles/project-types'
 import { overheadCosting } from './articles/overhead-costing'
@@ -64,6 +67,7 @@ import { itemRates } from './articles/item-rates'
 import { distributionBackorders } from './articles/distribution-backorders'
 import { fixedAssetsDepreciation } from './articles/fixed-assets-depreciation'
 import { revenueRecognition } from './articles/revenue-recognition'
+import { expenseAmortization } from './articles/expense-amortization'
 import { propertyManagement } from './articles/property-management'
 import { distributionWarehouses } from './articles/distribution-warehouses'
 import { distributionAvailability } from './articles/distribution-availability'
@@ -101,7 +105,7 @@ import {
   bankingAndReconciliation,
   fileCabinet,
 } from './articles/daily-workflows'
-import { financialReports, analyticsAndSavedViews, periodClose } from './articles/reporting-close'
+import { financialReports, analyticsAndSavedViews, periodClose, yearEndClosing } from './articles/reporting-close'
 import { agentWorkbench } from './articles/agent-workbench'
 import { migrationAndCutover, reconciliationBeforeCutover } from './articles/migration'
 import { migrateWithAConnector } from './articles/migrate-with-a-connector'
@@ -256,8 +260,11 @@ const ARTICLE_SECTION_BY_SLUG: Record<string, string> = {
   'chart-of-accounts-and-dimensions': 'accounting-ledger',
   'parties-items-and-projects': 'accounting-master-data',
   'revenue-recognition': 'accounting-advanced',
+  'expense-amortization': 'accounting-advanced',
   'fixed-assets-depreciation': 'accounting-advanced',
   'allocations': 'accounting-advanced',
+  intercompany: 'accounting-advanced',
+  'chart-of-accounts-governance': 'accounting-ledger',
   'sales-workflow': 'transactions-daily',
   'electronic-invoicing': 'transactions-daily',
   'purchasing-workflow': 'transactions-daily',
@@ -330,8 +337,11 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   chartOfAccountsAndDimensions,
   partiesItemsAndProjects,
   revenueRecognition,
+  expenseAmortization,
   fixedAssetsDepreciation,
   allocations,
+  intercompany,
+  multiBookAccounting,
   salesWorkflow,
   electronicInvoicing,
   purchasingWorkflow,
@@ -347,6 +357,7 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   distributionLabels,
   bankingAndReconciliation,
   periodClose,
+  yearEndClosing,
   projectTypes, overheadCosting, laborCosting, laborPricing, manufacturingOverview, payroll, employmentMigration, positionsAndHeadcount, hrmProcesses, inboxAndHome, automations, webhooks, correctingAndRescinding, performanceAndRetention, continuousPerformance, selfService, leaveTimeVersusValue, recruitingFunnel, benefitsEnrollment, fieldTickets, preBilling, subcontractorCompliance, compensationAndTransparency,
   busySeasonCapacity,
   staffingBoardEvidence, softHardBookings, retainersDrawdownsRecognition,
@@ -411,6 +422,7 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   auditLog,
   fileCabinet,
   issueReporting,
+  chartOfAccountsGovernance,
 ]
 
 export const DOC_ARTICLES: DocArticle[] = RAW_DOC_ARTICLES.map((article) => {

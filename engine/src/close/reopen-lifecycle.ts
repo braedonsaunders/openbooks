@@ -2,6 +2,7 @@ import { CloseError, CLOSE_MODULES, periodLockRequiresApprovedReopen, type Close
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgContext, type SqlExecutor } from "../platform/db.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
+import { reversePeriodEndJournalsForReopen } from "./period-end-journals.ts";
 import { upsertLock, periodScopeAdvisoryLock, tightenNarrowerLocks } from "../periods/period-locks.ts";
 import { CloseReopenRequestRow, ReopenApprovalConflict, controlledReopenHours, describeActiveReopenOverlap, describeReopenConflicts, endFullyClosedReopenRequests, lockReopenRequestScope, reopenApprovalConflicts, reopenIndependenceRequired, unconflictedReopenApprovers } from "./reopen-approvals.ts";
 
@@ -416,6 +417,10 @@ export async function decidePeriodReopen(args: {
         }
       }
     }
+    await reversePeriodEndJournalsForReopen(tx, {
+      orgId: args.orgId, periodId: row.period_id, bookId: row.book_id, subsidiaryId: row.subsidiary_id,
+      modules, actorId: args.actorId, reason: row.reason, requestId: args.requestId,
+    });
     const approved = await tx.execute(sql`
       update close_reopen_requests set status = 'approved', approved_by = ${args.actorId},
              approved_at = now(), expires_at = ${expiresAt.toISOString()}, updated_at = now(), updated_by = ${args.actorId}

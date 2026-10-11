@@ -1367,6 +1367,9 @@ export async function postAssetLifecycleEntry(
     reversesEntryId: args.reversesEntryId,
     actorId: args.actorId,
     currency: args.currency,
+    // Asset changes post each book's own measurement; full books never
+    // replicate the primary book's copy.
+    replicate: false,
     lines: lines.map((line) => ({
       accountId: line.accountId,
       amount: line.amount,

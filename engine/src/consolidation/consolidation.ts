@@ -7,6 +7,7 @@ import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
 import { addCalendarDays, isoDateOf } from "../platform/business-date.ts";
 import { PNL_TYPES } from "../records/account-types.ts";
 import { loadControlAccounts } from "../records/control-accounts.ts";
+import { excludePeriodEndJournals } from "../records/period-end-origins.ts";
 import { financialClosePeriodScope } from "../close/fx-revaluation.ts";
 import {
   add,
@@ -504,6 +505,7 @@ export async function runOwnershipConsolidationIn(
           end as rate
         ) translation
        where e.org_id=${orgId} and e.book_id=${bookId} and e.status in ('posted','reversed')
+         and ${excludePeriodEndJournals(sql`e.origin`)}
          and l.subsidiary_id=${interest.subsidiary_id} and e.period_id=${periodId} and e.posting_date<=${postingDate}
          and e.posting_date between ${interest.effective_from}
              and coalesce(${interest.effective_to}, 'infinity'::date)
@@ -609,6 +611,7 @@ export async function runOwnershipConsolidationIn(
             join accounts a on a.id=l.account_id and a.org_id=l.org_id
              and (a.type='equity' or a.type in ${PNL_TYPES})
            where e.org_id=${orgId} and e.book_id=${bookId} and e.status in ('posted','reversed')
+             and ${excludePeriodEndJournals(sql`e.origin`)}
              and l.subsidiary_id=${interest.subsidiary_id} and e.posting_date <= ${interest.acquisition_date}
            group by l.account_id,a.type having sum(l.amount)<>0
         `);
@@ -1258,6 +1261,7 @@ async function runAutoEliminationIn(
        and (e.period_id = ${periodId}
             or (a.type not in ${flowTypes} and source_period.ends_on < ${period.ends_on}::date))
        and e.status in ('posted', 'reversed')
+       and ${excludePeriodEndJournals(sql`e.origin`)}
        and a.eliminate and l.subsidiary_id <> ${elim.id}
        and not exists (
          select 1 from consolidation_control_losses loss
@@ -1323,6 +1327,7 @@ async function runAutoEliminationIn(
         join accounts a on a.id = l.account_id and a.org_id = l.org_id
        where e.org_id = ${orgId} and e.book_id = ${book.id}
          and e.status in ('posted', 'reversed')
+         and ${excludePeriodEndJournals(sql`e.origin`)}
          and l.subsidiary_id = ${elim.id} and a.eliminate
          and a.type not in ${flowTypes}
          and p.ends_on < ${period.ends_on}::date and e.period_id <> ${periodId}

@@ -31,6 +31,17 @@
         "reports"
       ]
     },
+    "amortization": {
+      "description": "Expense amortization: effective-dated templates, prepaid and deferred expense schedules from bill, journal and expense report lines and manual opening balances, governed schedule changes, the amortization run and scan, and the prepaid reconciliation.",
+      "dependsOn": [
+        "journal",
+        "money",
+        "organization",
+        "periods",
+        "platform",
+        "records"
+      ]
+    },
     "apps": {
       "description": "Installed app packages: the sandboxed runtime and invocation records.",
       "dependsOn": [
@@ -38,13 +49,14 @@
       ]
     },
     "assets": {
-      "description": "Fixed-asset lifecycle and book depreciation.",
+      "description": "Fixed-asset lifecycle and book depreciation; compound assets, proposals from purchases, construction in progress, maintenance and insurance.",
       "dependsOn": [
         "journal",
         "money",
         "organization",
         "periods",
-        "platform"
+        "platform",
+        "records"
       ]
     },
     "automations": {
@@ -73,7 +85,8 @@
         "money",
         "organization",
         "periods",
-        "platform"
+        "platform",
+        "records"
       ]
     },
     "billing": {
@@ -120,10 +133,12 @@
       "description": "Period close: calendars, module fences, close packages and automations, FX revaluation, posting-period assignment, commerce completeness proofs.",
       "dependsOn": [
         "allocations",
+        "amortization",
         "banking",
         "commerce",
         "flows",
         "fx",
+        "intercompany",
         "journal",
         "money",
         "organization",
@@ -134,13 +149,28 @@
         "records"
       ]
     },
+    "chart": {
+      "description": "Chart of accounts governance: account merges with their reference catalog and reclass, accounting contexts and localized account labels, and the chart's posting policies.",
+      "dependsOn": [
+        "flows",
+        "journal",
+        "money",
+        "organization",
+        "periods",
+        "platform",
+        "records"
+      ]
+    },
     "composition": {
       "description": "Composition root: installs the runtime seams (script journal writer first) that lower modules cannot import without cycling.",
       "dependsOn": [
         "allocations",
+        "chart",
         "close",
         "flows",
         "hrm",
+        "intercompany",
+        "inventory",
         "journal",
         "ledger",
         "manufacturing",
@@ -331,6 +361,21 @@
         "records"
       ]
     },
+    "intercompany": {
+      "description": "Intercompany framework: paired intercompany transactions and their pairing workspace, transfer pricing, netting and settlement runs, bank transfers between entities, cross-subsidiary fulfillment charges and intercompany reconciliation.",
+      "dependsOn": [
+        "flows",
+        "fx",
+        "inventory",
+        "journal",
+        "money",
+        "organization",
+        "periods",
+        "platform",
+        "records",
+        "sales"
+      ]
+    },
     "internal-billing": {
       "description": "Internal billing between departments, projects and subsidiaries: effective-dated rules and the internal billing document writer, posted through the native lifecycle.",
       "dependsOn": [
@@ -373,6 +418,8 @@
       "description": "The posting kernel and its orchestration: postDocument, posting effects, script journal writes, document void, delete and correction, billing provenance release.",
       "dependsOn": [
         "allocations",
+        "amortization",
+        "assets",
         "compliance",
         "contractor-withholding",
         "crm",
@@ -401,6 +448,7 @@
     "journal": {
       "description": "Double-entry journal kernel: postEntry/markEntryReversed, posting contracts and kernel balance invariants. No document orchestration.",
       "dependsOn": [
+        "fx",
         "money",
         "organization",
         "periods",
@@ -682,6 +730,7 @@
       "description": "The web scheduler tick, its outbox and lock identities.",
       "dependsOn": [
         "allocations",
+        "amortization",
         "banking",
         "billing",
         "close",
@@ -809,6 +858,7 @@
         "organization",
         "periods",
         "platform",
+        "records",
         "tax"
       ]
     },
@@ -853,6 +903,18 @@
         "money",
         "organization",
         "platform"
+      ]
+    },
+    "multibook": {
+      "description": "Multi-book accounting: a secondary book's currency per subsidiary and account mappings, governed activation, catch-up and deactivation of full replication with opening balances, and replication status.",
+      "dependsOn": [
+        "amortization",
+        "journal",
+        "money",
+        "organization",
+        "periods",
+        "platform",
+        "records"
       ]
     }
   },

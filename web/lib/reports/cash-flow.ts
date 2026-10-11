@@ -1,6 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { functionalReportReader } from "./currency-basis";
+import { excludePeriodEndJournals } from "@openbooks/engine/records/period-end-origins";
 import { bucketSubsidiaryFilter, glActivityBuckets, glSummaryEligibleDims, statementBookExpr } from "../gl-summary";
 import { resolveOrgId } from "../org-scope";
 import { decimalIsMaterial, decimalSum, type ExactDecimal } from "../statement-format";
@@ -122,6 +123,7 @@ export async function cashFlow(
          and e.posting_date >= ${from} and e.posting_date <= ${to}
          and e.book_id = ${book}
          and e.origin <> 'fx_revaluation'
+         and ${excludePeriodEndJournals(sql`e.origin`)}
          and l.account_id in (
            select id from accounts where org_id = ${resolvedOrgId} and type = 'asset_bank')
     )
@@ -204,6 +206,7 @@ export async function cashFlow(
             from journal_lines l
             join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
               and e.book_id = ${book}
+              and ${excludePeriodEndJournals(sql`e.origin`)}
             join accounts a on a.id = l.account_id and a.org_id = l.org_id
            where l.org_id = ${resolvedOrgId} and a.type = 'asset_bank' and ${dimWhere(dims)}`,
   ));

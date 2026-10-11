@@ -1,0 +1,185 @@
+{
+  "workspace": {
+    "title": "Amortization",
+    "description": "Prepaid and deferred expenses held in prepaid accounts and released to expense period by period."
+  },
+  "views": {
+    "schedules": "Schedules",
+    "run": "Run",
+    "reconciliation": "Reconciliation"
+  },
+  "statusFilter": {
+    "open": "Open",
+    "draft": "Draft",
+    "active": "Active",
+    "on_hold": "On hold",
+    "completed": "Completed",
+    "cancelled": "Cancelled"
+  },
+  "status": {
+    "draft": "Draft",
+    "active": "Active",
+    "on_hold": "On hold",
+    "completed": "Completed",
+    "cancelled": "Cancelled"
+  },
+  "sourceKind": {
+    "vendor_bill": "Bill",
+    "journal": "Journal",
+    "expense_report": "Expense report",
+    "manual": "Manual"
+  },
+  "method": {
+    "straight_line": "Straight-line by period",
+    "prorated_first_last": "Prorated first and last period",
+    "exact_days": "Exact days",
+    "variable": "Variable percentages"
+  },
+  "event": {
+    "created": "Created",
+    "activated": "Activated",
+    "held": "Put on hold",
+    "resumed": "Resumed",
+    "term_changed": "Term changed",
+    "destination_changed": "Destination changed",
+    "reduced": "Reduced for a credit",
+    "cancelled": "Cancelled",
+    "source_voided": "Source voided",
+    "completed": "Fully amortized"
+  },
+  "list": {
+    "statusFilter": "Filter schedules by status",
+    "templates": "Amortization templates",
+    "waterfall": "Prepaid expense waterfall",
+    "empty": "No schedules match. Defer a bill line through an amortization template, or record a manual schedule.",
+    "columns": {
+      "number": "Schedule",
+      "status": "Status",
+      "source": "Source",
+      "template": "Template",
+      "subsidiary": "Subsidiary",
+      "total": "Deferred",
+      "remaining": "Unamortized",
+      "nextPeriod": "Next period"
+    }
+  },
+  "drawer": {
+    "total": "Deferred",
+    "amortized": "Amortized",
+    "remaining": "Unamortized",
+    "nextPeriod": "Next period",
+    "source": "Source",
+    "line": "line {line}",
+    "serviceWindow": "Service window",
+    "method": "Method",
+    "deferralAccount": "Deferral account",
+    "destinationAccount": "Destination account",
+    "subsidiary": "Subsidiary",
+    "currency": "Currency",
+    "openingAmortized": "Amortized before this schedule",
+    "holdReason": "Hold reason",
+    "planTab": "Plan",
+    "historyTab": "History",
+    "changesTab": "Changes",
+    "period": "Period",
+    "account": "Account",
+    "planned": "Planned",
+    "posted": "Posted",
+    "noPlan": "No periods remain planned.",
+    "balanceChange": "Balance change: {amount}",
+    "viewEntry": "View journal entry"
+  },
+  "changes": {
+    "action": "Change",
+    "failed": "The change was not saved.",
+    "saved": "Schedule updated",
+    "effectivePeriod": "Takes effect from period",
+    "newLastPeriod": "New last period",
+    "destinationAccount": "New destination account",
+    "amount": "Credit amount",
+    "cancelMode": "Settle the balance by",
+    "effectiveDate": "Effective date",
+    "reason": "Reason",
+    "actions": {
+      "activate": "Activate",
+      "hold": "Put on hold",
+      "resume": "Resume",
+      "change_term": "Change term",
+      "change_destination": "Change destination",
+      "reduce": "Reduce for a credit",
+      "cancel": "Cancel schedule"
+    },
+    "hints": {
+      "activate": "Starts amortizing a manual schedule. Its balance must already stand in the deferral account.",
+      "hold": "Runs skip the schedule until it resumes.",
+      "resume": "Due periods post on the next run.",
+      "change_term": "Spreads every unposted amount, including earlier periods that never posted, evenly from the chosen period through the new last period.",
+      "change_destination": "Amortizes into the new account from the chosen period.",
+      "reduce": "Records a credit against the schedule and re-plans the unposted periods; any excess amortization returns to the deferral account.",
+      "cancel": "Writing off expenses the unamortized balance; reversing returns posted amortization for a source credited in full."
+    },
+    "modes": {
+      "write_off": "Writing off the unamortized balance",
+      "reverse": "Reversing posted amortization"
+    }
+  },
+  "run": {
+    "period": "Amortize through period",
+    "submit": "{count, plural, =0 {Nothing due} one {Post # period} other {Post # periods}}",
+    "description": "Posts every planned period of active schedules that ends on or before the period end. A period that has posted never posts again.",
+    "failed": "Amortization did not run.",
+    "saved": "{posted, plural, =0 {Nothing posted} one {# period posted} other {# periods posted}}",
+    "empty": "Nothing is due through this period.",
+    "columns": {
+      "schedule": "Schedule",
+      "period": "Period",
+      "account": "Expense account",
+      "amount": "Amount"
+    }
+  },
+  "reconciliation": {
+    "asOf": "As of",
+    "report": "Open the reconciliation report",
+    "tied": "Every deferral account agrees with its schedules.",
+    "untied": "A deferral account differs from its schedules: a posting to it is not accounted for by any schedule.",
+    "empty": "No deferral accounts to reconcile yet.",
+    "columns": {
+      "account": "Deferral account",
+      "subsidiary": "Subsidiary",
+      "book": "Book",
+      "ledger": "General ledger",
+      "subledger": "Schedules",
+      "difference": "Difference",
+      "openSchedules": "Open schedules"
+    }
+  },
+  "newSchedule": {
+    "open": "New schedule",
+    "title": "New manual schedule",
+    "description": "Track a prepaid balance that already stands in a deferral account. It is saved as a draft and posts nothing until activated.",
+    "noTemplates": "Create an amortization template first:",
+    "template": "Template",
+    "subsidiary": "Subsidiary",
+    "totalAmount": "Deferred amount",
+    "openingAmortized": "Already amortized",
+    "serviceStart": "Service start",
+    "serviceEnd": "Service end",
+    "amortizeFrom": "First period to amortize",
+    "destinationAccount": "Destination account",
+    "memo": "Memo",
+    "reason": "Reason",
+    "submit": "Save draft",
+    "saved": "Schedule {number} saved as a draft",
+    "failed": "The schedule was not saved."
+  },
+  "billLine": {
+    "lineTemplate": "Amortization",
+    "lineTemplateHelp": "Defers this line to the template's prepaid account and amortizes it by period.",
+    "lineNoTemplate": "Expense now",
+    "lineServiceStart": "Service start",
+    "lineServiceEnd": "Service end"
+  },
+  "common": {
+    "cancel": "Cancel"
+  }
+}

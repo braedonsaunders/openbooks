@@ -5,6 +5,7 @@ import { InventoryError } from "./contracts.ts";
 import { assertDocumentLinesUntracked } from "./tracking.ts";
 import { assertInventoryOffHoldsNoStock, assertMovementOwner, inventoryFeatureEnabled } from "./profile-policy.ts";
 import { lockInventoryPosition } from "./position.ts";
+import { crossSubsidiaryFulfillmentActive, crossSubsidiaryFulfillmentHandler, foreignStockLocationOwner } from "./cross-subsidiary.ts";
 import { issueInventory, type IssueInput } from "./movements.ts";
 import { loadDocumentInventoryLines, unprofiledInventoryLines, assertNoUnprofiledInventoryLines, inventoryPostingEffectKey, isJsonRecord, type DocumentInventoryLine } from "./document-lines.ts";
 import { isUuid } from "../platform/uuid.ts";
@@ -305,6 +306,31 @@ export async function applySalesFulfillmentInventoryIssues(
          limit 1`));
       if (seen.rows[0]) continue;
       const selection = salesFulfillmentTrackingSelection(line);
+      // A warehouse owned by another entity ships through cross-subsidiary
+      // fulfillment when it is on; otherwise the ordinary issue below refuses
+      // the cross-entity attempt exactly as before.
+      const owner = await foreignStockLocationOwner(runner, orgId, ctx, line.stockLocationId, movementSubsidiaryId);
+      if (owner && (await crossSubsidiaryFulfillmentActive(runner, orgId))) {
+        await crossSubsidiaryFulfillmentHandler()!.fulfill(runner, {
+          orgId,
+          actorId,
+          fulfillmentDocumentId: documentId,
+          lineId: line.lineId,
+          lineNumber: line.lineNumber,
+          itemId: line.itemId,
+          stockLocationId: line.stockLocationId,
+          quantity: line.quantity,
+          lotId: selection.lotId,
+          serialId: selection.serialId,
+          departmentId: line.departmentId,
+          projectId: line.projectId,
+          date,
+          sellingSubsidiaryId: movementSubsidiaryId,
+          fulfillingSubsidiaryId: owner,
+        });
+        count++;
+        continue;
+      }
       await issueInventory(
         orgId,
         actorId,

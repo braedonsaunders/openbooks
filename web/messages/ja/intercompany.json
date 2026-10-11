@@ -1,0 +1,257 @@
+{
+  "title": "会社間",
+  "description": "法人間の注文、請求書、クレジットを対応付け、相手側伝票がない書類や不一致のある書類を確認します。",
+  "openReconciliation": "法人間残高照合",
+  "truncated": "先頭の {count} 件を表示しています。法人で絞り込むと残りを確認できます。",
+  "tabs": {
+    "pairing": "伝票の対応付け",
+    "netting": "相殺",
+    "transfers": "振替"
+  },
+  "views": {
+    "unpaired": "未対応",
+    "mismatched": "不一致",
+    "paired": "対応済み"
+  },
+  "empty": {
+    "unpaired": {
+      "title": "すべての法人間伝票が対応付けられています",
+      "description": "法人を代表する顧客または仕入先との伝票は、相手法人の伝票と対応付けられるまでここに表示されます。"
+    },
+    "mismatched": {
+      "title": "不一致のある組はありません",
+      "description": "通貨、合計、数量が異なる組や、一方の伝票が無効化された組が表示されます。"
+    },
+    "paired": {
+      "title": "対応付けられた伝票はありません",
+      "description": "未対応ビューから相手側伝票を作成するか、既存の伝票を関連付けてください。"
+    }
+  },
+  "columns": {
+    "document": "伝票",
+    "kind": "種類",
+    "entity": "エンティティ",
+    "counterparty": "取引相手",
+    "party": "取引先",
+    "date": "日付",
+    "amount": "金額",
+    "status": "状態",
+    "actions": "操作",
+    "pair": "ペア",
+    "seller": "売手",
+    "buyer": "購買担当者",
+    "entities": "エンティティ",
+    "sellerAmount": "売手金額",
+    "buyerAmount": "買主金額",
+    "state": "州",
+    "issues": "課題"
+  },
+  "kinds": {
+    "sales_order": "受注",
+    "purchase_order": "発注書",
+    "customer_invoice": "請求書",
+    "vendor_bill": "仕入請求書",
+    "customer_credit": "クレジットメモ",
+    "vendor_credit": "仕入先クレジット"
+  },
+  "statuses": {
+    "draft": "下書き",
+    "pending_approval": "承認待ち",
+    "approved": "承認済み",
+    "posted": "記帳済み",
+    "voided": "無効化日時"
+  },
+  "pairKinds": {
+    "order": "注文の組",
+    "invoice": "売上請求書と仕入請求書",
+    "credit": "クレジットの組"
+  },
+  "origins": {
+    "generated": "生成済み",
+    "linked": "関連付け済み"
+  },
+  "states": {
+    "in_sync": "同期済み",
+    "awaiting_counterpart": "相手側の処理待ち",
+    "mismatched": "不一致"
+  },
+  "mismatch": {
+    "currency": "通貨が異なります：売手 {seller}、買手 {buyer}",
+    "amount": "合計の差額：{difference}",
+    "quantity": "{item}：売手数量 {seller}、買手数量 {buyer}",
+    "sellerVoided": "売手の伝票が無効化されました",
+    "buyerVoided": "買手の伝票が無効化されました"
+  },
+  "actions": {
+    "generate": "相手側伝票を作成",
+    "link": "紐付け"
+  },
+  "errors": {
+    "generateFailed": "相手側伝票を作成できませんでした。",
+    "unlinkFailed": "組の関連付けを解除できませんでした。",
+    "linkFailed": "伝票を関連付けできませんでした。",
+    "nettingFailed": "相殺処理を更新できませんでした。",
+    "transferFailed": "振替を完了できませんでした。"
+  },
+  "pair": {
+    "unlinkTitle": "この組を解除",
+    "unlinkReason": "この伝票の対応付けを解除する理由は何ですか？",
+    "unlinked": "対応付けを解除しました",
+    "unlink": "解除",
+    "seller": "売手伝票",
+    "buyer": "買手伝票",
+    "linkedOn": "関連付け日",
+    "linkReason": "関連付けの理由"
+  },
+  "link": {
+    "title": "{document} を相手側伝票に関連付け",
+    "submit": "伝票を関連付け",
+    "noCandidates": "相手法人には、この取引先に該当する種類の未対応伝票がありません。",
+    "counterpart": "相手側伝票",
+    "reason": "理由"
+  },
+  "netting": {
+    "title": "相殺処理",
+    "description": "指定日時点の法人間債権と債務を相殺し、必要に応じて残額を現金決済し、承認後に計上します。",
+    "new": "新規相殺処理",
+    "empty": {
+      "title": "相殺処理はありません",
+      "description": "相殺をプレビューして、各法人の組の債権債務を確認します。"
+    },
+    "columns": {
+      "run": "実行",
+      "asOf": "基準日",
+      "entities": "エンティティ",
+      "pairs": "法人の組",
+      "lines": "明細行",
+      "cash": "現金決済",
+      "status": "状態"
+    },
+    "cashYes": "採用",
+    "cashNo": "不採用",
+    "statuses": {
+      "proposed": "提案評価",
+      "pending_approval": "承認待ち",
+      "approved": "承認済み",
+      "rejected": "却下",
+      "posted": "記帳済み",
+      "cancelled": "取消済み",
+      "reversed": "逆仕訳済み"
+    },
+    "components": {
+      "open_item": "未消込項目",
+      "due_position": "法人間債権・債務残高",
+      "cash": "現金主義"
+    },
+    "newTitle": "新規相殺処理",
+    "newDescription": "法人と日付を選択します。提案前にプレビューしてください。提案内容が承認・計上の対象になります。",
+    "preview": "プレビュー",
+    "propose": "相殺処理を提案",
+    "asOf": "基準日",
+    "settleCash": "残額を現金決済する",
+    "subsidiaries": "エンティティ",
+    "bankFor": "{entity} の銀行口座",
+    "chooseBank": "銀行口座を選択",
+    "reason": "理由",
+    "previewTitle": "プレビュー：{lines} 行",
+    "pairColumns": {
+      "pair": "ペア",
+      "currency": "通貨",
+      "fromNet": "起点法人の純残高",
+      "toNet": "相手法人の純残高",
+      "unreconciled": "未照合",
+      "netted": "相殺済み",
+      "cash": "現金主義"
+    },
+    "cancelTitle": "相殺処理を取消",
+    "cancelReason": "この相殺処理を取り消す理由は何ですか？",
+    "reverseTitle": "相殺処理を反対仕訳",
+    "reverseReason": "この相殺処理を反対仕訳する理由は何ですか？",
+    "submit": "承認申請",
+    "post": "転記",
+    "reversalDate": "振替日",
+    "reverse": "取消",
+    "cancel": "処理を取り消し",
+    "decisionNote": "判断メモ",
+    "fingerprint": "提案のフィンガープリント",
+    "pairsTitle": "法人の組",
+    "linesTitle": "明細行",
+    "lineColumns": {
+      "component": "項目",
+      "entity": "エンティティ",
+      "reference": "参照番号",
+      "open": "未出荷",
+      "netted": "相殺済み",
+      "cash": "現金主義",
+      "rate": "決済レート",
+      "realizedFx": "実現為替差損益"
+    },
+    "entryLink": "仕訳 {number}"
+  },
+  "transfers": {
+    "title": "法人間資金振替",
+    "description": "ある法人の銀行口座から別法人の口座に資金を振り替えます。法人間債権・債務勘定により各法人の帳簿を均衡させます。",
+    "new": "新規振替",
+    "empty": {
+      "title": "法人間資金振替はありません",
+      "description": "同一法人の銀行口座間の振替は銀行業務で処理します。"
+    },
+    "columns": {
+      "transfer": "振替",
+      "date": "日付",
+      "route": "出庫元 → 入庫先",
+      "amount": "金額",
+      "status": "状態"
+    },
+    "statuses": {
+      "posted": "記帳済み",
+      "reversed": "逆仕訳済み"
+    },
+    "newTitle": "新規法人間資金振替",
+    "newDescription": "支払法人は銀行口座を貸記し、受取法人は銀行口座を借記します。両口座は同じ通貨である必要があります。",
+    "post": "振替を計上",
+    "fromLegend": "開始",
+    "toLegend": "終了",
+    "subsidiary": "エンティティ",
+    "chooseSubsidiary": "エンティティを選択",
+    "bankAccount": "銀行口座",
+    "chooseBank": "銀行口座を選択",
+    "date": "日付",
+    "amount": "金額",
+    "currency": "通貨",
+    "memo": "摘要",
+    "reason": "理由",
+    "reverseTitle": "振替を反対仕訳",
+    "reverseReason": "この振替を反対仕訳する理由は何ですか？",
+    "reversalDate": "振替日",
+    "reverse": "取消",
+    "entry": "仕訳",
+    "reversalEntry": "取消仕訳"
+  },
+  "reconciliation": {
+    "title": "法人間残高照合",
+    "description": "各法人の帳簿における法人間残高を通貨別に表示し、照合が必要な差額を確認します。",
+    "asOf": "{date} 時点",
+    "openWorkspace": "対応付け画面を開く",
+    "empty": "この日時点の法人間残高はありません。",
+    "columns": {
+      "currency": "通貨",
+      "entity": "エンティティ",
+      "receivable": "法人間債権",
+      "payable": "法人間債務",
+      "position": "法人間債権・債務",
+      "net": "純残高",
+      "functionalNet": "純残高（機能通貨）"
+    },
+    "summary": {
+      "balances": "法人ペアの残高",
+      "unreconciled": "未照合"
+    },
+    "difference": "差異"
+  },
+  "party": {
+    "representsAsCustomer": "法人間顧客として {subsidiary} を代表",
+    "representsAsVendor": "法人間仕入先として {subsidiary} を代表",
+    "manageRepresentation": "代表取引先を管理"
+  }
+}

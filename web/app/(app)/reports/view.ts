@@ -102,6 +102,13 @@ export async function reportsHubFor(
     authz ? isFeatureEnabled(authz.user.orgId, 'warehousing') : Promise.resolve(false),
     authz && can(authz, 'resourcing.read') ? isFeatureEnabled(authz.user.orgId, 'resourcing') : Promise.resolve(false),
   ])
+  // Intercompany reconciliation reads every multi-entity ledger.
+  const multiSubsidiaryEnabled = authz ? await isFeatureEnabled(authz.user.orgId, 'multiSubsidiary') : false
+  const intercompanyReportVisible = multiSubsidiaryEnabled && Boolean(authz && can(authz, 'intercompany.read'))
+  // Multi-book accounting gates the book-to-book comparison.
+  const multiBookEnabled = authz && can(authz, 'gl.read')
+    ? await isFeatureEnabled(authz.user.orgId, 'multiBookAccounting')
+    : false
   // Projects → Progress tracking gates the Earned value report.
   const progressEnabled = projectsEnabled && authz && can(authz, 'projects.read')
     ? await isFeatureEnabled(authz.user.orgId, 'projectProgress')
@@ -148,7 +155,9 @@ export async function reportsHubFor(
   const hrmDefinitions = hrmEnabled
     ? builtInDefinitions.filter((row) => entityCategory(row) === 'hrm')
     : []
+  const fixedAssetDefinitions = builtInDefinitions.filter((row) => entityCategory(row) === 'fixed_assets')
   const classifiedBuiltInIds = new Set([
+    ...fixedAssetDefinitions,
     ...receivablesPayablesDefinitions,
     ...allocationDefinitions,
     ...ledgerDefinitions,
@@ -216,6 +225,7 @@ export async function reportsHubFor(
         card('cashFlow', '/reports/cash-flow', 'Waves', 'statement'),
         card('cashFlowIndirect', '/reports/cash-flow-indirect', 'Waves', 'statement'),
         card('trialBalance', '/reports/trial-balance', 'ClipboardList', 'ledger'),
+        ...(multiBookEnabled ? [card('bookDifferences', '/reports/book-differences', 'BookOpen', 'ledger')] : []),
       ],
     },
     {
@@ -225,6 +235,7 @@ export async function reportsHubFor(
       cards: [
         card('generalLedger', '/reports/general-ledger', 'BookOpen', 'ledger'),
         card('journal', '/reports/journal', 'NotebookPen', 'ledger'),
+        ...(intercompanyReportVisible ? [card('intercompanyReconciliation', '/reports/intercompany-reconciliation', 'Scale', 'ledger')] : []),
         ...definitionCards(ledgerDefinitions, 'BookOpen', t('hub.cards.builtInDescription')),
       ],
     },
@@ -338,6 +349,12 @@ export async function reportsHubFor(
       accent: 'teal',
       cards: definitionCards(hrmDefinitions, 'Users', t('hub.cards.hrmDescription')),
     } satisfies HubGroup] : []),
+    ...(fixedAssetDefinitions.length > 0 ? [{
+      key: 'fixedAssets',
+      label: t('hub.groups.fixedAssets'),
+      accent: 'slate',
+      cards: definitionCards(fixedAssetDefinitions, 'Landmark', t('hub.cards.builtInDescription')),
+    } satisfies HubGroup] : []),
     ...(otherBuiltInDefinitions.length > 0 ? [{
       key: 'otherBuiltIns',
       label: t('hub.groups.other'),
@@ -370,6 +387,8 @@ export async function reportsHubFor(
             warehousing: warehousingEnabled,
             resourcing: resourcingEnabled,
             payroll: payrollEnabled && Boolean(authz && can(authz, 'payroll.read')),
+            multiSubsidiary: intercompanyReportVisible,
+            multiBookAccounting: multiBookEnabled,
           }),
         ).map((s) => {
           const qs = new URLSearchParams(s.params ?? {}).toString()

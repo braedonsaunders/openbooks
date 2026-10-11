@@ -5,6 +5,7 @@ import { add, mulDecimal } from '@openbooks/engine/money/money'
 import { flowRates } from './fx-presentation'
 import type { BudgetDimensions } from './budgets'
 import { scenarioOutOfScopeSubsidiaryNames } from './budget-scope'
+import { excludePeriodEndJournals } from '@openbooks/engine/records/period-end-origins'
 import {
   combineTotals,
   recomputeVariance,
@@ -180,21 +181,23 @@ export async function budgetVsActualView(
   // presentation currency at its latest date before the caller merges them
   // per account — the same second leg every consolidated flow reader applies.
   const actualRows = (await db.execute<{ account_id: string; func: string | null; amt: string; late: string | null }>(sql`
-    select l.account_id, sub.base_currency as func, coalesce(sum(l.amount), 0) as amt,
-      max(e.posting_date)::text as late
+    select l.account_id, public.accounting_book_currency(l.org_id, e.book_id, l.subsidiary_id) as func,
+      coalesce(sum(l.amount), 0) as amt, max(e.posting_date)::text as late
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
      where e.org_id = ${orgId} and a.org_id = ${orgId}
        and a.type in ${PNL_TYPES} and e.book_id = ${scenario.book_id}
+       and ${excludePeriodEndJournals(sql`e.origin`)}
        ${subsidiaryIds ? sql`and l.subsidiary_id in (${subsidiaryList})` : sql``}
        and e.posting_date >= ${window.from} and e.posting_date <= ${window.to}
        ${dims.departmentId ? sql`and l.department_id = ${dims.departmentId}` : sql``}
        ${dims.projectId ? sql`and l.project_id = ${dims.projectId}` : sql``}
        ${dims.locationId ? sql`and l.location_id = ${dims.locationId}` : sql``}
        ${dims.classId ? sql`and l.class_id = ${dims.classId}` : sql``}
-     group by l.account_id, sub.base_currency
+     -- The scenario's book may carry a subsidiary in its own currency.
+     group by l.account_id, public.accounting_book_currency(l.org_id, e.book_id, l.subsidiary_id)
   `))
 
   const budgetRows = (await db.execute<{ account_id: string; func: string | null; amt: string; late: string | null }>(sql`

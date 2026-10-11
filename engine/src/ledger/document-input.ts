@@ -44,6 +44,11 @@ export interface DocumentLineInput extends BillLineInput {
    *  credits and sales orders). Either may be absent; both must be ordered. */
   workFrom?: string | null
   workTo?: string | null
+  /** Amortization template this line defers through (vendor bills, journals
+   *  and expense reports), with the optional service window it covers. */
+  amortizationTemplateId?: string | null
+  amortizationStartOn?: string | null
+  amortizationEndOn?: string | null
   /** Warehouse used by inventory receipt or issue effects for this line. */
   stockLocationId?: string | null
   /**

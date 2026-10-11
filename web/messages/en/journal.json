@@ -11,7 +11,8 @@
     "columns": {
       "entry": "Entry",
       "origin": "Origin",
-      "debits": "Debits"
+      "debits": "Debits",
+      "book": "Book"
     }
   },
   "origins": {
@@ -25,7 +26,12 @@
     "fxSettlement": "FX settlement",
     "translation": "Translation",
     "migration": "Migration",
-    "manufacturing": "Manufacturing"
+    "manufacturing": "Manufacturing",
+    "opening": "Opening",
+    "bookOpening": "Book opening",
+    "expenseAmortization": "Expense amortization",
+    "accountMerge": "Account merge",
+    "assetCapitalization": "Asset capitalization"
   },
   "detail": {
     "notFound": "Entry not found",
@@ -44,7 +50,8 @@
       "debit": "Debit",
       "credit": "Credit",
       "openItem": "Open item"
-    }
+    },
+    "book": "Book {book}"
   },
   "newButton": {
     "label": "New journal",
@@ -87,5 +94,12 @@
     "budgetaryControlRemedy": "Revise the budget through its approval flow: copy the approved budget to a draft, raise this account's amount for the fund in the worksheet, approve the copy and archive the superseded budget. Or link this actual to the open encumbrance that reserved it.",
     "voidAwaitingApproval": "A void of this journal is awaiting approval. The journal stays posted until the approval is decided.",
     "createUnconfirmed": "The server did not confirm the new journal. Save again: the retry reuses this draft's key, so it cannot create a second journal."
+  },
+  "book": {
+    "label": "Accounting book",
+    "primary": "primary",
+    "allBooks": "All books",
+    "allBooksHint": "Posts to the primary book and replicates into every full book.",
+    "specificHint": "Book-specific: posts to this book only, in the currency it keeps for the journal’s subsidiary."
   }
 }

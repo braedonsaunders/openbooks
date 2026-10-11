@@ -28,6 +28,8 @@ export type SetupRailFlags = {
   shippingEnabled?: boolean
   payrollEnabled?: boolean
   hrmEnabled?: boolean
+  /** Segment dependencies: the open-document exceptions page joins Dimensions. */
+  segmentDependenciesEnabled?: boolean
   /** Installed apps that declare at least one setting, in display order. */
   appSettings?: { key: string; name: string }[]
 }
@@ -89,6 +91,7 @@ export function setupRail({
   shippingEnabled = false,
   payrollEnabled = false,
   hrmEnabled = false,
+  segmentDependenciesEnabled = false,
   appSettings = [],
 }: SetupRailFlags): SetupRail {
   // Drop feature-gated entities (e.g. subsidiary tabs when multi-subsidiary is off).
@@ -210,6 +213,13 @@ export function setupRail({
               { href: '/admin/setup/tax-depreciation', labelKey: 'admin.setup.taxDepreciationSetup.navTitle', iconKey: 'landmark' },
             ]
           : []
+        : group.key === 'dimensions'
+        ? [
+            ...entities(group.key),
+            ...(segmentDependenciesEnabled
+              ? [{ href: '/admin/setup/segment-dependencies', labelKey: 'admin.setup.segmentDependencies.navTitle', iconKey: 'workflow' }]
+              : []),
+          ]
         : group.key === 'agents'
         ? [
             { href: '/admin/setup/agents', labelKey: 'admin.setup.agents.nav.overview', iconKey: 'sparkles' },

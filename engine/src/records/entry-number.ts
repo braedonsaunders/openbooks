@@ -18,7 +18,7 @@
  * them without importing the posting kernel and forming a cycle.
  */
 import { sql } from "drizzle-orm";
-import type { db } from "../platform/db.ts";
+import type { db, SqlExecutor } from "../platform/db.ts";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -30,7 +30,7 @@ export class EntryNumberError extends Error {
 }
 
 /** Serialize only claimants for the same organization/number pair. */
-async function lockEntryNumber(tx: Tx, orgId: string, entryNumber: string): Promise<void> {
+async function lockEntryNumber(tx: SqlExecutor, orgId: string, entryNumber: string): Promise<void> {
   const key = `openbooks:entry-number:${orgId}:${entryNumber}`;
   await tx.execute(sql`
     select pg_advisory_xact_lock(hashtextextended(${key}, 0))
@@ -57,7 +57,7 @@ async function lockEntryNumber(tx: Tx, orgId: string, entryNumber: string): Prom
  * read-then-insert atomic for that number without serializing other posts.
  */
 export async function nextFreeEntryNumber(
-  tx: Tx,
+  tx: SqlExecutor,
   orgId: string,
   preferred: string,
 ): Promise<string> {

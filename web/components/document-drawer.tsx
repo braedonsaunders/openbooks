@@ -1,8 +1,12 @@
 'use client'
 
+import { amortizationLineColumns } from './transaction-form/amortization-columns'
+
 import { apportionWithholdingMaterialsCost, collapseWithholdingLineMetadata } from '@openbooks/engine/allocations/withholding-cost'
 
 import { CLEAR_SEGMENT, INHERIT_SEGMENT, segmentCellValue, segmentAssignmentsFromCells } from '../lib/segment-assignments'
+import { collectDependencyRules, dependentOptions, lineExtraDims } from '../lib/segment-dependency-options'
+import type { DimensionAssignment, SegmentDependencyRule } from '@openbooks/engine/organization/segment-dependency-rules'
 
 import { quoteGoodsPlaceOfSupply } from '@openbooks/engine/tax/contracts'
 
@@ -105,17 +109,22 @@ interface SubsidiaryOpt {
   depth: number
 }
 interface SegmentOpt {
+  id?: string
   key: string
   name: string
   showOnHeader: boolean
   showOnLines: boolean
   values: { id: string; code: string | null; name: string }[]
+  /** Dependency rules restricting this segment's values (segment value dependencies). */
+  dependencies?: SegmentDependencyRule[]
 }
 interface BuiltinSegmentOpt {
+  id?: string
   key: string
   storageColumn: string | null
   showOnHeader: boolean
   showOnLines: boolean
+  dependencies?: SegmentDependencyRule[]
 }
 
 // Stable identities for the omitted-`segments`/`builtinSegments` defaults. A
@@ -171,6 +180,11 @@ interface LineRow extends Record<string, unknown> {
   /** Warehouse for inventory receipt/issue effects; blank unless the line's
    *  item is stocked. */
   stockLocationId: string
+  /** Amortization template the line defers through (blank = expense now) and
+   *  its optional service window (YYYY-MM-DD or blank). */
+  amortizationTemplateId: string
+  amortizationStartOn: string
+  amortizationEndOn: string
   /** On a credit memo, the posted receipt or shipment this line returns.
    *  Blank = a purely financial credit line that moves no stock. The chosen
    *  movement carries its own lot/serial, so the row stores only its id. A
@@ -756,6 +770,9 @@ const emptyLine = (): LineRow => ({
   workFrom: '',
   workTo: '',
   stockLocationId: '',
+  amortizationTemplateId: '',
+  amortizationStartOn: '',
+  amortizationEndOn: '',
   returnSourceMovementId: '',
   taxProfileId: '',
   amount: '',
@@ -808,6 +825,9 @@ export function isBlankDrawerLine(row: Record<string, unknown>): boolean {
     'workFrom',
     'workTo',
     'stockLocationId',
+    'amortizationTemplateId',
+    'amortizationStartOn',
+    'amortizationEndOn',
     'returnSourceMovementId',
     'taxProfileId',
     'amount',
@@ -990,6 +1010,9 @@ function toRow(l: Record<string, unknown>, lineDefs: CustomFieldDefClient[], seg
     workFrom: lineText(l.work_from),
     workTo: lineText(l.work_to),
     stockLocationId: lineText(l.stock_location_id),
+    amortizationTemplateId: lineText(l.amortization_template_id),
+    amortizationStartOn: lineText(l.amortization_start_on),
+    amortizationEndOn: lineText(l.amortization_end_on),
     // Overwritten below from native return evidence when the line carries it.
     returnSourceMovementId: '',
     taxProfileId: l.tax_group_id ? `group:${l.tax_group_id}` : l.tax_code_id ? `code:${l.tax_code_id}` : '',
@@ -1219,6 +1242,10 @@ export interface DocumentDrawerProps {
    *  renders by default. Authority-generated documents keep their columns
    *  through generatedAuthority instead. */
   withholdingSchemes?: { code: string }[]
+  /** Current amortization templates for the vendor bill line columns,
+   *  resolved by the loader while Expense amortization is on. Absent hides
+   *  the columns; stored line values still round-trip unchanged. */
+  amortizationTemplates?: { id: string; label: string }[]
   /** Server-known stored-value gate. When explicitly false the tender
    *  section offers no gift card / store credit method. Undefined preserves
    *  the hidden default. */
@@ -1272,12 +1299,14 @@ export function DocumentDrawer({
   depositDefaultDate,
   marketplaceFacilitators = EMPTY_FACILITATORS,
   withholdingSchemes,
+  amortizationTemplates,
   storedValueEnabled,
 }: DocumentDrawerProps) {
   const { money } = useMoney()
   const t = useTranslations(config.i18n)
   const tCommon = useTranslations('common')
   const tWithholdingLine = useTranslations('documents.withholdingLine')
+  const tAmortization = useTranslations('amortization.billLine')
   const tSales = useTranslations('salesOrders')
   const tPostingEffects = useTranslations('common.postingEffects')
   const tReturns = useTranslations('returns')
@@ -2030,6 +2059,7 @@ export function DocumentDrawer({
   type ControlOption = { id: string; number: string | null; name: string }
   const [controlChoices, setControlChoices] = useState<{
     accounts: ControlOption[]
+    intercompany?: ControlOption | null
     partyDefault: ControlOption | null
     organizationDefault: ControlOption | null
     selected: ControlOption | null
@@ -2071,7 +2101,9 @@ export function DocumentDrawer({
   // catalogs define its copy.
   const controlDefault = !controlSide
     ? ''
-    : controlChoices?.partyDefault
+    : controlChoices?.intercompany
+      ? t('drawer.controlAccountIntercompany', { account: controlLabel(controlChoices.intercompany) })
+      : controlChoices?.partyDefault
       ? t('drawer.controlAccountPartyDefault', { account: controlLabel(controlChoices.partyDefault) })
       : controlChoices?.organizationDefault
         ? t('drawer.controlAccountOrganizationDefault', { account: controlLabel(controlChoices.organizationDefault) })
@@ -2285,6 +2317,15 @@ export function DocumentDrawer({
                 classId: r.classId || null,
                 ...(carriesWorkDates ? { workFrom: r.workFrom || null, workTo: r.workTo || null } : {}),
                 stockLocationId: r.stockLocationId || null,
+                // A deferred bill line keeps its template and service window
+                // whether or not the columns show: lines are replaced on save.
+                ...(config.kind === 'vendor_bill'
+                  ? {
+                      amortizationTemplateId: r.amortizationTemplateId || null,
+                      amortizationStartOn: r.amortizationTemplateId ? r.amortizationStartOn || null : null,
+                      amortizationEndOn: r.amortizationTemplateId ? r.amortizationEndOn || null : null,
+                    }
+                  : {}),
                 // Tri-state, and only on kinds that can return stock: absent
                 // preserves the stored selection, null clears it, an object
                 // replaces it (see returnCellPayload for the cell's wire
@@ -2929,8 +2970,42 @@ export function DocumentDrawer({
     }
   }, [showWarehousePicker, stockLocations, stockedItemIds, tCommon])
 
+  // -- line amortization (vendor bills, while the feature is on) ------------
+  const amortizationColumns = useMemo<LineGridColumn<LineRow>[]>(() => {
+    return config.kind === 'vendor_bill' ? amortizationLineColumns<LineRow>(amortizationTemplates, tAmortization) : []
+  }, [config.kind, amortizationTemplates, tAmortization])
+
   // -- grid columns (line-based kinds; transfer uses its own fields) --------
   const columns = useMemo<LineGridColumn<LineRow>[]>(() => {
+    // Segment value dependencies: each line picker offers the values the
+    // line's other values allow on the document date.
+    const dependencyRules = collectDependencyRules([...segments, ...builtinSegments])
+    const builtinSegmentId = (storage: string) => builtinSegments.find((segment) => segment.storageColumn === storage)?.id
+    const segmentKeys = segments.map((segment) => segment.key)
+    const lineDimensions = (row: LineRow): DimensionAssignment => {
+      const cells = row as unknown as Record<string, unknown>
+      return {
+        subsidiaryId: (typeof cells.subsidiaryId === 'string' && cells.subsidiaryId) || subsidiaryId || null,
+        departmentId: (typeof cells.departmentId === 'string' && cells.departmentId) || departmentId || null,
+        projectId: (typeof cells.projectId === 'string' && cells.projectId) || projectIdHeader || null,
+        locationId: locationId || null,
+        classId: classId || null,
+        extraDims: lineExtraDims(extraDims, cells, segmentKeys),
+      }
+    }
+    const dependent = <T extends { value: string }>(options: T[], storageOrId: { storage?: string; id?: string }, cell: string) =>
+      dependencyRules.length === 0
+        ? undefined
+        : (row: LineRow) => dependentOptions(
+          options,
+          dependencyRules,
+          storageOrId.id ?? (storageOrId.storage ? builtinSegmentId(storageOrId.storage) : undefined),
+          lineDimensions(row),
+          documentDate,
+          String((row as unknown as Record<string, unknown>)[cell] ?? ''),
+        )
+    const departmentOptions = [{ value: '', label: '—' }, ...departments.map((d) => ({ value: d.id, label: d.name ?? '' }))]
+    const projectOptions = projects.map((p) => ({ value: p.id, label: p.name ?? '' }))
     const cols: LineGridColumn<LineRow>[] = [
       {
         key: 'accountId',
@@ -2947,14 +3022,16 @@ export function DocumentDrawer({
         label: tCommon('labels.department'),
         width: '140px',
         type: 'select',
-        options: [{ value: '', label: '—' }, ...departments.map((d) => ({ value: d.id, label: d.name ?? '' }))],
+        options: departmentOptions,
+        optionsFor: dependent(departmentOptions, { storage: 'department_id' }, 'departmentId'),
       },
       {
         key: 'projectId',
         label: tCommon('labels.project'),
         width: 'minmax(150px,1.2fr)',
         type: 'search-select',
-        options: projects.map((p) => ({ value: p.id, label: p.name ?? '' })),
+        options: projectOptions,
+        optionsFor: dependent(projectOptions, { storage: 'project_id' }, 'projectId'),
         placeholder: '—',
       },
     ]
@@ -2971,15 +3048,17 @@ export function DocumentDrawer({
       })
     }
     for (const segment of segments.filter((item) => item.showOnLines)) {
+      const segmentOptions = [{ value: INHERIT_SEGMENT, label: tCommon('labels.inheritHeader') }, { value: CLEAR_SEGMENT, label: tCommon('labels.noDimensionValue') }, ...segment.values.map((value) => ({
+        value: value.id,
+        label: `${value.code ? `${value.code} · ` : ''}${value.name}`,
+      }))]
       cols.push({
         key: `seg_${segment.key}`,
         label: segment.name,
         width: '150px',
         type: 'search-select',
-        options: [{ value: INHERIT_SEGMENT, label: tCommon('labels.inheritHeader') }, { value: CLEAR_SEGMENT, label: tCommon('labels.noDimensionValue') }, ...segment.values.map((value) => ({
-          value: value.id,
-          label: `${value.code ? `${value.code} · ` : ''}${value.name}`,
-        }))],
+        options: segmentOptions,
+        optionsFor: dependent(segmentOptions, { id: segment.id }, `seg_${segment.key}`),
         placeholder: '—',
       })
     }
@@ -3009,6 +3088,7 @@ export function DocumentDrawer({
     ] })
     if (config.kind === 'vendor_bill' && showWithholdingLines) cols.push({ key: 'withholdingMaterialsCost', label: tWithholdingLine('directCost'), help: tWithholdingLine('directCostHelp'), width: '160px', type: 'amount', align: 'right' })
     if (marketplaceColumn) cols.push(marketplaceColumn)
+    cols.push(...amortizationColumns)
     const lineVisibility = new Map(builtinSegments.map((segment) => [segment.storageColumn, segment.showOnLines]))
     const storageForRowKey: Record<string, string> = {
       departmentId: 'department_id', projectId: 'project_id', locationId: 'location_id', classId: 'class_id',
@@ -3018,7 +3098,7 @@ export function DocumentDrawer({
       return !storage || lineVisibility.get(storage) !== false
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accounts, departments, projects, taxProfiles, lineDefs, segments, builtinSegments, config, t, tCommon, tWithholdingLine, warehouseColumn, returnSourceColumn, promotionColumn, marketplaceColumn, showWithholdingLines])
+  }, [accounts, departments, projects, taxProfiles, lineDefs, segments, builtinSegments, config, t, tCommon, tWithholdingLine, warehouseColumn, returnSourceColumn, promotionColumn, marketplaceColumn, showWithholdingLines, subsidiaryId, departmentId, projectIdHeader, locationId, classId, extraDims, documentDate, amortizationColumns])
 
   const field = 'space-y-1.5'
   const accountName = (id: unknown): string => {
@@ -3233,10 +3313,13 @@ export function DocumentDrawer({
       ...(warehouseColumn ? [warehouseColumn] : []),
       ...(returnSourceColumn ? [returnSourceColumn] : []),
       ...(promotionColumn ? [promotionColumn] : []),
+      // Amortization columns are force-shown like the warehouse picker:
+      // tenant layouts predate them.
+      ...amortizationColumns,
       ...columns.filter((column) => String(column.key).startsWith('seg_') || (showWithholdingLines && (column.key === 'withholdingTreatment' || column.key === 'withholdingMaterialsCost') && !configured.some(c => c.key === column.key))),
     ]
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [layout, accounts, departments, projects, locations, classes, items, taxProfiles, lineDefs, cfColumns, columns, recordType, builtinSegments, t, tCommon, tWithholdingLine, warehouseColumn, returnSourceColumn, promotionColumn, showWithholdingLines])
+  }, [layout, accounts, departments, projects, locations, classes, items, taxProfiles, lineDefs, cfColumns, columns, recordType, builtinSegments, t, tCommon, tWithholdingLine, warehouseColumn, returnSourceColumn, promotionColumn, showWithholdingLines, amortizationColumns])
 
   const headerDefByDefKey = useMemo(() => new Map(headerDefs.map((d) => [d.key, d])), [headerDefs])
   const defLabelForHeader = (key: string): string => {

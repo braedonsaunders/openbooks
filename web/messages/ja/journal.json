@@ -11,7 +11,8 @@
     "columns": {
       "entry": "仕訳",
       "origin": "オリジン",
-      "debits": "借方"
+      "debits": "借方",
+      "book": "帳簿"
     }
   },
   "origins": {
@@ -25,7 +26,12 @@
     "fxSettlement": "為替決済",
     "translation": "換算",
     "migration": "移行",
-    "manufacturing": "製造"
+    "manufacturing": "製造",
+    "opening": "期首",
+    "bookOpening": "帳簿期首",
+    "expenseAmortization": "費用の期間配分",
+    "accountMerge": "勘定の統合",
+    "assetCapitalization": "資産計上"
   },
   "detail": {
     "notFound": "仕訳が見つかりません",
@@ -44,7 +50,8 @@
       "ruleGroup": "ルール：{name}",
       "scriptGroup": "スクリプト：{name}",
       "otherGroup": "{kind}：{name}"
-    }
+    },
+    "book": "帳簿 {book}"
   },
   "newButton": {
     "label": "新規仕訳",
@@ -87,5 +94,12 @@
     "budgetaryControlRemedy": "予算を承認フローで改定してください。承認済み予算を下書きとしてコピーし、ワークシートでこのファンドの勘定金額を増やし、コピーを承認して置き換えられた予算をアーカイブします。または、この実績を予約した未決の負担行為に紐付けてください。",
     "voidAwaitingApproval": "この仕訳の取消は承認待ちです。承認が決定するまで仕訳は転記済みのままです。",
     "createUnconfirmed": "サーバーが新しい仕訳の作成を確認できませんでした。もう一度保存してください。再試行はこの下書きのキーを再利用するため、仕訳が2件作成されることはありません。"
+  },
+  "book": {
+    "label": "会計帳簿",
+    "primary": "主帳簿",
+    "allBooks": "すべての帳簿",
+    "allBooksHint": "主帳簿に計上され、すべてのフル帳簿に複製されます。",
+    "specificHint": "帳簿固有：この帳簿にのみ、仕訳の子会社に対してこの帳簿が保持する通貨で計上されます。"
   }
 }

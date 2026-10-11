@@ -15,20 +15,23 @@ export class ReportCurrencyBasisError extends Error {
  * to rediscover its currency. An unused subsidiary cannot block a report.
  */
 export function functionalReportReader(orgId: string, where: SQL) {
+  // Each subsidiary counts in the currency the read's book carries it in:
+  // its functional currency, or a secondary book's own currency for it.
   const census = sql`(
     select count(*) from (
-      select distinct sub.base_currency
+      select distinct public.accounting_book_currency(sub.org_id, hit.book_id, sub.id)
         from subsidiaries sub
-       where sub.org_id = ${orgId}
-         and exists (
-           select 1 from journal_lines l
+        cross join lateral (
+           select e.book_id from journal_lines l
            join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
            join accounts a on a.id = l.account_id and a.org_id = l.org_id
            left join parties p on p.id = l.party_id and p.org_id = l.org_id
            left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
            where l.org_id = ${orgId} and l.subsidiary_id = sub.id
              and e.status in ('posted', 'reversed') and (${where})
-         )
+           limit 1
+        ) hit
+       where sub.org_id = ${orgId}
        limit 2
     ) currencies
   )`

@@ -43,6 +43,7 @@ import {
 import { WizardLayout } from "../../../components/page-layout";
 import { readApiErrorMessage } from "../../../lib/api-error";
 import { UnbilledAccrualPanel } from "./UnbilledAccrualPanel";
+import { PeriodEndJournalsPanel } from "./PeriodEndJournalsPanel";
 
 /**
  * Close-wizard rows. Each list reads a different query (see view.ts), so
@@ -172,6 +173,8 @@ type Props = {
   /** May post general-ledger journals (the unbilled revenue accrual). */
   canPostGl?: boolean;
   unbilledRevenueAccrual?: boolean;
+  /** Company Settings → Features: explicit year-end closing journals. */
+  periodEndJournals?: boolean;
 };
 
 const STAGES = [
@@ -632,7 +635,9 @@ function closeExceptionActionHref(code: string, run: CloseRunRow): string | null
     "fx-missing": "/admin/setup/fx-rates",
     "fx-unrevalued": "/admin/setup/fx-rates",
     "fx-reversal-period-missing": "/admin/setup/fx-rates",
+    "book-replication-incomplete": "/admin/setup/accounting-book-replication",
     "intercompany-residual": "/reports/trial-balance",
+    "intercompany-unreconciled": "/reports/intercompany-reconciliation",
     "consolidated-rates-missing": "/reports/trial-balance",
     "material-variances": "/reports/pnl",
     "commerce-orders-incomplete": "/channels",
@@ -915,6 +920,9 @@ function TaskCard(props: Props & { task: CloseTaskRow }) {
         {props.unbilledRevenueAccrual && props.task.key === "unbilled-revenue-accrued" ? (
           <UnbilledAccrualPanel periodId={props.run.period_id} canPost={props.canPostGl === true} />
         ) : null}
+        {props.periodEndJournals && props.task.key === "period-end-journals" ? (
+          <PeriodEndJournalsPanel periodId={props.run.period_id} bookId={props.run.book_id} canRun={props.canRun} />
+        ) : null}
         {props.canRun &&
         props.subsidiaryEnabled &&
         props.task.key === "consolidation" &&
@@ -936,7 +944,7 @@ function TaskCard(props: Props & { task: CloseTaskRow }) {
         ) : null}
         {actionHref &&
         !["complete", "waived"].includes(props.task.status) &&
-        !["fx-revalued", "consolidation", "unbilled-revenue-accrued"].includes(props.task.key) ? (
+        !["fx-revalued", "consolidation", "unbilled-revenue-accrued", "period-end-journals"].includes(props.task.key) ? (
           <Button variant="outline" size="sm" asChild>
             <Link href={(actionHref)}>
               <ExternalLink size={14} />
@@ -1036,6 +1044,8 @@ function closeTaskActionHref(task: CloseTaskRow, run: CloseRunRow): string | nul
     "ar-cutoff": "/ar",
     "ap-cutoff": "/ap",
     "depreciation-posted": "/assets",
+    "prepaid-amortized": `/accounting/amortization?view=run&period=${run.period_id}`,
+    "asset-capitalization-reviewed": "/assets/proposals",
     "fx-ready": "/admin/setup/fx-rates",
     "intercompany-balanced": "/reports/trial-balance",
     consolidation: "/reports/trial-balance",

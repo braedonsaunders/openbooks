@@ -156,7 +156,8 @@
     "controlAccountUnset": "No hay cuenta por cobrar configurada: defina una en Configuración → Empresa y contabilidad → Cuentas de control",
     "createUnconfirmed": "El servidor no confirmó el nuevo documento. Guarde de nuevo: el reintento usa la clave de este borrador, así que no puede crear un segundo documento.",
     "saveUnconfirmed": "El servidor no confirmó el guardado. Recargue el documento para ver su estado guardado antes de volver a editarlo.",
-    "createConflict": "Este borrador ya se guardó con otros datos. Recargue la página y abra el documento guardado desde la lista en lugar de volver a introducirlo."
+    "createConflict": "Este borrador ya se guardó con otros datos. Recargue la página y abra el documento guardado desde la lista en lugar de volver a introducirlo.",
+    "controlAccountIntercompany": "Intercompañía — {account}"
   },
   "dailySummary": {
     "date": "Fecha",

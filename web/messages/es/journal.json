@@ -11,7 +11,8 @@
     "columns": {
       "entry": "Asiento",
       "origin": "Origen",
-      "debits": "Débitos"
+      "debits": "Débitos",
+      "book": "Libro"
     }
   },
   "origins": {
@@ -25,7 +26,12 @@
     "fxSettlement": "Liquidación de divisas",
     "translation": "Conversión de moneda",
     "migration": "Migración",
-    "manufacturing": "Fabricación"
+    "manufacturing": "Fabricación",
+    "opening": "Apertura",
+    "bookOpening": "Apertura de libro",
+    "expenseAmortization": "Amortización de gastos",
+    "accountMerge": "Fusión de cuentas",
+    "assetCapitalization": "Capitalización de activos"
   },
   "detail": {
     "notFound": "Asiento no encontrado",
@@ -44,7 +50,8 @@
       "ruleGroup": "Regla: {name}",
       "scriptGroup": "Script: {name}",
       "otherGroup": "{kind}: {name}"
-    }
+    },
+    "book": "Libro {book}"
   },
   "newButton": {
     "label": "Nuevo asiento",
@@ -87,5 +94,12 @@
     "budgetaryControlRemedy": "Revise el presupuesto mediante su flujo de aprobación: copie el presupuesto aprobado como borrador, aumente el importe de esta cuenta para el fondo en la hoja de trabajo, apruebe la copia y archive el presupuesto sustituido. O vincule este importe al compromiso abierto que lo reservó.",
     "voidAwaitingApproval": "La anulación de este asiento espera aprobación. El asiento permanece contabilizado hasta que se decida la aprobación.",
     "createUnconfirmed": "El servidor no confirmó el nuevo asiento. Guarde de nuevo: el reintento usa la clave de este borrador, así que no puede crear un segundo asiento."
+  },
+  "book": {
+    "label": "Libro contable",
+    "primary": "principal",
+    "allBooks": "Todos los libros",
+    "allBooksHint": "Se registra en el libro principal y se replica en cada libro completo.",
+    "specificHint": "Específico del libro: se registra solo en este libro, en la moneda que mantiene para la subsidiaria del asiento."
   }
 }

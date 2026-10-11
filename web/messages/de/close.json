@@ -220,6 +220,22 @@
     "commerce-exceptions-open": {
       "title": "Kanalausnahmen warten",
       "message": "{count, plural, one {# geparkte Bestellung oder geparktes Ereignis braucht noch eine Lösung.} other {# geparkte Bestellungen oder Ereignisse brauchen noch eine Lösung.}}"
+    },
+    "intercompany-unreconciled": {
+      "title": "Konzerninterne Salden stimmen nicht überein",
+      "message": "{count, plural, one {# konzerninternes Paar hat Salden, die zwischen seinen Gesellschaften nicht übereinstimmen. Prüfen Sie die Konzernabstimmung vor dem Abschluss.} other {# konzerninterne Paare haben Salden, die zwischen ihren Gesellschaften nicht übereinstimmen. Prüfen Sie die Konzernabstimmung vor dem Abschluss.}}"
+    },
+    "period-end-journals-pending": {
+      "title": "Abschlussbuchungen sind nicht aktuell",
+      "message": "{count, plural, one {Für # Gesellschaft oder Richtlinienbedingung müssen die Abschlussbuchungen erzeugt oder berichtigt werden.} other {Für # Gesellschaften oder Richtlinienbedingungen müssen die Abschlussbuchungen erzeugt oder berichtigt werden.}}"
+    },
+    "book-replication-incomplete": {
+      "title": "Vollständigen Büchern fehlen Buchungen",
+      "message": "{count, plural, one {# Buchung wurde nicht in ein vollständiges Buch übernommen. Erfassen Sie unter Buchübernahme eine Aktualisierung.} other {# Buchungen wurden nicht in ein vollständiges Buch übernommen. Erfassen Sie unter Buchübernahme eine Aktualisierung.}}"
+    },
+    "prepaid-amortization-unposted": {
+      "title": "Auflösung der Rechnungsabgrenzung ist nicht gebucht",
+      "message": "{count, plural, one {# fällige Auflösungsperiode ist nicht gebucht.} other {# fällige Auflösungsperioden sind nicht gebucht.}}"
     }
   },
   "severity": {
@@ -432,6 +448,22 @@
     "commerce-complete": {
       "title": "Commerce-Vollständigkeit nachweisen",
       "description": "Jeder Shopverkauf steht im Hauptbuch: Bestellungen stimmen mit dem Shop überein, Auszahlungen sind gebucht, Verrechnungskonten sind null, und Schuldabstimmungen stimmen."
+    },
+    "period-end-journals": {
+      "title": "Abschlussbuchungen zum Periodenende buchen",
+      "description": "Die Ertrags- und Aufwandskonten des Geschäftsjahres mit expliziten Abschlussbuchungen in die Gewinnrücklagen abschließen und das Folgejahr eröffnen, wenn die Richtlinie es verlangt."
+    },
+    "book-replication-complete": {
+      "title": "Vollständigkeit der vollständigen Bücher bestätigen",
+      "description": "Jede Buchung bis zum Periodenende ist in jedes Buch mit vollständiger Übernahme übernommen."
+    },
+    "prepaid-amortized": {
+      "title": "Aktive Rechnungsabgrenzung auflösen",
+      "description": "Jede bis zum Periodenende fällige Auflösungsperiode aktiver Abgrenzungspläne buchen."
+    },
+    "asset-capitalization-reviewed": {
+      "title": "Aktivierung von Anlagen prüfen",
+      "description": "Offene Anlagenvorschläge entscheiden und Anlagen im Bau mit ihren Hauptbuchkonten abstimmen."
     }
   },
   "setup": {
@@ -962,5 +994,78 @@
     "posted": "Abgrenzung nicht fakturierter Umsätze gebucht.",
     "postFailed": "Die Abgrenzung konnte nicht gebucht werden.",
     "postPermission": "Zum Buchen der Abgrenzung ist die Berechtigung zum Buchen von Journaleinträgen erforderlich."
+  },
+  "periodEndJournals": {
+    "loading": "Abschlussbuchungen werden berechnet…",
+    "loadFailed": "Die Abschlussbuchungen konnten nicht berechnet werden.",
+    "retry": "Erneut versuchen",
+    "scope": "Geschäftsjahr {year} ({from} bis {to}) · {book}",
+    "closingPeriod": "Abschlussbuchungen in {period}",
+    "openingPeriod": "Eröffnungsbuchungen in {period}",
+    "policyRetainedEarnings": "Erträge und Aufwendungen werden in {retained} abgeschlossen",
+    "policyIncomeSummary": "Erträge und Aufwendungen werden über {summary} in {retained} abgeschlossen",
+    "policyBalanceSheet": "mit Schlussbilanz- und Eröffnungsbuchungen",
+    "policyEffective": "Richtlinie gültig ab {date}",
+    "blocked": "Vor dem Erzeugen beheben",
+    "openPolicy": "Richtlinie für Abschlussbuchungen öffnen",
+    "empty": "Keine Gesellschaft hat in diesem Geschäftsjahr abzuschließende Bewegungen.",
+    "status": {
+      "not_generated": "Nicht erzeugt",
+      "current": "Aktuell",
+      "stale": "Neu zu erzeugen",
+      "nothing_to_close": "Nichts abzuschließen",
+      "blocked": "Nicht bereit"
+    },
+    "fiscalYearEarnings": "Ergebnis des Geschäftsjahres",
+    "priorUnclosedEarnings": "Frühere, noch nicht abgeschlossene Ergebnisse",
+    "review": "Buchungen prüfen",
+    "journals": "{count, plural, one {# Buchung} other {# Buchungen}}",
+    "kinds": {
+      "income_statement": "Abschluss der Erfolgsrechnung",
+      "income_summary": "Abschluss des Ergebnissammelkontos",
+      "balance_sheet": "Schlussbilanzbuchung",
+      "opening": "Eröffnungssalden"
+    },
+    "columns": {
+      "account": "Konto",
+      "dimensions": "Dimensionen",
+      "debit": "Soll",
+      "credit": "Haben",
+      "entity": "Gesellschaft",
+      "generation": "Generierung",
+      "status": "Zustand",
+      "generated": "Erzeugt",
+      "reversed": "Storniert",
+      "journals": "Buchungen"
+    },
+    "dimensions": {
+      "department": "Abteilung",
+      "class": "Klasse",
+      "location": "Standort",
+      "project": "Projekt",
+      "segment": "Segmentwert"
+    },
+    "generate": "Abschlussbuchungen erzeugen",
+    "reverse": "Abschlussbuchungen stornieren",
+    "generateReasonTitle": "Die Abschlussbuchungen erzeugen",
+    "reverseReasonTitle": "Die Abschlussbuchungen stornieren",
+    "reasonHint": "Begründen Sie den Schritt. Die Begründung wird mit den Buchungen im Prüfprotokoll gespeichert (10–500 Zeichen).",
+    "reasonLabel": "Begründung",
+    "generated": "{count, plural, one {Abschlussbuchungen für # Gesellschaft gebucht.} other {Abschlussbuchungen für # Gesellschaften gebucht.}}",
+    "unchanged": "Die Abschlussbuchungen sind bereits aktuell; es wurde nichts gebucht.",
+    "partiallyRefused": "{count, plural, one {# Gesellschaft ist nicht bereit.} other {# Gesellschaften sind nicht bereit.}}",
+    "reversed": "{count, plural, one {Abschlussbuchungen für # Gesellschaft storniert.} other {Abschlussbuchungen für # Gesellschaften storniert.}}",
+    "generateFailed": "Die Abschlussbuchungen konnten nicht erzeugt werden.",
+    "reverseFailed": "Die Abschlussbuchungen konnten nicht storniert werden.",
+    "runPermission": "Zum Erzeugen von Abschlussbuchungen ist die Berechtigung zum Ausführen des Abschlusses erforderlich.",
+    "history": "Verlauf",
+    "generations": "{count, plural, one {# Generierung} other {# Generierungen}}",
+    "historyEmpty": "Für dieses Geschäftsjahr wurden noch keine Abschlussbuchungen erzeugt.",
+    "setStatus": {
+      "posted": "Gebucht",
+      "reversed": "Storniert"
+    },
+    "by": "{name} am {at}",
+    "system": "Automatisch"
   }
 }

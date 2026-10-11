@@ -42,6 +42,9 @@ export type ReportDrillTarget =
       period?: string
       /** Newest activity first — CoA / register-style browsing, not cell tie-out. */
       newestFirst?: boolean
+      /** Keep period-end closing and opening journals: general ledger,
+       *  register and chart-of-accounts drills. Statement drills omit them. */
+      includePeriodEndJournals?: boolean
     }
   | {
       kind: 'aging'
@@ -248,6 +251,7 @@ export function parseReportDrillTarget(raw: string | null): ReportDrillTarget | 
       ...(period ? { period } : {}),
       ...(input.newestFirst === true ? { newestFirst: true } : {}),
       ...(input.hideVoidPairs === true ? { hideVoidPairs: true } : {}),
+      ...(input.includePeriodEndJournals === true ? { includePeriodEndJournals: true } : {}),
     }
   }
 

@@ -165,7 +165,14 @@
     "manufacturing-mrp": "MRP-Läufe",
     "manufacturing-time": "Produktionszeiten",
     "manufacturing-quality": "Qualität",
-    "close-reopen-requests": "Wiedereröffnungsanträge"
+    "close-reopen-requests": "Wiedereröffnungsanträge",
+    "intercompany": "Konzernverrechnung",
+    "intercompany-netting": "Konzerninterne Verrechnung",
+    "amortization": "Abgrenzungen",
+    "asset-proposals": "Anlagenvorschläge",
+    "asset-construction": "Anlagen im Bau",
+    "asset-maintenance": "Anlagenwartung",
+    "asset-insurance": "Anlagenversicherung"
   },
   "groups": {
     "manufacturing": "Fertigung",
@@ -262,7 +269,8 @@
     "setup-tax-depreciation": "Steuerliche Abschreibung",
     "setup-overhead": "Gemeinkosten",
     "crm-sales": "Vertrieb",
-    "hrm-compensation": "Vergütung"
+    "hrm-compensation": "Vergütung",
+    "intercompany": "Konzernverrechnung"
   },
   "moduleKeywords": {
     "receipts": "Beleg, Zahlungseingang, Zahlung erfassen, Zahlung, Kundenzahlung, Einzahlung",

@@ -642,6 +642,28 @@ export const NAV_MODULES: NavModule[] = [
     recordTarget: { kind: 'query', param: 'doc' },
   },
   {
+    key: 'intercompany',
+    href: '/intercompany',
+    label: 'Intercompany',
+    iconKey: 'git-branch',
+    group: 'accounting',
+    subgroup: 'ledger',
+    requiredPermission: 'intercompany.read',
+    featureKey: 'intercompanyTransactions',
+    recordTarget: { kind: 'query', param: 'pair' },
+  },
+  {
+    key: 'intercompany-netting',
+    href: '/intercompany/netting',
+    label: 'Intercompany Netting',
+    iconKey: 'workflow',
+    group: 'accounting',
+    subgroup: 'ledger',
+    requiredPermission: 'intercompany.read',
+    featureKey: 'intercompanyNetting',
+    recordTarget: { kind: 'query', param: 'run' },
+  },
+  {
     key: 'accounts',
     href: '/accounts',
     label: 'Chart of Accounts',
@@ -662,6 +684,27 @@ export const NAV_MODULES: NavModule[] = [
   {
     key: 'leases', href: '/assets/leases', label: 'Lessee Leases', iconKey: 'key',
     group: 'accounting', subgroup: 'assets', requiredPermission: 'assets.read',
+  },
+  {
+    key: 'amortization', href: '/accounting/amortization', label: 'Amortization', iconKey: 'timer',
+    group: 'accounting', subgroup: 'assets', requiredPermission: 'amortization.read',
+    featureKey: 'expenseAmortization', recordTarget: { kind: 'query', param: 'schedule' },
+  },
+  {
+    key: 'asset-proposals', href: '/assets/proposals', label: 'Asset Proposals', iconKey: 'inbox',
+    group: 'accounting', subgroup: 'assets', requiredPermission: 'assets.read', featureKey: 'assetProposals',
+  },
+  {
+    key: 'asset-construction', href: '/assets/construction', label: 'Construction in Progress', iconKey: 'building',
+    group: 'accounting', subgroup: 'assets', requiredPermission: 'assets.read', featureKey: 'constructionInProgress',
+  },
+  {
+    key: 'asset-maintenance', href: '/assets/maintenance', label: 'Asset Maintenance', iconKey: 'wrench',
+    group: 'accounting', subgroup: 'assets', requiredPermission: 'assets.read', featureKey: 'assetMaintenance',
+  },
+  {
+    key: 'asset-insurance', href: '/assets/insurance', label: 'Asset Insurance', iconKey: 'shield',
+    group: 'accounting', subgroup: 'assets', requiredPermission: 'assets.read', featureKey: 'assetInsurance',
   },
   {
     // Subsequent-measurement register (lease/asset/revenue/consolidation).
@@ -1130,6 +1173,10 @@ const LOCAL_DESTINATION_LABELS: Record<string, string> = {
   "/assets?tab=tax-depreciation": "Tax Depreciation",
   "/assets/leases": "Lessee Leases",
   "/assets/equipment": "Equipment",
+  "/assets/proposals": "Asset Proposals",
+  "/assets/construction": "Construction in Progress",
+  "/assets/maintenance": "Asset Maintenance",
+  "/assets/insurance": "Asset Insurance",
   "/compliance": "Overview",
   "/compliance/vendors": "Subcontractors",
   "/compliance/lien-waivers": "Lien Waivers",
@@ -1303,6 +1350,8 @@ export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
     'nonprofit',
     // Within the ledger section, after Journals and Chart of Accounts.
     'internal-billing',
+    'intercompany',
+    'intercompany-netting',
   ],
   insights: ['reports', 'analytics', 'insights', 'saved-searches'],
   settings: [

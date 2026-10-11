@@ -505,6 +505,7 @@ const JOURNAL: RecordTypeMeta = {
     { key: "entry_number", labelKey: "journal.list.columns.entry", kind: "reference", sortable: true, sortKey: "number", locked: true },
     { key: "memo", labelKey: "common.labels.memo", kind: "text" },
     { key: "origin", labelKey: "journal.list.columns.origin", kind: "text", sortable: true, sortKey: "origin" },
+    { key: "book", labelKey: "journal.list.columns.book", kind: "text", sortable: true, sortKey: "book", defaultWidth: 110, accountingBook: true },
     { key: "line_count", labelKey: "common.labels.lines", kind: "text", sortable: true, sortKey: "lines", defaultWidth: 90 },
     { key: "total_debits", labelKey: "journal.list.columns.debits", kind: "amount", sortable: true, sortKey: "debits", defaultWidth: 120 },
     { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
@@ -517,12 +518,16 @@ const JOURNAL: RecordTypeMeta = {
       kind: "select",
       operators: OPERATORS_BY_KIND.select,
       options: [
-        ["manual", "manual"], ["closing", "closing"], ["allocation", "allocation"],
+        ["manual", "manual"], ["closing", "closing"], ["opening", "opening"], ["allocation", "allocation"],
         ["revaluation", "revaluation"], ["labor_burden", "laborBurden"],
-        ["depreciation", "depreciation"], ["revenue_recognition", "revenueRecognition"],
+        ["depreciation", "depreciation"], ["asset_capitalization", "assetCapitalization"],
+        ["revenue_recognition", "revenueRecognition"],
         ["fx_settlement", "fxSettlement"], ["translation", "translation"],
+        ["expense_amortization", "expenseAmortization"],
         // Standalone migration true-ups remain visible in the journal list.
         ["migration", "migration"],
+        ["book_opening", "bookOpening"],
+        ["account_merge", "accountMerge"],
       ].map(([value, key]) => ({ value: value!, labelKey: `journal.origins.${key}` })),
     },
     {
@@ -536,6 +541,7 @@ const JOURNAL: RecordTypeMeta = {
       ],
     },
     { key: "posting_date", labelKey: "common.labels.date", kind: "date", operators: OPERATORS_BY_KIND.date },
+    { key: "book", labelKey: "journal.list.columns.book", kind: "text", operators: OPERATORS_BY_KIND.text },
   ],
 };
 
@@ -543,7 +549,7 @@ const JOURNAL_DRAFT: RecordTypeMeta = {
   ...JOURNAL,
   key: "journal_draft",
   supportsForms: false,
-  listColumns: JOURNAL.listColumns.filter((column) => column.key !== "origin" && column.key !== "line_count"),
+  listColumns: JOURNAL.listColumns.filter((column) => column.key !== "origin" && column.key !== "line_count" && column.key !== "book"),
   listFilters: JOURNAL.listFilters.filter((filter) => filter.key === "posting_date"),
 };
 

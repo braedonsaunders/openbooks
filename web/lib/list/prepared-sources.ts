@@ -239,6 +239,10 @@ const SOURCES = {
     rowKeyField: 'id',
     mode: 'loaded',
   },
+  intercompany_unpaired: { route: '/intercompany', rowsField: 'unpairedRows', rowKeyField: 'id', mode: 'loaded' },
+  intercompany_pairs: { route: '/intercompany', rowsField: 'pairRows', rowKeyField: 'id', mode: 'loaded' },
+  intercompany_netting_runs: { route: '/intercompany/netting', rowsField: 'rows', rowKeyField: 'id', mode: 'loaded' },
+  intercompany_transfers: { route: '/intercompany/transfers', rowsField: 'rows', rowKeyField: 'id', mode: 'loaded' },
   compliance_information_returns: {
     route: '/compliance/information-returns',
     rowsField: 'rows',
@@ -851,6 +855,8 @@ const SOURCES = {
   subcontracts_payment_controls: { route: '/subcontracts', mode: 'loaded' },
   close_posting_periods: { route: '/close/posting-periods', mode: 'loaded' },
   projects_duplicate_candidates: { route: '/projects/duplicates', mode: 'loaded' },
+  accounts_merges: { route: '/accounts/merges', rowsField: 'rows', rowKeyField: 'id', mode: 'loaded' },
+  segment_dependency_violations: { route: '/admin/setup/segment-dependencies', rowsField: 'rows', rowKeyField: 'key', mode: 'loaded' },
   admin_pdf_templates: { route: '/admin/pdf-templates', mode: 'loaded' },
   payroll_work_locations: { route: '/payroll/work-locations', mode: 'loaded' },
   admin_audit: { route: '/admin/audit', mode: 'external' },
@@ -864,6 +870,9 @@ const SOURCES = {
   compliance_vendors: { route: '/compliance/vendors', mode: 'loaded' },
   documents_trash: { route: '/documents/trash', mode: 'loaded' },
   tax_provisions: { route: '/tax/provisions', mode: 'loaded' },
+  amortization_schedules: { route: '/accounting/amortization', mode: 'loaded' },
+  amortization_due: { route: '/accounting/amortization', mode: 'loaded' },
+  amortization_reconciliation: { route: '/accounting/amortization', mode: 'loaded' },
   time_clock_pairs: {
     route: '/time/clock',
     rowsField: 'rows',
@@ -891,6 +900,18 @@ const SOURCES = {
     rowKeyField: 'stagingLocationId',
     mode: 'loaded',
   },
+  // Fixed-asset depth workspaces: each reader returns its authorized, bounded rows.
+  asset_proposals: { route: '/assets/proposals', rowsField: 'rows', rowKeyField: 'id', mode: 'loaded' },
+  asset_cip_records: { route: '/assets/construction', rowsField: 'rows', rowKeyField: 'id', mode: 'loaded' },
+  asset_cip_costs: { route: '/assets/construction', rowsField: 'selected.costs', rowKeyField: 'id', mode: 'loaded' },
+  asset_cip_candidates: { route: '/assets/construction', rowsField: 'selected.candidates', rowKeyField: 'journalLineId', mode: 'loaded' },
+  asset_cip_reconciliation: { route: '/assets/construction', rowsField: 'reconciliation', rowKeyField: 'accountId', mode: 'loaded' },
+  asset_maintenance_schedules: { route: '/assets/maintenance', rowsField: 'rows', rowKeyField: 'scheduleId', mode: 'loaded' },
+  asset_maintenance_records: { route: '/assets/maintenance', rowsField: 'selected.records', rowKeyField: 'id', mode: 'loaded' },
+  asset_insurance_policies: { route: '/assets/insurance', rowsField: 'rows', rowKeyField: 'id', mode: 'loaded' },
+  asset_insurance_coverages: { route: '/assets/insurance', rowsField: 'selected.coverages', rowKeyField: 'assetId', mode: 'loaded' },
+  asset_insured_values: { route: '/assets/insurance', rowsField: 'comparison', rowKeyField: 'assetId', mode: 'loaded' },
+  asset_components: { route: '/assets', rowsField: 'members', rowKeyField: 'id', mode: 'loaded' },
 } satisfies Record<string, PreparedListSource>
 
 export type PreparedListSourceKey = keyof typeof SOURCES

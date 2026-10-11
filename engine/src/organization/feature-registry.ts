@@ -62,15 +62,58 @@ export const FEATURES: FeatureDef[] = [
   // currencies/books. Data-dependent default — resolved by subsidiaryFeatureEnabled,
   // NOT the static defaultEnabled below (which only applies to brand-new orgs).
   { key: 'multiSubsidiary', defaultEnabled: false, category: 'finance', group: 'structure' },
+  // Intercompany framework, all subordinate to Multi-subsidiary. Each is off
+  // by default because it changes how documents post (representing parties
+  // post to intercompany receivable/payable accounts) or adds a governed
+  // settlement path; data is kept when any of them is switched off.
+  // - Intercompany transactions: representing customers/vendors, paired
+  //   intercompany orders, invoices and credits, transfer pricing policies,
+  //   the pairing workspace and the reconciliation report.
+  // - Intercompany netting: governed netting and settlement runs over open
+  //   intercompany balances, and bank transfers between entities.
+  // - Cross-subsidiary fulfillment: one entity fulfills another entity's sales
+  //   order from its own stock at a transfer price; needs transfer pricing,
+  //   inventory and order entry.
+  { key: 'intercompanyTransactions', defaultEnabled: false, category: 'finance', group: 'structure', parentKey: 'multiSubsidiary', navModules: ['intercompany'] },
+  { key: 'intercompanyNetting', defaultEnabled: false, category: 'finance', group: 'structure', parentKey: 'multiSubsidiary', navModules: ['intercompany-netting'] },
+  { key: 'crossSubsidiaryFulfillment', defaultEnabled: false, category: 'finance', group: 'structure', parentKey: 'multiSubsidiary', requiresAll: ['intercompanyTransactions', 'inventory', 'orders'] },
   // Multi-currency: transact in currencies other than the base, with FX rates,
   // revaluation, and realized/unrealized gain-loss. Data-dependent default (see
   // resolveMultiCurrency), NOT the static flag below.
   { key: 'multiCurrency', defaultEnabled: false, category: 'finance', group: 'structure' },
+  // Multi-book accounting: secondary books with their own base currency per
+  // subsidiary, account mappings, full replication of ordinary
+  // transactions, book-specific journals and book-to-book comparison. Off
+  // by default; existing secondary books keep receiving their own
+  // depreciation, recognition, allocation and revaluation entries either
+  // way. It cannot be switched off while a book replicates in full.
+  { key: 'multiBookAccounting', defaultEnabled: false, category: 'finance', group: 'structure' },
+  // Chart of accounts governance. Account merges fold a duplicate account
+  // into a surviving one through a previewed, audited reclass; accounting
+  // contexts present reports under localized account numbers and names
+  // (for example a local statutory chart); segment dependencies restrict a
+  // segment value to listed values of another segment. Each is a deliberate
+  // adoption decision, so all three default off; turning one off keeps its
+  // records and history.
+  { key: 'accountMerges', defaultEnabled: false, category: 'finance', group: 'structure' },
+  { key: 'accountingContexts', defaultEnabled: false, category: 'finance', group: 'structure' },
+  { key: 'segmentDependencies', defaultEnabled: false, category: 'finance', group: 'structure' },
   { key: 'banking', defaultEnabled: true, category: 'finance', group: 'cash', navModules: ['banking', 'banking-cash', 'banking-transactions', 'banking-psp-settlements', 'banking-payouts', 'banking-match', 'banking-recons', 'banking-rules', 'banking-imports'] },
   // Automated bank connectivity (SFTP file drops + Plaid/GoCardless/TrueLayer
   // live feeds). Off by default — manual OFX/CSV import always works without it.
   { key: 'bankFeeds', defaultEnabled: false, category: 'finance', group: 'cash' },
   { key: 'fixedAssets', defaultEnabled: true, category: 'finance', group: 'assets', navModules: ['assets', 'leases', 'tax-depreciation'] },
+  // Fixed-asset depth, each opt-in under Fixed Assets: compound assets with
+  // separately depreciated components; asset proposals generated from
+  // posted purchases under the capitalization rules; construction in
+  // progress with its subledger and governed capitalization; maintenance
+  // schedules and work records; insurance policies and renewals. Turning
+  // one off hides its screens and refuses its writes; recorded data stays.
+  { key: 'assetComponents', defaultEnabled: false, category: 'finance', group: 'assets', parentKey: 'fixedAssets' },
+  { key: 'assetProposals', defaultEnabled: false, category: 'finance', group: 'assets', navModules: ['asset-proposals'], parentKey: 'fixedAssets' },
+  { key: 'constructionInProgress', defaultEnabled: false, category: 'finance', group: 'assets', navModules: ['asset-construction'], parentKey: 'fixedAssets' },
+  { key: 'assetMaintenance', defaultEnabled: false, category: 'finance', group: 'assets', navModules: ['asset-maintenance'], parentKey: 'fixedAssets' },
+  { key: 'assetInsurance', defaultEnabled: false, category: 'finance', group: 'assets', navModules: ['asset-insurance'], parentKey: 'fixedAssets' },
   { key: 'budgets', defaultEnabled: true, category: 'finance', group: 'planning', navModules: ['budgets'] },
   // Internal billing: one part of the business bills another — department
   // to department, project to project, or subsidiary to subsidiary. Each
@@ -109,6 +152,17 @@ export const FEATURES: FeatureDef[] = [
   // and governed close-package publication. It depends on Flows because the
   // independent approval must be real at the service boundary, not a UI flag.
   { key: 'advancedClose', defaultEnabled: false, category: 'finance', group: 'close', parentKey: 'flows' },
+  // Explicit year-end closing and opening journals for jurisdictions that
+  // require them. Off by default: statements compute retained earnings either
+  // way. The generation step lives in the period close workspace, so the
+  // close surface is its parent.
+  { key: 'periodEndJournals', defaultEnabled: false, category: 'finance', group: 'close', parentKey: 'continuousClose' },
+  // Expense amortization: prepaid and deferred expense schedules from bill,
+  // journal and expense report lines, amortized by period with a close
+  // step and a GL reconciliation. Automatic amortization posts due periods
+  // on the scheduler without an operator run. Data is kept when off.
+  { key: 'expenseAmortization', defaultEnabled: false, category: 'finance', group: 'close' },
+  { key: 'expenseAmortizationAutoRun', defaultEnabled: false, category: 'finance', group: 'close', parentKey: 'expenseAmortization' },
 
   // Sales — pipeline, order entry and point-of-sale selling.
   // The account list is NOT here: leads, prospects and customers share one

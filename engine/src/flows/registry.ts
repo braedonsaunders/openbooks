@@ -42,6 +42,11 @@ import {
   fundReleasesFlowAdapter,
 } from "./fund-releases-adapter.ts";
 import {
+  INTERCOMPANY_NETTING_RUN_SUBJECT_KIND,
+  intercompanyNettingRunSubjectProfile,
+  intercompanyNettingRunsFlowAdapter,
+} from "./intercompany-netting-runs-adapter.ts";
+import {
   FIELD_TICKET_SUBJECT_KIND,
   fieldTicketSubjectProfile,
   fieldTicketsFlowAdapter,
@@ -133,6 +138,7 @@ export function getFlowAdapter(subjectKind: string): FlowSubjectAdapter | null {
   if (subjectKind === CLOSE_RUN_SUBJECT_KIND) return closeRunsFlowAdapter;
   if (subjectKind === ALLOCATION_RUN_SUBJECT_KIND) return allocationRunsFlowAdapter;
   if (subjectKind === FUND_RELEASE_SUBJECT_KIND) return fundReleasesFlowAdapter;
+  if (subjectKind === INTERCOMPANY_NETTING_RUN_SUBJECT_KIND) return intercompanyNettingRunsFlowAdapter;
   if (subjectKind === FIELD_TICKET_SUBJECT_KIND) return fieldTicketsFlowAdapter;
   if (subjectKind === PREBILL_SUBJECT_KIND) return prebillsFlowAdapter;
   if (subjectKind === OUTBOUND_PAYMENT_RUN_SUBJECT_KIND) return outboundPaymentRunsFlowAdapter;
@@ -204,6 +210,7 @@ export function listFlowSubjectProfiles(): FlowSubjectProfile[] {
     closeRunSubjectProfile,
     allocationRunSubjectProfile,
     fundReleaseSubjectProfile,
+    intercompanyNettingRunSubjectProfile,
     fieldTicketSubjectProfile,
     prebillSubjectProfile,
     payRunSubjectProfile,

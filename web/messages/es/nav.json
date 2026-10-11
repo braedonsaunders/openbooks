@@ -165,7 +165,14 @@
     "manufacturing-mrp": "Ejecuciones de MRP",
     "manufacturing-time": "Tiempo de producción",
     "manufacturing-quality": "Calidad",
-    "close-reopen-requests": "Solicitudes de reapertura"
+    "close-reopen-requests": "Solicitudes de reapertura",
+    "intercompany": "Intercompañía",
+    "intercompany-netting": "Compensación intercompañía",
+    "amortization": "Amortización de gastos",
+    "asset-proposals": "Propuestas de activos",
+    "asset-construction": "Obras en curso",
+    "asset-maintenance": "Mantenimiento de activos",
+    "asset-insurance": "Seguros de activos"
   },
   "modulesShort": {
     "hrm-performance-cycles": "Gestionar evaluaciones",
@@ -262,7 +269,8 @@
     "setup-tax-depreciation": "Depreciación fiscal",
     "setup-overhead": "Gastos generales",
     "crm-sales": "Ventas",
-    "hrm-compensation": "Compensación"
+    "hrm-compensation": "Compensación",
+    "intercompany": "Intercompañía"
   },
   "moduleKeywords": {
     "receipts": "recibo, recibos, recibir pago, pago, cobro, pago de cliente",

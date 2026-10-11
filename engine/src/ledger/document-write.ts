@@ -1,3 +1,4 @@
+import { amortizationLineRefusal } from "../amortization/source-fields.ts";
 import { WithholdingMaterialsCostError } from "../allocations/withholding-cost.ts";
 import { assertWithholdingDepositEdit } from "../contractor-withholding/deposits.ts";
 import { assertWithholdingRemittanceEdit, ContractorWithholdingError } from "../contractor-withholding/service.ts";
@@ -50,6 +51,7 @@ import { featureEnabled } from '../organization/feature-registry.ts'
 import { isFeatureEnabled, orgFeatureState, checkProjectsWriteEnabled } from '../organization/feature-state.ts'
 import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from '../records/custom-fields.ts'
 import { extraDimsSubsidiaryError, segmentRegistry, validateExtraDims } from '../organization/segments.ts'
+import { assertDocumentSegmentDependencies } from '../organization/segment-dependencies.ts'
 import { resolveExternalRefPair } from '../records/external-ref.ts'
 import { documentWorkDatesRefusal } from '../records/work-period.ts'
 import { businessToday, isIsoCalendarDate } from '../platform/business-date.ts'
@@ -1062,6 +1064,9 @@ async function planDocumentEntryAllocations(args: {
     isBillable: null,
     workFrom: l.workFrom,
     workTo: l.workTo,
+    amortizationTemplateId: l.amortizationTemplateId ?? null,
+    amortizationStartOn: l.amortizationStartOn ?? null,
+    amortizationEndOn: l.amortizationEndOn ?? null,
     distributionKey: l.distributionKey ?? null,
     distributionGroupId: l.distributionGroupId ?? null,
     distributionLocked: l.distributionLocked ?? null,
@@ -1705,7 +1710,7 @@ export async function applyDocumentEdit(
   // distribution stamps rely on). Null = new line.
   let submittedLineKeys: (string | null)[] | null = null
   let preparedLines:
-    | { accountId: string; itemId: string | null; description: string | null; quantity: string | null; unit: string | null; unitPrice: string | null; amount: string; taxCodeId: string | null; taxGroupId: string | null; taxInputAmount: string; taxAmount: string; taxOverridden: boolean; withholdingTreatment: "labour" | "materials" | "excluded" | null; withholdingMaterialsCost: string | null; taxComponents: ReturnType<typeof computeBillTotals>['lines'][number]['taxComponents']; nativeGoodsTax?: GoodsTaxSnapshot; providerQuote?: ReturnType<typeof computeBillTotals>['lines'][number]['providerQuote']; marketplaceFacilitator: string | null; partyId: string | null; departmentId: string | null; projectId: string | null; locationId: string | null; classId: string | null; workFrom?: string | null; workTo?: string | null; stockLocationId: string | null; extraDims: Record<string, string | null>; custom: Record<string, unknown>; distributionGroupId: string | null; distributionRuleId: string | null; distributionVersionId: string | null; distributionLocked: boolean }[]
+    | { accountId: string; itemId: string | null; description: string | null; quantity: string | null; unit: string | null; unitPrice: string | null; amount: string; taxCodeId: string | null; taxGroupId: string | null; taxInputAmount: string; taxAmount: string; taxOverridden: boolean; withholdingTreatment: "labour" | "materials" | "excluded" | null; withholdingMaterialsCost: string | null; taxComponents: ReturnType<typeof computeBillTotals>['lines'][number]['taxComponents']; nativeGoodsTax?: GoodsTaxSnapshot; providerQuote?: ReturnType<typeof computeBillTotals>['lines'][number]['providerQuote']; marketplaceFacilitator: string | null; partyId: string | null; departmentId: string | null; projectId: string | null; locationId: string | null; classId: string | null; workFrom?: string | null; workTo?: string | null; amortizationTemplateId: string | null; amortizationStartOn: string | null; amortizationEndOn: string | null; stockLocationId: string | null; extraDims: Record<string, string | null>; custom: Record<string, unknown>; distributionGroupId: string | null; distributionRuleId: string | null; distributionVersionId: string | null; distributionLocked: boolean }[]
     | null = null
   if (body.lines) {
     // Charge lines are NOT editable through the generic line editor, and this
@@ -1827,6 +1832,7 @@ export async function applyDocumentEdit(
       { key: 'classId', label: 'class', table: 'classes' },
       { key: 'itemId', label: 'item', table: 'items' },
       { key: 'stockLocationId', label: 'stock location', table: 'stock_locations' },
+      { key: 'amortizationTemplateId', label: 'amortization template', table: 'expense_amortization_templates' },
     ] as const
     for (let i = 0; i < body.lines.length; i++) {
       const line = body.lines[i]!
@@ -1836,6 +1842,8 @@ export async function applyDocumentEdit(
           throw new DocumentEditError(422, `Line ${i + 1}: invalid ${def.key}`)
         }
       }
+      const amortizationRefusal = amortizationLineRefusal(current.kind, line)
+      if (amortizationRefusal) throw new DocumentEditError(422, `Line ${i + 1}: ${amortizationRefusal}`)
     }
     for (const def of lineRefDefs) {
       const ids = [...new Set(body.lines.map((l) => l[def.key]).filter((v): v is string => typeof v === 'string' && v.length > 0))]
@@ -1989,6 +1997,9 @@ export async function applyDocumentEdit(
         classId: l.classId ?? null,
         workFrom: l.workFrom,
         workTo: l.workTo,
+        amortizationTemplateId: l.amortizationTemplateId ?? null,
+        amortizationStartOn: l.amortizationStartOn ?? null,
+        amortizationEndOn: l.amortizationEndOn ?? null,
         stockLocationId: l.stockLocationId ?? null,
         extraDims: lineDims.cleaned,
         custom: lv.cleaned,
@@ -2508,7 +2519,8 @@ export async function applyDocumentEdit(
                                         distribution_locked,
                                         time_entry_id, employee_id, time_type_id,
                                         equipment_unit_id, rate_version_id, bill_rate, bill_amount, promotion_id,
-                                        work_from, work_to)
+                                        work_from, work_to,
+                                        amortization_template_id, amortization_start_on, amortization_end_on)
             values (${orgId}, ${id}, ${i + 1}, ${l.accountId}, ${l.itemId}, ${l.description},
                     ${l.quantity ?? '1'}, ${l.unit}, ${l.unitPrice ?? l.amount}, ${l.amount},
                     ${l.taxCodeId}, ${l.taxGroupId}, ${l.taxInputAmount}, ${l.taxAmount}, ${l.taxOverridden}, ${l.withholdingTreatment}, ${l.withholdingMaterialsCost}, ${l.marketplaceFacilitator},
@@ -2520,7 +2532,8 @@ export async function applyDocumentEdit(
                     ${carry?.equipmentUnitId ?? null}, ${carry?.rateVersionId ?? null}, ${billRate}, ${billAmount},
                     ${promotionsByLine.get(submittedLineKeys?.[i] ?? '') ?? null},
                     ${workPeriodSubmitted ? l.workFrom ?? null : carry?.workFrom ?? null},
-                    ${workPeriodSubmitted ? l.workTo ?? null : carry?.workTo ?? null})
+                    ${workPeriodSubmitted ? l.workTo ?? null : carry?.workTo ?? null},
+                    ${l.amortizationTemplateId}, ${l.amortizationStartOn}, ${l.amortizationEndOn})
             returning id
           `))
           insertedLineIds.push(inserted.rows[0]!.id)
@@ -2697,6 +2710,10 @@ export async function applyDocumentEdit(
           throw new Error('customer role was not established while saving the document')
         }
       }
+
+      // Segment value dependencies, checked on the saved lines with header
+      // defaults inherited, exactly as posting will read them.
+      await assertDocumentSegmentDependencies(tx, orgId, id)
 
       if (auditBefore) {
         const auditAfter = await captureTransactionAuditSnapshot(tx, id, ctx.orgId)

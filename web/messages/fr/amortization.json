@@ -1,0 +1,185 @@
+{
+  "workspace": {
+    "title": "Étalement des charges",
+    "description": "Charges payées d’avance et différées portées en comptes de régularisation, puis passées en charge période par période."
+  },
+  "views": {
+    "schedules": "Échéanciers",
+    "run": "Traitement",
+    "reconciliation": "Rapprochement"
+  },
+  "statusFilter": {
+    "open": "En cours",
+    "draft": "Brouillon",
+    "active": "Actif",
+    "on_hold": "Suspendu",
+    "completed": "Terminé",
+    "cancelled": "Annulé"
+  },
+  "status": {
+    "draft": "Brouillon",
+    "active": "Actif",
+    "on_hold": "Suspendu",
+    "completed": "Terminé",
+    "cancelled": "Annulé"
+  },
+  "sourceKind": {
+    "vendor_bill": "Facture fournisseur",
+    "journal": "Écriture de journal",
+    "expense_report": "Note de frais",
+    "manual": "Saisie manuelle"
+  },
+  "method": {
+    "straight_line": "Linéaire par période",
+    "prorated_first_last": "Première et dernière période au prorata",
+    "exact_days": "Au jour près",
+    "variable": "Pourcentages variables"
+  },
+  "event": {
+    "created": "Créé",
+    "activated": "Activé",
+    "held": "Suspendu",
+    "resumed": "Repris",
+    "term_changed": "Durée modifiée",
+    "destination_changed": "Compte de destination modifié",
+    "reduced": "Réduit pour un avoir",
+    "cancelled": "Annulé",
+    "source_voided": "Pièce source annulée",
+    "completed": "Entièrement étalé"
+  },
+  "list": {
+    "statusFilter": "Filtrer les échéanciers par état",
+    "templates": "Modèles d’étalement",
+    "waterfall": "Cascade des charges constatées d’avance",
+    "empty": "Aucun échéancier ne correspond. Étalez une ligne de facture avec un modèle d’étalement, ou saisissez un échéancier manuel.",
+    "columns": {
+      "number": "Échéancier",
+      "status": "État",
+      "source": "Origine",
+      "template": "Modèle",
+      "subsidiary": "Filiale",
+      "total": "Montant différé",
+      "remaining": "Restant à étaler",
+      "nextPeriod": "Prochaine période"
+    }
+  },
+  "drawer": {
+    "total": "Montant différé",
+    "amortized": "Déjà étalé",
+    "remaining": "Restant à étaler",
+    "nextPeriod": "Prochaine période",
+    "source": "Origine",
+    "line": "ligne {line}",
+    "serviceWindow": "Période de service",
+    "method": "Méthode",
+    "deferralAccount": "Compte de régularisation",
+    "destinationAccount": "Compte de destination",
+    "subsidiary": "Filiale",
+    "currency": "Devise",
+    "openingAmortized": "Étalé avant cet échéancier",
+    "holdReason": "Motif de la suspension",
+    "planTab": "Échéances",
+    "historyTab": "Historique",
+    "changesTab": "Modifications",
+    "period": "Période",
+    "account": "Compte",
+    "planned": "Prévu",
+    "posted": "Comptabilisé",
+    "noPlan": "Plus aucune période n’est prévue.",
+    "balanceChange": "Variation du solde : {amount}",
+    "viewEntry": "Voir l’écriture"
+  },
+  "changes": {
+    "action": "Modification",
+    "failed": "La modification n’a pas été enregistrée.",
+    "saved": "Échéancier mis à jour",
+    "effectivePeriod": "À compter de la période",
+    "newLastPeriod": "Nouvelle dernière période",
+    "destinationAccount": "Nouveau compte de destination",
+    "amount": "Montant de l’avoir",
+    "cancelMode": "Solder le restant par",
+    "effectiveDate": "Date d’effet",
+    "reason": "Motif",
+    "actions": {
+      "activate": "Activer",
+      "hold": "Suspendre",
+      "resume": "Reprendre",
+      "change_term": "Modifier la durée",
+      "change_destination": "Modifier le compte de destination",
+      "reduce": "Réduire pour un avoir",
+      "cancel": "Annuler l’échéancier"
+    },
+    "hints": {
+      "activate": "Démarre l’étalement d’un échéancier manuel. Son solde doit déjà figurer au compte de régularisation.",
+      "hold": "Les traitements ignorent l’échéancier jusqu’à sa reprise.",
+      "resume": "Les périodes échues sont comptabilisées au prochain traitement.",
+      "change_term": "Répartit uniformément chaque montant non comptabilisé, y compris celui des périodes antérieures jamais comptabilisées, de la période choisie jusqu’à la nouvelle dernière période.",
+      "change_destination": "Étale vers le nouveau compte à partir de la période choisie.",
+      "reduce": "Enregistre un avoir sur l’échéancier et replanifie les périodes non comptabilisées ; l’excédent déjà étalé revient au compte de régularisation.",
+      "cancel": "La passation en perte constate le restant en charge ; la contrepassation restitue l’étalement comptabilisé pour une pièce entièrement créditée."
+    },
+    "modes": {
+      "write_off": "Passation en charge du restant",
+      "reverse": "Contrepassation de l’étalement comptabilisé"
+    }
+  },
+  "run": {
+    "period": "Étaler jusqu’à la période",
+    "submit": "{count, plural, =0 {Rien d’échu} one {Comptabiliser # période} other {Comptabiliser # périodes}}",
+    "description": "Comptabilise chaque période prévue des échéanciers actifs qui se termine au plus tard à la fin de la période. Une période comptabilisée ne l’est jamais deux fois.",
+    "failed": "L’étalement n’a pas été exécuté.",
+    "saved": "{posted, plural, =0 {Rien de comptabilisé} one {# période comptabilisée} other {# périodes comptabilisées}}",
+    "empty": "Rien n’est échu jusqu’à cette période.",
+    "columns": {
+      "schedule": "Échéancier",
+      "period": "Période",
+      "account": "Compte de charge",
+      "amount": "Montant"
+    }
+  },
+  "reconciliation": {
+    "asOf": "Au",
+    "report": "Ouvrir le rapport de rapprochement",
+    "tied": "Chaque compte de régularisation concorde avec ses échéanciers.",
+    "untied": "Un compte de régularisation diffère de ses échéanciers : une écriture n’y est expliquée par aucun échéancier.",
+    "empty": "Aucun compte de régularisation à rapprocher pour l’instant.",
+    "columns": {
+      "account": "Compte de régularisation",
+      "subsidiary": "Filiale",
+      "book": "Livre",
+      "ledger": "Grand livre",
+      "subledger": "Échéanciers",
+      "difference": "Écart",
+      "openSchedules": "Échéanciers en cours"
+    }
+  },
+  "newSchedule": {
+    "open": "Nouvel échéancier",
+    "title": "Nouvel échéancier manuel",
+    "description": "Suit un solde de charges constatées d’avance déjà porté au compte de régularisation. Il est enregistré en brouillon et ne comptabilise rien avant son activation.",
+    "noTemplates": "Créez d’abord un modèle d’étalement :",
+    "template": "Modèle",
+    "subsidiary": "Filiale",
+    "totalAmount": "Montant différé",
+    "openingAmortized": "Déjà étalé",
+    "serviceStart": "Début de service",
+    "serviceEnd": "Fin de service",
+    "amortizeFrom": "Première période à étaler",
+    "destinationAccount": "Compte de destination",
+    "memo": "Mémo",
+    "reason": "Motif",
+    "submit": "Enregistrer le brouillon",
+    "saved": "Échéancier {number} enregistré en brouillon",
+    "failed": "L’échéancier n’a pas été enregistré."
+  },
+  "billLine": {
+    "lineTemplate": "Étalement",
+    "lineTemplateHelp": "Porte cette ligne au compte de régularisation du modèle et l’étale par période.",
+    "lineNoTemplate": "Charge immédiate",
+    "lineServiceStart": "Début de service",
+    "lineServiceEnd": "Fin de service"
+  },
+  "common": {
+    "cancel": "Annuler"
+  }
+}

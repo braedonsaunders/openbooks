@@ -109,6 +109,11 @@ export const EXCLUDE = new Set([
   "audit_log",
   "api_key_events",
   "intercompany_pairs",
+  // Netting runs reference the pairs above; their posted ledger effects and
+  // fund transfer entries are copied with the journal.
+  "intercompany_netting_runs",
+  "intercompany_netting_lines",
+  "intercompany_fund_transfers",
   // Credential material is never copied. api_keys.key_hash and
   // sftp_servers.username sit in GLOBAL unique indexes (api_keys_hash,
   // sftp_servers_username_global) because the API/SFTP front doors route a

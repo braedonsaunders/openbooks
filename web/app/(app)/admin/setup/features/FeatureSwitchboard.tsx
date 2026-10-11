@@ -10,6 +10,7 @@ import {
   Building,
   Building2,
   CalendarCheck,
+  CalendarClock,
   ChartLine,
   CircleDollarSign,
   Code2,
@@ -87,6 +88,7 @@ export const FEATURE_ICONS: Record<string, LucideIcon> = {
   informationReturns: Receipt,
   continuousClose: CalendarCheck,
   advancedClose: ShieldCheck,
+  expenseAmortization: CalendarClock,
   // Sales
   crm: Users,
   orders: ShoppingCart,

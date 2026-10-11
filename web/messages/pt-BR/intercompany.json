@@ -1,0 +1,257 @@
+{
+  "title": "Entre empresas",
+  "description": "Vincule pedidos, faturas e créditos entre suas entidades e identifique documentos sem contraparte ou com divergências.",
+  "openReconciliation": "Conciliação entre empresas",
+  "truncated": "Exibindo os primeiros {count} documentos. Filtre por entidade para ver os demais.",
+  "tabs": {
+    "pairing": "Vinculação",
+    "netting": "Compensação",
+    "transfers": "Transferências"
+  },
+  "views": {
+    "unpaired": "Não vinculados",
+    "mismatched": "Divergentes",
+    "paired": "Vinculados"
+  },
+  "empty": {
+    "unpaired": {
+      "title": "Todos os documentos entre empresas estão vinculados",
+      "description": "Documentos de clientes ou fornecedores representantes aparecem aqui até serem vinculados à contraparte da outra entidade."
+    },
+    "mismatched": {
+      "title": "Nenhum par divergente",
+      "description": "Pares com diferenças de moeda, total ou quantidade, ou com um documento anulado, aparecem aqui."
+    },
+    "paired": {
+      "title": "Nenhum documento vinculado",
+      "description": "Crie uma contraparte ou vincule um documento existente na visualização Não vinculados."
+    }
+  },
+  "columns": {
+    "document": "Documento",
+    "kind": "Tipo",
+    "entity": "Entidade",
+    "counterparty": "Contraparte",
+    "party": "Parte",
+    "date": "Data",
+    "amount": "Valor",
+    "status": "Estado",
+    "actions": "Ações",
+    "pair": "Par",
+    "seller": "Vendedor",
+    "buyer": "Comprador",
+    "entities": "Entidades",
+    "sellerAmount": "Valor do vendedor",
+    "buyerAmount": "Valor do comprador",
+    "state": "Estado",
+    "issues": "Problemas"
+  },
+  "kinds": {
+    "sales_order": "Pedido de venda",
+    "purchase_order": "Pedido de compra",
+    "customer_invoice": "Fatura",
+    "vendor_bill": "Conta a pagar",
+    "customer_credit": "Nota de crédito",
+    "vendor_credit": "Crédito de fornecedor"
+  },
+  "statuses": {
+    "draft": "Rascunho",
+    "pending_approval": "Aguardando aprovação",
+    "approved": "Aprovado",
+    "posted": "Lançado",
+    "voided": "Anulada em"
+  },
+  "pairKinds": {
+    "order": "Par de pedidos",
+    "invoice": "Fatura e conta a pagar",
+    "credit": "Par de créditos"
+  },
+  "origins": {
+    "generated": "Gerado",
+    "linked": "Vinculado"
+  },
+  "states": {
+    "in_sync": "Sincronizado",
+    "awaiting_counterpart": "Aguardando contraparte",
+    "mismatched": "Divergentes"
+  },
+  "mismatch": {
+    "currency": "Moedas diferentes: vendedor {seller}, comprador {buyer}",
+    "amount": "Diferença entre totais: {difference}",
+    "quantity": "{item}: quantidade do vendedor {seller}, quantidade do comprador {buyer}",
+    "sellerVoided": "O documento do vendedor foi anulado",
+    "buyerVoided": "O documento do comprador foi anulado"
+  },
+  "actions": {
+    "generate": "Criar contraparte",
+    "link": "Vincular"
+  },
+  "errors": {
+    "generateFailed": "Não foi possível criar a contraparte.",
+    "unlinkFailed": "Não foi possível desvincular o par.",
+    "linkFailed": "Não foi possível vincular os documentos.",
+    "nettingFailed": "Não foi possível atualizar a compensação.",
+    "transferFailed": "Não foi possível concluir a transferência."
+  },
+  "pair": {
+    "unlinkTitle": "Desvincular este par",
+    "unlinkReason": "Por que estes documentos não estão mais vinculados?",
+    "unlinked": "Par desvinculado",
+    "unlink": "Desvincular",
+    "seller": "Documento do vendedor",
+    "buyer": "Documento do comprador",
+    "linkedOn": "Data da vinculação",
+    "linkReason": "Motivo da vinculação"
+  },
+  "link": {
+    "title": "Vincular {document} a uma contraparte",
+    "submit": "Vincular documentos",
+    "noCandidates": "A outra entidade não tem documento não vinculado do tipo correspondente para esta parte.",
+    "counterpart": "Documento da contraparte",
+    "reason": "Motivo"
+  },
+  "netting": {
+    "title": "Execuções de compensação",
+    "description": "Compense recebíveis e obrigações entre entidades em uma data, liquide opcionalmente o saldo em dinheiro e contabilize após aprovação.",
+    "new": "Nova compensação",
+    "empty": {
+      "title": "Nenhuma compensação",
+      "description": "Pré-visualize uma compensação para ver quanto cada par de entidades deve entre si."
+    },
+    "columns": {
+      "run": "Executar",
+      "asOf": "Em",
+      "entities": "Entidades",
+      "pairs": "Pares",
+      "lines": "Linhas",
+      "cash": "Liquidação em dinheiro",
+      "status": "Estado"
+    },
+    "cashYes": "Sim",
+    "cashNo": "Não",
+    "statuses": {
+      "proposed": "Proposta",
+      "pending_approval": "Aguardando aprovação",
+      "approved": "Aprovado",
+      "rejected": "Rejeitado",
+      "posted": "Lançado",
+      "cancelled": "Cancelada",
+      "reversed": "Estornado"
+    },
+    "components": {
+      "open_item": "Item em aberto",
+      "due_position": "Posição a receber/a pagar entre empresas",
+      "cash": "Caixa"
+    },
+    "newTitle": "Nova compensação",
+    "newDescription": "Escolha as entidades e a data. Pré-visualize antes de propor a compensação; a proposta será aprovada e contabilizada.",
+    "preview": "Prévia",
+    "propose": "Propor compensação",
+    "asOf": "Data de referência",
+    "settleCash": "Liquidar o saldo em dinheiro",
+    "subsidiaries": "Entidades",
+    "bankFor": "Conta bancária de {entity}",
+    "chooseBank": "Escolher conta bancária",
+    "reason": "Motivo",
+    "previewTitle": "Prévia: {lines} linhas",
+    "pairColumns": {
+      "pair": "Par",
+      "currency": "Moeda",
+      "fromNet": "Saldo líquido da entidade de origem",
+      "toNet": "Saldo líquido da entidade de destino",
+      "unreconciled": "Não conciliado",
+      "netted": "Compensado",
+      "cash": "Caixa"
+    },
+    "cancelTitle": "Cancelar compensação",
+    "cancelReason": "Por que esta compensação está sendo cancelada?",
+    "reverseTitle": "Estornar compensação",
+    "reverseReason": "Por que esta compensação está sendo estornada?",
+    "submit": "Enviar para aprovação",
+    "post": "Contabilizar",
+    "reversalDate": "Data da reversão",
+    "reverse": "Estornar",
+    "cancel": "Cancelar remessa",
+    "decisionNote": "Nota da decisão",
+    "fingerprint": "Identificação digital da proposta",
+    "pairsTitle": "Pares",
+    "linesTitle": "Linhas",
+    "lineColumns": {
+      "component": "Componente",
+      "entity": "Entidade",
+      "reference": "Nº de referência",
+      "open": "Em aberto",
+      "netted": "Compensado",
+      "cash": "Caixa",
+      "rate": "Taxa de liquidação",
+      "realizedFx": "Variação cambial realizada"
+    },
+    "entryLink": "Lançamento contábil {number}"
+  },
+  "transfers": {
+    "title": "Transferências entre empresas",
+    "description": "Transfira dinheiro entre contas bancárias de duas entidades. As contas a receber/a pagar do par equilibram a contabilidade de cada entidade.",
+    "new": "Nova transferência",
+    "empty": {
+      "title": "Nenhuma transferência entre empresas",
+      "description": "Transferências entre contas bancárias da mesma entidade ficam em Bancos."
+    },
+    "columns": {
+      "transfer": "Transferência",
+      "date": "Data",
+      "route": "De → Para",
+      "amount": "Valor",
+      "status": "Estado"
+    },
+    "statuses": {
+      "posted": "Lançado",
+      "reversed": "Estornado"
+    },
+    "newTitle": "Nova transferência entre empresas",
+    "newDescription": "A entidade pagadora credita sua conta bancária; a recebedora debita a sua. Ambas as contas devem usar a mesma moeda.",
+    "post": "Contabilizar transferência",
+    "fromLegend": "De",
+    "toLegend": "Até",
+    "subsidiary": "Entidade",
+    "chooseSubsidiary": "Escolher entidade",
+    "bankAccount": "Conta bancária",
+    "chooseBank": "Escolher conta bancária",
+    "date": "Data",
+    "amount": "Valor",
+    "currency": "Moeda",
+    "memo": "Memorando",
+    "reason": "Motivo",
+    "reverseTitle": "Estornar transferência",
+    "reverseReason": "Por que esta transferência está sendo estornada?",
+    "reversalDate": "Data da reversão",
+    "reverse": "Estornar",
+    "entry": "Lançamento",
+    "reversalEntry": "Lançamento de estorno"
+  },
+  "reconciliation": {
+    "title": "Conciliação entre empresas",
+    "description": "Saldos de cada par de empresas por moeda nos livros das duas entidades e diferença a conciliar.",
+    "asOf": "Em {date}",
+    "openWorkspace": "Abrir espaço de vinculação",
+    "empty": "Nenhum saldo entre empresas nesta data.",
+    "columns": {
+      "currency": "Moeda",
+      "entity": "Entidade",
+      "receivable": "Recebível entre empresas",
+      "payable": "Obrigação entre empresas",
+      "position": "A receber/a pagar entre empresas",
+      "net": "Líquido",
+      "functionalNet": "Líquido (moeda funcional)"
+    },
+    "summary": {
+      "balances": "Saldos dos pares",
+      "unreconciled": "Não conciliado"
+    },
+    "difference": "Diferença"
+  },
+  "party": {
+    "representsAsCustomer": "Representa {subsidiary} como cliente entre empresas",
+    "representsAsVendor": "Representa {subsidiary} como fornecedor entre empresas",
+    "manageRepresentation": "Gerenciar partes representantes"
+  }
+}

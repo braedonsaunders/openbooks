@@ -74,7 +74,8 @@
     "matchBanner": "Some stocked lines are not matched to a purchase order — the bill cannot post until they are matched.",
     "createUnconfirmed": "The server did not confirm the new record. Save again: the retry reuses this draft's key, so it cannot create a second record.",
     "saveUnconfirmed": "The server did not confirm the save. Reload the record to see its saved state before editing again.",
-    "createConflict": "This draft was already saved with different details. Reload the page and open the saved record from the list instead of entering it again."
+    "createConflict": "This draft was already saved with different details. Reload the page and open the saved record from the list instead of entering it again.",
+    "controlAccountIntercompany": "Intercompany — {account}"
   },
   "capture": {
     "title": "Bill capture",

@@ -88,6 +88,9 @@ test('any expense content makes the row non-blank — even without an account', 
     { departmentId: 'd1' },
     { taxProfileId: 'code:vat' },
     { cf_note: 'keep me' },
+    { amortizationTemplateId: 'template' },
+    { amortizationStartOn: '2026-07-01' },
+    { amortizationEndOn: '2026-09-30' },
   ]) {
     assert.equal(isBlankExpenseLine({ ...blankExpenseRow(), ...content }), false, JSON.stringify(content))
   }

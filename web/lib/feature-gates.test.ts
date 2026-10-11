@@ -115,6 +115,7 @@ const FEATURE_API_DIRS: Record<string, string[]> = {
   flows: ['app/api/flows', 'app/api/admin/flows'],
   multiSubsidiary: ['app/api/consolidation'],
   multiCurrency: ['app/api/admin/fx-provider', 'app/api/close/run-revaluation'],
+  multiBookAccounting: ['app/api/accounting-books'],
   apiAccess: ['app/api/admin/api-keys'],
   // orders: omitted — /api/estimates|sales-orders|purchase-orders route.ts files
   // are thin re-exports of _order/handlers.ts, which already calls

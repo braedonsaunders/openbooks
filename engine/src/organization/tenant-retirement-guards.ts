@@ -8,6 +8,27 @@ export const TENANT_RETIREMENT_GUARDS = [
     "patch": true
   },
   {
+    "name": "accounting_book_account_map_guard",
+    "source": "0682_accounting_book_currency_and_account_maps.sql",
+    "sha256": "1441263ecb10f36afe08b60ae0c5b5477f0fa9658bb9ec6c00c76ac6ec42b628",
+    "newSha256": "1441263ecb10f36afe08b60ae0c5b5477f0fa9658bb9ec6c00c76ac6ec42b628",
+    "patch": false
+  },
+  {
+    "name": "accounting_book_currency_guard",
+    "source": "0682_accounting_book_currency_and_account_maps.sql",
+    "sha256": "8e9382dc8a72bf44a64cd5a175655648c6ea43da57a4e37e75c7d5591a75e3a8",
+    "newSha256": "8e9382dc8a72bf44a64cd5a175655648c6ea43da57a4e37e75c7d5591a75e3a8",
+    "patch": false
+  },
+  {
+    "name": "accounting_book_replication_run_immutable",
+    "source": "0682_accounting_book_currency_and_account_maps.sql",
+    "sha256": "2602a805edc008997535fa1a1c461a06eaa7e09e39b6520df3750acb773f7c15",
+    "newSha256": "2602a805edc008997535fa1a1c461a06eaa7e09e39b6520df3750acb773f7c15",
+    "patch": false
+  },
+  {
     "name": "aging_bucket_policies_history_guard",
     "source": "0564_aging_bucket_policies.sql",
     "sha256": "4067b502751ace3e857d9c6ea7817d9f3bcb9f721be2b42ff26e529aac1d013d",
@@ -314,6 +335,27 @@ export const TENANT_RETIREMENT_GUARDS = [
     "sha256": "a651e3b7e5b0a8d0b4394758cca04de07e73591043922fc16e96b2d8df5d32bf",
     "newSha256": "dfd652399b54d27996e3c349ba223167950cdbd8a7304e2b3c31ca898552914c",
     "patch": true
+  },
+  {
+    "name": "expense_amortization_event_guard",
+    "source": "0687_expense_amortization_schedules.sql",
+    "sha256": "d104ac3ef1bde1af08611cfbbcbec156b8f29226b052447e4ff8f01ba039f2b6",
+    "newSha256": "d104ac3ef1bde1af08611cfbbcbec156b8f29226b052447e4ff8f01ba039f2b6",
+    "patch": false
+  },
+  {
+    "name": "expense_amortization_line_guard",
+    "source": "0687_expense_amortization_schedules.sql",
+    "sha256": "0e7d6580116286f0e2bb32b4899cf3f7b96c0577f358413d51f2d681c4616160",
+    "newSha256": "0e7d6580116286f0e2bb32b4899cf3f7b96c0577f358413d51f2d681c4616160",
+    "patch": false
+  },
+  {
+    "name": "expense_amortization_schedule_guard",
+    "source": "0687_expense_amortization_schedules.sql",
+    "sha256": "783345d0c9a8efd5648dc2615e84a9f3177b20b378be3375e412e91f76d13301",
+    "newSha256": "783345d0c9a8efd5648dc2615e84a9f3177b20b378be3375e412e91f76d13301",
+    "patch": false
   },
   {
     "name": "field_ticket_labor_line_immutable_guard",
@@ -769,6 +811,13 @@ export const TENANT_RETIREMENT_GUARDS = [
     "sha256": "30d1141683f1e822b46e6c7e64a734234572a56345e699a4543f991050e28427",
     "newSha256": "100716d7f7ec0b3343e3fea8ee2c0b83a060783207991e5b30a9d0081361c58e",
     "patch": true
+  },
+  {
+    "name": "multibook_evidence_immutable",
+    "source": "0682_accounting_book_currency_and_account_maps.sql",
+    "sha256": "57cfe6f0bffa374dcdb2958ae7cec3b0ec01c68b0e5ac31f54e3c8657d73bdd7",
+    "newSha256": "57cfe6f0bffa374dcdb2958ae7cec3b0ec01c68b0e5ac31f54e3c8657d73bdd7",
+    "patch": false
   },
   {
     "name": "net_investment_configuration_guard",
@@ -1539,6 +1588,27 @@ export const TENANT_RETIREMENT_GUARDS = [
     "sha256": "c552a5ad592446e94ee32005ada5b971fcd0a75ea46359b40a1ebc7b1f68e946",
     "newSha256": "aca581caf6ef846a3319eff6c0ec99850823d8f5678fc7e1f6a25f09837d6d08",
     "patch": true
+  },
+  {
+    "name": "period_end_journal_policy_guard",
+    "source": "0684_period_end_journals.sql",
+    "sha256": "c2277350b9bc1efdeccfa8961a7316610f7abea719421bb6981446a58b20b929",
+    "newSha256": "c2277350b9bc1efdeccfa8961a7316610f7abea719421bb6981446a58b20b929",
+    "patch": false
+  },
+  {
+    "name": "period_end_journal_set_guard",
+    "source": "0684_period_end_journals.sql",
+    "sha256": "2b3d68814dad441e2301e8b9eaee04ac9b05d9c4149c11ebf4baa7f6403a3681",
+    "newSha256": "2b3d68814dad441e2301e8b9eaee04ac9b05d9c4149c11ebf4baa7f6403a3681",
+    "patch": false
+  },
+  {
+    "name": "period_end_journal_entry_guard",
+    "source": "0684_period_end_journals.sql",
+    "sha256": "07f9d2d53dd8951b3ada47c1f9847194b1ee03322602a00affa119884fe7eeec",
+    "newSha256": "07f9d2d53dd8951b3ada47c1f9847194b1ee03322602a00affa119884fe7eeec",
+    "patch": false
   }
 ] as const;
 
@@ -1546,6 +1616,24 @@ export const TENANT_RETIREMENT_GUARD_ATTRIBUTES = [
   {
     "name": "account_group_member_scope_guard",
     "config": []
+  },
+  {
+    "name": "accounting_book_account_map_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "accounting_book_currency_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "accounting_book_replication_run_immutable",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
   },
   {
     "name": "aging_bucket_policies_history_guard",
@@ -1742,6 +1830,24 @@ export const TENANT_RETIREMENT_GUARD_ATTRIBUTES = [
   {
     "name": "entitlement_ledger_append_only_guard",
     "config": []
+  },
+  {
+    "name": "expense_amortization_event_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "expense_amortization_line_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "expense_amortization_schedule_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
   },
   {
     "name": "field_ticket_labor_line_immutable_guard",
@@ -2028,6 +2134,12 @@ export const TENANT_RETIREMENT_GUARD_ATTRIBUTES = [
   {
     "name": "lease_schedule_history_guard",
     "config": []
+  },
+  {
+    "name": "multibook_evidence_immutable",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
   },
   {
     "name": "net_investment_configuration_guard",
@@ -2560,10 +2672,43 @@ export const TENANT_RETIREMENT_GUARD_ATTRIBUTES = [
     "config": [
       "search_path=public,pg_catalog"
     ]
+  },
+  {
+    "name": "period_end_journal_policy_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "period_end_journal_set_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "period_end_journal_entry_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
   }
 ] as const;
 
 export const TENANT_RETIREMENT_TRIGGER_CONTRACTS = [
+  {
+    "table": "accounting_book_account_maps",
+    "trigger": "accounting_book_account_map_guard",
+    "function": "accounting_book_account_map_guard"
+  },
+  {
+    "table": "accounting_book_currencies",
+    "trigger": "accounting_book_currency_guard",
+    "function": "accounting_book_currency_guard"
+  },
+  {
+    "table": "accounting_book_replication_runs",
+    "trigger": "accounting_book_replication_runs_immutable",
+    "function": "accounting_book_replication_run_immutable"
+  },
   {
     "table": "ap_capture_corrections",
     "trigger": "ap_capture_corrections_append_only",
@@ -2583,6 +2728,11 @@ export const TENANT_RETIREMENT_TRIGGER_CONTRACTS = [
     "table": "ap_capture_runs",
     "trigger": "ap_capture_runs_immutable",
     "function": "openbooks_guard_finished_ap_capture_run"
+  },
+  {
+    "table": "book_entry_replications",
+    "trigger": "book_entry_replications_immutable",
+    "function": "multibook_evidence_immutable"
   },
   {
     "table": "file_blobs",
@@ -4093,6 +4243,36 @@ export const TENANT_RETIREMENT_TRIGGER_CONTRACTS = [
     "table": "payroll_prior_earnings",
     "trigger": "payroll_prior_earnings_guard",
     "function": "payroll_prior_earnings_guard"
+  },
+  {
+    "table": "period_end_journal_policies",
+    "trigger": "period_end_journal_policy_guard",
+    "function": "period_end_journal_policy_guard"
+  },
+  {
+    "table": "period_end_journal_sets",
+    "trigger": "period_end_journal_set_guard",
+    "function": "period_end_journal_set_guard"
+  },
+  {
+    "table": "period_end_journal_entries",
+    "trigger": "period_end_journal_entry_guard",
+    "function": "period_end_journal_entry_guard"
+  },
+  {
+    "table": "expense_amortization_schedules",
+    "trigger": "expense_amortization_schedule_guard",
+    "function": "expense_amortization_schedule_guard"
+  },
+  {
+    "table": "expense_amortization_schedule_lines",
+    "trigger": "expense_amortization_line_guard",
+    "function": "expense_amortization_line_guard"
+  },
+  {
+    "table": "expense_amortization_schedule_events",
+    "trigger": "expense_amortization_event_guard",
+    "function": "expense_amortization_event_guard"
   }
 ] as const;
 

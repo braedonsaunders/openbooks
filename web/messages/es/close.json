@@ -220,6 +220,22 @@
     "commerce-exceptions-open": {
       "title": "Hay excepciones del canal en espera",
       "message": "{count, plural, one {Queda # pedido o evento en espera sin solución.} other {Quedan # pedidos o eventos en espera sin solución.}}"
+    },
+    "intercompany-unreconciled": {
+      "title": "Los saldos intercompañía no coinciden",
+      "message": "{count, plural, one {# par intercompañía tiene saldos que no coinciden entre sus entidades. Revise la conciliación intercompañía antes de cerrar.} other {# pares intercompañía tienen saldos que no coinciden entre sus entidades. Revise la conciliación intercompañía antes de cerrar.}}"
+    },
+    "period-end-journals-pending": {
+      "title": "Los asientos de cierre no están al día",
+      "message": "{count, plural, one {# entidad legal o condición de la política necesita generar o corregir sus asientos de cierre.} other {# entidades legales o condiciones de la política necesitan generar o corregir sus asientos de cierre.}}"
+    },
+    "book-replication-incomplete": {
+      "title": "A los libros completos les faltan transacciones",
+      "message": "{count, plural, one {# transacción no se ha replicado en un libro completo. Registre una puesta al día en Replicación de libros.} other {# transacciones no se han replicado en un libro completo. Registre una puesta al día en Replicación de libros.}}"
+    },
+    "prepaid-amortization-unposted": {
+      "title": "La amortización de gastos anticipados no está contabilizada",
+      "message": "{count, plural, one {# período de amortización vencido no está contabilizado.} other {# períodos de amortización vencidos no están contabilizados.}}"
     }
   },
   "severity": {
@@ -432,6 +448,22 @@
     "commerce-complete": {
       "title": "Probar la integridad del comercio",
       "description": "Cada venta de la tienda está en el mayor: los pedidos coinciden con la tienda, los pagos están contabilizados, la compensación queda en cero y los pasivos cuadran."
+    },
+    "period-end-journals": {
+      "title": "Registrar los asientos de cierre del ejercicio",
+      "description": "Cerrar las cuentas de ingresos y gastos del ejercicio contra resultados acumulados con asientos de cierre explícitos, y abrir el ejercicio siguiente cuando la política lo exige."
+    },
+    "book-replication-complete": {
+      "title": "Confirmar que los libros completos están completos",
+      "description": "Cada transacción hasta el cierre del período está replicada en cada libro con replicación completa."
+    },
+    "prepaid-amortized": {
+      "title": "Amortizar gastos anticipados",
+      "description": "Contabilizar cada período de amortización de los calendarios activos que termina antes del cierre del período."
+    },
+    "asset-capitalization-reviewed": {
+      "title": "Revisar la capitalización de activos",
+      "description": "Resolver las propuestas de activos pendientes y conciliar las obras en curso con sus cuentas del libro mayor."
     }
   },
   "setup": {
@@ -962,5 +994,78 @@
     "posted": "Devengo de ingresos no facturados contabilizado.",
     "postFailed": "No se pudo contabilizar el devengo.",
     "postPermission": "Contabilizar el devengo requiere permiso para contabilizar asientos."
+  },
+  "periodEndJournals": {
+    "loading": "Calculando los asientos de cierre…",
+    "loadFailed": "No se pudieron calcular los asientos de cierre.",
+    "retry": "Reintentar",
+    "scope": "Ejercicio {year} ({from} a {to}) · {book}",
+    "closingPeriod": "los asientos de cierre se registran en {period}",
+    "openingPeriod": "los asientos de apertura se registran en {period}",
+    "policyRetainedEarnings": "Los ingresos y gastos se cierran contra {retained}",
+    "policyIncomeSummary": "Los ingresos y gastos se cierran a través de {summary} contra {retained}",
+    "policyBalanceSheet": "con asientos de cierre de balance y de apertura",
+    "policyEffective": "política vigente desde {date}",
+    "blocked": "Resolver antes de generar",
+    "openPolicy": "Abrir la política de asientos de cierre",
+    "empty": "Ninguna entidad legal tiene movimientos que cerrar en este ejercicio.",
+    "status": {
+      "not_generated": "Sin generar",
+      "current": "Al día",
+      "stale": "Requiere regenerar",
+      "nothing_to_close": "Nada que cerrar",
+      "blocked": "No preparada"
+    },
+    "fiscalYearEarnings": "Resultado del ejercicio",
+    "priorUnclosedEarnings": "Resultados anteriores aún sin cerrar",
+    "review": "Revisar asientos",
+    "journals": "{count, plural, one {# asiento} other {# asientos}}",
+    "kinds": {
+      "income_statement": "Cierre de la cuenta de resultados",
+      "income_summary": "Cierre del resumen de resultados",
+      "balance_sheet": "Cierre del balance",
+      "opening": "Saldos de apertura"
+    },
+    "columns": {
+      "account": "Cuenta",
+      "dimensions": "Dimensiones",
+      "debit": "Débito",
+      "credit": "Crédito",
+      "entity": "Entidad legal",
+      "generation": "Generación",
+      "status": "Estado",
+      "generated": "Generado",
+      "reversed": "Revertido",
+      "journals": "Asientos"
+    },
+    "dimensions": {
+      "department": "Departamento",
+      "class": "Clase",
+      "location": "Ubicación",
+      "project": "Proyecto",
+      "segment": "Segmento"
+    },
+    "generate": "Generar asientos de cierre",
+    "reverse": "Revertir asientos de cierre",
+    "generateReasonTitle": "Generar los asientos de cierre",
+    "reverseReasonTitle": "Revertir los asientos de cierre",
+    "reasonHint": "Explique el motivo. Se conserva con los asientos en el registro de auditoría (10–500 caracteres).",
+    "reasonLabel": "Motivo",
+    "generated": "{count, plural, one {Asientos de cierre registrados para # entidad legal.} other {Asientos de cierre registrados para # entidades legales.}}",
+    "unchanged": "Los asientos de cierre ya están al día; no se registró nada.",
+    "partiallyRefused": "{count, plural, one {# entidad legal no está preparada.} other {# entidades legales no están preparadas.}}",
+    "reversed": "{count, plural, one {Asientos de cierre revertidos para # entidad legal.} other {Asientos de cierre revertidos para # entidades legales.}}",
+    "generateFailed": "No se pudieron generar los asientos de cierre.",
+    "reverseFailed": "No se pudieron revertir los asientos de cierre.",
+    "runPermission": "Generar asientos de cierre requiere el permiso para ejecutar el cierre.",
+    "history": "Historial",
+    "generations": "{count, plural, one {# generación} other {# generaciones}}",
+    "historyEmpty": "Aún no se han generado asientos de cierre para este ejercicio.",
+    "setStatus": {
+      "posted": "Registrado",
+      "reversed": "Revertido"
+    },
+    "by": "{name} el {at}",
+    "system": "Sistema"
   }
 }

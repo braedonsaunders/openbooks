@@ -25,6 +25,7 @@ import { DownstreamConsumptionError, InventoryError } from "../inventory/contrac
 import { reverseInventoryJournal, reverseInventoryMovement } from "../inventory/reversal.ts";
 import { listReceiptVoidBlockers } from "../inventory/receipt-void-dependents.ts";
 import { reverseDropShipConfirmationPair } from "../inventory/drop-ship-reversal.ts";
+import { crossSubsidiaryFulfillmentHandler, crossSubsidiaryShipment } from "../inventory/cross-subsidiary.ts";
 import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 import { emitDocumentVoided } from "../webhooks/emit.ts";
 import { lockApplicationEvidence } from "../records/application-lock.ts";
@@ -32,6 +33,9 @@ import { reverseStoredValueForVoidedDocument } from "../stored-value/void-revers
 import { isUuid } from "../platform/uuid.ts";
 import { PROVIDER_COMMIT_KINDS, requestProviderVoidTx } from "../tax/provider-commit.ts";
 import { voidPaymentWithholdings, releaseWithholdingRemittance } from "../contractor-withholding/service.ts";
+import { AmortizationError } from "../amortization/errors.ts";
+import { cancelAmortizationForVoidedSource } from "../amortization/source-void.ts";
+import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
 
 /**
  * Machine-readable void refusal reasons. The human message
@@ -461,6 +465,7 @@ export async function requestDocumentVoid(
 ): Promise<DocumentVoidResult> {
   const reason = validateReason(input.reason);
   return withOrgTransaction(input.orgId, async () => {
+    await lockLedgerSetupFence(db, input.orgId, "shared");
     const current = await loadDocument(input.documentId, input.orgId);
     // Keep the scope decision on the locked source row and hold that lock
     // through reservation, gate creation, and any immediate reversal.
@@ -644,6 +649,7 @@ export async function requestReceiptVoidWithDependents(
   input: DocumentVoidInput,
 ): Promise<DocumentVoidResult> {
   return withOrgTransaction(input.orgId, async () => {
+    await lockLedgerSetupFence(db, input.orgId, "shared");
     const relief = await listReceiptVoidBlockers(db, input.orgId, input.documentId);
     if (relief.blockers.length === 0) return requestDocumentVoid(input);
     if (!relief.allowVoidWithDependents) {
@@ -1088,6 +1094,19 @@ async function reverseOrderShipment(
         }
         throw error;
       }
+      // A line shipped from another entity's stock also reverses its
+      // intercompany cross-charge, so neither entity keeps half of the sale.
+      if (input.voidKind === "sales_fulfillment" && (await crossSubsidiaryShipment(tx, input.orgId, movement.id))) {
+        const handler = crossSubsidiaryFulfillmentHandler();
+        if (!handler) throw new DocumentVoidError("this shipment was fulfilled by another subsidiary and cannot be voided in this installation");
+        await handler.voided(tx, {
+          orgId: input.orgId,
+          actorId: input.actorId,
+          issueMovementId: movement.id,
+          reversalDate: input.reversalDate,
+          reason: input.reason,
+        });
+      }
     }
     // Approved lines are storage-immutable (migration 0034): restoring the
     // fulfilled counter is operational reconciliation state, not a
@@ -1301,6 +1320,7 @@ export async function completeRequestedDocumentVoid(
   allowedSubsidiaryIds?: ReadonlySet<string> | null,
 ): Promise<string | null> {
   return withOrgTransaction(orgId, async () => {
+    await lockLedgerSetupFence(db, orgId, "shared");
     const result: {
       reversalEntryId: string | null;
       kind: string;
@@ -1668,6 +1688,26 @@ export async function completeRequestedDocumentVoid(
           );
         }
 
+        // Capitalized cost depends on this posting: an accepted asset proposal
+        // or a construction-in-progress link must be reversed first. Pending
+        // proposals need nothing here; the reversal voids them.
+        const capitalized = (await tx.execute<{ accepted: boolean; linked: boolean }>(sql`
+          select exists (select 1 from asset_proposals p
+                          where p.org_id = ${orgId} and p.source_entry_id = ${entryId} and p.status = 'accepted') as accepted,
+                 exists (select 1 from asset_cip_costs c
+                          where c.org_id = ${orgId} and c.source_entry_id = ${entryId} and c.status = 'linked') as linked
+        `)).rows[0];
+        if (capitalized?.accepted) {
+          throw new DocumentVoidError(
+            "this transaction was capitalized through an accepted fixed-asset proposal — reverse the acceptance from Fixed Assets → Proposals (Reverse acceptance), then void the transaction",
+          );
+        }
+        if (capitalized?.linked) {
+          throw new DocumentVoidError(
+            "this transaction carries a cost linked to construction in progress — unlink the cost from Fixed Assets → Construction in progress, then void the transaction",
+          );
+        }
+
         const entryResult = (await tx.execute<Record<string, unknown>>(sql`
           select * from journal_entries
            where id = ${entryId} and org_id = ${orgId}
@@ -1835,6 +1875,21 @@ export async function completeRequestedDocumentVoid(
         };
 
         reversalEntryId = await reverseEntry(entryId, "VOID");
+        // Amortization schedules sourced by this document cancel with it:
+        // their posted amortization returns to the deferral account on the
+        // reversal date, so expense and the deferral both net to zero.
+        try {
+          await cancelAmortizationForVoidedSource(tx, {
+            orgId,
+            documentId,
+            reversalDate,
+            actorId: String(doc.void_requested_by),
+            reason: String(doc.void_reason),
+          });
+        } catch (error) {
+          if (error instanceof AmortizationError) throw new DocumentVoidError(`${error.message} ${error.remedy}`, 422, "invalid");
+          throw error;
+        }
         for (const fx of outgoingFx.rows) {
           await reverseEntry(fx.id, "VOID");
         }

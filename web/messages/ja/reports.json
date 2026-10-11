@@ -50,7 +50,11 @@
       "statementsTitle": "得意先別明細",
       "statementsDescription": "得意先を選んで明細を開く。期間内の未決済項目、入金、滞留残高を表示します。",
       "statementBatchesTitle": "明細一括送信",
-      "statementBatchesDescription": "残高のあるすべての得意先に明細を送信し、各送信の完了まで追跡します。"
+      "statementBatchesDescription": "残高のあるすべての得意先に明細を送信し、各送信の完了まで追跡します。",
+      "intercompanyReconciliationTitle": "法人間残高照合",
+      "intercompanyReconciliationDescription": "各法人の帳簿における法人間残高を通貨別に表示し、照合が必要な差額を確認します。",
+      "bookDifferencesTitle": "帳簿間差異",
+      "bookDifferencesDescription": "主帳簿の各勘定科目を副帳簿と並べ、差異を表示"
     },
     "groups": {
       "financial": "財務諸表",
@@ -67,7 +71,8 @@
       "allocations": "配賦",
       "aiGovernance": "AI ガバナンス",
       "other": "その他のレポート",
-      "resourcing": "リソース計画"
+      "resourcing": "リソース計画",
+      "fixedAssets": "固定資産"
     },
     "customStudio": {
       "title": "カスタムレポートビルダー",
@@ -1145,6 +1150,42 @@
       "managed_property_portfolio": {
         "label": "管理物件",
         "description": "ユーザーが閲覧を許可された法人に限定した、現在の物件ポートフォリオのライフサイクル。"
+      },
+      "prepaid_amortization_plan": {
+        "label": "前払費用の配分計画",
+        "description": "配分スケジュールの予定期間と配分済み期間を月・勘定・スケジュール別に一覧します。"
+      },
+      "prepaid_amortization_reconciliation": {
+        "label": "前払費用の照合",
+        "description": "総勘定元帳の繰延勘定の動きと、それを説明するスケジュールを並べます。日付までの合計が一致すれば差額はゼロです。"
+      },
+      "fixed_asset_register": {
+        "label": "帳簿別固定資産台帳",
+        "description": "すべての有効な帳簿におけるすべての固定資産（建設仮勘定と構成資産を含む）と、そのステータス、親資産、取得原価、減価償却累計額、および現在の帳簿価額です。"
+      },
+      "fixed_asset_rollforward": {
+        "label": "固定資産増減表",
+        "description": "資産・帳簿ごとの月末の取得原価と減価償却累計額：期首、増加、振替、除却、建設仮勘定からの資産計上、減価償却、再測定、期末。帳簿とカテゴリで集計すると増減表になります。"
+      },
+      "fixed_asset_depreciation_forecast": {
+        "label": "減価償却予測",
+        "description": "各資産の現在のスケジュールに基づく、資産・帳簿・期間ごとの未転記の予定減価償却費です。"
+      },
+      "asset_proposals": {
+        "label": "資産計上候補",
+        "description": "資産計上の候補となった転記済み購買明細と、そのソース、仕入先、勘定、ルール、金額、判断です。"
+      },
+      "asset_maintenance_due": {
+        "label": "資産保守の期日",
+        "description": "有効な保守スケジュールと、その次回期日とメーター値、最新の測定値、およびレポート日時点で予定・期日到来・期日超過のいずれであるかです。"
+      },
+      "asset_insured_values": {
+        "label": "保険価額と正味帳簿価額の比較",
+        "description": "レポート日に有効な保険契約の対象となるすべての資産について、保険価額と再調達価額を主帳簿の帳簿価額と比較し、その差額を示します。"
+      },
+      "asset_cip_costs": {
+        "label": "建設仮勘定の原価",
+        "description": "建設仮勘定レコードに紐付けられたすべての総勘定元帳明細（請求書、仕訳、プロジェクト原価）と、そのレコード、勘定、プロジェクト、金額です。補助元帳と建設仮勘定の照合に使用します。"
       }
     },
     "columns": {
@@ -2755,6 +2796,147 @@
         "code": "物件コード",
         "name": "物件",
         "status": "状態"
+      },
+      "prepaid_amortization_plan": {
+        "month": "月",
+        "schedule_number": "スケジュール",
+        "schedule_status": "スケジュールの状態",
+        "line_status": "期間の状態",
+        "deferral_account": "繰延勘定",
+        "destination_account": "費用勘定",
+        "subsidiary": "子会社",
+        "currency": "通貨",
+        "amortized": "配分済み",
+        "scheduled": "予定",
+        "schedule_id": "スケジュール（ID）",
+        "journal_entry_id": "仕訳（ID）",
+        "book_id": "帳簿ID"
+      },
+      "prepaid_amortization_reconciliation": {
+        "moved_on": "日付",
+        "deferral_account": "繰延勘定",
+        "subsidiary": "子会社",
+        "book": "帳簿",
+        "currency": "通貨",
+        "source": "出所",
+        "ledger": "総勘定元帳",
+        "subledger": "スケジュール",
+        "difference": "差額",
+        "account_id": "勘定科目ID",
+        "book_id": "帳簿ID"
+      },
+      "fixed_asset_register": {
+        "book_id": "帳簿キー",
+        "book": "帳簿",
+        "asset_number": "資産番号",
+        "name": "名前",
+        "status": "ステータス",
+        "category": "カテゴリ",
+        "parent_asset": "親資産",
+        "subsidiary": "法人",
+        "base_currency": "基準通貨",
+        "acquired_on": "取得日",
+        "in_service_on": "使用開始日",
+        "cost": "取得原価",
+        "accumulated_depreciation": "減価償却累計額",
+        "carrying_value": "帳簿価額",
+        "id": "資産キー"
+      },
+      "fixed_asset_rollforward": {
+        "book_id": "帳簿キー",
+        "book": "帳簿",
+        "month": "月",
+        "asset_number": "資産番号",
+        "name": "名前",
+        "status": "ステータス",
+        "category": "カテゴリ",
+        "subsidiary": "法人",
+        "base_currency": "基準通貨",
+        "cost_opening": "期首取得原価",
+        "additions": "増加",
+        "transfers": "振替および一部除却",
+        "disposals": "除却",
+        "capitalized": "建設仮勘定からの資産計上",
+        "cost_closing": "期末取得原価",
+        "accumulated_opening": "期首減価償却累計額",
+        "depreciation": "減価償却",
+        "remeasurement": "減損および再評価",
+        "accumulated_other": "増加・振替・除却に係る減価償却累計額",
+        "accumulated_closing": "期末減価償却累計額",
+        "asset_id": "資産キー"
+      },
+      "fixed_asset_depreciation_forecast": {
+        "book_id": "帳簿キー",
+        "book": "帳簿",
+        "period": "期間",
+        "period_ends_on": "期間終了日",
+        "asset_number": "資産番号",
+        "name": "名前",
+        "category": "カテゴリ",
+        "subsidiary": "法人",
+        "base_currency": "基準通貨",
+        "posted": "転記済み",
+        "planned": "予定減価償却費",
+        "asset_id": "資産キー"
+      },
+      "asset_proposals": {
+        "posting_date": "転記日",
+        "source": "ソース",
+        "description": "説明",
+        "vendor": "仕入先",
+        "account": "勘定",
+        "rule": "ルール",
+        "status": "ステータス",
+        "subsidiary": "法人",
+        "base_currency": "基準通貨",
+        "amount": "金額",
+        "resolution_reason": "判断メモ",
+        "id": "候補キー"
+      },
+      "asset_maintenance_due": {
+        "asset_number": "資産番号",
+        "asset": "資産",
+        "task": "作業",
+        "vendor": "仕入先",
+        "next_due_on": "次回期日",
+        "next_due_usage": "次回期日のメーター値",
+        "current_usage": "最新のメーター測定値",
+        "usage_unit": "メーター単位",
+        "standing": "状況",
+        "is_active": "有効",
+        "subsidiary": "法人",
+        "base_currency": "基準通貨",
+        "estimated_cost": "見積原価",
+        "id": "スケジュールキー"
+      },
+      "asset_insured_values": {
+        "policy_number": "保険契約",
+        "insurer": "保険会社",
+        "coverage_ends_on": "補償終了日",
+        "asset_number": "資産番号",
+        "asset": "資産",
+        "subsidiary": "法人",
+        "base_currency": "基準通貨",
+        "insured_value": "保険価額",
+        "replacement_value": "再調達価額",
+        "net_book_value": "正味帳簿価額",
+        "gap": "保険価額と正味帳簿価額の差額",
+        "asset_id": "資産キー"
+      },
+      "asset_cip_costs": {
+        "cip_number": "建設仮勘定レコード",
+        "cip_name": "建設仮勘定名",
+        "cip_status": "レコードのステータス",
+        "account": "勘定",
+        "entry_number": "仕訳",
+        "posting_date": "転記日",
+        "project": "プロジェクト",
+        "memo": "メモ",
+        "link_status": "紐付け状況",
+        "subsidiary": "法人",
+        "base_currency": "基準通貨",
+        "amount": "金額",
+        "id": "原価キー"
       }
     },
     "enumValues": {
@@ -2881,7 +3063,15 @@
       "insufficient_funds": "残高不足",
       "needs_authentication": "認証が必要",
       "primary": "プライマリ方法",
-      "backup": "バックアップ方法"
+      "backup": "バックアップ方法",
+      "construction": "建設仮勘定",
+      "capitalized": "資産計上済み",
+      "accepted": "承認済み",
+      "scheduled": "予定",
+      "due": "期日到来",
+      "overdue": "期日超過",
+      "linked": "紐付け済み",
+      "unlinked": "未紐付け"
     }
   },
   "operators": {
@@ -3135,6 +3325,14 @@
     "analytics-workforce-capacity": {
       "name": "要員キャパシティ",
       "description": "現在の要員配置計画：計画済み、予算確保済み、充足済み、未充足のフルタイム換算人員。"
+    },
+    "prepaid-expense-waterfall": {
+      "name": "前払費用ウォーターフォール",
+      "description": "月・繰延勘定・通貨別の配分済みおよび予定の前払・繰延費用。"
+    },
+    "prepaid-expense-reconciliation": {
+      "name": "前払費用の照合",
+      "description": "総勘定元帳の繰延勘定残高とスケジュールの未配分残高を、勘定・子会社・帳簿・通貨別に比較します。"
     }
   },
   "generalLedger": {
@@ -3178,7 +3376,12 @@
       "gift": "寄付",
       "grant": "助成金",
       "release": "使途制限の解除",
-      "manufacturing": "製造"
+      "manufacturing": "製造",
+      "opening": "期首",
+      "book_opening": "帳簿の期首残高",
+      "expense_amortization": "費用の期間配分",
+      "account_merge": "勘定の統合",
+      "asset_capitalization": "資産計上"
     },
     "columns": {
       "detail": "取引先／摘要"
@@ -3337,5 +3540,29 @@
       "currentPrice": "現行価格",
       "invoicedToDate": "請求済額"
     }
+  },
+  "bookDifferences": {
+    "title": "帳簿間差異",
+    "asOf": "{primary} と {compare} の比較 · {date} 時点",
+    "compareBook": "比較対象",
+    "empty": "どちらの帳簿にも選択条件の残高はありません。",
+    "unavailableTitle": "比較する帳簿がありません",
+    "setupBooks": "会計帳簿",
+    "currencyNote": "主帳簿はこのビューを {primary}、比較帳簿は {compare} で表示するため、差異は計算されません。",
+    "retainedEarningsPrior": "利益剰余金（前年度以前）",
+    "columns": {
+      "accountNumber": "勘定科目",
+      "accountName": "名称",
+      "primary": "{book}残高（{currency}）",
+      "compare": "{book}残高（{currency}）",
+      "difference": "差異"
+    }
+  },
+  "accountingContext": {
+    "label": "会計コンテキスト",
+    "default": "子会社の既定",
+    "base": "基本勘定科目表",
+    "legend": "会計コンテキスト：{context}。{marker} は基本勘定科目表の番号と名称で表示された勘定を示します",
+    "blockedTitle": "この会計コンテキストでは勘定を表示できません"
   }
 }

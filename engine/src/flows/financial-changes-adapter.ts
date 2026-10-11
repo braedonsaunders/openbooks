@@ -9,6 +9,7 @@ import type { FlowSubjectProfile } from "@openbooks/forms-core";
 import { db, withOrg, withOrgTransaction, withTransactionSavepoint } from "../platform/db.ts";
 import { canonicalJson } from "../platform/canonical-json.ts";
 import {
+  ACCOUNT_MERGE_OPERATION,
   ADJUDICATED_HOLIDAY_HOURS_OPERATION,
   MANUFACTURING_SCRAP_RESTATEMENT_OPERATION,
   MANUFACTURING_STANDARD_ROLLUP_OPERATION,
@@ -39,6 +40,7 @@ async function assertAccountingSubjectFeatures(orgId: string, subjectId: string,
   if (domain==='revenue' && operation==='expected_breakage_estimate' && (!await lockAndCheckOrgFeature(db,orgId,'usageBilling') || !await lockAndCheckOrgFeature(db,orgId,'revenueRecognition')))
     throw new FinancialChangeFeatureError('Turn on Usage Billing and Revenue Recognition in Company Settings → Features before submitting or approving a breakage estimate')
   if (domain === 'manufacturing' && !await lockAndCheckOrgFeature(db,orgId,'manufacturing')) throw new FinancialChangeFeatureError('Turn on Manufacturing in Company Settings → Features before submitting or approving a manufacturing event.');
+  if (domain === 'ledger' && !await lockAndCheckOrgFeature(db,orgId,'accountMerges')) throw new FinancialChangeFeatureError('Turn on Account merges in Company Settings → Features before submitting or approving an account merge.');
   if (domain !== 'provision') return
   const project = (await db.execute<{project_id:string|null}>(sql`select project_id from provision_obligations where org_id=${orgId} and id=${subjectId}`)).rows[0]?.project_id
   if (project && !await lockAndCheckOrgFeature(db,orgId,'projects'))
@@ -74,7 +76,7 @@ export const financialChangeSubjectProfile: FlowSubjectProfile = {
       key: "domain",
       label: "Accounting domain",
       type: "enum",
-      options: ["lease", "revenue", "asset", "consolidation", "manufacturing", "provision", "sales", "payroll"].map((value) => ({
+      options: ["lease", "revenue", "asset", "consolidation", "manufacturing", "provision", "sales", "payroll", "ledger"].map((value) => ({
         value,
         label: value,
       })),
@@ -196,6 +198,11 @@ export const financialChangesFlowAdapter: FlowSubjectAdapter = defineTableSubjec
     if (row.submitted_by === ctx.userId && !row.self_approval_authorized)
       throw new Error("The retained approval policy does not permit deciding your own submission. Review the gate's self-approval setting in Flows.");
     if (outcome === 'approved') await assertAccountingSubjectFeatures(ctx.orgId,row.subject_id,row.domain,row.operation)
+    if (row.domain === "ledger" && outcome === "approved") {
+      if (row.operation !== ACCOUNT_MERGE_OPERATION) throw new Error("This ledger event is unsupported; reject it and submit a supported proposal.");
+      if (!await actorHasPermission(db, ctx.orgId, ctx.userId, "gl.manage"))
+        throw new Error("An account merge requires authority to manage the chart of accounts (gl.manage); ask a controller to approve it.");
+    }
     if (row.domain === "payroll" && outcome === "approved") {
       if (row.operation !== ADJUDICATED_HOLIDAY_HOURS_OPERATION ||
           !await actorHasPermission(db, ctx.orgId, ctx.userId, "payroll.run")) {

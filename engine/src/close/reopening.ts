@@ -1,4 +1,5 @@
 import { CloseError, CLOSE_MODULES, periodLockRequiresApprovedReopen, type CloseModule } from "../periods/period-policy.ts";
+import { assertPeriodEndReopenAllowed } from "./period-end-journals.ts";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { assertCloseScope, periodScopeAdvisoryLock } from "../periods/period-locks.ts";
@@ -85,6 +86,7 @@ async function insertPeriodReopenRequest(tx: SqlExecutor, args: ReopenRequestArg
         : `an approved reopen window for ${scope} is active; to widen or extend it, raise one request that includes all of its modules plus the ones you need — its approval replaces the window`,
     );
   }
+  await assertPeriodEndReopenAllowed(tx, args);
   const impact = (await tx.execute<Record<string, unknown>>(sql`
     select
       (select count(*) from journal_entries where org_id = ${args.orgId} and period_id = ${args.periodId} and book_id = ${args.bookId}) as entries,

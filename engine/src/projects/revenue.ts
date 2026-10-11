@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { add, cmp, formatMoney, mulRatio, normalizeMoney, toUnits } from "../money/money.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
+import { excludePeriodEndJournals } from "../records/period-end-origins.ts";
 import { buildAllRecognitionSchedulesInTransaction, legacyRebuildBlock, revenueRecognitionFeatureEnabled } from "../revenue/recognition.ts";
 import { recognitionAccounts } from "./recognition.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
@@ -306,6 +307,7 @@ export async function syncProjectRevenueContractsInTransaction(
                     join accounts a on a.id = l.account_id and a.org_id = l.org_id
                    where l.org_id = ${orgId} and l.project_id = ${p.id} and e.status in ('posted', 'reversed')
                      and e.book_id = ${primary.id}
+                     and ${excludePeriodEndJournals(sql`e.origin`)}
                      and l.subsidiary_id = ${owner.id} and e.posting_date <= ${asOfDate}::date
                      and (a.type in ('expense','cogs','expense_other','expense_deferred') ${laborWipScope})), 0) as actual`));
       // Estimated total cost (ASC 606 input method): once the project carries

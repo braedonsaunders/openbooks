@@ -3,6 +3,7 @@ import { add, cmp, mulDecimal, neg, normalizeMoney, sum } from "../money/money.t
 import { AP_OPEN_ITEM_KINDS, AR_OPEN_ITEM_KINDS } from "../records/open-item-kinds.ts";
 import { datedAppliedAmountSql } from "../records/balance-due.ts";
 import { apOpenAccountScope, asOfPostedEntryLateral } from "../records/open-item-scopes.ts";
+import { excludePeriodEndJournals, statementMonthActivity } from "../records/period-end-origins.ts";
 import { addCalendarDays, businessToday, calendarDaysBetween, parseIsoDate } from "../platform/business-date.ts";
 import {
   effectiveDetectorMateriality,
@@ -113,12 +114,13 @@ async function bankAccountBalances(
       select id from journal_entries
        where org_id = ${orgId} and status in ('posted', 'reversed')
          and book_id = (select b.id from accounting_books b where b.org_id = ${orgId} and b.is_primary and b.is_active and b.posts_gl order by b.created_at limit 1)
+         and ${excludePeriodEndJournals(sql`origin`)}
          and posting_date >= date_trunc('month', ${asOf}::date)::date
          and posting_date <= ${asOf}
     ),
     movement as (
       select g.account_id, (g.debit_total - g.credit_total) as amt, sub.base_currency as func
-        from gl_month_activity g
+        from ${statementMonthActivity(orgId)} g
         left join subsidiaries sub on sub.id = g.subsidiary_id and sub.org_id = ${orgId}
        where g.org_id = ${orgId}
          and g.book_id = (select b.id from accounting_books b where b.org_id = ${orgId} and b.is_primary and b.is_active and b.posts_gl order by b.created_at limit 1)

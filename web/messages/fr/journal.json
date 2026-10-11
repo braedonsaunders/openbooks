@@ -11,7 +11,8 @@
     "columns": {
       "entry": "Écriture",
       "origin": "Origine",
-      "debits": "Débits"
+      "debits": "Débits",
+      "book": "Livre"
     }
   },
   "origins": {
@@ -25,7 +26,12 @@
     "fxSettlement": "Règlement de change",
     "translation": "Conversion",
     "migration": "Migration",
-    "manufacturing": "Fabrication"
+    "manufacturing": "Fabrication",
+    "opening": "Ouverture",
+    "bookOpening": "Ouverture de livre",
+    "expenseAmortization": "Étalement des charges",
+    "accountMerge": "Fusion de comptes",
+    "assetCapitalization": "Immobilisation d’actifs"
   },
   "detail": {
     "notFound": "Écriture introuvable",
@@ -44,7 +50,8 @@
       "ruleGroup": "Règle : {name}",
       "scriptGroup": "Script : {name}",
       "otherGroup": "{kind} : {name}"
-    }
+    },
+    "book": "Livre {book}"
   },
   "newButton": {
     "label": "Nouvelle écriture",
@@ -87,5 +94,12 @@
     "budgetaryControlRemedy": "Révisez le budget par son circuit d''approbation : copiez le budget approuvé en brouillon, augmentez le montant de ce compte pour le fonds dans la feuille de calcul, approuvez la copie et archivez le budget remplacé. Ou liez ce montant à l''engagement ouvert qui l''a réservé.",
     "voidAwaitingApproval": "L'annulation de ce journal attend une approbation. Le journal reste comptabilisé jusqu'à la décision d'approbation.",
     "createUnconfirmed": "Le serveur n'a pas confirmé la nouvelle écriture. Enregistrez à nouveau : la nouvelle tentative réutilise la clé de ce brouillon et ne peut pas créer une seconde écriture."
+  },
+  "book": {
+    "label": "Livre comptable",
+    "primary": "principal",
+    "allBooks": "Tous les livres",
+    "allBooksHint": "Comptabilisé dans le livre principal et répliqué dans chaque livre complet.",
+    "specificHint": "Propre au livre : comptabilisé uniquement dans ce livre, dans la devise qu’il tient pour la filiale de l’écriture."
   }
 }

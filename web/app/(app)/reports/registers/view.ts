@@ -149,7 +149,7 @@ export async function loadRegisters(sp: Record<string, string | undefined>): Pro
   let currencyBasisBlocked: CurrencyBasisNotice | null = null
   let reg: Awaited<ReturnType<typeof partyRegister>> | null = null
   try {
-    subView = await reportSubsidiaryView(q.subsidiaryId, period.to)
+    subView = await reportSubsidiaryView(q.subsidiaryId, period.to, selectedBook.id)
     reg = await partyRegister(side, {
       bookId: selectedBook.id,
       from: period.from,
@@ -241,6 +241,7 @@ export async function loadRegisters(sp: Record<string, string | undefined>): Pro
           to: openingDate,
           mode: 'balance',
           dims,
+          includePeriodEndJournals: true,
         },
         closing: m(pt.closing),
         closingDrill: {
@@ -252,6 +253,7 @@ export async function loadRegisters(sp: Record<string, string | undefined>): Pro
           to: period.to,
           mode: 'balance',
           dims,
+          includePeriodEndJournals: true,
         },
         lines: pt.lines.map((l, i) => ({
           key: `${l.entryId}-${i}`,

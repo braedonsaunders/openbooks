@@ -1283,7 +1283,9 @@
       "purchasing": "Einkauf",
       "parties": "Personen & Unternehmen",
       "banking": "Bankwesen",
-      "expenses": "Spesenabrechnungen"
+      "expenses": "Spesenabrechnungen",
+      "intercompany": "Konzernverrechnung",
+      "amortization": "Aufwandsabgrenzung"
     },
     "gl_read": "Journale und Salden anzeigen",
     "gl_manage": "Kontenplan verwalten",
@@ -1461,7 +1463,16 @@
     "purchase_orders_read": "Bestellungen und Wareneingänge anzeigen",
     "purchase_orders_create": "Bestellungen erstellen, ändern und stornieren",
     "goods_receipts_create": "Wareneingänge zu Bestellungen buchen",
-    "time_self": "Eigene Zeit erfassen und einreichen"
+    "time_self": "Eigene Zeit erfassen und einreichen",
+    "intercompany_read": "Konzerninterne Paare, Verrechnungsläufe, Überweisungen und Abstimmung anzeigen",
+    "intercompany_manage": "Konzerninterne Paare erstellen, verknüpfen und trennen; Verrechnungsläufe vorschlagen und abbrechen",
+    "intercompany_settle": "Verrechnungsläufe und konzerninterne Überweisungen buchen und stornieren",
+    "intercompany_approve": "Konzerninterne Verrechnungsläufe genehmigen oder ablehnen",
+    "gl_post_book_specific": "Buchspezifische Journale buchen",
+    "amortization_read": "Abgrenzungspläne und Berichte anzeigen",
+    "amortization_manage": "Auflösung ausführen und Pläne ändern",
+    "assets_capitalize": "Anlagenvorschläge übernehmen und Anlagen im Bau aktivieren",
+    "assets_maintain": "Wartungspläne und Versicherungspolicen für Anlagen pflegen"
   },
   "ai": {
     "metaTitle": "KI-Einstellungen",
@@ -3841,6 +3852,59 @@
         "title": "Stellenbeschreibungen",
         "singularTitle": "Stellenbeschreibung",
         "description": "Wiederverwendbare Ausschreibungsinhalte für neue Stellenanforderungen: Titel, Beschäftigungsart, Gehaltsspanne und Beschreibung."
+      },
+      "intercompany-representing-parties": {
+        "title": "Konzerninterne vertretende Geschäftspartner",
+        "description": "Der Kunde und der Lieferant, die jede Tochtergesellschaft vertreten, wenn Schwestergesellschaften mit ihr Handel treiben."
+      },
+      "intercompany-transfer-pricing": {
+        "title": "Konzerninterne Verrechnungspreise",
+        "description": "Datierte Preisgestaltung für Waren, die eine Gesellschaft für eine andere erfüllt: eine Preisstufe oder Kosten zuzüglich Aufschlag."
+      },
+      "period-end-journal-policies": {
+        "title": "Abschlussbuchungen zum Periodenende",
+        "singular": "Richtlinie für Abschlussbuchungen",
+        "description": "Wie der Jahresabschluss seine Buchungen erzeugt: das Konto für Gewinnrücklagen, ein optionales Ergebnissammelkonto, Schlussbilanz- und Eröffnungsbuchungen, die Buchungsperiode und die Dimensionen, die Abschlusszeilen behalten. Jede Version gilt für Geschäftsjahre, die an oder nach ihrem Gültigkeitsdatum enden."
+      },
+      "accounting-book-currencies": {
+        "title": "Buchwährungen",
+        "description": "Die Basiswährung und der Umrechnungskurstyp, die ein Nebenbuch je Tochtergesellschaft führt, nach Gültigkeitsdatum.",
+        "singularTitle": "Buchwährung"
+      },
+      "accounting-book-account-maps": {
+        "title": "Kontenzuordnungen je Buch",
+        "description": "Das Konto, auf dem ein Nebenbuch ein Konto des Kontenplans führt, nach Gültigkeitsdatum und optional je Tochtergesellschaft.",
+        "singularTitle": "Kontenzuordnung"
+      },
+      "accounting-book-replication": {
+        "title": "Buchübernahme",
+        "description": "Aktivieren, aktualisieren oder beenden Sie die Übernahme aller Buchungen in ein Nebenbuch, mit dem Verlauf jeder Änderung.",
+        "singularTitle": "Übernahmeänderung"
+      },
+      "expense-amortization-templates": {
+        "title": "Abgrenzungsvorlagen",
+        "description": "Wie vorausbezahlte und abgegrenzte Aufwendungen aufgelöst werden: Methode, Laufzeit, Abgrenzungskonto und Standardzielkonto. Je Code mit Gültigkeitsdatum."
+      },
+      "accounting-contexts": {
+        "title": "Rechnungslegungskontexte",
+        "description": "Benannte Kontexte, etwa ein landesrechtlicher Kontenplan, unter deren lokalisierten Kontonummern und -namen Berichte laufen können."
+      },
+      "accounting-context-defaults": {
+        "title": "Standards",
+        "description": "Tochtergesellschaften oder alle Tochtergesellschaften eines Landes, die unter diesem Kontext berichten, sofern ein Bericht keinen anderen nennt."
+      },
+      "account-localizations": {
+        "title": "Lokalisierte Konten",
+        "description": "Lokalisierte Nummer und Bezeichnung je Konto mit Gültigkeitsdatum, optional für eine Tochtergesellschaft. Eine lokalisierte Nummer gehört je Bereich und Zeitraum zu genau einem Konto."
+      },
+      "segment-value-dependencies": {
+        "title": "Abhängigkeiten",
+        "description": "Werte dieses Segments, die nur mit bestimmten Werten eines steuernden Segments zulässig sind. Jede Zeile erlaubt einen steuernden Wert; ein Wert ohne Zeilen bleibt uneingeschränkt."
+      },
+      "asset-capitalization-rules": {
+        "title": "Aktivierungsregeln",
+        "singularTitle": "Aktivierungsregel",
+        "description": "Welche gebuchten Einkaufszeilen zu Anlagenvorschlägen werden: ein Konto, Artikel oder eine Artikelkategorie mit einem Mindestbetrag, mit Gültigkeitsdatum."
       }
     },
     "fields": {
@@ -4468,7 +4532,46 @@
       "compensationMin": "Gehalt Minimum",
       "compensationMax": "Gehalt Maximum",
       "compensationCurrency": "Gehaltswährung",
-      "compensationBasis": "Gehaltsbasis"
+      "compensationBasis": "Gehaltsbasis",
+      "customerPartyId": "Vertretender Kunde",
+      "vendorPartyId": "Vertretender Lieferant",
+      "fromReceivableAccountId": "Konzerninterne Forderung der Absendergesellschaft",
+      "fromPayableAccountId": "Konzerninterne Verbindlichkeit der Absendergesellschaft",
+      "toReceivableAccountId": "Konzerninterne Forderung der Empfängergesellschaft",
+      "toPayableAccountId": "Konzerninterne Verbindlichkeit der Empfängergesellschaft",
+      "sellerSubsidiaryId": "Verkaufende Tochtergesellschaft",
+      "buyerSubsidiaryId": "Kaufende Tochtergesellschaft",
+      "markupPercent": "Aufschlag in %",
+      "revenueAccountId": "Konzerninternes Erlöskonto",
+      "costAccountId": "Konzerninternes Aufwandskonto",
+      "closingMethod": "Abschlussmethode",
+      "retainedEarningsAccountId": "Konto für Gewinnrücklagen",
+      "incomeSummaryAccountId": "Ergebnissammelkonto",
+      "balanceSheetJournals": "Schlussbilanz- und Eröffnungsbuchungen",
+      "postingPeriod": "Buchungsperiode",
+      "preserveDepartments": "Abteilungen beibehalten",
+      "preserveClasses": "Klassen beibehalten",
+      "preserveLocations": "Standorte beibehalten",
+      "preserveProjects": "Projekte beibehalten",
+      "preserveSegments": "Benutzerdefinierte Segmente beibehalten",
+      "amortizationMethod": "Auflösungsmethode",
+      "amortizationTermSource": "Laufzeit aus",
+      "amortizationPeriodCount": "Anzahl Perioden",
+      "amortizationPercentages": "Prozenttabelle",
+      "amortizationPeriodRow": "Periode {number}",
+      "amortizationAddPeriod": "Periode hinzufügen",
+      "amortizationPercent": "Anteil am Betrag in Prozent",
+      "amortizationDeferralAccount": "Abgrenzungskonto (aktive Rechnungsabgrenzung)",
+      "amortizationDestinationAccount": "Standard-Zielkonto",
+      "contextId": "Rechnungslegungskontext",
+      "localizedNumber": "Lokalisierte Nummer",
+      "localizedName": "Lokalisierte Bezeichnung",
+      "valueId": "Wert",
+      "controllingSegmentId": "Steuerndes Segment",
+      "allowedValueId": "Zulässig mit",
+      "matchKind": "Abgleich nach",
+      "minimumAmount": "Mindestbetrag für die Aktivierung",
+      "assetCategoryId": "Vorgeschlagene Anlagenkategorie"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Tage zwischen dem neuesten verwendbaren Kurs und dem Periodenende, ab denen Bewertung und Konsolidierung den Kurs ablehnen. Stichtagskurse zählen ab dem Datum des Kassakurses zum Periodenende, Durchschnittskurse ab der neuesten einbezogenen Notierung. Standard ohne Richtlinie: 31 Tage.",
@@ -4647,7 +4750,32 @@
       "hrmJobDescriptionTitle": "Der Stellentitel, den Bewerbende in der Ausschreibung sehen.",
       "hrmJobDescriptionKind": "Zum Beispiel Vollzeit, Teilzeit, saisonal oder befristet.",
       "hrmJobDescriptionPay": "Optional. Minimum, Maximum, Währung und Basis gemeinsam angeben oder alle vier leer lassen.",
-      "hrmJobDescriptionBody": "Der Ausschreibungstext. Neue Stellenanforderungen übernehmen eine Kopie; Änderungen hier wirken nicht auf bestehende Stellen."
+      "hrmJobDescriptionBody": "Der Ausschreibungstext. Neue Stellenanforderungen übernehmen eine Kopie; Änderungen hier wirken nicht auf bestehende Stellen.",
+      "representedSubsidiary": "Die Tochtergesellschaft, die diese Geschäftspartner in den Büchern anderer Gesellschaften vertreten.",
+      "representingCustomer": "Schwestergesellschaften stellen diesem Kunden Rechnungen, wenn sie an die Tochtergesellschaft verkaufen. Er darf mit der Tochtergesellschaft selbst noch keine Geschäfte tätigen.",
+      "representingVendor": "Schwestergesellschaften erhalten Rechnungen von diesem Lieferanten, wenn sie bei der Tochtergesellschaft einkaufen. Er darf mit der Tochtergesellschaft selbst noch keine Geschäfte tätigen.",
+      "transferPricingSeller": "Die Gesellschaft, die die Waren erfüllt und dafür berechnet.",
+      "transferPricingBuyer": "Leer lassen, um für jede kaufende Gesellschaft ohne eigene Regelung zu gelten.",
+      "transferPricingMarkup": "Wird auf die Kosten der erfüllenden Gesellschaft aufgeschlagen. 10 bedeutet Kosten plus 10 %.",
+      "transferPricingRevenue": "Der konzerninterne Erlös der erfüllenden Gesellschaft. Muss bei der Konsolidierung als „Eliminieren“ markiert sein.",
+      "transferPricingCost": "Der Aufwand der verkaufenden Gesellschaft zum Verrechnungspreis. Muss bei der Konsolidierung als „Eliminieren“ markiert sein.",
+      "intercompanyControlAccount": "Konzerninterne Ausgangs- und Eingangsrechnungen an oder von den vertretenden Geschäftspartnern buchen ihre offenen Posten auf diese Konten. Jedes muss bei der Konsolidierung als „Eliminieren“ markiert sein.",
+      "periodEndEffectiveFrom": "Geschäftsjahre, die an oder nach diesem Datum enden, werden nach dieser Version abgeschlossen. Sie kann nicht in ein bereits durch Abschlussbuchungen geschlossenes Jahr zurückwirken.",
+      "periodEndClosingMethod": "Direkt: Erträge und Aufwendungen werden in die Gewinnrücklagen abgeschlossen. Über ein Ergebnissammelkonto: Sie werden auf dieses Konto abgeschlossen, das anschließend in die Gewinnrücklagen abgeschlossen wird.",
+      "periodEndPostingPeriod": "Die letzte reguläre Periode des Geschäftsjahres oder die Abschlussperiode des Jahres, sofern der Geschäftskalender eine hat.",
+      "periodEndBalanceSheetJournals": "Zusätzlich jedes Bilanzkonto zum Jahresende auf null stellen und dieselben Salden am ersten Tag des nächsten Geschäftsjahres wieder eröffnen.",
+      "periodEndPreserveSegments": "Ausgleichssegmente werden immer beibehalten, damit jeder Segmentwert für sich ausgeglichen bleibt.",
+      "amortizationTemplateCode": "Versionen einer Vorlage teilen ihren Code; maßgeblich ist die am Buchungsdatum gültige Version.",
+      "amortizationEffectiveFrom": "Ab diesem Datum gebuchte Vorgänge verwenden diese Version. Eine verwendete Version behält ihre Regeln; für Änderungen legen Sie eine spätere Version an.",
+      "amortizationMethod": "Linear verteilt gleichmäßig je Periode; anteilig gewichtet angebrochene erste und letzte Monate nach Tagen; taggenau gewichtet jeden Monat nach seinen Leistungstagen; variabel folgt einer Prozenttabelle.",
+      "amortizationTermSource": "Vorlagenperioden lösen über die unten angegebene Periodenzahl ab Leistungsbeginn der Position auf; Leistungsdaten nutzen Beginn und Ende der Position.",
+      "amortizationPercentages": "Ein Prozentsatz je Periode in Reihenfolge, zusammen genau 100.",
+      "amortizationPeriodOffset": "Perioden zwischen Beginn und erster Auflösung; 0 beginnt in der ersten Periode.",
+      "amortizationDeferralAccount": "Das Umlauf- oder sonstige Vermögenskonto, auf dem der Aufwand bis zur Auflösung steht.",
+      "amortizationDestinationAccount": "Leer lässt jede Position auf ihr eigenes Aufwandskonto auflösen.",
+      "contextDefaultScope": "Wählen Sie eine Tochtergesellschaft oder lassen Sie das Feld leer und wählen Sie ein Land für alle dortigen Tochtergesellschaften.",
+      "localizationSubsidiary": "Leer lassen, um für alle Tochtergesellschaften zu gelten; eine tochterspezifische Lokalisierung hat in deren Berichten Vorrang.",
+      "allowedValue": "Ein zulässiger Wert je Zeile. Fügen Sie für jeden Wert des steuernden Segments, mit dem dieser Wert verwendet werden darf, eine Zeile hinzu."
     },
     "options": {
       "withholdingCondominiumPayer": "Wohnungseigentümergemeinschaft als Zahler",
@@ -5457,6 +5585,33 @@
       "schedulePdfColorTreatment": {
         "subtle": "Dezente Akzente",
         "strong": "Kräftige Flächen"
+      },
+      "transferPricingMethod": {
+        "price_level": "Preisstufe",
+        "cost_plus": "Kosten plus Aufschlag"
+      },
+      "periodEndClosingMethod": {
+        "retained_earnings": "Direkt in die Gewinnrücklagen",
+        "income_summary": "Über ein Ergebnissammelkonto"
+      },
+      "periodEndPostingPeriod": {
+        "last_period": "Letzte Periode des Jahres",
+        "adjustment_period": "Abschlussperiode"
+      },
+      "amortizationMethod": {
+        "straight_line": "Linear je Periode",
+        "prorated_first_last": "Erste und letzte Periode anteilig",
+        "exact_days": "Taggenau",
+        "variable": "Variable Prozentsätze"
+      },
+      "amortizationTermSource": {
+        "template": "Vorlagenperioden",
+        "service_dates": "Leistungsdaten der Position"
+      },
+      "capitalizationMatch": {
+        "account": "Konto",
+        "item": "Artikel",
+        "itemCategory": "Artikelkategorie"
       }
     },
     "bankFeeds": {
@@ -5871,7 +6026,9 @@
         "submittedTimeEntries": "{count, plural, one {# eingereichte Zeiterfassung wartet auf Prüfung} other {# eingereichte Zeiterfassungen warten auf Prüfung}}",
         "subsidiaryTxns": "{count, plural, one {# Tochtergesellschaft mit} other {# Tochtergesellschaften mit}} gebuchten Buchungen",
         "trackedVendors": "{count, plural, one {# erfasster Nachunternehmer} other {# erfasste Nachunternehmer}}",
-        "unfiledInformationReturns": "{count, plural, one {# finalisierte Informationsmeldung, die nicht eingereicht wurde} other {# finalisierte Informationsmeldungen, die nicht eingereicht wurden}}"
+        "unfiledInformationReturns": "{count, plural, one {# finalisierte Informationsmeldung, die nicht eingereicht wurde} other {# finalisierte Informationsmeldungen, die nicht eingereicht wurden}}",
+        "fullReplicationBooks": "Bücher mit vollständiger Übernahme aller Buchungen",
+        "bookSpecificJournals": "Buchspezifische Journale"
       },
       "title": "Funktionen",
       "groups": {
@@ -6445,7 +6602,9 @@
       "scheduleBoardBooking": "Einplanung",
       "scheduleBoardBookingHelp": "Ganztägige Einplanungen verwenden diese Arbeitszeiten in der Zeitzone der Plantafel.",
       "scheduleBoardAutomation": "Automatisierung",
-      "scheduleBoardAutomationHelp": "Was geschieht, nachdem eine Einplanung auf dieser Plantafel veröffentlicht wurde."
+      "scheduleBoardAutomationHelp": "Was geschieht, nachdem eine Einplanung auf dieser Plantafel veröffentlicht wurde.",
+      "intercompanyControlAccounts": "Konten für konzerninterne Forderungen und Verbindlichkeiten",
+      "periodEndDimensions": "Auf Abschlusszeilen beibehaltene Dimensionen"
     },
     "segmentValues": {
       "builtinLink": "{name} öffnen",
@@ -7382,6 +7541,75 @@
       "4": "Donnerstag",
       "5": "Freitag",
       "6": "Samstag"
+    },
+    "multiBook": {
+      "currencyFormDescription": "Ein Nebenbuch kann eine Tochtergesellschaft in eigener Basiswährung führen. Buchungen in das Buch werden zum gewählten Kurstyp an ihrem Datum umgerechnet. Eine Version ändert sich nie unter bereits gebuchten Einträgen; ändern Sie den Kurstyp mit einer Version ab einem späteren Datum.",
+      "mapFormDescription": "Führen Sie ein Konto des Kontenplans in einem Buch als anderes Konto. Die Zuordnung behält die Abschlussklasse bei, beachtet Währungsbeschränkungen und gilt ab ihrem Startdatum für jede in das Buch übernommene oder erzeugte Buchung.",
+      "replicationFormDescription": "Jede Änderung wird mit ihrem Grund festgehalten. Die Aktivierung übernimmt im selben Schritt jede Buchung ab dem Startdatum und übernimmt frühere Historie als Eröffnungssalden oder vollständig.",
+      "fields": {
+        "bookId": "Buch",
+        "subsidiaryId": "Tochtergesellschaft",
+        "mapSubsidiaryId": "Tochtergesellschaft (optional)",
+        "currency": "Buchwährung",
+        "rateType": "Kurstyp",
+        "effectiveFrom": "Gültig ab",
+        "effectiveTo": "Gültig bis",
+        "reason": "Grund",
+        "sourceAccountId": "Konto des Kontenplans",
+        "targetAccountId": "Konto im Buch",
+        "kind": "Änderung",
+        "modeAfter": "Modus",
+        "replicationMode": "Übernahme",
+        "replicationFrom": "Übernehmen ab",
+        "replicatedCount": "Übernommene Buchungen",
+        "createdAt": "Erfasst",
+        "openingStrategy": "Frühere Historie",
+        "currencyDifferenceAccountId": "Konto für Währungsdifferenzen"
+      },
+      "help": {
+        "bookId": "Ein Nebenbuch. Das Hauptbuch ist das maßgebliche Buch und hat keine buchspezifische Konfiguration.",
+        "currency": "Ein Buch führt je Tochtergesellschaft eine Währung.",
+        "rateType": "Kassakurs verwendet den letzten Kurs am oder vor dem Buchungsdatum; Monatsdurchschnitt den Mittelwert der Kassakurse des Monats.",
+        "effectiveTo": "Leer lassen, damit die Version gültig bleibt. Sie kann nicht vor bereits gebuchten Einträgen enden.",
+        "reason": "Wird mit der Änderung im Prüfpfad festgehalten.",
+        "targetAccountId": "Muss die Abschlussklasse und Währungsbeschränkung des Kontos beibehalten.",
+        "mapSubsidiaryId": "Leer lassen, um das Konto für alle Tochtergesellschaften zuzuordnen; eine Zuordnung je Tochtergesellschaft hat Vorrang.",
+        "kind": "Aktivieren startet die vollständige Übernahme; Aktualisieren schließt Lücken; Deaktivieren beendet die Übernahme; Einstellungen ändern das Konto für Währungsdifferenzen.",
+        "replicationFrom": "Das erste Buchungsdatum, das das Buch erhält. Nach dem Festlegen unveränderlich.",
+        "openingStrategy": "Eröffnungssalden buchen den Saldo jedes Kontos vor dem Startdatum; vollständige Historie setzt voraus, dass das Hauptbuch nichts Früheres enthält.",
+        "currencyDifferenceAccountId": "Ein Ertrags-, Aufwands- oder Eigenkapitalkonto für Differenzen, die bei der Umrechnung gemischter Währungen in die Buchwährung verbleiben."
+      },
+      "rateTypes": {
+        "spot": "Kassakurs",
+        "month_average": "Monatsdurchschnitt"
+      },
+      "changeKinds": {
+        "activation": "Vollständige Übernahme aktivieren",
+        "catch_up": "Aktualisieren",
+        "deactivation": "Übernahme deaktivieren",
+        "settings": "Einstellungen ändern"
+      },
+      "openingStrategies": {
+        "opening_balances": "Eröffnungssalden",
+        "full_history": "Vollständige Historie"
+      },
+      "modes": {
+        "adjustment_only": "Nur Anpassungen",
+        "full": "Vollständig"
+      }
+    },
+    "segmentDependencies": {
+      "navTitle": "Abhängigkeitsverstöße",
+      "title": "Verstöße gegen Segmentabhängigkeiten",
+      "description": "{count, plural, =0 {Kein offener Beleg verstößt gegen eine Abhängigkeitsregel.} one {# offene Belegzeile verstößt gegen eine zum Belegdatum gültige Regel.} other {# offene Belegzeilen verstoßen gegen eine zum Belegdatum gültige Regel.}}",
+      "empty": "Kein offener Beleg verstößt gegen eine Abhängigkeitsregel.",
+      "columns": {
+        "document": "Beleg",
+        "date": "Datum",
+        "status": "Zustand",
+        "line": "Zeile",
+        "problem": "Abweichung"
+      }
     }
   },
   "flows": {
@@ -8105,6 +8333,66 @@
     "manufacturingSubcontract": {
       "title": "Externe Fertigung",
       "description": "Komponenten an Lieferanten senden, Bearbeitungsleistungen erfassen und Produktion auf den Fertigungsauftrag zurücknehmen."
+    },
+    "intercompanyTransactions": {
+      "title": "Konzerninterne Transaktionen",
+      "description": "Vertretende Kunden und Lieferanten je Gesellschaft, Konten für konzerninterne Forderungen und Verbindlichkeiten, zugeordnete konzerninterne Belege und Verrechnungspreise."
+    },
+    "intercompanyNetting": {
+      "title": "Konzerninterne Verrechnung",
+      "description": "Konzerninterne Salden zwischen Gesellschaften mit Genehmigung verrechnen und ausgleichen sowie Geld zwischen den Bankkonten der Gesellschaften übertragen."
+    },
+    "crossSubsidiaryFulfillment": {
+      "title": "Gesellschaftsübergreifende Auftragserfüllung",
+      "description": "Kundenaufträge einer Gesellschaft aus dem Lager einer anderen Gesellschaft erfüllen, mit einer konzerninternen Weiterbelastung zum Verrechnungspreis."
+    },
+    "periodEndJournals": {
+      "title": "Abschlussbuchungen zum Periodenende",
+      "description": "Explizite Jahresabschlussbuchungen für Rechtsordnungen, die sie verlangen: Erträge und Aufwendungen in die Gewinnrücklagen, wahlweise über ein Ergebnissammelkonto, optional mit Schlussbilanz- und Eröffnungsbuchungen für das Folgejahr. Die Berichte berechnen die Gewinnrücklagen in jedem Fall."
+    },
+    "multiBookAccounting": {
+      "title": "Mehrbuchhaltung (Multi-Book)",
+      "description": "Führen Sie Nebenbücher je Tochtergesellschaft in eigener Basiswährung, ordnen Sie Konten je Buch zu, übernehmen Sie jede Buchung in vollständige Bücher, buchen Sie buchspezifische Journale und vergleichen Sie Bücher nebeneinander."
+    },
+    "expenseAmortization": {
+      "title": "Aufwandsabgrenzung",
+      "description": "Vorausbezahlte und abgegrenzte Aufwendungen aus Eingangsrechnungen, Buchungssätzen und Spesenabrechnungen werden über Pläne periodenweise aufgelöst, mit Abschlussschritt und Abstimmung zum Hauptbuch."
+    },
+    "expenseAmortizationAutoRun": {
+      "title": "Automatische Auflösung",
+      "description": "Bucht fällige Auflösungsperioden über den Planer, sobald sie enden, ohne manuellen Lauf."
+    },
+    "accountMerges": {
+      "title": "Kontenzusammenführung",
+      "description": "Ein doppeltes Konto in ein verbleibendes Konto zusammenführen: alle Ablehnungen und Auswirkungen vorab prüfen, den Saldo per Umbuchung und die Einstellungen mit übertragen und die gebuchte Historie unverändert lassen."
+    },
+    "accountingContexts": {
+      "title": "Rechnungslegungskontexte",
+      "description": "Berichte mit lokalisierten Kontonummern und -namen darstellen, etwa nach einem landesrechtlichen Kontenplan, je Kontext und optional je Tochtergesellschaft oder Land."
+    },
+    "segmentDependencies": {
+      "title": "Segmentabhängigkeiten",
+      "description": "Einen Segmentwert nur zusammen mit bestimmten Werten eines anderen Segments zulassen, etwa eine Klasse nur mit bestimmten Abteilungen; geprüft beim Speichern und Buchen von Belegen."
+    },
+    "assetComponents": {
+      "title": "Zusammengesetzte Anlagen",
+      "description": "Fassen Sie Komponentenanlagen unter einer übergeordneten Anlage zusammen, jede mit eigenen Anschaffungskosten, eigener Nutzungsdauer und Abschreibung, verdichtet je Buch und gemeinsam abgegangen."
+    },
+    "assetProposals": {
+      "title": "Anlagenvorschläge",
+      "description": "Machen Sie aus gebuchten Einkaufszeilen, die Ihren Aktivierungsregeln entsprechen, Vorschläge zur Übernahme als Anlagen, Komponenten oder Anlagen im Bau."
+    },
+    "constructionInProgress": {
+      "title": "Anlagen im Bau",
+      "description": "Sammeln Sie Kosten auf Datensätzen für Anlagen im Bau, stimmen Sie sie mit dem Hauptbuch ab und aktivieren Sie sie nach Fertigstellung in Anlagen."
+    },
+    "assetMaintenance": {
+      "title": "Anlagenwartung",
+      "description": "Planen Sie Wartungen nach Zeit oder Zählerstand, erfassen Sie Arbeiten zu den Eingangsrechnungen, mit denen sie bezahlt wurden, und erhalten Sie Hinweise zu fälligen und überfälligen Wartungen."
+    },
+    "assetInsurance": {
+      "title": "Anlagenversicherung",
+      "description": "Erfassen Sie Versicherungspolicen für Anlagen, erhalten Sie Verlängerungserinnerungen und vergleichen Sie die Versicherungssumme mit dem Nettobuchwert."
     }
   },
   "extensions": {

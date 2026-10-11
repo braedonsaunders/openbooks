@@ -247,6 +247,18 @@ export const LOCAL_NAVIGATION: LocalNavigationSet[] = [
     { href: '/assets?tab=tax-depreciation', ns: 'nav', key: 'modules.tax-depreciation', permission: 'assets.read', feature: 'fixedAssets' },
     { href: '/assets/leases', ns: 'nav', key: 'modules.leases', permission: 'assets.read', feature: 'fixedAssets', prefix: true },
     { href: '/assets/equipment', ns: 'nav', key: 'modules.equipment', permission: 'assets.read', feature: 'equipment' },
+    { href: '/assets/proposals', ns: 'nav', key: 'modules.asset-proposals', permission: 'assets.read', feature: 'assetProposals' },
+    { href: '/assets/construction', ns: 'nav', key: 'modules.asset-construction', permission: 'assets.read', feature: 'constructionInProgress' },
+    { href: '/assets/maintenance', ns: 'nav', key: 'modules.asset-maintenance', permission: 'assets.read', feature: 'assetMaintenance' },
+    { href: '/assets/insurance', ns: 'nav', key: 'modules.asset-insurance', permission: 'assets.read', feature: 'assetInsurance' },
+  ] },
+  // Pairing rides Intercompany transactions; netting runs and transfers ride
+  // Intercompany netting. No set-level feature: either switch alone keeps
+  // its own tabs.
+  { id: 'intercompany', label: 'Intercompany', tabs: [
+    { href: '/intercompany', iconKey: 'git-branch', ns: 'intercompany', key: 'tabs.pairing', permission: 'intercompany.read', feature: 'intercompanyTransactions' },
+    { href: '/intercompany/netting', iconKey: 'workflow', ns: 'intercompany', key: 'tabs.netting', permission: 'intercompany.read', feature: 'intercompanyNetting' },
+    { href: '/intercompany/transfers', iconKey: 'banknote', ns: 'intercompany', key: 'tabs.transfers', permission: 'intercompany.read', feature: 'intercompanyNetting' },
   ] },
   // No set-level feature: the overview/vendors tabs need subcontractor
   // compliance while information returns ride their own tax switch, so the

@@ -9,12 +9,13 @@ const original: PostEntryInput = {
   lines: [{ accountId: "bank", amount: "10", partyId: "customer" }, { accountId: "income", amount: "-10" }],
 };
 
-function legacyExecutor() {
+function legacyExecutor(requestBasis?: { amountBasis: "functional" | "book"; accountBasis: "source" | "book" }) {
   let calls = 0;
   const executor = { async execute() {
     calls += 1;
     return { rows: original.lines.map((line, index) => ({
       entry_id: "existing-entry", id: `line-${index + 1}`, line_number: index + 1, request_hash: null, header: original,
+      request_basis: requestBasis,
       line: { ...line, subsidiaryId: original.subsidiaryId, currency: "CAD", txnAmount: line.amount, fxRate: "1.0000000000", lineNumber: index + 1 },
     })) };
   } } as unknown as SqlExecutor;
@@ -46,4 +47,14 @@ test("legacy keyed replay refuses changed amounts, accounts, currency, dimension
 test("posting evidence cannot be supplied through caller custom metadata", async () => {
   const { executor } = legacyExecutor();
   await assert.rejects(() => postEntry(executor, { ...original, custom: { postingRequestHash: "spoofed" } }), /reserved posting evidence/);
+  await assert.rejects(() => postEntry(executor, { ...original, custom: { postingRequestBasis: "spoofed" } }), /reserved posting evidence/);
+});
+
+test("keyed replay refuses a different amount or account measurement basis", async () => {
+  for (const patch of [{ amountBasis: "book" as const }, { accountBasis: "book" as const }]) {
+    const { executor } = legacyExecutor({ amountBasis: "functional", accountBasis: "source" });
+    await assert.rejects(() => postEntry(executor, { ...original, ...patch }), /different posting content/);
+  }
+  const { executor } = legacyExecutor({ amountBasis: "functional", accountBasis: "source" });
+  assert.equal((await postEntry(executor, { ...original, amountBasis: "functional", accountBasis: "source" })).entryId, "existing-entry");
 });
