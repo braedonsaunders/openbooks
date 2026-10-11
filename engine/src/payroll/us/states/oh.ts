@@ -516,8 +516,9 @@ export function ohSchoolDistrict(payDate: string, code: string): OhSchoolDistric
   const districts = SCHOOL_DISTRICTS_BY_YEAR[year];
   if (!districts) {
     throw new PayrollError(
-      `the ${year} Ohio school district income tax rates are not loaded — transcribe "School `
-      + `Districts With an Income Tax" for ${year} from tax.ohio.gov into ${RATES_MODULE}. `
+      `the ${year} Ohio school district income tax rates are not loaded — the "School Districts `
+      + `With an Income Tax" list for ${year} is published at tax.ohio.gov. `
+      + "This year is not yet supported by the US pack; contact support. "
       + "Loaded years: " + Object.keys(SCHOOL_DISTRICTS_BY_YEAR).join(", ") + ". Never carry a "
       + "prior year's list forward: districts are added, renewed and allowed to expire every "
       + "election cycle.",
@@ -605,7 +606,7 @@ export function ohEditionFor(periodEnd: string): OhEdition {
       `no Ohio withholding table is loaded for a payroll period ending ${periodEnd}. This pack `
       + `carries the sets effective ${OH_TRANSCRIBED_FROM} onwards; the Department revises them `
       + "mid-year and keys each set to the payroll period's END date, so an earlier period needs "
-      + `the set that was in force then. Transcribe it from tax.ohio.gov into ${RATES_MODULE}.`,
+      + `the set that was in force then. This date is not yet supported by the US pack; contact support.`,
     );
   }
   return edition;
@@ -670,7 +671,7 @@ export function ohOptionalComputerFormula(input: {
     candidate.upTo == null || taxable <= U(candidate.upTo));
   if (!band) {
     throw new PayrollError(
-      `no Ohio withholding band covers annual taxable wages of ${D(taxable)} — ${RATES_MODULE}`,
+      `no Ohio withholding band covers annual taxable wages of ${D(taxable)} — refused by name; contact support`,
     );
   }
   factors.OH_BAND_RATE = band.rate;
@@ -709,7 +710,7 @@ export function ohPercentageMethod(input: {
   const taxable = max0(U(input.wages) - exemption);
   const row = edition.printedTables[key].find((candidate) =>
     candidate.upTo == null || taxable <= U(candidate.upTo));
-  if (!row) throw new PayrollError(`no Ohio ${key} line covers ${D(taxable)} — ${RATES_MODULE}`);
+  if (!row) throw new PayrollError(`no Ohio ${key} line covers ${D(taxable)} — refused by name; contact support`);
   return D(U(row.base) + mulRateCents(taxable - U(row.over), row.rate));
 }
 

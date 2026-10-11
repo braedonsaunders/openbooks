@@ -439,7 +439,7 @@ export function plTableYearForPayDate(payDate: string): 2026 {
       `PL tables have no transcribed figures for pay date ${payDate}: `
       + "the PL pack transcribes calendar 2026 only "
       + "(PIT skala + ZUS/NFZ/FP rates, Budget Act and obwieszczenia for 2026). "
-      + "Transcribe the year's tables into engine/src/payroll/pl/ first.",
+      + "This date is not yet supported by the PL pack; contact support.",
     );
   }
   return 2026;

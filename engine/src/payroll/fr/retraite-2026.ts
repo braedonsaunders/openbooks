@@ -176,7 +176,7 @@ export function frRetraiteYearForPayDate(payDate: string): 2026 {
       `FR retraite complémentaire has no transcribed tables for pay date ${payDate}: `
       + "the FR pack transcribes calendar 2026 only "
       + "(AGIRC-ARRCO calcul des cotisations 2026). "
-      + "Transcribe the year's tables into engine/src/payroll/fr/ first.",
+      + "This date is not yet supported by the FR pack; contact support.",
     );
   }
   return 2026;

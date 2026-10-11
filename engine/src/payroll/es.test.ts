@@ -144,11 +144,12 @@ test("ES foral territories are refused by name, never covered by AEAT", () => {
     assert.match(pv, new RegExp(name), "PV names " + name);
   }
   // The refusal names the real gap (foral tables missing, AEAT never
-  // covers them) and the remedy — not a stale "AEAT not transcribed".
+  // covers them) and the support remedy — never a source path.
   for (const code of ["NC", "PV"] as const) {
     assert.match(reasons[code] ?? "", /foral retention tables.*aren't in this pack/);
     assert.match(reasons[code] ?? "", /AEAT tables never cover/);
-    assert.match(reasons[code] ?? "", /Transcribe.*engine\/src\/payroll\/es\/rates\.ts/);
+    assert.match(reasons[code] ?? "", /not yet supported by the ES pack; contact support/);
+    assert.ok(!reasons[code]!.includes("engine/src/"), `refusal must not name a source path:\n${reasons[code]}`);
   }
   const withholding = new Map(ES_WITHHOLDING.regions.map((region) => [region.region, region]));
   for (const code of ["NC", "PV"]) {
@@ -159,7 +160,8 @@ test("ES foral territories are refused by name, never covered by AEAT", () => {
     const reason = withholding.get(code)?.unimplementedReason ?? "";
     assert.match(reason, /foral retention tables.*aren't in this pack/);
     assert.match(reason, /AEAT tables never cover/);
-    assert.match(reason, /Transcribe.*engine\/src\/payroll\/es\/rates\.ts/);
+    assert.match(reason, /not yet supported by the ES pack; contact support/);
+    assert.ok(!reason.includes("engine/src/"), `refusal must not name a source path:\n${reason}`);
     assert.doesNotMatch(reason, /not transcribed either/);
   }
 });
@@ -278,7 +280,8 @@ test("ES computeStatutory refuses foral regions, off-year runs and off-monthly p
       assert.ok(error instanceof PayrollPackError);
       assert.match((error as Error).message, /foral/);
       assert.match((error as Error).message, /AEAT tables never cover/);
-      assert.match((error as Error).message, /Transcribe.*rates\.ts/);
+      assert.match((error as Error).message, /not yet supported by the ES pack; contact support/);
+      assert.ok(!(error as Error).message.includes("engine/src/"), `refusal must not name a source path:\n${(error as Error).message}`);
       return true;
     },
   );

@@ -555,8 +555,7 @@ export function assertEarningsAssessedStable(
       `earnings-assessed statutory line ${component} for ${employee} ${detail} across the `
       + "deduction-protection passes — an earnings-assessed levy is computed from earnings, "
       + "which protection never changes, so it is computed once. If it genuinely depends on "
-      + "the deductions taken, declare it assessedOn: 'taxable_income' in its country pack "
-      + "(engine/src/payroll/packs.ts) so every pass re-derives it",
+      + "the deductions taken, this pack needs a correction; contact support.",
     );
   };
   for (const [index, before] of first.entries()) {

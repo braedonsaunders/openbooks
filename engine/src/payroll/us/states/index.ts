@@ -222,9 +222,9 @@ export function requireUsStateWithholding(code: string): UsStateWithholdingEngin
     `${code} income tax withholding is not implemented by the US payroll pack. `
     + `${code} levies a wage income tax, so nothing here may approximate it: withholding the `
     + "federal amount, a neighbouring state's amount, or nothing at all would each be silently "
-    + `wrong money on every stub. Transcribe ${publication ?? `${code}'s published withholding tables`}`
-    + ` into engine/src/payroll/us/states/${code.toLowerCase()}.ts and register the engine in `
-    + "engine/src/payroll/us/states/index.ts. "
+    + `wrong money on every stub. `
+    + (publication ? `The tables are published in ${publication}. ` : "")
+    + `This state is not yet supported by the US pack; contact support. `
     + `Implemented today: ${implementedUsStates().join(", ")}.`,
   );
 }

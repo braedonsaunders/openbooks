@@ -370,11 +370,11 @@ test("CU is populated with a slip; the 770 stays declared and refused", async ()
   assert.equal(settanta.amendment.supported, false, "770 names its correction gap");
   await assert.rejects(
     settanta.population("org", 2025),
-    /no filing population is transcribed/,
+    /cannot populate it for tax year 2025.*not yet supported by the IT pack/,
   );
   await assert.rejects(
     settanta.population("org", 2026),
-    /no filing population is transcribed/,
+    /cannot populate it for tax year 2026.*not yet supported by the IT pack/,
   );
   assert.equal(settanta.parseRowId("anything"), null);
   assert.equal(IT_PAYROLL_PACK.filings(), IT_PACK_FILINGS);

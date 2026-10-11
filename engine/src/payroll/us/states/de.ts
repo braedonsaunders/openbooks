@@ -263,8 +263,8 @@ export function wilmingtonRateFor(
     payDate >= entry.effectiveFrom && (entry.effectiveTo == null || payDate < entry.effectiveTo));
   if (!period) {
     throw new PayrollError(
-      `no Wilmington city wage tax rate is loaded for a pay date of ${payDate} — Transcribe the period `
-      + `from the City of Wilmington's published tax rates into ${RATES_MODULE}.`,
+      `no Wilmington city wage tax rate is loaded for a pay date of ${payDate} — the City of Wilmington `
+      + `publishes its tax rates. This date is not yet supported by the US pack; contact support — refused by name.`,
     );
   }
   return {

@@ -137,27 +137,26 @@ export interface PayrollTaxYearProblem {
   taxYear: number;
   kind: "missing" | "draft" | "undeclared";
   /**
-   * Developer-facing: names the year, the pack, the region, and the
-   * developer remedy (scaffold script, rates module). Read by engine throws
-   * (`assertPayrollTaxYearSupported`) and logs — never by an operator
-   * surface.
+   * Refusal sentence: names the year, the pack, the region, and the years
+   * the pack does publish. Operator-safe — no script, file path, or
+   * command — because engine throws (`assertPayrollTaxYearSupported`) and
+   * logs both reach operators. The developer remedy (scaffold script, rates
+   * module) lives in the code comment on `payrollTaxYearProblem`, never in
+   * this string.
    */
   message: string;
   /**
    * Operator-facing: names the pack, the requested year, and the years the
    * pack does publish (or that it publishes none), and states that no action
    * in the product loads a year the pack does not publish. Names no script,
-   * file path, or command. Readiness blockers and filing refusals read THIS;
-   * `message` keeps the developer text so no caller silently changes
-   * audience when this string is edited.
+   * file path, or command. Readiness blockers and filing refusals read THIS.
    */
   operatorMessage: string;
 }
 
 /**
  * The operator half of a tax-year refusal: what the pack publishes and the
- * fact that no in-product action loads what it does not. The developer half
- * (scaffold command, rates module) stays on `message` for engine throws.
+ * fact that no in-product action loads what it does not.
  * Exported for the setup check, which must refuse an undeclared country
  * without a tax year (see below).
  */
@@ -195,6 +194,14 @@ export function payrollTaxYearOperatorMessage(
   );
 }
 
+/**
+ * Developer remedy for an unloaded year (kept here, never in the refusal
+ * strings above, which both reach operators): scaffold the edition with
+ * `node --import tsx scripts/payroll-new-tax-year.ts --country <CC> --year
+ * <YYYY>`, transcribe the published figures into the pack's rates module
+ * (the `ratesModule` on its tax-year support declaration), and make the
+ * pack's goldens pass before paying into the year.
+ */
 export function payrollTaxYearProblem(
   country: string,
   taxYear: number,
@@ -219,9 +226,9 @@ export function payrollTaxYearProblem(
     return {
       country, region: region ?? null, taxYear, kind: "draft",
       message:
-        `the ${taxYear} statutory tables for ${scope} are scaffolded but not filled in — the draft `
-        + `edition still carries placeholder values. Transcribe the published figures in `
-        + `${support.ratesModule} and make its goldens pass before paying into ${taxYear}.`,
+        `the ${taxYear} statutory tables for ${scope} are scaffolded but not filled in — this year `
+        + `is not yet supported by the ${country} pack; contact support. `
+        + (loaded.length > 0 ? `Loaded years: ${loaded.join(", ")}.` : "No years are loaded."),
       operatorMessage: payrollTaxYearOperatorMessage(country, scope, taxYear, "draft", loaded),
     };
   }
@@ -230,9 +237,7 @@ export function payrollTaxYearProblem(
     message:
       `${taxYear} statutory tables are not loaded for ${scope} — `
       + (loaded.length > 0 ? `loaded years: ${loaded.join(", ")}. ` : "no years are loaded. ")
-      + `Scaffold the edition with \`node --import tsx scripts/payroll-new-tax-year.ts --country `
-      + `${country} --year ${taxYear}\` and transcribe the published figures into `
-      + `${support.ratesModule}.`,
+      + `This year is not yet supported by the ${country} pack; contact support.`,
     operatorMessage: payrollTaxYearOperatorMessage(country, scope, taxYear, "missing", loaded),
   };
 }

@@ -684,6 +684,6 @@ export function refuseUnprintedPeriod(
     + `${(engine.printedPeriods ?? []).join(", ")} pay periods, and this payroll runs `
     + `${periodsPerYear} periods a year. The state's method is a per-period TABLE lookup, not a `
     + "formula, so there is nothing to scale: change the pay schedule to a published frequency, "
-    + "or transcribe the state's table for this one.",
+    + "or contact support about a table for this one.",
   );
 }

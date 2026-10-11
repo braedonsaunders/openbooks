@@ -174,7 +174,7 @@ export async function computeDeStatutory(
     throw new DePayrollRefusal(
       `DE payroll pack has no transcribed tables for tax year ${ctx.taxYear}: 2026 is the only `
       + "transcribed edition (BMF Programmablaufplan für den Lohnsteuerabzug 2026, Stand 12.11.2025, "
-      + "plus SVRV 2026 — see engine/src/payroll/de/rates.ts).",
+      + "plus SVRV 2026). This year is not yet supported by the DE pack; contact support.",
     );
   }
   const levyRefusal = deEmployerLevyRefusal();

@@ -65,10 +65,10 @@ const ES_REGIONS: PayrollRegionCoverage = {
   unsupportedReasons: {
     NC: "Navarra applies the foral IRPF regime: foral retention tables for Navarra "
       + "(Hacienda Foral de Navarra) aren't in this pack — AEAT tables never cover Navarra. "
-      + "Transcribe them into engine/src/payroll/es/rates.ts before calculating",
+      + "These territories are not yet supported by the ES pack; contact support.",
     PV: "the Basque Historical Territories — Álava/Araba, Gipuzkoa and Bizkaia — apply the "
       + "foral IRPF regime: foral retention tables for the three Haciendas Forales aren't in this pack — "
-      + "AEAT tables never cover them. Transcribe them into engine/src/payroll/es/rates.ts before calculating",
+      + "AEAT tables never cover them. These territories are not yet supported by the ES pack; contact support.",
   },
 };
 

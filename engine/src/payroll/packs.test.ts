@@ -119,7 +119,8 @@ test("an undeclared levy stops the run rather than defaulting to a class", () =>
     (error: Error) => {
       assert.ok(error instanceof PayrollPackError);
       assert.match(error.message, /does not declare what uk_secondary_ni/);
-      assert.match(error.message, /assessedOn/);
+      assert.match(error.message, /not supported by the CA pack; contact support/);
+      assert.ok(!error.message.includes("engine/src/"), `refusal must not name a source path:\n${error.message}`);
       return true;
     },
   );

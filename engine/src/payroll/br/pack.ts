@@ -64,7 +64,7 @@ export const BR_PAYROLL_PACK: PayrollCountryPack = {
     supported: ["BR"],
     unsupportedReason:
       "income tax withholding for {region} is not implemented: the national IRRF table does not compute end to end. "
-      + "Transcribe the year's tables into engine/src/payroll/br/ first.",
+      + "This region is not yet supported by the BR pack; contact support.",
   },
   jurisdictions: BR_JURISDICTIONS,
   // Two destinations share the money — Receita Federal takes IRRF (DARF),

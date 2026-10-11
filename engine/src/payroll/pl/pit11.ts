@@ -111,7 +111,8 @@ export interface Pit11Slip {
  * every pack's pack.ts at module level (this module loads underneath
  * pl/pack.ts, so that edge is a TDZ crash; see the lazy-declaration note
  * atop canada/filings.ts). The message mirrors payrollTaxYearProblem's
- * `missing` kind, including the scaffold remedy.
+ * `missing` kind: the years the pack publishes plus the support remedy —
+ * never a script or source path, which an operator cannot act on.
  */
 function assertPlTaxYearSupported(taxYear: number): void {
   const loaded = payrollSupportedTaxYears(PL_TAX_YEARS);
@@ -119,8 +120,7 @@ function assertPlTaxYearSupported(taxYear: number): void {
   throw new PayrollPackError(
     `${taxYear} statutory tables are not loaded for PL — `
     + (loaded.length > 0 ? `loaded years: ${loaded.join(", ")}. ` : "no years are loaded. ")
-    + `Scaffold the edition with \`node --import tsx scripts/payroll-new-tax-year.ts --country PL --year ${taxYear}\` `
-    + "and transcribe the published figures into engine/src/payroll/pl/rates.ts.",
+    + "This year is not yet supported by the PL pack; contact support.",
   );
 }
 

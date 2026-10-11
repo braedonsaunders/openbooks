@@ -256,9 +256,8 @@ function tablesForYear(year: number): PlYearTables {
   if (year === 2024) return PL_2024_TABLES;
   throw new PayrollPackError(
     `PL withholding for tax year ${year} has not been transcribed `
-    + "— the PL payroll pack's transcribed years are calendar 2024–2026 "
-    + "(see engine/src/payroll/pl/tables-2024.ts, tables-2025.ts and tables-2026.ts). "
-    + "Transcribe the year's tables before calculating",
+    + "— the PL payroll pack's transcribed years are calendar 2024–2026. "
+    + "This year is not yet supported by the PL pack; contact support.",
   );
 }
 
@@ -320,9 +319,8 @@ function requirePayYear(payDate: string, tables: PlYearTables): void {
   if (payDate < `${tables.year}-01-01` || payDate > `${tables.year}-12-31`) {
     throw new PayrollPackError(
       `PL tables have no transcribed figures for pay date ${payDate}: `
-      + `the PL pack transcribes calendar ${tables.year} in ${tables.module} `
-      + "(see the module header for the instruments). "
-      + "Transcribe the year's tables into engine/src/payroll/pl/ first.",
+      + `the PL pack transcribes calendar ${tables.year}. `
+      + "This date is not yet supported by the PL pack; contact support.",
     );
   }
 }

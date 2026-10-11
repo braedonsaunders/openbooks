@@ -217,8 +217,7 @@ export async function cuSlips(orgId: string, taxYear: number): Promise<CuSlip[]>
   if (taxYear !== 2025 && taxYear !== 2026) {
     throw new ItFilingRefusal(
       `the IT payroll pack has no transcribed tables for tax year ${taxYear}: 2025 and 2026 are the transcribed `
-      + "editions (see engine/src/payroll/it/tax-year-2025.ts and tax-year-2026.ts). Transcribe the year's "
-      + "Legge di Bilancio, AdE provvedimenti, and INPS circular into engine/src/payroll/it/rates.ts before "
+      + "editions. This year is not yet supported by the IT pack; contact support before "
       + `certifying ${taxYear}.`,
     );
   }
@@ -226,8 +225,8 @@ export async function cuSlips(orgId: string, taxYear: number): Promise<CuSlip[]>
     throw new ItFilingRefusal(
       `the IT payroll pack transcribes the CU box layout only for tax year 2025 (CU 2026 istruzioni, `
       + `AdE Provvedimento n. 15707 del 15 gennaio 2026): the CU ${taxYear + 1} istruzioni (redditi ${taxYear}) `
-      + `are not transcribed (see engine/src/payroll/it/tax-year-2026.ts), so no CU can be certified for ${taxYear} `
-      + `until that layout is transcribed.`,
+      + `are not yet published in this pack version — this layout is not yet supported by the IT pack; `
+      + `contact support, so no CU can be certified for ${taxYear} until then.`,
     );
   }
   await assertPayrollCountryKnown(db, orgId, taxYear);

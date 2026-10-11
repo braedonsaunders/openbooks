@@ -357,7 +357,7 @@ export function frCotisationYearForPayDate(payDate: string): 2026 {
       `FR cotisations have no transcribed tables for pay date ${payDate}: `
       + "the FR pack transcribes calendar 2026 only "
       + "(URSSAF taux secteur privé + plafonds, both rendered January 2026). "
-      + "Transcribe the year's tables into engine/src/payroll/fr/ first.",
+      + "This date is not yet supported by the FR pack; contact support.",
     );
   }
   return 2026;

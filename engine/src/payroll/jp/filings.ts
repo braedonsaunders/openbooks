@@ -62,7 +62,7 @@ function refusePopulation(filing: string, box: string, year: number): Promise<Pa
     new PayrollPackError(
       `the JP payroll pack declares the ${filing} filing but cannot populate it for tax year ${year}: `
       + "the engine performs monthly 源泉徴収 only and does not perform 年末調整 "
-      + "(see JP_REFUSED_2026 in engine/src/payroll/jp/rates.ts), so no 年調年税額 exists to report "
+      + "(see JP_REFUSED_2026), so no 年調年税額 exists to report "
       + `in the ${box} box — printing the sum of monthly withholdings there would file a wrong `
       + "statutory figure. Perform 年末調整 following the NTA's 年末調整のしかた "
       + "(所得税法第190条) and prepare the filing outside this product."

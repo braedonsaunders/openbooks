@@ -353,7 +353,7 @@ export function dcOpflWithholding(payDate: string, coveredWages: string): string
   if (rate == null) {
     throw new PayrollError(
       `District of Columbia Paid Family Leave has no transcribed employer rate for ${rates.year}. `
-      + "Transcribe the year's rate before calculating — refused by name",
+      + "This year is not yet supported by the US pack; contact support — refused by name",
     );
   }
   return D(mulRateCents(U(coveredWages), rate));

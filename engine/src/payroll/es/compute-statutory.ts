@@ -255,15 +255,15 @@ export async function computeEsStatutory(
   if (taxYear !== 2026) {
     fail(
       `tax year ${taxYear} has not been transcribed — the ES payroll pack's only `
-      + "transcribed year is calendar 2026 (see engine/src/payroll/es/rates.ts). "
-      + "Transcribe the year's ALGORITMO before calculating",
+      + "transcribed year is calendar 2026. This year is not yet supported by the ES pack; "
+      + "contact support.",
     );
   }
   if (region === "NC" || region === "PV") {
     fail(
       `region "${region}" applies the foral IRPF regime (Hacienda Foral de Navarra / `
-      + "Haciendas Forales de Álava, Gipuzkoa y Bizkaia) — AEAT tables never cover it. Transcribe "
-      + "the foral tables into engine/src/payroll/es/rates.ts before calculating",
+      + "Haciendas Forales de Álava, Gipuzkoa y Bizkaia) — AEAT tables never cover it. These "
+      + "territories are not yet supported by the ES pack; contact support.",
     );
   }
   assertRegionSupported(region);

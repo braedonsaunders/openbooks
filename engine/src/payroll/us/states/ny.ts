@@ -706,7 +706,7 @@ export function nysWithholding(input: {
     // to zero keeps a future transcription gap loud.
     throw new PayrollError(
       `no New York State Method II line covers net wages of ${D(net)} for a `
-      + `${input.marital} ${period} payroll — engine/src/payroll/us/states/ny.ts`,
+      + `${input.marital} ${period} payroll — refused by name; contact support`,
     );
   }
   const tax = applyRow(row, net);
@@ -872,7 +872,7 @@ function computeNyc(
   if (!row) {
     throw new PayrollError(
       `no New York City Method II line covers net wages of ${D(net)} for a ${period} payroll `
-      + "— engine/src/payroll/us/states/ny.ts",
+      + "— refused by name; contact support",
     );
   }
   const tax = applyRow(row, net);

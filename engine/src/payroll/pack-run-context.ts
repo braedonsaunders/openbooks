@@ -267,9 +267,7 @@ export function statutoryAssessment(
   if (!assessedOn) {
     throw new PayrollPackError(
       `the ${country} payroll pack does not declare what ${systemKey}/${kind} is assessed on — `
-      + "add the component to its statutory slot in engine/src/payroll/packs.ts with an "
-      + "assessedOn of 'earnings' (gross/pensionable/insurable) or 'taxable_income' "
-      + "(income after pre-tax deductions)",
+      + `this configuration is not supported by the ${country} pack; contact support.`,
     );
   }
   if (declared.some((component) => component.assessedOn !== assessedOn)) {

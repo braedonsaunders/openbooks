@@ -49,7 +49,7 @@ const FR_REGIONS: Omit<PayrollCountryPack, "country">["regions"] = {
   supported: ["FR"],
   unsupportedReason:
     "income tax withholding for {region} is not implemented: PAS does not compute end to end. "
-    + "Transcribe the year's grille into engine/src/payroll/fr/ first.",
+    + "This region is not yet supported by the FR pack; contact support.",
 };
 
 // ---------------------------------------------------------------------------

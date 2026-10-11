@@ -63,9 +63,8 @@ export function assertBrInformeYearSupported(taxYear: number): void {
   if (!brInformeYears().includes(taxYear)) {
     throw new PayrollError(
       `BR payroll: tax year ${taxYear} has not been transcribed — the transcribed years are `
-      + `${brInformeYears().join(", ")} (see engine/src/payroll/br/tax-year-2024.ts, `
-      + "tax-year-2025.ts and tax-year-2026.ts). "
-      + "Transcribe the year's Portaria + monthly tables before issuing informes de rendimentos",
+      + `${brInformeYears().join(", ")}. `
+      + "This year is not yet supported by the BR pack; contact support.",
     );
   }
 }

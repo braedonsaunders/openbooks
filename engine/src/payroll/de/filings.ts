@@ -83,7 +83,7 @@ export function assertLohnsteuerbescheinigungYear(taxYear: number): void {
       + `(BMF Programmablaufplan für den Lohnsteuerabzug 2026, BMF-Schreiben vom 12.11.2025; `
       + `Ausdruck der elektronischen Lohnsteuerbescheinigung für 2026). Rate tables and form `
       + `layouts publish separately: filing a prior year's box layout against current money is `
-      + `refused. Transcribe the ${taxYear} Ausdruck layout before issuing.`,
+      + `refused. This layout is not yet supported by the DE pack; contact support.`,
     );
   }
 }

@@ -57,8 +57,8 @@ async function assertEsFilingYear(orgId: string, taxYear: number, filing: string
     throw new PayrollError(
       `the ES payroll pack cannot populate ${filing} for tax year ${taxYear}: `
       + `${taxYear} statutory tables are not loaded for ES — loaded years: `
-      + `${ES_PUBLISHED_YEARS.join(", ")}. Transcribe the year's ALGORITMO into `
-      + "engine/src/payroll/es/rates.ts before filing it.",
+      + `${ES_PUBLISHED_YEARS.join(", ")}. This year is not yet supported by the ES pack; `
+      + "contact support.",
     );
   }
 }

@@ -90,8 +90,8 @@ export function assertFrFilingYearSupported(taxYear: number): void {
   if (!covered) {
     throw new PayrollError(
       `no published FR statutory tables for tax year ${taxYear} — the FR payroll pack's only `
-      + "transcribed year is calendar 2026 (PAS grille I and URSSAF parameters in "
-      + "engine/src/payroll/fr/). Transcribe the year's grille and contribution parameters first.",
+      + "transcribed year is calendar 2026 (PAS grille I and URSSAF parameters). "
+      + "This year is not yet supported by the FR pack; contact support.",
     );
   }
 }

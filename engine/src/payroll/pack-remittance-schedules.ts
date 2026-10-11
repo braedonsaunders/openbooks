@@ -98,7 +98,7 @@ export function allRemittanceSchedules(
     if (!payrollJurisdictionDeclared(schedule.calendar)) {
       throw new PayrollPackError(
         `${where} moves deadlines against "${schedule.calendar}", which no payroll pack declares — ` +
-        `declare it in engine/src/payroll/packs.ts (declared: ${
+        `this jurisdiction is not yet supported by any payroll pack; contact support. (Declared: ${
           declaredJurisdictions().map((j) => j.key).join(", ")})`,
       );
     }

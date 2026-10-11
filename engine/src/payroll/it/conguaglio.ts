@@ -198,8 +198,8 @@ function tablesFor(taxYear: number): ItYearTables {
   if (taxYear === 2026) return IT_2026_TABLES;
   throw new ItPayrollRefusal(
     `IT conguaglio has no transcribed tables for tax year ${taxYear}: 2025 and 2026 are the transcribed `
-    + "editions (see engine/src/payroll/it/rates.ts). Transcribe the year's Legge di Bilancio, AdE "
-    + `provvedimenti, and INPS circular before settling ${taxYear}.`,
+    + "editions. This year is not yet supported by the IT pack; contact support before "
+    + `settling ${taxYear}.`,
   );
 }
 
@@ -285,7 +285,7 @@ export function calculateItConguaglio(
       + "cannot rapportare al periodo di lavoro (D.L. 3/2020 art. 1 c. 1; L. 207/2024 art. 1 c. 5), and indebiti "
       + "oltre 60 euro si recuperano in dieci rate (L. 207/2024 art. 1 c. 7), a timing no in-product mechanism "
       + "prices (see IT_REFUSED_2025/IT_REFUSED_2026). Verify the rapportata spettanza and settle the residual "
-      + "through a pay-run adjustment (engine/src/payroll/run-adjustments.ts); the IRPEF/addizionali conguaglio "
+      + "through a pay-run adjustment; the IRPEF/addizionali conguaglio "
       + "for this employee is left unsettled by this run.",
     );
   }

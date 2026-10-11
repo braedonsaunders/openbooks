@@ -669,7 +669,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         throw new UsWithholdingError(
           `no ${levy.label} rate has been entered for ${input.payDate}; `
           + "the rate is employer-entered because no publication carries it — "
-          + "enter the assessed figure before calculating; refused by name",
+          + "enter the assessed figure in Payroll Setup → Statutory rates before calculating; refused by name",
         );
       }
       let enteredRate: bigint;
@@ -678,13 +678,13 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       } catch {
         throw new UsWithholdingError(
           `${levy.label} has an unreadable entered rate "${entered}"; `
-          + "enter an exact decimal rate before calculating — refused by name",
+          + "enter an exact decimal rate in Payroll Setup → Statutory rates before calculating — refused by name",
         );
       }
       if (method.maxRate !== undefined && enteredRate > rate6(method.maxRate)) {
         throw new UsWithholdingError(
           `${levy.label} entered rate ${entered} exceeds the published maximum of ${method.maxRate}; `
-          + "enter a rate within the statutory maximum before calculating — refused by name",
+          + "enter a rate within the statutory maximum in Payroll Setup → Statutory rates before calculating — refused by name",
         );
       }
       rate = entered;
@@ -703,7 +703,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         }
         throw new UsWithholdingError(
           `${levy.label} has no published flat rate effective on ${input.payDate}; `
-          + "transcribe the official effective rate before calculating — refused by name",
+          + "this levy is not yet supported by the US pack for this date; contact support — refused by name",
         );
       }
       rate = published.rate;
@@ -852,7 +852,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
           if (!applicable) {
             throw new UsWithholdingError(
               `${levy.label} has no separate-supplemental rate for ${category} effective on ${input.payDate}; `
-              + "transcribe the official category rate before calculating — refused by name",
+              + "this levy is not yet supported by the US pack for this date; contact support — refused by name",
             );
           }
           separateCategoryAmounts.push({ category, amount: D(amount), rate: applicable.rate });
@@ -865,7 +865,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         if (!applicable) {
           throw new UsWithholdingError(
             `${levy.label} has no transcribed separate-supplemental flat rate for ${input.payDate}; `
-            + "transcribe the official rate effective on the payment date before calculating — refused by name",
+            + "this levy is not yet supported by the US pack for this date; contact support — refused by name",
           );
         }
         separateFlatRate = applicable.rate;
@@ -889,7 +889,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       if (!applicable) {
         throw new UsWithholdingError(
           `${levy.label} has no transcribed combined-supplemental rate for ${input.payDate}; `
-          + "transcribe the official rate effective on the payment date before calculating — refused by name",
+          + "this levy is not yet supported by the US pack for this date; contact support — refused by name",
         );
       }
       combinedFlatRate = applicable.rate;
@@ -1192,8 +1192,8 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
     const engine = usStateWithholding(engineCode);
     if (!engine) {
       throw new UsWithholdingError(
-        `${levy.label} is declared with a published engine (${engineCode}) that is not registered `
-        + "in engine/src/payroll/us/states/index.ts",
+        `${levy.label} is declared with a published engine (${engineCode}) that is not registered — `
+        + "this configuration is not supported by the US pack; contact support.",
       );
     }
     // The per-allocation credit prices inside the Detroit engine, which sees
@@ -1595,7 +1595,7 @@ export function computeUsEmployerWithholding(input: {
       } catch {
         throw new UsWithholdingError(
           `${levy.label} has an unreadable entered rate "${entered}"; `
-          + "enter an exact decimal rate before calculating — refused by name",
+          + "enter an exact decimal rate in Payroll Setup → Statutory rates before calculating — refused by name",
         );
       }
       rate = entered;
@@ -1614,7 +1614,7 @@ export function computeUsEmployerWithholding(input: {
       if (!published) {
         throw new UsWithholdingError(
           `${levy.label} has no published flat rate effective on ${payDate}; `
-          + "transcribe the official effective rate before calculating — refused by name",
+          + "this levy is not yet supported by the US pack for this date; contact support — refused by name",
         );
       }
       rate = published.rate;

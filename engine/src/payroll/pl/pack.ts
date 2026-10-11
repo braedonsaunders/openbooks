@@ -46,7 +46,7 @@ const PL_REGIONS: PayrollCountryPack["regions"] = {
   supported: ["PL"],
   unsupportedReason:
     "income tax withholding for {region} is not implemented: the monthly PIT advance does not compute end to end. "
-    + "Transcribe the year's tables into engine/src/payroll/pl/ first.",
+    + "This region is not yet supported by the PL pack; contact support.",
 };
 
 // ---------------------------------------------------------------------------

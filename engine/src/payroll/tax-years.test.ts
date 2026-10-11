@@ -69,13 +69,14 @@ test("the declaration agrees with what the engines will actually calculate", () 
   assert.throws(() => usRatesForPayDate(`${beyond}-01-15`));
 });
 
-test("an unloaded year is named, with the year, the pack and the fix", () => {
+test("an unloaded year is named, with the year, the pack and the support remedy", () => {
   const beyond = Math.max(...payrollSupportedTaxYears(payrollTaxYearSupport("CA"))) + 1;
   const problem = payrollTaxYearProblem("CA", beyond);
   assert.equal(problem?.kind, "missing");
   assert.match(problem!.message, new RegExp(`${beyond} statutory tables are not loaded for CA`));
-  assert.match(problem!.message, /payroll-new-tax-year/);
-  assert.match(problem!.message, /engine\/src\/payroll\/canada\/rates\.ts/);
+  assert.match(problem!.message, /not yet supported by the CA pack; contact support/);
+  assert.ok(!problem!.message.includes("payroll-new-tax-year"), `refusal must not name the scaffold script:\n${problem!.message}`);
+  assert.ok(!problem!.message.includes("engine/src/"), `refusal must not name a source path:\n${problem!.message}`);
   assert.equal(payrollTaxYearProblem("CA", 2026), null);
   assert.throws(() => assertPayrollTaxYearSupported("US", beyond), /not loaded for US/);
 });
@@ -99,8 +100,12 @@ test("an unsupported year tells the operator what is published, with no develope
   );
   assert.ok(!/scaffold/i.test(operator), `operator text must not prescribe scaffolding:\n${operator}`);
   assert.ok(!/transcribe/i.test(operator), `operator text must not prescribe transcription:\n${operator}`);
-  // The developer remedy is unchanged for engine throws and logs.
-  assert.match(problem!.message, /payroll-new-tax-year/);
+  // The thrown refusal carries the same operator remedy — engine throws
+  // reach operators, so no source path or scaffold script may appear there
+  // either. The developer remedy lives in the code comment, not the string.
+  assert.match(problem!.message, /not yet supported by the ES pack; contact support/);
+  assert.ok(!problem!.message.includes("payroll-new-tax-year"), `refusal must not name the scaffold script:\n${problem!.message}`);
+  assert.ok(!problem!.message.includes("engine/src/"), `refusal must not name a source path:\n${problem!.message}`);
 });
 
 test("a draft year tells the operator it is not available, with no developer remedy", () => {
@@ -120,8 +125,13 @@ test("a draft year tells the operator it is not available, with no developer rem
   );
   assert.ok(!/scaffold/i.test(operator), `operator text must not prescribe scaffolding:\n${operator}`);
   assert.ok(!/transcribe/i.test(operator), `operator text must not prescribe transcription:\n${operator}`);
-  // The developer remedy is unchanged for engine throws and logs.
-  assert.match(problem!.message, /placeholder values/);
+  // The thrown refusal carries the same operator remedy — engine throws
+  // reach operators, so no source path or scaffold script may appear there
+  // either. The developer remedy lives in the code comment, not the string.
+  assert.match(problem!.message, /scaffolded but not filled in/);
+  assert.match(problem!.message, /not yet supported by the AU pack; contact support/);
+  assert.ok(!problem!.message.includes("payroll-new-tax-year"), `refusal must not name the scaffold script:\n${problem!.message}`);
+  assert.ok(!problem!.message.includes("engine/src/"), `refusal must not name a source path:\n${problem!.message}`);
 });
 
 test("the setup check reports an unpublished year in operator text", () => {

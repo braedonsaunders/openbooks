@@ -230,8 +230,8 @@ export function philadelphiaRateFor(
   if (!period) {
     throw new PayrollError(
       `no Philadelphia wage tax rate is loaded for a pay date of ${payDate} — the City revises the `
-      + `rate every 1 July and the rate is keyed to the PAY DATE. Transcribe the period from `
-      + `phila.gov's Tax Rate History into ${RATES_MODULE}.`,
+      + `rate every 1 July and the rate is keyed to the PAY DATE (current set: phila.gov's Tax Rate History). `
+      + `This date is not yet supported by the US pack; contact support.`,
     );
   }
   return {

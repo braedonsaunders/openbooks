@@ -511,7 +511,7 @@ function enforceIt2026SubstituteRegimes(input: It2025Input): void {
       `IT 2026 refuses ${input.renewalIncrease2026} of contractual-renewal increases in ordinary pay: L. 199/2025 `
       + "art. 1 c. 7 prices them under a 5% imposta sostitutiva (private-sector, 2025 lavoro income ≤ 33.000; "
       + `AdE Circ. 2/E/2026), which the engine does not compute — see ${refused}. Price renewal increases `
-      + "outside ordinary IRPEF (pay-run adjustment, engine/src/payroll/run-adjustments.ts)",
+      + "outside ordinary IRPEF through a pay-run adjustment",
     );
   }
   if (positive(input.shiftAllowances2026, "shiftAllowances2026") > ZERO) {
@@ -519,7 +519,7 @@ function enforceIt2026SubstituteRegimes(input: It2025Input): void {
       `IT 2026 refuses ${input.shiftAllowances2026} of night/holiday/rest-day/shift allowances in ordinary pay: `
       + "L. 199/2025 art. 1 c. 10–11 prices them under a 15% imposta sostitutiva (cap 1.500/year; AdE FAQ Circ. "
       + `3/E/2026), which the engine does not compute — see ${refused}. Price qualifying allowances outside `
-      + "ordinary IRPEF (pay-run adjustment, engine/src/payroll/run-adjustments.ts)",
+      + "ordinary IRPEF through a pay-run adjustment",
     );
   }
   // c. 18–21 tourism speciale is NOT refused here: it prices inside
@@ -950,7 +950,7 @@ export function calculateItWithTables(input: It2025Input, tables: ItYearTables):
       + "progressive scaglioni schedule (1.23% / 1.58% / 1.72% by bracket), which no single rate can represent — "
       + `a scalar silently misprices every Lombardia payroll; see ${refused}. Enter the deliberated brackets as `
       + "regionalBrackets, or price the surtax outside the pack "
-      + "(pay-run adjustment, engine/src/payroll/run-adjustments.ts)",
+      + "through a pay-run adjustment",
     );
   }
   let addRegionale = hasRegionalBrackets
@@ -1125,8 +1125,7 @@ export async function computeItStatutoryWithRates(
   if (taxYear !== 2025 && taxYear !== 2026) {
     throw new ItPayrollRefusal(
       `IT payroll pack has no transcribed tables for tax year ${taxYear}: 2025 and 2026 are the transcribed `
-      + "editions (see engine/src/payroll/it/tax-year-2025.ts and tax-year-2026.ts). Transcribe the year's "
-      + "Legge di Bilancio, AdE provvedimenti, and INPS circular into engine/src/payroll/it/rates.ts before "
+      + "editions. This year is not yet supported by the IT pack; contact support before "
       + `paying into ${taxYear}.`,
     );
   }

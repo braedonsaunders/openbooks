@@ -196,9 +196,9 @@ const US_REGIONS: PayrollRegionCoverage = {
    */
   supported: supportedUsStates(),
   unsupportedReason:
-    "{region} income tax withholding is not implemented by the US payroll pack. Transcribe the "
-    + "state's published withholding tables into engine/src/payroll/us/states/ and register the "
-    + `engine. Implemented: ${implementedUsStates().join(", ")}.`,
+    "{region} income tax withholding is not implemented by the US payroll pack. "
+    + "This state is not yet supported by the US pack; contact support. "
+    + `Implemented: ${implementedUsStates().join(", ")}.`,
 };
 
 /**

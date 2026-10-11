@@ -310,7 +310,8 @@ export function dePapVersorgungsbezuegeRefusal(): PayrollPackError {
   return new PayrollPackError(
     `DE PAP 2026: Versorgungsbezüge (VBEZ/VBS/STERBE) not implemented — `
     + `the MRE4 Versorgungsfreibetrag tables TAB1–TAB3 (§19 Abs. 2 EStG) are `
-    + `not transcribed into engine/src/payroll/de/. Refused by name.`,
+    + `not transcribed in this pack version — this pay type is not yet supported by the DE pack; `
+    + `contact support. Refused by name.`,
   );
 }
 
@@ -318,8 +319,8 @@ export function dePapVersorgungsbezuegeRefusal(): PayrollPackError {
 export function dePapAltersentlastungsbetragRefusal(): PayrollPackError {
   return new PayrollPackError(
     `DE PAP 2026: Altersentlastungsbetrag (ALTER1/AJAHR) not implemented — `
-    + `the MRE4ALTE tables TAB4–TAB5 (§24a EStG) are not transcribed into `
-    + `engine/src/payroll/de/. Refused by name.`,
+    + `the MRE4ALTE tables TAB4–TAB5 (§24a EStG) are not transcribed in this pack version — `
+    + `this pay type is not yet supported by the DE pack; contact support. Refused by name.`,
   );
 }
 
@@ -328,7 +329,8 @@ export function dePapSonstigeBezuegeRefusal(): PayrollPackError {
   return new PayrollPackError(
     `DE PAP 2026: sonstige Bezüge (SONSTB/JRE4/MBV, §39b Abs. 3 EStG) not `
     + `implemented — MSONST/MOSONST/MRE4SONST/STSMIN/MSOLZSTS are not `
-    + `transcribed into engine/src/payroll/de/. Refused by name.`,
+    + `transcribed in this pack version — this pay type is not yet supported by the DE pack; `
+    + `contact support. Refused by name.`,
   );
 }
 

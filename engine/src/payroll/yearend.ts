@@ -74,7 +74,7 @@ function caYearCaps(taxYear: number): { mie: string; yampe: string; qpipMie: str
   }
   throw new PayrollError(
     `no CRA maximums for tax year ${taxYear} — T4 boxes 24 and 26 cannot be capped. `
-    + "Add the year to engine/src/payroll/canada/rates.ts",
+    + "This year is not yet supported by the CA pack; contact support.",
   );
 }
 

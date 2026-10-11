@@ -91,7 +91,7 @@ export function rl1YearCaps(taxYear: number): {
   }
   throw new PayrollError(
     `no Revenu Québec maximums for tax year ${taxYear} — RL-1 boxes G and I cannot be capped. `
-    + "Add the year to engine/src/payroll/canada/quebec/rl1.ts (rl1YearCaps) alongside the TP-1015.F-V edition",
+    + "This year is not yet supported by the CA-QC pack; contact support.",
   );
 }
 

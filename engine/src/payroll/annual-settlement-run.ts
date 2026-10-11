@@ -179,7 +179,7 @@ export async function settleAnnualSettlement(
       `annual settlement: "${settlement.label}" declares mode "${settlement.mode}" for ${employeeName} — `
       + 'the run layer honours "adjustment_line" only (one extra line on an otherwise normal final run), '
       + "so this employee's year is left unsettled by this run. Settle the residual through a pay-run "
-      + "adjustment (engine/src/payroll/run-adjustments.ts) and recalculate.",
+      + "adjustment and recalculate.",
     );
   }
   const missing = missingSettlementInputs(settlement, { emp, certificateFor });

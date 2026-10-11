@@ -22,7 +22,7 @@ export function payrollJurisdiction(key: string): PayrollJurisdiction {
   if (!jurisdiction) {
     throw new PayrollPackError(
       `no payroll pack declares the statutory holiday calendar for "${key}" — `
-      + `declare it in engine/src/payroll/packs.ts (declared: `
+      + `this jurisdiction is not yet supported by any payroll pack; contact support. (Declared: `
       + `${declaredJurisdictions().map((j) => j.key).join(", ")})`,
     );
   }

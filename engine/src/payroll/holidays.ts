@@ -542,7 +542,7 @@ export function statutoryHolidayPayRule(
   if (editions === null) return null;
   if (editions.length === 0) {
     throw new PayrollHolidayError(
-      `${declaration.name}: the public-holiday calendar and statutory holiday-pay rule under ${declaration.citation} are not transcribed — transcribe both in the jurisdiction pack before calculating payroll`,
+      `${declaration.name}: the public-holiday calendar and statutory holiday-pay rule under ${declaration.citation} are not transcribed — this jurisdiction is not yet supported by the holiday-pay calendar; contact support before calculating payroll`,
     );
   }
   const date = onDate.slice(0, 10);
@@ -566,7 +566,7 @@ export function statutoryHolidayPayRule(
     throw new PayrollHolidayError(
       `${declaration.name} declares no statutory holiday-pay formula in force on ${date} — `
       + `the statute governing that date has not been transcribed (transcribed: ${known}). `
-      + "Transcribe the edition in engine/src/payroll/canada/employment-standards.ts, or run "
+      + "This date is not yet supported by the holiday-pay calendar; contact support, or run "
       + "the period against a date the pack covers. This calculation will not apply a formula "
       + "that was not the law at the time",
     );
@@ -2180,8 +2180,8 @@ export function undeclaredJurisdictionHolidayConflict(input: {
     message:
       `statutory holiday pay is enabled and ${first.name} (${first.date}) falls in this pay `
       + `period, but no payroll pack declares a statutory holiday calendar or pay formula for `
-      + `${jurisdiction} — transcribe the jurisdiction in engine/src/payroll/packs.ts, or turn `
-      + "statutory holiday pay off in Payroll setup",
+      + `${jurisdiction} — this jurisdiction is not yet supported by any payroll pack; contact `
+      + "support, or turn statutory holiday pay off in Payroll setup",
   };
 }
 

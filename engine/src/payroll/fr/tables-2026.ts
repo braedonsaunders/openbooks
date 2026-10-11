@@ -120,8 +120,8 @@ export function frPasEditionForVersement(payDate: string): FrPasEdition {
     throw new PayrollPackError(
       `FR PAS has no transcribed grille for versements dated ${payDate}: `
       + "the FR pack transcribes calendar 2026 only "
-      + "(BOI-BAREME-000037-20250410 and -20260407). Transcribe the year's "
-      + "tables into engine/src/payroll/fr/ first.",
+      + "(BOI-BAREME-000037-20250410 and -20260407). This date is not yet supported by the FR pack; "
+      + "contact support.",
     );
   }
   return payDate < "2026-05-01" ? "may2025" : "may2026";

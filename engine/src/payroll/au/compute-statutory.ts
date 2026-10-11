@@ -309,8 +309,7 @@ export async function computeAuStatutory(
     throw new PayrollPackError(
       `AU PAYG withholding for tax year ${taxYear} has not been transcribed `
       + "— the AU payroll pack's only transcribed edition is 2026–27 "
-      + "(taxYear 2027; see tax-year-2027.ts). Transcribe the year's "
-      + "legislation before calculating",
+      + "(taxYear 2027). This year is not yet supported by the AU pack; contact support.",
     );
   }
   // Schedule 5 is not transcribed, and the Schedule 1 engine below prices

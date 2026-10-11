@@ -253,9 +253,8 @@ export async function computeFrStatutory(
   if (taxYear !== 2026) {
     throw new PayrollPackError(
       `FR PAS withholding for tax year ${taxYear} has not been transcribed `
-      + "— the FR payroll pack's only transcribed year is calendar 2026 "
-      + "(see engine/src/payroll/fr/tables-2026.ts). Transcribe the year's "
-      + "grids before calculating",
+      + "— the FR payroll pack's only transcribed year is calendar 2026. "
+      + "This year is not yet supported by the FR pack; contact support.",
     );
   }
   if (region !== "FR") {

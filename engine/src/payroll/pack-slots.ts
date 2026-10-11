@@ -16,9 +16,8 @@ export function assertContributoryBasesDeclared(country: string): void {
   const { contributoryBases } = payrollPack(country);
   if (!contributoryBases?.pensionable?.trim() || !contributoryBases?.insurable?.trim()) {
     throw new PayrollPackError(
-      `the ${country} payroll pack does not declare its contributory bases — say what the `
-      + "pensionable and insurable earning flags accumulate (engine/src/payroll/packs.ts "
-      + "contributoryBases) before its components can be seeded",
+      `the ${country} payroll pack does not declare its contributory bases — `
+      + `this pack cannot be seeded; contact support.`,
     );
   }
 }

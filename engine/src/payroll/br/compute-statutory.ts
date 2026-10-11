@@ -114,9 +114,8 @@ export async function computeBrStatutoryWithRates(
   if (taxYear !== 2026 && taxYear !== 2025 && taxYear !== 2024) {
     fail(
       `tax year ${taxYear} has not been transcribed — the BR payroll pack's transcribed years are `
-      + "calendar 2024, 2025 and 2026 (see engine/src/payroll/br/tax-year-2024.ts, "
-      + "tax-year-2025.ts and tax-year-2026.ts). "
-      + "Transcribe the year's Portaria + monthly tables before calculating",
+      + "calendar 2024, 2025 and 2026. "
+      + "This year is not yet supported by the BR pack; contact support.",
     );
   }
   // Every year prices through its own transcribed table bundle, selected by
@@ -212,8 +211,8 @@ export async function computeBrStatutoryWithRates(
     if (taxYear !== 2026) {
       fail(
         `salário-família for tax year ${taxYear} is not transcribed — only the 2026 quota and ceiling `
-        + "(R$ 67,54 / R$ 1.980,38, Portaria 13/2026) are modelled; transcribe the year's Portaria "
-        + "before calculating",
+        + "(R$ 67,54 / R$ 1.980,38, Portaria 13/2026) are modelled. "
+        + "This year is not yet supported by the BR pack; contact support.",
       );
     }
     if (salarioContribuicao <= cents(BR_2026_SALARIO_FAMILIA.limiteRemuneracao, "salário-família limite")) {

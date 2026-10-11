@@ -128,7 +128,7 @@ function requireIdEditionEffective(payDate: string): void {
     throw new PayrollError(
       `Idaho income tax withholding for pay dates before ${ID_SUNSET_EDITION_FROM} is not loaded — `
       + "the April 2025 Table for Percentage Computation Method still subtracted Idaho Child Tax "
-      + `Credit allowances. Transcribe that earlier edition into ${RATES_MODULE} if a `
+      + `Credit allowances. Contact support if a `
       + "pre-July-31-2026 pay date must be calculated. Never apply the revised "
       + "zero-allowance tables to an earlier pay date: the July 31, 2026 announcement directs "
       + "their use going forward from issuance, and no operative date before that is established.",

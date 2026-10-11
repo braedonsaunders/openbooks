@@ -82,13 +82,13 @@ export function assertAuFinalisationYear(taxYear: number): void {
   if (draft) {
     throw new PayrollPackError(
       `AU STP finalisation for ${auFinancialYearLabel(taxYear)} (taxYear ${taxYear}) is refused: `
-      + `the ${taxYear} statutory tables for AU are scaffolded but not filled in — the draft `
-      + `edition still carries placeholder values. Transcribe the published ATO figures before finalising ${taxYear}.`,
+      + `the ${taxYear} statutory tables for AU are scaffolded but not filled in. `
+      + `This year is not yet supported by the AU pack; contact support.`,
     );
   }
   throw new PayrollPackError(
     `AU STP finalisation for taxYear ${taxYear} is refused: ${taxYear} statutory tables are not loaded for AU — `
     + (published.length > 0 ? `loaded years: ${published.join(", ")}. ` : "no years are loaded. ")
-    + "Transcribe the year's ATO legislation before finalising.",
+    + "This year is not yet supported by the AU pack; contact support.",
   );
 }

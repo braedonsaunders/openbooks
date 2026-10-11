@@ -374,7 +374,7 @@ export async function applyCaEmployerLevies(
           if (taxYear !== 2026) {
             throw new PayrollPackError(
               `QC HSF 2026 agriculture/forestry/fishing exemption does not cover ${taxYear} — clear the `
-              + "exemption or transcribe the year's rule before pricing",
+              + "exemption, or contact support for a year the exemption does not cover.",
             );
           }
           hsfAmount = "0" as Money;
@@ -426,7 +426,7 @@ export async function applyCaEmployerLevies(
     if (taxYear !== 2026) {
       throw new PayrollPackError(
         `Québec CNT has no transcribed rate for ${taxYear}: 2026 prices 0.06% to $103,000 per employee `
-        + "(Revenu Québec). Transcribe the year's rate and maximum before calculating.",
+        + "(Revenu Québec). This year is not yet supported by the CA-QC pack; contact support.",
       );
     }
     const runSubsidiary = (await tx.execute<{ subsidiary_id: string | null }>(sql`

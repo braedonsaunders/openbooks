@@ -80,8 +80,8 @@ export async function computeJpStatutoryWithRates(
   if (taxYear !== 2026) {
     fail(
       `tax year ${taxYear} has not been transcribed — the JP payroll pack's only transcribed `
-      + "year is calendar 2026 (令和8年分 月額表 + 厚生年金保険料額表 令和8年度版; see "
-      + "engine/src/payroll/jp/rates.ts). Transcribe the year's tables before calculating",
+      + "year is calendar 2026 (令和8年分 月額表 + 厚生年金保険料額表 令和8年度版). "
+      + "This year is not yet supported by the JP pack; contact support.",
     );
   }
   if (!JP_PREFECTURE_CODES.includes(region)) {

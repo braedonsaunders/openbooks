@@ -1594,8 +1594,8 @@ function everyUsRegion(): PayrollRegionWithholding[] {
     }
     if (implemented.has(state)) {
       throw new PayrollError(
-        `${state} has a withholding engine but no jurisdiction declaration in `
-        + "engine/src/payroll/us/jurisdictions.ts",
+        `${state} has a withholding engine but no jurisdiction declaration — `
+        + "this pack needs a correction; contact support.",
       );
     }
     const publication = usStatePublication(state);
@@ -1606,7 +1606,7 @@ function everyUsRegion(): PayrollRegionWithholding[] {
       unimplementedReason:
         `${state} levies a wage income tax and the US pack has not transcribed its tables. `
         + (publication ? `They are published in ${publication}. ` : "")
-        + `Add engine/src/payroll/us/states/${state.toLowerCase()}.ts and register it.`,
+        + `This state is not yet supported by the US pack; contact support.`,
       taxesNonresidentWages: true,
       residentWithholding: "unknown",
       residentWithholdingImplemented: false,

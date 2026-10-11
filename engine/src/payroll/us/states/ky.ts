@@ -209,8 +209,8 @@ export function louisvilleRateFor(
     .at(-1);
   if (!period) {
     throw new PayrollError(
-      `no Louisville occupational tax rate is loaded for a pay date of ${payDate} — transcribe the `
-      + `Revenue Commission's effective rate into ${RATES_MODULE}.`,
+      `no Louisville occupational tax rate is loaded for a pay date of ${payDate} — the Metro Revenue `
+      + `Commission publishes the effective rate. This date is not yet supported by the US pack; contact support — refused by name.`,
     );
   }
   return {

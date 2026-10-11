@@ -168,8 +168,7 @@ export const RL1_XML_DOWNLOAD_REFUSAL =
   + "en format XML; guide IN-800), so a generated file could not be validated against "
   + "the real schema and might misstate a statutory filing. The RL-1 slip data above "
   + "is complete — file it through Revenu Québec's online services (mandatory when "
-  + "more than 5 slips) or authorized software until the partner specification is "
-  + "obtained and the serializer in engine/src/payroll/canada/quebec/rl1xml.ts is completed.";
+  + "more than 5 slips) or authorized software.";
 
 /**
  * Why an RL-1 cannot be AMENDED or CANCELLED here — the registry's

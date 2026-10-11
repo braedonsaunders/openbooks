@@ -2981,7 +2981,7 @@ const REFUSALS: Refusal[] = [
   {
     state: "OH", label: "a period ending before the earliest transcribed table set",
     input: { payDate: "2025-09-05", periodEnd: "2025-08-31", periodsPerYear: 26, wages: "3000.00" },
-    refusal: /no Ohio withholding table is loaded for a payroll period ending 2025-08-31.*carries the sets effective 2025-10-01 onwards.*Transcribe it from tax\.ohio\.gov/s,
+    refusal: /no Ohio withholding table is loaded for a payroll period ending 2025-08-31.*carries the sets effective 2025-10-01 onwards.*not yet supported by the US pack; contact support/s,
   },
   {
     // A 260-day payroll mapped onto Detroit's 365-day column would deduct 40% too
@@ -3061,7 +3061,7 @@ const REFUSALS: Refusal[] = [
   {
     state: "CO", label: "an unprinted 365-period daily frequency",
     input: { payDate: "2026-03-06", periodsPerYear: 365, wages: "1000.00", federalFilingStatus: "single" },
-    refusal: /365 periods a year.*per-period TABLE lookup.*transcribe the state's table for this one/,
+    refusal: /365 periods a year.*per-period TABLE lookup.*contact support about a table for this one/,
   },
   {
     state: "CO", label: "a DR 1059 missing its current-year military-spouse attestations",
