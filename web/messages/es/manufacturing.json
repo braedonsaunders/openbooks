@@ -196,6 +196,7 @@
     "startOperation": "Iniciar operación",
     "resumeOperation": "Reanudar operación",
     "pauseOperation": "Pausar operación",
+    "correctOperationStart": "Corregir fecha de inicio",
     "completeOperation": "Completar operación",
     "waive": "Eximir saldo de material",
     "endRate": "Finalizar tarifa",

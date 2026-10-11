@@ -196,6 +196,7 @@
     "startOperation": "Démarrer l’opération",
     "resumeOperation": "Reprendre l’opération",
     "pauseOperation": "Suspendre l’opération",
+    "correctOperationStart": "Corriger la date de début",
     "completeOperation": "Terminer l’opération",
     "waive": "Dispenser le solde matière",
     "endRate": "Terminer le taux",

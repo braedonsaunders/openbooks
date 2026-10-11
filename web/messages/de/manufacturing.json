@@ -196,6 +196,7 @@
     "startOperation": "Arbeitsgang starten",
     "resumeOperation": "Arbeitsgang fortsetzen",
     "pauseOperation": "Arbeitsgang pausieren",
+    "correctOperationStart": "Startdatum korrigieren",
     "completeOperation": "Arbeitsgang abschließen",
     "waive": "Materialrest erlassen",
     "endRate": "Satz beenden",

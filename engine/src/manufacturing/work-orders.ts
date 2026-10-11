@@ -1585,6 +1585,50 @@ export async function startWorkOrderOperation(tx: SqlExecutor, orgId: string, ac
   return after;
 }
 
+/**
+ * Correct the start stamp of an operation that is still in progress. The
+ * stamp is the floor for the operation's completion date, so an operation
+ * started on the real clock before back-dating existed could never record
+ * the day production actually finished. Only an earlier, real day may be
+ * stated, and only while the operation has posted nothing of its own:
+ * posted consumption keeps its date, so it must be reversed first.
+ */
+export async function correctWorkOrderOperationStart(
+  tx: SqlExecutor, orgId: string, actorId: string, workOrderId: string, operationId: string,
+  input: { startedOn: string; reason: string },
+) {
+  await assertManufacturingFeature(tx, orgId, "manufacturing");
+  await lockManufacturingOrderManageAuthority(tx, orgId, actorId, workOrderId);
+  const { order, operation: before } = await lockOperation(tx, orgId, workOrderId, operationId);
+  const reason = input.reason?.trim() ?? "";
+  if (reason.length < 5) refuse(`Correcting operation ${before.sequence}'s start requires a reason.`, "start_correction_reason_required", "Enter why the recorded start is wrong.");
+  if (before.status !== "running" && before.status !== "paused") {
+    refuse(`Operation ${before.sequence} is ${before.status}; only a started, unfinished operation's start can be corrected.`, "invalid_operation_transition", "Correct the start before completing the operation.", 409);
+  }
+  const startedOn = await operationEventDate(tx, orgId, input.startedOn, null, `Operation ${before.sequence}`);
+  const recorded = before.started_at ? new Date(before.started_at).toISOString().slice(0, 10) : null;
+  if (!startedOn || (recorded !== null && startedOn >= recorded)) {
+    refuse(`Operation ${before.sequence} started on ${recorded}; a correction must state an earlier day.`, "start_correction_not_earlier", "Enter the earlier day production actually began.");
+  }
+  const posted = (await tx.execute<{ entry_number: string; posting_date: string }>(sql`
+    select entry_number, posting_date::text as posting_date from journal_entries
+     where org_id=${orgId} and origin='manufacturing' and custom->>'work_order_number'=${order.number}
+       and custom->>'operation_id'=${operationId}
+       -- Live entries only: a reversed posting no longer fixes a date.
+       and status='posted' and reverses_entry_id is null
+     order by posting_date limit 1`)).rows[0];
+  if (posted) {
+    refuse(`Operation ${before.sequence} already posted ${posted.entry_number} on ${posted.posting_date}.`, "start_correction_posted", "Reverse that posting before correcting the start, so its date and the start agree.", 409);
+  }
+  const updated = await tx.execute(sql`
+    update mfg_wo_operations set started_at=${startedOn}::date::timestamptz, updated_by=${actorId}, updated_at=now()
+     where org_id=${orgId} and work_order_id=${workOrderId} and id=${operationId} and status in ('running','paused')
+     returning id, work_order_id, sequence, status, operator_user_id, pause_reason, started_at`);
+  const after = rowOrNotFound(updated.rows);
+  await auditChange(tx, { orgId, actorId, table: "mfg_wo_operations", rowId: operationId, action: "update", before, after: { ...after, reason } });
+  return after;
+}
+
 export async function pauseWorkOrderOperation(tx: SqlExecutor, orgId: string, actorId: string, workOrderId: string, operationId: string, reason: string) {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
   await lockManufacturingOrderManageAuthority(tx,orgId,actorId,workOrderId);

@@ -196,6 +196,7 @@
     "startOperation": "工程を開始",
     "resumeOperation": "工程を再開",
     "pauseOperation": "工程を一時停止",
+    "correctOperationStart": "開始日を訂正",
     "completeOperation": "工程を完了",
     "waive": "資材残数量を免除",
     "endRate": "単価を終了",

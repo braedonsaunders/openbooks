@@ -382,6 +382,11 @@ export function childCommands(
           fields: [reason("reason", true, 1)],
         },
         {
+          key: "correctOperationStart",
+          path: base + "/correct-start",
+          fields: [date("startedOn", null, true), reason("reason", true, 5)],
+        },
+        {
           key: "completeOperation",
           path: base + "/complete",
           note: "operationNote",

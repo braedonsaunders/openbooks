@@ -196,6 +196,7 @@
     "startOperation": "Start operation",
     "resumeOperation": "Resume operation",
     "pauseOperation": "Pause operation",
+    "correctOperationStart": "Correct start date",
     "completeOperation": "Complete operation",
     "waive": "Waive material balance",
     "endRate": "End rate",

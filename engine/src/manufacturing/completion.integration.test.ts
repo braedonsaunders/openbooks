@@ -43,7 +43,7 @@ import { upsertItemPolicy, assertManufacturingItemExists } from "./item-policies
 import { runMrp } from "./mrp.ts";
 import { activateRouting, proposeRoutingActivation, applyRoutingActivation, updateRouting, createRouting, createRoutingOperation, createNextRoutingVersion, updateRoutingOperation, getRouting } from "./routings.ts";
 import { addWorkCenterRate, endWorkCenterRate, createWorkCenter, updateWorkCenter } from "./work-centers.ts";
-import { createWorkOrder,getWorkOrder, updateDraftWorkOrder, holdWorkOrder, releaseWorkOrder, cancelWorkOrder, startWorkOrderOperation } from "./work-orders.ts";
+import { createWorkOrder,getWorkOrder, updateDraftWorkOrder, holdWorkOrder, releaseWorkOrder, cancelWorkOrder, startWorkOrderOperation, correctWorkOrderOperationStart } from "./work-orders.ts";
 import { completeWorkOrderOperation, issueMaterials } from "./materials.ts";
 import { completeWorkOrder, markWorkOrderDone, reverseMaterialIssue, waiveMaterial } from "./completion.ts";
 import { previewStandardRollup,proposeStandardRollup,applyStandardRollup } from "./standard-rollup.ts";
@@ -577,6 +577,17 @@ const cases: Case[] = [
         join journal_entries e on e.org_id=o.org_id and e.custom->>'operation_id'=o.id::text and e.custom ? 'conversion_labor_amount'
        where o.org_id=${f.org.orgId} and o.id=${wo.operation}`)).rows[0]!);
     assert.deepEqual(stamped, { completed: finished, posted: finished });
+  } },
+  { name: "an operation started on the real clock can have its start corrected to an earlier day", run: async (f) => {
+    const wo = await conversionOrder(f, f.org.items.assembly);
+    const started = await withBypassContext(async () => (await db.execute<{ day: string }>(sql`select started_at::date::text as day from mfg_wo_operations where org_id=${f.org.orgId} and id=${wo.operation}`)).rows[0]!.day);
+    const earlier = addCalendarDays(started, -3);
+    await refuse(run((tx) => correctWorkOrderOperationStart(tx, f.org.orgId, f.actorId, wo.id, wo.operation, { startedOn: started, reason: "Started earlier on the floor" })),
+      "start_correction_not_earlier", "a correction must state an earlier day", "Enter the earlier day");
+    await run((tx) => correctWorkOrderOperationStart(tx, f.org.orgId, f.actorId, wo.id, wo.operation, { startedOn: earlier, reason: "Started earlier on the floor" }));
+    await run((tx) => completeWorkOrderOperation(tx, f.org.orgId, f.actorId, wo.id, wo.operation, { doneQty: "10", completedOn: earlier }));
+    const completed = await withBypassContext(async () => (await db.execute<{ day: string }>(sql`select completed_at::date::text as day from mfg_wo_operations where org_id=${f.org.orgId} and id=${wo.operation}`)).rows[0]!.day);
+    assert.equal(completed, earlier, "the corrected start lets the completion carry its true day");
   } },
   { name: "an operation released before any overhead rate takes the rate effective at its order's date", run: async (f) => {
     // Released while no overhead rate covered the order: the frozen snapshot is empty.

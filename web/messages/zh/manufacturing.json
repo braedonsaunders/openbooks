@@ -196,6 +196,7 @@
     "startOperation": "开始工序",
     "resumeOperation": "恢复工序",
     "pauseOperation": "暂停工序",
+    "correctOperationStart": "更正开始日期",
     "completeOperation": "完成工序",
     "waive": "豁免材料余额",
     "endRate": "结束费率",
