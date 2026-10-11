@@ -1480,8 +1480,8 @@ export const TENANT_RETIREMENT_GUARDS = [
   {
     "name": "production_bom_revision_guard",
     "source": "0619_operating_profiles_production_extensions.sql",
-    "sha256": "bd7a264752e9542c1dc1490afa3befa2423acb357729729c2dd1c76823832ac0",
-    "newSha256": "01dab22ed6c14cfadd50ab5c282e2a8dd7e4937fc31f9462c9f71c7b6b55de74",
+    "sha256": "01dab22ed6c14cfadd50ab5c282e2a8dd7e4937fc31f9462c9f71c7b6b55de74",
+    "newSha256": "4ceb220937a7cd8673072332b610d5ed1ba1e4148191114e17fa830ccc54c171",
     "patch": true
   },
   {

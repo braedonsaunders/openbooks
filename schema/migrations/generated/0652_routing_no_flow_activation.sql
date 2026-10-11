@@ -26,7 +26,9 @@
 -- The production BOM revision guard admits the same evidence when the
 -- approved replacement writes its lines: the delete and inserts run
 -- under the recorded change key, and a self-decided change is permitted
--- only with the automatic no-flow evidence re-proven in storage.
+-- only with the automatic no-flow evidence re-proven in storage. The
+-- replacement preserves the retirement DELETE admission byte for byte,
+-- so the pinned retirement contract advances by digest only.
 --
 -- No schema, data, or backfill: three trigger function replacements,
 -- otherwise a no-op. Reapply-safe by construction.
@@ -102,6 +104,10 @@ END $function$;
 CREATE OR REPLACE FUNCTION public.production_bom_revision_guard() RETURNS trigger LANGUAGE plpgsql SET search_path=public,pg_catalog AS $$
 DECLARE subject_org uuid;subject_item uuid;change_key text;proposal public.financial_changes%ROWTYPE;governed boolean;
 BEGIN
+  IF TG_OP = 'DELETE' AND tenant_retirement.openbooks_tenant_retirement_delete_allowed(TG_TABLE_NAME, to_jsonb(OLD)) THEN
+    RETURN OLD;
+  END IF;
+
  IF TG_OP='DELETE' THEN
   IF public.openbooks_sandbox_wipe_allowed(OLD.org_id) THEN RETURN OLD; END IF;
   subject_org:=OLD.org_id;subject_item:=OLD.assembly_item_id;
@@ -110,7 +116,8 @@ BEGIN
   subject_org:=NEW.org_id;subject_item:=NEW.assembly_item_id;
  END IF;
  IF TG_OP='UPDATE' AND (NEW.org_id,NEW.assembly_item_id) IS DISTINCT FROM (OLD.org_id,OLD.assembly_item_id) THEN
-  RAISE EXCEPTION 'A recipe line cannot change its organization or assembly.' USING ERRCODE='23514'; END IF;
+  RAISE EXCEPTION 'A recipe line cannot change its organization or assembly.' USING ERRCODE='23514';
+ END IF;
  IF TG_OP='UPDATE' AND to_jsonb(NEW)-ARRAY['updated_at','updated_by'] IS NOT DISTINCT FROM to_jsonb(OLD)-ARRAY['updated_at','updated_by'] THEN RETURN NEW; END IF;
  governed:=EXISTS(SELECT 1 FROM public.mfg_work_orders WHERE org_id=subject_org AND produced_item_id=subject_item AND released_at IS NOT NULL)
   OR EXISTS(SELECT 1 FROM public.mfg_routings WHERE org_id=subject_org AND produced_item_id=subject_item AND activation_change_id IS NOT NULL)
@@ -118,22 +125,26 @@ BEGIN
  IF NOT governed THEN IF TG_OP='DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF; END IF;
  change_key:=nullif(current_setting('openbooks.production_bom_changes',true),'')::jsonb->>(subject_org::text||':'||subject_item::text);
  IF change_key IS NULL OR change_key!~*'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
-  RAISE EXCEPTION 'This production recipe requires an approved revision; open its BOM editor and submit the revision for approval.' USING ERRCODE='23514'; END IF;
+  RAISE EXCEPTION 'This production recipe requires an approved revision; open its BOM editor and submit the revision for approval.' USING ERRCODE='23514';
+ END IF;
  SELECT * INTO proposal FROM public.financial_changes WHERE org_id=subject_org AND id=change_key::uuid AND subject_id=subject_item
   AND domain='manufacturing' AND operation='bom_revision_activation' AND status='approved' FOR SHARE;
- IF NOT FOUND OR proposal.approved_by IS NULL OR (proposal.approved_by=proposal.submitted_by AND NOT public.financial_change_self_decision_authorized(proposal.org_id,proposal.id,proposal.submitted_by)
+ IF NOT FOUND OR proposal.approved_by IS NULL OR (proposal.approved_by=proposal.submitted_by AND NOT public.financial_change_self_decision_authorized(proposal.org_id,proposal.id,proposal.submitted_by))
   AND NOT (COALESCE(proposal.payload->'decision'->>'mode','')='automatic'
    AND COALESCE(proposal.payload->'decision'->'policy'->>'flowConfigured','')='false'
    AND NOT EXISTS(SELECT 1 FROM flows f WHERE f.org_id=proposal.org_id AND f.subject_kind='financial_change' AND f.enabled)
-   AND NOT EXISTS(SELECT 1 FROM flow_runs r WHERE r.org_id=proposal.org_id AND r.subject_kind='financial_change' AND r.subject_id=proposal.id))) THEN
-  RAISE EXCEPTION 'A current recipe requires its permitted approval decision.' USING ERRCODE='23514'; END IF;
+   AND NOT EXISTS(SELECT 1 FROM flow_runs r WHERE r.org_id=proposal.org_id AND r.subject_kind='financial_change' AND r.subject_id=proposal.id)) THEN
+  RAISE EXCEPTION 'A current recipe requires its permitted approval decision.' USING ERRCODE='23514';
+ END IF;
  IF TG_OP='DELETE' THEN
   IF NOT EXISTS(SELECT 1 FROM jsonb_array_elements(proposal.before_state->'lines') previous WHERE previous->>'id'=OLD.id::text
     AND public.production_bom_line_evidence(previous,false)=public.production_bom_line_evidence(to_jsonb(OLD),true)) THEN
-   RAISE EXCEPTION 'The recipe changed after approval; propose its current revision again.' USING ERRCODE='23514'; END IF;
+   RAISE EXCEPTION 'The recipe changed after approval; propose its current revision again.' USING ERRCODE='23514';
+  END IF;
   RETURN OLD;
  ELSIF TG_OP='UPDATE' OR NOT EXISTS(SELECT 1 FROM jsonb_array_elements(proposal.payload->'components') component
    WHERE public.production_bom_line_evidence(component,false)=public.production_bom_line_evidence(to_jsonb(NEW),true)) THEN
-  RAISE EXCEPTION 'Apply the exact approved recipe replacement; direct line changes are refused.' USING ERRCODE='23514'; END IF;
+  RAISE EXCEPTION 'Apply the exact approved recipe replacement; direct line changes are refused.' USING ERRCODE='23514';
+ END IF;
  RETURN NEW;
 END $$;
