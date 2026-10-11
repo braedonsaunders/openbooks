@@ -19,7 +19,7 @@ import { reportBookSelection } from './report-books'
 import type { StatementDimFilter } from './statement-matrix'
 import type { DimFilter } from './reports'
 import { subsidiaryVisibleFilter } from './subsidiaries'
-import { decimalAdd, decimalCmp, decimalNeg } from './statement-format'
+import { decimalAdd, decimalNeg } from './statement-format'
 
 export const REPORT_DRILL_PAGE_SIZE = 50
 
@@ -164,6 +164,7 @@ async function ledgerData(target: Extract<ReportDrillTarget, { kind: 'ledger' }>
       profitSigned: target.profitSigned,
       cashOnly: target.cashOnly,
       newestFirst: target.newestFirst,
+      hideVoidPairs: target.hideVoidPairs,
       limit: REPORT_DRILL_PAGE_SIZE,
       offset: (page - 1) * REPORT_DRILL_PAGE_SIZE,
       orgId: authz.user.orgId,
@@ -182,8 +183,8 @@ async function ledgerData(target: Extract<ReportDrillTarget, { kind: 'ledger' }>
       { label: tc('transactionTypes.journalEntry') },
       { label: tc('labels.account') },
       { label: tc('labels.description') },
-      { label: tr('trialBalance.columns.debits'), align: 'right' },
-      { label: tr('trialBalance.columns.credits'), align: 'right' },
+      { label: tc('labels.amount'), align: 'right' },
+      { label: tc('labels.status') },
     ],
     rows: result.lines.map((line) => ({
       key: line.lineId,
@@ -192,8 +193,16 @@ async function ledgerData(target: Extract<ReportDrillTarget, { kind: 'ledger' }>
         line.entryNumber,
         [line.accountNumber, line.accountName].filter(Boolean).join(' · '),
         [line.party, line.memo].filter(Boolean).join(' · '),
-        decimalCmp(line.amount, '0') > 0 ? money(line.amount) : '',
-        decimalCmp(line.amount, '0') < 0 ? money(decimalNeg(line.amount)) : '',
+        // Statement-signed, never a magnitude: the column sums exactly to
+        // the net total above (a void pair nets to zero here, as it does in
+        // the statement cell). Reversal legs print negative — that minus
+        // sign is the reversal marker the old debit/credit split swallowed.
+        money(line.signed),
+        line.entryStatus === 'reversed'
+          ? tc('status.voided')
+          : line.reversesEntryId
+            ? tr('drillDrawer.reversalOf', { entry: line.reversesEntryNumber ?? '' })
+            : '',
       ],
       transaction: { entryId: line.entryId, docKind: line.docKind, docId: line.docId },
     })),
@@ -201,6 +210,7 @@ async function ledgerData(target: Extract<ReportDrillTarget, { kind: 'ledger' }>
     page,
     perPage: REPORT_DRILL_PAGE_SIZE,
     total: result.count,
+    voidPairLines: result.voidPairLines,
   }
 }
 

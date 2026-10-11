@@ -3218,7 +3218,10 @@
     "supporting": "選択したレポート値の根拠となるレコードです。",
     "supportingCapped": "根拠レコードは最大10,000件まで表示されます。結果は上限に達しており、不完全な場合があります。",
     "loadFailed": "根拠レコードを読み込めませんでした。",
-    "recordLoadFailed": "取引を開けませんでした。"
+    "recordLoadFailed": "取引を開けませんでした。",
+    "reversalOf": "{entry}の反対仕訳",
+    "hideVoidPairs": "無効化されたペアを非表示 ({count})",
+    "showVoidPairs": "無効化されたペアを表示"
   },
   "flyout": {
     "title": "仕訳",

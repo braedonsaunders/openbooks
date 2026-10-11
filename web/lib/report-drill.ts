@@ -7,6 +7,8 @@ import { isUuid } from '@openbooks/engine/src/platform/uuid.ts'
 export const REPORT_DRILL_PERIOD_PARAM = 'reportDrillPeriod'
 export const REPORT_DRILL_FROM_PARAM = 'reportDrillFrom'
 export const REPORT_DRILL_TO_PARAM = 'reportDrillTo'
+/** Overlay chrome for the void-pair toggle; the drill fetch maps it to hideVoids. */
+export const REPORT_DRILL_HIDE_VOIDS_PARAM = 'reportDrillHideVoids'
 
 export type ReportDrillTarget =
   | {
@@ -32,6 +34,9 @@ export type ReportDrillTarget =
       profitSigned?: boolean
       /** Only journal entries that touch a bank account; used by Cash Flow. */
       cashOnly?: boolean
+      /** Drop complete in-window void pairs (they net to zero). Off by
+       *  default: the drill shows every posted line with its void marker. */
+      hideVoidPairs?: boolean
       /** House period-preset id. Present on period-browsable drills (CoA);
        *  omitted on statement cell drills so the flyout keeps the cell window. */
       period?: string
@@ -127,6 +132,9 @@ export type ReportDrillResponse = {
   page: number
   perPage: number
   total: number
+  /** Lines in the full set that belong to a complete in-window void pair.
+   *  The drawer offers the hide-voids toggle exactly when this is positive. */
+  voidPairLines?: number
 }
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
@@ -239,6 +247,7 @@ export function parseReportDrillTarget(raw: string | null): ReportDrillTarget | 
       cashOnly: input.cashOnly === true,
       ...(period ? { period } : {}),
       ...(input.newestFirst === true ? { newestFirst: true } : {}),
+      ...(input.hideVoidPairs === true ? { hideVoidPairs: true } : {}),
     }
   }
 

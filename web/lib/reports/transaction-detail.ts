@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { PAYROLL_RESTRICTED_PARTY_LABEL, collapseRestrictedPayrollLines } from "../payroll-confidentiality";
 import { resolveOrgId } from "../org-scope";
-import type { ExactDecimal } from "../statement-format";
+import { decimalNeg, type ExactDecimal } from "../statement-format";
 import { statementBookExpr } from "../gl-summary";
 import { CREDIT_NORMAL } from "./statements";
 import { type DimFilter, dimWhere } from "./filters";
@@ -28,6 +28,18 @@ export interface TxnDetailLine {
   docKind: string | null
   /** Source-document id → opens the native module drawer; null when none. */
   docId: string | null
+  /** Statement-signed amount under the same reader convention as `net`, so
+   *  displayed lines foot exactly to the clicked cell (a void pair nets to
+   *  zero here exactly as it does in the statement). */
+  signed: ExactDecimal
+  /** Owning entry's lifecycle state: `reversed` marks a voided original. */
+  entryStatus: "posted" | "reversed"
+  /** Set on reversal lines: the voided original they unwind. */
+  reversesEntryId: string | null
+  /** The voided original's number, set on reversal lines. */
+  reversesEntryNumber: string | null
+  /** The reversal's number, set on voided originals. */
+  reversedByEntryNumber: string | null
 }
 
 export interface TxnDetailResult {
@@ -38,6 +50,10 @@ export interface TxnDetailResult {
   net: ExactDecimal
   count: number
   truncated: boolean
+  /** Lines in the full set that belong to a complete in-window void pair
+   *  (voided original plus its reversal). Zero when `hideVoidPairs` removes
+   *  them; the drawer offers the hide toggle exactly when this is positive. */
+  voidPairLines: number
 }
 
 /**
@@ -83,6 +99,11 @@ export async function transactionDetail(opts: {
   /** Newest posting date first — CoA / register browsing. Statement cell
    *  drills leave this off so page 1 still starts at the window's first line. */
   newestFirst?: boolean
+  /** Drop complete in-window void pairs (voided original plus its reversal).
+   *  Both legs net to zero, so the net is unchanged and the drill reads
+   *  clean. Off by default: the drill shows every posted line with its void
+   *  marker. A pair split across the window edge is never half-hidden. */
+  hideVoidPairs?: boolean
 }): Promise<TxnDetailResult> {
   const orgId = await resolveOrgId(opts.orgId)
   const limit = opts.limit ?? 2000
@@ -203,47 +224,91 @@ export async function transactionDetail(opts: {
             else l.amount * least(coalesce(cs.share, 0::numeric), 1::numeric)
           end)`
     : sql`l.amount`
-  const where = sql`l.org_id = ${orgId} and e.org_id = ${orgId} and a.org_id = ${orgId} and ${bookFilter} and ${acctFilter} and ${dateFilter} and ${dimWhere(opts.dims)}${cashFilter}${partyFilter}${projectCustomerFilter}${projectSearchFilter}${activeProjectFilter}${cashBasis ? sql` and ${cashValue} <> 0` : sql``}`
   // Cash-basis lines are valued at their recognized (settled-share) amount so
   // the debit/credit/net split ties to the matrix cell, not to gross lines.
   const v = cashBasis ? cashValue : sql`l.amount`
   const readerNet = opts.profitSigned
     ? sql`-${v}`
     : sql`case when a.type in ${[...CREDIT_NORMAL]} then -${v} else ${v} end`
+  // A void pair nets to zero inside this drill exactly when the partner entry
+  // sits in the same entry population (book, window, posted set) and its
+  // mirror leg on this account values to the negation of this leg. Mirror
+  // legs share every line attribute (account, subsidiary, dims, party), so a
+  // line filter that passes one passes the other; only the valuation can
+  // differ (cash-basis settled shares), hence the valued comparison. The
+  // native void chain links one original to one reversal, so paired legs
+  // hide symmetrically; anything else stays visible rather than half-hidden.
+  const partnerWindow =
+    opts.mode === "balance"
+      ? sql`pe.posting_date <= ${opts.to}`
+      : sql`pe.posting_date >= ${opts.from ?? "0001-01-01"} and pe.posting_date <= ${opts.to}`
+  const partnerValue = cashBasis
+    ? sql`(case
+            when pe.id in (select entry_id from bank_entries)
+              or pe.id in (select entry_id from settlement_fx_entries) then pl.amount
+            else pl.amount * least(coalesce((select share from cash_settled where entry_id = pe.id), 0::numeric), 1::numeric)
+          end)`
+    : sql`pl.amount`
+  const voidPair = sql`exists (
+    select 1
+      from journal_lines pl
+      join journal_entries pe on pe.id = pl.entry_id and pe.org_id = pl.org_id
+     where pl.org_id = l.org_id
+       and pe.book_id = ${statementBookExpr(orgId, opts.bookId)}
+       and ${partnerWindow}
+       and pe.status in ('posted', 'reversed')
+       and ((e.reverses_entry_id is not null and pe.id = e.reverses_entry_id)
+         or (pe.reverses_entry_id = e.id))
+       and pl.account_id = l.account_id
+       and ${partnerValue} = -(${v})
+  )`
+  const where = sql`l.org_id = ${orgId} and e.org_id = ${orgId} and a.org_id = ${orgId} and ${bookFilter} and ${acctFilter} and ${dateFilter} and ${dimWhere(opts.dims)}${cashFilter}${partyFilter}${projectCustomerFilter}${projectSearchFilter}${activeProjectFilter}${cashBasis ? sql` and ${cashValue} <> 0` : sql``}${opts.hideVoidPairs ? sql` and not (${voidPair})` : sql``}`
 
   // Totals over the FULL set (independent of the display limit), so `net` ties
   // out to the clicked cell even when the line list is truncated. `net` is
   // reader-signed by default; profit subtotals instead negate every included
   // line so debit-normal costs subtract from credit-normal revenue.
-  const agg = (await db.execute<{ n: number; debit: string; credit: string; net: string }>(sql`
+  const agg = (await db.execute<{ n: number; debit: string; credit: string; net: string; pair_n: number }>(sql`
     ${cashCtes}
     select count(*)::int as n,
            coalesce(sum(case when ${v} > 0 then ${v} else 0 end), 0) as debit,
            coalesce(sum(case when ${v} < 0 then -${v} else 0 end), 0) as credit,
-           coalesce(sum(${readerNet}), 0) as net
+           coalesce(sum(${readerNet}), 0) as net,
+           count(*) filter (where ${voidPair})::int as pair_n
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')${cashJoins}
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
      where ${where}
   `))
-  const totals = agg.rows[0] ?? { n: 0, debit: '0', credit: '0', net: '0' }
+  const totals = agg.rows[0] ?? { n: 0, debit: '0', credit: '0', net: '0', pair_n: 0 }
 
   const r = (await db.execute<{
       line_id: string; entry_id: string; entry_number: string | null; date: string
       acct_number: string | null; acct_name: string; acct_type: string; acct_id: string
       party: string | null; party_id: string | null; memo: string | null; amount: string
       doc_kind: string | null; doc_id: string | null; entry_origin: string
+      entry_status: string; reverses_entry_id: string | null; reverses_entry_number: string | null
+      reversed_by_entry_number: string | null; signed: string
     }>(sql`
     ${cashCtes}
     select l.id as line_id, e.id as entry_id, e.entry_number, e.posting_date::text as date,
            a.number as acct_number, a.name as acct_name, a.type as acct_type, l.account_id as acct_id,
            p.display_name as party, l.party_id, l.memo, ${v} as amount,
-           d.kind as doc_kind, d.id as doc_id, e.origin as entry_origin
+           d.kind as doc_kind, d.id as doc_id, e.origin as entry_origin,
+           e.status as entry_status, e.reverses_entry_id,
+           orig.entry_number as reverses_entry_number,
+           (select r.entry_number
+              from journal_entries r
+             where r.org_id = e.org_id and r.reverses_entry_id = e.id
+             order by r.created_at, r.id
+             limit 1) as reversed_by_entry_number,
+           ${readerNet} as signed
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')${cashJoins}
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       left join parties p on p.id = l.party_id and p.org_id = l.org_id
       left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
+      left join journal_entries orig on orig.id = e.reverses_entry_id and orig.org_id = e.org_id
      where ${where}
      order by ${opts.newestFirst
        ? sql`e.posting_date desc, e.entry_number desc, l.line_number desc`
@@ -253,7 +318,11 @@ export async function transactionDetail(opts: {
   // Confidentiality collapses BEFORE shaping below; the totals above are over
   // the same posted set, so net/debit/credit tie out exactly. Without
   // payroll.read the collapsed line keeps the account and the summed amount
-  // but names no employee and shows no per-employee memo or amount.
+  // but names no employee and shows no per-employee memo or amount. A
+  // collapsed group shares one entry and account, so its statement-signed
+  // total is the same reader rule applied to the summed amount.
+  const signTotal = (acctType: string, total: ExactDecimal): ExactDecimal =>
+    opts.profitSigned || CREDIT_NORMAL.has(acctType) ? decimalNeg(total) : total
   const confidential = opts.canSeePayroll === true ? r.rows : collapseRestrictedPayrollLines(
     r.rows.map((x) => ({
       ...x,
@@ -262,7 +331,7 @@ export async function transactionDetail(opts: {
       partyId: x.party_id,
       payrollOrigin: x.doc_kind === 'pay_run' || x.entry_origin === 'payroll',
     })),
-    (first, total) => ({ ...first, party: PAYROLL_RESTRICTED_PARTY_LABEL, memo: null, amount: total }),
+    (first, total) => ({ ...first, party: PAYROLL_RESTRICTED_PARTY_LABEL, memo: null, amount: total, signed: signTotal(first.acct_type, total) }),
   )
   const lines: TxnDetailLine[] = confidential.map((x) => ({
     lineId: x.line_id,
@@ -277,6 +346,11 @@ export async function transactionDetail(opts: {
     amount: x.amount,
     docKind: x.doc_kind,
     docId: x.doc_id,
+    signed: x.signed,
+    entryStatus: x.entry_status === "reversed" ? "reversed" : "posted",
+    reversesEntryId: x.reverses_entry_id,
+    reversesEntryNumber: x.reverses_entry_number,
+    reversedByEntryNumber: x.reversed_by_entry_number,
   }))
   return {
     lines,
@@ -285,5 +359,6 @@ export async function transactionDetail(opts: {
     net: totals.net,
     count: totals.n,
     truncated: totals.n > lines.length,
+    voidPairLines: totals.pair_n,
   }
 }

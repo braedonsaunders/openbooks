@@ -45,7 +45,13 @@ export const GET = defineRoute({
           from: url.searchParams.get('from'),
           to: url.searchParams.get('to'),
         }, gate.user.orgId)
-        return NextResponse.json(await loadReportDrillData(scoped, gate, requestedPage))
+        // A complete void pair nets to zero, so hiding one only ever hides
+        // noise: the drill keeps footing to the cell either way.
+        const hideVoids = url.searchParams.get('hideVoids') === '1'
+          && scoped.kind === 'ledger'
+          ? { ...scoped, hideVoidPairs: true }
+          : scoped
+        return NextResponse.json(await loadReportDrillData(hideVoids, gate, requestedPage))
       } catch (error) {
         return reportDrillErrorResponse(error)
       }

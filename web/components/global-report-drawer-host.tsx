@@ -7,11 +7,12 @@ import { Skeleton, UrlDrawer, cn } from '@openbooks/ui'
 import {
   parseReportDrillTarget,
   REPORT_DRILL_FROM_PARAM,
+  REPORT_DRILL_HIDE_VOIDS_PARAM,
   REPORT_DRILL_PERIOD_PARAM,
   REPORT_DRILL_TO_PARAM,
   type ReportDrillResponse,
 } from '../lib/report-drill'
-import { hrefWithoutKeys } from '../lib/report-overlay'
+import { hrefWithOverlay, hrefWithoutKeys } from '../lib/report-overlay'
 import { Pagination } from './pagination'
 import { RelatedTransactionDrawerClient, type RelatedTransactionDrawerData } from './related-transaction-drawer-client'
 import { EntryFlyout } from '../app/(app)/reports/EntryFlyout'
@@ -35,6 +36,7 @@ export function GlobalReportDrawerHost() {
   const drillPeriod = params.get(REPORT_DRILL_PERIOD_PARAM)
   const drillFrom = params.get(REPORT_DRILL_FROM_PARAM)
   const drillTo = params.get(REPORT_DRILL_TO_PARAM)
+  const hideVoids = params.get(REPORT_DRILL_HIDE_VOIDS_PARAM) === '1'
   const recordId = journalPage ? null : params.get('reportRecord')
   const recordKind = params.get('reportRecordKind')
   const parsed = useMemo(() => parseReportDrillTarget(target), [target])
@@ -43,9 +45,19 @@ export function GlobalReportDrawerHost() {
   const closeHref = useMemo(
     () => hrefWithoutKeys(pathname, query, [
       'reportDrill', 'reportDrillPage', REPORT_DRILL_PERIOD_PARAM, REPORT_DRILL_FROM_PARAM, REPORT_DRILL_TO_PARAM,
+      REPORT_DRILL_HIDE_VOIDS_PARAM,
       'reportRecord', 'reportRecordKind', 'txn', 'drawerReturn', 'form', 'transactionTab',
     ]),
     [pathname, query],
+  )
+  // Toggling void visibility re-pages from the start: hidden pairs change
+  // the row count, so a carried page could land past the end.
+  const toggleVoidsHref = useMemo(
+    () => hrefWithOverlay(pathname, query, {
+      [REPORT_DRILL_HIDE_VOIDS_PARAM]: hideVoids ? null : '1',
+      reportDrillPage: '1',
+    }),
+    [pathname, query, hideVoids],
   )
   const recordCloseHref = useMemo(
     () => hrefWithoutKeys(pathname, query, ['reportRecord', 'reportRecordKind', 'drawerReturn', 'form', 'transactionTab']),
@@ -56,6 +68,7 @@ export function GlobalReportDrawerHost() {
   if (drillPeriod) drillSearch.set('period', drillPeriod)
   if (drillFrom) drillSearch.set('from', drillFrom)
   if (drillTo) drillSearch.set('to', drillTo)
+  if (hideVoids) drillSearch.set('hideVoids', '1')
   const data = useDrawerResource<ReportDrillResponse>(target ? `/api/reports/drill?${drillSearch}` : null, (error) => {
     toast.error(error.message || t('drillDrawer.loadFailed'))
     overlay.replace(closeHref)
@@ -110,6 +123,19 @@ export function GlobalReportDrawerHost() {
                   </div>
                 ))}
               </div>
+            ) : null}
+            {(data.voidPairLines ?? 0) > 0 || hideVoids ? (
+              <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                <input
+                  type="checkbox"
+                  checked={hideVoids}
+                  onChange={() => overlay.replace(toggleVoidsHref)}
+                  className="h-3.5 w-3.5 accent-teal-600"
+                />
+                {hideVoids
+                  ? t('drillDrawer.showVoidPairs')
+                  : t('drillDrawer.hideVoidPairs', { count: data.voidPairLines ?? 0 })}
+              </label>
             ) : null}
             {data.rows.length ? (
               <Table>
