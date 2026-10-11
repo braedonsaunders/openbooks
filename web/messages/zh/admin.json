@@ -2786,7 +2786,11 @@
         "originatorName": "发起方名称",
         "originatorIban": "发起方 IBAN",
         "originatorBic": "发起方 BIC",
-        "creditorId": "债权人 ID"
+        "creditorId": "债权人 ID",
+        "clientNumber": "RBC客户编号",
+        "serviceCurrency": "服务货币",
+        "transmission": "传输格式",
+        "environment": "文件环境"
       },
       "originator": {
         "title": "发起方凭据",

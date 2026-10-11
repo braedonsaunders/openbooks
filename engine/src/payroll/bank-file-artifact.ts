@@ -1,4 +1,7 @@
+import { allocateRbcStd152Number, rbcStd152SettingsDigest } from "../payments-core/rail-rbc-identity.ts";
 import { createHash } from "node:crypto";
+import { unsealJson } from "../platform/secrets.ts";
+import { validateRbcStd152Settings, type RbcStd152Settings } from "../payments-core/rail-rbc-std152.ts";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { activeStorageKind, getS3Blob, putS3Blob, refuseMaskedStorageKind } from "../platform/file-storage.ts";
@@ -529,6 +532,8 @@ function payrollFileCreationNumberFor(
   sequenceValue: number,
 ): number | null {
   switch (format) {
+    case "rbc_std152":
+      throw new PayrollError("RBC STD152 file numbers require the shared client allocation");
     case "cpa005":
       return ((sequenceValue - 1) % 9999) + 1;
     case "nacha":
@@ -549,6 +554,7 @@ function payrollMessageIdFor(format: PayRunBankFileFormat, fileNumber: string): 
   switch (format) {
     case "sepa":
       return fileNumber;
+    case "rbc_std152":
     case "cpa005":
     case "nacha":
     case "cemtex":
@@ -573,6 +579,7 @@ function payrollBacsVolSerialFor(
       // over 3 months: ((seq - 1) % 999999) + 1 spans 000001–999999, never
       // 000000.
       return String(((sequenceValue - 1) % 999999) + 1).padStart(6, "0");
+    case "rbc_std152":
     case "cpa005":
     case "nacha":
     case "sepa":
@@ -594,6 +601,7 @@ function payrollBacsFileNumberFor(
   switch (format) {
     case "bacs":
       return String(((sequenceValue - 1) % 999) + 1).padStart(3, "0");
+    case "rbc_std152":
     case "cpa005":
     case "nacha":
     case "sepa":
@@ -615,6 +623,7 @@ function payrollCnabNsaFor(
   switch (format) {
     case "cnab240":
       return String(((sequenceValue - 1) % 999999) + 1).padStart(6, "0");
+    case "rbc_std152":
     case "cpa005":
     case "nacha":
     case "sepa":
@@ -641,6 +650,7 @@ function payrollBankFileRequiresSingleByteCharacters(format: PayRunBankFileForma
   switch (format) {
     case "sepa":
       return false;
+    case "rbc_std152":
     case "cpa005":
     case "nacha":
     case "cemtex":
@@ -657,6 +667,8 @@ function payrollBankFileRequiresSingleByteCharacters(format: PayRunBankFileForma
 
 function payrollFilenameLabelFor(format: PayRunBankFileFormat): string {
   switch (format) {
+    case "rbc_std152":
+      return "RBC-STD152";
     case "cpa005":
       return "CPA005";
     case "nacha":
@@ -789,6 +801,15 @@ export async function generatePayRunBankFile(
   }
 
   return await db.transaction(async (tx) => {
+    if (format === "rbc_std152") {
+      const row = (await tx.execute<{ sealed: string | null; currency: string }>(sql`
+        select p.originator_secrets_encrypted as sealed,p.currency from payment_bank_profiles p
+        join payment_formats f on f.org_id=p.org_id and f.id=p.payment_format_id and f.is_active and f.rail='rbc_std152_credit'
+        where p.org_id=${orgId} and p.id=${config.paymentBankProfileId} and p.is_active for share of p,f
+      `)).rows[0];
+      const live = validateRbcStd152Settings(row?.sealed ? unsealJson<Partial<RbcStd152Settings>>(row.sealed,{orgId,purpose:"payment.originator.secrets"}) : {});
+      if (!live.ok || row?.currency !== "CAD" || !config.rbcStd152 || rbcStd152SettingsDigest(live.settings) !== rbcStd152SettingsDigest(config.rbcStd152)) throw new PayrollError("RBC profile changed while preparing payroll — reload the profile and generate again");
+    }
     // NACHA File ID Modifier allocates FIRST, under the bank-profile lock
     // (profile-then-run order, shared with the AP allocator, so the two
     // rails cannot deadlock): the bank keys same-day duplicates on
@@ -881,7 +902,9 @@ export async function generatePayRunBankFile(
     // allocation, once, and stored — so a wrap of either alphabet still
     // produces a file the operator can trace to a sequence value that never
     // repeats.
-    const fileCreationNumber = payrollFileCreationNumberFor(format, sequenceValue);
+    const fileCreationNumber = format === "rbc_std152"
+      ? await allocateRbcStd152Number(tx, orgId, config.rbcStd152!.clientNumber)
+      : payrollFileCreationNumberFor(format, sequenceValue);
     const fileIdModifier = nachaModifier;
     const bacsVolSerial = payrollBacsVolSerialFor(format, sequenceValue);
     const bacsFileNumber = payrollBacsFileNumberFor(format, sequenceValue);

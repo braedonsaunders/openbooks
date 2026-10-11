@@ -1,3 +1,5 @@
+import { validateRbcStd152Settings, type RbcStd152Settings } from "../payments-core/rail-rbc-std152.ts";
+import { allocateRbcStd152Number, rbcStd152SettingsDigest } from "../payments-core/rail-rbc-identity.ts";
 import { createHash, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import {
@@ -37,6 +39,7 @@ import { guardCsvCell } from "@openbooks/reports";
 export { PAYMENT_FILE_STATUSES } from "./file-statuses.ts";
 
 export type BuiltInPaymentRail =
+  | "rbc_std152_credit"
   | "cpa005_credit"
   | "nacha_credit"
   | "sepa_credit"
@@ -60,6 +63,7 @@ const BUILTIN_FORMATS: Array<{
   extension: string;
   contentType: string;
 }> = [
+  { code: "RBC-STD152", name: "RBC STD152 Canadian-bank credit", rail: "rbc_std152_credit", direction: "credit", country: "CA", currency: "CAD", extension: "txt", contentType: "text/plain; charset=us-ascii" },
   { code: "CPA005", name: "CPA Standard 005 credit", rail: "cpa005_credit", direction: "credit", country: "CA", currency: "CAD", extension: "txt", contentType: "text/plain; charset=us-ascii" },
   { code: "NACHA-CREDIT", name: "NACHA ACH credit", rail: "nacha_credit", direction: "credit", country: "US", currency: "USD", extension: "ach", contentType: "text/plain; charset=us-ascii" },
   { code: "SEPA-CREDIT", name: "SEPA credit transfer", rail: "sepa_credit", direction: "credit", country: null, currency: "EUR", extension: "xml", contentType: "application/xml" },
@@ -147,6 +151,13 @@ async function validatePaymentBankProfileRefs(orgId: string, input: {
   }
   if (row.rail === "positive_pay" && !String(input.settings?.positivePayAccountReference ?? "").trim()) {
     throw new PaymentError("Positive Pay requires the institution's bank account reference");
+  }
+  if (row.rail === "rbc_std152_credit") {
+    const checked = validateRbcStd152Settings((input.originatorSecrets ?? {}) as Partial<RbcStd152Settings>);
+    if (!checked.ok) throw new PaymentError(`RBC STD152 configuration is incomplete: ${checked.missing.join(", ")}`);
+    if (input.currency !== "CAD" || checked.settings.serviceCurrency !== "CAD") throw new PaymentError("the available RBC STD152 format requires a CAD service and profile");
+    if (checked.settings.serviceCurrency !== input.currency) throw new PaymentError("RBC service currency must match the profile currency");
+    if (input.country !== "CA") throw new PaymentError("RBC STD152 Canadian-bank credits require a CA profile");
   }
   const transactionCode = input.originatorSecrets?.transactionCode;
   if (row.rail === "cpa005_credit" && transactionCode !== undefined
@@ -869,7 +880,7 @@ async function renderPaymentFile(ctx: FormatContext, orgId: string, now: Date, f
   // The org's calendar day backs every formatter's "no scheduled date" default,
   // so bank files never inherit the server's UTC day by accident.
   const scoped: FormatContext = { ...ctx, businessDate: await businessToday(orgId) };
-  if (["cpa005_credit", "nacha_credit", "sepa_credit"].includes(scoped.format.rail)) {
+  if (["rbc_std152_credit", "cpa005_credit", "nacha_credit", "sepa_credit"].includes(scoped.format.rail)) {
     return loadRunFile(String(scoped.run.id), orgId, { ...fileOpts, allowedSubsidiaryIds });
   }
   // Every other rail renders from pre-read payment rows instead of locked
@@ -1127,9 +1138,31 @@ export async function generatePaymentFileArtifact(
         timeZone,
       })
     : null;
+  const rbcIdentity = ctx.format.rail === "rbc_std152_credit" ? await withOrgTransaction(orgId, async () => {
+    const locked = (await db.execute<{ id: string }>(sql`select id from payment_runs where org_id=${orgId} and id=${runId} and status in ('approved','generated','delivered','partially_failed') and payment_bank_profile_id=${ctx.profile.id} for update`)).rows[0];
+    if (!locked) throw new PaymentError("payment run not found");
+    const prior = (await db.execute<{ details: { fileCreationNumber?: number; clientDigest?: string; settingsDigest?: string } }>(sql`select details from payment_events where org_id=${orgId} and payment_run_id=${runId} and event_type='rbc_file_number_allocated' and (details->>'parentFileId') is not distinct from ${opts?.reprocessFileId ?? null}::text order by created_at limit 1`)).rows[0];
+    const checked = validateRbcStd152Settings(ctx.profile.secrets as Partial<RbcStd152Settings>);
+    if (!checked.ok) throw new PaymentError(`RBC STD152 profile is incomplete: ${checked.missing.join(", ")}`);
+    const settingsDigest = rbcStd152SettingsDigest(checked.settings);
+    const profile = (await db.execute<{ sealed: string | null; currency: string }>(sql`select originator_secrets_encrypted as sealed,currency from payment_bank_profiles where org_id=${orgId} and id=${ctx.profile.id} and is_active for share`)).rows[0];
+    const live = validateRbcStd152Settings(profile?.sealed ? unsealJson<Partial<RbcStd152Settings>>(profile.sealed,{orgId,purpose:"payment.originator.secrets"}) : {});
+    if (!live.ok || profile?.currency !== "CAD" || live.settings.serviceCurrency !== "CAD" || rbcStd152SettingsDigest(live.settings) !== settingsDigest) throw new PaymentError("RBC profile changed while generating the file — reload the run and try again");
+    const clientDigest = createHash("sha256").update(checked.settings.clientNumber).digest("hex");
+    if (prior) {
+      const n = prior.details.fileCreationNumber;
+      if (prior.details.clientDigest !== clientDigest || prior.details.settingsDigest !== settingsDigest || !Number.isInteger(n) || n! < 1 || n! > 9999) throw new PaymentError("RBC file identity no longer matches the run profile — retain the original profile or create a new governed payment run");
+      return { number: n!, settingsDigest };
+    }
+    const n = await allocateRbcStd152Number(db, orgId, checked.settings.clientNumber);
+    const event = await db.insert(schema.paymentEvents).values({orgId,paymentRunId:runId,eventType:"rbc_file_number_allocated",details:{fileCreationNumber:n,clientDigest,settingsDigest,parentFileId:opts?.reprocessFileId ?? null},actorId:userId}).returning({id:schema.paymentEvents.id});
+    if (event.length !== 1) throw new PaymentError("RBC file number allocation was not recorded");
+    return { number: n, settingsDigest };
+  }) : undefined;
   const rendered = await renderPaymentFile(ctx, orgId, now, {
     fileCreatedAt,
     ...(nachaModifier ? { fileIdModifier: nachaModifier } : {}),
+    ...(rbcIdentity ? { fileCreationNumber: rbcIdentity.number, rbcSettingsDigest: rbcIdentity.settingsDigest } : {}),
   }, opts?.allowedSubsidiaryIds);
   // File names are attacker-influenced (a custom formatter returns an
   // arbitrary string) and later concatenated onto the SFTP outbound folder,
@@ -1149,14 +1182,20 @@ export async function generatePaymentFileArtifact(
     // set — a rolled-back run can never gain an artifact — and (2) serializes
     // concurrent generations of one run, so only the first sees no live
     // artifact and the rest idempotently return it.
-    const gate = (await db.execute<{ status: string }>(sql`
-      select status from payment_runs
+    const gate = (await db.execute<{ status: string; payment_bank_profile_id: string | null }>(sql`
+      select status, payment_bank_profile_id from payment_runs
        where id = ${runId} and org_id = ${orgId}
          and status in ('approved', 'generated', 'delivered', 'partially_failed')
        for update
     `));
     const liveStatus = gate.rows[0]?.status;
     if (!liveStatus) throw new PaymentError("approve the payment run before generating its file");
+    if (rbcIdentity) {
+      if (gate.rows[0]?.payment_bank_profile_id !== ctx.profile.id) throw new PaymentError("RBC run profile changed after rendering — reload the run before generating its file");
+      const profile = (await db.execute<{ sealed: string | null; currency: string; format_id: string }>(sql`select originator_secrets_encrypted as sealed,currency,payment_format_id as format_id from payment_bank_profiles where org_id=${orgId} and id=${ctx.profile.id} and is_active for share`)).rows[0];
+      const live = validateRbcStd152Settings(profile?.sealed ? unsealJson<Partial<RbcStd152Settings>>(profile.sealed,{orgId,purpose:"payment.originator.secrets"}) : {});
+      if (!live.ok || profile?.currency !== "CAD" || profile.format_id !== ctx.format.id || rbcStd152SettingsDigest(live.settings) !== rbcIdentity.settingsDigest) throw new PaymentError("RBC profile changed after rendering — preserve the allocated file identity and restore the original profile or create a new governed run");
+    }
     // Rendering happened before the run lock. Bind those bytes to the exact
     // pending instruction set under the lock: a partially failed run may
     // already have sent siblings, and re-exporting them would pay twice.

@@ -392,7 +392,7 @@ async function createPaymentRunWithinTransaction(
     opts.billDocumentIds.map((id) => ({ kind: "document" as const, id })),
     opts.allowedSubsidiaryIds,
   );
-  const method = profile.rail === "cpa005_credit" ? "eft"
+  const method = ["cpa005_credit", "rbc_std152_credit"].includes(profile.rail) ? "eft"
     : profile.rail === "nacha_credit" ? "ach"
     : profile.rail === "sepa_credit" ? "sepa"
     : profile.rail === "positive_pay" ? "positive_pay"

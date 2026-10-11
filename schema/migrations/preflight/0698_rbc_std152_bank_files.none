@@ -1,0 +1,1 @@
+This migration widens existing payroll bank-file admission to RBC STD152. Existing formats retain their numbering requirements. No payroll artifacts, payments, bank details or financial history are rewritten.

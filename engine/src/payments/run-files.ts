@@ -1,3 +1,5 @@
+import { buildRbcStd152File } from "../payments-core/rail-rbc-std152.ts";
+import { loadRbcStd152Settings, rbcStd152SettingsDigest } from "../payments-core/rail-rbc-identity.ts";
 import { createHash } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { db, schema } from "../platform/db.ts";
@@ -28,6 +30,8 @@ import { lockRunBankEvidence, paymentRunReadiness } from "./run-readiness.ts";
  * server-local rendering) unchanged.
  */
 export interface RunFileOptions {
+  fileCreationNumber?: number;
+  rbcSettingsDigest?: string;
   fileCreatedAt?: Date;
   allowedSubsidiaryIds?: ReadonlySet<string> | null;
   /**
@@ -227,6 +231,27 @@ export async function loadSepaRunFile(
   return { filename: `SEPA-${run.runNumber}.xml`, content, runNumber: run.runNumber };
 }
 
+export async function loadRbcStd152RunFile(runId: string, orgId: string, opts?: RunFileOptions) {
+  await assertNotSandbox(orgId, "generate RBC payment file");
+  const [run] = await db.select().from(schema.paymentRuns).where(and(eq(schema.paymentRuns.id,runId),eq(schema.paymentRuns.orgId,orgId)));
+  if (!run || run.status === "cancelled" || run.method !== "eft") throw new PaymentError("RBC STD152 requires an active EFT payment run");
+  const settings = await loadRbcStd152Settings(orgId, runId);
+  if (settings.ok && opts?.rbcSettingsDigest !== rbcStd152SettingsDigest(settings.settings)) throw new PaymentError("RBC profile no longer matches the allocated file identity — reload the run or restore its original profile");
+  if (!settings.ok) throw new PaymentError(`RBC STD152 configuration is incomplete: ${settings.missing.join(", ")}`);
+  if (opts?.fileCreationNumber == null) throw new PaymentError("Generate the native payment artifact to allocate an RBC file number before downloading");
+  const readiness = await paymentRunReadiness(runId,orgId);
+  if (readiness.blockers.length) throw new PaymentError(`Cannot generate RBC file: ${readiness.blockers.map(b=>`${b.payee}: ${b.reason}`).join("; ")}`);
+  const evidence = await lockRunBankEvidence("eft",runId,orgId,opts.allowedSubsidiaryIds);
+  const today = await businessToday(orgId);
+  const stamp = await creationStamp(orgId,new Date(),opts.fileCreatedAt);
+  const content = buildRbcStd152File({settings:settings.settings,fileCreationNumber:opts.fileCreationNumber,fileCreationDate:stamp.day,payments:evidence.map(e=>{
+    const units = toUnits(e.amount);
+    if (units%100n!==0n) throw new PaymentError(`RBC payment for ${e.payee} contains a fraction of a cent`);
+    return {amountCents:units/100n,fundsDate:run.scheduledFor??today,institution:e.detail.institution!,transit:e.detail.transit!,accountNumber:e.detail.accountNumber,payeeName:e.payee,crossReference:(e.documentNumber??e.id).slice(0,19)};
+  })});
+  return {filename:`RBC-STD152-${run.runNumber}.txt`,content,runNumber:run.runNumber};
+}
+
 /** Dispatch a payment run to its bank file by method (eft→CPA-005, ach→NACHA, sepa→pain.001). */
 export async function loadRunFile(
   runId: string,
@@ -235,6 +260,8 @@ export async function loadRunFile(
 ): Promise<{ filename: string; content: string; runNumber: string; contentType: string }> {
   const [run] = await db.select().from(schema.paymentRuns).where(and(eq(schema.paymentRuns.id, runId), eq(schema.paymentRuns.orgId, orgId)));
   if (!run) throw new PaymentError("payment run not found");
+  const format = (await db.select({rail:schema.paymentFormats.rail}).from(schema.paymentBankProfiles).innerJoin(schema.paymentFormats,and(eq(schema.paymentFormats.id,schema.paymentBankProfiles.paymentFormatId),eq(schema.paymentFormats.orgId,schema.paymentBankProfiles.orgId))).where(and(eq(schema.paymentBankProfiles.id,run.paymentBankProfileId!),eq(schema.paymentBankProfiles.orgId,orgId))))[0];
+  if (format?.rail === "rbc_std152_credit") return {...(await loadRbcStd152RunFile(runId,orgId,opts)),contentType:"text/plain; charset=us-ascii"};
   if (run.method === "ach") return { ...(await loadNachaRunFile(runId, orgId, opts)), contentType: "text/plain; charset=us-ascii" };
   if (run.method === "sepa") return { ...(await loadSepaRunFile(runId, orgId, opts)), contentType: "application/xml" };
   return { ...(await loadCpa005RunFile(runId, orgId, opts)), contentType: "text/plain; charset=us-ascii" };

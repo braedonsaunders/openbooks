@@ -2711,7 +2711,11 @@
         "originatorName": "Nombre del originador",
         "originatorIban": "IBAN del originador",
         "originatorBic": "BIC del originador",
-        "creditorId": "ID del acreedor"
+        "creditorId": "ID del acreedor",
+        "clientNumber": "Número de cliente RBC",
+        "serviceCurrency": "Moneda del servicio",
+        "transmission": "Formato de transmisión",
+        "environment": "Entorno del archivo"
       },
       "originator": {
         "title": "Credenciales del originador",

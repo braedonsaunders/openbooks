@@ -126,6 +126,7 @@ const CNAB240_SETTINGS = {
 const originatorFor = (
   format: PayRunBankFileFormat,
   settings: {
+    rbcStd152?: unknown;
     cpa005?: unknown;
     nacha?: unknown;
     sepa?: unknown;
@@ -182,6 +183,28 @@ test("nacha renders 94-character ACH records through the NACHA builder", () => {
   assert.deepEqual(result.trailer, { totalCents: 250_000n, count: 1 });
   assert.equal(result.extension, "ach");
   assert.equal(result.currency, "USD");
+});
+
+test("RBC payroll renders the shared STD152 rail with CAD metadata and exact trailer", () => {
+  const originator = originatorFor("rbc_std152", { rbcStd152: {
+    clientNumber: "1234567890", originatorLongName: "Example Employer", originatorShortName: "Example",
+    transactionCode: "200", serviceCurrency: "CAD", transmission: "file_transfer_legacy", environment: "test",
+  } });
+  const inputs = withCreditRouting(SINGLE, "rbc_std152", { institution: "003", transit: "01234" });
+  const request = { orgId: "org", documentId: "doc", format: "rbc_std152" as const, originator,
+    fileCreationNumber: 7, fundsDate: "2026-08-21", createdAt: CREATED_AT, timeZone: "UTC" };
+  const result = renderPayRunBankFile(inputs, request);
+  assert.equal(result.currency, "CAD");
+  assert.deepEqual(result.trailer, { totalCents: 250_000n, count: 1 });
+  const records = result.content.split("\r\n").filter(Boolean);
+  assert.equal(records[0]!.length, 94);
+  records.slice(1).forEach(record => assert.equal(record.length, 152));
+  assert.equal(records[2]!.slice(86, 93), "2026233");
+  assert.throws(() => renderPayRunBankFile(inputs, { ...request, originator: {
+    ...originator, currency: "USD", rbcStd152: { ...originator.rbcStd152!, serviceCurrency: "USD" },
+  } }), /requires a CAD service and profile/);
+  assert.throws(() => renderPayRunBankFile({ ...inputs, population: { ...inputs.population, total: "2500.0001" },
+    credits: inputs.credits.map(credit => ({ ...credit, amount: "2500.0001" })) }, request), /fraction of one/);
 });
 
 test("sepa renders pain.001 XML through the SEPA builder", () => {
@@ -313,6 +336,12 @@ test("each format's arm runs its own builder, proved by cross-wired originators"
     message: RegExp;
   }[] = [
     {
+      format: "rbc_std152",
+      inputs: withCreditRouting(SINGLE, "rbc_std152", { institution: "003", transit: "01234" }),
+      originator: originatorFor("rbc_std152", { cpa005: CPA005_SETTINGS }),
+      message: /RBC STD152 payroll format requires a CAD service and profile/,
+    },
+    {
       format: "cpa005",
       inputs: withCreditRouting(SINGLE, "cpa005", { institution: "004", transit: "12345" }),
       originator: originatorFor("cpa005", { nacha: NACHA_SETTINGS }),
@@ -395,6 +424,7 @@ test("the record-length table declares every format — sepa's and bacs's nulls 
   // for the delimited reason once its builder exists; a format with no
   // entry fails tsc at the Record literal.
   assert.deepEqual(PAYROLL_BANK_FILE_RECORD_LENGTHS, {
+    rbc_std152: null,
     cpa005: 1464,
     nacha: 94,
     sepa: null,

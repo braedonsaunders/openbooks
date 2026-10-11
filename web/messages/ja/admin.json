@@ -2873,7 +2873,11 @@
         "originatorName": "オリジネーター名",
         "originatorIban": "オリジネーターIBAN",
         "originatorBic": "オリジネーターBIC",
-        "creditorId": "債権者ID"
+        "creditorId": "債権者ID",
+        "clientNumber": "RBC顧客番号",
+        "serviceCurrency": "サービス通貨",
+        "transmission": "送信形式",
+        "environment": "ファイル環境"
       },
       "originator": {
         "title": "オリジネーター認証情報",

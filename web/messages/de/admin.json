@@ -2873,7 +2873,11 @@
         "originatorName": "Name des Auftraggebers",
         "originatorIban": "IBAN des Auftraggebers",
         "originatorBic": "BIC des Auftraggebers",
-        "creditorId": "Gläubiger-ID"
+        "creditorId": "Gläubiger-ID",
+        "clientNumber": "RBC-Kundennummer",
+        "serviceCurrency": "Servicewährung",
+        "transmission": "Übertragungsformat",
+        "environment": "Dateiumgebung"
       },
       "originator": {
         "title": "Auftraggeber-Anmeldedaten",

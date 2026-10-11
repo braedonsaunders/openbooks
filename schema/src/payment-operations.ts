@@ -29,6 +29,7 @@ export const paymentFormats = pgTable(
     name: text("name").notNull(),
     rail: text("rail", {
       enum: [
+        "rbc_std152_credit",
         "cpa005_credit",
         "nacha_credit",
         "sepa_credit",

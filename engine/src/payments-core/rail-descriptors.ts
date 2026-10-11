@@ -1,5 +1,12 @@
 /** Payment-format metadata shared by AP operations and payroll export. */
 export const PAYMENT_RAIL_DESCRIPTORS = {
+  rbc_std152: {
+    currency: "CAD",
+    paymentFormatRails: ["rbc_std152_credit"],
+    payrollRails: ["rbc_std152_credit"],
+    extension: "txt",
+    contentType: "text/plain; charset=us-ascii",
+  },
   cpa005: {
     currency: "CAD",
     paymentFormatRails: ["cpa005_credit"],

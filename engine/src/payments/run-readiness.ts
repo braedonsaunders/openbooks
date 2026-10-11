@@ -1,3 +1,4 @@
+import { loadRbcStd152Settings } from "../payments-core/rail-rbc-identity.ts";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db, schema, withOrgTransaction } from "../platform/db.ts";
 import { lockScopeRows } from "../organization/subsidiary-scope.ts";
@@ -373,6 +374,7 @@ export async function paymentRunReadiness(
   let eft: EftSettingsResult;
   if (method === "ach") eft = await loadNachaSettings(orgId, runId) as EftSettingsResult;
   else if (method === "sepa") eft = await loadSepaSettings(orgId, runId) as EftSettingsResult;
+  else if (method === "eft" && rail === "rbc_std152_credit") eft = await loadRbcStd152Settings(orgId, runId) as unknown as EftSettingsResult;
   else if (method === "eft") eft = await loadEftSettings(orgId, runId);
   else eft = { ok: true, settings: {} as EftSettings };
   const rows = (await db.execute<{

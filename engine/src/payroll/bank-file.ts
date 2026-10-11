@@ -1,3 +1,4 @@
+import { buildRbcStd152File, validateRbcStd152Settings, type RbcStd152Settings } from "../payments-core/rail-rbc-std152.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { cmp, formatMoney, sum, toUnits } from "../money/money.ts";
@@ -233,6 +234,7 @@ export interface PayRunBankFileFormatSpec {
  * than Cemtex.
  */
 export const PAYROLL_BANK_FILE_FORMATS: Record<PayRunBankFileFormat, PayRunBankFileFormatSpec> = {
+  rbc_std152: payrollFormat("rbc_std152"),
   cpa005: payrollFormat("cpa005"),
   nacha: payrollFormat("nacha"),
   sepa: payrollFormat("sepa"),
@@ -363,6 +365,7 @@ export interface PayrollOriginatorConfig {
    * counts toward the 94 characters either way.
    */
   lineEnding: "lf" | "crlf";
+  rbcStd152?: RbcStd152Settings;
   cpa005?: EftSettings & { transactionCode: string };
   nacha?: NachaSettings & { entryClassCode: "PPD" | "CCD"; entryDescription: string };
   sepa?: SepaSettings;
@@ -394,6 +397,7 @@ function lineEndingFor(row: ProfileRow, format: PayRunBankFileFormat): "lf" | "c
   // JavaScript caller and the already-persisted row the type system cannot
   // police.
   switch (format) {
+    case "rbc_std152":
     case "cpa005":
       return "crlf";
     case "sepa":
@@ -470,6 +474,16 @@ const FILL_ME = (value: unknown) =>
  * payroll deposit, 460 is accounts payable, and silently sending wages under
  * the AP code misdescribes the credit on the employee's statement.
  */
+function resolveRbcStd152(row: ProfileRow): PayrollOriginatorResult {
+  const raw = row.originator_secrets_encrypted == null ? {} : unsealJson<Partial<RbcStd152Settings>>(row.originator_secrets_encrypted, { orgId: row.orgId, purpose: "payment.originator.secrets" });
+  const result = validateRbcStd152Settings(raw);
+  if (!result.ok) return { ok: false, profileName: row.name, missing: result.missing };
+  if (row.currency !== "CAD" || result.settings.serviceCurrency !== "CAD") return { ok: false, profileName: row.name, missing: ["the available RBC STD152 format requires a CAD service and profile"] };
+  if (result.settings.transactionCode !== "200") return { ok: false, profileName: row.name, missing: ["transactionCode must be 200 for payroll credits"] };
+  if (result.settings.serviceCurrency !== row.currency) return { ok: false, profileName: row.name, missing: ["serviceCurrency must match the payment bank profile currency"] };
+  return { ok: true, config: { paymentBankProfileId: row.id, profileName: row.name, format: "rbc_std152", currency: result.settings.serviceCurrency, lineEnding: "crlf", rbcStd152: result.settings } };
+}
+
 function resolveCpa005(row: ProfileRow): PayrollOriginatorResult {
   const raw =
       row.originator_secrets_encrypted == null
@@ -816,6 +830,7 @@ const PAYROLL_BANK_FILE_ORIGINATOR_RESOLVERS: Record<
   PayRunBankFileFormat,
   (row: ProfileRow) => PayrollOriginatorResult
 > = {
+  rbc_std152: resolveRbcStd152,
   cpa005: resolveCpa005,
   nacha: resolveNacha,
   sepa: resolveSepa,
@@ -1232,10 +1247,11 @@ export async function loadCredits(
     // throw names the format for the JavaScript caller and the
     // already-persisted row the type system cannot police.
     switch (format) {
+      case "rbc_std152":
       case "cpa005": {
         if (!/^\d{3}$/.test(routing.institution ?? "") || !/^\d{5}$/.test(routing.transit ?? "")) {
           problems.push(
-            `${entry.employeeName}: CPA-005 needs a 3-digit institution and 5-digit transit number`,
+            `${entry.employeeName}: ${format === "rbc_std152" ? "RBC STD152" : "CPA-005"} needs a 3-digit institution and 5-digit transit number`,
           );
           continue;
         }
@@ -1402,6 +1418,12 @@ interface BankFileTrailerSource {
  * CPA-005 Z record: positions 47–60 total value of credit transactions (14
  * digits, cents), positions 61–68 total number of credit transactions (8).
  */
+function readRbcStd152Trailer({ records }: BankFileTrailerSource): TrailerTotals {
+  const trailer = records.at(-1);
+  if (!trailer || trailer.length !== 152 || trailer.slice(6, 10) !== "ZTRL" || !/^\d{20}$/.test(trailer.slice(20, 40))) throw new PayrollError("Generated RBC STD152 file has no readable Z trailer");
+  return { count: Number(trailer.slice(20, 26)), totalCents: BigInt(trailer.slice(26, 40)) };
+}
+
 function readCpa005Trailer({ records }: BankFileTrailerSource): TrailerTotals {
   const trailer = records[records.length - 1];
   if (!trailer || trailer[0] !== "Z" || trailer.length !== 1464) {
@@ -1554,6 +1576,7 @@ const PAYROLL_BANK_FILE_TRAILER_READERS: Record<
   PayRunBankFileFormat,
   (source: BankFileTrailerSource) => TrailerTotals
 > = {
+  rbc_std152: readRbcStd152Trailer,
   cpa005: readCpa005Trailer,
   nacha: readNachaTrailer,
   sepa: readSepaTrailer,
@@ -1622,7 +1645,7 @@ export interface PayRunBankFileBuildInput {
   format?: PayRunBankFileFormat;
   /** Resolved tenant originator configuration — never defaulted here. */
   originator: PayrollOriginatorConfig;
-  /** CPA-005 file creation number (1–9999), allocated by the artifact module. */
+  /** Canadian bank file creation number (1–9999), allocated by the artifact module. */
   fileCreationNumber?: number;
   /** NACHA file ID modifier (A–Z, 0–9), allocated by the artifact module. */
   fileIdModifier?: string;
@@ -1784,6 +1807,7 @@ const PAYROLL_BANK_FILE_BUILDERS: Record<
   PayRunBankFileFormat,
   (input: PayRunBankFileBuildInput, credits: PayRunBankFileCredit[]) => string
 > = {
+  rbc_std152: buildRbcStd152Payroll,
   cpa005: buildCpa005Payroll,
   nacha: buildNachaPayroll,
   sepa: buildSepaPayroll,
@@ -1803,6 +1827,7 @@ const PAYROLL_BANK_FILE_BUILDERS: Record<
  * fixed-width) declares null here for that stated reason.
  */
 export const PAYROLL_BANK_FILE_RECORD_LENGTHS: Record<PayRunBankFileFormat, number | null> = {
+  rbc_std152: null, // 94-character transmission envelope followed by 152-character logical records.
   cpa005: 1464,
   nacha: 94,
   sepa: null,
@@ -1831,6 +1856,9 @@ export function renderPayRunBankFile(
     throw new PayrollError(
       `payment bank profile "${input.originator.profileName}" originates ${input.originator.format}, not ${format}`,
     );
+  }
+  if (format === "rbc_std152" && (input.originator.currency !== "CAD" || input.originator.rbcStd152?.serviceCurrency !== "CAD")) {
+    throw new PayrollError("the available RBC STD152 payroll format requires a CAD service and profile");
   }
   const { population, credits } = inputs;
 
@@ -1921,6 +1949,17 @@ export function renderPayRunBankFile(
     trailer,
     contentBytes: format === "zengin" ? encodeZenginFile(content) : null,
   };
+}
+
+function buildRbcStd152Payroll(input: PayRunBankFileBuildInput, credits: PayRunBankFileCredit[]): string {
+  const settings = input.originator.rbcStd152;
+  if (settings && settings.transactionCode !== "200") throw new PayrollError("RBC STD152 payroll requires transaction code 200 on its bank profile");
+  if (!settings || input.fileCreationNumber == null) throw new PayrollError("RBC STD152 requires configured originator details and an allocated file creation number");
+  return buildRbcStd152File({ settings, fileCreationNumber: input.fileCreationNumber, fileCreationDate: creationDay(input), payments: credits.map(credit => ({
+    amountCents: toUnits(credit.amount) / 100n, fundsDate: input.fundsDate,
+    institution: credit.routing.institution!, transit: credit.routing.transit!, accountNumber: credit.accountNumber,
+    payeeName: credit.employeeName, crossReference: `PAY ${credit.employeeNumber}`.slice(0,19),
+  })) });
 }
 
 function buildCpa005Payroll(
