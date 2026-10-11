@@ -6,6 +6,7 @@ import { db } from "../platform/db.ts";
 import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { payRunStaleness } from "./readiness.ts";
+import { payRunCalculationSource, payRunCalculationSourceDigest } from "./run-calculation-evidence.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { dropScratchOrgReporting } from "../testing/fixtures.ts";
@@ -130,6 +131,14 @@ test(
           employeePartyId: fx.employeeId, employee: "Refused employee", kind: "refusal",
           message: "prior insurable wages need a state allocation",
         }])}::jsonb
+         where org_id = ${fx.orgId} and document_id = ${input.documentId}`);
+      // Re-record the calculation's source evidence for the refused outcome,
+      // as the calculation itself does, so only the carry-in can stale it.
+      const source = await payRunCalculationSource(fx.orgId, input.documentId);
+      assert.ok(source);
+      await db.execute(sql`
+        update pay_runs set calculation_source_snapshot = ${JSON.stringify(source)}::jsonb,
+               calculation_source_digest = ${payRunCalculationSourceDigest(source)}
          where org_id = ${fx.orgId} and document_id = ${input.documentId}`);
       assert.deepEqual((await payRunStaleness(fx.orgId, input.documentId)).reasons, []);
 
