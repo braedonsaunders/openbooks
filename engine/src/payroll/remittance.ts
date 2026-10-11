@@ -346,11 +346,21 @@ async function mixedCurrencyAccruals(
       component_id: string; code: string; name: string;
       kind: "deduction" | "employer_contribution" | "credit";
       system_key: string | null; country: string | null; remittance_party_id: string | null;
+      component_party_id: string | null; covered_party_id: string | null;
       liability_account_id: string | null; filing_account_id: string | null;
       filingUnknown: boolean; province: string; subsidiary_id: string | null;
       currency: string; period_id: string; period_end: string; amount: string;
     }>(sql`
     select c.id as component_id, c.code, c.name, c.kind, c.system_key, c.country, l.remittance_party_id,
+           c.remittance_party_id as component_party_id,
+           (select cover_bill.party_id
+              from payroll_remittance_coverage cov
+              join documents cover_bill
+                on cover_bill.id = cov.bill_document_id and cover_bill.org_id = cov.org_id
+               and cover_bill.status <> 'voided'
+             where cov.org_id = l.org_id and cov.stub_line_id = l.id
+             order by cover_bill.created_at desc, cover_bill.id desc
+             limit 1) as covered_party_id,
            l.liability_account_id,
            ${filingAccount} as filing_account_id,
            bool_or(s.filing_account_source = 'unknown' or s.filing_account_id is null) as "filingUnknown",
@@ -376,6 +386,7 @@ async function mixedCurrencyAccruals(
        and l.kind in ('deduction', 'employer_contribution', 'credit')
        ${payrollSubsidiaryScopeFilter(sql`source_document.subsidiary_id`, allowedSubsidiaryIds)}
      group by c.id, c.code, c.name, c.kind, c.system_key, c.country, l.remittance_party_id,
+              c.remittance_party_id, covered_party_id,
               l.liability_account_id, ${filingAccount}, s.province,
               source_document.subsidiary_id,
               s.currency_code, period.id, period.ends_on
@@ -432,6 +443,8 @@ async function mixedCurrencyAccruals(
       system_key: row.system_key,
       country: row.country,
       remittance_party_id: row.remittance_party_id,
+      component_party_id: row.component_party_id,
+      covered_party_id: row.covered_party_id,
       liability_account_id: row.liability_account_id,
       filing_account_id: row.filing_account_id,
       filingUnknown: row.filingUnknown,
@@ -480,6 +493,19 @@ async function mixedCurrencyAccruals(
 export interface RemittanceResolvableRow {
   /** The stub line's commit-time destination snapshot (migration 0296). */
   snapshotPartyId: string | null;
+  /**
+   * The component's CURRENT remittance vendor. Runs committed before a
+   * vendor was assigned carry a null snapshot; their unremitted liabilities
+   * resolve against this live assignment instead of surfacing unassigned.
+   */
+  componentPartyId: string | null;
+  /**
+   * The live (non-voided) remittance bill that consumed this line, or null
+   * while the liability is unremitted. A consumed line keeps its bill's
+   * vendor as history even when the component is reassigned afterwards;
+   * voiding the bill frees the line back to live resolution.
+   */
+  coveredPartyId: string | null;
   systemKey: string | null;
   country: string | null;
   province: string;
@@ -522,14 +548,33 @@ export function makeRemittanceDestinationResolver(
       // destination — it surfaces unassigned under the RQ schedule, never
       // under the CRA one.
       if (regionalKey) return { partyId: settingsVendor(regionalKey), vendorKey: regionalKey };
-      // The SNAPSHOT, never the live component: a vendor edited after commit
-      // cannot re-point this accrual.
+      // The SNAPSHOT, never the live component: a vendor stamped at commit
+      // cannot be re-pointed by editing the component afterwards.
       if (row.snapshotPartyId) return { partyId: row.snapshotPartyId, vendorKey: null };
+      // A line an issued remittance bill consumed keeps that bill's vendor
+      // as its history, even when the component was assigned (or reassigned)
+      // after the bill. Unremitted lines never reach this branch.
+      if (row.coveredPartyId) return { partyId: row.coveredPartyId, vendorKey: null };
       const vendorKey = row.systemKey
         ? packDeclaration?.vendorSettingsKeyBySystemKey.get(row.systemKey)
         : undefined;
-      if (!vendorKey) return { partyId: null, vendorKey: null };
-      return { partyId: settingsVendor(vendorKey), vendorKey };
+      if (!vendorKey) {
+        // No pack declaration for this component: unremitted liabilities
+        // resolve against the component's current vendor (runs committed
+        // before the assignment carry a null snapshot); genuinely
+        // vendorless rows stay unassigned for setup.
+        if (row.componentPartyId) return { partyId: row.componentPartyId, vendorKey: null };
+        return { partyId: null, vendorKey: null };
+      }
+      const configured = settingsVendor(vendorKey);
+      if (configured) return { partyId: configured, vendorKey };
+      // The pack declares the destination but the org never configured its
+      // vendor: the component's own vendor answers instead, keeping the pack
+      // key as schedule provenance so the declared timetable still dates
+      // the bill. Without a component vendor the row stays unassigned under
+      // the pack key, exactly as before.
+      if (row.componentPartyId) return { partyId: row.componentPartyId, vendorKey };
+      return { partyId: null, vendorKey };
     },
     isInternalAccrual: (row) =>
       row.systemKey != null
@@ -620,15 +665,34 @@ export async function payrollRemittanceSummary(
       component_id: string; code: string; name: string;
       kind: "deduction" | "employer_contribution" | "credit";
       system_key: string | null; country: string | null; remittance_party_id: string | null;
+      component_party_id: string | null; covered_party_id: string | null;
       liability_account_id: string | null; filing_account_id: string | null;
       filingUnknown: boolean; province: string; subsidiary_id: string | null;
       currency: string; amount: string;
     }>(sql`
     select c.id as component_id, c.code, c.name, c.kind, c.system_key, c.country, l.remittance_party_id,
-           -- Historical accrual evidence only. Current component or statutory
-           -- account setup cannot establish where an older liability accrued,
-           -- and the CURRENT component vendor cannot establish who an older
-           -- accrual remits to: both are the stub line's commit-time snapshot.
+           -- The component's CURRENT vendor: unremitted liabilities committed
+           -- while the component named no vendor (null snapshot above) resolve
+           -- against this live assignment instead of surfacing unassigned.
+           c.remittance_party_id as component_party_id,
+           -- The live bill that consumed the row's lines, if any: consumed
+           -- lines keep their bill's vendor as history even when the
+           -- component is reassigned afterwards. Voided bills free their
+           -- lines back to live resolution, so they never pin. A scalar
+           -- subquery (never a join): one row per stub line even if two
+           -- live bills ever covered the same line, so grouped sums can
+           -- never double-count it.
+           (select cover_bill.party_id
+              from payroll_remittance_coverage cov
+              join documents cover_bill
+                on cover_bill.id = cov.bill_document_id and cover_bill.org_id = cov.org_id
+               and cover_bill.status <> 'voided'
+             where cov.org_id = l.org_id and cov.stub_line_id = l.id
+             order by cover_bill.created_at desc, cover_bill.id desc
+             limit 1) as covered_party_id,
+           -- Historical accrual evidence only. Current statutory account
+           -- setup cannot establish where an older liability accrued: that
+           -- stays the stub line's commit-time snapshot.
            l.liability_account_id,
            ${filingAccount} as filing_account_id,
            bool_or(s.filing_account_source = 'unknown' or s.filing_account_id is null) as "filingUnknown",
@@ -649,6 +713,7 @@ export async function payrollRemittanceSummary(
        and l.kind in ('deduction', 'employer_contribution', 'credit')
        ${payrollSubsidiaryScopeFilter(sql`source_document.subsidiary_id`, allowedSubsidiaryIds)}
      group by c.id, c.code, c.name, c.kind, c.system_key, c.country, l.remittance_party_id,
+              c.remittance_party_id, covered_party_id,
               l.liability_account_id, ${filingAccount}, s.province,
               source_document.subsidiary_id, s.currency_code
      order by c.sequence, c.code
@@ -704,6 +769,8 @@ export async function payrollRemittanceSummary(
   const resolver = sharedResolution;
   const toResolvable = (row: (typeof rows)[number]): RemittanceResolvableRow => ({
     snapshotPartyId: row.remittance_party_id,
+    componentPartyId: row.component_party_id,
+    coveredPartyId: row.covered_party_id,
     systemKey: row.system_key,
     country: row.country,
     province: row.province,
@@ -1000,10 +1067,20 @@ export async function assertPayrollRemittanceBillCurrent(
   const live = (await executor.execute<{
     line_id: string; kind: "deduction" | "employer_contribution" | "credit";
     amount: string; snapshot_party_id: string | null;
+    component_party_id: string | null; covered_party_id: string | null;
     system_key: string | null; country: string | null; province: string;
   }>(sql`
     select l.id::text as line_id, l.kind, l.amount::text as amount,
            l.remittance_party_id::text as snapshot_party_id,
+           c.remittance_party_id::text as component_party_id,
+           (select cover_bill.party_id::text
+              from payroll_remittance_coverage cov
+              join documents cover_bill
+                on cover_bill.id = cov.bill_document_id and cover_bill.org_id = cov.org_id
+               and cover_bill.status <> 'voided'
+             where cov.org_id = l.org_id and cov.stub_line_id = l.id
+             order by cover_bill.created_at desc, cover_bill.id desc
+             limit 1) as covered_party_id,
            c.system_key, c.country, s.province
       from pay_stub_lines l
       join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
@@ -1015,6 +1092,8 @@ export async function assertPayrollRemittanceBillCurrent(
   const liveById = new Map(
     live.rows.map((row) => [row.line_id, {
       snapshotPartyId: row.snapshot_party_id,
+      componentPartyId: row.component_party_id,
+      coveredPartyId: row.covered_party_id,
       systemKey: row.system_key,
       country: row.country,
       province: row.province,
@@ -1126,10 +1205,18 @@ export type RemittanceRow = {
   /** The component row's pack country — picks the pack whose declaration governs the row. */
   country: string | null;
   /** The stub line's commit-time destination snapshot (migration 0296) — the
-   * vendor the accrual remitted to when it committed, never the component's
-   * vendor today. Null for lines whose component named no vendor (which fall
-   * through to the pack's configured vendor, exactly as before). */
+   * vendor the accrual remitted to when it committed. Null for lines
+   * committed while the component named no vendor; those resolve against
+   * the component's vendor today (see component_party_id), and lines an
+   * issued bill consumed resolve against that bill (see covered_party_id).
+   */
   remittance_party_id: string | null;
+  /** The component's CURRENT remittance vendor — the live assignment
+   * unremitted snapshot-less liabilities resolve against. */
+  component_party_id: string | null;
+  /** The live (non-voided) remittance bill that consumed this row's lines,
+   * or null while unremitted — the vendor history consumed lines keep. */
+  covered_party_id: string | null;
   liability_account_id: string | null;
   filing_account_id: string | null;
   /** True when any stub behind the row never had its filing account attributed. */
@@ -2270,6 +2357,10 @@ export interface RemittanceScopeLine {
   amount: string;
   /** The stub line's commit-time destination snapshot (migration 0296). */
   snapshotPartyId: string | null;
+  /** The component's CURRENT remittance vendor (see RemittanceResolvableRow). */
+  componentPartyId: string | null;
+  /** The live bill that consumed this line, if any (see RemittanceResolvableRow). */
+  coveredPartyId: string | null;
   systemKey: string | null;
   country: string | null;
   province: string;
@@ -2297,11 +2388,21 @@ export async function remittanceScopeLines(
   const rows = (await executor.execute<{
     line_id: string; kind: "deduction" | "employer_contribution" | "credit";
     amount: string; snapshot_party_id: string | null;
+    component_party_id: string | null; covered_party_id: string | null;
     system_key: string | null; country: string | null; province: string;
     component_id: string; component_name: string; liability_account_id: string | null;
   }>(sql`
     select l.id::text as line_id, l.kind, l.amount::text as amount,
            l.remittance_party_id::text as snapshot_party_id,
+           c.remittance_party_id::text as component_party_id,
+           (select cover_bill.party_id::text
+              from payroll_remittance_coverage cov
+              join documents cover_bill
+                on cover_bill.id = cov.bill_document_id and cover_bill.org_id = cov.org_id
+               and cover_bill.status <> 'voided'
+             where cov.org_id = l.org_id and cov.stub_line_id = l.id
+             order by cover_bill.created_at desc, cover_bill.id desc
+             limit 1) as covered_party_id,
            c.system_key, c.country, s.province,
            c.id::text as component_id, c.name as component_name,
            l.liability_account_id::text as liability_account_id
@@ -2321,6 +2422,8 @@ export async function remittanceScopeLines(
     kind: row.kind,
     amount: row.amount,
     snapshotPartyId: row.snapshot_party_id,
+    componentPartyId: row.component_party_id,
+    coveredPartyId: row.covered_party_id,
     systemKey: row.system_key,
     country: row.country,
     province: row.province,

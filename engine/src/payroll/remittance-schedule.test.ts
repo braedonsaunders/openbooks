@@ -212,7 +212,8 @@ test("an undated destination refuses instead of using a registration timetable",
 
 const ROW: RemittanceRow = {
   component_id: "qpip", code: "QPIP", name: "QPIP", kind: "deduction",
-  system_key: "qpip", country: "CA", remittance_party_id: null, liability_account_id: "liab-1",
+  system_key: "qpip", country: "CA", remittance_party_id: null, component_party_id: null,
+  covered_party_id: null, liability_account_id: "liab-1",
   filing_account_id: ACCOUNT.id, filingUnknown: false, province: "QC", amount: "100.00",
   subsidiary_id: "sub-1", currency: "CAD", sliceAmount: "100.00",
 };

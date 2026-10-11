@@ -37,7 +37,8 @@ const ACCOUNTS = new Map([[RP1.id, RP1], [RP2.id, RP2]]);
 function row(overrides: Partial<RemittanceRow>): RemittanceRow {
   const base: Omit<RemittanceRow, "sliceAmount"> = {
     component_id: "c1", code: "TAX", name: "Income tax", kind: "deduction",
-    system_key: "income_tax", country: "CA", remittance_party_id: "cra", liability_account_id: "gl-tax",
+    system_key: "income_tax", country: "CA", remittance_party_id: "cra", component_party_id: null,
+    covered_party_id: null, liability_account_id: "gl-tax",
     filing_account_id: RP1.id, filingUnknown: false, province: "ON", amount: "100.00",
     subsidiary_id: "sub-a" as string | null, currency: "CAD",
     ...overrides,
