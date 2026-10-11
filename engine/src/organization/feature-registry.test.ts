@@ -160,3 +160,30 @@ test("time tracking stands alone: hourly time needs no job costing", () => {
   assert.equal(featureEnabled({ projects: false, timeTracking: true, fieldTime: true }, "fieldTime"), true);
   assert.equal(featureEnabled({ projects: false, timeTracking: false, fieldTime: true }, "fieldTime"), false);
 });
+
+test("information returns are a tax switch beside the other tax features", () => {
+  const def = FEATURE_BY_KEY.get("informationReturns");
+  assert.ok(def, "informationReturns must be registered before filing routes gate on it");
+  assert.equal(def.defaultEnabled, false);
+  assert.equal(def.category, "finance");
+  assert.equal(def.group, "tax");
+  assert.deepEqual(def.navModules ?? [], ["information-returns"]);
+  assert.equal(def.parentKey, undefined);
+  assert.deepEqual(def.requiresAll ?? [], []);
+  // A services partnership with no projects files 1099s with Projects and
+  // subcontractor compliance both off.
+  assert.equal(featureEnabled({ projects: false, subcontractorCompliance: false, informationReturns: true }, "informationReturns"), true);
+  assert.equal(featureEnabled({ subcontractorCompliance: true, informationReturns: false }, "informationReturns"), false);
+  assert.equal(featureEnabled({}, "informationReturns"), false);
+});
+
+test("subcontractor compliance keeps COIs and lien waivers, recommending information returns", () => {
+  const def = FEATURE_BY_KEY.get("subcontractorCompliance");
+  assert.ok(def, "subcontractorCompliance must stay registered for the COI workspace");
+  assert.equal(def.category, "projects");
+  assert.equal(def.group, "purchasing");
+  assert.deepEqual(def.navModules ?? [], ["compliance", "compliance-vendors", "lien-waivers"]);
+  assert.deepEqual(def.recommends ?? [], ["informationReturns"]);
+  // Enabling the tax switch never requires the compliance switch.
+  assert.equal(featureEnabled({ subcontractorCompliance: false, informationReturns: true }, "informationReturns"), true);
+});

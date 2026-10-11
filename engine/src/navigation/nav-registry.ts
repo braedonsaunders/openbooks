@@ -487,7 +487,8 @@ export const NAV_MODULES: NavModule[] = [
   // pay run rather than under Projects. `lien-waivers` is listed on BOTH the
   // subcontractorCompliance and projects feature gates, so it disappears when
   // either is off — a lien is a claim against a project, and there is no waiving
-  // one without projects.
+  // one without projects. `information-returns` is the year-end tax switch
+  // beside it, so a 1099 filer with no COI tracking still reaches its filings.
   {
     key: 'compliance',
     href: '/compliance',
@@ -527,7 +528,7 @@ export const NAV_MODULES: NavModule[] = [
     group: 'purchasing',
     subgroup: 'compliance',
     requiredPermission: 'compliance.read',
-    featureKey: 'subcontractorCompliance',
+    featureKey: 'informationReturns',
   },
 
   // Banking — the bank feed, matching, and reconciliation.

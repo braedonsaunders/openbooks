@@ -247,11 +247,14 @@ export const LOCAL_NAVIGATION: LocalNavigationSet[] = [
     { href: '/assets/leases', ns: 'nav', key: 'modules.leases', permission: 'assets.read', feature: 'fixedAssets', prefix: true },
     { href: '/assets/equipment', ns: 'nav', key: 'modules.equipment', permission: 'assets.read', feature: 'equipment' },
   ] },
-  { id: 'compliance', label: 'Subcontractor Compliance', feature: 'subcontractorCompliance', tabs: [
-    { href: '/compliance', ns: 'compliance', key: 'tabs.overview', permission: 'compliance.read' },
-    { href: '/compliance/vendors', ns: 'compliance', key: 'tabs.vendors', permission: 'compliance.read' },
-    { href: '/compliance/lien-waivers', ns: 'compliance', key: 'tabs.lienWaivers', permission: 'compliance.read', feature: 'projects' },
-    { href: '/compliance/information-returns', ns: 'compliance', key: 'tabs.informationReturns', permission: 'compliance.read' },
+  // No set-level feature: the overview/vendors tabs need subcontractor
+  // compliance while information returns ride their own tax switch, so the
+  // workspace renders while EITHER switch is on and each tab enforces its own.
+  { id: 'compliance', label: 'Subcontractor Compliance', tabs: [
+    { href: '/compliance', ns: 'compliance', key: 'tabs.overview', permission: 'compliance.read', feature: 'subcontractorCompliance' },
+    { href: '/compliance/vendors', ns: 'compliance', key: 'tabs.vendors', permission: 'compliance.read', feature: 'subcontractorCompliance' },
+    { href: '/compliance/lien-waivers', ns: 'compliance', key: 'tabs.lienWaivers', permission: 'compliance.read', feature: 'projects', requiredFeatures: ['subcontractorCompliance'] },
+    { href: '/compliance/information-returns', ns: 'compliance', key: 'tabs.informationReturns', permission: 'compliance.read', feature: 'informationReturns' },
   ] },
 ]
 

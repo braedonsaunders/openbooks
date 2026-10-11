@@ -96,6 +96,13 @@ export const FEATURES: FeatureDef[] = [
   // it on is a deliberate adoption decision (OSS registrations and customer
   // evidence must be configured first). Data and evidence are kept when off.
   { key: 'crossBorderTax', defaultEnabled: false, category: 'finance', group: 'tax' },
+  // Year-end information returns (1099-NEC/MISC, T4A): vendor TIN capture,
+  // information-return box rules, the worksheet/filing surfaces and the box
+  // mapping on expense accounts. Off by default — filing for a payee is a
+  // deliberate adoption decision (TINs, box rules and filing entities must be
+  // configured first). Deliberately NOT under Projects: a services org with
+  // no projects still pays 1099 contractors. Data is kept when off.
+  { key: 'informationReturns', defaultEnabled: false, category: 'finance', group: 'tax', navModules: ['information-returns'] },
   { key: 'continuousClose', defaultEnabled: true, category: 'finance', group: 'close', navModules: ['continuous-close'] },
   // Core period close is always available. This gate adds the mature-team
   // governance layer: evidence-heavy blueprints, independent approval flows,
@@ -269,15 +276,16 @@ export const FEATURES: FeatureDef[] = [
   // and compliance make the workflow richer but are not required to account
   // for a direct subcontract.
   { key: 'subcontracts', defaultEnabled: false, category: 'projects', group: 'purchasing', navModules: ['subcontracts'], requiresAll: ['projects'], recommends: ['orders', 'subcontractorCompliance'] },
-  // Subcontractor compliance: certificates of insurance, lien waivers, and
-  // year-end information returns (1099-NEC/MISC, T4A) for the people you pay.
-  // Off by default and deliberately NOT a child of `projects`: COI tracking and
-  // 1099 filing are buy-side controls that stand on their own, and an org with
-  // no projects still has subcontractors to vet. The lien-waiver surface is the
-  // one part that needs a project, so it additionally requires the Projects
-  // gate — enforced at its own page/API boundary, not by a parent gate that
-  // would take insurance tracking down with it.
-  { key: 'subcontractorCompliance', defaultEnabled: false, category: 'projects', group: 'purchasing', navModules: ['compliance', 'compliance-vendors', 'lien-waivers', 'information-returns'] },
+  // Subcontractor compliance: certificates of insurance and lien waivers for
+  // the people you pay. Off by default and deliberately NOT a child of
+  // `projects`: COI tracking stands on its own, and an org with no projects
+  // still has subcontractors to vet. The lien-waiver surface is the one part
+  // that needs a project, so it additionally requires the Projects gate —
+  // enforced at its own page/API boundary, not by a parent gate that would
+  // take insurance tracking down with it. Year-end information returns are a
+  // separate tax switch (`informationReturns`, recommended below), not part
+  // of this gate.
+  { key: 'subcontractorCompliance', defaultEnabled: false, category: 'projects', group: 'purchasing', navModules: ['compliance', 'compliance-vendors', 'lien-waivers'], recommends: ['informationReturns'] },
   { key: 'equipment', defaultEnabled: true, category: 'projects', group: 'equipment', navModules: ['equipment'] },
 
   // People — hire to retire, pay and employee spend.
