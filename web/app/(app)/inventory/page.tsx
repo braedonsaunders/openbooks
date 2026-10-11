@@ -22,6 +22,7 @@ import { BomWorkspace, NewBomButton, type BomAssembly } from './BomWorkspace'
 import { CountsList, NewCountButton } from './counts/CountsList'
 import { InventoryActionDrawer } from './InventoryActionDrawer'
 import { NewMovementButton } from './NewMovementButton'
+import { ReceiveAgainstPoDrawer, type ReceivablePurchaseOrder } from './ReceiveAgainstPoDrawer'
 import { canPostInventoryMovement } from './movement-permissions'
 import { ReverseLandedVoucherAction } from './ReverseLandedVoucherAction'
 import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
@@ -56,6 +57,11 @@ export default async function Inventory({
   const requestedView = selectedView(sp)
   const canManage = can(authz, 'items.manage')
   const canPostMovement = canPostInventoryMovement(authz)
+  // Standalone goods-receipt entry: receiving through the native receive
+  // path takes the receiving grant on top of items.post — the same
+  // authority the receive route enforces.
+  const canReceive = can(authz, 'goods_receipts.create') && can(authz, 'items.post')
+  const showReceivePicker = pickString(sp.receive) === 'new' && canReceive
   const canPost = can(authz, 'items.post')
   const canReverse = can(authz, 'items.reverse')
   const canSetup = can(authz, 'admin.setup.manage')
@@ -98,6 +104,23 @@ export default async function Inventory({
              ${subsidiaryVisibleFilter(sql`s.id`, authz.allowedSubsidiaryIds)}
            order by s.name`),
       ])
+    : null
+
+  // Approved purchase orders still waiting for stock: the standalone
+  // receive entry offers exactly the orders the receive route will accept.
+  const receivablePos = showReceivePicker
+    ? await db.execute<ReceivablePurchaseOrder>(sql`
+        select d.id, d.document_number as "number", p.display_name as "vendor",
+               count(*)::int as "openLines"
+          from documents d
+          join document_lines dl on dl.document_id = d.id and dl.org_id = d.org_id
+          left join parties p on p.id = d.party_id and p.org_id = d.org_id
+         where d.org_id = ${orgId} and d.kind = 'purchase_order' and d.status = 'approved'
+           and dl.quantity > dl.quantity_fulfilled + dl.quantity_cancelled
+           ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
+         group by d.id, d.document_number, d.document_date, p.display_name
+         order by d.document_date desc, d.document_number, d.id
+         limit 100`)
     : null
 
   const countData = view === 'counts'
@@ -170,8 +193,15 @@ export default async function Inventory({
 
   const movementHref = `/inventory?inventoryView=${view}&movement=new`
   const closeMovementHref = `/inventory?inventoryView=${view}`
+  const receiveHref = `/inventory?inventoryView=${view}&receive=new`
   const headerAction = view === 'onhand' || view === 'movements' ? (
-    <>{canPostMovement ? <NewMovementButton href={movementHref} /> : null}{canReverse ? <ReverseLandedVoucherAction /> : null}</>
+    <>{canPostMovement ? <NewMovementButton href={movementHref} /> : null}{canReceive ? (
+      <Button asChild>
+        <Link href={receiveHref}>
+          <Plus size={15} /> {t('receive.action')}
+        </Link>
+      </Button>
+    ) : null}{canReverse ? <ReverseLandedVoucherAction /> : null}</>
   ) : view === 'counts' ? (
     canPost ? (
       <NewCountButton label={t('counts.newButton')} />
@@ -216,6 +246,9 @@ export default async function Inventory({
       ) : null}
 
       {view==='holds'||view==='consignment'||view==='cycles'?<StockControls key={view} view={view==='cycles'?'cycle_due':view} canManage={canManage} canPost={canPost} pickers={movementPickers?{items:movementPickers[0].rows,stockLocations:movementPickers[1].rows,accounts:movementPickers[2].rows,subsidiaries:movementPickers[3].rows}:undefined}/>:null}
+      {showReceivePicker && receivablePos ? (
+        <ReceiveAgainstPoDrawer orders={receivablePos.rows} closeHref={closeMovementHref} />
+      ) : null}
       {pickString(sp.layerItem)?<LayerInquiry itemId={pickString(sp.layerItem)!} stockLocationId={pickString(sp.layerLocation)}/>:null}
       {view === 'counts' && countData ? (
         <CountsList

@@ -578,6 +578,7 @@ export function OrderDrawer({
   layout,
   createMode = false,
   closeHref,
+  initialReceiveOpen = false,
   orgId,
   backorders = false,
   pickLists = false,
@@ -634,6 +635,12 @@ export function OrderDrawer({
   createMode?: boolean
   /** List URL (filters preserved) that Cancel and the close affordance return to. */
   closeHref?: string
+  /**
+   * Open with the goods-receipt form raised (the inventory "receive against
+   * this order" entry). Honored only for an approved purchase order the
+   * viewer may receive; anything else opens the drawer normally.
+   */
+  initialReceiveOpen?: boolean
   /**
    * Calling organization for unsaved-draft retention (sessionStorage is
    * keyed by org + kind + record). Absent means no retention: the drawer
@@ -747,8 +754,11 @@ export function OrderDrawer({
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
   // Goods-receipt draft: "Convert to Goods receipt" opens the prefilled form
   // instead of receiving the full remainder blindly; the receipt posts only
-  // on the form's explicit Save through the native receive path.
-  const [receiveOpen, setReceiveOpen] = useState(false)
+  // on the form's explicit Save through the native receive path. The
+  // inventory receive entry deep-links here with the form already raised.
+  const [receiveOpen, setReceiveOpen] = useState(
+    initialReceiveOpen && kind === 'purchase_order' && doc.status === 'approved',
+  )
   // Unsaved-draft retention state lives below, next to the dirty tracker.
   const [dropShipRoutes, setDropShipRoutes] = useState<DropShipRoute[]>(dropShipLines)
   const [dropShipVendorId, setDropShipVendorId] = useState('')
@@ -2333,7 +2343,8 @@ export function OrderDrawer({
           />
         </div>
       </div>
-      {receiveOpen && kind === 'purchase_order' ? (
+      {receiveOpen && kind === 'purchase_order' && isApproved
+      && convertTargets.some((target) => target.kind === 'purchase_receipt') ? (
         <GoodsReceiptForm
           orderId={String(doc.id)}
           apiBase={apiBase}

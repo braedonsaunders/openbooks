@@ -8,6 +8,12 @@
     "newButton": "New movement",
     "view": "View"
   },
+  "receive": {
+    "action": "Receive against purchase order",
+    "title": "Receive against a purchase order",
+    "empty": "No purchase orders are waiting for receipt.",
+    "openLines": "{count} lines still to receive"
+  },
   "view": {
     "onhand": "On hand",
     "movements": "Movements",

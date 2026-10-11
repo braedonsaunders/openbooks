@@ -8,6 +8,12 @@
     "newButton": "Neue Bewegung",
     "view": "Ansicht"
   },
+  "receive": {
+    "action": "Wareneingang zu Bestellung",
+    "title": "Wareneingang zu einer Bestellung",
+    "empty": "Keine Bestellungen warten auf Wareneingang.",
+    "openLines": "{count} offene Positionen"
+  },
   "view": {
     "onhand": "Bestand",
     "movements": "Bewegungen",

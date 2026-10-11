@@ -8,6 +8,12 @@
     "newButton": "新規変動",
     "view": "表示"
   },
+  "receive": {
+    "action": "発注書に対する入庫",
+    "title": "発注書に対する入庫",
+    "empty": "入庫待ちの発注書がありません。",
+    "openLines": "未入庫 {count} 明細"
+  },
   "view": {
     "onhand": "手持在庫",
     "movements": "変動",

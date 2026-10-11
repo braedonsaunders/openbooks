@@ -8,6 +8,12 @@
     "newButton": "Nuevo movimiento",
     "view": "Vista"
   },
+  "receive": {
+    "action": "Recibir contra orden de compra",
+    "title": "Recibir contra una orden de compra",
+    "empty": "No hay órdenes de compra pendientes de recepción.",
+    "openLines": "{count} líneas por recibir"
+  },
   "view": {
     "onhand": "Existencias",
     "movements": "Movimientos",

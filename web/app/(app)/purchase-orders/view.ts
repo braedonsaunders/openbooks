@@ -74,6 +74,10 @@ export async function loadPurchaseOrders(
   const canManage = can(authz, 'purchase_orders.create')
   const t = await getTranslations('purchaseOrders')
   const openId = pickString(sp[PARAM])
+  // The inventory receive entry deep-links here with the receipt form
+  // already raised (?order=<id>&receive=1). The drawer honors it only for
+  // an approved order the viewer may receive.
+  const receiveRequested = pickString(sp.receive) === '1'
   // Only a real document id may reach the uuid comparison: the create view
   // (no id, or the literal 'new') must not bind '' or 'new' to a uuid column.
   const openDocumentId = openId && isUuid(openId) ? openId : null
@@ -195,9 +199,10 @@ export async function loadPurchaseOrders(
             remountKey: creating ? 'new-purchase-order' : String(drawerOrder!.doc.id),
             order: (creating ? unsavedOrder : drawerOrder)!,
             initialMode: creating || pickString(sp.mode) === 'edit' ? 'edit' : 'view',
+            initialReceiveOpen: !creating && receiveRequested ? true : undefined,
             createMode: creating || undefined,
             closeHref: creating
-              ? mergeHref(BASE, sp, { [PARAM]: undefined, [CREATE_PARAM]: undefined, mode: undefined, form: undefined })
+              ? mergeHref(BASE, sp, { [PARAM]: undefined, [CREATE_PARAM]: undefined, mode: undefined, form: undefined, receive: undefined })
               : undefined,
             kind: KIND,
             orgId: authz.user.orgId,

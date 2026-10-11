@@ -8,6 +8,12 @@
     "newButton": "新建变动",
     "view": "查看"
   },
+  "receive": {
+    "action": "按采购订单收货",
+    "title": "按采购订单收货",
+    "empty": "没有等待收货的采购订单。",
+    "openLines": "还有 {count} 行待收货"
+  },
   "view": {
     "onhand": "在库",
     "movements": "变动",

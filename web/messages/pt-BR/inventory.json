@@ -8,6 +8,12 @@
     "newButton": "Nova movimentação",
     "view": "Visualizar"
   },
+  "receive": {
+    "action": "Receber contra pedido de compra",
+    "title": "Receber contra um pedido de compra",
+    "empty": "Nenhum pedido de compra aguardando recebimento.",
+    "openLines": "{count} linhas a receber"
+  },
   "view": {
     "onhand": "Disponível",
     "movements": "Movimentações",

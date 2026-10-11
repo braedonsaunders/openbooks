@@ -8,6 +8,12 @@
     "newButton": "Nouveau mouvement",
     "view": "Vue"
   },
+  "receive": {
+    "action": "Réceptionner sur bon de commande",
+    "title": "Réceptionner sur un bon de commande",
+    "empty": "Aucun bon de commande en attente de réception.",
+    "openLines": "{count} lignes à réceptionner"
+  },
   "view": {
     "onhand": "En stock",
     "movements": "Mouvements",
