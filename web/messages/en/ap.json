@@ -70,7 +70,8 @@
     "controlAccountHelp": "The payable this document posts to. Payments and vendor credits settle it on the same account. Leave empty to use the default.",
     "controlAccountPartyDefault": "Vendor default — {account}",
     "controlAccountOrganizationDefault": "Organization default — {account}",
-    "controlAccountUnset": "No payable account configured — set one in Setup → Company & Accounting → Control accounts"
+    "controlAccountUnset": "No payable account configured — set one in Setup → Company & Accounting → Control accounts",
+    "matchBanner": "Some stocked lines are not matched to a purchase order — the bill cannot post until they are matched."
   },
   "capture": {
     "title": "Bill capture",
@@ -355,5 +356,18 @@
     "emptySourcePayments": "No payment evidence is recorded for this return.",
     "paymentDocument": "Payment document",
     "reportingFxRate": "Reporting exchange rate"
+  },
+  "match": {
+    "title": "Match to purchase order",
+    "description": "Link each stocked line to the purchase-order line it bills. Matched lines clear received-not-billed at the receipt value; price differences go to purchase price variance.",
+    "lineLabel": "Line {lineNumber} — {item}, {quantity} {unit}",
+    "chooseOrder": "Choose a purchase-order line…",
+    "candidateLabel": "{orderNumber} line {lineNumber} — {quantity} {unit} billable at {unitPrice}",
+    "receipts": "Receipts: {list}",
+    "noCandidates": "No open purchase-order lines hold this item.",
+    "loadFailed": "Could not load purchase orders.",
+    "matchFailed": "Could not match these lines.",
+    "confirm": "Match lines",
+    "matched": "Bill lines matched."
   }
 }

@@ -350,3 +350,33 @@ test("a refused row withdraw persists the server reason inline", async (t) => {
   assert.ok(alert, "the refused withdraw must persist a row-inline alert");
   assert.match(alert.textContent ?? "", /submitter or an approver/);
 });
+
+/** A 422 refusal naming a remedy renders both through the shared reader —
+ * the unmatched-lines bill refusal names its purchase order twice, once as
+ * the reason and once as the next step. */
+test("a 422 post refusal renders the server remedy with the reason", async (t) => {
+  const prior = globalThis.fetch;
+  globalThis.fetch = (async () =>
+    Response.json(
+      {
+        error: "vendor-bill line 1 (GRN-ETH-GUJI) is stock still open on purchase order PO-00002 line 1",
+        code: "BILL_LINES_UNMATCHED",
+        remedy: "Match this bill to purchase order PO-00002 (Match to purchase order), then post again",
+      },
+      { status: 422 },
+    )) as typeof fetch;
+  const { host, root } = await mountApprovedRow();
+  t.after(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+    globalThis.fetch = prior;
+  });
+  await clickPost(host);
+  await tick();
+  const alert = host.querySelector('[role="alert"]');
+  assert.ok(alert, "the refused post must persist a row-inline alert");
+  assert.match(alert.textContent ?? "", /still open on purchase order PO-00002/);
+  assert.match(alert.textContent ?? "", /Match this bill to purchase order PO-00002/);
+});

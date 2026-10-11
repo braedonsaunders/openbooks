@@ -57,6 +57,7 @@ import { EInvoiceButton } from './einvoice-button'
 import { SendButton } from './send-button'
 import { FlowManualButtons } from './flow-manual-buttons'
 import { ApprovalActions } from './approval-actions'
+import { BillMatchDialog } from './bill-match-dialog'
 import { ApprovalHistory } from './approval-history'
 import { PDF_RECORD_TYPE_BY_KEY } from '../lib/pdf-templates/catalog'
 import { add, cmp, fromUnits, normalizeMoney, roundDiv, sum } from '@openbooks/engine/src/money/money.ts'
@@ -1430,6 +1431,41 @@ export function DocumentDrawer({
   // payable account with no party, accepted under the "warn" policy). They
   // pin beside the record until the next lifecycle action.
   const [postWarnings, setPostWarnings] = useState<string[]>([])
+  // Matching a hand-coded bill to its purchase order: the dialog links
+  // stocked lines the drawer created without provenance. The banner shows
+  // while unmatched lines still have open order lines to match (an early
+  // warning, before posting refuses) or right after posting refused for
+  // exactly that — both offer the same dialog.
+  const [matchOpen, setMatchOpen] = useState(false)
+  const [matchHint, setMatchHint] = useState(false)
+  const [matchRefused, setMatchRefused] = useState(false)
+  const canMatchBill =
+    config.kind === 'vendor_bill' &&
+    (doc.status === 'draft' || doc.status === 'approved') &&
+    canCreate
+  useEffect(() => {
+    if (!canMatchBill || matchOpen) return
+    let cancelled = false
+    async function probe() {
+      try {
+        const res = await fetch(`/api/documents/${doc.id}/bill-match`)
+        if (!res.ok) return
+        const data = (await res.json().catch(() => null)) as {
+          lines?: { matched?: unknown; candidates?: unknown[] }[]
+        } | null
+        if (cancelled || !data || !Array.isArray(data.lines)) return
+        setMatchHint(
+          data.lines.some((line) => !line.matched && Array.isArray(line.candidates) && line.candidates.length > 0),
+        )
+      } catch {
+        // The probe is advisory: a failed read hides the banner, never the bill.
+      }
+    }
+    void probe()
+    return () => {
+      cancelled = true
+    }
+  }, [canMatchBill, doc.id, documentRevision, matchOpen])
 
   const nativeGoods = config.kind==='customer_invoice' && customValues.canadianGoodsTax && typeof customValues.canadianGoodsTax==='object'
     ? customValues.canadianGoodsTax as {deliveryProvince:string;deliveryMethod:string;agreementEvidence:string} : null
@@ -2593,6 +2629,7 @@ export function DocumentDrawer({
       if (!confirmed) return
     }
     setPostWarnings([])
+    setMatchRefused(false)
     await execute(
       () =>
         fetchAppAction('/api/documents/actions', {
@@ -2628,6 +2665,10 @@ export function DocumentDrawer({
           // toast alone is too easy to miss, so the message also pins as an
           // inline banner until the next action or edit. A rejected transport
           // pins without refreshing — there is nothing new to show.
+          // A bill refused until its lines are matched offers the match
+          // dialog beside the pinned refusal, keyed on the refusal code —
+          // never on message text.
+          if (error.code === 'BILL_LINES_UNMATCHED') setMatchRefused(true)
           if (error.kind !== 'transport') router.refresh()
         },
       },
@@ -3631,6 +3672,26 @@ export function DocumentDrawer({
             {warning}
           </p>
         ))}
+        {canMatchBill && (matchHint || matchRefused) ? (
+          <div role="alert" className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-amber-200 bg-amber-50 p-2.5 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+            <p className="min-w-48 flex-1">{t('drawer.matchBanner')}</p>
+            <Button size="sm" variant="outline" disabled={busy} onClick={() => setMatchOpen(true)}>
+              {t('match.title')}
+            </Button>
+          </div>
+        ) : null}
+        {matchOpen && canMatchBill ? (
+          <BillMatchDialog
+            billId={String(doc.id)}
+            onClose={() => setMatchOpen(false)}
+            onMatched={() => {
+              setMatchOpen(false)
+              setMatchRefused(false)
+              toast.success(t('match.matched'))
+              router.refresh()
+            }}
+          />
+        ) : null}
           {config.kind==='customer_invoice' && (editable || nativeGoods) ? <div className="space-y-3 border-b p-4">
             <div className="space-y-1"><FieldLabel fieldName={tCommon('nativeGoodsTax.title')}>{tCommon('nativeGoodsTax.title')}</FieldLabel>
               {editable ? <Select value={nativeGoods ? 'native' : 'manual'} onChange={event=>setCustomValues(values=>({...values,canadianGoodsTax:event.target.value==='native'

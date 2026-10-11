@@ -70,7 +70,8 @@
     "controlAccountHelp": "Das Verbindlichkeitenkonto, auf das dieser Beleg gebucht wird. Zahlungen und Lieferantengutschriften gleichen ihn auf demselben Konto aus. Leer lassen, um den Standard zu verwenden.",
     "controlAccountPartyDefault": "Lieferantenstandard — {account}",
     "controlAccountOrganizationDefault": "Unternehmensstandard — {account}",
-    "controlAccountUnset": "Kein Verbindlichkeitenkonto eingerichtet – legen Sie eines unter Einrichtung → Unternehmen & Buchhaltung → Kontrollkonten fest"
+    "controlAccountUnset": "Kein Verbindlichkeitenkonto eingerichtet – legen Sie eines unter Einrichtung → Unternehmen & Buchhaltung → Kontrollkonten fest",
+    "matchBanner": "Einige Lagerzeilen sind keiner Bestellung zugeordnet — die Rechnung kann erst gebucht werden, wenn sie zugeordnet sind."
   },
   "capture": {
     "title": "Rechnungserfassung",
@@ -355,5 +356,18 @@
     "emptySourcePayments": "Für diese Meldung sind keine Zahlungsnachweise erfasst.",
     "paymentDocument": "Zahlungsbeleg",
     "reportingFxRate": "Meldewechselkurs"
+  },
+  "match": {
+    "title": "Bestellung zuordnen",
+    "description": "Ordnen Sie jede Lagerzeile der Bestellzeile zu, die sie abrechnet. Zugeordnete Zeilen gleichen Erhalten-nicht-berechnet zum Wareneingangswert aus; Preisdifferenzen gehen in die Einkaufspreisabweichung.",
+    "lineLabel": "Zeile {lineNumber} — {item}, {quantity} {unit}",
+    "chooseOrder": "Bestellzeile wählen…",
+    "candidateLabel": "{orderNumber} Zeile {lineNumber} — {quantity} {unit} abrechenbar zu {unitPrice}",
+    "receipts": "Wareneingänge: {list}",
+    "noCandidates": "Keine offene Bestellzeile enthält diesen Artikel.",
+    "loadFailed": "Bestellungen konnten nicht geladen werden.",
+    "matchFailed": "Diese Zeilen konnten nicht zugeordnet werden.",
+    "confirm": "Zeilen zuordnen",
+    "matched": "Rechnungszeilen zugeordnet."
   }
 }

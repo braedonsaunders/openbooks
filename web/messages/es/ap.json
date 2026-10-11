@@ -70,7 +70,8 @@
     "controlAccountHelp": "La cuenta por pagar en la que se contabiliza este documento. Los pagos y créditos de proveedor lo liquidan en la misma cuenta. Déjela vacía para usar la predeterminada.",
     "controlAccountPartyDefault": "Predeterminada del proveedor — {account}",
     "controlAccountOrganizationDefault": "Predeterminada de la organización — {account}",
-    "controlAccountUnset": "No hay cuenta por pagar configurada: defina una en Configuración → Empresa y contabilidad → Cuentas de control"
+    "controlAccountUnset": "No hay cuenta por pagar configurada: defina una en Configuración → Empresa y contabilidad → Cuentas de control",
+    "matchBanner": "Algunas líneas de existencias no están asociadas a una orden de compra — la factura no se puede contabilizar hasta asociarlas."
   },
   "capture": {
     "title": "Captura de facturas",
@@ -355,5 +356,18 @@
     "emptySourcePayments": "No hay justificantes de pago registrados para esta declaración.",
     "paymentDocument": "Documento de pago",
     "reportingFxRate": "Tipo de cambio de declaración"
+  },
+  "match": {
+    "title": "Asociar a orden de compra",
+    "description": "Asocie cada línea de existencias a la línea de orden de compra que factura. Las líneas asociadas saldan lo recibido no facturado al valor de recepción; las diferencias de precio van a la variación del precio de compra.",
+    "lineLabel": "Línea {lineNumber} — {item}, {quantity} {unit}",
+    "chooseOrder": "Elija una línea de orden…",
+    "candidateLabel": "{orderNumber} línea {lineNumber} — {quantity} {unit} facturables a {unitPrice}",
+    "receipts": "Recepciones: {list}",
+    "noCandidates": "Ninguna línea de orden abierta contiene este artículo.",
+    "loadFailed": "No se pudieron cargar las órdenes de compra.",
+    "matchFailed": "No se pudieron asociar estas líneas.",
+    "confirm": "Asociar líneas",
+    "matched": "Líneas de factura asociadas."
   }
 }

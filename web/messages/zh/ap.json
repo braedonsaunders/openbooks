@@ -70,7 +70,8 @@
     "controlAccountHelp": "此单据过账的应付科目。付款和供应商贷项在同一科目上核销。留空则使用默认科目。",
     "controlAccountPartyDefault": "供应商默认 — {account}",
     "controlAccountOrganizationDefault": "组织默认 — {account}",
-    "controlAccountUnset": "未配置应付科目 — 请在“设置 → 公司与会计 → 控制科目”中设置"
+    "controlAccountUnset": "未配置应付科目 — 请在“设置 → 公司与会计 → 控制科目”中设置",
+    "matchBanner": "部分库存行尚未匹配采购订单 — 匹配后才能过账该账单。"
   },
   "capture": {
     "title": "账单采集",
@@ -355,5 +356,18 @@
     "emptySourcePayments": "此申报尚无已记录的付款凭证。",
     "paymentDocument": "付款单据",
     "reportingFxRate": "申报汇率"
+  },
+  "match": {
+    "title": "匹配采购订单",
+    "description": "将每个库存行链接到其开票的采购订单行。已匹配的行按收货价值结清未开票收货；价格差异计入采购价格差异。",
+    "lineLabel": "第 {lineNumber} 行 — {item}，{quantity} {unit}",
+    "chooseOrder": "选择采购订单行…",
+    "candidateLabel": "{orderNumber} 第 {lineNumber} 行 — 可开票 {quantity} {unit}，单价 {unitPrice}",
+    "receipts": "收货记录：{list}",
+    "noCandidates": "没有包含该物料的未结采购订单行。",
+    "loadFailed": "无法加载采购订单。",
+    "matchFailed": "无法匹配这些行。",
+    "confirm": "匹配行",
+    "matched": "账单行已匹配。"
   }
 }

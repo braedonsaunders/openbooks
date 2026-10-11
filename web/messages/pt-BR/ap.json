@@ -70,7 +70,8 @@
     "controlAccountHelp": "A conta a pagar em que este documento é lançado. Pagamentos e créditos de fornecedor o liquidam na mesma conta. Deixe em branco para usar o padrão.",
     "controlAccountPartyDefault": "Padrão do fornecedor — {account}",
     "controlAccountOrganizationDefault": "Padrão da organização — {account}",
-    "controlAccountUnset": "Nenhuma conta a pagar configurada — defina uma em Configuração → Empresa e Contabilidade → Contas de controle"
+    "controlAccountUnset": "Nenhuma conta a pagar configurada — defina uma em Configuração → Empresa e Contabilidade → Contas de controle",
+    "matchBanner": "Algumas linhas de estoque não estão vinculadas a um pedido de compra — a fatura só pode ser lançada após vinculá-las."
   },
   "capture": {
     "title": "Captura de contas a pagar",
@@ -355,5 +356,18 @@
     "emptySourcePayments": "Nenhum comprovante de pagamento foi registrado para esta declaração.",
     "paymentDocument": "Documento de pagamento",
     "reportingFxRate": "Taxa de câmbio da declaração"
+  },
+  "match": {
+    "title": "Vincular ao pedido de compra",
+    "description": "Vincule cada linha de estoque à linha do pedido que ela fatura. As linhas vinculadas zeram o recebido não faturado pelo valor do recebimento; as diferenças de preço vão para a variação de preço de compra.",
+    "lineLabel": "Linha {lineNumber} — {item}, {quantity} {unit}",
+    "chooseOrder": "Escolha uma linha do pedido…",
+    "candidateLabel": "{orderNumber} linha {lineNumber} — {quantity} {unit} faturáveis a {unitPrice}",
+    "receipts": "Recebimentos: {list}",
+    "noCandidates": "Nenhuma linha de pedido em aberto contém este item.",
+    "loadFailed": "Não foi possível carregar os pedidos de compra.",
+    "matchFailed": "Não foi possível vincular estas linhas.",
+    "confirm": "Vincular linhas",
+    "matched": "Linhas da fatura vinculadas."
   }
 }

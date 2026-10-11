@@ -186,3 +186,105 @@ test("a closed-period Post refusal pins as a record alert and toasts", async (t)
     "a refused Post must never toast success",
   );
 });
+
+test("an unmatched-lines Post refusal offers the match dialog", async (t) => {
+  globalThis.__drawerRouter = { push() {}, refresh() {} };
+  globalThis.__drawerToasts = [];
+  globalThis.__confirmCalls = [];
+  globalThis.__confirmVerdict = true;
+  const message =
+    "vendor-bill line 1 (GRN-ETH-GUJI) is stock still open on purchase order PO-00002 line 1: match the bill to its purchase-order line";
+  const restoreFetch = scriptFetch((url) => {
+    if (url === "/api/documents/actions") {
+      return Response.json(
+        {
+          error: message,
+          code: "BILL_LINES_UNMATCHED",
+          remedy: "Match this bill to purchase order PO-00002 (Match to purchase order), then post again",
+        },
+        { status: 422 },
+      );
+    }
+    if (/\/api\/documents\/.+\/bill-match$/.test(url)) {
+      return Response.json({ billNumber: "BILL-00001", billStatus: "approved", lines: [] });
+    }
+    return null;
+  });
+  t.after(restoreFetch);
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  t.after(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  });
+  const doc = {
+    id: randomUUID(),
+    kind: "vendor_bill",
+    status: "approved",
+    document_number: "BILL-00001",
+    currency: "USD",
+    updated_at: "2026-09-17T12:00:00.000000Z",
+    document_date: "2026-09-17",
+    subtotal: "100.00",
+    tax_total: "0.00",
+    total: "100.00",
+  };
+  await act(async () => {
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <MoneyProvider currency="USD">
+          <DocumentDrawer
+            payload={{ doc, lines: [] }}
+            config={DOC_KINDS["vendor_bill"]!}
+            basePath="/ap/bills"
+            parties={[]}
+            accounts={[]}
+            taxCodes={[]}
+            taxGroups={[]}
+            cards={[]}
+            bankAccounts={[]}
+            departments={[]}
+            projects={[]}
+            locations={[]}
+            classes={[]}
+            items={[]}
+            subsidiaries={[]}
+            headerDefs={[]}
+            lineDefs={[]}
+            segments={SEGMENTS}
+            canCreate
+            canPost
+            layout={{ header: { groups: [] }, lines: { columns: [] }, actions: [{ key: "post", visible: true }] } as never}
+          />
+        </MoneyProvider>
+      </NextIntlClientProvider>,
+    );
+    await tick();
+  });
+  await tick();
+  await tick();
+  const menu = buttonsNamed("Actions")[0];
+  assert.ok(menu, "record actions must live behind the Actions menu");
+  await click(menu);
+  const post = buttonsNamed("Post")[0];
+  assert.ok(post, "an approved bill must offer Post");
+  await click(post);
+  await tick();
+  await tick();
+  const alert = document.querySelector('[role="alert"]');
+  assert.ok(alert, "the unmatched-lines refusal must pin as a record alert");
+  assert.match(alert.textContent ?? "", /still open on purchase order PO-00002/);
+  const match = buttonsNamed("Match to purchase order")[0];
+  assert.ok(match, "the refusal must offer the match dialog beside the pinned refusal");
+  await click(match);
+  await tick();
+  await tick();
+  assert.match(
+    document.body.textContent ?? "",
+    /No open purchase-order lines hold this item/,
+    "the match dialog opens from the refusal",
+  );
+});

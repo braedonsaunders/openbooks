@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import { Button } from '@openbooks/ui'
 import { BookCheck, Eye, LoaderCircle, Send, Undo2 } from 'lucide-react'
 import { promptDialog } from '../lib/prompt'
+import { readApiErrorMessage } from '../lib/api-error'
 import type { DocKindConfig } from '../lib/document-kinds'
 
 /**
@@ -56,11 +57,12 @@ export function DocumentRowActions({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, documentId: id }),
       })
-      // The error body may not be JSON (proxy 5xx pages): never let the read
-      // itself throw, or the failure goes silent with an unhandled rejection.
+      // The refusal text is read through the shared reader: the status is
+      // checked first and the server's message (with any remedy it names)
+      // renders in every envelope, while a non-JSON body falls back to the
+      // translated copy instead of going silent.
       if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as { error?: unknown }
-        const message = typeof data.error === 'string' && data.error ? data.error : t('toasts.actionFailed')
+        const message = await readApiErrorMessage(res, t('toasts.actionFailed'))
         setRefusal(message)
         toast.error(message)
       } else toast.success(action === 'submit' ? t('toasts.submitted') : t('toasts.posted'))
@@ -92,8 +94,7 @@ export function DocumentRowActions({
         body: JSON.stringify({ action: 'withdraw', documentId: id, reason }),
       })
       if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as { error?: unknown }
-        const message = typeof data.error === 'string' && data.error ? data.error : t('toasts.actionFailed')
+        const message = await readApiErrorMessage(res, t('toasts.actionFailed'))
         setRefusal(message)
         toast.error(message)
       } else toast.success(tCommon('approvalFlow.withdrawn'))

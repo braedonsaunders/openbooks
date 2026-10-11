@@ -70,7 +70,8 @@
     "controlAccountHelp": "この伝票が計上される買掛金勘定です。支払と仕入先クレジットは同じ勘定で消し込まれます。空欄の場合は既定の勘定を使用します。",
     "controlAccountPartyDefault": "仕入先の既定 — {account}",
     "controlAccountOrganizationDefault": "組織の既定 — {account}",
-    "controlAccountUnset": "買掛金勘定が設定されていません — 「セットアップ → 会社と会計 → 統制勘定」で設定してください"
+    "controlAccountUnset": "買掛金勘定が設定されていません — 「セットアップ → 会社と会計 → 統制勘定」で設定してください",
+    "matchBanner": "一部の在庫行が発注書に紐付いていません — 紐付けるまでこの請求書は転記できません。"
   },
   "capture": {
     "title": "仕入請求書の取込",
@@ -355,5 +356,18 @@
     "emptySourcePayments": "この申告の支払証憑は記録されていません。",
     "paymentDocument": "支払書類",
     "reportingFxRate": "申告用為替レート"
+  },
+  "match": {
+    "title": "発注書に紐付ける",
+    "description": "各在庫行を請求対象の発注明細行に紐付けます。紐付けた行は受入価額で未請求受入を消し込み、価格差は購買価格差異になります。",
+    "lineLabel": "行 {lineNumber} — {item}、{quantity} {unit}",
+    "chooseOrder": "発注明細行を選択…",
+    "candidateLabel": "{orderNumber} 行 {lineNumber} — {quantity} {unit} 請求可、単価 {unitPrice}",
+    "receipts": "受入: {list}",
+    "noCandidates": "この品目を含む未処理の発注明細行がありません。",
+    "loadFailed": "発注書を読み込めませんでした。",
+    "matchFailed": "これらの行を紐付けできませんでした。",
+    "confirm": "行を紐付ける",
+    "matched": "請求書の行を紐付けました。"
   }
 }

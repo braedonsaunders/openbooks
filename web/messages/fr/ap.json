@@ -70,7 +70,8 @@
     "controlAccountHelp": "Le compte fournisseur sur lequel ce document est comptabilisé. Les paiements et avoirs fournisseurs le soldent sur ce même compte. Laissez vide pour utiliser le compte par défaut.",
     "controlAccountPartyDefault": "Défaut du fournisseur — {account}",
     "controlAccountOrganizationDefault": "Défaut de l’organisation — {account}",
-    "controlAccountUnset": "Aucun compte fournisseur configuré — définissez-en un dans Configuration → Société et comptabilité → Comptes de contrôle"
+    "controlAccountUnset": "Aucun compte fournisseur configuré — définissez-en un dans Configuration → Société et comptabilité → Comptes de contrôle",
+    "matchBanner": "Certaines lignes de stock ne sont rattachées à aucune commande — la facture ne peut être comptabilisée qu'une fois rattachées."
   },
   "capture": {
     "title": "Capture de factures",
@@ -355,5 +356,18 @@
     "emptySourcePayments": "Aucun justificatif de paiement n’est enregistré pour cette déclaration.",
     "paymentDocument": "Document de paiement",
     "reportingFxRate": "Taux de change de déclaration"
+  },
+  "match": {
+    "title": "Rattacher à la commande",
+    "description": "Rattachez chaque ligne de stock à la ligne de commande qu'elle facture. Les lignes rattachées soldent le reçu non facturé à la valeur de réception ; les écarts de prix vont à l'écart sur prix d'achat.",
+    "lineLabel": "Ligne {lineNumber} — {item}, {quantity} {unit}",
+    "chooseOrder": "Choisir une ligne de commande…",
+    "candidateLabel": "{orderNumber} ligne {lineNumber} — {quantity} {unit} facturables à {unitPrice}",
+    "receipts": "Réceptions : {list}",
+    "noCandidates": "Aucune ligne de commande ouverte ne contient cet article.",
+    "loadFailed": "Impossible de charger les commandes.",
+    "matchFailed": "Impossible de rattacher ces lignes.",
+    "confirm": "Rattacher les lignes",
+    "matched": "Lignes de facture rattachées."
   }
 }
