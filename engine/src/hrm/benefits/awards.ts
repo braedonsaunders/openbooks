@@ -535,10 +535,14 @@ async function recordAward(
         `employment service starts after the award period — issue awards inside the employment span`,
       );
     }
+    // A settlement measures only activity the employee performed, so a
+    // period that starts or ends inside active service (a hire or the final
+    // week before a termination) is payable; a direct award must sit wholly
+    // inside active service.
+    const awardRange = sql`daterange(${periodFrom}::date, ${(periodTo ?? periodFrom)}::date + 1, '[)')`;
     const activeCoverage = (await db.execute<{ covered: boolean }>(sql`
       select coalesce(
-        daterange(${periodFrom}::date, ${(periodTo ?? periodFrom)}::date + 1, '[)')
-          <@ range_agg(daterange(effective_from, effective_to, '[)')),
+        ${origin === "settlement" ? sql`${awardRange} && range_agg(daterange(effective_from, effective_to, '[)'))` : sql`${awardRange} <@ range_agg(daterange(effective_from, effective_to, '[)'))`},
         false
       ) as covered
       from worker_employment_versions
@@ -548,7 +552,9 @@ async function recordAward(
     if (adjustsAwardId === null && !activeCoverage) {
       throw new BenefitsError(
         "REFUSED",
-        "current employment history has no active service covering the full award period — issue awards inside active service; end dates exclude their day",
+        origin === "settlement"
+          ? "current employment history has no active service inside the settled period — settle periods the employee worked; end dates exclude their day"
+          : "current employment history has no active service covering the full award period — issue awards inside active service; end dates exclude their day",
       );
     }
     const sources = (
