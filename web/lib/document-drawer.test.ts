@@ -314,7 +314,7 @@ test('a refused send-for-signature hands the server reason back instead of a fal
   // SIM Northstar has no email transport: the route 422s with the typed
   // FieldTicketError reason. The mutation must carry that reason to the
   // caller (toast + pinned dialog alert), never the generic fallback.
-  const refusal = 'Email delivery is not configured — set it up in Admin → Email'
+  const refusal = 'Email delivery is not enabled for this organization. An administrator with setup access can choose a provider and turn delivery on in Admin → Email.'
   const { transport, requests } = scriptedServer([
     {
       match: (request) => request.path === '/api/field-tickets/ft-1',
