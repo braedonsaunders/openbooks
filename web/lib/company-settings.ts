@@ -535,12 +535,12 @@ export async function updateCompanySettings(
           delete collected.depositAccountIds;
         } else {
           if (!Array.isArray(v)) {
-            return { status: 400, body: { error: "depositAccountIds must be a list of account ids" } };
+            return { status: 400, body: { error: "Till-drop bank accounts must be a list of account ids" } };
           }
           const ids = [...new Set(v)];
           for (const id of ids) {
             if (typeof id !== "string" || !isUuid(id)) {
-              return { status: 400, body: { error: "depositAccountIds must be a list of account ids" } };
+              return { status: 400, body: { error: "Till-drop bank accounts must be a list of account ids" } };
             }
           }
           collected.depositAccountIds = ids;

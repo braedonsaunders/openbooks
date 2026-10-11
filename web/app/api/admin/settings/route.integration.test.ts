@@ -690,9 +690,22 @@ test(
       const after = await settingsState(fixture.orgId);
       assert.deepEqual(after.settings.cashSales, { defaultCashAccountId: fixture.accounts.bank });
 
+      // The settings form always sends the till-drop list, empty or not.
+      const withDrops = await put(fixture, { cashSales: {
+        walkInCustomerId: null, defaultCashAccountId: fixture.accounts.bank, defaultCardAccountId: null,
+        defaultBankAccountId: null, depositAccountIds: [fixture.accounts.bank],
+      } });
+      assert.equal(withDrops.status, 200, await withDrops.clone().text());
+      assert.deepEqual((await settingsState(fixture.orgId)).settings.cashSales,
+        { defaultCashAccountId: fixture.accounts.bank, depositAccountIds: [fixture.accounts.bank] });
+      const cleared = await put(fixture, { cashSales: { defaultCashAccountId: fixture.accounts.bank, depositAccountIds: [] } });
+      assert.equal(cleared.status, 200, await cleared.clone().text());
+      assert.deepEqual((await settingsState(fixture.orgId)).settings.cashSales, { defaultCashAccountId: fixture.accounts.bank });
+
+      const beforeUndeclared = await settingsState(fixture.orgId);
       const undeclared = await put(fixture, { name: "Scratch Undeclared Field", tillDefaults: { cash: fixture.accounts.bank } });
       assert.equal(undeclared.status, 400);
-      assert.deepEqual(await settingsState(fixture.orgId), after, "a refused save changes nothing");
+      assert.deepEqual(await settingsState(fixture.orgId), beforeUndeclared, "a refused save changes nothing");
     } finally {
       routeState.authz = null;
       await dropScratchOrg(fixture.orgId);

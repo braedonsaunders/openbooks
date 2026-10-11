@@ -37,7 +37,14 @@ const requestBodySchema = z.object({
   requireStockCountReview: z.boolean().optional(),
   // Cash-sale till defaults; blank or null clears a default and the settings
   // command validates each one by name.
-  cashSales: z.record(z.string(), z.union([z.string(), z.null()])).optional(),
+  cashSales: z.object({
+    walkInCustomerId: z.string().nullable().optional(),
+    defaultCashAccountId: z.string().nullable().optional(),
+    defaultCardAccountId: z.string().nullable().optional(),
+    defaultBankAccountId: z.string().nullable().optional(),
+    // Till-drop bank accounts; the settings command validates each by name.
+    depositAccountIds: z.array(z.string()).max(50).nullable().optional(),
+  }).strict().optional(),
   // Company default payment terms; null clears and the settings command
   // validates the referenced terms by name.
   billing: z.object({
