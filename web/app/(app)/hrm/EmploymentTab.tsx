@@ -51,6 +51,18 @@ type AsOf = {
   assignments: Assignment[]
 }
 
+/**
+ * The assignment slot a proposed change most plausibly edits: the primary
+ * slot, else the employee's only slot. Undefined when neither applies, so
+ * the operator names the slot explicitly.
+ */
+function proposalDefaults(asOf: AsOf | null): { assignmentKey: string } | undefined {
+  if (!asOf) return undefined
+  const primary = asOf.assignments.find((assignment) => assignment.isPrimary)
+  const key = primary?.assignmentKey ?? (asOf.assignments.length === 1 ? asOf.assignments[0]?.assignmentKey : undefined)
+  return key ? { assignmentKey: key } : undefined
+}
+
 type ChangeRequest = {
   id: string
   status: string
@@ -792,6 +804,7 @@ export function EmploymentTab({
         <ChangeRequestDrawer
           employmentId={employmentId}
           initialRequest={null}
+          initialValues={proposalDefaults(state.asOf)}
           departmentOptions={departmentOptions}
           onClose={() => setProposing(false)}
           onSaved={reload}

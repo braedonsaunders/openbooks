@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
@@ -155,13 +155,20 @@ export function ChangeRequestDrawer({
   const [reason, setReason] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  // Every refusal reaches the operator at the action they took: the alert
+  // pins at the foot of the scrolling body, so the toast carries the same
+  // message to the Save or Submit button in the header.
+  const reportFailure = useCallback((message: string) => {
+    setError(message)
+    toast.error(message)
+  }, [])
   const appliedOnSubmit = useRef(false)
   // The draft this drawer created: a refused submit (or save) must retry
   // against the same draft — creating again orphans the first one, and
   // the next Submit would post a second draft beside it.
   const savedPayload = useRef<Record<string, unknown> | null>(initialRequest?.payload ?? null)
   const [createdId, setCreatedId] = useState<string | null>(null)
-  const { loadState: reasonLoadState, options: reasonOptions, required: reasonsOn } = useActionReasons(true, setError)
+  const { loadState: reasonLoadState, options: reasonOptions, required: reasonsOn } = useActionReasons(true, reportFailure)
   const [action, setAction] = useState('')
   const [reasonCode, setReasonCode] = useState('')
   // A dirty draft never closes silently: Cancel, the X button, Escape, and
@@ -421,14 +428,18 @@ export function ChangeRequestDrawer({
       body: JSON.stringify({ employmentId, payload }),
     })
     if (!res.ok) {
-      const message = await readApiErrorMessage(res, t('employment.changeRequests.requestFailed'))
-      setError(message)
-      toast.error(message)
+      reportFailure(await readApiErrorMessage(res, t('employment.changeRequests.requestFailed')))
       return null
     }
     const data = await res.json().catch(() => ({}))
     const id = (data as { request?: { id?: unknown } }).request?.id
-    return typeof id === 'string' ? id : null
+    if (typeof id !== 'string') {
+      // A success without the draft's id cannot be retried against, so it
+      // refuses here rather than returning a silent null.
+      reportFailure(t('employment.changeRequests.requestFailed'))
+      return null
+    }
+    return id
   }
 
   async function patchDraft(requestId: string, payload: Record<string, unknown>): Promise<boolean> {
@@ -438,9 +449,7 @@ export function ChangeRequestDrawer({
       body: JSON.stringify({ payload }),
     })
     if (!res.ok) {
-      const message = await readApiErrorMessage(res, t('employment.changeRequests.requestFailed'))
-      setError(message)
-      toast.error(message)
+      reportFailure(await readApiErrorMessage(res, t('employment.changeRequests.requestFailed')))
       return false
     }
     await res.json().catch(() => ({}))
@@ -478,13 +487,23 @@ export function ChangeRequestDrawer({
     return id
   }
 
+  /**
+   * A local validation refusal: the same message reaches the operator as a
+   * server refusal (alert and toast), and the field to fix takes focus.
+   * Nothing is posted, so the drawer stays open with the typed work.
+   */
+  function refuseField(message: string, fieldId: string): false {
+    reportFailure(message)
+    document.getElementById(fieldId)?.focus()
+    return false
+  }
+
   /** Classification gate, checked before any draft is created so a
    * refused submit never leaves a draft behind. submitDraft keeps its own
    * check as the second half of the guard. */
   function requireAction(): boolean {
     if (reasonsOn && (!action || !reasonCode)) {
-      setError(t('employment.changeRequests.actionRequired'))
-      return false
+      return refuseField(t('employment.changeRequests.actionRequired'), action ? 'cr-reason-code' : 'cr-action')
     }
     return true
   }
@@ -501,14 +520,12 @@ export function ChangeRequestDrawer({
       }),
     })
     if (!res.ok) {
-      const message = await readApiErrorMessage(res, t('employment.changeRequests.requestFailed'))
-      setError(message)
-      toast.error(message)
+      reportFailure(await readApiErrorMessage(res, t('employment.changeRequests.requestFailed')))
       return false
     }
-    const body = await res.json() as { request?: { status?: string } }
-    if (!body.request || !['pending_approval', 'applied'].includes(body.request.status ?? '')) {
-      setError(t('employment.changeRequests.requestFailed'))
+    const body = await res.json().catch(() => null) as { request?: { status?: string } } | null
+    if (!body?.request || !['pending_approval', 'applied'].includes(body.request.status ?? '')) {
+      reportFailure(t('employment.changeRequests.requestFailed'))
       return false
     }
     appliedOnSubmit.current = body.request.status === 'applied'
@@ -517,16 +534,17 @@ export function ChangeRequestDrawer({
 
   function requireAssignmentKey(): boolean {
     if ((kind === 'assignment_change' || kind === 'position_assignment') && !assignmentKey.trim()) {
-      setError(t('employment.changeRequests.assignmentKeyRequired'))
-      return false
+      return refuseField(
+        t('employment.changeRequests.assignmentKeyRequired'),
+        kind === 'position_assignment' ? 'cr-position-assignment-key' : 'cr-assignment-key',
+      )
     }
     return true
   }
 
   function requirePositionLink(): boolean {
     if (kind === 'position_assignment' && !unassign && !positionId) {
-      setError(t('employment.changeRequests.positionRequired'))
-      return false
+      return refuseField(t('employment.changeRequests.positionRequired'), 'cr-position')
     }
     return true
   }
@@ -534,7 +552,7 @@ export function ChangeRequestDrawer({
   function requireReason(): string | null {
     if (employeeEdit && !reasonsOn && !reason.trim()) return t('employment.changeRequests.defaultEditReason')
     if (!reason.trim()) {
-      setError(t('employment.changeRequests.reasonRequired'))
+      refuseField(t('employment.changeRequests.reasonRequired'), 'cr-reason')
       return null
     }
     return reason.trim()
@@ -574,7 +592,14 @@ export function ChangeRequestDrawer({
   }
 
   async function submitForApproval() {
-    if (reasonLoadState === 'loading' || reasonLoadState === 'failed') return
+    // The Submit button is disabled while the reasons load; a failed load
+    // has already reported its refusal, so the click restates it rather
+    // than returning silently.
+    if (reasonLoadState === 'loading') return
+    if (reasonLoadState === 'failed') {
+      reportFailure(t('employment.changeRequests.requestFailed'))
+      return
+    }
     if (!requireAssignmentKey()) return
     if (!requirePositionLink()) return
     const submitReason = requireReason()
