@@ -195,7 +195,7 @@
     },
     "commerce-payouts-unposted": {
       "title": "Auszahlungen sind ungebucht",
-      "message": "{count, plural, one {# Abrechnungsstapel oder Auszahlungszeile braucht Buchung oder Belegverknüpfung vor dem Abschluss.} other {# Abrechnungsstapel oder Auszahlungszeilen brauchen Buchung oder Belegverknüpfung vor dem Abschluss.}}"
+      "message": "{count, plural, one {# Abrechnungsstapel braucht Buchung oder Verkaufsnachweis vor dem Abschluss.} other {# Abrechnungsstapel brauchen Buchung oder Verkaufsnachweis vor dem Abschluss.}}"
     },
     "commerce-clearing-residual": {
       "title": "Verrechnungskonten haben einen Rest",

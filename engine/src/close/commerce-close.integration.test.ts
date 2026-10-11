@@ -239,7 +239,7 @@ test("a draft payout fails naming the provider reference", { skip: !DB }, async 
   }
 });
 
-test("a posted payout with an unmatched charge fails naming the line", { skip: !DB }, async () => {
+test("a posted payout with an unmatched charge fails naming the batch", { skip: !DB }, async () => {
   const fx = await seedCommerceOrg();
   try {
     await withBypass(async () => {
@@ -256,13 +256,42 @@ test("a posted payout with an unmatched charge fails naming the line", { skip: !
     });
     const checks = await withBypass(() => commerceCloseChecks(fx.org.orgId, SCOPE(fx.org), { storefrontTotals: matchingProvider() }));
     const payouts = byCode(checks, "commerce-payouts-unposted");
-    // The fee needs no receipt; the charge without a document link does.
+    // The fee needs no receipt; the charge without a document link does —
+    // and the gate counts the one unlinked batch, not its lines.
     assert.equal(payouts.count, 1);
-    const lines = (payouts.details as { unmatchedLines: { kind: string; lineRef: string; batchRef: string }[] }).unmatchedLines;
-    assert.equal(lines.length, 1);
-    assert.equal(lines[0]!.kind, "charge");
-    assert.equal(lines[0]!.lineRef, "ch_1");
-    assert.equal(lines[0]!.batchRef, "po_posted_1");
+    const batches = (payouts.details as { unlinkedBatches: { batchRef: string; unevidencedLines: number; unevidencedTotal: string }[] }).unlinkedBatches;
+    assert.equal(batches.length, 1);
+    assert.equal(batches[0]!.batchRef, "po_posted_1");
+    assert.equal(batches[0]!.unevidencedLines, 1);
+    assert.match(batches[0]!.unevidencedTotal, /5000/);
+  } finally {
+    await dropScratchOrg(fx.org.orgId);
+  }
+});
+
+test("three unmatched charges in one payout still count one batch", { skip: !DB }, async () => {
+  const fx = await seedCommerceOrg();
+  try {
+    await withBypass(async () => {
+      const batchId = (await db.execute<{ id: string }>(sql`
+        insert into psp_settlement_batches
+          (org_id, provider, external_ref, currency, settlement_date, status, journal_entry_id, posted_at)
+        values (${fx.org.orgId}, 'stripe', 'po_posted_3', 'CAD', ${DAY}::date, 'posted',
+                ${fx.sweepEntryId}, ${`${DAY}T12:00:00Z`}::timestamptz)
+        returning id`)).rows[0]!.id;
+      await db.execute(sql`
+        insert into psp_settlement_lines (org_id, batch_id, line_number, kind, external_ref, amount, currency)
+        values (${fx.org.orgId}, ${batchId}, 1, 'charge', 'ch_1', 1000, 'CAD'),
+               (${fx.org.orgId}, ${batchId}, 2, 'charge', 'ch_2', 2000, 'CAD'),
+               (${fx.org.orgId}, ${batchId}, 3, 'charge', 'ch_3', 3000, 'CAD')`);
+    });
+    const checks = await withBypass(() => commerceCloseChecks(fx.org.orgId, SCOPE(fx.org), { storefrontTotals: matchingProvider() }));
+    const payouts = byCode(checks, "commerce-payouts-unposted");
+    assert.equal(payouts.count, 1);
+    const batches = (payouts.details as { unlinkedBatches: { batchRef: string; unevidencedLines: number; unevidencedTotal: string }[] }).unlinkedBatches;
+    assert.equal(batches.length, 1);
+    assert.equal(batches[0]!.unevidencedLines, 3);
+    assert.match(batches[0]!.unevidencedTotal, /6000/);
   } finally {
     await dropScratchOrg(fx.org.orgId);
   }

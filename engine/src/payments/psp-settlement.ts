@@ -2814,6 +2814,291 @@ export async function clearSettlementLineJournal(
 }
 
 /**
+ * Recognise a settlement batch's sales with one journal entry: every
+ * matchable line without evidence is stamped with the same
+ * recognizedByJournalEntry marker the per-line action writes, so a December
+ * of 420 charge lines is evidenced in one audited operator action instead of
+ * 420. Lines already carrying a document link or a marker are left alone and
+ * reported, never overwritten — the batch action adopts nothing silently. A
+ * void batch refuses: voided history is closed. The marker carries
+ * `"via": "batch"` so the batch reversal below can lift exactly what the
+ * batch action set, never a line the bookkeeper marked by hand.
+ */
+export async function markSettlementBatchJournal(
+  orgId: string,
+  batchId: string,
+  journalEntryId: string,
+  actorId: string | null,
+  allowedSubsidiaryIds: ReadonlySet<string> | null | undefined,
+): Promise<{
+  batchId: string;
+  journalEntryId: string;
+  journalEntryNumber: string;
+  marked: number;
+  skippedLinked: number;
+  skippedMarked: number;
+}> {
+  if (!isUuid(journalEntryId)) {
+    throw new PspSettlementError(
+      "a settlement batch is recognised only by a posted journal entry; choose the journal entry that books this payout's sales",
+    );
+  }
+  const scope = allowedSubsidiaryIds;
+  if (scope === undefined) throw new ScopeNotFoundError();
+  return withOrg(orgId, async () => {
+    await requireBankingFeature(orgId);
+    const batch = (await db.execute<{ id: string; status: string; subsidiary_id: string | null; external_ref: string }>(sql`
+      select id, status, subsidiary_id, external_ref from psp_settlement_batches
+       where id = ${batchId} and org_id = ${orgId} for update
+    `)).rows[0];
+    if (!batch) throw new ScopeNotFoundError();
+    if (!subsidiaryScopeAllows(scope, batch.subsidiary_id)) throw new ScopeNotFoundError();
+    if (batch.status === "void") {
+      throw new PspSettlementError(
+        `payout ${batch.external_ref} is void; voided history is closed — reverse the void instead of recognising it`,
+      );
+    }
+    const entry = (await db.execute<{ id: string; entry_number: string; status: string; subsidiary_id: string | null }>(sql`
+      select id, entry_number, status, subsidiary_id from journal_entries
+       where id = ${journalEntryId} and org_id = ${orgId} for update
+    `)).rows[0];
+    if (!entry) {
+      throw new PspSettlementError(
+        "the journal entry does not belong to this organization; choose a posted journal entry in this organization",
+      );
+    }
+    if (!subsidiaryScopeAllows(scope, entry.subsidiary_id)) throw new ScopeNotFoundError();
+    if (!(await settlementLineDocumentInEntity(orgId, batch.subsidiary_id, entry.subsidiary_id))) {
+      throw new PspSettlementError(
+        `journal entry ${entry.entry_number} belongs to a different legal entity than payout ${batch.external_ref}; choose a journal entry posted in the payout's entity instead`,
+      );
+    }
+    if (entry.status !== "posted") {
+      throw new PspSettlementError(
+        `journal entry ${entry.entry_number} is ${entry.status}, not posted; post it first, then recognise the settlement batch`,
+      );
+    }
+    const matchableList = `{"${[...MATCHABLE_SETTLEMENT_LINE_KINDS].join('","')}"}`;
+    const lines = (await db.execute<{ id: string; document_id: string | null; meta: unknown }>(sql`
+      select id, document_id, meta from psp_settlement_lines
+       where org_id = ${orgId} and batch_id = ${batchId}
+         and kind = any(${matchableList}::text[])
+       order by line_number for update
+    `)).rows;
+    const after = {
+      id: journalEntryId,
+      number: entry.entry_number,
+      by: actorId,
+      at: new Date().toISOString(),
+      via: "batch",
+    };
+    let marked = 0;
+    let skippedLinked = 0;
+    let skippedMarked = 0;
+    for (const line of lines) {
+      if (line.document_id !== null) {
+        skippedLinked += 1;
+        continue;
+      }
+      if ((line.meta as Record<string, unknown> | null)?.["recognizedByJournalEntry"] != null) {
+        skippedMarked += 1;
+        continue;
+      }
+      const updated = await db.execute(sql`
+        update psp_settlement_lines
+           set meta = coalesce(meta, '{}'::jsonb) || ${JSON.stringify({ recognizedByJournalEntry: after })}::jsonb,
+               updated_at = now(), updated_by = ${actorId}
+         where id = ${line.id} and org_id = ${orgId} and batch_id = ${batchId}
+      `);
+      if ((updated.rowCount ?? 0) !== 1) {
+        throw new PspSettlementError(`settlement line ${line.id} could not be marked; reload the payout and try again`);
+      }
+      await auditSettlementLine(orgId, line.id, "mark-journal", { before: { recognizedByJournalEntry: null }, after: { recognizedByJournalEntry: after } }, actorId);
+      marked += 1;
+    }
+    await db.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'psp_settlement_batches', ${batchId}, 'mark-batch-journal',
+              ${JSON.stringify({
+                journalEntryId,
+                journalEntryNumber: entry.entry_number,
+                marked,
+                skippedLinked,
+                skippedMarked,
+              })}::jsonb, ${actorId})
+    `);
+    return { batchId, journalEntryId, journalEntryNumber: entry.entry_number, marked, skippedLinked, skippedMarked };
+  });
+}
+
+/**
+ * Reverse a batch-level journal recognition before close. Only markers the
+ * batch action set (`via: "batch"`) come off, so a line the bookkeeper
+ * marked by hand keeps its evidence; the journal stays exactly as posted.
+ * Once the payout's settlement period is closed for Banking the recognition
+ * is close evidence and refuses — the refusal names the controlled reopen
+ * route through the native period wording.
+ */
+export async function clearSettlementBatchJournal(
+  orgId: string,
+  batchId: string,
+  actorId: string | null,
+  allowedSubsidiaryIds: ReadonlySet<string> | null | undefined,
+): Promise<{ batchId: string; cleared: number; journalEntryNumbers: string[] }> {
+  const scope = allowedSubsidiaryIds;
+  if (scope === undefined) throw new ScopeNotFoundError();
+  return withOrg(orgId, async () => {
+    await requireBankingFeature(orgId);
+    const batch = (await db.execute<{ id: string; status: string; subsidiary_id: string | null; external_ref: string; settlement_date: string; journal_entry_id: string | null }>(sql`
+      select id, status, subsidiary_id, external_ref, settlement_date::text, journal_entry_id
+        from psp_settlement_batches
+       where id = ${batchId} and org_id = ${orgId} for update
+    `)).rows[0];
+    if (!batch) throw new ScopeNotFoundError();
+    if (!subsidiaryScopeAllows(scope, batch.subsidiary_id)) throw new ScopeNotFoundError();
+    if (batch.status === "void") {
+      throw new PspSettlementError(
+        `payout ${batch.external_ref} is void; voided history is closed`,
+      );
+    }
+    // The recognition becomes close evidence at close: lifting it afterwards
+    // would rewrite what the close attested, so the payout's own settlement
+    // period must still be open for Banking.
+    const periodId = await periodForDate(orgId, batch.settlement_date);
+    if (!periodId) {
+      throw new PspSettlementError(
+        `no accounting period covers the payout date ${batch.settlement_date}; the batch recognition cannot be reversed without a period to attest it`,
+      );
+    }
+    const sourceBook = batch.journal_entry_id
+      ? (await db.execute<{ book_id: string }>(sql`
+          select book_id from journal_entries where id = ${batch.journal_entry_id} and org_id = ${orgId}
+        `)).rows[0]?.book_id ?? null
+      : null;
+    if (!sourceBook) {
+      throw new PspSettlementError(
+        `payout ${batch.external_ref} has no posted settlement journal; post it first, then reverse the batch recognition`,
+      );
+    }
+    await assertPeriodModulesOpen(db, {
+      orgId,
+      periodId,
+      bookId: sourceBook,
+      subsidiaryIds: batch.subsidiary_id ? [batch.subsidiary_id] : [],
+      modules: ["banking"],
+    });
+    const matchableList = `{"${[...MATCHABLE_SETTLEMENT_LINE_KINDS].join('","')}"}`;
+    const lines = (await db.execute<{ id: string; meta: unknown }>(sql`
+      select id, meta from psp_settlement_lines
+       where org_id = ${orgId} and batch_id = ${batchId}
+         and kind = any(${matchableList}::text[])
+         and meta->'recognizedByJournalEntry'->>'via' = 'batch'
+       order by line_number for update
+    `)).rows;
+    if (lines.length === 0) {
+      throw new PspSettlementError(
+        `payout ${batch.external_ref} carries no batch-level journal recognition to reverse`,
+      );
+    }
+    const numbers = new Set<string>();
+    for (const line of lines) {
+      const before = (line.meta as Record<string, unknown> | null)?.["recognizedByJournalEntry"] ?? null;
+      const number = (before as Record<string, unknown> | null)?.["number"];
+      if (typeof number === "string") numbers.add(number);
+      const updated = await db.execute(sql`
+        update psp_settlement_lines
+           set meta = coalesce(meta, '{}'::jsonb) - 'recognizedByJournalEntry',
+               updated_at = now(), updated_by = ${actorId}
+         where id = ${line.id} and org_id = ${orgId} and batch_id = ${batchId}
+      `);
+      if ((updated.rowCount ?? 0) !== 1) {
+        throw new PspSettlementError(`settlement line ${line.id} could not be unmarked; reload the payout and try again`);
+      }
+      await auditSettlementLine(orgId, line.id, "unmark-journal", { before: { recognizedByJournalEntry: before }, after: { recognizedByJournalEntry: null } }, actorId);
+    }
+    await db.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'psp_settlement_batches', ${batchId}, 'unmark-batch-journal',
+              ${JSON.stringify({ cleared: lines.length, journalEntryNumbers: [...numbers] })}::jsonb, ${actorId})
+    `);
+    return { batchId, cleared: lines.length, journalEntryNumbers: [...numbers] };
+  });
+}
+
+/**
+ * Suggest the journal entry that recognised a batch's sales: a posted entry
+ * in the payout's entity, posted in the 62 days up to the settlement date,
+ * whose revenue-account lines total exactly the batch's charge total in the
+ * payout currency. Equality is exact decimal against numeric(19,4) sums —
+ * never rounded — and the operator still confirms: the suggestion proposes,
+ * the batch action disposes. Never the batch's own posting journal, never a
+ * reversal leg, never a draft.
+ */
+export async function suggestSettlementBatchJournal(
+  orgId: string,
+  batchId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null | undefined,
+): Promise<{
+  batchId: string;
+  chargeTotal: string;
+  currency: string;
+  excludedOtherCurrencyLines: number;
+  candidates: { id: string; number: string; postingDate: string; revenueTotal: string }[];
+}> {
+  const scope = allowedSubsidiaryIds;
+  if (scope === undefined) throw new ScopeNotFoundError();
+  return withOrg(orgId, async () => {
+    const batch = (await db.execute<{ id: string; status: string; subsidiary_id: string | null; external_ref: string; settlement_date: string; currency: string; journal_entry_id: string | null }>(sql`
+      select id, status, subsidiary_id, external_ref, settlement_date::text, currency, journal_entry_id
+        from psp_settlement_batches
+       where id = ${batchId} and org_id = ${orgId}
+    `)).rows[0];
+    if (!batch) throw new ScopeNotFoundError();
+    if (!subsidiaryScopeAllows(scope, batch.subsidiary_id)) throw new ScopeNotFoundError();
+    if (batch.status === "void") {
+      throw new PspSettlementError(`payout ${batch.external_ref} is void; voided history needs no recognition`);
+    }
+    const totals = (await db.execute<{ charge_total: string; excluded_lines: string }>(sql`
+      select coalesce(sum(amount) filter (where kind = 'charge' and (currency is null or currency = ${batch.currency})), 0)::text as charge_total,
+             count(*) filter (where kind = 'charge' and currency is not null and currency <> ${batch.currency})::text as excluded_lines
+        from psp_settlement_lines
+       where org_id = ${orgId} and batch_id = ${batchId}
+    `)).rows[0] ?? { charge_total: "0", excluded_lines: "0" };
+    const excluded = Number(totals.excluded_lines);
+    // A zero charge total matches everything, and a mixed-currency batch
+    // cannot prove equality in one currency: both refuse candidates by
+    // construction rather than proposing a wrong journal.
+    if (totals.charge_total === "0" || totals.charge_total === "0.0000" || excluded > 0) {
+      return { batchId, chargeTotal: totals.charge_total, currency: batch.currency, excludedOtherCurrencyLines: excluded, candidates: [] };
+    }
+    const rows = (await db.execute<{ id: string; number: string; posting_date: string; revenue_total: string; subsidiary_id: string | null }>(sql`
+      select e.id, e.entry_number as number, e.posting_date::text as posting_date,
+             abs(sum(l.txn_amount))::text as revenue_total, e.subsidiary_id
+        from journal_entries e
+        join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
+        join accounts a on a.id = l.account_id and a.org_id = e.org_id
+       where e.org_id = ${orgId} and e.status = 'posted'
+         and e.reverses_entry_id is null
+         and e.id <> coalesce(${batch.journal_entry_id}, '00000000-0000-0000-0000-000000000000'::uuid)
+         and e.posting_date between (${batch.settlement_date}::date - interval '62 days') and ${batch.settlement_date}::date
+         and a.type in ('income', 'income_other')
+         and l.currency = ${batch.currency}
+       group by e.id, e.entry_number, e.posting_date, e.subsidiary_id
+      having abs(sum(l.txn_amount)) = abs(${totals.charge_total}::numeric)
+       order by e.posting_date desc, e.entry_number
+       limit 10
+    `)).rows;
+    const candidates: { id: string; number: string; postingDate: string; revenueTotal: string }[] = [];
+    for (const row of rows) {
+      if (!subsidiaryScopeAllows(scope, row.subsidiary_id)) continue;
+      if (!(await settlementLineDocumentInEntity(orgId, batch.subsidiary_id, row.subsidiary_id))) continue;
+      candidates.push({ id: row.id, number: row.number, postingDate: row.posting_date, revenueTotal: row.revenue_total });
+    }
+    return { batchId, chargeTotal: totals.charge_total, currency: batch.currency, excludedOtherCurrencyLines: excluded, candidates };
+  });
+}
+
+/**
  * Delete an unposted settlement draft. Drafts are not history — nothing is
  * posted and nothing unwinds — but the removal is still audited with the
  * batch and line snapshot, and the provider reference is freed so a

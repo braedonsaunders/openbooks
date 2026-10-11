@@ -288,6 +288,21 @@ const mockSources = new Map<string, string>([
         return { batchId }
       }
 
+      export async function markSettlementBatchJournal(orgId, batchId, journalEntryId, userId) {
+        state.domainCalls.push({ action: 'markBatchJournal', orgId, userId, input: { batchId, journalEntryId } })
+        return { batchId, journalEntryId, journalEntryNumber: 'JE-9', marked: 3, skippedLinked: 0, skippedMarked: 0 }
+      }
+
+      export async function clearSettlementBatchJournal(orgId, batchId, userId) {
+        state.domainCalls.push({ action: 'unmarkBatchJournal', orgId, userId, input: { batchId } })
+        return { batchId, cleared: 3, journalEntryNumbers: ['JE-9'] }
+      }
+
+      export async function suggestSettlementBatchJournal(orgId, batchId) {
+        state.domainCalls.push({ action: 'suggestJournal', orgId, input: { batchId } })
+        return { batchId, chargeTotal: '300.0000', currency: 'CAD', excludedOtherCurrencyLines: 0, candidates: [] }
+      }
+
       export async function accruePayoutsInTransit(orgId, accrualDate, userId) {
         state.domainCalls.push({ action: 'accrue', orgId, userId, input: { accrualDate } })
         return { accrualDate, reversalDate: accrualDate, accrued: [], reversed: [], skipped: [] }
@@ -839,6 +854,45 @@ test("accrue books the month-end in-transit position", async () => {
 
   assert.equal(response.status, 200);
   assert.equal(routeState.domainCalls[0]?.action, "accrue");
+});
+
+test("markBatchJournal recognises the whole batch with one journal", async () => {
+  reset(["banking.reconcile"]);
+
+  const response = await post({
+    action: "markBatchJournal",
+    batchId: "00000000-0000-4000-8000-0000000000b1",
+    journalEntryId: "00000000-0000-4000-8000-0000000000e1",
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal((await response.json() as { marked: number }).marked, 3);
+  assert.equal(routeState.domainCalls[0]?.action, "markBatchJournal");
+});
+
+test("unmarkBatchJournal reverses the batch-level recognition", async () => {
+  reset(["banking.reconcile"]);
+
+  const response = await post({
+    action: "unmarkBatchJournal",
+    batchId: "00000000-0000-4000-8000-0000000000b1",
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal((await response.json() as { cleared: number }).cleared, 3);
+  assert.equal(routeState.domainCalls[0]?.action, "unmarkBatchJournal");
+});
+
+test("suggestJournal proposes the exact-total journal for operator confirm", async () => {
+  reset(["banking.read"]);
+
+  const response = await GET(
+    new Request("http://openbooks.test/api/psp/settlements?suggestJournal=00000000-0000-4000-8000-0000000000b1"),
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal((await response.json() as { chargeTotal: string }).chargeTotal, "300.0000");
+  assert.equal(routeState.domainCalls[0]?.action, "suggestJournal");
 });
 
 test("resolveDoc lists posted documents for manual links", async () => {

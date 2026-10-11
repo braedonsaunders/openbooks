@@ -195,7 +195,7 @@
     },
     "commerce-payouts-unposted": {
       "title": "Quedan pagos por contabilizar",
-      "message": "{count, plural, one {# lote de liquidación o línea de pago necesita su asiento o su vínculo documental antes del cierre.} other {# lotes de liquidación o líneas de pago necesitan su asiento o su vínculo documental antes del cierre.}}"
+      "message": "{count, plural, one {# lote de liquidación necesita su asiento o su evidencia de ventas antes del cierre.} other {# lotes de liquidación necesitan su asiento o su evidencia de ventas antes del cierre.}}"
     },
     "commerce-clearing-residual": {
       "title": "Las cuentas de compensación tienen saldo",

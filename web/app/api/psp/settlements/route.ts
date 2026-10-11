@@ -24,12 +24,15 @@ import { businessToday, isIsoCalendarDate } from "@openbooks/engine/src/platform
 import {
   accruePayoutsInTransit,
   batchDepositTieout,
+  clearSettlementBatchJournal,
   clearSettlementLineDocument,
   clearSettlementLineJournal,
   deleteSettlementDraft,
+  markSettlementBatchJournal,
   markSettlementLineAdjustment,
   markSettlementLineJournal,
   setSettlementLineDocument,
+  suggestSettlementBatchJournal,
 } from "@openbooks/engine/payments/settlement";
 import { CommerceError, matchPayoutLines } from "@openbooks/engine/commerce";
 import {
@@ -298,6 +301,18 @@ const postBodySchema0 = z.discriminatedUnion("action", [
     batchId: z.string(),
     lineId: z.string(),
   }),
+  // Batch-level journal recognition: one entry evidences every unevidenced
+  // matchable line, suggested by exact charge-to-revenue equality and
+  // confirmed by the operator; reversible until the payout period closes.
+  z.strictObject({
+    action: z.literal("markBatchJournal"),
+    batchId: z.string(),
+    journalEntryId: z.string(),
+  }),
+  z.strictObject({
+    action: z.literal("unmarkBatchJournal"),
+    batchId: z.string(),
+  }),
   z.strictObject({
     action: z.literal("deleteDraft"),
     batchId: z.string(),
@@ -381,6 +396,23 @@ export const GET = defineRoute({
          limit 10
       `);
       return NextResponse.json({ documents: docs.rows });
+    }
+    // Batch journal suggestion: posted entries whose revenue lines total
+    // exactly the batch's charge total, for the operator to confirm. A
+    // restricted caller never learns another entity's entries: the engine
+    // filters by the same scope the batch reads.
+    const suggestJournal = new URL(req.url).searchParams.get("suggestJournal");
+    if (suggestJournal !== null && suggestJournal.trim() !== "") {
+      if (!isUuid(suggestJournal)) return notFound("record");
+      try {
+        return NextResponse.json(
+          await suggestSettlementBatchJournal(orgId, suggestJournal, gate.allowedSubsidiaryIds),
+        );
+      } catch (e) {
+        if (e instanceof ScopeNotFoundError) return notFound("record");
+        if (e instanceof PspSettlementError) return apiErrorResponse(e, { safeStatus: 422 });
+        throw e;
+      }
     }
     if (batchId !== null) {
       if (!isUuid(batchId)) return notFound("record");
@@ -718,6 +750,27 @@ export const POST = defineRoute({
             orgId,
             body.batchId,
             body.lineId,
+            userId,
+            authz.allowedSubsidiaryIds,
+          );
+          return NextResponse.json(unmarked);
+        }
+        case "markBatchJournal": {
+          if (!isUuid(body.batchId)) return notFound("record");
+          const marked = await markSettlementBatchJournal(
+            orgId,
+            body.batchId,
+            body.journalEntryId,
+            userId,
+            authz.allowedSubsidiaryIds,
+          );
+          return NextResponse.json(marked);
+        }
+        case "unmarkBatchJournal": {
+          if (!isUuid(body.batchId)) return notFound("record");
+          const unmarked = await clearSettlementBatchJournal(
+            orgId,
+            body.batchId,
             userId,
             authz.allowedSubsidiaryIds,
           );

@@ -745,3 +745,139 @@ test("an unmatched line offers evidence actions and a draft offers delete", asyn
     "linking posts the audited line link",
   );
 });
+
+/** A posted payout offers batch-level sales recognition: the suggestion
+ * proposes the exact-total journal, confirming posts one audited batch
+ * mark, and the reversal refusal pins its reason instead of vanishing. */
+function mockPostedBatchDetail(posts: { action?: unknown }[], suggest: unknown, postResponse: unknown, postStatus = 200) {
+  const prior = globalThis.fetch;
+  globalThis.fetch = (async (input: unknown, init?: { method?: string; body?: string }) => {
+    const href = String(input);
+    if (href.includes("suggestJournal=")) return Response.json(suggest);
+    if (href.includes("batchId=")) {
+      return Response.json({
+        batch: {
+          id: "d0000000-0000-0000-0000-000000000002",
+          externalRef: "po_posted",
+          provider: "stripe",
+          providerName: "Stripe",
+          status: "Posted",
+          rawStatus: "posted",
+          settlementDate: "Sep 21, 2026",
+          currency: "USD",
+          grossAmount: "$300.00",
+          feeAmount: "$0.00",
+          refundAmount: "$0.00",
+          disputeAmount: "$0.00",
+          adjustmentAmount: "$0.00",
+          fxAmount: "$0.00",
+          netAmount: "$300.00",
+        },
+        lines: [
+          { id: "l-1", lineNumber: 1, kind: "charge", externalRef: "ch_1", description: null, amount: "100.00", currency: "USD", documentId: null, documentKind: null, documentNumber: null, journalEntryId: null, journalEntryNumber: null },
+          { id: "l-2", lineNumber: 2, kind: "charge", externalRef: "ch_2", description: null, amount: "100.00", currency: "USD", documentId: null, documentKind: null, documentNumber: null, journalEntryId: null, journalEntryNumber: null },
+          { id: "l-3", lineNumber: 3, kind: "charge", externalRef: "ch_3", description: null, amount: "100.00", currency: "USD", documentId: null, documentKind: null, documentNumber: null, journalEntryId: null, journalEntryNumber: null },
+        ],
+        tieout: null,
+        accruals: [],
+      });
+    }
+    if (init?.method === "POST") {
+      posts.push(JSON.parse(init.body ?? "{}") as { action?: unknown });
+      return Response.json(postResponse, { status: postStatus });
+    }
+    return Response.json({ batches: [], subsidiaries: [] });
+  }) as typeof fetch;
+  return () => {
+    globalThis.fetch = prior;
+  };
+}
+
+async function openPostedBatch(host: HTMLElement) {
+  const opener = [...host.querySelectorAll("button")].find((el) => el.textContent === "po_posted") as HTMLButtonElement;
+  assert.ok(opener, "the posted reference opens the detail drawer");
+  await act(async () => {
+    opener.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  });
+  await tick();
+  await tick();
+  assert.ok(
+    document.body.textContent?.includes("Batch sales recognition"),
+    "the posted payout offers batch-level sales recognition",
+  );
+}
+
+test("a suggested journal confirms into one audited batch mark", async (t) => {
+  const posts: { action?: unknown; batchId?: unknown; journalEntryId?: unknown }[] = [];
+  const restore = mockPostedBatchDetail(
+    posts,
+    {
+      batchId: "d0000000-0000-0000-0000-000000000002",
+      chargeTotal: "300.0000",
+      currency: "USD",
+      excludedOtherCurrencyLines: 0,
+      candidates: [{ id: "e-0001", number: "JE-9", postingDate: "2026-09-20", revenueTotal: "300.0000" }],
+    },
+    { batchId: "d0000000-0000-0000-0000-000000000002", journalEntryId: "e-0001", journalEntryNumber: "JE-9", marked: 3, skippedLinked: 0, skippedMarked: 0 },
+  );
+  t.after(restore);
+  const { host, root } = await mount({ canReconcile: true, rows: ROWS });
+  t.after(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  });
+  await openPostedBatch(host);
+  const click = async (name: string) => {
+    const button = [...document.querySelectorAll("button")].find((el) => el.textContent === name) as HTMLButtonElement;
+    assert.ok(button, `a ${name} button must render`);
+    await act(async () => {
+      button.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    });
+    await tick();
+    await tick();
+  };
+  await click("Suggest journal");
+  assert.ok(document.body.textContent?.includes("JE-9"), "the suggestion proposes the exact-total journal");
+  await click("Recognise batch");
+  assert.ok(
+    posts.some((body) => body.action === "markBatchJournal" && body.journalEntryId === "e-0001"),
+    "confirming posts one audited batch mark",
+  );
+  assert.ok(
+    document.body.textContent?.includes("3 of 3 lines recognised by JE-9"),
+    "the batch mark reports its line count",
+  );
+});
+
+test("a refused batch reversal pins its reason", async (t) => {
+  const posts: { action?: unknown }[] = [];
+  const restore = mockPostedBatchDetail(
+    posts,
+    { batchId: "x", chargeTotal: "0.0000", currency: "USD", excludedOtherCurrencyLines: 0, candidates: [] },
+    { error: "payout po_posted carries no batch-level journal recognition to reverse" },
+    422,
+  );
+  t.after(restore);
+  const { host, root } = await mount({ canReconcile: true, rows: ROWS });
+  t.after(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  });
+  await openPostedBatch(host);
+  const reverse = [...document.querySelectorAll("button")].find(
+    (el) => el.textContent === "Reverse batch recognition",
+  ) as HTMLButtonElement;
+  assert.ok(reverse, "the reversal button must render");
+  await act(async () => {
+    reverse.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  });
+  await tick();
+  await tick();
+  const alert = document.querySelector('[role="alert"]');
+  assert.ok(alert, "the refused reversal must pin its reason");
+  assert.match(alert.textContent ?? "", /no batch-level journal recognition to reverse/);
+});

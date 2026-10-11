@@ -1140,6 +1140,14 @@ export function PspSettlementsWorkspace({
               canReconcile={canReconcile}
               onEvidence={(line) => setEvidenceLineNumber(line.lineNumber)}
             />
+            {canReconcile ? (
+              <BatchJournalPanel
+                batchId={detail.batch.id}
+                batchStatus={detail.batch.rawStatus}
+                t={t}
+                onChanged={reloadDetail}
+              />
+            ) : null}
             {(() => {
               const line =
                 evidenceLineNumber === null
@@ -1354,6 +1362,182 @@ function LineEvidencePanel({
           </Button>
         ) : null}
       </div>
+    </div>
+  )
+}
+
+interface BatchJournalCandidate {
+  id: string
+  number: string
+  postingDate: string
+  revenueTotal: string
+}
+
+interface BatchJournalSuggestion {
+  chargeTotal: string
+  currency: string
+  excludedOtherCurrencyLines: number
+  candidates: BatchJournalCandidate[]
+}
+
+function isBatchJournalCandidate(value: unknown): value is BatchJournalCandidate {
+  return (
+    isRecord(value) &&
+    typeof value.id === 'string' &&
+    typeof value.number === 'string' &&
+    typeof value.postingDate === 'string' &&
+    typeof value.revenueTotal === 'string'
+  )
+}
+
+/**
+ * Batch-level sales recognition for a posted payout: one journal evidences
+ * every unmatched charge line, so a high-volume December clears in one
+ * audited action instead of hundreds. The suggestion proposes the posted
+ * journal whose revenue lines total exactly the batch's charges — the
+ * operator confirms per candidate, and the reversal lifts only batch-set
+ * markers until the payout period closes.
+ */
+function BatchJournalPanel({
+  batchId,
+  batchStatus,
+  t,
+  onChanged,
+}: {
+  batchId: string
+  batchStatus: string
+  t: ReturnType<typeof useTranslations>
+  onChanged: (reloadList: boolean) => void
+}) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [suggestion, setSuggestion] = useState<BatchJournalSuggestion | null>(null)
+  const [searched, setSearched] = useState(false)
+
+  if (batchStatus !== 'posted') return null
+
+  const suggest = async () => {
+    setBusy(true)
+    setError(null)
+    setNotice(null)
+    try {
+      const response = await fetch(`/api/psp/settlements?suggestJournal=${encodeURIComponent(batchId)}`)
+      // Check the status before parsing: the refusal names the cause, and
+      // parsing an error body first turns it into a JSON error about nothing.
+      if (!response.ok) {
+        const data = (await response.json().catch(() => null)) as { error?: unknown } | null
+        setError(typeof data?.error === 'string' && data.error ? data.error : t('batchJournalFailed'))
+        return
+      }
+      const data = (await response.json().catch(() => null)) as {
+        chargeTotal?: unknown
+        currency?: unknown
+        excludedOtherCurrencyLines?: unknown
+        candidates?: unknown
+      } | null
+      if (!data || typeof data.chargeTotal !== 'string' || !Array.isArray(data.candidates)) {
+        setError(t('batchJournalFailed'))
+        return
+      }
+      setSuggestion({
+        chargeTotal: data.chargeTotal,
+        currency: typeof data.currency === 'string' ? data.currency : '',
+        excludedOtherCurrencyLines:
+          typeof data.excludedOtherCurrencyLines === 'number' ? data.excludedOtherCurrencyLines : 0,
+        candidates: data.candidates.filter(isBatchJournalCandidate),
+      })
+      setSearched(true)
+    } catch {
+      setError(t('batchJournalFailed'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const confirm = async (journalEntryId: string) => {
+    setBusy(true)
+    setError(null)
+    setNotice(null)
+    const result = await requestSettlement<{ marked?: unknown; skippedLinked?: unknown; skippedMarked?: unknown; journalEntryNumber?: unknown }>({
+      action: 'markBatchJournal',
+      batchId,
+      journalEntryId,
+    })
+    if (!result.ok) {
+      setError(result.error ?? t('batchJournalFailed'))
+    } else {
+      const marked = typeof result.data.marked === 'number' ? result.data.marked : 0
+      const skipped =
+        (typeof result.data.skippedLinked === 'number' ? result.data.skippedLinked : 0) +
+        (typeof result.data.skippedMarked === 'number' ? result.data.skippedMarked : 0)
+      const number = typeof result.data.journalEntryNumber === 'string' ? result.data.journalEntryNumber : ''
+      setNotice(t('batchJournalMarked', { marked, total: marked + skipped, number }))
+      setSuggestion(null)
+      setSearched(false)
+      await onChanged(false)
+    }
+    setBusy(false)
+  }
+
+  const reverse = async () => {
+    setBusy(true)
+    setError(null)
+    setNotice(null)
+    const result = await requestSettlement<{ cleared?: unknown }>({
+      action: 'unmarkBatchJournal',
+      batchId,
+    })
+    if (!result.ok) {
+      // No batch recognition, or a closed payout period: the refusal names
+      // the cause and stays pinned until the next action.
+      setError(result.error ?? t('batchJournalFailed'))
+    } else {
+      setSuggestion(null)
+      setSearched(false)
+      await onChanged(false)
+    }
+    setBusy(false)
+  }
+
+  return (
+    <div className="space-y-3 rounded-md border border-slate-200 p-3 dark:border-slate-700">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h4 className="text-sm font-semibold">{t('batchJournalTitle')}</h4>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" variant="outline" disabled={busy} onClick={() => void reverse()}>
+            {t('batchJournalReverse')}
+          </Button>
+          <Button size="sm" variant="outline" disabled={busy} onClick={() => void suggest()}>
+            {t('batchJournalSuggest')}
+          </Button>
+        </div>
+      </div>
+      <p className="text-xs text-slate-500 dark:text-slate-400">{t('batchJournalHint')}</p>
+      {error ? (
+        <p role="alert" className="text-sm text-red-600">
+          {error}
+        </p>
+      ) : null}
+      {notice ? <p className="text-sm text-emerald-700 dark:text-emerald-300">{notice}</p> : null}
+      {suggestion ? (
+        suggestion.candidates.length > 0 ? (
+          <ul className="space-y-1">
+            {suggestion.candidates.map((candidate) => (
+              <li key={candidate.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                <span className="font-mono">
+                  {candidate.number} · {candidate.revenueTotal} {suggestion.currency} · {candidate.postingDate}
+                </span>
+                <Button size="sm" variant="outline" disabled={busy} onClick={() => void confirm(candidate.id)}>
+                  {t('batchJournalConfirm')}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        ) : searched ? (
+          <p className="text-sm text-slate-500">{t('batchJournalNoCandidates')}</p>
+        ) : null
+      ) : null}
     </div>
   )
 }

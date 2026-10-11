@@ -195,7 +195,7 @@
     },
     "commerce-payouts-unposted": {
       "title": "Des versements restent à comptabiliser",
-      "message": "{count, plural, one {# lot de règlement ou ligne de versement attend son écriture ou son lien documentaire avant la clôture.} other {# lots de règlement ou lignes de versement attendent leur écriture ou leur lien documentaire avant la clôture.}}"
+      "message": "{count, plural, one {# lot de règlement attend son écriture ou sa preuve de ventes avant la clôture.} other {# lots de règlement attendent leur écriture ou leur preuve de ventes avant la clôture.}}"
     },
     "commerce-clearing-residual": {
       "title": "Des comptes d’attente gardent un solde",

@@ -253,26 +253,27 @@ type PayoutRow = {
   net_amount: string;
 };
 
-type UnmatchedLineRow = {
+type UnlinkedBatchRow = {
   provider: string;
   batch_ref: string;
   settlement_date: string;
-  line_number: string;
-  kind: string;
-  line_ref: string | null;
-  amount: string;
-  currency: string | null;
+  currency: string;
+  unevidenced_lines: string;
+  unevidenced_total: string;
 };
 
 /**
  * Every payout settled in the window must be posted and reconciled. Draft
- * batches hold money the ledger has never seen; a posted batch whose
+ * batches hold money the ledger has never seen; a posted batch with
  * matchable lines (charges, refunds, disputes — the same kinds the payout
- * matcher resolves) point at nothing, or at a document that no longer
- * posts, is money without a receipt. The link is re-verified, never
- * trusted: a stale document id counts as unmatched. A line marked as
- * recognised by a posted journal entry is evidenced by that marker — the
- * sale was booked by journal, so there is no document to link.
+ * matcher resolves) that point at nothing, or at a document that no longer
+ * posts, is money without a receipt. The gate counts unlinked BATCHES with
+ * their unevidenced line totals, not lines: one operator action — a
+ * document link per line or one batch-level journal recognition — clears a
+ * whole batch. The link is re-verified, never trusted: a stale document id
+ * counts as unmatched. A line marked as recognised by a posted journal
+ * entry is evidenced by that marker — the sale was booked by journal, so
+ * there is no document to link.
  */
 async function payoutCheck(orgId: string, scope: CommerceCloseScope): Promise<CommerceCloseCheck> {
   const subsidiaryIds = scope.subsidiaryIds ?? [];
@@ -289,11 +290,11 @@ async function payoutCheck(orgId: string, scope: CommerceCloseScope): Promise<Co
   // The matchable kinds stay C30's single source of truth; only the
   // literal form is inlined for the ANY() comparison.
   const matchableList = `{"${[...MATCHABLE_SETTLEMENT_LINE_KINDS].join('","')}"}`;
-  const lines = (
-    await db.execute<UnmatchedLineRow>(sql`
+  const unlinked = (
+    await db.execute<UnlinkedBatchRow>(sql`
       select b.provider, b.external_ref as batch_ref, b.settlement_date::text,
-             l.line_number::text, l.kind, l.external_ref as line_ref,
-             l.amount::text, l.currency
+             b.currency, count(*)::text as unevidenced_lines,
+             coalesce(sum(l.amount), 0)::text as unevidenced_total
         from psp_settlement_lines l
         join psp_settlement_batches b on b.org_id = l.org_id and b.id = l.batch_id
         left join documents d on d.org_id = l.org_id and d.id = l.document_id
@@ -305,7 +306,8 @@ async function payoutCheck(orgId: string, scope: CommerceCloseScope): Promise<Co
          -- A line the bookkeeper marked as recognised by a posted journal
          -- entry carries its evidence in the marker, not in a document link.
          and (l.meta->>'recognizedByJournalEntry' is null)
-       order by b.settlement_date, b.provider, l.line_number`)
+       group by b.provider, b.external_ref, b.settlement_date, b.currency
+       order by b.settlement_date, b.provider`)
   ).rows;
   return {
     code: "commerce-payouts-unposted",
@@ -314,7 +316,7 @@ async function payoutCheck(orgId: string, scope: CommerceCloseScope): Promise<Co
     severity: "critical",
     title: "close.diagnostics.commerce-payouts-unposted.title",
     message: "close.diagnostics.commerce-payouts-unposted.message",
-    count: rows.length + lines.length,
+    count: rows.length + unlinked.length,
     details: {
       batches: rows.map((row) => ({
         provider: row.provider,
@@ -324,15 +326,13 @@ async function payoutCheck(orgId: string, scope: CommerceCloseScope): Promise<Co
         netAmount: row.net_amount,
         remedyHref: "/banking/psp-settlements",
       })),
-      unmatchedLines: lines.map((row) => ({
+      unlinkedBatches: unlinked.map((row) => ({
         provider: row.provider,
         batchRef: row.batch_ref,
         settlementDate: row.settlement_date,
-        lineNumber: Number(row.line_number),
-        kind: row.kind,
-        lineRef: row.line_ref,
-        amount: row.amount,
         currency: row.currency,
+        unevidencedLines: Number(row.unevidenced_lines),
+        unevidencedTotal: row.unevidenced_total,
         remedyHref: "/banking/psp-settlements",
       })),
     },
