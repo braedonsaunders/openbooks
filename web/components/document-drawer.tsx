@@ -14,6 +14,7 @@ import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { documentDrawerHref } from '../lib/document-drawer-navigation'
 import { displayDocumentNumber, displayFormName } from '../lib/document-display'
+import { documentActionAvailable, type DocumentLifecycleAction } from '../lib/document-action-availability'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { fetchAppAction, readApiErrorMessage, refusalMessageFromBody } from '../lib/api-error'
@@ -3522,6 +3523,14 @@ export function DocumentDrawer({
   // not just the actions menu (which already filters 'edit' out): saving the
   // toggle must remove every Edit entry point.
   const editActionVisible = actionLayout.find((action) => action.key === 'edit')?.visible !== false
+  // Lifecycle entries in the actions menu read one availability rule: a posted
+  // record offers only its governed void (see document-action-availability).
+  const lifecycleAction = (action: DocumentLifecycleAction) => documentActionAvailable(action, {
+    status: doc.status,
+    directPost: config.directPost === true,
+    canCreate,
+    canPost,
+  })
   const renderFormAction = (key: string) => {
     switch (key) {
       case 'customize':
@@ -3542,19 +3551,19 @@ export function DocumentDrawer({
       case 'approval':
         return <ApprovalActions subjectKind={String(doc.kind)} subjectId={String(doc.id)} withdrawDocumentId={String(doc.id)} />
       case 'submit':
-        return isDraft && canCreate && !config.directPost ? (
+        return lifecycleAction('submit') ? (
           <Button disabled={busy || (config.partyRole ? !partyId : false) || !positiveAmount(effectiveTotals.total)} onClick={() => act('submit')}>
             {t('actions.submitForApproval')}
           </Button>
         ) : null
       case 'post':
-        return (isDraft && canCreate && config.directPost) || (doc.status === 'approved' && canPost) ? (
+        return lifecycleAction('post') ? (
           <Button disabled={busy || (isDraft && !positiveAmount(effectiveTotals.total))} onClick={() => act('post')}>
             {tCommon('actions.post')}
           </Button>
         ) : null
       case 'void':
-        return (doc.status === 'approved' || doc.status === 'posted') && canPost ? (
+        return lifecycleAction('void') ? (
           <Button variant="ghost" disabled={busy} onClick={voidDocument} className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40">
             {tCommon('actions.void')}
           </Button>
@@ -3566,7 +3575,7 @@ export function DocumentDrawer({
           </Button>
         ) : null
       case 'delete':
-        return doc.status === 'draft' && canCreate ? (
+        return lifecycleAction('delete') ? (
           <Button variant="ghost" disabled={busy} onClick={remove} className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40">
             {tCommon('actions.delete')}
           </Button>
@@ -3736,7 +3745,7 @@ export function DocumentDrawer({
             {/* canPost is the approve grant for every drawer-registry kind
                 (the permission catalog derives approve from the post grant),
                 so this is approve-level authority, never just edit. */}
-            {doc.status === 'approved' && canPost ? (
+            {lifecycleAction('returnToDraft') ? (
               <Button variant="outline" disabled={busy} onClick={returnToDraft}>{tCommon('actions.returnToDraft')}</Button>
             ) : null}
           </>

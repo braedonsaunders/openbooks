@@ -100,8 +100,19 @@ export function HolidayAttestations(props: {
   const [busy, setBusy] = useState(false)
 
   const actionable = errors
-    .map((error, index) => ({ error, index, needed: classifyError(error) }))
+    .map((error) => ({ error, needed: classifyError(error) }))
     .filter((item) => item.needed !== null)
+  // A row is keyed by the exception it answers, never by its position: once
+  // one employee's answer is filed the recalculated list shifts, and a
+  // positional key would hand the next employee the previous row's pending
+  // choice. Equal identities (the same fact named twice) get a stable ordinal.
+  const ordinals = new Map<string, number>()
+  const rowKeys = actionable.map(({ error, needed }) => {
+    const base = [error.employeePartyId ?? error.employee, needed, error.holidayKey ?? '', error.holidayDate ?? ''].join('|')
+    const ordinal = ordinals.get(base) ?? 0
+    ordinals.set(base, ordinal + 1)
+    return ordinal === 0 ? base : `${base}#${ordinal}`
+  })
   // An ambiguous name match files nothing: the control stays hidden rather
   // than answering for the wrong employee.
   const resolveEmployee = (error: AttestationError): AttestationEmployee | null => {
@@ -190,12 +201,12 @@ export function HolidayAttestations(props: {
 
   return (
     <div className="mt-3 space-y-3 border-t border-amber-200/60 pt-3 dark:border-amber-800/40">
-      {actionable.map(({ error, index, needed }) => {
+      {actionable.map(({ error, needed }, position) => {
         const attested = resolveEmployee(error)
         if (!attested) return null
         return (
           <AttestationRow
-            key={index}
+            key={rowKeys[position]}
             error={error}
             needed={needed!}
             attested={attested}
