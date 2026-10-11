@@ -3,9 +3,8 @@
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { Button, Input, SearchSelect, Select } from '@openbooks/ui'
+import { Button, FieldLabel, Input, SearchSelect, Select } from '@openbooks/ui'
 import { CashTendersSection, parseTenderDrafts, type CloseoutDraft, type TenderDraft } from './cash-tenders-section'
-import { FieldLabel } from './document-form-primitives'
 
 export interface DailySummaryOption {
   value: string
@@ -51,6 +50,7 @@ export function CashDailySummaryForm({
   defaultSubsidiaryId: string | null
 }) {
   const t = useTranslations('ar')
+  const tCommon = useTranslations('common')
   const router = useRouter()
   const [date, setDate] = useState(defaultDate)
   const [subsidiaryId, setSubsidiaryId] = useState(defaultSubsidiaryId ?? '')
@@ -130,7 +130,7 @@ export function CashDailySummaryForm({
         </div>
         {subsidiaries ? (
           <div>
-            <FieldLabel fieldName="subsidiary">Subsidiary</FieldLabel>
+            <FieldLabel fieldName="subsidiary">{tCommon('labels.subsidiary')}</FieldLabel>
             <SearchSelect
               options={subsidiaries}
               value={subsidiaryId}

@@ -1,3 +1,5 @@
+import { sql } from "drizzle-orm";
+import { db, withBypassContext, withOrgContext } from "../platform/db.ts";
 import { importNetSuiteAttachments, type ImportOptions } from "./netsuite-attachments.ts";
 
 function parseArgs(argv: string[]): ImportOptions {
@@ -40,7 +42,17 @@ function parseArgs(argv: string[]): ImportOptions {
   };
 }
 
-importNetSuiteAttachments(parseArgs(process.argv.slice(2)))
+async function run(options: ImportOptions) {
+  // bypass: cross-org-by-design — the operator names the tenant by id or exact name.
+  const orgs = await withBypassContext(() => db.execute<{ id: string }>(sql`
+    select id from orgs where id::text = ${options.org} or name = ${options.org}
+  `));
+  if (orgs.rows.length !== 1) throw new Error(`tenant not found or ambiguous: ${options.org}`);
+  const orgId = orgs.rows[0]!.id;
+  return withOrgContext(orgId, () => importNetSuiteAttachments({ ...options, org: orgId }));
+}
+
+run(parseArgs(process.argv.slice(2)))
   .then((summary) => console.log(JSON.stringify(summary, null, 2)))
   .catch((error) => {
     console.error(error instanceof Error ? error.message : error);
