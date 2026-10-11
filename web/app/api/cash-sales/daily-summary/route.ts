@@ -2,19 +2,18 @@ import { z } from 'zod';
 import { defineRoute } from '@/lib/api/route';
 import { NextResponse } from 'next/server'
 import { randomUUID } from 'node:crypto'
-import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { createDocument } from "@openbooks/engine/src/ledger/document-write.ts";
-import { loadDocument } from "@openbooks/engine/src/ledger/document-service.ts";
-import { DocumentEditError } from "@openbooks/engine/src/records/document-edit-policy.ts";
-import { runRecordFlows } from "@openbooks/engine/src/flows/run.ts";
+import { createDocument } from "@openbooks/engine/documents/write";
+import { loadDocument } from "@openbooks/engine/ledger/document-service";
+import { DocumentEditError } from "@openbooks/engine/records/document-edit-policy";
+import { runRecordFlows } from "@openbooks/engine/flows/run";
 import { DocumentCreateConflict } from "../../../../lib/documents.ts";
-import type { DocumentEditInput } from "../../../../../engine/src/ledger/document-input.ts";
+import type { DocumentEditInput } from "@openbooks/engine/ledger/document-input";
 import { getAuthz, can, guardSubsidiaryScope, subsidiariesInScope } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import { isDocKindEnabled } from "../../../../lib/documents.ts";
 import { notFound } from "@/lib/api/responses";
 import { apiErrorResponse } from "@/lib/api/error-response";
+import { activeOperatingSubsidiaryIds } from '@/lib/record-scope-reads'
 
 const SummaryLineSchema = z.object({
   accountId: z.string().uuid(),
@@ -87,10 +86,7 @@ export const POST = defineRoute({
     if (routeBody.subsidiaryId !== undefined) {
       subsidiaryId = routeBody.subsidiaryId
     } else {
-      const roots = (await db.execute<{ id: string }>(sql`
-        select id from subsidiaries
-         where org_id = ${user.orgId} and is_active and not is_elimination
-         order by (parent_id is null) desc, name`)).rows.map((r) => r.id)
+      const roots = await activeOperatingSubsidiaryIds(user.orgId)
       subsidiaryId = roots.find((id) => !authz.allowedSubsidiaryIds || authz.allowedSubsidiaryIds.has(id)) ?? null
       if (!subsidiaryId) {
         return NextResponse.json({ error: 'no_available_subsidiary' }, { status: 409 })

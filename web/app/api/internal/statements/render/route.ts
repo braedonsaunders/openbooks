@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { db, withOrg } from '@openbooks/engine/src/platform/db.ts'
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
+import { withOrg } from '@openbooks/engine/platform/db'
 import { parseReportQuery } from '../../../../../lib/report-filters'
 import { resolvePeriod } from '../../../../../lib/periods'
 import { resolveReport, type ReportKind } from '../../../../../lib/report-run'
@@ -12,6 +11,7 @@ import { apiErrorResponse } from '../../../../../lib/api/error-response'
 import { internalTokenMatches, parseInternalOrgId } from '../../../../../lib/internal-token'
 import { safeName } from '../../../../../lib/export'
 import { isUuid } from '../../../../../lib/list-params'
+import { readStatementBatchItemEmail, readStatementBatchRunForRender, readStatementParty } from '../../../../../lib/statement-batch'
 
 export const runtime = 'nodejs'
 
@@ -39,30 +39,18 @@ export async function GET(req: Request) {
 
   try {
     return await withOrg(orgId, async () => {
-      const runs = (await db.execute<{
-        period_from: string | null; period_to: string;
-        authorization_snapshot: { version?: number; userId?: string; allowedSubsidiaryIds?: string[] | null };
-      }>(sql`
-        select period_from::text as period_from, period_to::text as period_to, authorization_snapshot
-          from statement_batch_runs where id = ${runId} and org_id = ${orgId} limit 1`)).rows
-      const run = runs[0]
+      const run = await readStatementBatchRunForRender(orgId, runId)
       if (!run) return NextResponse.json({ error: 'statement batch run was not found — re-create the run' }, { status: 404 })
       const snapshot = run.authorization_snapshot ?? {}
       if (snapshot.version !== 1 || !snapshot.userId) {
         return NextResponse.json({ error: 'statement batch run requires reauthorization — create a new batch run' }, { status: 403 })
       }
-      const items = (await db.execute<{ to_email: string | null }>(sql`
-        select to_email from statement_batch_items
-         where run_id = ${runId} and party_id = ${partyId} and org_id = ${orgId} limit 1`)).rows
-      const item = items[0]
+      const item = await readStatementBatchItemEmail(orgId, runId, partyId)
       if (!item) return NextResponse.json({ error: 'customer is not part of this batch run' }, { status: 404 })
       if (!item.to_email?.trim()) {
         return NextResponse.json({ error: 'customer has no statement email — add an email address to the party first' }, { status: 422 })
       }
-      const parties = (await db.execute<{ display_name: string; subsidiary_id: string | null }>(sql`
-        select display_name, subsidiary_id::text as subsidiary_id from parties
-         where id = ${partyId} and org_id = ${orgId} limit 1`)).rows
-      const party = parties[0]
+      const party = await readStatementParty(orgId, partyId)
       if (!party) return NextResponse.json({ error: 'customer is not part of this batch run' }, { status: 404 })
       const allowed = snapshot.allowedSubsidiaryIds ?? null
       if (allowed !== null && party.subsidiary_id !== null && !allowed.includes(party.subsidiary_id)) {

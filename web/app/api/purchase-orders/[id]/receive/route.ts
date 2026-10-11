@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
 import { z } from 'zod'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { lineRequiresReceipt } from '@openbooks/engine/src/records/stock-receipt.ts'
-import { InventoryError, InventoryOwnershipError, UnitConversionError } from '@openbooks/engine/src/inventory/contracts.ts'
-import { resolveDefaultWarehouse, WarehouseRefusal } from '@openbooks/engine/src/inventory/warehouses.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
+import { lineRequiresReceipt } from '@openbooks/engine/records/stock-receipt'
+import { InventoryError, InventoryOwnershipError, UnitConversionError } from '@openbooks/engine/inventory/contracts/module'
+import { resolveDefaultWarehouse, WarehouseRefusal } from '@openbooks/engine/inventory/warehouses'
 import { defineRoute } from '@/lib/api/route'
 import { notFound } from '@/lib/api/responses'
 import { can, guardSubsidiaryScope } from '../../../../../lib/authz'
@@ -14,6 +13,7 @@ import { unexpectedServerError } from '../../../../../lib/api/unexpected'
 import { ConversionError, receivePurchaseOrder } from '../../../../../lib/order-cycle'
 import { fromQuantityUnits, toQuantityUnits } from '../../../../../lib/order-cycle-math'
 import { formatMaxReceivable, resolveOverReceiptTolerance } from '../../../../../lib/purchase-over-receipt'
+import { readDocumentScope, readPurchaseOrderLinesForReceipt } from '../../../../../lib/record-scope-reads'
 
 export const runtime = 'nodejs'
 
@@ -36,10 +36,7 @@ type ReceiveAuthz = Parameters<typeof guardSubsidiaryScope>[0] & {
 
 /** The source must be this org's purchase order inside the caller's scope. */
 async function scopedSource(authz: ReceiveAuthz, id: string) {
-  const owns = (await db.execute<{ subsidiaryId: string | null }>(
-    sql`select subsidiary_id as "subsidiaryId" from documents where id = ${id} and kind = 'purchase_order' and org_id = ${authz.user.orgId}`,
-  ))
-  const source = owns.rows[0]
+  const source = await readDocumentScope(authz.user.orgId, id, { kind: 'purchase_order' })
   if (!source) return { denied: notFound('record') as NextResponse }
   const denied = guardSubsidiaryScope(authz, source.subsidiaryId)
   if (denied) return { denied }
@@ -74,27 +71,7 @@ export const GET = defineRoute({
     if ('denied' in scoped) return scoped.denied
     try {
       const receiptDate = await businessToday(gate.user.orgId)
-      const rows = (await db.execute<{
-        id: string
-        line_number: number
-        item_id: string | null
-        description: string | null
-        unit: string | null
-        unit_price: string
-        quantity: string
-        quantity_fulfilled: string
-        stock_location_id: string | null
-        item_kind: string | null
-        item_category: string | null
-      }>(sql`
-        select line.id, line.line_number, line.item_id, line.description, line.unit, line.unit_price,
-               line.quantity, line.quantity_fulfilled, line.stock_location_id, i.kind as item_kind,
-               i.category as item_category
-          from document_lines line
-          left join items i on i.id = line.item_id and i.org_id = line.org_id
-         where line.org_id = ${gate.user.orgId} and line.document_id = ${id}
-         order by line.line_number
-      `)).rows
+      const rows = await readPurchaseOrderLinesForReceipt(gate.user.orgId, id)
       const defaultWarehouse = await resolveDefaultWarehouse(db, gate.user.orgId, scoped.source.subsidiaryId)
       // The tolerated maximum rides the prefill so the form admits an
       // over-receipt within policy; the save path re-resolves the policy

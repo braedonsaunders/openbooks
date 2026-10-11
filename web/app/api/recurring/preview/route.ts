@@ -1,21 +1,19 @@
 import { NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
 import { z } from "zod";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
-import { add } from "@openbooks/engine/src/money/money.ts";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { add } from "@openbooks/engine/money/money";
 import {
   pendingOccurrences,
   previewRunTokens,
-  recurringTemplateScopeFilter,
   remainingOccurrences,
   type Cadence,
-} from "@openbooks/engine/src/billing/recurring.ts";
+} from "@openbooks/engine/billing/recurring";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { isDocKindEnabled } from "@/lib/documents";
 import { notFound } from "@/lib/api/responses";
-import { RecurringError } from "@openbooks/engine/src/billing/recurring.ts";
+import { RecurringError } from "@openbooks/engine/billing/recurring";
+import { readScheduleForPreview, readTemplateSummary, resolveTemplateDocument } from "@/lib/recurring/preview-reads";
 
 export const runtime = "nodejs";
 
@@ -64,21 +62,7 @@ export const GET = defineRoute({
     let maxOccurrences: number | null = null;
     let skippedRunOns: string[] = [];
     if (scheduleId) {
-      const row = (await db.execute<{
-        templateId: string; cadence: Cadence; cron: string | null; nextRunOn: string;
-        endsOn: string | null; anchorDay: number | null;
-        runCount: number; maxOccurrences: number | null; skippedRunOns: string[] | null;
-      }>(sql`
-        select rs.template_document_id as "templateId", rs.cadence, rs.cron,
-               rs.next_run_on::text as "nextRunOn", rs.ends_on::text as "endsOn",
-               rs.anchor_day as "anchorDay",
-               rs.run_count as "runCount", rs.max_occurrences as "maxOccurrences",
-               rs.skipped_run_ons::text[] as "skippedRunOns"
-          from recurring_schedules rs
-          join documents d on d.id = rs.template_document_id and d.org_id = rs.org_id
-         where rs.id = ${scheduleId} and rs.org_id = ${authz.user.orgId}
-           ${recurringTemplateScopeFilter(authz.user.orgId, sql`d.id`, sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
-      `)).rows[0];
+      const row = await readScheduleForPreview({ orgId: authz.user.orgId, allowedSubsidiaryIds: authz.allowedSubsidiaryIds }, scheduleId);
       if (!row) return notFound("record");
       ({ templateId, cadence, cron, nextRunOn, endsOn, anchorDay } = row);
       runCount = Number(row.runCount);
@@ -111,14 +95,12 @@ export const GET = defineRoute({
       if (!templateDocumentId && !templateDocumentNumber) {
         return NextResponse.json({ error: "a template document or schedule is required" }, { status: 400 });
       }
-      const candidates = (await db.execute<{ id: string }>(sql`
-        select d.id from documents d where d.org_id = ${authz.user.orgId}
-          and ${templateDocumentId ? sql`d.id = ${templateDocumentId}` : sql`d.document_number = ${templateDocumentNumber}`}
-          ${recurringTemplateScopeFilter(authz.user.orgId, sql`d.id`, sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
-        order by d.id limit 2
-      `));
-      if (candidates.rows.length !== 1 || !candidates.rows[0]) return notFound("record");
-      templateId = candidates.rows[0].id;
+      const resolvedTemplate = await resolveTemplateDocument(
+        { orgId: authz.user.orgId, allowedSubsidiaryIds: authz.allowedSubsidiaryIds },
+        { id: templateDocumentId, number: templateDocumentNumber },
+      );
+      if (!resolvedTemplate) return notFound("record");
+      templateId = resolvedTemplate;
       anchorDay = Number(nextRunOn.slice(8, 10));
       // An unsaved create previews its own draft bounds: the occurrence
       // limit caps the billable count and draft skips stay out of the list,
@@ -151,10 +133,7 @@ export const GET = defineRoute({
       if (e instanceof RecurringError) return apiErrorResponse(new RecurringInputRefusal(e.message));
       return apiErrorResponse(e);
     }
-    const template = (await db.execute<{ number: string; total: string; currency: string; kind: string }>(sql`
-      select document_number as "number", total::text as "total", currency, kind
-        from documents where id = ${templateId} and org_id = ${authz.user.orgId}
-    `)).rows[0];
+    const template = await readTemplateSummary(authz.user.orgId, templateId);
     if (!template || !(await isDocKindEnabled(authz.user.orgId, template.kind))) return notFound("record");
     let estimatedTotal = "0";
     for (const _date of preview.occurrences) estimatedTotal = add(estimatedTotal, template.total);

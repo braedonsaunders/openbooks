@@ -1,24 +1,20 @@
 import { z } from 'zod'
-import { sql } from 'drizzle-orm'
 import { NextResponse } from 'next/server'
 import { defineRoute } from '@/lib/api/route'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { withOrgTransaction } from '@openbooks/engine/platform/db'
 import {
   listBoards,
   boardAuthority,
-} from '@openbooks/engine/src/schedule-boards/boards.ts'
-import { ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+} from '@openbooks/engine/schedule-boards/boards'
+import { ScopeNotFoundError } from '@openbooks/engine/organization/scope'
+import { readProjectSubsidiary } from '@/lib/record-scope-reads'
 export const GET = defineRoute({
   permission: 'projects.read',
   feature: 'projectScheduling',
   params: z.object({ id: z.string().uuid() }),
   handler: async ({ authz, params }) =>
     withOrgTransaction(authz.user.orgId, async () => {
-      const project = (
-        await db.execute<{ subsidiaryId: string | null }>(
-          sql`select subsidiary_id as "subsidiaryId" from projects where org_id=${authz.user.orgId} and id=${params.id}`,
-        )
-      ).rows[0]
+      const project = await readProjectSubsidiary(authz.user.orgId, params.id)
       if (
         !project ||
         (authz.allowedSubsidiaryIds !== null &&

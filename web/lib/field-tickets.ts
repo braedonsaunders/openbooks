@@ -9,7 +9,7 @@ import {
   type FieldTicketLaborEvidenceLine,
 } from '@openbooks/engine/src/projects/field-ticket-labor-evidence.ts'
 import { mul, div, isZero, add, sum, cmp, normalizeMoney } from '@openbooks/engine/src/money/money.ts'
-import { recordFieldTicketProgressInTransaction } from '@openbooks/engine/src/projects/progress.ts'
+import { recordFieldTicketProgressInTransaction } from '@openbooks/engine/projects/progress'
 import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { nextDocumentNumber } from "./bills.ts";
 import { documentRevisionCounterSql } from "../../engine/src/records/revision.ts";
@@ -1796,3 +1796,29 @@ export type TicketLineRow = {
   equipment_name: string | null
   rate_components: { rateLineId: string | null; unitCode: string; unitName: string; quantity: string; rate: string; amount: string }[]
 };
+
+/** An active project's entity, for filling a field ticket from its schedule. */
+export async function readActiveProjectForTicket(orgId: string, projectId: string): Promise<{ subsidiaryId: string | null } | null> {
+  const row = (await db.execute<{ subsidiary_id: string | null }>(sql`
+    select subsidiary_id from projects where org_id = ${orgId} and id = ${projectId} and is_active
+  `)).rows[0]
+  return row ? { subsidiaryId: row.subsidiary_id } : null
+}
+
+/** Regular, wage-bearing time types shown on field tickets — what scheduled work fills into. */
+export async function fieldTicketScheduleTimeTypes(orgId: string): Promise<{ id: string; name: string }[]> {
+  return (await db.execute<{ id: string; name: string }>(sql`
+    select id, name from time_types where org_id = ${orgId} and is_active and show_on_field_ticket
+      and classification = 'regular' and not exclude_from_wages order by name, id
+  `)).rows
+}
+
+/** Active employees, narrowed to one legal entity when the project names one. */
+export async function activeEmployeePartyIds(orgId: string, subsidiaryId: string | null): Promise<Set<string>> {
+  const rows = (await db.execute<{ id: string }>(sql`
+    select p.id from parties p where p.org_id = ${orgId} and p.is_active
+      ${subsidiaryId ? sql`and p.subsidiary_id = ${subsidiaryId}` : sql``}
+      and exists (select 1 from employee_roles r where r.org_id = p.org_id and r.party_id = p.id and r.is_active)
+  `)).rows
+  return new Set(rows.map((row) => row.id))
+}

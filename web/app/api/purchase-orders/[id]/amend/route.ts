@@ -1,13 +1,13 @@
 import { z } from 'zod'
 import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { withOrgTransaction } from '@openbooks/engine/platform/db'
+import { ScopeNotFoundError } from '@openbooks/engine/organization/scope'
 import { defineRoute } from '@/lib/api/route'
 import { notFound } from '@/lib/api/responses'
 import { guardSubsidiaryScope } from '../../../../../lib/authz'
 import { unexpectedServerError } from '../../../../../lib/api/unexpected'
 import { amendPurchaseOrder, PurchaseOrderAmendError } from '../../../../../lib/purchase-order-amend'
+import { readDocumentScope } from '@/lib/record-scope-reads'
 
 export const runtime = 'nodejs'
 
@@ -41,13 +41,9 @@ export const POST = defineRoute({
   handler: async ({ authz, params: { id }, body }) => {
     try {
       const outcome = await withOrgTransaction(authz.user.orgId, async () => {
-        const locked = (await db.execute<{ subsidiaryId: string | null }>(sql`
-          select subsidiary_id as "subsidiaryId" from documents
-           where id = ${id} and kind = 'purchase_order' and org_id = ${authz.user.orgId}
-           for update
-        `))
-        if (!locked.rows[0]) return { kind: 'not_found' as const }
-        if (guardSubsidiaryScope(authz, locked.rows[0]?.subsidiaryId)) {
+        const locked = await readDocumentScope(authz.user.orgId, id, { kind: 'purchase_order', lock: true })
+        if (!locked) return { kind: 'not_found' as const }
+        if (guardSubsidiaryScope(authz, locked.subsidiaryId)) {
           return { kind: 'scope_revoked' as const }
         }
         const result = await amendPurchaseOrder({

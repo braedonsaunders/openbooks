@@ -1,14 +1,12 @@
 import { NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
 import { z } from "zod";
-import { db } from "@openbooks/engine/src/platform/db.ts";
 import { defineRoute } from "@/lib/api/route";
 import { getAuthz } from "@/lib/authz";
 import { canReadDocumentKind } from "@/lib/flow-subject-authz";
-import { subsidiaryVisibleFilter } from "@/lib/subsidiaries";
+import { findPossibleDuplicates } from "@/lib/document-duplicates";
 import { notFound } from "@/lib/api/responses";
 import { isUuid } from "@/lib/list-params";
-import { canonicalDecimal, compareDecimal } from "@openbooks/engine/src/money/exact-decimal.ts";
+import { canonicalDecimal, compareDecimal } from "@openbooks/engine/money/decimal";
 
 export const runtime = "nodejs";
 
@@ -49,17 +47,10 @@ export const GET = defineRoute({
     // nothing rather than warning on every same-total bill.
     const reference = referenceNumber?.trim() ?? "";
     if (kind === "vendor_bill" && !reference) return NextResponse.json({ duplicates: [] });
-    const rows = (await db.execute<{ id: string; documentNumber: string }>(sql`
-      select id, document_number as "documentNumber" from documents
-       where org_id = ${authz.user.orgId} and kind = ${kind}
-         and status <> 'voided'
-         and party_id = ${partyId}
-         and document_date = ${documentDate}::date
-         and total = ${amount}
-         ${kind === "vendor_bill" ? sql`and nullif(btrim(reference_number), '') = ${reference}` : sql``}
-         ${subsidiaryVisibleFilter(sql`subsidiary_id`, authz.allowedSubsidiaryIds)}
-       order by document_date desc, id
-       limit 5`)).rows;
+    const rows = await findPossibleDuplicates({
+      orgId: authz.user.orgId, kind, partyId, documentDate, total: amount, reference,
+      allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+    });
     return NextResponse.json({
       duplicates: rows.map((row) => ({ id: row.id, documentNumber: row.documentNumber })),
     });

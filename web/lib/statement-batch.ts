@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import { isValidEmailAddress } from '@openbooks/emails'
 import { functionalReportReader } from './reports/currency-basis'
 import { dimWhere } from './reports/filters'
@@ -319,4 +319,28 @@ export async function buildStatementBatchPreview(
     allowedSubsidiaryIds,
   })
   return { from, to, recipients, excluded, subsidiaries: subView.picker, currency: subView.currency }
+}
+
+/** A statement batch run's period and the sender's authorization snapshot, for rendering one statement. */
+export async function readStatementBatchRunForRender(orgId: string, runId: string) {
+  return (await db.execute<{
+    period_from: string | null; period_to: string;
+    authorization_snapshot: { version?: number; userId?: string; allowedSubsidiaryIds?: string[] | null };
+  }>(sql`
+    select period_from::text as period_from, period_to::text as period_to, authorization_snapshot
+      from statement_batch_runs where id = ${runId} and org_id = ${orgId} limit 1`)).rows[0] ?? null
+}
+
+/** The recipient email a batch run recorded for one customer. */
+export async function readStatementBatchItemEmail(orgId: string, runId: string, partyId: string) {
+  return (await db.execute<{ to_email: string | null }>(sql`
+    select to_email from statement_batch_items
+     where run_id = ${runId} and party_id = ${partyId} and org_id = ${orgId} limit 1`)).rows[0] ?? null
+}
+
+/** A statement customer's display name and entity. */
+export async function readStatementParty(orgId: string, partyId: string) {
+  return (await db.execute<{ display_name: string; subsidiary_id: string | null }>(sql`
+    select display_name, subsidiary_id::text as subsidiary_id from parties
+     where id = ${partyId} and org_id = ${orgId} limit 1`)).rows[0] ?? null
 }

@@ -2,18 +2,15 @@ import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 
 import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { documentRevisionSql } from '@openbooks/engine/src/records/revision.ts'
-import { db } from '@openbooks/engine/src/platform/db.ts'
 import {
-  QUICK_APPROVAL_FLOW_DESCRIPTION,
   buildQuickApprovalGraph,
   flowSubjectProfileForOrg,
   lintFlowGraphForSubject,
   listFlowSubjectProfiles,
   quickApprovalAmountField,
-} from '@openbooks/engine/src/flows/index.ts'
+} from '@openbooks/engine/flows/module'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
+import { activeUserIds, insertQuickApprovalFlow, readQuickApprovalSetup } from '../../../../../lib/flows/quick-approval-store'
 
 export const runtime = 'nodejs'
 
@@ -55,23 +52,8 @@ async function legacyGET(req: Request) {
   if (!profile) {
     return NextResponse.json({ error: `unknown subject kind "${subjectKind}"` }, { status: 400 })
   }
-  const [flowRes, usersRes, rolesRes] = await Promise.all([
-    db.execute<Record<string, unknown>>(sql`
-      select id, name, enabled, ${documentRevisionSql(sql`updated_at`)} as updated_at
-        from flows
-       where org_id = ${gate.user.orgId} and subject_kind = ${subjectKind}
-         and description = ${QUICK_APPROVAL_FLOW_DESCRIPTION}
-       order by updated_at desc limit 1`),
-    db.execute<Record<string, unknown>>(sql`
-      select id, name, email from users
-       where org_id = ${gate.user.orgId} and is_active
-       order by name`),
-    db.execute<Record<string, unknown>>(sql`
-      select key, name from app_roles
-       where org_id = ${gate.user.orgId}
-       order by name`),
-  ])
-  const flow = flowRes.rows[0]
+  const setup = await readQuickApprovalSetup(gate.user.orgId, subjectKind)
+  const flow = setup.flow
   return NextResponse.json({
     flow: flow
       ? {
@@ -81,12 +63,12 @@ async function legacyGET(req: Request) {
           updatedAt: String(flow.updated_at),
         }
       : null,
-    users: usersRes.rows.map((user) => ({
+    users: setup.users.map((user) => ({
       id: String(user.id),
       name: String(user.name),
       email: String(user.email),
     })),
-    roles: rolesRes.rows.map((role) => ({
+    roles: setup.roles.map((role) => ({
       key: String(role.key),
       name: String(role.name),
     })),
@@ -114,10 +96,7 @@ export const POST = defineRoute({
     if (!profile) {
       return NextResponse.json({ error: `unknown subject kind "${body.subjectKind}"` }, { status: 400 })
     }
-    const usersRes = body.approver.type === 'user'
-      ? await db.execute<{ id: string }>(sql`
-          select id from users where org_id = ${user.orgId} and is_active`)
-      : null;
+    const approverIds = body.approver.type === 'user' ? await activeUserIds(user.orgId) : undefined
     const built = buildQuickApprovalGraph(
       profile,
       {
@@ -125,7 +104,7 @@ export const POST = defineRoute({
         ...(body.threshold !== undefined ? { threshold: body.threshold } : {}),
         ...(body.preventSelfApproval !== undefined ? { preventSelfApproval: body.preventSelfApproval } : {}),
       },
-      usersRes ? new Set(usersRes.rows.map((row) => String(row.id))) : undefined,
+      approverIds,
     )
     if (!built.ok) {
       return NextResponse.json({ error: built.message, code: built.code }, { status: 400 })
@@ -137,21 +116,9 @@ export const POST = defineRoute({
       return NextResponse.json({ errors: lint.errors }, { status: 400 })
     }
     const name = body.name?.trim() || `Approval: ${profile.label}`
-    const id = await db.transaction(async (tx) => {
-      const r = await tx.execute<{ id: string }>(sql`
-        insert into flows (org_id, name, description, subject_kind, enabled, graph, created_by, updated_by)
-        values (${user.orgId}, ${name}, ${QUICK_APPROVAL_FLOW_DESCRIPTION}, ${body.subjectKind}, true,
-                ${JSON.stringify(built.graph)}::jsonb, ${user.id}, ${user.id})
-        returning *`);
-      const created = r.rows[0]!
-      await tx.execute(sql`
-        insert into audit_log
-          (org_id, table_name, row_id, action, changes, actor_id, request_id)
-        values
-          (${user.orgId}, 'flows', ${created.id}, 'insert',
-           ${JSON.stringify({ after: created })}::jsonb,
-           ${user.id}, ${request.headers.get('X-Request-Id')})`)
-      return created.id
+    const id = await insertQuickApprovalFlow({
+      orgId: user.orgId, actorId: user.id, name, subjectKind: body.subjectKind,
+      graph: built.graph, requestId: request.headers.get('X-Request-Id'),
     })
     return NextResponse.json({ id })
   },

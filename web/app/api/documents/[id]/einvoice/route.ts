@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/platform/database'
-import { ScopeNotFoundError, subsidiaryVisibleFilter } from '@openbooks/engine/organization/scope'
+import { ScopeNotFoundError } from '@openbooks/engine/organization/scope'
 import {
   EInvoiceConfigurationError, EInvoiceRefusal, EINVOICE_PROFILES, isEInvoiceProfileKey,
   issueNativeEInvoice, loadNativeEInvoice, validateEInvoice,
@@ -17,12 +16,13 @@ import { loadPdfRecordValues } from '@/lib/pdf-templates/values'
 import { loadRecordDesignatedTemplateName, resolvePdfTemplate } from '@/lib/pdf-templates/store'
 import { mergeAndPrintPdf } from '@/lib/pdf-templates/render'
 import { assertEInvoicePdfDesign, eInvoicePdfValues } from '@/lib/pdf-templates/einvoice'
+import { listEInvoiceArchives, readEInvoiceArchive, readEInvoiceSubject } from '@/lib/einvoice/document-reads'
 
 export const runtime = 'nodejs'
 const params = z.object({ id: z.string().uuid() })
-const profile = z.custom<EInvoiceProfileKey>(value => typeof value === 'string' && isEInvoiceProfileKey(value), 'Choose a supported e-invoice profile.')
-const issueBody = z.object({ profile, buyerReference: z.string().trim().min(1).max(200).nullable().optional() }).strict()
-const querySchema = z.object({ profile: profile.optional(), buyerReference: z.string().trim().max(200).optional(), validate: z.enum(['1']).optional(), issued: z.string().uuid().optional() }).strict()
+const profileKey = z.string().refine((value): value is EInvoiceProfileKey => isEInvoiceProfileKey(value), 'Choose a supported e-invoice profile.')
+const issueBody = z.object({ profile: profileKey, buyerReference: z.string().trim().min(1).max(200).nullable().optional() }).strict()
+const querySchema = z.object({ profile: profileKey.optional(), buyerReference: z.string().trim().max(200).optional(), validate: z.enum(['1']).optional(), issued: z.string().uuid().optional() }).strict()
 
 function refusal(error: unknown): NextResponse | null {
   const renderer = rendererUnavailableResponse(error)
@@ -40,19 +40,10 @@ export const GET = defineRoute({
     if (!query.success) return NextResponse.json({ error: query.error.issues[0]?.message ?? 'Invalid e-invoice request.' }, { status: 400 })
     return withOrgTransaction(authz.user.orgId, async () => {
       const tx = db
-      const document = (await tx.execute<{ kind: string; status: string; configuredProfile: string | null; buyerReference: string | null }>(sql`
-        select d.kind,d.status,coalesce(c.einvoice_profile,s.default_profile) as "configuredProfile",
-          coalesce(d.reference_number,c.einvoice_buyer_reference) as "buyerReference"
-        from documents d
-        left join customer_roles c on c.org_id=d.org_id and c.party_id=d.party_id
-        left join einvoice_settings s on s.org_id=d.org_id and s.subsidiary_id=d.subsidiary_id
-        where d.org_id=${authz.user.orgId} and d.id=${id} and d.kind in ('customer_invoice','customer_credit')
-          ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)} for share of d`)).rows[0]
+      const document = await readEInvoiceSubject(tx, { orgId: authz.user.orgId, allowedSubsidiaryIds: authz.allowedSubsidiaryIds }, id, { lock: true })
       if (!document || !(await isDocKindEnabled(authz.user.orgId, document.kind))) throw new ScopeNotFoundError()
       if (query.data.issued) {
-        const archive = (await tx.execute<{ content: Uint8Array; fileName: string; mediaType: string; sha256: string }>(sql`
-          select content,file_name as "fileName",media_type as "mediaType",content_sha256 as sha256
-          from einvoice_documents where org_id=${authz.user.orgId} and document_id=${id} and id=${query.data.issued}`)).rows[0]
+        const archive = await readEInvoiceArchive(tx, authz.user.orgId, id, query.data.issued)
         if (!archive) throw new ScopeNotFoundError()
         const extension = archive.mediaType === 'application/pdf' ? 'pdf' : 'xml'
         return new NextResponse(new Uint8Array(archive.content), { headers: {
@@ -61,9 +52,7 @@ export const GET = defineRoute({
           'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff', 'X-EInvoice-SHA256': archive.sha256,
         } })
       }
-      const archives = (await tx.execute<{ id: string; profile: string; fileName: string; issuedAt: string; sha256: string; buyerReference: string | null }>(sql`
-        select id,profile,file_name as "fileName",issued_at::text as "issuedAt",content_sha256 as sha256,buyer_reference as "buyerReference"
-        from einvoice_documents where org_id=${authz.user.orgId} and document_id=${id} order by issued_at,id`)).rows
+      const archives = await listEInvoiceArchives(tx, authz.user.orgId, id)
       const metadata = {
         profiles: Object.values(EINVOICE_PROFILES).map(({ key, label, hybridPdf }) => ({ key, label, hybridPdf })),
         configuredProfile: document.configuredProfile, buyerReference: document.buyerReference,
@@ -94,9 +83,7 @@ export const POST = defineRoute({
   permission: 'documents.manage', feature: 'einvoicing', params, body: issueBody,
   handler: async ({ authz, params: { id }, body }) => {
     try {
-      const document = (await db.execute<{ kind: string }>(sql`
-        select d.kind from documents d where d.org_id=${authz.user.orgId} and d.id=${id}
-          and d.kind in ('customer_invoice','customer_credit') ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}`)).rows[0]
+      const document = await readEInvoiceSubject(db, { orgId: authz.user.orgId, allowedSubsidiaryIds: authz.allowedSubsidiaryIds }, id)
       if (!document || !(await isDocKindEnabled(authz.user.orgId, document.kind))) throw new ScopeNotFoundError()
       const issued = await issueNativeEInvoice({ orgId: authz.user.orgId, actorId: authz.user.id, allowedSubsidiaryIds: authz.allowedSubsidiaryIds }, id, body,
         async invoice => {

@@ -1,14 +1,13 @@
 import { z } from 'zod';
 import { defineRoute } from '@/lib/api/route';
 import { NextResponse } from 'next/server';
-import { sql } from 'drizzle-orm';
-import { db } from '@openbooks/engine/src/platform/db.ts';
-import { correctReceiptQuantity, correctReceiptRemainder } from '@openbooks/engine/src/inventory/receipt-void-dependents.ts';
+import { correctReceiptQuantity, correctReceiptRemainder } from '@openbooks/engine/inventory/receipt-void-dependents';
 import { getAuthz, can, guardSubsidiaryScope } from '../../../../../lib/authz';
 import { isFeatureEnabled } from '../../../../../lib/features';
 import { isDocKindEnabled } from "../../../../../lib/documents.ts";
 import { isUuid } from '../../../../../lib/list-params';
 import { notFound } from "@/lib/api/responses";
+import { readDocumentScope } from '@/lib/record-scope-reads'
 
 export const runtime = 'nodejs';
 
@@ -49,12 +48,7 @@ export const POST = defineRoute({
     if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
     const { id } = params as { id: string };
     if (!isUuid(id)) return notFound('record');
-    const found = (await db.execute<{ kind: string; subsidiaryId: string | null }>(sql`
-      select kind, subsidiary_id as "subsidiaryId"
-        from documents
-       where id = ${id} and org_id = ${authz.user.orgId}
-    `));
-    const doc = found.rows[0];
+    const doc = await readDocumentScope(authz.user.orgId, id);
     if (!doc || doc.kind !== 'purchase_receipt') return notFound('record');
     const denied = guardSubsidiaryScope(authz, doc.subsidiaryId);
     if (denied) return denied;

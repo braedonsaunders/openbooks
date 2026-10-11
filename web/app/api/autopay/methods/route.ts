@@ -21,8 +21,7 @@ import {
   markEmailUncertain,
   resolveOrgEmailTransport,
 } from '@openbooks/engine/delivery/email-config'
-import { db } from '@openbooks/engine/platform/database'
-import { sql } from 'drizzle-orm'
+import { readOrgName } from '@/lib/record-scope-reads'
 
 export const runtime = 'nodejs'
 
@@ -121,7 +120,7 @@ export const POST = defineRoute({
     if (recipient && transport) {
       // The setup session already exists: a failed send still returns the
       // link so the operator can share it another way.
-      const orgName = (await db.execute<{ name: string }>(sql`select name from orgs where id = ${orgId}`)).rows[0]?.name ?? ''
+      const orgName = await readOrgName(orgId)
       const mail = paymentMethodSetupEmail({
         orgName,
         customerName: (await setupCustomerName(orgId, body.partyId)) ?? '',

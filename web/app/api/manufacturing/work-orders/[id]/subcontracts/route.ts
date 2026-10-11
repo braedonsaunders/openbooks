@@ -1,10 +1,10 @@
 import {z} from 'zod';
-import {sql} from 'drizzle-orm';
 import {defineRoute} from '@/lib/api/route';
-import {db,withOrgTransaction} from '@openbooks/engine/src/platform/db.ts';
-import {readSubcontractWorkspace} from '@openbooks/engine/src/manufacturing/subcontract-workspace.ts';
-import {createProductionSubcontract,shipSubcontractMaterial,recordSubcontractReturn,capitalizeSubcontractServiceBill,reverseSubcontractServiceCost,returnSubcontractComponents,cancelProductionSubcontract} from '@openbooks/engine/src/manufacturing/subcontracts.ts';
-import {ManufacturingNotFoundError} from '@openbooks/engine/src/manufacturing/errors.ts';
+import {db,withOrgTransaction} from '@openbooks/engine/platform/db';
+import {readSubcontractWorkspace} from '@openbooks/engine/manufacturing/subcontract-workspace';
+import {createProductionSubcontract,shipSubcontractMaterial,recordSubcontractReturn,capitalizeSubcontractServiceBill,reverseSubcontractServiceCost,returnSubcontractComponents,cancelProductionSubcontract} from '@openbooks/engine/manufacturing/subcontracts';
+import {ManufacturingNotFoundError} from '@openbooks/engine/manufacturing/errors';
+import { subcontractBelongsToWorkOrder } from '@/lib/record-scope-reads'
 const params=z.object({id:z.string().uuid()}).strict();
 export const GET=defineRoute({permission:'manufacturing.read',feature:'manufacturingSubcontract',params,handler:({authz,params,request})=>withOrgTransaction(authz.user.orgId,async()=>{
   const selected=new URL(request.url).searchParams.get('selected');
@@ -24,7 +24,7 @@ const body=z.discriminatedUnion('command',[
 export const POST=defineRoute({permission:'items.post',feature:'manufacturingSubcontract',params,body,handler:({authz,params,body})=>withOrgTransaction(authz.user.orgId,async()=>{
   const org=authz.user.orgId,actor=authz.user.id;
   if(body.command==='create')return Response.json(await createProductionSubcontract(db,org,actor,{id:body.id,workOrderId:params.id,operationId:body.operationId,vendorId:body.vendorId,custodyLocationId:body.custodyLocationId}));
-  if(!(await db.execute(sql`select id from mfg_subcontracts where org_id=${org} and id=${body.subcontractId} and work_order_id=${params.id}`)).rows.length)throw new ManufacturingNotFoundError();
+  if(!(await subcontractBelongsToWorkOrder(org,body.subcontractId,params.id)))throw new ManufacturingNotFoundError();
   const subcontractId=body.subcontractId;
   // Each command derives fresh authority on the actual retained work order before replay or writes.
   if(body.command==='ship')return Response.json(await shipSubcontractMaterial(db,org,actor,subcontractId,body));

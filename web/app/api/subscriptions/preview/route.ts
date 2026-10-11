@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
-import { add, mul } from "@openbooks/engine/src/money/money.ts";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { add, mul } from "@openbooks/engine/money/money";
 import {
   SubscriptionError,
   loadSubRow,
@@ -10,11 +8,12 @@ import {
   normalizeSubscriptionMoney,
   pendingSubscriptionPeriods,
   previewSubscriptionCatchUp,
-} from "@openbooks/engine/src/billing/subscription-billing.ts";
+} from "@openbooks/engine/billing/subscription-billing";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { defineRoute } from "@/lib/api/route";
 import { guardSubsidiaryScope } from "@/lib/authz";
 import { notFound } from "@/lib/api/responses";
+import { readSubscriptionCurrency, readSubscriptionCustomerScope, readSubscriptionPlan } from "@/lib/subscriptions/preview-reads";
 
 export const runtime = "nodejs";
 
@@ -40,14 +39,9 @@ export const GET = defineRoute({
     const subscriptionId = get("subscriptionId");
     try {
       if (subscriptionId) {
-        const owned = (await db.execute<{ subsidiaryId: string | null }>(sql`
-          select c.subsidiary_id as "subsidiaryId"
-            from subscriptions s
-            join parties c on c.id = s.customer_id and c.org_id = s.org_id
-           where s.id = ${subscriptionId} and s.org_id = ${orgId}
-        `));
-        if (!owned.rows[0]) return notFound("record");
-        const denied = guardSubsidiaryScope(authz, owned.rows[0].subsidiaryId, { orgWideNull: true });
+        const owned = await readSubscriptionCustomerScope(orgId, subscriptionId);
+        if (!owned) return notFound("record");
+        const denied = guardSubsidiaryScope(authz, owned.subsidiaryId, { orgWideNull: true });
         if (denied) return denied;
         const row = await loadSubRow(subscriptionId, orgId);
         const preview = await previewSubscriptionCatchUp(orgId, subscriptionId, asOf);
@@ -55,13 +49,7 @@ export const GET = defineRoute({
           row.quantity,
           row.priceOverride ?? row.planAmount,
         );
-        const planCurrency = (await db.execute<{ currency: string | null }>(sql`
-          select coalesce(v.currency_code, p.currency_code) as "currency"
-            from subscriptions s
-            join subscription_plans p on p.id = s.plan_id and p.org_id = s.org_id
-            left join subscription_lifecycles l on l.subscription_id = s.id and l.org_id = s.org_id
-            left join subscription_plan_versions v on v.id = l.plan_version_id and v.org_id = s.org_id
-           where s.id = ${subscriptionId} and s.org_id = ${orgId}`)).rows[0]?.currency ?? null;
+        const planCurrency = await readSubscriptionCurrency(orgId, subscriptionId);
         return NextResponse.json({
           asOf,
           periods: preview.periods,
@@ -79,9 +67,7 @@ export const GET = defineRoute({
       if (!/^\d{4}-\d{2}-\d{2}$/.test(nextBillOn)) {
         return NextResponse.json({ error: "next bill date must be a calendar date (YYYY-MM-DD)" }, { status: 400 });
       }
-      const plan = (await db.execute<{ amount: string; interval: string; intervalCount: number; currency: string | null }>(sql`
-        select amount::text as "amount", interval, interval_count as "intervalCount", currency_code as "currency"
-          from subscription_plans where id = ${planId} and org_id = ${orgId}`)).rows[0];
+      const plan = await readSubscriptionPlan(orgId, planId);
       if (!plan) return NextResponse.json({ error: "billing plan not found" }, { status: 404 });
       const cadence = normalizeSubscriptionCadence(plan.interval, plan.intervalCount);
       const quantity = normalizeSubscriptionMoney(get("quantity") ?? "1", "quantity", "positive");
