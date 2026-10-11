@@ -147,6 +147,7 @@ const holidayInput = (fx: Fixture) => ({
   premiumComponentId: fx.premiumComponentId,
   excludeDocumentId: fx.currentRunId,
   hourlyRate: "30.00",
+  subsidiaryId: fx.subsidiaryId,
 });
 
 test(
@@ -248,6 +249,7 @@ test(
         premiumComponentId: randomUUID(),
         excludeDocumentId: randomUUID(),
         hourlyRate: "25.00",
+        subsidiaryId: randomUUID(),
       }),
       /Alberta Employee[\s\S]*last-and-first-shift[\s\S]*absence assertion/,
     );
@@ -263,9 +265,10 @@ test(
     // no wages, no pay) rather than trip a demand driven by another
     // province's statute. BC does declare its own 30-day employment
     // qualifier, so the employee gets a hire date to isolate this question.
-    const orgId = randomUUID();
+    const org = await createScratchOrg();
+    const orgId = org.orgId;
     const employeePartyId = randomUUID();
-    const actorId = randomUUID();
+    const actorId = (await seedFlowActors(orgId)).adminId;
     await db.execute(sql`
       insert into parties (id, org_id, kind, display_name, is_active, custom)
       values (${employeePartyId}, ${orgId}, 'person', 'BC Employee', true, '{}'::jsonb)`);
@@ -284,11 +287,11 @@ test(
         premiumComponentId: randomUUID(),
         excludeDocumentId: randomUUID(),
         hourlyRate: "25.00",
+        subsidiaryId: org.subsidiaryId,
       });
       assert.deepEqual(lines, []);
     } finally {
-      await db.execute(sql`delete from employee_roles where org_id = ${orgId}`);
-      await db.execute(sql`delete from parties where org_id = ${orgId}`);
+      await dropScratchOrgReporting(orgId);
     }
   },
 );
