@@ -118,6 +118,7 @@ describe("quebec", () => {
           scheduleId, subsidiaryId: org.subsidiaryId, name: "Jean Tremblay", country: "CA",
           province: "QC", payBasis: "hourly", currency: "CAD", rate: "30", rateBasis: "hour",
           federalClaimCode: 1, vacationPercent: "0", vacationMethod: "accrue",
+          wcbExempt: true, wcbExemptReason: 'quebec fixture: workers-compensation coverage out of scope',
           timeEntries: ["2026-07-06", "2026-07-08", "2026-07-10", "2026-07-14"]
             .map((workedOn) => ({ workedOn })),
         });
@@ -384,6 +385,7 @@ describe("quebec-hsf", () => {
             scheduleId, subsidiaryId: org.subsidiaryId, name, country: "CA", province,
             payBasis: "hourly", currency: "CAD", rate: "30", rateBasis: "hour",
             federalClaimCode: 1, vacationPercent: "0", vacationMethod: "accrue",
+            wcbExempt: true, wcbExemptReason: 'quebec fixture: workers-compensation coverage out of scope',
             timeEntries: ["2026-07-06", "2026-07-08", "2026-07-10", "2026-07-14"]
               .map((workedOn) => ({ workedOn })),
           });
@@ -545,6 +547,7 @@ describe("qpip-employer-cap", () => {
         });
         await seedPayrollProfile(org.orgId, employeeId, qpipEmploymentId, scheduleId, actorId, {
           country: 'CA', province: 'QC', payBasis: 'hourly', federalClaimCode: 1,
+          wcbExempt: true, wcbExemptReason: 'quebec fixture: workers-compensation coverage out of scope',
         }, { percentFloor: '0', method: 'accrue' });
 
 

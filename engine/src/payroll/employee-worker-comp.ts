@@ -11,6 +11,24 @@ class WorkerCompAssignmentError extends PayrollError {
   readonly status = 422;
 }
 
+/**
+ * The shared wording for an undecided workers-compensation coverage: no rate
+ * class assigned, no exemption recorded. The run refuses with it at
+ * calculate time and readiness flags it before calculate, so the two name
+ * the same remedies in the same words — assign a rate class, or record an
+ * exemption with a reason. The readiness item carries the link to the
+ * employee payroll tab; the calculate refusal names the path for API
+ * consumers who never see the wizard.
+ */
+export const UNDECIDED_WORKER_COMP_DETAIL =
+  "no WCB/WSIB rate class is assigned and no exemption is recorded — " +
+  "assign a WCB rate class on the employee's Payroll tab (/entities/employees), " +
+  "or mark the employee exempt from workers' compensation with a reason " +
+  "(for example an owner or director the employer account does not cover)";
+
+export const undecidedWorkerCompError = (employeeName: string): string =>
+  `${employeeName} has no workers-compensation coverage decided: ${UNDECIDED_WORKER_COMP_DETAIL}`;
+
 /** The employee drawer and bulk import share one audited classification writer. */
 export async function assignEmployeeWorkerCompGroup(input: {
   orgId: string; actorId: string; employeePartyId: string;

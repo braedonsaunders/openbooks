@@ -16,6 +16,7 @@ import {
   levyAssessableBase,
   type CaExemptionRunStatus,
 } from "./employer-levies.ts";
+import { employerLevyProgramKeys } from "../packs.ts";
 
 test("only committed runs consume the EHT exemption for other runs", () => {
   const cases: readonly (readonly [CaExemptionRunStatus, boolean])[] = [
@@ -77,4 +78,13 @@ test("absent applicability means assessable: only stamped exclusions remove a li
   ];
   assert.equal(levyAssessableBase(lines, "wcb"), "1200.0000");
   assert.equal(levyAssessableBase(lines, "eht"), "1000.0000");
+});
+
+test("only packs declaring a workers-comp levy can refuse for it", () => {
+  // The coverage refusal is pack-declared, never a country list: Canada
+  // prices the `wcb` program, so its employees answer for coverage, while a
+  // pack with no such premium (the US pack declares no levy programs at
+  // all) refuses nothing no matter what the profile holds.
+  assert.ok(employerLevyProgramKeys("CA").includes("wcb"));
+  assert.ok(!employerLevyProgramKeys("US").includes("wcb"));
 });

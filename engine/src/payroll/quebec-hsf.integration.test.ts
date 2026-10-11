@@ -118,6 +118,7 @@ test(
           scheduleId, subsidiaryId: org.subsidiaryId, name, country: "CA", province,
           payBasis: "hourly", currency: "CAD", rate: "30", rateBasis: "hour",
           federalClaimCode: 1, vacationPercent: "0", vacationMethod: "accrue",
+          wcbExempt: true, wcbExemptReason: 'hsf fixture: workers-compensation coverage out of scope',
           timeEntries: ["2026-07-06", "2026-07-08", "2026-07-10", "2026-07-14"]
             .map((workedOn) => ({ workedOn })),
         });

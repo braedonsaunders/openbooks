@@ -158,6 +158,7 @@
         },
         "employee": {
           "noWage": "{count, plural, one {# employé n’a} other {# employés n’ont}} aucun taux de salaire en vigueur pour cette période.",
+          "noWorkerComp": "{count, plural, one {# employé a} other {# employés ont}} une couverture d’indemnisation des accidents du travail non décidée : {detail}",
           "zeroHours": "{count, plural, one {# employé horaire n’a} other {# employés horaires n’ont}} aucune heure approuvée dans cette période.",
           "paidInPeriod": "{count, plural, one {# employé a} other {# employés ont}} déjà été payés pour une période qui chevauche.",
           "terminated": "{count, plural, one {# employé a} other {# employés ont}} terminé leur emploi au plus tard à la fin de la période.",
@@ -528,6 +529,10 @@
       "cppExempt": "Exempté RPC",
       "eiExempt": "Exempté AE",
       "taxExempt": "Exempté d’impôt sur le revenu",
+      "workerCompGroup": "Classe WCB",
+      "wcbExempt": "Exempté WCB",
+      "wcbExemptReason": "Motif d’exemption",
+      "wcbUndecided": "Aucune classe ni exemption — la paie est bloquée jusqu’à décision.",
       "isActive": "Actif",
       "country": "Pays",
       "state": "État d’emploi",

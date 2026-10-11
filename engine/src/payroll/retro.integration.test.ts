@@ -87,6 +87,7 @@ test(
       const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
       await seedPayrollProfile(org.orgId, employeeId, employmentId, scheduleId, actorId, {
         country: 'CA', province: 'ON', payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1,
+        wcbExempt: true, wcbExemptReason: 'retro fixture: workers-compensation coverage out of scope',
       }, { percentFloor: '4', method: 'accrue' });
 
 
@@ -441,6 +442,7 @@ test(
       const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
       await seedPayrollProfile(org.orgId, employeeId, employmentId, scheduleId, actorId, {
         country: 'CA', province: 'ON', payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1,
+        wcbExempt: true, wcbExemptReason: 'retro fixture: workers-compensation coverage out of scope',
       }, { percentFloor: '4', method: 'accrue' });
 
 
@@ -614,6 +616,7 @@ test(
       const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
       await seedPayrollProfile(org.orgId, employeeId, employmentId, scheduleId, actorId, {
         country: 'CA', province: 'ON', payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1,
+        wcbExempt: true, wcbExemptReason: 'retro fixture: workers-compensation coverage out of scope',
       }, { percentFloor: '4', method: 'accrue' });
 
 
@@ -765,6 +768,7 @@ test(
         const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
         await seedPayrollProfile(org.orgId, employeeId, employmentId, scheduleId, actorId, {
           country: 'CA', province: 'ON', payBasis: payBasis, federalClaimCode: 1, provincialClaimCode: 1,
+          wcbExempt: true, wcbExemptReason: 'retro fixture: workers-compensation coverage out of scope',
         }, { percentFloor: '4', method: 'accrue' });
 
         await seedPayrollTime(org.orgId, employeeId, actorId, {

@@ -124,8 +124,10 @@ async function makeEmployee(
   await db.execute(sql`
     insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id, country, province,
                                            pay_basis, federal_claim_code, provincial_claim_code,
+                                           wcb_exempt, wcb_exempt_reason,
                                            is_active, created_by, updated_by)
     values (${orgId}, ${employeeId}, ${employmentId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
+            true, 'aggregate fixture: workers-compensation coverage out of scope',
             true, ${actorId}, ${actorId})`);
   await seedVacationTerms(orgId, employmentId, actorId, "4", "accrue");
   return employeeId;

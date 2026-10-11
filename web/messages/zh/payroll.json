@@ -158,6 +158,7 @@
         },
         "employee": {
           "noWage": "{count, plural, one {# 名员工} other {# 名员工}}没有本期间有效的工资标准。",
+          "noWorkerComp": "{count, plural, one {# 名员工} other {# 名员工}}工伤赔偿保障未定：{detail}",
           "zeroHours": "{count, plural, one {# 名计时员工} other {# 名计时员工}}本期间没有已审批工时。",
           "paidInPeriod": "{count, plural, one {# 名员工} other {# 名员工}}已有重叠期间的发薪。",
           "terminated": "{count, plural, one {# 名员工} other {# 名员工}}已在期间结束当日或之前离职。",
@@ -528,6 +529,10 @@
       "cppExempt": "CPP 豁免",
       "eiExempt": "EI 豁免",
       "taxExempt": "所得税豁免",
+      "workerCompGroup": "WCB费率类别",
+      "wcbExempt": "WCB豁免",
+      "wcbExemptReason": "豁免原因",
+      "wcbUndecided": "未设费率类别也无豁免 — 在确定保障之前工资运行将被阻止。",
       "isActive": "有效",
       "country": "国家",
       "state": "就业所在州",

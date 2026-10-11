@@ -201,6 +201,7 @@ async function seedEmployee(
   });
   await seedPayrollProfile(fx.orgId, employeeId, employmentId, fx.scheduleId, fx.actorId, {
     province: 'ON', payBasis: 'hourly', country: 'CA', federalClaimCode: 1, provincialClaimCode: 1,
+    wcbExempt: true, wcbExemptReason: 'opening fixture: workers-compensation coverage out of scope',
   }, { percentFloor: '4', method: 'accrue' });
 
   return { employeeId, employmentId };

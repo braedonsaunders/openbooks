@@ -39,6 +39,7 @@ async function seedEmployee(
   // Stub calculation refuses employees without an HRM employment (NOT NULL since 0374), so the hire carries one.
   await seedPayrollProfile(fx.orgId, employeeId, await seedWorkerEmployment(fx.orgId, employeeId, fx.subsidiaryId), fx.scheduleId, fx.actorId, {
     province: 'ON', payBasis: 'hourly', country: 'CA', federalClaimCode: 1, provincialClaimCode: 1,
+    wcbExempt: true, wcbExemptReason: 'historical fixture: workers-compensation coverage out of scope',
   }, { percentFloor: '4', method: 'accrue' });
 
   return employeeId;

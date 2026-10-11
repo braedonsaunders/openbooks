@@ -740,8 +740,12 @@ test("stat pay: OFF is byte-identical, ON pays the declared formula, undeclared 
     const employmentId = await seedWorkerEmployment(orgId, id, org.subsidiaryId);
     // Every row is Canadian, including 'ZZ': that is the extra-provincial
     // withholding code, not another country — the CA pack prices all four.
+    // Coverage is out of scope here (this asserts holiday pay, never WCB):
+    // every hire stands explicitly exempt so the run refuses nothing, with
+    // money identical either way.
     await seedPayrollProfile(orgId, id, employmentId, scheduleId, actorId, {
       country: 'CA', province: province, payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1,
+      wcbExempt: true, wcbExemptReason: 'agnostic fixture: workers-compensation coverage out of scope',
     }, { percentFloor: '4', method: 'accrue' });
 
     return id;

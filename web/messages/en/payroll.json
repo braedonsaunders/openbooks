@@ -158,6 +158,7 @@
         },
         "employee": {
           "noWage": "{count, plural, one {# employee has} other {# employees have}} no wage rate effective for this period.",
+          "noWorkerComp": "{count, plural, one {# employee has} other {# employees have}} undecided workers-compensation coverage: {detail}",
           "zeroHours": "{count, plural, one {# hourly employee has} other {# hourly employees have}} no approved time in this period.",
           "paidInPeriod": "{count, plural, one {# employee was} other {# employees were}} already paid for an overlapping period.",
           "terminated": "{count, plural, one {# employee was} other {# employees were}} terminated on or before the period end.",
@@ -528,6 +529,10 @@
       "cppExempt": "CPP exempt",
       "eiExempt": "EI exempt",
       "taxExempt": "Income tax exempt",
+      "workerCompGroup": "WCB rate class",
+      "wcbExempt": "WCB exempt",
+      "wcbExemptReason": "Exemption reason",
+      "wcbUndecided": "No rate class and no exemption — the run refuses until coverage is decided.",
       "isActive": "Active",
       "country": "Country",
       "state": "State of employment",

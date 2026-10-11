@@ -203,7 +203,9 @@ test('profile GET serves the packs declared subdivisions and withholding shapes'
     assert.deepEqual(ca.supportedSubdivisions, ca.subdivisions)
     assert.ok(ca.certificates.some((c) => c.key === 'ca_td1' && c.scope.level === 'country'))
     assert.ok(ca.certificates.some((c) => c.key === 'ca_td1_ON' && c.scope.region === 'ON'))
-    assert.deepEqual(ca.exemptionFlags, [])
+    // Canada's only profile-level exclusion is the workers-compensation one:
+    // CPP/EI/income-tax exemptions stay TD1 flag fields on the certificates.
+    assert.deepEqual(ca.exemptionFlags.map((f) => f.column), ['wcb_exempt'])
     const us = body.packProfiles['US']!
     assert.equal(us.subdivisionLabel, 'state')
     assert.ok(us.subdivisions.includes('CA') && us.subdivisions.includes('NY'))
@@ -687,6 +689,81 @@ test('dated former employees can configure historical payroll without reactivati
         where p.org_id=${org.orgId} and p.id=${employeeId}`)).rows[0]!
       assert.deepEqual(flags, { party_active: false, role_active: false, terminated_on: '2026-05-08' })
     })
+  } finally { await withBypassContext(() => dropScratchOrg(org.orgId)) }
+})
+
+test('profile POST saves WCB coverage: rate class through the audited writer, exemption with a reason', async () => {
+  // The payroll tab decides coverage in one save: the rate class rides the
+  // audited classification writer (optimistic check plus audit row), the
+  // exemption rides the profile columns. Both read back on GET.
+  const { org, employeeId, scheduleId } = await fixture()
+  try {
+    await withBypassContext(async () => {
+      await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='admin'`)
+      await db.execute(sql`update orgs set settings=settings || '{"features":{"payroll":true}}'::jsonb where id=${org.orgId}`)
+    })
+    const groupId = randomUUID()
+    await withBypassContext(async () => {
+      await db.execute(sql`
+        insert into worker_comp_groups (id, org_id, code, name, rate_percent, max_assessable, is_active)
+        values (${groupId}, ${org.orgId}, 'OFFICE', 'Office', '1.84', '100000', true)`)
+    })
+    const base = { employeePartyId: employeeId, payScheduleId: scheduleId, country: 'CA', province: 'ON', payBasis: 'hourly', sin: '046454286' }
+    const saved = await post({ ...base, workerCompGroupId: groupId, expectedWorkerCompGroupId: null })
+    assert.equal(saved.status, 200, await saved.clone().text())
+    const reread = await get(`?employee=${employeeId}`)
+    assert.equal(reread.status, 200, await reread.clone().text())
+    const profile = ((await reread.json()) as { profile: Record<string, unknown> }).profile
+    assert.equal(profile['worker_comp_group_id'], groupId)
+    assert.equal(profile['wcb_exempt'], false)
+    // The response body above is consumed: fetch the groups list served
+    // beside the row with a second GET.
+    const rereadGroups = await get(`?employee=${employeeId}`)
+    const served = ((await rereadGroups.json()) as { workerCompGroups: { id: string; code: string }[] }).workerCompGroups
+    assert.ok(served.some((group) => group.id === groupId && group.code === 'OFFICE'))
+    await withOrgContext(org.orgId, async () => {
+      const role = (await db.execute<{ worker_comp_group_id: string }>(sql`
+        select worker_comp_group_id::text from employee_roles
+         where org_id = ${org.orgId} and party_id = ${employeeId}`)).rows[0]!
+      assert.equal(role.worker_comp_group_id, groupId)
+      const audit = (await db.execute<{ changes: unknown }>(sql`
+        select changes from audit_log where org_id = ${org.orgId} and table_name = 'employee_roles'
+         order by at desc limit 1`)).rows[0]!
+      assert.match(JSON.stringify(audit.changes), /employee payroll tab/)
+    })
+    // Clearing the class returns the employee to undecided; recording the
+    // exemption with a reason decides it the other way.
+    const cleared = await post({ ...base, workerCompGroupId: null, expectedWorkerCompGroupId: groupId })
+    assert.equal(cleared.status, 200, await cleared.clone().text())
+    const exempted = await post({ ...base, wcbExempt: true, wcbExemptReason: 'owner not covered by the employer account' })
+    assert.equal(exempted.status, 200, await exempted.clone().text())
+    await withOrgContext(org.orgId, async () => {
+      const row = (await db.execute<{ wcb_exempt: boolean; wcb_exempt_reason: string; worker_comp_group_id: string | null }>(sql`
+        select wcb_exempt, wcb_exempt_reason,
+               (select worker_comp_group_id::text from employee_roles where org_id = ${org.orgId} and party_id = ${employeeId}) as worker_comp_group_id
+          from employee_payroll_profiles where org_id = ${org.orgId} and employee_party_id = ${employeeId}`)).rows[0]!
+      assert.equal(row.wcb_exempt, true)
+      assert.equal(row.wcb_exempt_reason, 'owner not covered by the employer account')
+      assert.equal(row.worker_comp_group_id, null)
+    })
+  } finally { await withBypassContext(() => dropScratchOrg(org.orgId)) }
+})
+
+test('profile POST refuses a reasonless WCB exemption', async () => {
+  // An exemption without a reason is an uncovered employee the run cannot
+  // tell from an excluded one: refused by name like the table CHECK, with
+  // nothing written.
+  const { org, employeeId, scheduleId } = await fixture()
+  try {
+    const base = { employeePartyId: employeeId, payScheduleId: scheduleId, country: 'CA', province: 'ON', payBasis: 'hourly', sin: '046454286' }
+    for (const reason of [undefined, null, '   ']) {
+      const response = await post({ ...base, wcbExempt: true, wcbExemptReason: reason })
+      assert.equal(response.status, 422, await response.clone().text())
+      assert.match(((await response.json()) as { error: string }).error, /exemption needs a reason/)
+    }
+    const rows = await withOrgContext(org.orgId, () => db.execute<{ count: string }>(sql`
+      select count(*) as count from employee_payroll_profiles where org_id = ${org.orgId}`))
+    assert.equal(rows.rows[0]!.count, '0')
   } finally { await withBypassContext(() => dropScratchOrg(org.orgId)) }
 })
 

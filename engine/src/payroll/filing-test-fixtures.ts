@@ -156,6 +156,9 @@ export interface HiredEmployeeSeed {
   vacationPercent?: string | null;
   vacationMethod?: VacationMethod | null;
   filingStatus?: string | null;
+  /** Workers-compensation exclusion, opt-in like every other extra: absent means undecided. */
+  wcbExempt?: boolean | null;
+  wcbExemptReason?: string | null;
   partySubsidiaryId?: string | null;
   employeeNumber?: string | null;
   hiredOn?: string | null;
@@ -214,6 +217,8 @@ export async function seedHiredEmployee(
     ["federal_claim_code", seed.federalClaimCode ?? undefined],
     ["provincial_claim_code", seed.provincialClaimCode ?? undefined],
     ["filing_status", seed.filingStatus ?? undefined],
+    ["wcb_exempt", seed.wcbExempt ?? undefined],
+    ["wcb_exempt_reason", seed.wcbExemptReason ?? undefined],
   ];
   for (const [col, val] of profileExtra) {
     if (val !== undefined) {
@@ -278,12 +283,18 @@ async function seedEmployee(
                                   is_active, created_by, updated_by)
     values (${fx.orgId}, ${employeeId}, 'CAD', '30', 'hour', '2020-01-01', true,
             ${fx.actorId}, ${fx.actorId})`);
+  // The shared hire stands outside workers-compensation scope: the adoption,
+  // scope and filing tests built on it assert their own behavior with clean
+  // calculations, so the fixture records the exemption explicitly (with the
+  // reason the run requires) instead of leaving coverage undecided. Tests of
+  // the coverage refusal itself seed their own employees.
   await db.execute(sql`
     insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
                                            province, pay_basis, country, federal_claim_code,
-                                           provincial_claim_code,
+                                           provincial_claim_code, wcb_exempt, wcb_exempt_reason,
                                            is_active, created_by, updated_by)
     values (${fx.orgId}, ${employeeId}, ${employmentId}, ${fx.scheduleId}, 'ON', 'hourly', 'CA', 1, 1,
+            true, 'shared adoption fixture: workers-compensation coverage out of scope',
             true, ${fx.actorId}, ${fx.actorId})`);
   await seedVacationTerms(fx.orgId, employmentId, fx.actorId);
   return { employeeId, employmentId };

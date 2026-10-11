@@ -56,6 +56,7 @@ test("a stale assignment under a prior employment is not paid twice", { skip: !D
   // One profile per party: it follows the CURRENT employment.
   await seedPayrollProfile(org.orgId, employeeId, newEmploymentId, scheduleId, actorId, {
     country: 'CA', province: 'ON', payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1,
+    wcbExempt: true, wcbExemptReason: 'scope fixture: workers-compensation coverage out of scope',
   }, { percentFloor: null, method: 'accrue' });
 
   await seedPayrollTime(org.orgId, employeeId, actorId, {

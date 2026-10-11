@@ -158,6 +158,7 @@
         },
         "employee": {
           "noWage": "{count, plural, one {# empleado no tiene} other {# empleados no tienen}} ninguna tarifa salarial vigente para este período.",
+          "noWorkerComp": "{count, plural, one {# empleado tiene} other {# empleados tienen}} cobertura de compensación laboral sin decidir: {detail}",
           "zeroHours": "{count, plural, one {# empleado por hora no tiene} other {# empleados por hora no tienen}} horas aprobadas en este período.",
           "paidInPeriod": "{count, plural, one {# empleado ya fue} other {# empleados ya fueron}} pagados por un período superpuesto.",
           "terminated": "{count, plural, one {# empleado terminó} other {# empleados terminaron}} su empleo a más tardar al fin del período.",
@@ -528,6 +529,10 @@
       "cppExempt": "Exento CPP",
       "eiExempt": "Exento EI",
       "taxExempt": "Exento de impuesto sobre la renta",
+      "workerCompGroup": "Clase WCB",
+      "wcbExempt": "Exento de WCB",
+      "wcbExemptReason": "Motivo de la exención",
+      "wcbUndecided": "Sin clase ni exención — la nómina se bloquea hasta decidir la cobertura.",
       "isActive": "Activo",
       "country": "País",
       "state": "Estado de empleo",

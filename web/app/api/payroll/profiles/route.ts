@@ -7,7 +7,7 @@ import { z } from 'zod'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { sealSecret, SecretIntegrityError, unsealSecret } from '@openbooks/engine/src/platform/secrets.ts'
 import { listFilingAccounts } from '@openbooks/engine/src/payroll/filing.ts'
-import { installedPayrollCountries, payrollProfileEmployment } from '@openbooks/engine/payroll/setup'
+import { assignEmployeeWorkerCompGroup, installedPayrollCountries, payrollProfileEmployment } from '@openbooks/engine/payroll/setup'
 import {
   employmentJurisdictionsOf,
   holidayOccupationClassesOf,
@@ -107,6 +107,18 @@ const profileBodySchema = z.strictObject({
   cppExempt: z.boolean().optional(),
   eiExempt: z.boolean().optional(),
   taxExempt: z.boolean().optional(),
+  // Workers-compensation exclusion (0662): exempt needs a reason (refused
+  // below, mirroring the table CHECK). Omitted keys keep the full-send shape
+  // of the neighbouring exemption flags: absent means not exempt.
+  wcbExempt: z.boolean().optional(),
+  wcbExemptReason: z.string().nullable().optional(),
+  // Workers-compensation rate class (employee_roles, not the profile): sent
+  // with the profile so coverage is decided in one place, applied through
+  // the audited classification writer. Omit both keys to leave the class
+  // untouched; send a group id (or null to clear it) with the loaded value
+  // as the expected one for the writer's optimistic check.
+  workerCompGroupId: z.string().nullable().optional(),
+  expectedWorkerCompGroupId: z.string().nullable().optional(),
   // Pack-declared employee facts (0191): one body key per profile column,
   // named camelCase(column) exactly like the CA/US keys above. Counts
   // accept any number or string here on purpose: the CA/US `optionalCount`
@@ -144,7 +156,7 @@ const PROFILE_AUDIT_COLUMNS = sql`
   federal_claim_code, federal_claim_amount, provincial_claim_code, provincial_claim_amount,
   additional_tax_per_period, prescribed_zone_deduction, authorized_annual_deductions,
   authorized_federal_credits, authorized_provincial_credits,
-  cpp_exempt, ei_exempt, tax_exempt, vacation_percent, vacation_method, is_active,
+  cpp_exempt, ei_exempt, tax_exempt, wcb_exempt, wcb_exempt_reason, vacation_percent, vacation_method, is_active,
   union_agreement_id, union_classification_id,
   filing_status, multiple_jobs, dependent_credits, other_income_annual, deductions_annual,
   w4_pre_2020, w4_allowances, fica_exempt, futa_exempt, sui_exempt,
@@ -503,6 +515,7 @@ export const GET = defineRoute({
                  prof.authorized_annual_deductions, prof.authorized_federal_credits,
                  prof.authorized_provincial_credits,
                  prof.cpp_exempt, prof.ei_exempt, prof.tax_exempt,
+                 prof.wcb_exempt, prof.wcb_exempt_reason,
                  prof.filing_status, prof.multiple_jobs, prof.dependent_credits,
                  prof.other_income_annual, prof.deductions_annual,
                  prof.w4_pre_2020, prof.w4_allowances, prof.fica_exempt, prof.futa_exempt, prof.sui_exempt,
@@ -513,11 +526,13 @@ export const GET = defineRoute({
                  prof.is_active, prof.sin_last3,
                  prof.filing_account_id, fa.account_number as filing_account_number,
                  prof.stub_delivery, prof.payment_method, prof.paid_on_commission,
-                 prof.statutory_occupation_class
+                 prof.statutory_occupation_class,
+                 er.worker_comp_group_id
             from employee_payroll_profiles prof
             join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
             left join pay_schedules s on s.id = prof.pay_schedule_id and s.org_id = prof.org_id
             left join payroll_filing_accounts fa on fa.id = prof.filing_account_id and fa.org_id = prof.org_id
+            left join employee_roles er on er.party_id = prof.employee_party_id and er.org_id = prof.org_id
            where prof.org_id = ${gate.user.orgId} and prof.employee_party_id = ${employee}`),
         db.execute(sql`
           select id, name, frequency from pay_schedules
@@ -593,6 +608,11 @@ export const GET = defineRoute({
         storedCertificates: storedRes.rows,
         schedules: schedulesRes.rows,
         filingAccounts: await visibleFilingAccounts(gate),
+        // Active WCB/WSIB rate classes for the payroll tab's coverage
+        // control, beside the employee's current class served on the row.
+        workerCompGroups: (await db.execute<{ id: string; code: string; name: string }>(sql`
+          select id::text as id, code, name from worker_comp_groups
+           where org_id = ${gate.user.orgId} and is_active order by name`)).rows,
         labourJurisdictions: labourJurisdictionOptions(),
         defaultCountry,
         countries: offeredProfileCountries(installed, [(profileRes.rows[0] as { country?: string | null } | undefined)?.country]),
@@ -610,6 +630,7 @@ export const GET = defineRoute({
              prof.authorized_annual_deductions, prof.authorized_federal_credits,
              prof.authorized_provincial_credits,
              prof.cpp_exempt, prof.ei_exempt, prof.tax_exempt,
+             prof.wcb_exempt, prof.wcb_exempt_reason,
              prof.filing_status, prof.multiple_jobs, prof.dependent_credits,
              prof.other_income_annual, prof.deductions_annual,
              prof.w4_pre_2020, prof.w4_allowances, prof.fica_exempt, prof.futa_exempt, prof.sui_exempt,
@@ -763,6 +784,30 @@ export const POST = defineRoute({
     }
     const stubDelivery = body.stubDelivery ?? 'email'
     const paymentMethod = body.paymentMethod ?? null
+    // Workers-compensation exclusion (0662): an exemption without a reason
+    // is an uncovered employee the run cannot tell from an excluded one, so
+    // the save refuses by name exactly like the table CHECK does.
+    const wcbExempt = body.wcbExempt === true
+    const wcbExemptReason = typeof body.wcbExemptReason === 'string' && body.wcbExemptReason.trim() !== ''
+      ? body.wcbExemptReason.trim() : null
+    if (wcbExempt && wcbExemptReason === null) {
+      return NextResponse.json({
+        error: 'a workers-compensation exemption needs a reason — record why this employment is not covered (for example an owner or director the employer account does not cover)',
+      }, { status: 422 })
+    }
+    // Workers-compensation rate class: null clears back to undecided (the run
+    // then refuses until a class or an exemption is recorded). UUID-shaped or
+    // refused — a typo'd id must never become a silent no-match.
+    const workerCompGroupId = body.workerCompGroupId === undefined || body.workerCompGroupId === ''
+      ? undefined : body.workerCompGroupId
+    if (workerCompGroupId !== undefined && workerCompGroupId !== null && !isUuid(workerCompGroupId)) {
+      return NextResponse.json({ error: 'worker-compensation group must be an id from Company Settings → Worker compensation groups' }, { status: 422 })
+    }
+    const expectedWorkerCompGroupId = body.expectedWorkerCompGroupId === undefined || body.expectedWorkerCompGroupId === ''
+      ? undefined : body.expectedWorkerCompGroupId
+    if (expectedWorkerCompGroupId !== undefined && expectedWorkerCompGroupId !== null && !isUuid(expectedWorkerCompGroupId)) {
+      return NextResponse.json({ error: 'worker-compensation group must be an id from Company Settings → Worker compensation groups' }, { status: 422 })
+    }
 
     const federalClaimBounds = profileColumnCountBounds(country, 'federal_claim_code')
     const provincialClaimBounds = profileColumnCountBounds(country, 'provincial_claim_code')
@@ -1006,6 +1051,21 @@ export const POST = defineRoute({
         }
       }
 
+      // Workers-compensation rate class, only when the editor sends it: the
+      // audited classification writer owns the employee_roles write, its
+      // optimistic check, and its parties.manage gate — this route never
+      // writes the column directly. Untouched when the body is silent, so a
+      // save that only edits withholding never re-asserts the class. Joins
+      // the ambient transaction (no executor), so a refused assignment rolls
+      // the profile save back with it instead of half-saving.
+      if (workerCompGroupId !== undefined) {
+        await assignEmployeeWorkerCompGroup({
+          orgId, actorId: userId, employeePartyId: body.employeePartyId,
+          groupId: workerCompGroupId, expectedGroupId: expectedWorkerCompGroupId ?? null,
+          reason: 'employee payroll tab', dryRun: false,
+          allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+        })
+      }
       // The employee lock also serializes first creation, when no profile row
       // exists yet. Capture the committed predecessor before changing any field.
       const before = (await db.execute<Record<string, unknown>>(sql`
@@ -1102,7 +1162,7 @@ export const POST = defineRoute({
            authorized_federal_credits, authorized_provincial_credits,
            filing_status, multiple_jobs, dependent_credits, other_income_annual, deductions_annual,
            w4_pre_2020, w4_allowances, fica_exempt, futa_exempt, sui_exempt,
-           cpp_exempt, ei_exempt, tax_exempt, is_active,
+           cpp_exempt, ei_exempt, tax_exempt, wcb_exempt, wcb_exempt_reason, is_active,
            pl_rok_urodzenia, es_ano_nacimiento, es_grupo_cotizacion, es_situacion_laboral,
            es_contrato_temporal,
            jp_hyojun_hoshu, jp_kaigo_dainigou, br_dependentes, br_pensao_mensal, br_salario_familia_filhos,
@@ -1119,6 +1179,7 @@ export const POST = defineRoute({
                 ${body.w4Pre2020 === true}, ${w4Allowances},
                 ${body.ficaExempt === true}, ${body.futaExempt === true}, ${body.suiExempt === true},
                 ${body.cppExempt === true}, ${body.eiExempt === true}, ${body.taxExempt === true},
+                ${wcbExempt}, ${wcbExemptReason},
                 ${body.isActive !== false},
                 ${factValues['pl_rok_urodzenia'] ?? null}, ${factValues['es_ano_nacimiento'] ?? null},
                 ${factValues['es_grupo_cotizacion'] ?? null}, ${factValues['es_situacion_laboral'] ?? null},
@@ -1154,7 +1215,9 @@ export const POST = defineRoute({
                       fica_exempt = excluded.fica_exempt, futa_exempt = excluded.futa_exempt,
                       sui_exempt = excluded.sui_exempt,
                       cpp_exempt = excluded.cpp_exempt, ei_exempt = excluded.ei_exempt,
-                      tax_exempt = excluded.tax_exempt, is_active = excluded.is_active,
+                      tax_exempt = excluded.tax_exempt,
+                      wcb_exempt = excluded.wcb_exempt, wcb_exempt_reason = excluded.wcb_exempt_reason,
+                      is_active = excluded.is_active,
                       pl_rok_urodzenia = excluded.pl_rok_urodzenia,
                       es_ano_nacimiento = excluded.es_ano_nacimiento,
                       es_grupo_cotizacion = excluded.es_grupo_cotizacion,

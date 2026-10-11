@@ -118,9 +118,11 @@ test(
           insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
                                                  filing_account_id, country, province, pay_basis,
                                                  federal_claim_code, provincial_claim_code,
+                                                 wcb_exempt, wcb_exempt_reason,
                                                  is_active, created_by, updated_by)
           values (${org.orgId}, ${employeeId}, ${employmentId}, ${rosterScheduleId}, ${accountId}, 'CA', 'ON',
-                  'salary', 1, 1, true, ${actorId}, ${actorId})`);
+                  'salary', 1, 1, true, 'employer-ei fixture: workers-compensation coverage out of scope',
+                  true, ${actorId}, ${actorId})`);
         await seedVacationTerms(org.orgId, employmentId, actorId, "0", "accrue");
         return employeeId;
       };

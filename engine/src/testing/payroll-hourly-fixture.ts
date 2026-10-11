@@ -61,9 +61,13 @@ export async function seedHourlyPayrollEmployee(fx: HourlyPayrollFixture, name: 
     annualHours: "2080", effectiveFrom: '2026-01-01',
   });
   const employmentId = await seedWorkerEmployment(fx.orgId, id, fx.subsidiaryId);
+  // Coverage is out of scope for the hourly suites built on this helper:
+  // every hire stands explicitly exempt so the run refuses nothing, with
+  // money identical either way.
   await seedPayrollProfile(fx.orgId, id, employmentId, fx.scheduleId, fx.actorId, {
     country: 'CA', province: 'ON', payBasis: "hourly", federalClaimCode: 1,
-    provincialClaimCode: 1,
+    provincialClaimCode: 1, wcbExempt: true,
+    wcbExemptReason: 'hourly fixture: workers-compensation coverage out of scope',
   }, { percentFloor: "4", method: 'accrue' });
   return { partyId: id, employmentId };
 }

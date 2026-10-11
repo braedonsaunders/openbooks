@@ -252,9 +252,13 @@ async function employee(fx: Fixture, name: string, opts: EmployeeOptions = {}): 
   });
   // Hires carry an HRM employment or stub calculation refuses them.
   const employmentId = await seedWorkerEmployment(fx.orgId, id, fx.subsidiaryId);
+  // Coverage is out of scope for these tests (one pins the premium with its
+  // own class): every other hire stands explicitly exempt so the run prices
+  // no premium and refuses nothing, with money identical either way.
   await seedPayrollProfile(fx.orgId, id, employmentId, opts.scheduleId ?? fx.scheduleId, fx.actorId, {
     country: 'CA', province: 'ON', payBasis: opts.payBasis ?? "hourly", federalClaimCode: 1,
-    provincialClaimCode: 1,
+    provincialClaimCode: 1, wcbExempt: true,
+    wcbExemptReason: 'multi-employee fixture: workers-compensation coverage out of scope',
   }, { percentFloor: opts.vacationPercent === undefined ? "4" : opts.vacationPercent, method: 'accrue' });
 
   return id;

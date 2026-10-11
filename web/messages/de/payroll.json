@@ -158,6 +158,7 @@
         },
         "employee": {
           "noWage": "{count, plural, one {# Mitarbeiter hat} other {# Mitarbeiter haben}} keinen für diese Periode gültigen Lohnsatz.",
+          "noWorkerComp": "{count, plural, one {# Mitarbeiter hat} other {# Mitarbeiter haben}} keine entschiedene Workers-Compensation-Abdeckung: {detail}",
           "zeroHours": "{count, plural, one {# Stundenmitarbeiter hat} other {# Stundenmitarbeiter haben}} keine genehmigten Stunden in dieser Periode.",
           "paidInPeriod": "{count, plural, one {# Mitarbeiter wurde} other {# Mitarbeiter wurden}} für eine überlappende Periode bereits bezahlt.",
           "terminated": "{count, plural, one {# Mitarbeiter ist} other {# Mitarbeiter sind}} zum Periodenende ausgeschieden.",
@@ -528,6 +529,10 @@
       "cppExempt": "CPP-befreit",
       "eiExempt": "EI-befreit",
       "taxExempt": "Einkommensteuerbefreit",
+      "workerCompGroup": "WCB-Tarifklasse",
+      "wcbExempt": "WCB-befreit",
+      "wcbExemptReason": "Befreiungsgrund",
+      "wcbUndecided": "Keine Klasse und keine Befreiung — der Lauf ist blockiert, bis der Schutz entschieden ist.",
       "isActive": "Aktiv",
       "country": "Land",
       "state": "Beschäftigungsstaat",

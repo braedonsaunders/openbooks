@@ -58,6 +58,7 @@ export function PayrollProfileTab({
     schedules: ScheduleOption[]
     filingAccounts: FilingAccountOption[]
     labourJurisdictions: Record<string, LabourJurisdictionOption[]>
+    workerCompGroups: { id: string; code: string; name: string }[]
     statutoryOccupationClasses: Record<string, HolidayOccupationClassOption[]>
     countries: string[]
     packProfiles: Record<string, PackProfileDeclaration>
@@ -67,7 +68,7 @@ export function PayrollProfileTab({
     defaultCountry: ProfileRow['country']
   }>({
     status: 'loading', profile: null, employmentId: null, schedules: [], filingAccounts: [],
-    labourJurisdictions: {}, statutoryOccupationClasses: {}, countries: [], packProfiles: {}, storedCertificates: [],
+    labourJurisdictions: {}, workerCompGroups: [], statutoryOccupationClasses: {}, countries: [], packProfiles: {}, storedCertificates: [],
     derivedColumns: {},
     employmentStart: null,
     defaultCountry: '',
@@ -106,6 +107,7 @@ export function PayrollProfileTab({
             filingAccounts: j.filingAccounts ?? [],
             // The packs' declared labour jurisdictions, per country pack.
             labourJurisdictions: j.labourJurisdictions ?? {},
+            workerCompGroups: Array.isArray(j.workerCompGroups) ? j.workerCompGroups : [],
             statutoryOccupationClasses: j.statutoryOccupationClasses ?? {},
             countries,
             packProfiles: j.packProfiles ?? {},
@@ -179,6 +181,8 @@ export function PayrollProfileTab({
     cpp_exempt: false,
     ei_exempt: false,
     tax_exempt: false,
+    wcb_exempt: false,
+    wcb_exempt_reason: null,
     filing_status: null,
     multiple_jobs: false,
     dependent_credits: null,
@@ -229,6 +233,7 @@ export function PayrollProfileTab({
           schedules={state.schedules}
           filingAccounts={state.filingAccounts}
           labourJurisdictions={state.labourJurisdictions}
+          workerCompGroups={state.workerCompGroups}
           statutoryOccupationClasses={state.statutoryOccupationClasses}
           countries={state.countries}
           packProfiles={state.packProfiles}

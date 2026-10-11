@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { PayrollError } from "../error.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 import { resolveStoredEmployerFact } from "../employer-fact-store.ts";
+import { undecidedWorkerCompError } from "../employee-worker-comp.ts";
 import { CA_OPENING_YTD_FIELDS } from "./opening-ytd.ts";
 
 /**
@@ -179,6 +180,21 @@ export async function applyCaEmployerLevies(
   const wcb = wcbGroup.rows[0];
   if (ctx.workerCompGroupId && (!wcb || wcb.rate_percent === null || cmp(wcb.rate_percent, '0') < 0 || wcb.max_assessable !== null && cmp(wcb.max_assessable, '0') < 0)) {
     throw new PayrollError(`${employeeName}: the dated worker-compensation group has no valid configured rate or assessable ceiling — review its rate and ceiling in Company Setup → Worker compensation groups before calculating.`);
+  }
+  // An undecided coverage with assessable earnings is a refusal, never a
+  // silent zero: without a rate class there is no premium, and without an
+  // exemption the employee is covered by law. Readiness names every such
+  // employee before calculate; this backstop holds for callers that reach
+  // the levy without it. No assessable earnings means no premium is lost,
+  // so an uncovered employee with nothing assessable calculates cleanly.
+  if (!wcb && cmp(assessableFor("wcb"), "0") > 0) {
+    const coverage = (await tx.execute<{ wcb_exempt: boolean | null }>(sql`
+      select wcb_exempt from employee_payroll_profiles
+       where org_id = ${orgId} and employee_party_id = ${employeePartyId}
+    `)).rows[0];
+    if (!coverage?.wcb_exempt) {
+      throw new PayrollError(undecidedWorkerCompError(employeeName));
+    }
   }
   if (wcb?.rate_percent && cmp(wcb.rate_percent, "0") > 0) {
     // Committed stubs only. A calculated run is a draft that may be abandoned

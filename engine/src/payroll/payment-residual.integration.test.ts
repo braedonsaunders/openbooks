@@ -32,8 +32,9 @@ async function postedRun(mixed = false) {
           where org_id=${fx.orgId} and employee_party_id=${fx.employeeId}`);
         const employmentId = await seedWorkerEmployment(fx.orgId, employeeId, fx.subsidiaryId);
         await db.execute(sql`insert into employee_payroll_profiles(org_id,employee_party_id,employment_id,pay_schedule_id,province,pay_basis,country,
-          federal_claim_code,provincial_claim_code,is_active,payment_method,created_by,updated_by)
+          federal_claim_code,provincial_claim_code,wcb_exempt,wcb_exempt_reason,is_active,payment_method,created_by,updated_by)
           select org_id,${employeeId},${employmentId},pay_schedule_id,province,pay_basis,country,federal_claim_code,provincial_claim_code,
+          wcb_exempt,wcb_exempt_reason,
           is_active,'cheque',created_by,updated_by from employee_payroll_profiles
           where org_id=${fx.orgId} and employee_party_id=${fx.employeeId}`);
         await db.execute(sql`insert into payroll_vacation_terms(org_id,employment_id,plan_id,method,percent_floor,annual_days_floor,effective_from,effective_to,reason,source_snapshot,created_by,updated_by)

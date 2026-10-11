@@ -584,6 +584,7 @@ test(
       await seedPayrollProfile(org.orgId, employeeId, remiEmploymentId, scheduleId, actorId, {
         country: 'CA', province: 'ON', payBasis: 'salary', federalClaimCode: 1, provincialClaimCode: 1,
         filingAccountId: filingAccountId,
+        wcbExempt: true, wcbExemptReason: 'remittance fixture: workers-compensation coverage out of scope',
       }, { percentFloor: '4', method: 'accrue' });
 
 
@@ -1534,6 +1535,7 @@ test(
       });
       await seedPayrollProfile(org.orgId, employeeId, duesEmploymentId, scheduleId, actorId, {
         country: 'CA', province: 'ON', payBasis: 'salary', federalClaimCode: 1, provincialClaimCode: 1,
+        wcbExempt: true, wcbExemptReason: 'remittance fixture: workers-compensation coverage out of scope',
       }, { percentFloor: '4', method: 'accrue' });
 
       const run = await createPayRun({
@@ -1653,6 +1655,7 @@ test(
       await seedPayrollProfile(org.orgId, employeeId, liabilityEmploymentId, scheduleId, actorId, {
         country: 'CA', province: 'ON', payBasis: 'salary', federalClaimCode: 1, provincialClaimCode: 1,
         filingAccountId: filingAccountId,
+        wcbExempt: true, wcbExemptReason: 'remittance fixture: workers-compensation coverage out of scope',
       }, { percentFloor: '4', method: 'accrue' });
 
       const postRun = async (periodStart: string, periodEnd: string) => {

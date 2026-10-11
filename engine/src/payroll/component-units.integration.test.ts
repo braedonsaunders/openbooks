@@ -65,6 +65,7 @@ test("quantity-unit lines pay their amount and count zero hours", { skip: !DB },
     const employmentId = await seedWorkerEmployment(org.orgId, worker, org.subsidiaryId);
     await seedPayrollProfile(org.orgId, worker, employmentId, scheduleId, actorId, {
       country: "CA", province: "ON", payBasis: "hourly", federalClaimCode: 1, provincialClaimCode: 1,
+      wcbExempt: true, wcbExemptReason: 'units fixture: workers-compensation coverage out of scope',
     }, { percentFloor: "4", method: "accrue" });
     await db.execute(sql`insert into employee_pay_components(id,org_id,employee_party_id,component_id,value,effective_from,created_by)
       values(${randomUUID()},${org.orgId},${worker},${premiumId},'2.0000','2026-01-01',${actorId})`);

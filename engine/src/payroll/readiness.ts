@@ -19,6 +19,7 @@ import { parsePayRunCalculationSource, payRunCalculationSource, payRunCalculatio
 import { payrollSettings } from "./run-setup.ts";
 import { payrollSubsidiaryScopeFilter, type PayrollSubsidiaryScope } from "./scope.ts";
 import {
+  employerLevyProgramKeys,
   jurisdictionKey,
   labourJurisdictionProblem,
   packRemittanceSchedules,
@@ -38,6 +39,7 @@ import {
 import { payrollBankProfiles } from "./bank-file.ts";
 import { findDocumentNumberSeriesCollisions } from "../records/numbering.ts";
 import { undeclaredJurisdictionHolidayConflict } from "./holidays.ts";
+import { UNDECIDED_WORKER_COMP_DETAIL } from "./employee-worker-comp.ts";
 import { effectiveFilingAccountSql } from "./filing.ts";
 import type { PayrollFilingAccount } from "./filing.ts";
 import {
@@ -126,6 +128,14 @@ type ScopeRow = {
   labour_jurisdiction: string | null;
   has_wage: boolean;
   has_employment_link: boolean;
+  /**
+   * Workers-compensation rate class on the active employee role; null means
+   * none is assigned — covered only when the payroll profile records an
+   * explicit exemption instead.
+   */
+  worker_comp_group_id: string | null;
+  /** Explicit workers-compensation exclusion with a reason (0662). */
+  wcb_exempt: boolean;
   approved_hours: string;
   hired_on: string | null;
   terminated_on: string | null;
@@ -240,6 +250,8 @@ async function scope(
            (${payrollEpisodeDate(rosterColumns, sql`er.hired_on`)})::text as hired_on,
            (${payrollEpisodeDate(rosterColumns, sql`er.terminated_on`)})::text as terminated_on,
            prof.sin_encrypted is not null as has_sin,
+           er.worker_comp_group_id,
+           coalesce(prof.wcb_exempt, false) as wcb_exempt,
            prof.payment_method as profile_payment_method,
            p.payment_method as party_payment_method,
            exists (select 1 from worker_employments employment
@@ -887,6 +899,23 @@ export async function payRunReadiness(
   if (noEmployment.length) flag("blocker", "employee.noEmployment", noEmployment, { href: employeesHref, action: "payroll.resolve-employment-links" });
   const noWage = people.filter((p) => !p.has_wage);
   if (noWage.length) flag("blocker", "employee.noWage", noWage, { href: employeesHref });
+
+  // Workers-compensation coverage is pack-declared, never a country list: an
+  // employee is flagged only when their own pack prices a workers-comp levy
+  // (the CA pack's `wcb` program) — a pack with no such premium refuses
+  // nothing. A missing rate class with no recorded exemption silently
+  // accrued no premium, so the run cannot calculate until each named
+  // employee is assigned a class or recorded exempt; calculateStub refuses
+  // the same predicate, so the wizard names it first.
+  const noWorkerComp = people.filter((p) =>
+    employerLevyProgramKeys(p.country).includes("wcb")
+    && !p.worker_comp_group_id && !p.wcb_exempt);
+  if (noWorkerComp.length) {
+    flag("blocker", "employee.noWorkerComp", noWorkerComp, {
+      detail: UNDECIDED_WORKER_COMP_DETAIL,
+      href: employeesHref,
+    });
+  }
 
   const zeroHours = people.filter((p) => p.pay_basis === "hourly" && Number(p.approved_hours) === 0);
   if (zeroHours.length) flag("warning", "employee.zeroHours", zeroHours, { href: "/timesheets" });

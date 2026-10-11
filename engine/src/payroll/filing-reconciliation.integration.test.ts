@@ -62,6 +62,7 @@ async function seedTwoEntities(): Promise<TwoEntityFixture> {
   });
   await seedPayrollProfile(fx.orgId, employeeB, employmentB, scheduleB, fx.actorId, {
     province: 'ON', payBasis: 'hourly', country: 'CA', federalClaimCode: 1, provincialClaimCode: 1,
+    wcbExempt: true, wcbExemptReason: 'filing fixture: workers-compensation coverage out of scope',
   }, { percentFloor: '4', method: 'accrue' });
 
 

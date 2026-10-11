@@ -316,6 +316,18 @@ export const CA_PAYROLL_PACK: PayrollCountryPack = {
     ...CA_COMPUTE_FACTOR_LABELS,
   },
   employeeFacts: CA_EMPLOYEE_FACTS,
+  // Workers-compensation exclusion is a profile FACT no employee-filed form
+  // sets (there is no "Form WCB-EXEMPT"), so it is declared here rather than
+  // on a certificate. The CPP/EI/income-tax exemptions stay TD1 flag fields.
+  profileExemptionFlags: [
+    {
+      column: "wcb_exempt",
+      label: "Exempt from workers' compensation",
+      help: "Only when the employer account genuinely does not cover this employment "
+        + "(for example an owner or director): a reason is required, and the run accrues "
+        + "no workers-compensation premium for them. Everyone else needs a WCB rate class.",
+    },
+  ],
   employerFacts: [...CA_EMPLOYER_FACTS, {
     key: "mb_remembrance_day_act_exempt",
     kind: "boolean",

@@ -621,10 +621,11 @@ export interface PayrollOpeningYtdField {
  * A boolean `employee_payroll_profiles` fact the pack's statutory engine reads
  * that NO employee-filed certificate sets — so the certificate declarations
  * cannot carry it and the profile editor would otherwise have nowhere to offer
- * it. The CA pack declares none: its exemptions (CPP, EI, income tax) are TD1
- * flag fields. The US pack declares FICA/FUTA exemption here because no form
- * exists for them (there is no "Form FICA-EXEMPT", so a certificate declaration
- * would have to lie in its `form`).
+ * it. The CA pack declares its workers-compensation exclusion here (no form
+ * sets it) while its CPP/EI/income-tax exemptions stay TD1 flag fields. The
+ * US pack declares FICA/FUTA exemption here because no form exists for them
+ * (there is no "Form FICA-EXEMPT", so a certificate declaration would have
+ * to lie in its `form`).
  */
 export interface PayrollProfileExemptionFlag {
   /** The `employee_payroll_profiles` boolean column holding the answer. */

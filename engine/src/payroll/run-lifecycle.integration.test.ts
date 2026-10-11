@@ -41,8 +41,11 @@ async function seedHourlyLifecycle(name: string, options: { monthly?: boolean; s
   });
   // Hires carry an HRM employment or stub calculation refuses them.
   const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
+  // Coverage is out of scope for lifecycle mechanics: the hire stands
+  // explicitly exempt so the run refuses nothing, with money identical.
   await seedPayrollProfile(org.orgId, employeeId, employmentId, scheduleId, actorId, {
     country: 'CA', province: 'ON', payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1,
+    wcbExempt: true, wcbExemptReason: 'lifecycle fixture: workers-compensation coverage out of scope',
   }, { percentFloor: null, method: 'accrue' });
 
   await seedPayrollTime(org.orgId, employeeId, actorId, {
@@ -86,10 +89,12 @@ describe("run-lifecycle", () => {
     await db.execute(sql`
       insert into employee_payroll_profiles
         (org_id, employee_party_id, pay_schedule_id, country, province, pay_basis,
-         federal_claim_code, provincial_claim_code, is_active, created_by, updated_by)
+         federal_claim_code, provincial_claim_code, wcb_exempt, wcb_exempt_reason,
+         is_active, created_by, updated_by)
       values
         (${org.orgId}, ${employeeId}, ${scheduleId}, 'CA', 'ON', 'salary', 1, 1, true,
-         ${actorId}, ${actorId})
+         'lifecycle fixture: workers-compensation coverage out of scope',
+         true, ${actorId}, ${actorId})
     `);
 
     // The last regular payday ended 2026-07-11; the next span is 07-12–07-25.

@@ -88,6 +88,7 @@ test(
       });
       await seedPayrollProfile(org.orgId, employeeId, employmentId, scheduleId, actorId, {
         country: 'CA', province: 'QC', payBasis: 'hourly', federalClaimCode: 1,
+        wcbExempt: true, wcbExemptReason: 'qpip fixture: workers-compensation coverage out of scope',
       }, { percentFloor: '0', method: 'accrue' });
 
 

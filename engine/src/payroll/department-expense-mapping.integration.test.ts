@@ -124,8 +124,10 @@ test(
       await db.execute(sql`
         insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
                                                country, province, pay_basis, federal_claim_code,
-                                               provincial_claim_code, is_active, created_by, updated_by)
+                                               provincial_claim_code, wcb_exempt, wcb_exempt_reason,
+                                               is_active, created_by, updated_by)
         values (${org.orgId}, ${employeeId}, ${employmentId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
+                true, 'department fixture: workers-compensation coverage out of scope',
                 true, ${actorId}, ${actorId})`);
       const { seedVacationTerms } = await import("./filing-test-fixtures.ts");
       await seedVacationTerms(org.orgId, employmentId, actorId, "0", "accrue");

@@ -346,6 +346,14 @@ export const employeePayrollProfiles = pgTable(
     authorizedProvincialCredits: money("authorized_provincial_credits"),
     cppExempt: boolean("cpp_exempt").notNull().default(false),
     eiExempt: boolean("ei_exempt").notNull().default(false),
+    /**
+     * Workers' compensation coverage exemption (0662): true only with a
+     * reason, for employments the employer account genuinely does not cover
+     * (owner, director). False means covered by a rate class — or uncovered,
+     * which the run refuses by name instead of accruing no premium.
+     */
+    wcbExempt: boolean("wcb_exempt").notNull().default(false),
+    wcbExemptReason: text("wcb_exempt_reason"),
     /** Sealed SIN/SSN (envelope encryption, like vendor TINs) for T4/W-2
      * filing; last 3 digits shown for identify-without-reveal. The workbench
      * view excludes the ciphertext. */
@@ -443,6 +451,11 @@ export const employeePayrollProfiles = pgTable(
       sql`${t.provincialClaimCode} is null or (${t.provincialClaimCode} >= 0 and ${t.provincialClaimCode} <= 10)`),
     check("employee_payroll_profiles_vacation",
       sql`${t.vacationPercent} is null or ${t.vacationPercent} >= 0`),
+    // 0662: an exemption without a reason is an uncovered employee the run
+    // cannot tell from an excluded one — refused here, mirroring the
+    // migration CHECK exactly.
+    check("employee_payroll_profiles_wcb_exempt_reason",
+      sql`${t.wcbExempt} = false or (${t.wcbExemptReason} is not null and btrim(${t.wcbExemptReason}) <> '')`),
     check("employee_payroll_profiles_allowances",
       sql`${t.w4Allowances} is null or ${t.w4Allowances} >= 0`),
     // 0191 pack-fact bounds (plus the 0389 salário-família count), mirroring

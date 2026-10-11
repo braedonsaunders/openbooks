@@ -158,6 +158,7 @@
         },
         "employee": {
           "noWage": "{count, plural, one {# 名の従業員に} other {# 名の従業員に}}この期間に有効な賃金レートがありません。",
+          "noWorkerComp": "{count, plural, one {# 名の従業員に} other {# 名の従業員に}}未決定の労災補償適用があります：{detail}",
           "zeroHours": "{count, plural, one {# 名の時間給従業員に} other {# 名の時間給従業員に}}この期間の承認済み時間がありません。",
           "paidInPeriod": "{count, plural, one {# 名の従業員が} other {# 名の従業員が}}重複する期間ですでに支給されています。",
           "terminated": "{count, plural, one {# 名の従業員が} other {# 名の従業員が}}期間末日以前に退職しています。",
@@ -528,6 +529,10 @@
       "cppExempt": "CPP適用除外",
       "eiExempt": "EI適用除外",
       "taxExempt": "所得税適用除外",
+      "workerCompGroup": "WCB料率クラス",
+      "wcbExempt": "WCB免除",
+      "wcbExemptReason": "免除理由",
+      "wcbUndecided": "料率クラスも免除も未設定 — 適用が決まるまで給与計算は停止します。",
       "isActive": "有効",
       "country": "国",
       "state": "勤務州（米国）",

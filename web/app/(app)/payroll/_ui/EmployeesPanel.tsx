@@ -158,6 +158,11 @@ export type ProfileRow = {
   cpp_exempt: boolean
   ei_exempt: boolean
   tax_exempt: boolean
+  /** Workers-compensation exclusion with a reason (0662); false = covered or undecided. */
+  wcb_exempt: boolean
+  wcb_exempt_reason: string | null
+  /** Current WCB/WSIB rate class (employee_roles); absent on list rows, which do not edit. */
+  worker_comp_group_id?: string | null
   /** An open string: the allowed answers come from the pack's declared
    *  certificate choices, never a union in this file. */
   filing_status: string | null
@@ -232,6 +237,8 @@ export function ProfileEditor(props: {
   /** country pack → what the editor renders for it: subdivisions, withholding
    *  certificates, exemption flags. From the API, declared by the packs. */
   packProfiles?: Record<string, PackProfileDeclaration>
+  /** Active WCB/WSIB rate classes for the coverage control, from the API. */
+  workerCompGroups?: { id: string; code: string; name: string }[]
   /** The employee's current row-backed filings, for prefilling row-backed
    *  fields. Served with the profile; absent on the list variant, which does
    *  not edit. */
@@ -294,6 +301,13 @@ export function ProfileEditor(props: {
   const [cppExempt, setCppExempt] = useState(p.cpp_exempt)
   const [eiExempt, setEiExempt] = useState(p.ei_exempt)
   const [taxExempt, setTaxExempt] = useState(p.tax_exempt)
+  const [wcbExempt, setWcbExempt] = useState(p.wcb_exempt)
+  const [wcbExemptReason, setWcbExemptReason] = useState(p.wcb_exempt_reason ?? '')
+  // Rate class as loaded, for the writer's optimistic check; '' is unassigned.
+  // Sent back only when the operator changes the select, so an untouched
+  // control never re-asserts the class.
+  const initialWorkerCompGroupId = (p as { worker_comp_group_id?: string | null }).worker_comp_group_id ?? ''
+  const [workerCompGroupId, setWorkerCompGroupId] = useState(initialWorkerCompGroupId)
   const [filingStatus, setFilingStatus] = useState<ProfileRow['filing_status']>(p.filing_status)
   const [multipleJobs, setMultipleJobs] = useState(p.multiple_jobs)
   const [dependentCredits, setDependentCredits] = useState(p.dependent_credits ?? '')
@@ -339,6 +353,18 @@ export function ProfileEditor(props: {
     : classOptions
   const classLabel = (classKey: string, fallback: string): string =>
     textOf(`employmentClassOptions.${classKey}`, fallback)
+  // Workers-compensation coverage: the org's active rate classes plus the
+  // pack's exemption declaration. Shown where the org prices WCB, where the
+  // pack declares the exclusion, or where an answer is already stored —
+  // never for packs with no workers-comp premium.
+  const workerCompGroups = props.workerCompGroups ?? []
+  const wcbRelevant = workerCompGroups.length > 0
+    || (pack?.exemptionFlags ?? []).some((flag) => flag.column === 'wcb_exempt')
+    || wcbExempt || workerCompGroupId !== ''
+  const wcbCoverageReadout = wcbExempt
+    ? (wcbExemptReason.trim() || textOf('fields.wcbExempt', 'WCB exempt'))
+    : (workerCompGroups.find((group) => group.id === workerCompGroupId)?.name
+      ?? (workerCompGroupId !== '' ? workerCompGroupId : textOf('fields.wcbUndecided', 'Coverage not decided')))
 
   // Everything below renders from the selected pack's declaration — the
   // subdivision list and label, the withholding certificates, the exemption
@@ -404,6 +430,7 @@ export function ProfileEditor(props: {
     cpp_exempt: [cppExempt, setCppExempt],
     ei_exempt: [eiExempt, setEiExempt],
     tax_exempt: [taxExempt, setTaxExempt],
+    wcb_exempt: [wcbExempt, setWcbExempt],
   }
   // Pack-declared columns with no bespoke binding above (every 0191 fact and
   // any future pack's): answers held as text, keyed by column. The profile
@@ -450,6 +477,7 @@ export function ProfileEditor(props: {
     cppExempt, eiExempt, taxExempt, filingStatus, multipleJobs,
     dependentCredits, otherIncomeAnnual, deductionsAnnual,
     w4Pre2020, w4Allowances, ficaExempt, futaExempt, suiExempt,
+    wcbExempt, wcbExemptReason, workerCompGroupId,
     isActive, sin,
     filingAccountId, stubDelivery, paymentMethod, paidOnCommission, occupationClass,
     extraColumns, rowAnswers,
@@ -578,6 +606,19 @@ export function ProfileEditor(props: {
           cppExempt: declaredColumns.has('cpp_exempt') && cppExempt,
           eiExempt: declaredColumns.has('ei_exempt') && eiExempt,
           taxExempt: declaredColumns.has('tax_exempt') && taxExempt,
+          // Posted as typed so the server refuses an unreasoned exemption by
+          // name rather than clearing it; cleared with the flag.
+          wcbExempt: declaredColumns.has('wcb_exempt') && wcbExempt,
+          wcbExemptReason: declaredColumns.has('wcb_exempt') && wcbExempt ? wcbExemptReason : null,
+          // Rate class only when the operator moved the select: the writer's
+          // optimistic check compares against the loaded value, and an
+          // untouched control must never re-assert it.
+          ...(workerCompGroupId !== initialWorkerCompGroupId
+            ? {
+                workerCompGroupId: workerCompGroupId === '' ? null : workerCompGroupId,
+                expectedWorkerCompGroupId: initialWorkerCompGroupId === '' ? null : initialWorkerCompGroupId,
+              }
+            : {}),
           filingStatus: kept('filing_status', filingStatus),
           multipleJobs: declaredColumns.has('multiple_jobs') && multipleJobs,
           dependentCredits: kept('dependent_credits', dependentCredits || null),
@@ -877,6 +918,9 @@ export function ProfileEditor(props: {
     }
   }
   for (const flag of pack?.exemptionFlags ?? []) {
+    // wcb_exempt renders in the general section's coverage block (rate class
+    // plus reasoned exemption together) instead of as a bare tax checkbox.
+    if (flag.column === 'wcb_exempt') continue
     const binding = columnFlag[flag.column]
     if (!binding) continue
     withholdingFlags.push({
@@ -1112,6 +1156,61 @@ export function ProfileEditor(props: {
             </Select>
           </div>
           )}
+          {/* Workers-compensation coverage: the rate class that prices the
+              employer's premium, or a reasoned exemption where the account
+              genuinely does not cover the employment. Undecided coverage
+              refuses the run by name, so this control defaults to nothing —
+              clearing the select returns the employee to undecided. */}
+          {wcbRelevant && (
+          <div className="sm:col-span-2">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <Label htmlFor="pp-worker-comp-group">{t('fields.workerCompGroup')}</Label>
+                <Select
+                  id="pp-worker-comp-group"
+                  value={workerCompGroupId}
+                  onChange={(e) => setWorkerCompGroupId(e.target.value)}
+                >
+                  <option value="">—</option>
+                  {workerCompGroups.map((group) => (
+                    <option key={group.id} value={group.id}>
+                      {group.name}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="pp-wcb-exempt">{t('fields.wcbExempt')}</Label>
+                <label htmlFor="pp-wcb-exempt" className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+                  <input
+                    id="pp-wcb-exempt"
+                    type="checkbox"
+                    checked={wcbExempt}
+                    onChange={(e) => setWcbExempt(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-700"
+                  />
+                  {wcbExempt
+                    ? (wcbExemptReason.trim() || t('fields.wcbExemptReason'))
+                    : textOf('fields.wcbExempt', 'WCB exempt')}
+                </label>
+                {wcbExempt && (
+                  <Input
+                    id="pp-wcb-exempt-reason"
+                    value={wcbExemptReason}
+                    onChange={(e) => setWcbExemptReason(e.target.value)}
+                    placeholder={t('fields.wcbExemptReason')}
+                    className="mt-2"
+                  />
+                )}
+              </div>
+            </div>
+            {(workerCompGroupId === '' && !wcbExempt) && (
+              <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
+                {t('fields.wcbUndecided')}
+              </p>
+            )}
+          </div>
+          )}
         </div>
         )}
         {showTax && (
@@ -1229,6 +1328,9 @@ export function ProfileEditor(props: {
                 )
               : null}
             {roRow('basis', t('fields.payBasis'), t(`basis.${payBasis}`))}
+            {wcbRelevant
+              ? roRow('wcb', t('fields.workerCompGroup'), wcbCoverageReadout)
+              : null}
             {filingAccounts.length > 0
               ? roRow(
                   'filing',

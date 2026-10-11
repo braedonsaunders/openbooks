@@ -57,7 +57,8 @@ async function setup(options: { approvalFlow?: boolean } = {}) {
     const worker = await seedEmployment(org.orgId, org.subsidiaryId, { from: "2026-01-01" });
     const scheduleId = randomUUID();
     await seedPayrollSchedule(org.orgId, scheduleId, authorId, { name: "Monthly", frequency: "monthly", periodsPerYear: 12, anchorPeriodEnd: "2026-01-31", payDateOffsetDays: 1 });
-    await seedPayrollProfile(org.orgId, worker.workerPartyId, worker.employmentId, scheduleId, authorId, { country: "CA", province: "ON", payBasis: "hourly" });
+    await seedPayrollProfile(org.orgId, worker.workerPartyId, worker.employmentId, scheduleId, authorId, { country: "CA", province: "ON", payBasis: "hourly",
+      wcbExempt: true, wcbExemptReason: 'package fixture: workers-compensation coverage out of scope' });
     const componentId = randomUUID();
     await db.execute(sql`insert into pay_components(id,org_id,code,name,kind,country,basis,value,is_active)
       values(${componentId},${org.orgId},'PKG_TRAVEL','Travel allowance','earning','CA','fixed_amount','0',true)`);
