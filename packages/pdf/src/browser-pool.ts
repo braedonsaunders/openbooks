@@ -4,6 +4,7 @@
 // always-closed page semaphore.
 
 import { existsSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { delimiter, isAbsolute, join } from 'node:path'
 import puppeteer, {
   type Browser,
@@ -21,11 +22,28 @@ import { isAllowedPdfRequest } from './template'
  */
 export class RendererUnavailableError extends Error {
   readonly executablePath: string | null
-  constructor(executablePath: string | null) {
-    super(rendererUnavailableMessage(executablePath))
+  constructor(executablePath: string | null, message?: string) {
+    super(message ?? rendererUnavailableMessage(executablePath))
     this.name = 'RendererUnavailableError'
     this.executablePath = executablePath
   }
+}
+
+/**
+ * Chromium hands a printed PDF back through a stream in its temporary
+ * directory. A failed stream read means the server cannot hold the output
+ * (temporary space or quota exhausted), which no retry of the same request
+ * can fix.
+ */
+export function rendererOutputUnavailableError(cause: unknown): RendererUnavailableError | null {
+  const name = typeof cause === 'object' && cause !== null ? (cause as { name?: unknown }).name : null
+  const message = cause instanceof Error ? cause.message : String(cause)
+  if (name !== 'ProtocolError' || !/IO\.read/.test(message)) return null
+  return new RendererUnavailableError(
+    rendererExecutablePath(),
+    `PDF renderer is unavailable: Chromium could not return the printed PDF (${message.slice(0, 120)}). ` +
+      `Free space or quota in the app server's temporary directory (${tmpdir()}), or point TMPDIR at disk-backed storage, then print again.`,
+  )
 }
 
 function rendererRemedy(): string {
@@ -303,6 +321,8 @@ export class PdfBrowserPool {
         }
       })
       return await fn(page)
+    } catch (error) {
+      throw rendererOutputUnavailableError(error) ?? error
     } finally {
       await page?.close().catch(() => undefined)
       release()

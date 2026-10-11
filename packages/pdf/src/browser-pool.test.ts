@@ -90,6 +90,16 @@ test('a disconnected browser is relaunched on next use', async () => {
   assert.equal(launches.length, 2)
 })
 
+test('a failed PDF stream read is the named renderer refusal; other print errors pass through', async () => {
+  const pool = new PdfBrowserPool(async () => fakeBrowser(async () => fakePage(() => undefined)))
+  const streamFailure = Object.assign(new Error('Protocol error (IO.read): Read failed'), { name: 'ProtocolError' })
+  const refused = await pool.withPage(async () => { throw streamFailure }).catch((e: unknown) => e)
+  assert.ok(refused instanceof RendererUnavailableError)
+  assert.match((refused as Error).message, /could not return the printed PDF.*temporary directory/)
+  const other = new Error('template exploded')
+  assert.equal(await pool.withPage(async () => { throw other }).catch((e: unknown) => e), other)
+})
+
 test('a page-setup failure still closes the page', async () => {
   let closed = 0
   const launcher: PdfBrowserLauncher = async () =>
