@@ -17,16 +17,17 @@ import { canonicalDecimal } from '@/lib/exact-decimal'
 import { moneyRefusal } from '@/lib/payroll-decimal-refusal'
 
 const requestBodySchema = z.object({
+  // Amount and currency stay shape-only here on purpose: the route below owns
+  // the refusal vocabulary (normalizeMoney's decimal-point remedy, the whole-
+  // digit range guard, the shared ISO 4217 gate), and schema-level refinements
+  // would shadow those named 422s with field-blind 400s.
   amount: z.union([
-    z.string().superRefine((value, ctx) => {
-      const exact = canonicalDecimal(value, 4)
-      if (exact === null || wholeDigits(exact) > 15) ctx.addIssue({ code: 'custom', message: moneyRefusal('Amount', value) })
-    }),
+    z.string(),
     z.literal(''),
     z.null(),
   ]).optional(),
   billDocumentId: z.string().uuid({ error: 'billDocumentId must be a valid bill id' }).nullable().optional(),
-  currency: z.string().regex(/^[A-Z]{3}$/, 'currency must be a three-letter ISO 4217 code').refine(isIso4217CurrencyCode, 'currency must be an installed ISO 4217 code').optional(),
+  currency: z.string().optional(),
   direction: z.enum(['received', 'issued']).optional(),
   jurisdiction: z.string().trim().max(20).nullable().optional(),
   notes: z.string().trim().max(2000).nullable().optional(),
