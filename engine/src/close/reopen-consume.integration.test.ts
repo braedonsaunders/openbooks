@@ -177,7 +177,7 @@ test(
 );
 
 test(
-  "ending a window early is the requester's or the approver's call",
+  "ending a window early requires the reopen permission, never identity",
   { skip: !DB },
   async () => {
     const org = await createScratchOrg();
@@ -188,18 +188,36 @@ test(
       const first = await requestPeriodReopen({ ...target, modules: ["gl"], actorId: actors.adminId, reason: "First window" });
       await decidePeriodReopen({ orgId: org.orgId, requestId: first, actorId: actors.approver1Id, approve: true, hours: 2 });
 
+      // Neither the uninvolved operator nor the permission-less requester
+      // can end the window: the gate is the reopen permission, with a
+      // remedy naming who can grant it.
       await assert.rejects(
         recloseApprovedReopen({
           orgId: org.orgId, requestId: first, actorId: actors.outsiderId, reason: "Uninvolved operator ends the window early",
         }),
-        /only the requester or the approver/,
+        /requires the close reopen permission/,
+      );
+      await assert.rejects(
+        recloseApprovedReopen({
+          orgId: org.orgId, requestId: first, actorId: actors.adminId, reason: "Requester without the permission ends the window",
+        }),
+        /requires the close reopen permission/,
       );
       assert.equal(await requestStatus(org.orgId, first), "approved");
 
+      // A permission-holding third party — neither requester nor approver —
+      // ends the window with reason and audit.
+      await db.execute(sql`update app_roles set permissions = '["close.reopen"]'::jsonb where org_id = ${org.orgId} and key = 'approver'`);
       await recloseApprovedReopen({
-        orgId: org.orgId, requestId: first, actorId: actors.adminId, reason: "Requester ends the window after re-closing",
+        orgId: org.orgId, requestId: first, actorId: actors.approver2Id, reason: "Independent approver ends the window after re-closing",
       });
       assert.equal(await requestStatus(org.orgId, first), "reclosed");
+      const audits = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from audit_log
+         where org_id = ${org.orgId} and table_name = 'close_reopen_requests'
+           and row_id = ${first} and action = 'end'
+      `));
+      assert.equal(audits.rows[0]?.n, 1);
     } finally {
       await dropScratchOrg(org.orgId);
     }

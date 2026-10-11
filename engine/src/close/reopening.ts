@@ -937,9 +937,14 @@ async function recloseApprovedReopenRow(args: {
             })}::jsonb)`);
 }
 
-/** End an approved reopen window immediately after controlled work completes.
- * The original approval remains immutable; the actor, timestamp and reason for
- * ending the window are appended to the close event stream. */
+/** End an approved reopen window early with a stated reason.
+ * Any holder of the reopen-approval permission (`close.reopen`) may end any
+ * active window — including a stale window whose modules are already closed,
+ * which otherwise blocks new reopens with no user path to clear it. Ending
+ * re-closes the modules the window opened, exactly like the re-close path.
+ * The original approval remains immutable; the actor, timestamp and reason
+ * are appended to the close event stream and the audit trail. The automatic
+ * expiry tick carries no actor and keeps its own path. */
 export async function recloseApprovedReopen(args: {
   orgId: string;
   requestId: string;
@@ -960,11 +965,15 @@ export async function recloseApprovedReopen(args: {
        for update`));
     const row = request.rows[0];
     if (!row) throw new CloseError("approved reopen request not found");
-    // Ending a window early is the requester's or the approver's call —
-    // never a third party's. The automatic expiry tick carries no actor and
-    // keeps its own path.
-    if (args.actorId !== row.requested_by && args.actorId !== row.approved_by) {
-      throw new CloseError("only the requester or the approver can end this reopen window");
+    // Ending a window closes modules, so the gate is the reopen-approval
+    // permission resolved in-transaction — never identity. A stale window's
+    // requester or approver may be unavailable, and the route already
+    // requires the same permission; unknown or inactive principals fail
+    // closed inside the permission check.
+    if (!(await actorHasPermission(tx, args.orgId, args.actorId, "close.reopen"))) {
+      throw new CloseError(
+        "ending a reopen window requires the close reopen permission; ask an administrator for access",
+      );
     }
     await recloseApprovedReopenRow({
       tx,
@@ -973,6 +982,19 @@ export async function recloseApprovedReopen(args: {
       reason,
       automatic: false,
     });
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${args.orgId}, 'close_reopen_requests', ${args.requestId}, 'end',
+              ${JSON.stringify({
+                before: { status: "approved" },
+                after: { status: "reclosed", reason },
+                scope: {
+                  periodId: row.period_id,
+                  bookId: row.book_id,
+                  subsidiaryId: row.subsidiary_id,
+                  modules: row.modules,
+                },
+              })}::jsonb, ${args.actorId})`);
   });
 }
 
@@ -980,7 +1002,7 @@ export async function recloseApprovedReopen(args: {
  * Extend an active reopen window, widen it to more modules, or both — the
  * alternative the overlap refusal offers instead of an overlapping request.
  * Extending prolongs an independent approval, so the requester cannot extend
- * their own window; ending early stays the requester's or approver's call
+ * their own window; ending early is any reopen-permission holder's call
  * (see recloseApprovedReopen). Added modules must currently need a window
  * (closed locks), and inherit the window's expiry.
  */
