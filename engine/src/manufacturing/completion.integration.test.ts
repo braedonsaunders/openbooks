@@ -594,6 +594,15 @@ const cases: Case[] = [
     assert.equal(evidence.overhead, "5.0000", "ten units at six minutes on a 5/h card");
     assert.equal(evidence.stored, 0, "the released snapshot itself stays frozen");
   } },
+  { name: "output is received on the stated day, never after today", run: async (f) => {
+    const wo = await prepare(f); await stock(f, f.org.items.component, "4", "3");
+    await issue(f, wo.id, [{ materialId: wo.materials[0]!.id, quantity: "2" }]);
+    await refuse(run((tx) => completeWorkOrder(tx, f.org.orgId, f.actorId, wo.id, { quantity: "1", receivedOn: addCalendarDays(f.postingDate, 1) })),
+      "operation_date_in_future", "cannot be dated after today", "Record the day production actually happened");
+    const result = await run((tx) => completeWorkOrder(tx, f.org.orgId, f.actorId, wo.id, { quantity: "1", receivedOn: f.org.date }));
+    const date = await withBypassContext(async () => (await db.execute<{ date: string }>(sql`select posting_date::text date from journal_entries where org_id=${f.org.orgId} and id=${result.entryId}`)).rows[0]?.date);
+    assert.equal(date, f.org.date, "the receipt posts on the day the output was received");
+  } },
   { name: "completion uses the organization's business date", run: async (f) => {
     const wo = await prepare(f); await stock(f, f.org.items.component, "4", "3");
     await issue(f, wo.id, [{ materialId: wo.materials[0]!.id, quantity: "2" }]);

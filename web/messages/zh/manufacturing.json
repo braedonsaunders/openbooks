@@ -65,6 +65,7 @@
     "plannedStart": "计划开始",
     "startedOn": "开始日期",
     "completedOn": "完成日期",
+    "receivedOn": "入库日期",
     "plannedEnd": "计划完成",
     "holdReason": "暂停原因",
     "cancelReason": "取消原因",

@@ -60,6 +60,14 @@ function standardRunMinutes(plannedRun: unknown, done: string, planned: unknown)
     return null;
   }
 }
+/** The latest completion day among an order's done operations. */
+function lastCompletedOn(operations: ManufacturingRow[] | undefined): string | null {
+  const days = (operations ?? [])
+    .filter((operation) => operation.status === "done" && operation.completedAt)
+    .map((operation) => String(operation.completedAt).slice(0, 10))
+    .sort();
+  return days.at(-1) ?? null;
+}
 const date = (key: string, initial?: unknown, required = false): Field =>
   field(key, initial, { type: "date", required, nullable: !required });
 const reason = (key = "reason", required = true, minLength = 5): Field =>
@@ -219,6 +227,8 @@ export function recordCommands(
         [
           decimal("quantity",r.receiptReworkInspectionId?repair?.quantity:undefined),
           select("receiptLocationId", options.locations, r.receiptLocationId),
+          // Output is received on the day production finished.
+          date("receivedOn", lastCompletedOn(data.sections.operations) ?? r.plannedStart ?? null),
         ],
         {
           ...(r.receiptReworkInspectionId?{}:{repeat:"tracking" as const}),

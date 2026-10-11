@@ -25,6 +25,7 @@ import { getManufacturingPolicies } from "./policies.ts";
 import { bomRequiredQuantity, type BomQuantityBasis } from "../inventory/bom-scrap.ts";
 import { manufacturingControlAccount, postManufacturingEntry } from "./journal.ts";
 import { conversionRelief } from "./conversion.ts";
+import { operationEventDate } from "./materials.ts";
 import { removeInboundLayer, restoreIssueLayers, reverseInventoryJournal, type ReverseInventoryInput, type ReverseInventoryResult, type ReversibleMovement } from "../inventory/reversal.ts";
 
 type Order = {
@@ -42,6 +43,8 @@ type Material = {
 type ReceiptSelection = { itemId?: string; quantity: string; lotNumber?: string; expiresOn?: string | null; serialNumber?: string };
 export interface CompleteWorkOrderInput {
   quantity: string; receiptLocationId?: string | null; lots?: ReceiptSelection[];
+  /** Business date the output was received; today when omitted. */
+  receivedOn?: string | null;
   componentSelections?: CompletionComponentSelection[];
   byproductValues?: Array<{ itemId: string; nrvUnit: string; reason: string }>;
 }
@@ -336,7 +339,12 @@ export async function completeWorkOrder(
   const repairOutput=order.receipt_rework_inspection_id?await assertReceiptReworkOutput(tx,orgId,actorId,order.id,q):null;
   const originalTracking=repairOutput?(await tx.execute<{lotNumber:string|null;serialNumber:string|null}>(sql`select lot.lot_number as "lotNumber",serial.serial_number as "serialNumber" from inventory_inspections inspected left join lots lot on lot.org_id=inspected.org_id and lot.id=inspected.lot_id left join serials serial on serial.org_id=inspected.org_id and serial.id=inspected.serial_id where inspected.org_id=${orgId} and inspected.id=${repairOutput.id}`)).rows[0]:null;
   const selections = input.lots?.length?input.lots:repairOutput&&originalTracking?[{quantity:q,...(originalTracking.lotNumber?{lotNumber:originalTracking.lotNumber}:{}),...(originalTracking.serialNumber?{serialNumber:originalTracking.serialNumber}:{})}]:[];
-  const date = await businessToday(orgId);
+  // Output is received on the day production finished: never after today,
+  // never before the order's latest completed operation.
+  const lastOperation = (await tx.execute<{ completed: string | null }>(sql`
+    select max(completed_at)::date::text as completed from mfg_wo_operations
+     where org_id=${orgId} and work_order_id=${order.id} and status='done'`)).rows[0]?.completed ?? null;
+  const date = await operationEventDate(tx, orgId, input.receivedOn, lastOperation, "Work order " + order.number + " receipt") ?? await businessToday(orgId);
   const bookId = await primaryBookId(orgId, tx as Runner);
   const periodId = await periodForDate(orgId, date, tx as Runner);
   if (!periodId) throw new ManufacturingError("No accounting period covers " + date + ".", { code: "posting_period_missing", remedy: "Open an accounting period for the completion date." });

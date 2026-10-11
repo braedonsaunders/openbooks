@@ -12,6 +12,7 @@ const Params = z.object({ id: z.string().uuid() });
 const Body = z.object({
   quantity: z.string(),
   receiptLocationId: z.string().uuid().nullable().optional(),
+  receivedOn: isoDate().nullable().optional(),
   lots: z.array(z.object({
     itemId: z.string().uuid().optional(), quantity: z.string(),
     lotNumber: z.string().trim().min(1).optional(), expiresOn: isoDate().nullable().optional(),
