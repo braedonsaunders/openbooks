@@ -151,6 +151,9 @@ test("status_change requires a governed status and a real window", () => {
   assert.equal(parsed.kind, "status_change");
   assert.equal(codeOf(() => validateChangePayload({ kind: "status_change", status: "fired", effectiveFrom: "2026-09-01" })), "INVALID_PAYLOAD");
   assert.equal(codeOf(() => validateChangePayload({ kind: "status_change", status: "active", effectiveFrom: "not-a-date" })), "INVALID_PAYLOAD");
+  // Ending employment must be a termination so coverage and final pay follow.
+  assert.equal(codeOf(() => validateChangePayload({ kind: "status_change", status: "terminated", effectiveFrom: "2026-09-01" })), "INVALID_PAYLOAD");
+  assert.equal(validateChangePayload({ kind: "status_change", status: "terminated", effectiveFrom: "2026-09-01", effectiveTo: "2026-09-08", historicalObservation: { sourceReference: "Record of employment" } }).kind, "status_change");
 });
 
 test("assignment_change needs at least one content field", () => {

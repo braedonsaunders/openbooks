@@ -55,8 +55,8 @@ const HRM_ACTIONS = [
   'leave_of_absence', 'return', 'termination', 'profile_change', 'other',
 ]
 
-const HIRE_STATUSES = ['offered', 'active', 'on_leave', 'suspended'] as const
-const ALL_STATUSES = ['offered', 'active', 'on_leave', 'suspended', 'terminated'] as const
+// Ending employment is its own Termination change, never a status change.
+const EMPLOYMENT_STATUS_OPTIONS = ['offered', 'active', 'on_leave', 'suspended'] as const
 
 function asText(value: unknown): string {
   return typeof value === 'string' ? value : ''
@@ -633,7 +633,7 @@ export function ChangeRequestDrawer({
     }
   }
 
-  const statusOptions = kind === 'hire' ? HIRE_STATUSES : ALL_STATUSES
+  const statusOptions = EMPLOYMENT_STATUS_OPTIONS
 
   return (
     <Drawer

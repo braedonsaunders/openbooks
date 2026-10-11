@@ -231,6 +231,12 @@ const statusChangePayloadSchema = z
     if (payload.historicalObservation && payload.effectiveTo === null) {
       ctx.addIssue({ code: "custom", message: "a historical status observation needs an exclusive end date" });
     }
+    // Ending employment is a termination: it ends benefit coverage and sets
+    // the payroll termination date. A status change records only observed
+    // historical windows of terminated status.
+    if (payload.status === "terminated" && !payload.historicalObservation) {
+      ctx.addIssue({ code: "custom", message: "end employment with a termination change, which also ends benefit coverage and final pay; a terminated status change is only for a historical observation" });
+    }
     try {
       makeEffectiveInterval(payload.effectiveFrom, payload.effectiveTo);
     } catch (error) {
@@ -3414,6 +3420,7 @@ export const EMPLOYMENT_CHANGE_KINDS = [
   "status_changed",
   "assignment_issued",
   "assignment_superseded",
+  "corrected",
   "terminated",
   "bank_details_changed",
   "profile_changed",
