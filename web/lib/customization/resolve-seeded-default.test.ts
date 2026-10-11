@@ -21,7 +21,7 @@ registerHooks({
       return {
         shortCircuit: true,
         format: 'module',
-        url: 'data:text/javascript,export async function subsidiaryFeatureEnabled() { return true }',
+        url: 'data:text/javascript,export async function subsidiaryFeatureEnabled() { return true } export async function isFeatureEnabled() { return true }',
       }
     }
     return nextResolve(specifier, context)

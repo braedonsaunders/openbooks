@@ -4,6 +4,7 @@
 
 import type { DocArticle, DocCategory, DocSection } from './types'
 import { allocations } from './articles/allocations'
+import { multiBookAccounting } from './articles/multi-book-accounting'
 import { welcome } from './articles/welcome'
 import { projectTypes } from './articles/project-types'
 import { overheadCosting } from './articles/overhead-costing'
@@ -332,6 +333,7 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   revenueRecognition,
   fixedAssetsDepreciation,
   allocations,
+  multiBookAccounting,
   salesWorkflow,
   electronicInvoicing,
   purchasingWorkflow,
