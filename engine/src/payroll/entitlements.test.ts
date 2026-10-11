@@ -386,6 +386,17 @@ test("ACT/365 credited service retains fractional evidence at a tier boundary", 
   assert.equal(serviceCreditMilestoneDate(baseline, 60), "2026-09-27");
   assert.throws(() => computeEmploymentServiceCredit({ ...baseline, creditedDays: "1e3" }, baseline.asOfDate), /Credited service/);
 });
+test("calendar months accept a mid-month start with whole credited months", () => {
+  const baseline = { id: "credit", convention: "calendar_months" as const, asOfDate: "2018-04-02", creditedDays: null, creditedMonths: 89, sourceSnapshot: { source: "observed" } };
+  const credit = computeEmploymentServiceCredit(baseline, "2025-09-02");
+  assert.equal(credit.serviceDays, null);
+  assert.equal(credit.completedMonths, 178);
+  assert.equal(meetsServiceYears(credit, 7), true);
+  // Only truly invalid input refuses, with the remedy naming the convention.
+  assert.throws(() => computeEmploymentServiceCredit({ ...baseline, creditedMonths: 88.5 }, baseline.asOfDate), /whole months by anniversary/);
+  assert.throws(() => computeEmploymentServiceCredit({ ...baseline, creditedMonths: -1 }, baseline.asOfDate), /whole months by anniversary/);
+  assert.throws(() => computeEmploymentServiceCredit({ ...baseline, creditedDays: "0" }, baseline.asOfDate), /cannot carry credited days/);
+});
 test("vacation progression preserves a separately granted higher personal rate", () => {
   const result = computePlanMovement(move({ plan: plan({ systemKey: "vacation" }), earnings: "3000.0000", employeeAccrualValue: "11.0000", serviceAccrualValue: "9.0000" }));
   assert.equal(result.movements[0]!.amount, "330.0000");

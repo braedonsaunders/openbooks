@@ -42,7 +42,8 @@ export interface EmploymentServiceCredit {
 export function computeEmploymentServiceCredit(baseline: ServiceCreditBaseline, asOf: string): EmploymentServiceCredit {
   parseIsoDate(baseline.asOfDate); parseIsoDate(asOf);
   if (baseline.convention === 'calendar_months') {
-    if (!Number.isSafeInteger(baseline.creditedMonths) || baseline.creditedMonths! < 0 || baseline.creditedDays !== null) throw new PayrollError('Calendar service requires nonnegative credited months and no credited days.');
+    if (baseline.creditedDays !== null) throw new PayrollError('Calendar months cannot carry credited days; clear the credited-day value, or use Actual days / 365 for day precision.');
+    if (!Number.isSafeInteger(baseline.creditedMonths) || baseline.creditedMonths! < 0) throw new PayrollError('Calendar months count whole months by anniversary from the as-of date; enter a whole number of months, or use Actual days / 365 for day precision.');
     return { convention: baseline.convention, serviceDays: null,
       completedMonths: baseline.creditedMonths! + monthsOfService(baseline.asOfDate, asOf),
       sourceSnapshot: { ...baseline.sourceSnapshot, baselineId: baseline.id, convention: baseline.convention, asOfDate: baseline.asOfDate, creditedMonths: baseline.creditedMonths } };
@@ -117,8 +118,12 @@ export async function validateServiceCreditConfiguration(executor: Pick<typeof d
   if (typeof values.reason !== 'string' || !values.reason.trim()) throw new PayrollError('Enter the reason for this credited-service baseline.');
   const creditedDays = values.creditedDays == null || values.creditedDays === '' ? null : canonicalDecimal(values.creditedDays, 16);
   if (values.creditedDays != null && values.creditedDays !== '' && creditedDays === null) throw new PayrollError(decimalNullRefusal('creditedDays', 'a credited-day value', values.creditedDays, 16));
+  // Forms post whole months as text ("89"); the calendar pack counts whole
+  // months by anniversary, so a whole-month spelling is the same evidence.
+  // Anything else reaches the pack refusal below, which names the convention.
+  const creditedMonths = values.creditedMonths == null || values.creditedMonths === '' ? null : Number(values.creditedMonths);
   computeEmploymentServiceCredit({ id: rowId ?? null, convention: values.convention as ServiceCreditBaseline['convention'], asOfDate: values.asOfDate,
-    creditedDays, creditedMonths: values.creditedMonths == null || values.creditedMonths === '' ? null : values.creditedMonths as number, sourceSnapshot: {} }, values.asOfDate);
+    creditedDays, creditedMonths, sourceSnapshot: {} }, values.asOfDate);
   const employment = await executor.execute(sql`select id from worker_employments where org_id = ${orgId} and id = ${values.employmentId}`);
   if (employment.rows.length !== 1) throw new PayrollError('Select an employment in this organization for credited service.');
 }
