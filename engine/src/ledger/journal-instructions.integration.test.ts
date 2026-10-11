@@ -71,6 +71,8 @@ test("named rate types preserve spot lookup and entity posting uses the selected
   await db.execute(sql`insert into subsidiary_accounting_preferences(org_id,subsidiary_id,effective_from,posting_rate_type,reason,created_by) values(${org.orgId},${org.subsidiaryId},${org.date},'corporate','Corporate treasury policy',${actor})`);
   assert.equal(await lookupSpotRate(db,org.orgId,'USD','CAD',org.date),'1.2000000000');
   assert.equal(await lookupExchangeRate(db,org.orgId,'USD','CAD',org.date,'corporate'),'1.4000000000');
+  const advanced=await journal(org,actor,'monetary',[{account:org.accounts.cogs,amount:'100',currency:'USD'},{account:org.accounts.ap,amount:'-140',currency:'CAD'}]);
+  assert.deepEqual(await validateJournalInstructions(db,org.orgId,advanced),{debits:'140.0000',credits:'140.0000'});
   const id=await journal(org,actor,'monetary',[{account:org.accounts.cogs,amount:'100'},{account:org.accounts.ap,amount:'-100'}],{currency:'USD',fx:'1.4'});
   const entry=await postDocument(id,controls(org));
   const amounts=(await db.execute<{amount:string;currency:string;txn:string}>(sql`select amount::text,currency,txn_amount::text as txn from journal_lines where org_id=${org.orgId} and entry_id=${entry} order by line_number`)).rows;
