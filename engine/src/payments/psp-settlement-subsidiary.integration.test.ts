@@ -53,7 +53,7 @@ async function batchState(orgId: string, batchId: string) {
 }
 
 test(
-  "post names the missing subsidiary and import refuses to replace saved draft evidence",
+  "post names the missing subsidiary and re-import repairs the draft",
   { skip: !DB },
   async () => {
     const org = await createScratchOrg();
@@ -89,17 +89,20 @@ test(
       );
       assert.equal((await batchState(org.orgId, batchId)).status, "draft");
 
-      await assert.rejects(
-        importSettlementBatch(org.orgId, actor, stripeParsed(externalRef, org.date), {
-          ...accounts,
-          subsidiaryId: secondSub,
-        }),
-        /already has different evidence/,
-      );
+      // The evidence is identical, so the re-import repairs the unposted
+      // draft's missing subsidiary instead of conflicting with it.
+      const repair = await importSettlementBatch(org.orgId, actor, stripeParsed(externalRef, org.date), {
+        ...accounts,
+        subsidiaryId: secondSub,
+      });
+      assert.deepEqual(repair, { batchId, created: false });
       const after = await batchState(org.orgId, batchId);
       assert.equal(after.status, "draft");
       assert.equal(after.journalEntryId, null);
-      assert.equal(after.subsidiaryId, null);
+      assert.equal(after.subsidiaryId, secondSub);
+      const { entryId } = await postSettlementBatch(org.orgId, batchId, actor, null);
+      assert.ok(entryId);
+      assert.equal((await batchState(org.orgId, batchId)).status, "posted");
     } finally {
       await dropScratchOrg(org.orgId);
     }

@@ -1336,98 +1336,168 @@ function stableJson(value: unknown): string {
   return JSON.stringify(value) ?? "null";
 }
 
-function sameStoredImport(
-  row: {
-    currency: string;
-    gross_amount: string;
-    fee_amount: string;
-    refund_amount: string;
-    dispute_amount: string;
-    adjustment_amount: string;
-    net_amount: string;
-    fx_amount: string;
-    settlement_date: string;
-    bank_account_id: string | null;
-    fee_account_id: string | null;
-    dispute_account_id: string | null;
-    fx_account_id: string | null;
-    clearing_account_id: string | null;
-    subsidiary_id: string | null;
-    source_currency: string | null;
-    conversion_rate: string | null;
-    conversion_rate_source: string | null;
-    payout_rate: string | null;
-    payout_rate_source: string | null;
-    source_payload: unknown;
-    line_count: number;
-    memo: string | null;
-  },
-  lines: Array<{
-    line_number: number;
-    kind: string;
-    external_ref: string | null;
-    description: string | null;
-    amount: string;
-    currency: string | null;
-    document_id: string | null;
-    meta: unknown;
-  }>,
+type StoredSettlementHeader = {
+  currency: string;
+  gross_amount: string;
+  fee_amount: string;
+  refund_amount: string;
+  dispute_amount: string;
+  adjustment_amount: string;
+  net_amount: string;
+  fx_amount: string;
+  settlement_date: string;
+  bank_account_id: string | null;
+  fee_account_id: string | null;
+  dispute_account_id: string | null;
+  fx_account_id: string | null;
+  clearing_account_id: string | null;
+  subsidiary_id: string | null;
+  source_currency: string | null;
+  conversion_rate: string | null;
+  conversion_rate_source: string | null;
+  payout_rate: string | null;
+  payout_rate_source: string | null;
+  source_payload: unknown;
+  line_count: number;
+  memo: string | null;
+};
+
+type StoredSettlementLine = {
+  line_number: number;
+  kind: string;
+  external_ref: string | null;
+  description: string | null;
+  amount: string;
+  currency: string | null;
+  document_id: string | null;
+  meta: unknown;
+};
+
+type SettlementFxPlan = {
+  sourceCurrency: string;
+  conversionRate: string;
+  conversionRateSource: string;
+  payoutRate: string | null;
+  payoutRateSource: string | null;
+} | null;
+
+/**
+ * Compare provider evidence only — everything the provider asserted about
+ * the payout (currency, footed totals, settlement day, FX evidence, raw
+ * payload, memo, and every evidence line). Posting configuration (bank,
+ * fee, dispute, FX and clearing accounts, subsidiary) is deliberately
+ * excluded: an unposted draft carries whatever configuration the first
+ * import supplied, and re-importing the same reference with the missing
+ * configuration repairs the draft instead of conflicting with it.
+ * Returns null when the evidence is identical, otherwise a short
+ * operator-readable description of the first difference.
+ */
+function settlementEvidenceDifference(
+  row: StoredSettlementHeader,
+  lines: StoredSettlementLine[],
   parsed: ParsedSettlement,
-  accounts: Partial<ImportAccounts>,
   currency: string,
   totals: ReturnType<typeof summarizeSettlement>,
-  subsidiaryId: string | null,
-  fx: {
-    sourceCurrency: string;
-    conversionRate: string;
-    conversionRateSource: string;
-    payoutRate: string | null;
-    payoutRateSource: string | null;
-  } | null,
-): boolean {
+  fx: SettlementFxPlan,
+): string | null {
   const sameAmount = (stored: string, expected: string) => toUnits(stored) === toUnits(expected);
-  if (
-    row.currency !== currency
-    || !sameAmount(row.gross_amount, totals.grossAmount)
-    || !sameAmount(row.fee_amount, totals.feeAmount)
-    || !sameAmount(row.refund_amount, totals.refundAmount)
-    || !sameAmount(row.dispute_amount, totals.disputeAmount)
-    || !sameAmount(row.adjustment_amount, totals.adjustmentAmount)
-    || !sameAmount(row.net_amount, totals.netAmount)
-    || !sameAmount(row.fx_amount, totals.fxAmount)
-    || row.settlement_date !== parsed.settlementDate
-    || row.bank_account_id !== (accounts.bankAccountId ?? null)
-    || row.fee_account_id !== (accounts.feeAccountId ?? null)
-    || row.dispute_account_id !== (accounts.disputeAccountId ?? null)
-    || row.fx_account_id !== (accounts.fxAccountId ?? null)
-    || row.clearing_account_id !== (accounts.clearingAccountId ?? null)
-    || row.subsidiary_id !== subsidiaryId
-    || (row.source_currency ?? null) !== (fx?.sourceCurrency ?? null)
-    || (row.conversion_rate ?? null) !== (fx?.conversionRate ?? null)
-    || (row.conversion_rate_source ?? null) !== (fx?.conversionRateSource ?? null)
-    || (row.payout_rate ?? null) !== (fx?.payoutRate ?? null)
-    || (row.payout_rate_source ?? null) !== (fx?.payoutRateSource ?? null)
-    || stableJson(row.source_payload) !== stableJson(parsed.raw ?? null)
-    || row.line_count !== parsed.lines.length
-    || row.memo !== (parsed.memo ?? null)
-    || lines.length !== parsed.lines.length
-  ) return false;
-
-  return parsed.lines.every((line, index) => {
+  const totalPairs: Array<[label: string, stored: string, expected: string]> = [
+    ["gross amount", row.gross_amount, totals.grossAmount],
+    ["fee amount", row.fee_amount, totals.feeAmount],
+    ["refund amount", row.refund_amount, totals.refundAmount],
+    ["dispute amount", row.dispute_amount, totals.disputeAmount],
+    ["adjustment amount", row.adjustment_amount, totals.adjustmentAmount],
+    ["net amount", row.net_amount, totals.netAmount],
+    ["fx amount", row.fx_amount, totals.fxAmount],
+  ];
+  if (row.currency !== currency) {
+    return `currency differs (stored ${row.currency} vs imported ${currency})`;
+  }
+  for (const [label, stored, expected] of totalPairs) {
+    if (!sameAmount(stored, expected)) {
+      return `${label} differs (stored ${stored} vs imported ${expected})`;
+    }
+  }
+  if (row.settlement_date !== parsed.settlementDate) {
+    return `settlement date differs (stored ${row.settlement_date} vs imported ${parsed.settlementDate})`;
+  }
+  const fxPairs: Array<[label: string, stored: string | null, expected: string | null]> = [
+    ["source currency", row.source_currency ?? null, fx?.sourceCurrency ?? null],
+    ["conversion rate", row.conversion_rate ?? null, fx?.conversionRate ?? null],
+    ["conversion rate source", row.conversion_rate_source ?? null, fx?.conversionRateSource ?? null],
+    ["payout rate", row.payout_rate ?? null, fx?.payoutRate ?? null],
+    ["payout rate source", row.payout_rate_source ?? null, fx?.payoutRateSource ?? null],
+  ];
+  for (const [label, stored, expected] of fxPairs) {
+    if (stored !== expected) {
+      return `${label} differs (stored ${stored ?? "(none)"} vs imported ${expected ?? "(none)"})`;
+    }
+  }
+  if (stableJson(row.source_payload) !== stableJson(parsed.raw ?? null)) {
+    return "provider payload differs from the persisted import";
+  }
+  if (row.memo !== (parsed.memo ?? null)) {
+    return "memo differs from the persisted import";
+  }
+  if (row.line_count !== parsed.lines.length || lines.length !== parsed.lines.length) {
+    return `line count differs (stored ${row.line_count} vs imported ${parsed.lines.length})`;
+  }
+  for (const [index, line] of parsed.lines.entries()) {
     const stored = lines[index];
+    const label = `line ${index + 1}`;
+    if (
+      stored === undefined
+      || stored.line_number !== index + 1
+      || stored.kind !== line.kind
+    ) {
+      return `${label} kind differs (stored ${stored?.kind ?? "(missing)"} vs imported ${line.kind})`;
+    }
+    if (stored.external_ref !== (line.externalRef ?? null)) {
+      return `${label} reference differs (stored ${stored.external_ref ?? "(none)"} vs imported ${line.externalRef ?? "(none)"})`;
+    }
+    if (stored.description !== (line.description ?? null)) {
+      return `${label} description differs from the persisted import`;
+    }
+    if (!sameAmount(stored.amount, line.amount)) {
+      return `${label} amount differs (stored ${stored.amount} vs imported ${line.amount})`;
+    }
+    if (stored.currency !== (line.currency ?? null)) {
+      return `${label} currency differs (stored ${stored.currency ?? "(none)"} vs imported ${line.currency ?? "(none)"})`;
+    }
     // The document link is operator matching evidence, never provider
     // evidence: no parser sets documentId, so a stored link must not turn a
     // same-reference refetch into a conflict. Provider evidence (kind, ref,
     // description, amount, currency, meta) still refuses on any drift.
-    return stored !== undefined
-      && stored.line_number === index + 1
-      && stored.kind === line.kind
-      && stored.external_ref === (line.externalRef ?? null)
-      && stored.description === (line.description ?? null)
-      && sameAmount(stored.amount, line.amount)
-      && stored.currency === (line.currency ?? null)
-      && stableJson(stored.meta) === stableJson(line.meta ?? {});
-  });
+    if (stableJson(stored.meta) !== stableJson(line.meta ?? {})) {
+      return `${label} detail differs from the persisted import`;
+    }
+  }
+  return null;
+}
+
+/**
+ * Compare the posting configuration a re-import carries against the
+ * persisted draft's. Returns the labels of the fields that would change;
+ * empty when the configuration already matches.
+ */
+function settlementConfigChanges(
+  row: StoredSettlementHeader,
+  accounts: Partial<ImportAccounts>,
+  subsidiaryId: string | null,
+): string[] {
+  const changes: string[] = [];
+  const pairs: Array<[label: string, stored: string | null, incoming: string | null | undefined]> = [
+    ["bank account", row.bank_account_id, accounts.bankAccountId],
+    ["fee account", row.fee_account_id, accounts.feeAccountId],
+    ["dispute account", row.dispute_account_id, accounts.disputeAccountId],
+    ["fx account", row.fx_account_id, accounts.fxAccountId],
+    ["clearing account", row.clearing_account_id, accounts.clearingAccountId],
+  ];
+  for (const [label, stored, incoming] of pairs) {
+    if (stored !== (incoming ?? null)) changes.push(label);
+  }
+  if (row.subsidiary_id !== subsidiaryId) changes.push("subsidiary");
+  return changes;
 }
 
 /**
@@ -1700,34 +1770,85 @@ export async function importSettlementBatch(
          where batch_id = ${batchId} and org_id = ${orgId}
          order by line_number
       `)).rows;
-      if (!stored || !sameStoredImport(stored, storedLines, parsed, accounts, currency, totals, subsidiaryId, sourceCurrency ? {
+      if (!stored) throw new PspSettlementError("settlement batch could not be read");
+      const persistedTotals = {
+        grossAmount: stored.gross_amount,
+        feeAmount: stored.fee_amount,
+        refundAmount: stored.refund_amount,
+        disputeAmount: stored.dispute_amount,
+        adjustmentAmount: stored.adjustment_amount,
+        netAmount: stored.net_amount,
+        fxAmount: stored.fx_amount,
+      };
+      const conflict = (difference: string) => new PspSettlementConflictError(
+        `provider settlement reference already has different evidence (${difference}); use the persisted batch, then reverse it or record a separate adjustment`,
+        {
+          batchId,
+          status: stored.status,
+          provider: stored.provider,
+          externalRef: stored.external_ref,
+          currency: stored.currency,
+          totals: persistedTotals,
+        },
+      );
+      const evidenceDifference = settlementEvidenceDifference(stored, storedLines, parsed, currency, totals, sourceCurrency ? {
         sourceCurrency,
         conversionRate,
         conversionRateSource,
         payoutRate,
         payoutRateSource,
-      } : null)) {
-        if (!stored) throw new PspSettlementError("settlement batch could not be read");
-        throw new PspSettlementConflictError(
-          "provider settlement reference already has different evidence; use the persisted batch, then reverse it or record a separate adjustment",
-          {
-            batchId,
-            status: stored.status,
-            provider: stored.provider,
-            externalRef: stored.external_ref,
-            currency: stored.currency,
-            totals: {
-              grossAmount: stored.gross_amount,
-              feeAmount: stored.fee_amount,
-              refundAmount: stored.refund_amount,
-              disputeAmount: stored.dispute_amount,
-              adjustmentAmount: stored.adjustment_amount,
-              netAmount: stored.net_amount,
-              fxAmount: stored.fx_amount,
-            },
-          },
-        );
+      } : null);
+      if (evidenceDifference) throw conflict(evidenceDifference);
+      const configChanges = settlementConfigChanges(stored, accounts, subsidiaryId);
+      if (configChanges.length === 0) return { batchId, created: false };
+      // The evidence matches but the configuration drifted. A posted batch
+      // is history and stays immutable; an unposted draft is repairable —
+      // the re-import fills in (or corrects) its bank, clearing, fee,
+      // dispute and FX accounts and subsidiary, audited, without touching
+      // a single evidence line. This is the repair the post refusal advises.
+      if (stored.status !== "draft") {
+        throw conflict(`only the posting configuration differs (${configChanges.join(", ")}), and a ${stored.status} batch is immutable`);
       }
+      const before = {
+        bankAccountId: stored.bank_account_id,
+        feeAccountId: stored.fee_account_id,
+        disputeAccountId: stored.dispute_account_id,
+        fxAccountId: stored.fx_account_id,
+        clearingAccountId: stored.clearing_account_id,
+        subsidiaryId: stored.subsidiary_id,
+      };
+      const after = {
+        bankAccountId: accounts.bankAccountId ?? null,
+        feeAccountId: accounts.feeAccountId ?? null,
+        disputeAccountId: accounts.disputeAccountId ?? null,
+        fxAccountId: accounts.fxAccountId ?? null,
+        clearingAccountId: accounts.clearingAccountId ?? null,
+        subsidiaryId,
+      };
+      const repaired = await db.execute(sql`
+        update psp_settlement_batches
+           set bank_account_id = ${after.bankAccountId},
+               fee_account_id = ${after.feeAccountId},
+               dispute_account_id = ${after.disputeAccountId},
+               fx_account_id = ${after.fxAccountId},
+               clearing_account_id = ${after.clearingAccountId},
+               subsidiary_id = ${after.subsidiaryId},
+               updated_at = now(), updated_by = ${actorId}
+         where id = ${batchId} and org_id = ${orgId} and status = 'draft'
+      `);
+      if ((repaired.rowCount ?? 0) !== 1) {
+        throw new PspSettlementError("settlement draft changed while repairing it; reload and import again");
+      }
+      await db.execute(sql`
+        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+        values (${orgId}, 'psp_settlement_batches', ${batchId}, 'update',
+                ${JSON.stringify({
+                  mode: "draft_configuration_repair",
+                  changed: configChanges,
+                  before,
+                  after,
+                })}::jsonb, ${actorId})
+      `);
       return { batchId, created: false };
     }
     await insertLines(orgId, batchId, parsed.lines, actorId);
@@ -1974,7 +2095,7 @@ export async function postSettlementBatch(
       if (!b.fee_account_id) missing.push("fee account");
       if (!b.subsidiary_id) missing.push("subsidiary");
       throw new PspSettlementError(
-        `settlement batch cannot post without ${missing.join(", ")}; re-import the same provider reference with the missing details to repair this draft`,
+        `settlement batch cannot post without ${missing.join(", ")}; re-import the same provider reference with the missing details to repair this draft (the draft keeps its evidence lines and only its missing configuration is filled in)`,
       );
     }
     // An absent subsidiary resolves to the org root — the same contract the

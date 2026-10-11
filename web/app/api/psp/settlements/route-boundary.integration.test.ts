@@ -258,7 +258,7 @@ test("import reports the persisted posted batch when the provider changes eviden
     })));
     assert.equal(correction.status, 409);
     assert.deepEqual(await correction.json(), {
-      error: "provider settlement reference already has different evidence; use the persisted batch, then reverse it or record a separate adjustment",
+      error: "provider settlement reference already has different evidence (gross amount differs (stored 100.0000 vs imported 120.0000)); use the persisted batch, then reverse it or record a separate adjustment",
       batch: {
         batchId: imported.batchId,
         status: "posted",
