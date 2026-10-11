@@ -44,7 +44,7 @@ import type { IndustryDef } from '@/lib/industries'
 import { countryOptions } from '@/lib/countries'
 import { currencyOptions } from '@/lib/iso-currencies'
 import { enterOrg } from '@/lib/sandbox-session'
-import { readApiErrorMessage } from '@/lib/api-error'
+import { readApiErrorMessage, refusalMessageFromBody } from '@/lib/api-error'
 import {
   recommendWorkspaceFeatures,
   type ComplexityLevel,
@@ -331,15 +331,12 @@ export function SetupWizard(props: {
           featureSelection: featureMode,
         }),
       })
+      // The refusal reads through the shared helper so message, remedy and
+      // code render: a refusal's sentence wins over its code, and a body
+      // that is not JSON keeps the localized fallback.
       if (!res.ok) {
-        // A refusal's sentence wins over its code; a body that is not JSON
-        // keeps the localized fallback.
-        const err = await res.json().catch(() => null) as { error?: unknown; message?: unknown } | null
-        throw new Error(
-          typeof err?.message === 'string' && err.message.trim()
-            ? err.message
-            : typeof err?.error === 'string' && err.error.trim() ? err.error : t('error'),
-        )
+        const err = await res.json().catch(() => null)
+        throw new Error(refusalMessageFromBody(err, { fallback: t('error') }) ?? t('error'))
       }
       // Payroll module chosen with a country pack: install it now (statutory
       // component seed + pack marker), mirroring the sample-company follow-up.

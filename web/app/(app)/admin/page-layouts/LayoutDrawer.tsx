@@ -9,6 +9,7 @@ import { useViewerFormat } from '@/lib/viewer-format'
 import { ArrowDown, ArrowUp, Undo2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge, Button, Input, Textarea, UrlDrawer } from '@openbooks/ui'
+import { refusalMessageFromBody } from '@/lib/api-error'
 import type { PageSpec } from '@braedonsaunders/appkit-viewspec'
 import {
   moveBlock,
@@ -219,8 +220,9 @@ export function LayoutDrawer({ drawer }: { drawer: PageLayoutDrawerData }) {
     const body = (await response.json().catch(() => ({}))) as { errors?: string[]; error?: string }
     if (!response.ok) {
       // Returned to the author, never swallowed: an unknown widget has to be
-      // NAMED or there is nothing to act on.
-      setErrors(body.errors ?? [body.error ?? tCommon('feedback.somethingWentWrong')])
+      // NAMED or there is nothing to act on. The single-refusal path reads
+      // through the shared helper so message, remedy and code render.
+      setErrors(body.errors ?? [refusalMessageFromBody(body, { fallback: tCommon('feedback.somethingWentWrong') }) ?? tCommon('feedback.somethingWentWrong')])
       return false
     }
     setErrors([])
@@ -250,8 +252,10 @@ export function LayoutDrawer({ drawer }: { drawer: PageLayoutDrawerData }) {
         errors?: string[]
         error?: string
       }
+      // The single-refusal path reads through the shared helper so message,
+      // remedy and code render instead of the bare `error` field.
       if (!response.ok || !body.previewUrl) {
-        setErrors(body.errors ?? [body.error ?? tCommon('feedback.somethingWentWrong')])
+        setErrors(body.errors ?? [refusalMessageFromBody(body, { fallback: tCommon('feedback.somethingWentWrong') }) ?? tCommon('feedback.somethingWentWrong')])
         return
       }
       setErrors([])
@@ -312,8 +316,10 @@ export function LayoutDrawer({ drawer }: { drawer: PageLayoutDrawerData }) {
         },
       )
       const body = (await response.json().catch(() => ({}))) as { errors?: string[]; error?: string }
+      // The single-refusal path reads through the shared helper so message,
+      // remedy and code render instead of the bare `error` field.
       if (!response.ok) {
-        setErrors(body.errors ?? [body.error ?? tCommon('feedback.somethingWentWrong')])
+        setErrors(body.errors ?? [refusalMessageFromBody(body, { fallback: tCommon('feedback.somethingWentWrong') }) ?? tCommon('feedback.somethingWentWrong')])
         return
       }
       setErrors([])

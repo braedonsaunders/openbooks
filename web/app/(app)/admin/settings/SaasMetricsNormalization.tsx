@@ -11,6 +11,7 @@ import {
   Input,
 } from '@openbooks/ui'
 import { PagedTable } from '@/components/paged-table'
+import { refusalMessageFromBody } from '@/lib/api-error'
 
 type MonthState = {
   month: string
@@ -43,7 +44,16 @@ async function readMonths(loadFailed: string, signal?: AbortSignal): Promise<{
     const res = await fetch('/api/metrics/normalization', { signal })
     if (!res.ok) {
       const body = await readError(res)
-      return { months: [], problem: { ...body, error: body.error ?? loadFailed } }
+      // The refusal reads through the shared helper so message and code
+      // render instead of only the `error` field; the remedy stays separate
+      // because the alert renders it as its own description line.
+      return {
+        months: [],
+        problem: {
+          ...body,
+          error: refusalMessageFromBody({ ...body, remedy: undefined }, { fallback: loadFailed }) ?? loadFailed,
+        },
+      }
     }
     return { months: (await res.json()) as MonthState[], problem: null }
   } catch {
@@ -109,7 +119,11 @@ export function SaasMetricsNormalization() {
       }
       if (!res.ok) {
         const body = await readError(res)
-        setProblem({ ...body, error: body.error ?? copy('requestFailed') })
+        // The refusal reads through the shared helper (see readMonths above).
+        setProblem({
+          ...body,
+          error: refusalMessageFromBody({ ...body, remedy: undefined }, { fallback: copy('requestFailed') }) ?? copy('requestFailed'),
+        })
         return
       }
       setProblem(null)
@@ -136,7 +150,11 @@ export function SaasMetricsNormalization() {
       }
       if (!res.ok) {
         const body = await readError(res)
-        setProblem({ ...body, error: body.error ?? copy('approveFailed') })
+        // The refusal reads through the shared helper (see readMonths above).
+        setProblem({
+          ...body,
+          error: refusalMessageFromBody({ ...body, remedy: undefined }, { fallback: copy('approveFailed') }) ?? copy('approveFailed'),
+        })
         return
       }
       setProblem(null)

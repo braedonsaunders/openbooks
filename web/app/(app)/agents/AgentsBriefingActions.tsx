@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { Mail, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
+import { refusalMessageFromBody } from '@/lib/api-error'
 import { Button } from '@openbooks/ui'
 
 /**
@@ -49,8 +50,11 @@ export function AgentsBriefingActions({
         emailed?: boolean
         error?: string
       } | null
+      // Mapped codes keep their labels; anything else reads through the
+      // shared helper so message, remedy and code render instead of the
+      // generic fallback.
       if (!response.ok || !body?.ok) {
-        toast.error(errorLabels[body?.error ?? 'failed'] ?? failedLabel)
+        toast.error(errorLabels[body?.error ?? 'failed'] ?? refusalMessageFromBody(body, { fallback: failedLabel }) ?? failedLabel)
         return
       }
       if (action === 'send') {

@@ -12,6 +12,7 @@ import { Button, FieldHelp, Input, Label, SearchSelect, Select, UrlDrawer } from
 import { PagedTable, type PagedColumn } from '../../../../../components/paged-table'
 import type { LineGridOption } from '../../../../../components/line-grid'
 import { confirmDialog } from '@/lib/confirm'
+import { refusalMessageFromBody } from '@/lib/api-error'
 
 export interface RateBookLine extends Record<string, unknown> {
   itemId: string
@@ -62,8 +63,9 @@ function signature(lines: RateBookLine[]): string {
 }
 
 function responseError(body: unknown, fallback: string): string {
-  if (body && typeof body === 'object' && 'error' in body && typeof body.error === 'string') return body.error
-  return fallback
+  // The refusal reads through the shared helper so message, remedy and code
+  // render instead of the bare `error` field.
+  return refusalMessageFromBody(body, { fallback }) ?? fallback
 }
 
 export function RateBookDrawer({

@@ -12,6 +12,7 @@ import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
+import { refusalMessageFromBody } from '@/lib/api-error'
 import { toast } from 'sonner'
 import { html as htmlLang } from '@codemirror/lang-html'
 import { EditorView } from '@codemirror/view'
@@ -181,8 +182,10 @@ export default function PdfTemplateEditor({
         }),
       })
       const data = await res.json().catch(() => ({}))
+      // The refusal reads through the shared helper so message, remedy and
+      // code render instead of the bare `error` field.
       if (!res.ok) {
-        toast.error(data.error ?? t('editor.saveFailed'))
+        toast.error(refusalMessageFromBody(data, { fallback: t('editor.saveFailed') }) ?? t('editor.saveFailed'))
         return
       }
       setSavedSnapshot(JSON.stringify([name, source, headerHtml, footerHtml, paperSize, orientation, marginMm, isDefault]))

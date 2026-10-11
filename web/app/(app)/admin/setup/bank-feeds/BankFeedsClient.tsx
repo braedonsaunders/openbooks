@@ -17,6 +17,7 @@ import {
   type FeedProvider,
 } from "../../../../../lib/bank-directory";
 import { isUuid } from "../../../../../lib/list-params";
+import { refusalMessageFromBody } from "../../../../../lib/api-error";
 import { confirmDialog } from "@/lib/confirm";
 
 interface Connection {
@@ -170,7 +171,10 @@ export function BankFeedsClient({
                   : t("feedMessages.unknownError"),
               }));
           } else if (typeof body.error === "string" && body.error.trim()) {
-            setMsg(t("feedMessages.syncFailed", { error: body.error.trim() }));
+            // The refusal reads through the shared helper so message, remedy
+            // and code render instead of the bare `error` field.
+            const refusal = refusalMessageFromBody(body, { fallback: body.error.trim() }) ?? body.error.trim();
+            setMsg(t("feedMessages.syncFailed", { error: refusal }));
           } else if (typeof body.imported === "number" && typeof body.duplicates === "number") {
             setMsg(t("feedMessages.imported", { imported: body.imported, duplicates: body.duplicates }));
           } else {

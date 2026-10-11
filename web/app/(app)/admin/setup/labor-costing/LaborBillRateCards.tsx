@@ -28,6 +28,7 @@ import {
 } from "@openbooks/ui";
 import { TransactionDrawer } from "../../../../../components/transaction-drawer";
 import { confirmDialog } from "../../../../../lib/confirm";
+import { refusalMessageFromBody } from "../../../../../lib/api-error";
 import { HeaderFields } from "../../../../../components/transaction-form/header-fields";
 import { CustomFieldInput } from "../../../../../components/custom-field-input";
 import type { CustomFieldDefClient } from "../../../../../components/custom-field-inputs";
@@ -181,7 +182,13 @@ export function LaborBillRateCards(props: {
           errorCode?: unknown;
         } | null;
         const code = typeof failure?.errorCode === "string" ? failure.errorCode : "save";
-        toast.error(t(`errors.${code}`));
+        // Mapped codes keep their copy; anything else reads through the
+        // shared helper so message, remedy and code render instead of a
+        // missing-key lookup.
+        toast.error(
+          (t.has(`errors.${code}` as never) ? t(`errors.${code}` as never) : null)
+          ?? refusalMessageFromBody(failure, { fallback: t("errors.save") }) ?? t("errors.save"),
+        );
         return;
       }
       const result = (await response.json()) as {
@@ -398,7 +405,11 @@ function RateCardDrawer(
           errorCode?: unknown;
         } | null;
         const code = typeof failure?.errorCode === "string" ? failure.errorCode : "save";
-        toast.error(t(`errors.${code}`));
+        // Mapped codes keep their copy (see the create branch above).
+        toast.error(
+          (t.has(`errors.${code}` as never) ? t(`errors.${code}` as never) : null)
+          ?? refusalMessageFromBody(failure, { fallback: t("errors.save") }) ?? t("errors.save"),
+        );
         return;
       }
       toast.success(t("saved"));

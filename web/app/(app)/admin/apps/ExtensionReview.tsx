@@ -19,7 +19,7 @@ import type { ExtensionDraft } from "@/lib/application/extensions";
 import { AppPackageEditor } from "./AppPackageEditor";
 import { AppWorkspaceTabs } from "./sections";
 import { AppOverviewHero } from "./AppOverviewHero";
-import { readApiErrorMessage } from "@/lib/api-error";
+import { readApiErrorMessage, refusalMessageFromBody } from "@/lib/api-error";
 import { confirmDialog } from "@/lib/confirm";
 import { parseManifest } from "@/lib/apps/manifest";
 import {
@@ -117,8 +117,10 @@ export function ExtensionReview({ draft }: { draft: ExtensionDraft }) {
       if (!response.ok)
         throw new Error(await readApiErrorMessage(response, t("failed")));
       const data = await response.json();
+      // The refusal reads through the shared helper so message, remedy and
+      // code render instead of the bare `error` field.
       if (!data.staged)
-        throw new Error(data.error ?? data.errors?.join("; ") ?? t("failed"));
+        throw new Error(refusalMessageFromBody(data, { fallback: t("failed") }) ?? t("failed"));
       router.push(data.previewUrl);
     } catch (e) {
       setError(e instanceof Error ? e.message : t("failed"));

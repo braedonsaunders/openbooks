@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react'
 import { useTranslations } from 'next-intl'
-import { readApiErrorMessage } from '@/lib/api-error'
+import { readApiErrorMessage, refusalMessageFromBody } from '@/lib/api-error'
 import {
   makeBridgeResult,
   parseBridgeRequest,
@@ -68,12 +68,13 @@ export function AppFrame({
           error?: unknown
           result?: unknown
         } | null
+        // The refusal reads through the shared helper so message, remedy and
+        // code render instead of the bare `error` field.
         if (json?.ok === false) {
           post(
             false,
-            typeof json?.error === 'string' && json.error.trim() !== ''
-              ? json.error
-              : t('bridge.callFailedWithStatus', { status: res.status }),
+            refusalMessageFromBody(json, { fallback: t('bridge.callFailedWithStatus', { status: res.status }) })
+              ?? t('bridge.callFailedWithStatus', { status: res.status }),
           )
         } else if (!json || typeof json !== 'object' || !('result' in json)) {
           post(false, t('bridge.callFailedWithStatus', { status: res.status }))

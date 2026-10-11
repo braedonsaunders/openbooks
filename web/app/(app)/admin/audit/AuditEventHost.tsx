@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { DrawerNavigateContext } from '@openbooks/ui'
 import { isUuid } from '@openbooks/engine/platform/identifiers'
 import { AuditEventDrawer, type AuditEvent } from './AuditEventDrawer'
+import { readApiErrorMessage } from '@/lib/api-error'
 
 /** Like the related-party drawer host, the event owns its detail request.
  * Native history keeps the list mounted when only the selected event changes. */
@@ -28,9 +29,10 @@ export function AuditEventHost({ event: initialEvent }: { event: AuditEvent | nu
     const controller = new AbortController()
     fetch(`/api/audit/events/${encodeURIComponent(eventId)}`, { signal: controller.signal, cache: 'no-store' })
       .then(async (response) => {
+        // The refusal reads through the shared helper so the server's reason
+        // renders instead of a bare fallback.
         if (!response.ok) {
-          const body = await response.json().catch(() => null) as { error?: string } | null
-          throw new Error(body?.error || t('loadFailedDescription'))
+          throw new Error(await readApiErrorMessage(response, t('loadFailedDescription')))
         }
         return await response.json() as AuditEvent
       })
