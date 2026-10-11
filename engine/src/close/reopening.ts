@@ -4,6 +4,7 @@ import { db, withBypassContext, withOrgContext, type SqlExecutor } from "../plat
 import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { assertCloseScope, upsertLock, periodScopeAdvisoryLock, tightenNarrowerLocks } from "../periods/period-locks.ts";
+import { assertPeriodEndReopenAllowed, reversePeriodEndJournalsForReopen } from "./period-end-journals.ts";
 /** One row of close_reopen_requests as read by the approve/re-close paths. */
 interface CloseReopenRequestRow extends Record<string, unknown> {
   id: string;
@@ -63,6 +64,8 @@ export async function requestPeriodReopen(args: {
       );
     }
   }
+  // A ledger closed by period-end journals reopens from its year-end period.
+  await assertPeriodEndReopenAllowed(db, args);
   const impact = (await db.execute<Record<string, unknown>>(sql`
     select
       (select count(*) from journal_entries where org_id = ${args.orgId} and period_id = ${args.periodId} and book_id = ${args.bookId}) as entries,
@@ -793,6 +796,12 @@ export async function decidePeriodReopen(args: {
         }
       }
     }
+    // Opening the general ledger behind period-end journals reverses them
+    // in this same transaction, attributed to this approval.
+    await reversePeriodEndJournalsForReopen(tx, {
+      orgId: args.orgId, periodId: row.period_id, bookId: row.book_id, subsidiaryId: row.subsidiary_id,
+      modules, actorId: args.actorId, reason: row.reason, requestId: args.requestId,
+    });
     await tx.execute(sql`
       update close_reopen_requests set status = 'approved', approved_by = ${args.actorId},
              approved_at = now(), expires_at = ${expiresAt.toISOString()}, updated_at = now(), updated_by = ${args.actorId}
