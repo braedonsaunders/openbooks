@@ -537,6 +537,9 @@ async function runOutboxWork(row: OutboxRow): Promise<void> {
   if (row.kind === "subscription_billing") {
     const { runDueSubscriptions } = await import("../billing/subscription-billing.ts");
     await runDueSubscriptions();
+    const { runRenewalScan } = await import('../billing/renewals.ts');
+    const failures = await runRenewalScan();
+    await surfaceScanOrgFailures({ scan: 'subscription renewal', noticeKind: 'subscription_renewal_scan_failed', href: '/collections', remedy: 'Review the dated renewal policy and its responsible operator in Setup.', problems: new Map(failures.map(f => [f.orgId, [f.error]])), unattributed: [] });
     return;
   }
   if (row.kind === "autopay_collection") {

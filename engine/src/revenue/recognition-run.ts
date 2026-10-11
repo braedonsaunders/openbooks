@@ -136,6 +136,7 @@ export async function runRevenueRecognition(
           candidate.line_id, true,
         ))[0];
         if (!row) return { status: "already_posted" as const };
+        if (row.recognition_held || row.delivery_pending) return { status: 'held' as const, row };
         // One period gate: the shared GL check replaces the raw
         // period_module_is_closed projection. Discovery stays advisory — a
         // closed line is skipped, not fatal — and source-owned imported
@@ -260,6 +261,11 @@ export async function runRevenueRecognition(
         if(linked.rows.length!==1)throw new RevenueRecognitionError('recognition journal could not be linked to its plan');
         return { status: "posted" as const, entryId: eid, planned: posting, row };
       }));
+      if (posted.status === 'held') {
+        result.skipped++;
+        result.problems.push(`${posted.row.contract_number} ${posted.row.obligation_desc}: ${posted.row.recognition_held ? posted.row.hold_reason : 'software bundle awaits delivery acceptance for all elements'}`);
+        continue;
+      }
       if (posted.status === "already_posted" || posted.status === "zero") {
         result.skipped++;
         continue;
@@ -345,7 +351,8 @@ export async function runRevenueRecognition(
       from recognition_rules r
      where r.id = o.recognition_rule_id
        and r.org_id = o.org_id
-       and o.org_id = ${orgId} and o.status = 'open'
+       and o.org_id = ${orgId} and o.status = 'open' and not o.recognition_held
+       and (o.delivery_bundle_document_id is null or not exists (select 1 from performance_obligations peer where peer.org_id=o.org_id and peer.delivery_bundle_document_id=o.delivery_bundle_document_id and peer.status<>'cancelled' and (peer.delivered_on is null or peer.delivered_on>${asOfDate}::date)))
        and (not r.is_forecast or o.last_change_id is not null) and ${obligationScope}
        ${obligationId ? sql`and o.id = ${obligationId}` : sql``}
        and (${effectiveMethod} <> 'percent_complete' or coalesce(o.percent_complete, '0')::numeric >= 100)

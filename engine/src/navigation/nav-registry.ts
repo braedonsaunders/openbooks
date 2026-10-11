@@ -295,6 +295,9 @@ export const NAV_MODULES: NavModule[] = [
     requiredPermission: 'items.read',
   },
   {
+    key: 'rebates', href: '/rebates', label: 'Rebates', iconKey: 'coins', group: 'accounting', subgroup: 'revenue-accounting', requiredPermission: 'documents.read', featureKey: 'rebateManagement',
+  },
+  {
     key: 'revenue',
     href: '/revenue',
     label: 'Revenue Recognition',

@@ -17,6 +17,7 @@ export type ScheduleLineRow = {
 };
 
 export interface ObligationRow {
+  recognition_held?: boolean; hold_reason?: string | null; control_revision?: number; delivered_on?: string | null; delivery_bundle_document_id?: string | null;
   id: string;
   description: string;
   allocated_price: string;
@@ -186,7 +187,7 @@ export async function loadContract(
     rule_name: string;
     legacy_unverified: boolean;
   }>(sql`
-    select o.id, o.description, o.allocated_price, o.recognition_starts_on, o.recognition_ends_on, o.status,
+    select o.recognition_held, o.hold_reason, o.control_revision, o.delivered_on::text, o.delivery_bundle_document_id, o.id, o.description, o.allocated_price, o.recognition_starts_on, o.recognition_ends_on, o.status,
            o.fair_value_flag, o.fair_value_low, o.fair_value_high,
            r.method, r.name as rule_name,o.recognition_rule_id,o.standalone_selling_price::text,o.percent_complete::text,
            coalesce(o.deferred_account_id,i.deferred_account_id,r.deferred_account_id) as deferred_account_id,

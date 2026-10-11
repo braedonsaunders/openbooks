@@ -1,3 +1,4 @@
+import { lockLedgerSetupFence } from '../organization/ledger-setup-fence.ts';
 import { assertWithholdingDepositCurrent } from "../contractor-withholding/deposits.ts";
 import { assertWithholdingRemittanceCurrent, ContractorWithholdingError } from "../contractor-withholding/service.ts";
 import { PlaceOfSupplyError } from '../tax/place-of-supply.ts';
@@ -85,6 +86,14 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
   if (!doc) throw new PostingError(`document ${documentId} not found`);
   try { assertProviderReturnPosting(doc); }
   catch (error) { if (error instanceof PaymentError) throw new PostingError(error.message); throw error; }
+  // One configuration snapshot covers account routing, allocation and the
+  // obligations/accruals that commit with this document's journal.
+  await lockLedgerSetupFence(db,doc.orgId,'shared');
+  await db.execute(sql`select id from orgs where id=${doc.orgId} for share`);
+  await db.execute(sql`select i.id from items i where i.org_id=${doc.orgId} and i.id in
+    (select item_id from document_lines where org_id=${doc.orgId} and document_id=${documentId}) order by i.id for share`);
+  await db.execute(sql`select r.id from recognition_rules r where r.org_id=${doc.orgId} and r.id in
+    (select i.recognition_rule_id from items i join document_lines l on l.item_id=i.id and l.org_id=i.org_id where l.org_id=${doc.orgId} and l.document_id=${documentId}) order by r.id for share`);
   const consolidationRefusal = await consolidationSourceRefusal(db, doc.orgId, documentId);
   if (consolidationRefusal) throw new PostingError(consolidationRefusal);
   if (doc.status === "posted")

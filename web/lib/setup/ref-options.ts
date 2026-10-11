@@ -53,6 +53,13 @@ export async function loadEntityOptions(
   orgId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null = null,
 ): Promise<RefOption[]> {
+  if (source === 'renewable-subscriptions') return (await db.execute<RefOption>(sql`
+    select s.id::text as value,p.display_name || ' · ' || plan.name as label from subscriptions s
+    join parties p on p.org_id=s.org_id and p.id=s.customer_id join subscription_plans plan on plan.org_id=s.org_id and plan.id=s.plan_id
+    join subscription_lifecycles l on l.org_id=s.org_id and l.subscription_id=s.id
+    where s.org_id=${orgId} and s.status='active' and l.term_ends_on is not null
+      ${subsidiaryVisibleFilter(sql`coalesce(p.subsidiary_id,(select id from subsidiaries where org_id=${orgId} and parent_id is null))`,allowedSubsidiaryIds)}
+    order by label,s.id`)).rows;
   if (source === 'operating-profiles') {
     return (await db.execute<RefOption>(sql`select id::text as value,name as label,family as "scopeValue" from operating_profiles where org_id=${orgId} and is_active and current_version_id is not null order by name,id`)).rows
   }

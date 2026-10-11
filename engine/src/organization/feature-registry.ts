@@ -237,6 +237,7 @@ export const FEATURES: FeatureDef[] = [
   // adoption. Pay-now and saved methods degrade to named refusals while
   // onlinePayments and autopay stay off.
   { key: 'customerPortal', defaultEnabled: false, category: 'billing', group: 'collections' },
+  { key: 'rebateManagement', defaultEnabled: false, category: 'sales', group: 'selling', navModules: ['rebates'] },
   { key: 'revenueRecognition', defaultEnabled: true, category: 'billing', group: 'revenue', navModules: ['revenue'] },
   // Revenue contracts spanning orders, subscriptions and several invoices.
   // Off by default: without it every invoice keeps its own contract. A child

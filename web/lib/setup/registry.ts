@@ -34,6 +34,8 @@ import { BILLING_ENTITIES } from './entities/billing'
 import { SALES_SETUP_ENTITIES } from './entities/sales'
 import { STORED_VALUE_ENTITIES } from './entities/stored-value'
 import { EINVOICING_ENTITIES } from './entities/einvoicing'
+import { REBATE_AGREEMENTS_ENTITY } from './entities/rebates'
+import { RENEWAL_POLICIES_ENTITY } from './entities/renewals'
 import { REVENUE_ENTITIES } from './entities/revenue'
 import { INVENTORY_ENTITIES } from './entities/inventory'
 import { WAREHOUSE_ENTITIES } from './entities/warehouses'
@@ -76,6 +78,8 @@ export const SETUP_ENTITIES: SetupEntity[] = [
   ...STORED_VALUE_ENTITIES,
   ...EINVOICING_ENTITIES,
   ...REVENUE_ENTITIES,
+  REBATE_AGREEMENTS_ENTITY,
+  RENEWAL_POLICIES_ENTITY,
   ...INVENTORY_ENTITIES,
   ...WAREHOUSE_ENTITIES,
   ...SHIPPING_ENTITIES,

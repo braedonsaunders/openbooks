@@ -176,6 +176,18 @@ export const ACCOUNT_REFERENCE_RULES: Readonly<Record<string, AccountReferenceRu
     blockWhere: { predicate: sql`r.status <> 'signed_off'`, remedy: "Finish and sign off, or discard, the open reconciliation of the source account before merging." },
   },
 
+  // Approved commercial terms keep their account identity. Accrued obligations
+  // must be settled or reversed before the referenced account can be merged.
+  ...Object.fromEntries(['accrual_account_id','offset_account_id','fx_account_id'].map(column=>[
+    `rebate_agreements.${column}`,
+    {label:'Rebate agreement accounts',disposition:'history' as const,blockWhere:{
+      predicate:sql`exists(select 1 from rebate_claims claim where claim.org_id=r.org_id and claim.agreement_id=r.id and claim.status in ('draft','approved','document_pending'))
+        or exists(select 1 from rebate_accruals fact where fact.org_id=r.org_id and fact.agreement_id=r.id group by fact.party_id
+          having sum(fact.amount)<>coalesce((select sum(claim.amount) from rebate_claims claim where claim.org_id=r.org_id and claim.agreement_id=r.id and claim.party_id=fact.party_id and claim.status='settled'),0))`,
+      remedy:'Generate and settle the remaining rebate claims, or reverse their settlements, before merging the agreement account. Create future agreements using the surviving account.',
+    }},
+  ])),
+
   // Posted and imported facts.
   "pay_stub_lines.expense_account_id": history("Pay stub lines (expense)"),
   "pay_stub_lines.liability_account_id": history("Pay stub lines (liability)"),

@@ -1,3 +1,4 @@
+import { accrueRebatesForDocument, rebateSettlementVoidContext, releaseVoidedRebateSettlement } from '../revenue/rebates.ts';
 import { releaseWithholdingDeposit } from "../contractor-withholding/deposits.ts";
 import { and, eq, getTableColumns, sql } from "drizzle-orm";
 import type { FlowEventSource } from "@openbooks/forms-core";
@@ -1401,6 +1402,7 @@ export async function completeRequestedDocumentVoid(
           !subsidiaryScopeAllows(allowedSubsidiaryIds, doc.subsidiary_id as string | null)) {
         throw new ScopeNotFoundError();
       }
+      const rebateClaim = await rebateSettlementVoidContext(orgId,documentId);
       const currentEntryId = doc.posted_entry_id ? String(doc.posted_entry_id) : null;
       if (currentEntryId !== discoveredEntryId) {
         throw new DocumentVoidError("the document posting changed while its void was being completed — retry", 409);
@@ -1940,7 +1942,7 @@ export async function completeRequestedDocumentVoid(
             from journal_entries
            where org_id = ${orgId} and source_document_id = ${documentId}
              -- Live entries only: one already reversed is not reversed again.
-             and origin = 'stored_value' and status = 'posted'
+             and origin in ('stored_value','rebate_settlement') and status = 'posted'
            order by id
            for update
         `));
@@ -2011,6 +2013,8 @@ export async function completeRequestedDocumentVoid(
         before,
         after,
       });
+      if (rebateClaim) await releaseVoidedRebateSettlement(orgId,String(doc.void_requested_by),rebateClaim,reversalEntryId,String(doc.void_reversal_date),String(doc.void_reason));
+      await accrueRebatesForDocument(orgId,documentId,String(doc.void_requested_by),String(doc.void_reversal_date));
       // Subscriber event joins the void transaction: a rolled-back void announces nothing.
       await emitDocumentVoided(tx, orgId, documentId, {
         reversalEntryId,

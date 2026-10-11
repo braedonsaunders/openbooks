@@ -1,5 +1,7 @@
 'use client'
 
+import { DrawerTabStrip } from '@/components/drawer-tab-strip'
+import { RenewalActions } from './RenewalActions'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
@@ -26,6 +28,7 @@ function statusVariant(status: SubscriptionDrawerData['status']): 'default' | 's
  * and retry.
  */
 export function SubscriptionDrawer({ drawer, closeHref }: { drawer: SubscriptionDrawerData; closeHref: string }) {
+  const [section,setSection]=useState('billing')
   const t = useTranslations('ar.collections.subscriptions.drawer')
   const common = useTranslations('common')
   const router = useRouter()
@@ -102,6 +105,9 @@ export function SubscriptionDrawer({ drawer, closeHref }: { drawer: Subscription
           <p className="text-sm text-destructive">{drawer.lastError}</p>
         ) : null}
       </div>
+      {drawer.canManage && drawer.renewalEnabled ? <DrawerTabStrip tabs={[{key:'billing',label:t('billing.title')},{key:'renewals',label:'Renewals'}]} activeKey={section} onSelect={setSection} ariaLabel="Subscription details"/> : null}
+      {drawer.canManage && drawer.renewalEnabled ? <div hidden={section!=='renewals'}><RenewalActions subscriptionId={drawer.id} initialDocument={drawer.renewalDocument??null} canAccept={drawer.canAcceptRenewal??false}/></div> : null}
+      <div hidden={section!=='billing'}>
       <DisclosureSection title={t('billing.title')} summary={t('billing.summary')}>
         <dl className="space-y-1.5 text-sm">
           <div className="flex justify-between gap-4">
@@ -156,6 +162,7 @@ export function SubscriptionDrawer({ drawer, closeHref }: { drawer: Subscription
           </dl>
         )}
       </DisclosureSection>
+      </div>
     </TransactionDrawer>
   )
 }

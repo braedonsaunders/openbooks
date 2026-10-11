@@ -40,6 +40,8 @@ export interface RecognitionPreviewInput {
  * - `zero`            a zero plan line: closed out, never posted
  */
 export type RecognitionSkipReason =
+  | "operator_hold"
+  | "delivery_pending"
   | "period_closed"
   | "not_configured"
   | "credit_capped"
@@ -279,7 +281,11 @@ export async function previewRevenueRecognition(
     let skipDetail: string | null = null;
     let amount = row.planned;
 
-    if (isZero(row.planned)) {
+    if (row.recognition_held || row.delivery_pending) {
+      skipReason = row.recognition_held ? "operator_hold" : "delivery_pending";
+      skipDetail = row.recognition_held ? row.hold_reason : 'Record delivery acceptance for every element in this software bundle';
+      amount = '0';
+    } else if (isZero(row.planned)) {
       skipReason = "zero";
       skipDetail = null;
       amount = "0";

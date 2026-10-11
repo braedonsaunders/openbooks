@@ -323,6 +323,7 @@ export const notifications = pgTable(
     ...auditColumns,
   },
   (t) => [
+    uniqueIndex("notifications_renewal_org_id_id").on(t.orgId,t.id),
     index("notifications_user_inbox").on(t.orgId, t.userId, t.readAt),
     index("notifications_user_created").on(t.userId, t.createdAt),
   ],

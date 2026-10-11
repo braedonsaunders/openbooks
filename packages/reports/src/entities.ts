@@ -12,6 +12,7 @@
 // changing the core query map.
 
 import { OPERATIONAL_REPORT_ENTITIES } from './operational-entities'
+import { REBATE_REPORT_ENTITIES } from './rebate-entities'
 import type { ReportFilterOperator, ReportRuleGroup } from './types'
 import { HRM_REPORT_ENTITIES } from './hrm-entities'
 import { CONTRACT_COST_REPORT_ENTITIES } from './contract-cost-entities'
@@ -1626,6 +1627,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
   // proposals, maintenance, insurance and construction in progress.
   ...FIXED_ASSET_REPORT_ENTITIES,
   ...RECOVERY_REPORT_ENTITIES,
+  ...REBATE_REPORT_ENTITIES,
   ...BANKING_REPORT_ENTITIES,
   ...DEMAND_REPORT_ENTITIES,
   // HR-20 begin: field time capture (0231). Clock events carry geo FLAGS

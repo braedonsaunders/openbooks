@@ -1,3 +1,5 @@
+import { createObligationsFromInvoice } from '../revenue/recognition-obligations.ts';
+import { accrueRebatesForDocument, settleRebateForPostedDocument } from '../revenue/rebates.ts';
 import { recordPaymentWithholdings } from "../contractor-withholding/service.ts";
 import { sql } from "drizzle-orm";
 import {
@@ -147,6 +149,11 @@ export async function postDocument(documentId: string, deps: PostingDeps, option
         entryId,
         options.audit?.actorId ?? null,
       );
+    }
+    if (!deps.migration) {
+      if (prepared.doc.kind==='customer_invoice'||prepared.doc.kind==='cash_sale') await createObligationsFromInvoice(documentId,prepared.doc.orgId,options.audit?.actorId??null);
+      await settleRebateForPostedDocument(prepared.doc.orgId, documentId, options.audit?.actorId ?? null);
+      await accrueRebatesForDocument(prepared.doc.orgId, documentId, options.audit?.actorId ?? null);
     }
     return { prepared, entryId };
   };

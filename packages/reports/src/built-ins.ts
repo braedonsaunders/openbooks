@@ -12,6 +12,7 @@ import { PORTFOLIO_SUMMARY_REPORTS } from './portfolio-summaries'
 
 import { SALES_REPORT_ENTITIES } from './sales-entities'
 import { BANKING_REPORT_ENTITIES } from './banking-entities'
+import { REBATE_REPORT_ENTITIES } from './rebate-entities'
 import { CONTRACT_COST_REPORT_ENTITIES } from './contract-cost-entities'
 import { AMORTIZATION_REPORT_ENTITIES } from './amortization-entities'
 import { FIXED_ASSET_REPORT_ENTITIES } from './fixed-asset-entities'
@@ -433,6 +434,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
   ...PORTFOLIO_SUMMARY_REPORTS,
   ...SALES_REPORT_ENTITIES.map(entity => ({ slug: entity.key.replaceAll('_','-'), name: entity.label, description: entity.description, query: defaultRowsQuery(entity) })),
   ...BANKING_REPORT_ENTITIES.map(entity => ({ slug: entity.key.replaceAll('_','-'), name: entity.label, description: entity.description, query: defaultRowsQuery(entity) })),
+  ...REBATE_REPORT_ENTITIES.map(entity => ({ slug: entity.key.replaceAll('_','-'), name: entity.label, description: entity.description, query: defaultRowsQuery(entity) })),
   ...CONTRACT_COST_REPORT_ENTITIES.map(entity => ({ slug: entity.key.replaceAll('_','-'), name: entity.label, description: entity.description, query: defaultRowsQuery(entity) })),
   ...AMORTIZATION_REPORT_ENTITIES.map(entity => ({ slug: entity.key.replaceAll('_','-'), name: entity.label, description: entity.description, query: defaultRowsQuery(entity) })),
   {

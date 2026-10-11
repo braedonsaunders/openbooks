@@ -1,10 +1,12 @@
 /** Invoice-to-obligation creation. Split from revenue/recognition.ts (pure moves only). */
 import { sql } from "drizzle-orm";
-import { db, type SqlExecutor } from "../platform/db.ts";
+import { db, withOrg, type SqlExecutor } from "../platform/db.ts";
+import { allocateRevenueBundle, calculatedFairValue, type FairValueMethod } from './fair-value.ts';
+import { lockLedgerSetupFence } from '../organization/ledger-setup-fence.ts';
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { cmp, sum } from "../money/money.ts";
-import { allocateByRelativeSSP, fairValueRangeFlag } from "./recognition-apportionment.ts";
-import { RevenueRecognitionError, revenueRecognitionFeatureEnabled } from "./recognition-transaction-price.ts";
+import { fairValueRangeFlag } from "./recognition-apportionment.ts";
+import { RevenueRecognitionError } from "./recognition-transaction-price.ts";
 import { buildAllRecognitionSchedulesOn } from "./recognition-schedule-build.ts";
 import {
   ensureScopedContract,
@@ -51,14 +53,27 @@ export async function createObligationsFromInvoice(
   orgId: string,
   actorId: string | null,
 ): Promise<CreateObligationsResult> {
-  if (!(await revenueRecognitionFeatureEnabled(db, orgId))) {
+  return withOrg(orgId, () => createObligationsOn(documentId, orgId, actorId));
+}
+
+async function createObligationsOn(documentId: string, orgId: string, actorId: string | null): Promise<CreateObligationsResult> {
+  await lockLedgerSetupFence(db,orgId,'shared');
+  await db.execute(sql`select pg_advisory_xact_lock(hashtext(${orgId}),hashtext(${`revenue-billing:${documentId}`}))`);
+  if (!(await lockAndCheckOrgFeature(db, orgId,'revenueRecognition'))) {
     return { created: 0, contractId: null, obligationIds: [] };
   }
   const docRes = (await db.execute<{ id: string; document_number: string; party_id: string | null; currency: string | null; document_date: string; subsidiary_id: string | null }>(sql`
     select id, document_number, party_id, currency, document_date, subsidiary_id
       from documents where id = ${documentId} and org_id = ${orgId} and kind in ('customer_invoice', 'cash_sale')`));
   const doc = docRes.rows[0];
-  if (!doc || !doc.party_id) return { created: 0, contractId: null, obligationIds: [] };
+  if (!doc) return { created: 0, contractId: null, obligationIds: [] };
+  if (!doc.party_id) {
+    if ((await db.execute(sql`select dl.id from document_lines dl join items i on i.org_id=dl.org_id and i.id=dl.item_id
+      where dl.org_id=${orgId} and dl.document_id=${documentId} and i.recognition_rule_id is not null limit 1`)).rows[0]) {
+      throw new RevenueRecognitionError('Deferred revenue requires a customer contract; select the customer before posting this sale');
+    }
+    return { created: 0, contractId: null, obligationIds: [] };
+  }
 
   // Scoped contracts (order/subscription) accumulate every billing of one
   // agreement into a single contract. When the gate is off — or the invoice
@@ -87,26 +102,27 @@ export async function createObligationsFromInvoice(
       item_ssp: string | null; revenue_allocation: string; rule_id: string; rule_deferred: string | null;
       rule_recognized: string | null; end_date_source: string; fair_value: string | null;
       fair_value_low: string | null; fair_value_high: string | null;
+      fair_value_id: string | null; calculation_method: FairValueMethod | null; formula_percent: string | null; list_price: string | null; unit_cost: string | null;
     }>(sql`
     select dl.id as line_id, dl.description, dl.amount, dl.quantity, dl.item_id, dl.custom as line_custom,
            it.income_account_id, it.deferred_account_id as item_deferred, it.standalone_selling_price as item_ssp,
            it.revenue_allocation,
            r.id as rule_id, r.deferred_account_id as rule_deferred, r.recognized_account_id as rule_recognized,
            r.end_date_source,
-           fv.unit_price as fair_value, fv.low_value as fair_value_low, fv.high_value as fair_value_high
+           fv.id as fair_value_id, fv.calculation_method, fv.formula_percent, fv.list_price, fv.unit_cost, fv.unit_price as fair_value, fv.low_value as fair_value_low, fv.high_value as fair_value_high
       from document_lines dl
       join items it on it.id = dl.item_id and it.org_id = dl.org_id and it.recognition_rule_id is not null
       join recognition_rules r on r.id = it.recognition_rule_id and r.org_id = it.org_id
       left join lateral (
-        select unit_price, low_value, high_value from fair_value_prices f
+        select id, unit_price, low_value, high_value, calculation_method, formula_percent, list_price, unit_cost from fair_value_prices f
          where f.org_id = ${orgId} and f.item_id = dl.item_id and f.is_active
-           and (f.currency = ${currency} or ${currency} = '')
+           and f.currency = ${currency}
            and (f.effective_from is null or f.effective_from <= ${doc.document_date})
            and (f.effective_to is null or f.effective_to >= ${doc.document_date})
-         order by f.effective_from desc nulls last limit 1
+         order by f.effective_from desc nulls last limit 1 for share
       ) fv on true
      where dl.document_id = ${documentId} and dl.org_id = ${orgId}
-     order by dl.line_number`));
+     order by dl.line_number for share of dl, it, r`));
   if (lineRes.rows.length === 0) return { created: 0, contractId: null, obligationIds: [] };
 
   // Lines that already produced an obligation (idempotent replay).
@@ -123,15 +139,16 @@ export async function createObligationsFromInvoice(
   // A complete replay skips pricing and only repairs missing schedules.
   // Lines flagged
   // 'exclude' from allocation keep their booked amount and don't dilute others.
-  const included = lines.length > 0 ? lineRes.rows.filter((l) => l.revenue_allocation !== "exclude") : [];
-  const bundleTotal = sum(included.map((l) => l.amount));
-  const alloc = allocateByRelativeSSP(
-    bundleTotal,
-    included.map((l) => ({ ssp: l.item_ssp ?? l.fair_value, booked: l.amount, quantity: l.quantity })),
-  );
-  const allocByLine = new Map<string, string>();
-  included.forEach((l, i) => allocByLine.set(l.line_id, alloc[i]!));
-  for (const l of lineRes.rows) if (l.revenue_allocation === "exclude") allocByLine.set(l.line_id, l.amount);
+  const sspByLine = new Map(lineRes.rows.map(l => [l.line_id, l.calculation_method && l.calculation_method !== 'fixed'
+    ? calculatedFairValue({ method: l.calculation_method, unitPrice: l.fair_value!, formulaPercent: l.formula_percent, listPrice: l.list_price, unitCost: l.unit_cost })
+    : l.item_ssp ?? l.fair_value]));
+  const allocated = lines.length ? allocateRevenueBundle(lineRes.rows.map(l => ({ allocation: l.revenue_allocation, ssp: sspByLine.get(l.line_id) ?? null, booked: l.amount, quantity: l.quantity }))) : [];
+  const allocByLine = new Map(lineRes.rows.map((l, i) => [l.line_id, allocated[i]!]));
+  const softwareBundle = lineRes.rows.some(l => l.revenue_allocation === 'software');
+  if (softwareBundle && (await db.execute(sql`select dl.id from document_lines dl where dl.org_id=${orgId} and dl.document_id=${documentId} and dl.amount<>0
+      and not exists(select 1 from items i where i.org_id=dl.org_id and i.id=dl.item_id and i.recognition_rule_id is not null) limit 1`)).rows[0]) {
+    throw new RevenueRecognitionError('Software bundles require a recognition rule and deferred account for every nonzero element; configure all bundle items before posting');
+  }
   if (lines.length > 0 && existing.rows.some((row) => cmp(row.allocated_price, allocByLine.get(row.document_line_id)!) !== 0)) {
     throw new RevenueRecognitionError("Partial revenue allocation conflicts with existing obligations; reconcile the contract before retrying");
   }
@@ -212,11 +229,12 @@ export async function createObligationsFromInvoice(
              booked_amount, standalone_selling_price, allocated_price,
              fair_value_flag, fair_value_low, fair_value_high,
              recognition_starts_on, recognition_ends_on,
-             deferred_account_id, recognized_account_id, status, created_by, updated_by)
+             deferred_account_id, recognized_account_id, delivery_bundle_document_id, allocation_basis, status, created_by, updated_by)
           values (${orgId}, ${cId}, ${l.line_id}, ${obligationKey}, ${l.item_id}, ${l.description ?? "Revenue"}, ${l.rule_id},
-                  ${l.amount}, ${l.item_ssp ?? l.fair_value}, ${allocated},
+                  ${l.amount}, ${sspByLine.get(l.line_id) ?? null}, ${allocated},
                   ${fvFlag}, ${fvFlag ? l.fair_value_low : null}, ${fvFlag ? l.fair_value_high : null},
-                  ${startsOn}, ${endsOn}, ${deferred}, ${recognized}, 'open', ${actorId}, ${actorId})
+                  ${startsOn}, ${endsOn}, ${deferred}, ${recognized}, ${softwareBundle ? documentId : null},
+                  ${JSON.stringify({ method: softwareBundle ? 'residual_vsoe' : 'relative_ssp', fairValuePriceId: l.fair_value_id, calculationMethod: l.calculation_method, formulaPercent: l.formula_percent, listPrice: l.list_price, unitCost: l.unit_cost, unitSsp: sspByLine.get(l.line_id) ?? null, quantity: l.quantity, allocated })}::jsonb, 'open', ${actorId}, ${actorId})
           -- The existing line obligation already owns its recognition amounts and schedule.
           on conflict (org_id, idempotency_key) where idempotency_key is not null do nothing
           returning id`));

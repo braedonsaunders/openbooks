@@ -70,7 +70,11 @@ export const REVENUE_ENTITIES: SetupEntity[] = [
     fields: [
       { key: 'itemId', kind: 'ref', ref: 'items', required: true },
       { key: 'currency', kind: 'ref', ref: 'currencies', required: true },
-      { key: 'unitPrice', kind: 'decimal', required: true },
+      { key: 'calculationMethod', kind: 'select', required: true, defaultValue: 'fixed', options: [{ value: 'fixed', label: 'Fixed price' }, { value: 'percent_of_list', label: 'Percentage of list price' }, { value: 'cost_plus', label: 'Cost plus markup' }] },
+      { key: 'unitPrice', kind: 'decimal', required: true, defaultValue: '0', showWhen: { field: 'calculationMethod', in: ['fixed'] } },
+      { key: 'formulaPercent', kind: 'decimal', showWhen: { field: 'calculationMethod', in: ['percent_of_list', 'cost_plus'] } },
+      { key: 'listPrice', kind: 'decimal', showWhen: { field: 'calculationMethod', in: ['percent_of_list'] } },
+      { key: 'unitCost', kind: 'decimal', showWhen: { field: 'calculationMethod', in: ['cost_plus'] } },
       { key: 'lowValue', kind: 'decimal' },
       { key: 'highValue', kind: 'decimal' },
       { key: 'effectiveFrom', kind: 'date' },

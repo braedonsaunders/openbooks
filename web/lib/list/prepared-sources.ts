@@ -62,6 +62,8 @@ const SOURCES = {
   collections_recurring: { route: '/collections?view=recurring', rowsField: 'schedules', rowKeyField: 'id', mode: 'loaded' },
   collections_policies: { route: '/collections?view=policies', rowsField: 'policies', rowKeyField: 'id', mode: 'loaded' },
   collections_plans: { route: '/collections?view=plans', rowsField: 'plans', rowKeyField: 'id', mode: 'loaded' },
+  rebate_agreements: { route: '/rebates', rowsField: 'rows', rowKeyField: 'id', mode: 'server', clientSearch: false, paging: { totalField: 'total', pageField: 'page', perPageField: 'perPage' } },
+  rebate_claims: { route: '/rebates?view=claims', rowsField: 'rows', rowKeyField: 'id', mode: 'server', clientSearch: false, paging: { totalField: 'total', pageField: 'page', perPageField: 'perPage' } },
   collections_subscriptions: { route: '/collections?view=subscriptions', rowsField: 'subscriptions', rowKeyField: 'id', mode: 'loaded' },
   collections_versions: { route: '/collections?view=versions', rowsField: 'versions', rowKeyField: 'id', mode: 'loaded' },
   collections_contracts: { route: '/collections?view=contracts', rowsField: 'lifecycles', rowKeyField: 'subscriptionId', mode: 'loaded' },

@@ -1833,6 +1833,9 @@ export async function convertOrder(
     const doc = src.rows[0]
     if (!doc) throw new ConversionError('Order not found')
     if (!ORDER_KINDS.includes(doc.kind as OrderKind)) throw new ConversionError('Not an order document')
+    if ((await tx.execute(sql`select id from subscription_renewal_occurrences where org_id=${orgId} and document_id=${sourceId} and occurrence='document' limit 1`)).rows[0]) {
+      throw new ConversionError('Accept this renewal from the subscription in Collections; subscription billing generates its invoices and prevents duplicate order billing')
+    }
     // Only an issued order converts. The switch is exhaustive so a status
     // added later (pending_approval today) refuses closed instead of
     // converting an order that was never issued.

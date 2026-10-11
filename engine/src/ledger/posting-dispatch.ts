@@ -130,9 +130,8 @@ export async function runPostDocumentEffects(
     const entryId = doc.postedEntryId ?? claimed?.entry_id ?? null;
     await applyPostedInventoryEffects(doc, postingDate, entryId, effectActorId);
     if (doc.kind === "customer_invoice" || doc.kind === "cash_sale") {
-      // A cash sale defers rev-rec lines exactly like an invoice; walk-in
-      // (party-less) sales simply produce no obligations, since recognition
-      // needs a counterparty contract.
+      // A cash sale defers recognition lines like an invoice. Deferred
+      // consideration requires the customer contract checked by the service.
       await createObligationsFromInvoice(doc.id, doc.orgId, effectActorId);
       await issueStoredValueForInvoice(doc.id, doc.orgId, effectActorId);
     } else if (doc.kind === "customer_credit" || doc.kind === "cash_refund") {

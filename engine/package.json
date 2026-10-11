@@ -801,6 +801,12 @@
     "./worker/shutdown": "./src/worker/shutdown.ts",
     "./inbox/kinds": "./src/inbox/kinds.ts",
     "./delivery/report-delivery": "./src/delivery/report-delivery.ts",
-    "./multibook": "./src/multibook/public.ts"
+    "./multibook": "./src/multibook/public.ts",
+    "./revenue/fair-value": "./src/revenue/fair-value.ts",
+    "./revenue/recognition-controls": "./src/revenue/recognition-controls.ts",
+    "./revenue/rebate-math": "./src/revenue/rebate-math.ts",
+    "./revenue/rebates": "./src/revenue/rebates.ts",
+    "./billing/renewals": "./src/billing/renewals.ts",
+    "./composition/rebate-settlement": "./src/composition/rebate-settlement.ts"
   }
 }

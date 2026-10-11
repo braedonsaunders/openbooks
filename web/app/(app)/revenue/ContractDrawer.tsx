@@ -16,6 +16,7 @@ import {
   UrlDrawer,
 } from "@openbooks/ui";
 import { add, neg, sum } from "@openbooks/engine/money/money";
+import { RecognitionControls } from "./RecognitionControls";
 import { PrepaidBreakageButton } from './PrepaidBreakageButton'
 import { CancelRecognitionButton } from "./CancelRecognitionButton";
 import { ReconcileLegacyButton } from "./ReconcileLegacyButton";
@@ -329,6 +330,7 @@ export function ContractDrawer({
                 <ReconcileLegacyButton obligationId={selectedObligation.id} />
               ) : null}
             </div>
+            {canRun ? <RecognitionControls obligationId={selectedObligation.id} held={selectedObligation.recognition_held ?? false} revision={selectedObligation.control_revision ?? 1} deliveredOn={selectedObligation.delivered_on ?? null} deliveryRequired={!!selectedObligation.delivery_bundle_document_id} /> : null}
             {/* -- advanced: period-by-period posting detail, collapsed with
                 its position summarized. Forced open while it needs
                 attention (no plan, unverified history, out-of-range

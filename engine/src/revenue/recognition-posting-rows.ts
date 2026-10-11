@@ -1,4 +1,5 @@
 /** Shared posting-row projection breaking the preview/run cycle. Split from revenue/recognition.ts (pure moves only). */
+import { resolveCoveringPeriod } from '../periods/period-resolution.ts';
 import { sql } from "drizzle-orm";
 import type { SqlExecutor } from "../platform/db.ts";
 import { measureCreditExposure, type CreditExposure } from "./deferred-credit-pool.ts";
@@ -92,6 +93,7 @@ export function recognitionObligationScope(orgId: string, allowedSubsidiaryIds: 
 
 export type RecognitionPostingRow = {
   recognition_on: string | null; recognition_currency: string | null; functional_currency:string|null; recognition_fx_rate: string;
+  bundle_delivered_on: string | null; recognition_held: boolean; hold_reason: string | null; delivery_pending: boolean;
   line_id: string; planned: string; period_id: string; sequence: number;
   book_id: string; period_name: string; period_ends_on: string;
   method: RecognitionMethod;
@@ -119,8 +121,12 @@ export async function recognitionPostingRows(
   claim = false,
 ): Promise<RecognitionPostingRow[]> {
   const obligationScope = recognitionObligationScope(orgId, allowedSubsidiaryIds, fallbackSubsidiaryId);
-  return (await runner.execute<RecognitionPostingRow>(sql`
-    select l.id             as line_id,
+  const rows = (await runner.execute<RecognitionPostingRow>(sql`
+    select (select max(peer.delivered_on)::text from performance_obligations peer where peer.org_id=o.org_id and peer.delivery_bundle_document_id=o.delivery_bundle_document_id and peer.status<>'cancelled') as bundle_delivered_on, o.recognition_held, o.hold_reason,
+           (o.delivery_bundle_document_id is not null and exists (select 1 from performance_obligations peer
+             where peer.org_id=o.org_id and peer.delivery_bundle_document_id=o.delivery_bundle_document_id and peer.status<>'cancelled'
+               and (peer.delivered_on is null or peer.delivered_on>${asOfDate}::date))) as delivery_pending,
+           l.id             as line_id,
            l.recognition_on::text as recognition_on,
            coalesce(s.change_basis->>'currency',s.transaction_currency) as recognition_currency,
            s.change_basis->>'functionalCurrency' as functional_currency,
@@ -180,6 +186,17 @@ export async function recognitionPostingRows(
        ${lineId ? sql`and l.id = ${lineId}` : sql``}
      order by c.contract_number, o.description, l.sequence
      ${claim ? sql`for update of l for share of s, bk, c, r, p` : sql``}`)).rows;
+  for (const row of rows) {
+    const plannedDate=row.recognition_on ?? row.period_ends_on;
+    if (!row.delivery_pending && row.bundle_delivered_on && row.bundle_delivered_on>plannedDate) {
+      const deliveryPeriod=await resolveCoveringPeriod(runner,orgId,row.bundle_delivered_on);
+      if (!deliveryPeriod) throw new RevenueRecognitionError('Generate an accounting period covering software bundle delivery before recognizing the deferred consideration');
+      const period=(await runner.execute<{name:string;ends_on:string}>(sql`select name,ends_on::text from accounting_periods where org_id=${orgId} and id=${deliveryPeriod.id}`)).rows[0];
+      if (!period) throw new RevenueRecognitionError('Delivery accounting period is unavailable');
+      row.period_id=deliveryPeriod.id; row.period_name=period.name; row.period_ends_on=period.ends_on; row.recognition_on=row.bundle_delivered_on;
+    }
+  }
+  return rows;
 }
 /** Exactly the fields the confirm fingerprint covers per line. */
 export interface FingerprintedRecognitionLine {

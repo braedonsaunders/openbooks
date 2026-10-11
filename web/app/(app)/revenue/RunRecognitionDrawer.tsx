@@ -31,7 +31,7 @@ export interface RecognitionCandidate {
   description: string
 }
 
-type SkipReason = 'period_closed' | 'not_configured' | 'credit_capped' | 'negative_floor' | 'zero'
+type SkipReason = 'operator_hold' | 'delivery_pending' | 'period_closed' | 'not_configured' | 'credit_capped' | 'negative_floor' | 'zero'
 
 interface PreviewRow {
   lineId: string
@@ -272,6 +272,8 @@ export function RunRecognitionDrawer({
 
   const skipLabel = (row: PreviewRow): string => {
     switch (row.skipReason) {
+      case 'operator_hold': return row.skipDetail ?? 'Recognition is on operator hold';
+      case 'delivery_pending': return row.skipDetail ?? 'Record delivery acceptance for every software bundle element';
       case 'period_closed':
         return t('review.skipPeriodClosed', { period: row.skipDetail ?? row.periodName })
       case 'not_configured':

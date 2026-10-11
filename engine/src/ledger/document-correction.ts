@@ -308,6 +308,7 @@ export async function planPostedCorrection(
   const reason = validateCorrectionReason(body.amendmentReason);
   const source = await loadCorrectionSource(db, orgId, sourceId);
   if (!source) throw new DocumentEditError(404, "not found");
+  if ((await db.execute(sql`select id from rebate_claims where org_id=${orgId} and settlement_document_id=${sourceId} limit 1`)).rows[0]) throw new DocumentEditError(422,'Void this rebate settlement through the native document workflow, then prepare the corrected settlement from its reopened claim in Rebates');
   if (source.status !== "posted") {
     throw new DocumentEditError(422, "only a posted document can create a correcting replacement");
   }
@@ -474,6 +475,7 @@ async function authorizePostedCorrection(
      limit 1
   `)).rows[0]
   assertNoExistingDocumentCorrection(existingCorrection?.documentNumber ?? null)
+  if ((await tx.execute(sql`select id from rebate_claims where org_id=${ctx.orgId} and settlement_document_id=${sourceId} limit 1`)).rows[0]) throw new DocumentEditError(422,'Void this rebate settlement through the native document workflow, then prepare the corrected settlement from its reopened claim in Rebates')
   if (source.status !== 'posted') {
     throw new DocumentEditError(422, 'only a posted document can create a correcting replacement')
   }

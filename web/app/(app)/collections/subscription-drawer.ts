@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { isFeatureEnabled } from '../../../lib/features'
 import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/database'
 import { can, requirePermission } from '../../../lib/authz'
@@ -33,6 +34,9 @@ export interface SubscriptionDrawerData {
   contract: { id: string; number: string } | null
   lastError: string | null
   canManage: boolean
+  renewalEnabled?: boolean
+  renewalDocument?: {documentId:string;kind:string}|null
+  canAcceptRenewal?: boolean
   closeHref: string
   /** Active customers for the bill-to/payer pickers (empty without manage). */
   customers: { id: string; name: string }[]
@@ -118,6 +122,8 @@ export async function loadSubscriptionDrawer(
            order by p.display_name limit 500`)
       ).rows
     : []
+  const renewalEnabled=await isFeatureEnabled(orgId,'advancedSubscriptions');
+  const renewalDocument=renewalEnabled?(await db.execute<{documentId:string;kind:string}>(sql`select o.document_id as "documentId",d.kind from subscription_renewal_occurrences o join documents d on d.org_id=o.org_id and d.id=o.document_id where o.org_id=${orgId} and o.subscription_id=${row.id} and o.occurrence='document' and not exists(select 1 from subscription_renewal_occurrences accepted where accepted.org_id=o.org_id and accepted.subscription_id=o.subscription_id and accepted.term_ends_on=o.term_ends_on and accepted.occurrence='acceptance') order by o.term_ends_on desc limit 1`)).rows[0]??null:null;
   return {
     drawer: {
       id: row.id,
@@ -144,7 +150,7 @@ export async function loadSubscriptionDrawer(
         ? { id: row.contractId, number: row.contractNumber ?? row.contractId.slice(0, 8) }
         : null,
       lastError: row.lastError,
-      canManage,
+      canManage,renewalEnabled,renewalDocument,canAcceptRenewal:can(authz,'ar.post'),
       closeHref: mergeHref('/collections', sp, { subscription: undefined, mode: undefined, form: undefined }),
       customers,
     },

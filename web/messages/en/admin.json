@@ -3822,6 +3822,14 @@
         "title": "Capitalization rules",
         "singularTitle": "Capitalization rule",
         "description": "Which posted purchase lines become asset proposals: an account, item or item category with a minimum amount, effective-dated."
+      },
+      "rebate-agreements": {
+        "title": "Rebate agreements",
+        "description": "Effective-dated terms with native approval and audit evidence."
+      },
+      "subscription-renewal-policies": {
+        "title": "Subscription renewal policies",
+        "description": "Effective-dated terms with native approval and audit evidence."
       }
     },
     "fields": {
@@ -3942,7 +3950,7 @@
       "supplementalWageCategory": "Supplemental wage category",
       "statutoryReportingCategory": "Statutory reporting category",
       "statutoryExemptionCategory": "Statutory exemption category",
-      "taxTreatment": "Tax treatment",
+      "taxTreatment": "Settlement tax treatment",
       "expenseAccountId": "Expense account",
       "liabilityAccountId": "Liability account",
       "holderPartyId": "Cardholder",
@@ -4138,7 +4146,7 @@
       "equipmentUnitId": "Equipment unit",
       "extensionKey": "App",
       "settingKey": "Setting",
-      "reason": "Reason for change",
+      "reason": "Review reason",
       "allocatedThrough": "Allocated through",
       "dateBasis": "Date basis",
       "unitsTotal": "Total units",
@@ -4408,7 +4416,7 @@
       "autonomy": "Declared review level",
       "boardId": "Schedule board",
       "resourceLocationId": "Resource location",
-      "partyId": "Contact",
+      "partyId": "Customer or vendor",
       "automaticDeliveryPolicy": "Automatic schedule delivery",
       "scheduleDeliveryOperator": "Authorized operator",
       "scheduleDeliveryTimeZone": "Report timezone",
@@ -4488,7 +4496,31 @@
       "allowedValueId": "Allowed with",
       "matchKind": "Matches on",
       "minimumAmount": "Minimum amount to capitalize",
-      "assetCategoryId": "Suggested asset category"
+      "assetCategoryId": "Suggested asset category",
+      "calculationMethod": "Fair-value calculation",
+      "formulaPercent": "Formula percentage",
+      "listPrice": "Dated list price",
+      "unitCost": "Dated unit cost",
+      "side": "Agreement side",
+      "activity": "Eligible activity",
+      "tierBasis": "Cumulative tier basis",
+      "tiers": "Retrospective tiers",
+      "threshold": "Minimum cumulative basis",
+      "targetUnitCost": "Guaranteed unit cost",
+      "marginPercent": "Guaranteed margin percentage",
+      "stacking": "Agreement combination",
+      "selectionGroup": "Best-deal group",
+      "accrualAccountId": "Rebate liability or receivable",
+      "offsetAccountId": "Rebate income or expense",
+      "fxAccountId": "Settlement FX account",
+      "subscriptionId": "Subscription",
+      "ownerId": "Responsible operator",
+      "reminderDays": "Reminder lead days",
+      "days": "Days before expiry",
+      "generationLeadDays": "Generate document days before expiry",
+      "upliftPercent": "Renewal uplift percentage",
+      "termMonths": "Renewal term months",
+      "settlementTaxCodeId": "Settlement tax code"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Days between the newest usable rate and the period end beyond which revaluation and consolidation refuse the rate. Closing rates count from the date of the period-end spot rate; average rates from the newest quote averaged. Default when no policy is set: 31 days.",
@@ -8397,6 +8429,10 @@
     "assetInsurance": {
       "title": "Asset insurance",
       "description": "Record insurance policies covering assets, get renewal reminders and compare insured value with net book value."
+    },
+    "rebateManagement": {
+      "description": "Govern customer and vendor rebate agreements, retrospective accruals, claims and settlements.",
+      "title": "Rebate management"
     }
   },
   "backupsManager": {

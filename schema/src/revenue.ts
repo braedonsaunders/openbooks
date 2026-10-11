@@ -105,6 +105,10 @@ export const fairValuePrices = pgTable(
     itemId: uuid("item_id").notNull(),
     currency: text("currency").notNull(),
     unitPrice: money("unit_price").notNull(),
+    calculationMethod: text("calculation_method", { enum: ["fixed", "percent_of_list", "cost_plus"] }).notNull().default("fixed"),
+    formulaPercent: money("formula_percent"),
+    listPrice: money("list_price"),
+    unitCost: money("unit_cost"),
     lowValue: money("low_value"),
     highValue: money("high_value"),
     /** Inclusive validity window. Active windows may not overlap within an

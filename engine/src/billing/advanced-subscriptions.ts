@@ -1283,6 +1283,10 @@ export async function prepareAdvancedSubscriptionBilling(orgId: string, subscrip
     if (action === "bill") return true;
     if (action === "stop") return false;
     if (!row.termEndsOn) return true;
+    // A configured commercial-renewal workflow waits for acceptance of its
+    // approved quote or order; billing never bypasses the agreed uplift.
+    if ((await db.execute(sql`select id from subscription_renewal_policies where org_id=${orgId} and subscription_id=${subscriptionId}
+      and effective_from<=${row.termEndsOn} and effective_to>=${row.termEndsOn} limit 1`)).rows[0]) return false;
     await applyAmendment(orgId, null, {
       subscriptionId,
       type: "renew",
