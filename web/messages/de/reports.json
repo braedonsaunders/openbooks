@@ -3173,7 +3173,8 @@
       "gift": "Spende",
       "grant": "Zuschuss",
       "release": "Freigabe aus Zweckbindungen",
-      "manufacturing": "Fertigung"
+      "manufacturing": "Fertigung",
+      "opening": "Eröffnung"
     },
     "columns": {
       "detail": "Geschäftspartner / Notiz"

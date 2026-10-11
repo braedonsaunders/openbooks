@@ -25,7 +25,8 @@
     "fxSettlement": "Liquidación de divisas",
     "translation": "Conversión de moneda",
     "migration": "Migración",
-    "manufacturing": "Fabricación"
+    "manufacturing": "Fabricación",
+    "opening": "Apertura"
   },
   "detail": {
     "notFound": "Asiento no encontrado",

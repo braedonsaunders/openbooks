@@ -25,7 +25,8 @@
     "fxSettlement": "為替決済",
     "translation": "換算",
     "migration": "移行",
-    "manufacturing": "製造"
+    "manufacturing": "製造",
+    "opening": "期首"
   },
   "detail": {
     "notFound": "仕訳が見つかりません",

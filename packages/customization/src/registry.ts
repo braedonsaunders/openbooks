@@ -517,7 +517,7 @@ const JOURNAL: RecordTypeMeta = {
       kind: "select",
       operators: OPERATORS_BY_KIND.select,
       options: [
-        ["manual", "manual"], ["closing", "closing"], ["allocation", "allocation"],
+        ["manual", "manual"], ["closing", "closing"], ["opening", "opening"], ["allocation", "allocation"],
         ["revaluation", "revaluation"], ["labor_burden", "laborBurden"],
         ["depreciation", "depreciation"], ["revenue_recognition", "revenueRecognition"],
         ["fx_settlement", "fxSettlement"], ["translation", "translation"],

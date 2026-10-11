@@ -218,6 +218,10 @@
     "commerce-exceptions-open": {
       "title": "有渠道异常待处理",
       "message": "{count, plural, one {有 # 个挂起的订单或事件待处理。} other {有 # 个挂起的订单或事件待处理。}}"
+    },
+    "period-end-journals-pending": {
+      "title": "期末结账分录不是最新的",
+      "message": "{count, plural, other {# 个法人实体或政策条件需要生成或更正期末结账分录。}}"
     }
   },
   "severity": {
@@ -430,6 +434,10 @@
     "commerce-complete": {
       "title": "证明商务完整性",
       "description": "每一笔网店销售都已入账：订单与网店一致，结算已过账，清算为零，负债结转相符。"
+    },
+    "period-end-journals": {
+      "title": "过账期末结账分录",
+      "description": "通过明确的结账分录将会计年度的收入和费用科目结转至留存收益，并在政策要求时开立下一年度。"
     }
   },
   "setup": {
@@ -957,5 +965,78 @@
     "posted": "未开票收入计提已过账。",
     "postFailed": "无法过账计提。",
     "postPermission": "过账计提需要过账日记账分录的权限。"
+  },
+  "periodEndJournals": {
+    "loading": "正在计算期末结账分录…",
+    "loadFailed": "无法计算期末结账分录。",
+    "retry": "重试",
+    "scope": "{year} 会计年度（{from} 至 {to}）· {book}",
+    "closingPeriod": "结账分录过账至 {period}",
+    "openingPeriod": "开账分录过账至 {period}",
+    "policyRetainedEarnings": "收入和费用结转至 {retained}",
+    "policyIncomeSummary": "收入和费用经由 {summary} 结转至 {retained}",
+    "policyBalanceSheet": "含资产负债表结账分录和开账分录",
+    "policyEffective": "政策生效日期 {date}",
+    "blocked": "生成前请先解决",
+    "openPolicy": "打开期末结账分录政策",
+    "empty": "本会计年度没有需要结账的法人实体。",
+    "status": {
+      "not_generated": "未生成",
+      "current": "最新",
+      "stale": "需要重新生成",
+      "nothing_to_close": "无需结账",
+      "blocked": "未就绪"
+    },
+    "fiscalYearEarnings": "本年度利润",
+    "priorUnclosedEarnings": "以前年度尚未结账的利润",
+    "review": "审阅分录",
+    "journals": "{count, plural, other {# 笔分录}}",
+    "kinds": {
+      "income_statement": "利润表结账",
+      "income_summary": "本年利润汇总结账",
+      "balance_sheet": "资产负债表结账",
+      "opening": "期初余额"
+    },
+    "columns": {
+      "account": "科目",
+      "dimensions": "维度",
+      "debit": "借方",
+      "credit": "贷方",
+      "entity": "法人实体",
+      "generation": "生成批次",
+      "status": "状态",
+      "generated": "生成",
+      "reversed": "冲销",
+      "journals": "分录"
+    },
+    "dimensions": {
+      "department": "部门",
+      "class": "类别",
+      "location": "地点",
+      "project": "项目",
+      "segment": "分段"
+    },
+    "generate": "生成期末结账分录",
+    "reverse": "冲销期末结账分录",
+    "generateReasonTitle": "生成期末结账分录",
+    "reverseReasonTitle": "冲销期末结账分录",
+    "reasonHint": "请说明原因。原因将与分录一起保存在审计记录中（10–500 个字符）。",
+    "reasonLabel": "原因",
+    "generated": "{count, plural, other {已为 # 个法人实体过账期末结账分录。}}",
+    "unchanged": "期末结账分录已是最新，未过账任何内容。",
+    "partiallyRefused": "{count, plural, other {# 个法人实体尚未就绪。}}",
+    "reversed": "{count, plural, other {已为 # 个法人实体冲销期末结账分录。}}",
+    "generateFailed": "无法生成期末结账分录。",
+    "reverseFailed": "无法冲销期末结账分录。",
+    "runPermission": "生成期末结账分录需要执行结账的权限。",
+    "history": "历史记录",
+    "generations": "{count, plural, other {# 个生成批次}}",
+    "historyEmpty": "本会计年度尚未生成期末结账分录。",
+    "setStatus": {
+      "posted": "已过账",
+      "reversed": "已冲销"
+    },
+    "by": "{name}（{at}）",
+    "system": "系统"
   }
 }

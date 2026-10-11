@@ -3740,6 +3740,11 @@
         "title": "职位描述",
         "singularTitle": "职位描述",
         "description": "新招聘申请可复用的发布内容：职位名称、雇用类型、薪酬范围和说明。"
+      },
+      "period-end-journal-policies": {
+        "title": "期末结账分录",
+        "singular": "期末结账分录政策",
+        "description": "年末结账如何过账其分录：留存收益科目、可选的本年利润汇总科目、资产负债表结账分录和开账分录、过账期间，以及结账行保留的维度。每个版本适用于在其生效日期或之后结束的会计年度。"
       }
     },
     "fields": {
@@ -4367,7 +4372,17 @@
       "compensationMin": "薪酬下限",
       "compensationMax": "薪酬上限",
       "compensationCurrency": "薪酬币种",
-      "compensationBasis": "薪酬基准"
+      "compensationBasis": "薪酬基准",
+      "closingMethod": "结账方式",
+      "retainedEarningsAccountId": "留存收益科目",
+      "incomeSummaryAccountId": "本年利润汇总科目",
+      "balanceSheetJournals": "资产负债表结账分录和开账分录",
+      "postingPeriod": "过账期间",
+      "preserveDepartments": "保留部门",
+      "preserveClasses": "保留类别",
+      "preserveLocations": "保留地点",
+      "preserveProjects": "保留项目",
+      "preserveSegments": "保留自定义分段"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "最新可用汇率距期末的天数超过此值时，重估和合并将拒绝该汇率。期末汇率从期末即期汇率的日期起算；平均汇率从计入平均的最新报价日期起算。未设置政策时的默认值：31 天。",
@@ -4546,7 +4561,12 @@
       "hrmJobDescriptionTitle": "求职者在职位发布中看到的职位名称。",
       "hrmJobDescriptionKind": "例如：全职、兼职、季节性或合同制。",
       "hrmJobDescriptionPay": "可选。请同时填写下限、上限、币种和基准，或四项全部留空。",
-      "hrmJobDescriptionBody": "职位发布文本。新招聘申请会复制该文本，因此在此编辑不会更改已有职位。"
+      "hrmJobDescriptionBody": "职位发布文本。新招聘申请会复制该文本，因此在此编辑不会更改已有职位。",
+      "periodEndEffectiveFrom": "在此日期或之后结束的会计年度按此版本结账。不能追溯至已由期末结账分录结账的年度。",
+      "periodEndClosingMethod": "直接：收入和费用结转至留存收益。经由本年利润汇总科目：先结转至该科目，再由该科目结转至留存收益。",
+      "periodEndPostingPeriod": "会计年度的最后一个常规期间；若会计日历设有调整期间，则为该年度的调整期间。",
+      "periodEndBalanceSheetJournals": "同时在年末日期将所有资产负债表科目清零，并在下一会计年度第一天重新建立相同余额。",
+      "periodEndPreserveSegments": "平衡分段始终保留，使每个分段值各自保持平衡。"
     },
     "options": {
       "withholdingCondominiumPayer": "公寓业主共同体付款人",
@@ -5356,6 +5376,14 @@
       "schedulePdfColorTreatment": {
         "subtle": "柔和强调",
         "strong": "浓色填充"
+      },
+      "periodEndClosingMethod": {
+        "retained_earnings": "直接结转至留存收益",
+        "income_summary": "经由本年利润汇总科目"
+      },
+      "periodEndPostingPeriod": {
+        "last_period": "年度最后一个期间",
+        "adjustment_period": "调整期间"
       }
     },
     "payroll": {
@@ -6323,7 +6351,8 @@
       "scheduleBoardBooking": "安排",
       "scheduleBoardBookingHelp": "全天安排按排程板时区使用这些工作时间。",
       "scheduleBoardAutomation": "自动化",
-      "scheduleBoardAutomationHelp": "在此排程板上发布安排后执行的操作。"
+      "scheduleBoardAutomationHelp": "在此排程板上发布安排后执行的操作。",
+      "periodEndDimensions": "结账行保留的维度"
     },
     "constructionRateEditor": {
       "tab": "适用范围和工资率"
@@ -8055,6 +8084,10 @@
     "manufacturingSubcontract": {
       "title": "外协制造",
       "description": "向供应商发送组件，记录加工服务，并将生产数量返回生产订单。"
+    },
+    "periodEndJournals": {
+      "title": "期末结账分录",
+      "description": "为要求结账分录的司法辖区过账明确的年末结账分录：将收入和费用结转至留存收益，可选择经由本年利润汇总科目，并可选过账资产负债表结账分录及下一年度的开账分录。无论是否启用，报表都会计算留存收益。"
     }
   },
   "backupsManager": {

@@ -3173,7 +3173,8 @@
       "gift": "Doação",
       "grant": "Subvenção",
       "release": "Liberação de restrições",
-      "manufacturing": "Manufatura"
+      "manufacturing": "Manufatura",
+      "opening": "Abertura"
     },
     "columns": {
       "detail": "Parte / memorando"

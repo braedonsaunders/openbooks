@@ -3665,6 +3665,11 @@
         "title": "Descriptions de poste",
         "singularTitle": "Description de poste",
         "description": "Contenu d'annonce réutilisable pour les nouvelles demandes : intitulé, type d'emploi, fourchette de rémunération et description."
+      },
+      "period-end-journal-policies": {
+        "title": "Écritures de clôture de l'exercice",
+        "singular": "politique d'écritures de clôture",
+        "description": "Comment la clôture annuelle passe ses écritures : le compte de report à nouveau, un compte de résultat récapitulatif facultatif, les écritures de clôture du bilan et de réouverture, la période de comptabilisation et les axes conservés sur les lignes de clôture. Chaque version régit les exercices se terminant à sa date d'effet ou après."
       }
     },
     "fields": {
@@ -4292,7 +4297,17 @@
       "compensationMin": "Rémunération minimale",
       "compensationMax": "Rémunération maximale",
       "compensationCurrency": "Devise de rémunération",
-      "compensationBasis": "Base de rémunération"
+      "compensationBasis": "Base de rémunération",
+      "closingMethod": "Méthode de clôture",
+      "retainedEarningsAccountId": "Compte de report à nouveau",
+      "incomeSummaryAccountId": "Compte de résultat récapitulatif",
+      "balanceSheetJournals": "Écritures de clôture du bilan et de réouverture",
+      "postingPeriod": "Période de comptabilisation",
+      "preserveDepartments": "Conserver les départements",
+      "preserveClasses": "Conserver les classes",
+      "preserveLocations": "Conserver les emplacements",
+      "preserveProjects": "Conserver les projets",
+      "preserveSegments": "Conserver les segments personnalisés"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Nombre de jours entre le taux utilisable le plus récent et la fin de période au-delà duquel la réévaluation et la consolidation refusent le taux. Les taux de clôture se comptent depuis la date du taux comptant de fin de période ; les taux moyens depuis la cotation la plus récente incluse dans la moyenne. Valeur par défaut sans politique : 31 jours.",
@@ -4471,7 +4486,12 @@
       "hrmJobDescriptionTitle": "L'intitulé de poste affiché aux candidats dans l'annonce.",
       "hrmJobDescriptionKind": "Par exemple temps plein, temps partiel, saisonnier ou contractuel.",
       "hrmJobDescriptionPay": "Facultatif. Saisissez ensemble le minimum, le maximum, la devise et la base, ou laissez les quatre vides.",
-      "hrmJobDescriptionBody": "Le texte de l'annonce. Les nouvelles demandes le copient : le modifier ici ne change jamais un poste existant."
+      "hrmJobDescriptionBody": "Le texte de l'annonce. Les nouvelles demandes le copient : le modifier ici ne change jamais un poste existant.",
+      "periodEndEffectiveFrom": "Les exercices se terminant à cette date ou après sont clôturés selon cette version. Elle ne peut pas remonter dans un exercice déjà clôturé par des écritures de clôture.",
+      "periodEndClosingMethod": "Directement : produits et charges sont soldés vers le report à nouveau. Via un compte de résultat récapitulatif : ils sont soldés vers ce compte, lui-même soldé ensuite vers le report à nouveau.",
+      "periodEndPostingPeriod": "La dernière période ordinaire de l'exercice, ou la période d'ajustement de l'exercice lorsque le calendrier fiscal en comporte une.",
+      "periodEndBalanceSheetJournals": "Solder également chaque compte de bilan à la date de clôture et rouvrir les mêmes soldes le premier jour de l'exercice suivant.",
+      "periodEndPreserveSegments": "Les segments d'équilibrage sont toujours conservés, afin que chaque valeur de segment reste équilibrée à elle seule."
     },
     "options": {
       "withholdingCondominiumPayer": "Payeur : copropriété",
@@ -5281,6 +5301,14 @@
       "schedulePdfColorTreatment": {
         "subtle": "Accents discrets",
         "strong": "Aplats soutenus"
+      },
+      "periodEndClosingMethod": {
+        "retained_earnings": "Directement vers le report à nouveau",
+        "income_summary": "Via un compte de résultat récapitulatif"
+      },
+      "periodEndPostingPeriod": {
+        "last_period": "Dernière période de l'exercice",
+        "adjustment_period": "Période d'ajustement"
       }
     },
     "laborCosting": {
@@ -6395,7 +6423,8 @@
       "scheduleBoardBooking": "Affectation",
       "scheduleBoardBookingHelp": "Les affectations à la journée utilisent ces heures de travail dans le fuseau horaire du tableau.",
       "scheduleBoardAutomation": "Automatisation",
-      "scheduleBoardAutomationHelp": "Ce qui se passe après la publication d’une affectation sur ce tableau."
+      "scheduleBoardAutomationHelp": "Ce qui se passe après la publication d’une affectation sur ce tableau.",
+      "periodEndDimensions": "Axes conservés sur les lignes de clôture"
     },
     "segmentValues": {
       "builtinLink": "Ouvrir {name}",
@@ -8055,6 +8084,10 @@
     "manufacturingSubcontract": {
       "title": "Fabrication externe",
       "description": "Envoyez des composants à un fournisseur, enregistrez les services et retournez la production sur l’ordre."
+    },
+    "periodEndJournals": {
+      "title": "Écritures de clôture de l'exercice",
+      "description": "Passez des écritures explicites de clôture de l'exercice dans les juridictions qui les exigent : produits et charges vers le report à nouveau, éventuellement via un compte de résultat récapitulatif, avec en option des écritures de clôture du bilan et de réouverture de l'exercice suivant. Les états financiers calculent le report à nouveau dans tous les cas."
     }
   },
   "backupsManager": {

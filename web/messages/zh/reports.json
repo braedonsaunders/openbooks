@@ -3173,7 +3173,8 @@
       "gift": "捐赠",
       "grant": "资助",
       "release": "解除用途限制",
-      "manufacturing": "生产制造"
+      "manufacturing": "生产制造",
+      "opening": "期初"
     },
     "columns": {
       "detail": "往来方 / 备注"

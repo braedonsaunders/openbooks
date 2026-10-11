@@ -3793,6 +3793,11 @@
         "title": "職務記述書",
         "singularTitle": "職務記述書",
         "description": "新しい採用申請の起点となる再利用可能な求人内容：職名、雇用形態、給与レンジ、説明。"
+      },
+      "period-end-journal-policies": {
+        "title": "期末決算仕訳",
+        "singular": "期末決算仕訳ポリシー",
+        "description": "年度末の締めが仕訳を計上する方法：利益剰余金勘定、任意の損益集計勘定、貸借対照表の締め仕訳と開始仕訳、計上期間、締め仕訳の明細が保持するディメンション。各バージョンは発効日以降に終了する会計年度に適用されます。"
       }
     },
     "fields": {
@@ -4420,7 +4425,17 @@
       "compensationMin": "給与下限",
       "compensationMax": "給与上限",
       "compensationCurrency": "給与通貨",
-      "compensationBasis": "給与基準"
+      "compensationBasis": "給与基準",
+      "closingMethod": "締め方法",
+      "retainedEarningsAccountId": "利益剰余金勘定",
+      "incomeSummaryAccountId": "損益集計勘定",
+      "balanceSheetJournals": "貸借対照表の締め仕訳と開始仕訳",
+      "postingPeriod": "計上期間",
+      "preserveDepartments": "部門を保持",
+      "preserveClasses": "クラスを保持",
+      "preserveLocations": "拠点を保持",
+      "preserveProjects": "プロジェクトを保持",
+      "preserveSegments": "カスタムセグメントを保持"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "使用可能な最新レートから期末までの日数がこれを超えると、再評価と連結はそのレートを拒否します。期末レートは期末スポットレートの日付から、平均レートは平均に含まれる最新の相場の日付から数えます。ポリシー未設定時の既定値: 31日。",
@@ -4599,7 +4614,12 @@
       "hrmJobDescriptionTitle": "求人で応募者に表示される職名。",
       "hrmJobDescriptionKind": "例：正社員、パートタイム、季節雇用、契約。",
       "hrmJobDescriptionPay": "任意。下限・上限・通貨・基準をすべて入力するか、4つとも空欄にします。",
-      "hrmJobDescriptionBody": "求人本文。新しい採用申請にコピーされるため、ここでの編集は既存の求人に影響しません。"
+      "hrmJobDescriptionBody": "求人本文。新しい採用申請にコピーされるため、ここでの編集は既存の求人に影響しません。",
+      "periodEndEffectiveFrom": "この日以降に終了する会計年度はこのバージョンで締められます。期末決算仕訳で締め済みの年度に遡って適用することはできません。",
+      "periodEndClosingMethod": "直接：収益と費用を利益剰余金へ振り替えます。損益集計勘定経由：収益と費用をその勘定へ振り替え、その後利益剰余金へ振り替えます。",
+      "periodEndPostingPeriod": "会計年度の最終通常期間、または会計カレンダーに調整期間がある場合はその年度の調整期間。",
+      "periodEndBalanceSheetJournals": "さらに、年度末日にすべての貸借対照表勘定をゼロにし、翌会計年度の初日に同じ残高を再計上します。",
+      "periodEndPreserveSegments": "バランシングセグメントは常に保持され、各セグメント値が単独で貸借一致します。"
     },
     "options": {
       "withholdingCondominiumPayer": "集合住宅管理組合の支払者",
@@ -5409,6 +5429,14 @@
       "schedulePdfColorTreatment": {
         "subtle": "控えめなアクセント",
         "strong": "濃い背景色"
+      },
+      "periodEndClosingMethod": {
+        "retained_earnings": "利益剰余金へ直接",
+        "income_summary": "損益集計勘定を経由"
+      },
+      "periodEndPostingPeriod": {
+        "last_period": "年度の最終期間",
+        "adjustment_period": "調整期間"
       }
     },
     "invoicing": {
@@ -6395,7 +6423,8 @@
       "scheduleBoardBooking": "割り当て",
       "scheduleBoardBookingHelp": "終日の割り当てには、ボードのタイムゾーンでこの勤務時間が使われます。",
       "scheduleBoardAutomation": "自動化",
-      "scheduleBoardAutomationHelp": "このボードで割り当てが公開された後の処理。"
+      "scheduleBoardAutomationHelp": "このボードで割り当てが公開された後の処理。",
+      "periodEndDimensions": "締め仕訳の明細に保持するディメンション"
     },
     "segmentValues": {
       "builtinLink": "{name}を開く",
@@ -8055,6 +8084,10 @@
     "manufacturingSubcontract": {
       "title": "外注製造",
       "description": "部品を仕入先に送り、加工サービスを記録し、生産数量を製造オーダーに戻します。"
+    },
+    "periodEndJournals": {
+      "title": "期末決算仕訳",
+      "description": "決算仕訳を義務付ける法域向けに、明示的な年度末の締め仕訳を計上します。収益と費用を利益剰余金へ振り替え（任意で損益集計勘定を経由）、任意で貸借対照表の締め仕訳と翌期の開始仕訳も計上します。財務諸表はいずれの場合も利益剰余金を計算します。"
     }
   },
   "extensions": {

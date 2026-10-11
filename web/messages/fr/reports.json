@@ -3153,7 +3153,8 @@
       "gift": "Don",
       "grant": "Subvention",
       "release": "Levée des restrictions",
-      "manufacturing": "Fabrication"
+      "manufacturing": "Fabrication",
+      "opening": "Ouverture"
     },
     "columns": {
       "detail": "Tiers / mémo"

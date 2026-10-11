@@ -3740,6 +3740,11 @@
         "title": "Descrições de cargo",
         "singularTitle": "Descrição de cargo",
         "description": "Conteúdo de vaga reutilizável para novas requisições: título, tipo de contratação, faixa salarial e descrição."
+      },
+      "period-end-journal-policies": {
+        "title": "Lançamentos de encerramento do exercício",
+        "singular": "política de lançamentos de encerramento",
+        "description": "Como o encerramento anual registra seus lançamentos: a conta de lucros acumulados, uma conta de apuração do resultado opcional, os lançamentos de encerramento do balanço e de abertura, o período de registro e as dimensões mantidas nas linhas de encerramento. Cada versão rege os exercícios que terminam na data de vigência ou depois."
       }
     },
     "fields": {
@@ -4367,7 +4372,17 @@
       "compensationMin": "Salário mínimo",
       "compensationMax": "Salário máximo",
       "compensationCurrency": "Moeda do salário",
-      "compensationBasis": "Base salarial"
+      "compensationBasis": "Base salarial",
+      "closingMethod": "Método de encerramento",
+      "retainedEarningsAccountId": "Conta de lucros acumulados",
+      "incomeSummaryAccountId": "Conta de apuração do resultado",
+      "balanceSheetJournals": "Lançamentos de encerramento do balanço e de abertura",
+      "postingPeriod": "Período de registro",
+      "preserveDepartments": "Manter departamentos",
+      "preserveClasses": "Manter classes",
+      "preserveLocations": "Manter locais",
+      "preserveProjects": "Manter projetos",
+      "preserveSegments": "Manter segmentos personalizados"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Dias entre a taxa utilizável mais recente e o fim do período a partir dos quais a reavaliação e a consolidação recusam a taxa. Taxas de fechamento contam a partir da data da taxa à vista de fim de período; taxas médias, a partir da cotação mais recente incluída na média. Padrão sem política: 31 dias.",
@@ -4546,7 +4561,12 @@
       "hrmJobDescriptionTitle": "O título do cargo que os candidatos veem na vaga.",
       "hrmJobDescriptionKind": "Por exemplo integral, meio período, temporário ou por contrato.",
       "hrmJobDescriptionPay": "Opcional. Informe mínimo, máximo, moeda e base juntos, ou deixe os quatro vazios.",
-      "hrmJobDescriptionBody": "O texto da vaga. Novas requisições o copiam, então editá-lo aqui nunca altera uma vaga existente."
+      "hrmJobDescriptionBody": "O texto da vaga. Novas requisições o copiam, então editá-lo aqui nunca altera uma vaga existente.",
+      "periodEndEffectiveFrom": "Os exercícios que terminam nesta data ou depois são encerrados por esta versão. Ela não pode retroagir a um exercício já encerrado por lançamentos de encerramento.",
+      "periodEndClosingMethod": "Diretamente: receitas e despesas são encerradas contra lucros acumulados. Por meio de uma conta de apuração do resultado: são encerradas contra essa conta, que depois é encerrada contra lucros acumulados.",
+      "periodEndPostingPeriod": "O último período regular do exercício, ou o período de ajuste do exercício quando o calendário fiscal tiver um.",
+      "periodEndBalanceSheetJournals": "Também zerar todas as contas do balanço na data de encerramento e restabelecer os mesmos saldos no primeiro dia do exercício seguinte.",
+      "periodEndPreserveSegments": "Os segmentos de balanceamento são sempre mantidos, para que cada valor de segmento continue equilibrado por si só."
     },
     "options": {
       "withholdingCondominiumPayer": "Pagador: condomínio",
@@ -5356,6 +5376,14 @@
       "schedulePdfColorTreatment": {
         "subtle": "Destaques sutis",
         "strong": "Preenchimentos fortes"
+      },
+      "periodEndClosingMethod": {
+        "retained_earnings": "Diretamente para lucros acumulados",
+        "income_summary": "Por meio de uma conta de apuração do resultado"
+      },
+      "periodEndPostingPeriod": {
+        "last_period": "Último período do exercício",
+        "adjustment_period": "Período de ajuste"
       }
     },
     "payroll": {
@@ -6323,7 +6351,8 @@
       "scheduleBoardBooking": "Alocação",
       "scheduleBoardBookingHelp": "As alocações de dia inteiro usam este expediente no fuso horário do quadro.",
       "scheduleBoardAutomation": "Automação",
-      "scheduleBoardAutomationHelp": "O que acontece depois que uma alocação é publicada neste quadro."
+      "scheduleBoardAutomationHelp": "O que acontece depois que uma alocação é publicada neste quadro.",
+      "periodEndDimensions": "Dimensões mantidas nas linhas de encerramento"
     },
     "constructionRateEditor": {
       "tab": "Escopo e tarifas"
@@ -8055,6 +8084,10 @@
     "manufacturingSubcontract": {
       "title": "Produção externa",
       "description": "Envie componentes a um fornecedor, registre serviços e devolva a produção à ordem."
+    },
+    "periodEndJournals": {
+      "title": "Lançamentos de encerramento do exercício",
+      "description": "Registre lançamentos explícitos de encerramento do exercício nas jurisdições que os exigem: receitas e despesas para lucros acumulados, opcionalmente por meio de uma conta de apuração do resultado, com lançamentos opcionais de encerramento do balanço e de abertura do exercício seguinte. As demonstrações calculam os lucros acumulados em qualquer caso."
     }
   },
   "backupsManager": {

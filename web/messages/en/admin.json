@@ -3740,6 +3740,11 @@
         "title": "Job descriptions",
         "singularTitle": "Job description",
         "description": "Reusable posting content a new requisition starts from: title, employment type, pay range and description."
+      },
+      "period-end-journal-policies": {
+        "title": "Period-End Journals",
+        "singular": "period-end journal policy",
+        "description": "How the year-end close posts its journals: the retained earnings account, an optional income summary account, balance-sheet closing and opening journals, the posting period and the dimensions the closing lines keep. Each version governs fiscal years ending on or after its effective date."
       }
     },
     "fields": {
@@ -4367,7 +4372,17 @@
       "compensationMin": "Pay minimum",
       "compensationMax": "Pay maximum",
       "compensationCurrency": "Pay currency",
-      "compensationBasis": "Pay basis"
+      "compensationBasis": "Pay basis",
+      "closingMethod": "Closing method",
+      "retainedEarningsAccountId": "Retained earnings account",
+      "incomeSummaryAccountId": "Income summary account",
+      "balanceSheetJournals": "Balance-sheet closing and opening journals",
+      "postingPeriod": "Posting period",
+      "preserveDepartments": "Keep departments",
+      "preserveClasses": "Keep classes",
+      "preserveLocations": "Keep locations",
+      "preserveProjects": "Keep projects",
+      "preserveSegments": "Keep custom segments"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Days between the newest usable rate and the period end beyond which revaluation and consolidation refuse the rate. Closing rates count from the date of the period-end spot rate; average rates from the newest quote averaged. Default when no policy is set: 31 days.",
@@ -4546,7 +4561,12 @@
       "hrmJobDescriptionTitle": "The job title applicants see on the posting.",
       "hrmJobDescriptionKind": "For example full-time, part-time, seasonal or contract.",
       "hrmJobDescriptionPay": "Optional. Enter minimum, maximum, currency and basis together, or leave all four empty.",
-      "hrmJobDescriptionBody": "The posting text. New requisitions copy it, so editing it here never changes an existing opening."
+      "hrmJobDescriptionBody": "The posting text. New requisitions copy it, so editing it here never changes an existing opening.",
+      "periodEndEffectiveFrom": "Fiscal years ending on or after this date close under this version. It cannot reach back into a year already closed by period-end journals.",
+      "periodEndClosingMethod": "Directly: income and expense close into retained earnings. Through an income summary account: they close into that account, which then closes into retained earnings.",
+      "periodEndPostingPeriod": "The last regular period of the fiscal year, or the year's adjustment period when the fiscal calendar has one.",
+      "periodEndBalanceSheetJournals": "Also zero every balance-sheet account on the year-end date and re-establish the same balances on the first day of the next fiscal year.",
+      "periodEndPreserveSegments": "Balancing segments are always kept, so each segment value stays balanced on its own."
     },
     "options": {
       "withholdingCondominiumPayer": "Condominium payer",
@@ -5356,6 +5376,14 @@
       "schedulePdfColorTreatment": {
         "subtle": "Subtle accents",
         "strong": "Strong fills"
+      },
+      "periodEndClosingMethod": {
+        "retained_earnings": "Directly into retained earnings",
+        "income_summary": "Through an income summary account"
+      },
+      "periodEndPostingPeriod": {
+        "last_period": "Last period of the year",
+        "adjustment_period": "Adjustment period"
       }
     },
     "payroll": {
@@ -6323,7 +6351,8 @@
       "scheduleBoardBooking": "Booking",
       "scheduleBoardBookingHelp": "Whole-day bookings use these working hours in the board's time zone.",
       "scheduleBoardAutomation": "Automation",
-      "scheduleBoardAutomationHelp": "What happens after a booking is published on this board."
+      "scheduleBoardAutomationHelp": "What happens after a booking is published on this board.",
+      "periodEndDimensions": "Dimensions kept on closing lines"
     },
     "constructionRateEditor": {
       "tab": "Scope & rates"
@@ -8055,6 +8084,10 @@
     "manufacturingSubcontract": {
       "title": "External manufacturing",
       "description": "Send components to a vendor, record processing services and return production onto the work order."
+    },
+    "periodEndJournals": {
+      "title": "Period-end journals",
+      "description": "Post explicit year-end closing journals for jurisdictions that require them: income and expense into retained earnings, optionally through an income summary account, with optional balance-sheet closing and next-year opening journals. Statements compute retained earnings either way."
     }
   },
   "backupsManager": {

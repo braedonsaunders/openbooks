@@ -40,6 +40,7 @@ export const JOURNAL_ENTRY_SORTS: Record<string, SQL> = {
 export const JOURNAL_GL_NATIVE_ORIGINS = [
   "manual",
   "closing",
+  "opening",
   "allocation",
   "revaluation",
   "fx_revaluation",

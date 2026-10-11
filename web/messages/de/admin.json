@@ -3793,6 +3793,11 @@
         "title": "Stellenbeschreibungen",
         "singularTitle": "Stellenbeschreibung",
         "description": "Wiederverwendbare Ausschreibungsinhalte für neue Stellenanforderungen: Titel, Beschäftigungsart, Gehaltsspanne und Beschreibung."
+      },
+      "period-end-journal-policies": {
+        "title": "Abschlussbuchungen zum Periodenende",
+        "singular": "Richtlinie für Abschlussbuchungen",
+        "description": "Wie der Jahresabschluss seine Buchungen erzeugt: das Konto für Gewinnrücklagen, ein optionales Ergebnissammelkonto, Schlussbilanz- und Eröffnungsbuchungen, die Buchungsperiode und die Dimensionen, die Abschlusszeilen behalten. Jede Version gilt für Geschäftsjahre, die an oder nach ihrem Gültigkeitsdatum enden."
       }
     },
     "fields": {
@@ -4420,7 +4425,17 @@
       "compensationMin": "Gehalt Minimum",
       "compensationMax": "Gehalt Maximum",
       "compensationCurrency": "Gehaltswährung",
-      "compensationBasis": "Gehaltsbasis"
+      "compensationBasis": "Gehaltsbasis",
+      "closingMethod": "Abschlussmethode",
+      "retainedEarningsAccountId": "Konto für Gewinnrücklagen",
+      "incomeSummaryAccountId": "Ergebnissammelkonto",
+      "balanceSheetJournals": "Schlussbilanz- und Eröffnungsbuchungen",
+      "postingPeriod": "Buchungsperiode",
+      "preserveDepartments": "Abteilungen beibehalten",
+      "preserveClasses": "Klassen beibehalten",
+      "preserveLocations": "Standorte beibehalten",
+      "preserveProjects": "Projekte beibehalten",
+      "preserveSegments": "Benutzerdefinierte Segmente beibehalten"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Tage zwischen dem neuesten verwendbaren Kurs und dem Periodenende, ab denen Bewertung und Konsolidierung den Kurs ablehnen. Stichtagskurse zählen ab dem Datum des Kassakurses zum Periodenende, Durchschnittskurse ab der neuesten einbezogenen Notierung. Standard ohne Richtlinie: 31 Tage.",
@@ -4599,7 +4614,12 @@
       "hrmJobDescriptionTitle": "Der Stellentitel, den Bewerbende in der Ausschreibung sehen.",
       "hrmJobDescriptionKind": "Zum Beispiel Vollzeit, Teilzeit, saisonal oder befristet.",
       "hrmJobDescriptionPay": "Optional. Minimum, Maximum, Währung und Basis gemeinsam angeben oder alle vier leer lassen.",
-      "hrmJobDescriptionBody": "Der Ausschreibungstext. Neue Stellenanforderungen übernehmen eine Kopie; Änderungen hier wirken nicht auf bestehende Stellen."
+      "hrmJobDescriptionBody": "Der Ausschreibungstext. Neue Stellenanforderungen übernehmen eine Kopie; Änderungen hier wirken nicht auf bestehende Stellen.",
+      "periodEndEffectiveFrom": "Geschäftsjahre, die an oder nach diesem Datum enden, werden nach dieser Version abgeschlossen. Sie kann nicht in ein bereits durch Abschlussbuchungen geschlossenes Jahr zurückwirken.",
+      "periodEndClosingMethod": "Direkt: Erträge und Aufwendungen werden in die Gewinnrücklagen abgeschlossen. Über ein Ergebnissammelkonto: Sie werden auf dieses Konto abgeschlossen, das anschließend in die Gewinnrücklagen abgeschlossen wird.",
+      "periodEndPostingPeriod": "Die letzte reguläre Periode des Geschäftsjahres oder die Abschlussperiode des Jahres, sofern der Geschäftskalender eine hat.",
+      "periodEndBalanceSheetJournals": "Zusätzlich jedes Bilanzkonto zum Jahresende auf null stellen und dieselben Salden am ersten Tag des nächsten Geschäftsjahres wieder eröffnen.",
+      "periodEndPreserveSegments": "Ausgleichssegmente werden immer beibehalten, damit jeder Segmentwert für sich ausgeglichen bleibt."
     },
     "options": {
       "withholdingCondominiumPayer": "Wohnungseigentümergemeinschaft als Zahler",
@@ -5409,6 +5429,14 @@
       "schedulePdfColorTreatment": {
         "subtle": "Dezente Akzente",
         "strong": "Kräftige Flächen"
+      },
+      "periodEndClosingMethod": {
+        "retained_earnings": "Direkt in die Gewinnrücklagen",
+        "income_summary": "Über ein Ergebnissammelkonto"
+      },
+      "periodEndPostingPeriod": {
+        "last_period": "Letzte Periode des Jahres",
+        "adjustment_period": "Abschlussperiode"
       }
     },
     "bankFeeds": {
@@ -6395,7 +6423,8 @@
       "scheduleBoardBooking": "Einplanung",
       "scheduleBoardBookingHelp": "Ganztägige Einplanungen verwenden diese Arbeitszeiten in der Zeitzone der Plantafel.",
       "scheduleBoardAutomation": "Automatisierung",
-      "scheduleBoardAutomationHelp": "Was geschieht, nachdem eine Einplanung auf dieser Plantafel veröffentlicht wurde."
+      "scheduleBoardAutomationHelp": "Was geschieht, nachdem eine Einplanung auf dieser Plantafel veröffentlicht wurde.",
+      "periodEndDimensions": "Auf Abschlusszeilen beibehaltene Dimensionen"
     },
     "segmentValues": {
       "builtinLink": "{name} öffnen",
@@ -8055,6 +8084,10 @@
     "manufacturingSubcontract": {
       "title": "Externe Fertigung",
       "description": "Komponenten an Lieferanten senden, Bearbeitungsleistungen erfassen und Produktion auf den Fertigungsauftrag zurücknehmen."
+    },
+    "periodEndJournals": {
+      "title": "Abschlussbuchungen zum Periodenende",
+      "description": "Explizite Jahresabschlussbuchungen für Rechtsordnungen, die sie verlangen: Erträge und Aufwendungen in die Gewinnrücklagen, wahlweise über ein Ergebnissammelkonto, optional mit Schlussbilanz- und Eröffnungsbuchungen für das Folgejahr. Die Berichte berechnen die Gewinnrücklagen in jedem Fall."
     }
   },
   "extensions": {
