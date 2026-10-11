@@ -1922,6 +1922,19 @@ export function OrderDrawer({
   const convertTargets = allowedConvertKinds
     ? CONVERSION_TARGETS[kind].filter((target) => allowedConvertKinds.includes(target.kind))
     : canManage ? CONVERSION_TARGETS[kind] : []
+  // The Actions popover must never open onto nothing (the document-drawer
+  // rule): every clause mirrors one entry rendered below, so a viewer with
+  // no entry gets no button instead of an empty menu. ApprovalActions
+  // resolves its gate asynchronously, so a pending-approval record always
+  // keeps the menu — its decision buttons may arrive after the popover opens.
+  const hasOrderMenuEntries =
+    canManage ||
+    (convertTargets.length > 0 && isApproved) ||
+    (kind === 'quote' && quoteAwardAvailable && !createMode) ||
+    (dropShipping && canAssessDropShip && kind === 'sales_order' && isApproved && dropShipRoutes.some((route) => route.purchaseOrderLineId)) ||
+    (dropShipping && canCreateDropShipPurchaseOrder && kind === 'sales_order' && isApproved && dropShipRoutes.some((row) => row.purchaseOrderLineId === null)) ||
+    (dropShipping && canConfirmDropShip && isDropShipPurchaseOrder && isApproved) ||
+    (returnAuthorizations && kind === 'sales_order' && isApproved)
 
   return (
     <TransactionDrawer
@@ -1976,9 +1989,9 @@ export function OrderDrawer({
               {busy ? tCommon('actions.saving') : tCommon('actions.save')}
             </Button>
           </>
-        ) : (
+        ) : hasOrderMenuEntries || doc.status === 'pending_approval' ? (
           <>
-            {(canManage || convertTargets.length > 0 || canCreateDropShipPurchaseOrder || canConfirmDropShip || (kind === 'quote' && quoteAwardAvailable)) ? (
+            {hasOrderMenuEntries ? (
           <>
             {kind === 'quote' && quoteAwardAvailable && !createMode ? (
               <QuoteAwardAction quoteId={String(doc.id)} docStatus={doc.status} canAward={quoteAwardEnabled} />
@@ -2062,7 +2075,7 @@ export function OrderDrawer({
                 approver" for SoD-blocked viewers. */}
             <ApprovalActions subjectKind={kind} subjectId={String(doc.id)} />
           </>
-        )
+        ) : null
       }
       keepRecordTabsMounted={['subscription']}
       detailTabs={createMode ? [] : [
