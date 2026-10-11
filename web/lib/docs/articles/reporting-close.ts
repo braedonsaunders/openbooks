@@ -6,7 +6,7 @@ export const financialReports: DocArticle = {
   category: 'reporting',
   order: 1,
   summary: 'Run financial statements, aging, registers, ledger detail, budget, order, and project reports.',
-  updated: '2026-07-21',
+  updated: '2026-10-11',
   keywords: [
     'reports',
     'profit and loss',
@@ -70,15 +70,25 @@ rules as opening the record from its owning module.
 - **Profit & Loss** explains income and expense over a period.
 - **Balance Sheet** shows assets, liabilities, and equity as of a date.
   Posted equity accounts print as posted. Computed **Retained earnings
-  (prior years)** is net income of closed fiscal years; **Current year
+  (prior years)** is net income of earlier fiscal years; **Current year
   earnings** is fiscal-year-to-date net income. Together they equal
-  lifetime P&L. There is no year-end closing journal.
+  lifetime P&L. Retained earnings are computed whether or not the year has
+  been closed by journal.
 - **Cash Flow** explains movement in cash by activity.
 - **Trial Balance** lists account debit and credit balances as of a date.
   Balance-sheet accounts are lifetime. Income-statement accounts are
   fiscal-year-to-date. Prior-year net income appears as computed retained
-  earnings so the trial still foots — income accounts are never zeroed by a
-  year-end journal.
+  earnings so the trial still foots.
+
+Year-end closing journals are optional. Organizations whose jurisdiction
+requires explicit closing entries turn on **Period-end journals** and post
+them as a step of the year-end close (see **Year-End Closing Journals**).
+Statements, the trial balance, cash flow, budgets, analytics and consolidated
+reports leave those closing and opening journals out, so every report reads
+exactly the same whether or not a year has been closed by journal, and the
+income statement of a closed year remains reportable. The **Journal**, the
+**General Ledger** detail and account registers show them, because they are
+the statutory record of the close.
 
 Use consistent book, subsidiary, date, currency, and dimension filters when
 comparing reports. A difference caused by scope is not an accounting difference.
@@ -233,7 +243,7 @@ export const periodClose: DocArticle = {
     'evidence',
     'continuous close',
   ],
-  related: ['banking-and-reconciliation', 'financial-reports', 'audit-log'],
+  related: ['banking-and-reconciliation', 'financial-reports', 'audit-log', 'year-end-closing'],
   body: `# Period Close
 
 Period close turns a set of completed reconciliations and reviews into a governed
@@ -328,9 +338,158 @@ For a correction after statements were issued, a reversal and correcting entry
 in an open period is often preferable because it preserves the original close.
 Follow the organization's accounting policy.
 
+## Year-end closing journals
+
+With **Period-end journals** turned on, the close run of the year's last
+period (or of its adjustment period, as the policy chooses) carries the
+**Post period-end journals** step. It previews the closing and opening
+journals per legal entity and generates them once the rest of the year is
+closed. Once they are posted, the fiscal year is sealed: a later posting into
+any period of that year is refused until the year-end period is reopened. A
+reopen of any other period of a year closed by journal is refused with that
+remedy, and approving the reopen of the year-end period reverses the journals.
+See **Year-End Closing Journals** for the full behavior.
+
 The original journal remains part of every financial report after its lifecycle
 status changes to **reversed**. Reports include it together with the linked
 posted reversal; excluding the original would report the reversal as new
 economic activity instead of a cancellation.
+`,
+}
+
+export const yearEndClosing: DocArticle = {
+  slug: 'year-end-closing',
+  title: 'Year-End Closing Journals',
+  category: 'banking-close',
+  order: 3,
+  summary: 'Post explicit year-end closing and opening journals where a jurisdiction requires them, as a governed step of the year-end close.',
+  updated: '2026-10-11',
+  keywords: [
+    'year-end close',
+    'closing entries',
+    'period-end journals',
+    'retained earnings',
+    'income summary',
+    'opening balances',
+    'balance sheet closing',
+  ],
+  related: ['period-close', 'financial-reports', 'audit-log'],
+  body: `# Year-End Closing Journals
+
+OpenBooks computes retained earnings in every statement, so most organizations
+never need a closing journal. Some jurisdictions require the books to record
+the closing explicitly: income and expense accounts are zeroed into retained
+earnings at the fiscal year end, and in some regimes the balance sheet is
+closed and reopened as well. **Period-end journals** posts those entries as a
+governed step of the year-end close.
+
+## Turn it on
+
+Turn on **Period-end journals** in **Company Settings → Features**. It sits
+under the close features and is off by default. Turning it off later keeps
+every journal and generation already recorded; the year-end seal described
+below keeps applying to years already closed by journal.
+
+## Configure the policy
+
+Record the policy in **Settings → Setup → Accounting → Period-End Journals**.
+Each version has an effective date and governs every fiscal year ending on or
+after it. Versions are never edited: record a new version to change the
+policy. A version cannot take effect on or before the end of a year that is
+already closed by journal, so a closed year always keeps the policy it was
+closed under.
+
+- **Closing method**: directly into the **Retained earnings account**, or
+  through an **Income summary account** that is then closed into retained
+  earnings. Both accounts must be active, postable equity accounts.
+- **Posting period**: the last regular period of the fiscal year, or the
+  year's adjustment period when the fiscal calendar has one.
+- **Balance-sheet closing and opening journals**: also zero every
+  balance-sheet account on the year-end date and re-establish the same
+  balances on the first day of the next fiscal year.
+- **Dimensions kept on closing lines**: departments, classes, locations,
+  projects and custom segments. Each kept combination is closed into retained
+  earnings on its own. Balancing segments are always kept, so every segment
+  value stays balanced.
+
+## What is posted
+
+For each accounting book and legal entity, in the legal entity's functional
+currency:
+
+- **Income statement closing** (origin **closing**): every income and expense
+  balance assigned to a period ending on or before the year end is reversed,
+  and the total of each kept dimension combination lands on the offset
+  account. Earnings of earlier years that were never closed by journal are
+  closed with the first closed year and shown separately in the preview.
+- **Income summary closing** (origin **closing**, income summary method only):
+  moves the income summary balance into retained earnings.
+- **Balance sheet closing** (origin **closing**, optional): zeroes every
+  balance-sheet account on the year-end date.
+- **Opening balances** (origin **opening**, optional): restores the same
+  balances in the first period of the next fiscal year.
+
+Every journal posts through the posting kernel: balanced in total and per
+legal entity, exact to the ledger unit, with an exactly-once key. Filter the
+**Journal** by the **Closing** and **Opening** origins to review them.
+
+## Generate from the close
+
+The step **Post period-end journals** appears in the close run of the period
+the journals post into. Open it to see, per legal entity, the fiscal-year
+earnings, any earlier earnings not yet closed, every journal with its lines,
+and anything that would refuse generation:
+
+- every other period of the fiscal year must be closed in every module;
+- the posting period (and, for opening journals, the next year's first
+  period) must still accept postings;
+- no draft, pending or approved transaction may remain in the year;
+- foreign-currency balances must be revalued at the posting period when
+  multiple currencies are on;
+- no later fiscal year may already be closed by journal.
+
+Choose **Generate period-end journals** and record a reason. Generating again
+with an unchanged ledger and policy posts nothing. The step is complete when
+every legal entity's journals match what the generator would post, and the
+close run cannot be approved until it is.
+
+## The year-end seal
+
+While a year's journals stand, the book and legal entity are closed through
+that year end. Any posting into a period ending on or before it is refused
+with the period to reopen — by the posting kernel and again by the database.
+This is deliberate: adjusting a closed year without reopening it would leave
+its income accounts open again behind the closing entries.
+
+## Late adjustments
+
+To change a closed year, request a controlled reopen of its year-end period.
+A reopen of any other period of that year is refused until the year-end
+period has been reopened. When the reopen is approved, the period-end
+journals are reversed in the same step — each by a posted reversal in the
+journal's own period, never deleted — and the generation records the
+approver, the reopen request and the reason. If opening journals were posted,
+the next year's first period must also be open for their reversal. Post the
+adjustment, then generate the journals again when the year is closed again.
+
+Before the year-end period locks, **Reverse period-end journals** in the step
+withdraws a generation with a recorded reason, for example to admit a late
+adjustment without a reopen.
+
+## History and audit
+
+The step's **History** lists every generation of the fiscal year with its
+journals, who generated it and why, and who reversed it, when and why. Each
+generation keeps a snapshot of the policy it used and a content fingerprint,
+and every generation and reversal is recorded in the audit log.
+
+## Reports
+
+Financial statements, the trial balance, cash flow, budgets, analytics,
+project profitability and consolidated statements exclude closing and
+opening journals and compute retained earnings from the ledger. The balance
+sheet for any date is therefore identical with or without the closing
+journals, and the income statement of a closed year is still reportable. The
+Journal, the General Ledger detail and account registers include them.
 `,
 }

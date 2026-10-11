@@ -101,7 +101,7 @@ import {
   bankingAndReconciliation,
   fileCabinet,
 } from './articles/daily-workflows'
-import { financialReports, analyticsAndSavedViews, periodClose } from './articles/reporting-close'
+import { financialReports, analyticsAndSavedViews, periodClose, yearEndClosing } from './articles/reporting-close'
 import { agentWorkbench } from './articles/agent-workbench'
 import { migrationAndCutover, reconciliationBeforeCutover } from './articles/migration'
 import { migrateWithAConnector } from './articles/migrate-with-a-connector'
@@ -347,6 +347,7 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   distributionLabels,
   bankingAndReconciliation,
   periodClose,
+  yearEndClosing,
   projectTypes, overheadCosting, laborCosting, laborPricing, manufacturingOverview, payroll, employmentMigration, positionsAndHeadcount, hrmProcesses, inboxAndHome, automations, webhooks, correctingAndRescinding, performanceAndRetention, continuousPerformance, selfService, leaveTimeVersusValue, recruitingFunnel, benefitsEnrollment, fieldTickets, preBilling, subcontractorCompliance, compensationAndTransparency,
   busySeasonCapacity,
   staffingBoardEvidence, softHardBookings, retainersDrawdownsRecognition,
