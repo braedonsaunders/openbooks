@@ -41,6 +41,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { WizardLayout } from "../../../components/page-layout";
+import { readApiErrorMessage } from "../../../lib/api-error";
 import { UnbilledAccrualPanel } from "./UnbilledAccrualPanel";
 
 /**
@@ -183,17 +184,17 @@ const STAGES = [
 ] as const;
 type Stage = (typeof STAGES)[number];
 
-async function call(url: string, body: Record<string, unknown>) {
+async function call(url: string, body: Record<string, unknown>, fallback: string) {
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  // The error body may not be JSON (proxy 5xx pages): never let the read
-  // itself throw a raw SyntaxError, or the failure surfaces as gibberish.
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error ?? "request failed");
-  return data;
+  // Refusals arrive under several keys (error, message, detail, remedy):
+  // read them through the shared helper so a refusal can never surface as
+  // an empty message. The success body may be empty; that is fine here.
+  if (!response.ok) throw new Error(await readApiErrorMessage(response, fallback));
+  return response.json().catch(() => ({}));
 }
 
 export function CloseWizard(props: Props) {
@@ -228,7 +229,7 @@ export function CloseWizard(props: Props) {
   async function runAction(action: string, comment?: string) {
     setBusy(true);
     try {
-      await call(`/api/close/runs/${props.run.id}`, { action, comment });
+      await call(`/api/close/runs/${props.run.id}`, { action, comment }, t("errors.actionFailed"));
       toast.success(t(`messages.${action}`));
       router.refresh();
     } catch (error) {
@@ -686,7 +687,7 @@ function TaskCard(props: Props & { task: CloseTaskRow }) {
   async function revalidateTask() {
     setBusy(true);
     try {
-      await call(`/api/close/runs/${props.run.id}`, { action: "refresh" });
+      await call(`/api/close/runs/${props.run.id}`, { action: "refresh" }, t("errors.actionFailed"));
       toast.success(t("messages.refresh"));
       router.refresh();
     } catch (error) {
@@ -701,7 +702,7 @@ function TaskCard(props: Props & { task: CloseTaskRow }) {
       await call(`/api/close/runs/${props.run.id}/tasks/${props.task.id}`, {
         action: actionName,
         notes: note || undefined,
-      });
+      }, t("errors.actionFailed"));
       toast.success(t("messages.taskUpdated"));
       setNote("");
       router.refresh();
@@ -720,7 +721,7 @@ function TaskCard(props: Props & { task: CloseTaskRow }) {
         evidenceType: "note",
         label: note.trim(),
         snapshot: { note: note.trim() },
-      });
+      }, t("errors.actionFailed"));
       toast.success(t("messages.evidenceAdded"));
       setNote("");
       router.refresh();
@@ -736,7 +737,7 @@ function TaskCard(props: Props & { task: CloseTaskRow }) {
       const result = await call("/api/close/run-revaluation", {
         periodId: props.run.period_id,
         bookId: props.run.book_id,
-      });
+      }, t("errors.actionFailed"));
       // Partial problems arrive with stable codes plus structured subsidiary
       // parameters and render through the close catalog; the legacy English
       // strings stay as the fallback when details are absent.
@@ -788,7 +789,7 @@ function TaskCard(props: Props & { task: CloseTaskRow }) {
       const result = (await call("/api/consolidation", {
         action: "consolidate",
         periodId: props.run.period_id,
-      })) as { elimination?: { status?: string } };
+      }, t("errors.actionFailed"))) as { elimination?: { status?: string } };
       // A re-run that only reverses a prior elimination posts no effective
       // elimination entry: saying "posted" would present the reversal as
       // effective, so the reversed state gets its own message.
