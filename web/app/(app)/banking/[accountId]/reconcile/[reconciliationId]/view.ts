@@ -6,7 +6,7 @@ import { getLocale, getTranslations } from 'next-intl/server'
 import { formatCivilDate } from '@/lib/format'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { reconciliationBookId, reconciliationTotals } from '@openbooks/engine/src/banking/banking.ts'
+import { reconciliationBookId, reconciliationTotals, reconciliationStaleness, priorPeriodLateEffect } from '@openbooks/engine/src/banking/banking.ts'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission, subsidiaryScopeAllows } from '../../../../../../lib/authz'
 import { openingCarryStartDate } from '../../../../../../lib/banking-accounts'
@@ -125,6 +125,28 @@ export interface ReconcileGlClearing extends Record<string, unknown> {
   total: string
 }
 
+export interface ReconcileStaleLateEntry extends Record<string, unknown> {
+  entryNumber: string
+  postingDate: string
+  amount: string
+  postedBy: string | null
+  postedAt: string | null
+}
+
+export interface ReconcileStaleReversedEntry extends Record<string, unknown> {
+  entryNumber: string
+  postingDate: string
+  amount: string
+  reversal: string | null
+}
+
+export interface ReconcileStaleness extends Record<string, unknown> {
+  badge: string
+  effect: string
+  late: ReconcileStaleLateEntry[]
+  reversed: ReconcileStaleReversedEntry[]
+}
+
 export interface ReconciliationData {
   backHref: string
   backLabel: string
@@ -164,6 +186,10 @@ export interface ReconciliationData {
   matchedTotal: number
   mParams: ReconcilePaneParams
   glClearings: ReconcileGlClearing[]
+  /** Read-time staleness once signed off; null while the sign-off stands. */
+  stale: ReconcileStaleness | null
+  /** Late effects from earlier signed-off periods, for unsigned sessions. */
+  priorEffects: string[]
 }
 
 export async function loadReconciliation(
@@ -345,6 +371,43 @@ export async function loadReconciliation(
        where ${mWhere}`),
   ]))
 
+  // Read-time staleness: late in-period postings and reversed matches move
+  // the ledger under a frozen sign-off. Unsigned sessions instead explain
+  // their opening difference from earlier signed-off periods' late effects.
+  const detail = await reconciliationStaleness(reconciliationId, ctx)
+  const stale: ReconcileStaleness | null = detail.stale
+    ? {
+        badge: t('stale.badge', { date: detail.staleSince ?? recon.through_date }),
+        effect: t('stale.effect', { amount: money(detail.clearedEffect, { maximumFractionDigits: 4 }) }),
+        late: detail.lateEntries.map((entry) => ({
+          entryNumber: entry.entryNumber,
+          postingDate: entry.postingDate,
+          amount: entry.amount,
+          postedBy: entry.postedBy,
+          postedAt: entry.postedAt?.slice(0, 10) ?? null,
+        })),
+        reversed: detail.reversedMatches.map((entry) => ({
+          entryNumber: entry.entryNumber,
+          postingDate: entry.postingDate,
+          amount: entry.amount,
+          reversal: entry.reversalNumber
+            ? t('stale.reversal', {
+                number: entry.reversalNumber,
+                date: entry.reversedAt?.slice(0, 10) ?? recon.through_date,
+              })
+            : null,
+        })),
+      }
+    : null
+  const priorEffects = signedOff
+    ? []
+    : (await priorPeriodLateEffect(accountId, recon.through_date, ctx)).map((effect) =>
+        t('stale.openingEffect', {
+          amount: money(effect.amount, { maximumFractionDigits: 4 }),
+          period: effect.throughDate,
+        }),
+      )
+
   return {
     backHref: `/banking/${accountId}`,
     backLabel: [recon.account_number, recon.account_name].filter(Boolean).join(' · '),
@@ -413,6 +476,8 @@ export async function loadReconciliation(
     matchedTotal: Number(mCount.rows[0]?.n ?? 0),
     mParams,
     glClearings,
+    stale,
+    priorEffects,
   }
 }
 
@@ -469,6 +534,8 @@ export function reconcileSpec(data: ReconciliationData): PageSpec {
         matchedTotal: data.matchedTotal,
         mParams: data.mParams,
         glClearings: data.glClearings,
+        stale: data.stale,
+        priorEffects: data.priorEffects,
       }),
     ],
   })

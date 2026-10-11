@@ -81,3 +81,11 @@ export function ReconActionCell({ href, label }: { href: string; label: string }
     </Button>
   )
 }
+
+/** A signed-off session's staleness: a warning badge once late in-period
+ *  postings or a reversal moved the ledger under the sign-off, nothing
+ *  while the sign-off still stands. */
+export function StaleBadgeCell({ label }: { label: string | null }) {
+  if (!label) return null
+  return <Badge variant="warning">{label}</Badge>
+}

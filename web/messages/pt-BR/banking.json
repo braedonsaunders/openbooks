@@ -564,6 +564,18 @@
     "sourceSignedOffDescription": "Conciliado a partir de {connector} até {date} — {cleared, number} conciliadas · {uncleared, number} pendentes. Nenhum extrato foi importado.",
     "sourceSignedOffByDescription": "Conciliado a partir de {connector} até {date} por {name} — {cleared, number} conciliadas · {uncleared, number} pendentes. Nenhum extrato foi importado."
   },
+  "stale": {
+    "badge": "Desatualizada desde {date}",
+    "column": "Desatualizada",
+    "lateTitle": "Lançado neste período após a finalização",
+    "reversedTitle": "Linhas conciliadas estornadas após a finalização",
+    "effect": "Efeito no saldo conciliado: {amount}",
+    "postedBy": "Lançado por",
+    "postedAt": "Lançado em",
+    "reversal": "Estorno {number} em {date}",
+    "remedy": "Concilie estas linhas na próxima sessão de conciliação — elas aparecem como linhas pendentes do razão.",
+    "openingEffect": "{amount} de lançamentos em {period} após sua finalização"
+  },
   "workspace": {
     "signedOffAlert": "Esta conciliação está finalizada — as linhas de lançamento correspondidas abaixo estão permanentemente marcadas como conciliadas.",
     "autoMatch": "Correspondência automática",

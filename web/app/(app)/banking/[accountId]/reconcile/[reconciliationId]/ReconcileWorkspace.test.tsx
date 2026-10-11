@@ -76,6 +76,13 @@ async function mountWorkspace(
     glTotal?: number;
     glOutstandingTotal?: string;
     glClearings?: { group_id: string; lines: number; entries: string | null; total: string }[];
+    stale?: {
+      badge: string;
+      effect: string;
+      late: { entryNumber: string; postingDate: string; amount: string; postedBy: string | null; postedAt: string | null }[];
+      reversed: { entryNumber: string; postingDate: string; amount: string; reversal: string | null }[];
+    } | null;
+    priorEffects?: string[];
   } = {},
 ): Promise<void> {
   const prior = globalThis.fetch
@@ -117,6 +124,8 @@ async function mountWorkspace(
             matchedTotal={0}
             mParams={pane}
             glClearings={override.glClearings ?? []}
+            stale={override.stale ?? null}
+            priorEffects={override.priorEffects ?? []}
           />
         </MoneyProvider>
       </NextIntlClientProvider>,
@@ -425,4 +434,40 @@ test('a signed-off session lists its outstanding items with totals instead of em
   assert.ok(text.includes('outstanding'), 'the panes name their outstanding totals')
   assert.ok(!text.includes('Match selected'), 'a signed-off session offers no matching')
   assert.ok(!text.includes('Sign off'), 'a signed-off session offers no second sign-off')
+})
+
+test('a stale signed-off session names the late entries, their effect, and the remedy', async (t) => {
+  await mountWorkspace(t, (async () => Response.json({})) as typeof fetch, {
+    status: 'signed_off',
+    stale: {
+      badge: 'Stale since 2026-07-25',
+      effect: 'Effect on cleared balance: -$920.00',
+      late: [
+        { entryNumber: 'STALE-late-receipt', postingDate: '2026-07-10', amount: '3500.0000', postedBy: 'Bank reviewer', postedAt: '2026-07-25' },
+        { entryNumber: 'STALE-late-payment', postingDate: '2026-07-12', amount: '-4420.0000', postedBy: 'Bank reviewer', postedAt: '2026-07-26' },
+      ],
+      reversed: [
+        { entryNumber: 'STALE-matched', postingDate: '2026-07-10', amount: '100.0000', reversal: 'Reversal STALE-rev on 2026-07-27' },
+      ],
+    },
+  })
+  const text = document.body.textContent ?? ''
+  assert.ok(text.includes('Stale since 2026-07-25'), 'the workspace badges the stale sign-off')
+  assert.ok(text.includes('STALE-late-receipt'), 'the panel names the late receipt')
+  assert.ok(text.includes('STALE-late-payment'), 'the panel names the late payment')
+  assert.ok(text.includes('Bank reviewer'), 'the panel names who posted the late entries')
+  assert.ok(text.includes('STALE-matched'), 'the panel names the reversed match')
+  assert.ok(text.includes('Reversal STALE-rev on 2026-07-27'), 'the panel names the reversal behind it')
+  assert.ok(text.includes('Match these lines in the next reconciliation session'), 'the panel states the remedy')
+})
+
+test('an unsigned session explains its opening difference from earlier late periods', async (t) => {
+  await mountWorkspace(t, (async () => Response.json({})) as typeof fetch, {
+    priorEffects: ['-920.00 from entries posted into 2026-07-15 after its sign-off'],
+  })
+  const text = document.body.textContent ?? ''
+  assert.ok(
+    text.includes('-920.00 from entries posted into 2026-07-15 after its sign-off'),
+    'the workspace carries the earlier period effect into the opening difference explanation',
+  )
 })

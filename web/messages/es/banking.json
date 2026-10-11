@@ -564,6 +564,18 @@
     "sourceSignedOffDescription": "Conciliado desde {connector} hasta {date} — {cleared, number} conciliadas · {uncleared, number} pendientes. No se importó ningún extracto.",
     "sourceSignedOffByDescription": "Conciliado desde {connector} hasta {date} por {name} — {cleared, number} conciliadas · {uncleared, number} pendientes. No se importó ningún extracto."
   },
+  "stale": {
+    "badge": "Desactualizada desde {date}",
+    "column": "Desactualizada",
+    "lateTitle": "Contabilizado en este período después de la aprobación",
+    "reversedTitle": "Líneas conciliadas revertidas después de la aprobación",
+    "effect": "Efecto en el saldo conciliado: {amount}",
+    "postedBy": "Contabilizado por",
+    "postedAt": "Contabilizado el",
+    "reversal": "Reversión {number} el {date}",
+    "remedy": "Concilie estas líneas en la próxima sesión de conciliación — aparecen como líneas pendientes del libro mayor.",
+    "openingEffect": "{amount} de asientos contabilizados en {period} después de su aprobación"
+  },
   "workspace": {
     "signedOffAlert": "Esta conciliación está aprobada — las líneas de diario conciliadas a continuación quedan marcadas de forma permanente como conciliadas.",
     "autoMatch": "Conciliación automática",

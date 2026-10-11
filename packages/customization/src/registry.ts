@@ -1817,6 +1817,7 @@ const BANK_RECONCILIATION: RecordTypeMeta = {
     { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status" },
     { key: "started", labelKey: "banking.account.columns.started", kind: "date", sortable: true, sortKey: "created" },
     { key: "signed_off", labelKey: "banking.account.columns.signedOff", kind: "date", sortable: true, sortKey: "signed_off" },
+    { key: "stale_since", labelKey: "banking.stale.column", kind: "date", sortable: false },
   ],
   listFilters: [
     {

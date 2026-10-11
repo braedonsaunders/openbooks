@@ -564,6 +564,18 @@
     "sourceSignedOffDescription": "{connector} から {date} まで消込済み — 消込済み {cleared, number} 件 · 未消込 {uncleared, number} 件。明細はインポートされていません。",
     "sourceSignedOffByDescription": "{connector} から {date} まで {name} が消込 — 消込済み {cleared, number} 件 · 未消込 {uncleared, number} 件。明細はインポートされていません。"
   },
+  "stale": {
+    "badge": "ステール（{date}以降）",
+    "column": "ステール",
+    "lateTitle": "承認後にこの期間に計上された仕訳",
+    "reversedTitle": "承認後に取り消された消込済み明細",
+    "effect": "消込済み残高への影響：{amount}",
+    "postedBy": "計上者",
+    "postedAt": "計上日時",
+    "reversal": "取消仕訳 {number}（{date}）",
+    "remedy": "次の照合セッションでこれらの明細を消し込んでください — 未消込の元帳明細として表示されます。",
+    "openingEffect": "承認後に {period} に計上された仕訳による {amount}"
+  },
   "workspace": {
     "signedOffAlert": "この消込は承認済みです。以下の照合された仕訳行は消込済みとして恒久的にスタンプされています。",
     "autoMatch": "自動照合",

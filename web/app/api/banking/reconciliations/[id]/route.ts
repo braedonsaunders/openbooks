@@ -8,6 +8,7 @@ import {
   BankingError,
   adjustReconciliation,
   discardReconciliation,
+  reconciliationStaleness,
   reconciliationTotals,
 } from '@openbooks/engine/src/banking/banking.ts'
 import { isUuid } from '../../../../../lib/list-params'
@@ -52,9 +53,16 @@ export const GET = defineRoute({
           userId: user.id,
           allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
         })
+        // Read-time staleness rides the same scope gate: late in-period
+        // postings and reversed matches behind a frozen sign-off.
+        const staleness = await reconciliationStaleness(id, {
+          orgId: user.orgId,
+          userId: user.id,
+          allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+        })
         // The ownership column gated the read; it is not part of the response shape.
         delete rec.rows[0].account_subsidiary_id
-        return NextResponse.json({ reconciliation: rec.rows[0], totals })
+        return NextResponse.json({ reconciliation: rec.rows[0], totals, staleness })
       } catch (e) {
         return apiErrorResponse(e)
       }

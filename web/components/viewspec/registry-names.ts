@@ -558,6 +558,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'show-inactives-toggle',
   'single-book-label',
   'spend-velocity-view',
+  'stale-badge-cell',
   'start-reconciliation',
   'statement-delete-cell',
   'statement-drawer',

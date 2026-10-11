@@ -18,6 +18,36 @@ export const BANK_RECONCILIATION_BUILT_IN_EXPR: Record<string, SQL> = {
   status: sql`r.status`,
   started: sql`to_char(r.created_at, 'YYYY-MM-DD')`,
   signed_off: sql`to_char(r.signed_off_at, 'YYYY-MM-DD')`,
+  // Read-time staleness for the cross-account list: the civil date of the
+  // earliest late in-period posting or reversed match behind a signed-off
+  // session, null while the sign-off stands. Unsigned sessions never read
+  // stale; the detail (entries, effect) lives on the workspace reader.
+  stale_since: sql`(
+    select to_char(min(evidence_at), 'YYYY-MM-DD')
+      from (
+        select je.posted_at as evidence_at
+          from journal_lines jl
+          join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
+         where jl.org_id = r.org_id and jl.account_id = r.account_id
+           and jl.currency = r.currency
+           and je.book_id = (select id from accounting_books
+                              where org_id = r.org_id and is_primary limit 1)
+           and je.status in ('posted', 'reversed')
+           and je.posting_date <= r.through_date
+           and je.posted_at > r.signed_off_at
+        union all
+        select coalesce(rev.posted_at, je.updated_at) as evidence_at
+          from reconciliation_matches m
+          join journal_lines jl on jl.id = m.journal_line_id and jl.org_id = m.org_id
+          join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
+          left join journal_entries rev
+            on rev.org_id = je.org_id and rev.reverses_entry_id = je.id
+         where m.org_id = r.org_id and m.reconciliation_id = r.id
+           and je.status = 'reversed'
+           and coalesce(rev.posted_at, je.updated_at) > r.signed_off_at
+      ) stale_evidence
+     where r.status = 'signed_off'
+  )`,
 }
 
 export const BANK_RECONCILIATION_SORTS: Record<string, SQL> = {

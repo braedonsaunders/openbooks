@@ -78,6 +78,28 @@ interface GlClearing {
   entries: string | null
   total: string
 }
+
+interface StaleLateEntry {
+  entryNumber: string
+  postingDate: string
+  amount: string
+  postedBy: string | null
+  postedAt: string | null
+}
+
+interface StaleReversedEntry {
+  entryNumber: string
+  postingDate: string
+  amount: string
+  reversal: string | null
+}
+
+interface Staleness {
+  badge: string
+  effect: string
+  late: StaleLateEntry[]
+  reversed: StaleReversedEntry[]
+}
 interface ReconciliationActionResult {
   error?: string
   matched?: number
@@ -138,6 +160,8 @@ type ReconcileWorkspaceProps = {
   matchedTotal: number
   mParams: PaneParams
   glClearings?: GlClearing[]
+  stale?: Staleness | null
+  priorEffects?: string[]
 }
 
 export function ReconcileWorkspace(props: ReconcileWorkspaceProps) {
@@ -163,12 +187,15 @@ function ReconcileWorkspaceForId({
   matchedTotal,
   mParams,
   glClearings = [],
+  stale = null,
+  priorEffects = [],
 }: ReconcileWorkspaceProps) {
   const { money: formatMoney } = useMoney(reconciliation.currency)
   const money = (value: MoneyValue) => formatMoney(value, { maximumFractionDigits: 4 })
   const t = useTranslations('banking.workspace')
   const tMatch = useTranslations('banking.match')
   const tBanking = useTranslations('banking')
+  const tStale = useTranslations('banking.stale')
   const tCommon = useTranslations('common')
   const router = useRouter()
   const [busy, setBusy] = useState(false)
@@ -418,6 +445,66 @@ function ReconcileWorkspaceForId({
           </div>
         )
       )}
+
+      {stale ? (
+        <Alert variant="warning">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="warning">{stale.badge}</Badge>
+            <span className="font-medium tabular-nums">{stale.effect}</span>
+          </div>
+          {stale.late.length > 0 ? (
+            <div className="mt-3 space-y-1">
+              <p className="font-medium">{tStale('lateTitle')}</p>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{tBanking('labels.entry')}</TableHead>
+                    <TableHead>{tCommon('labels.date')}</TableHead>
+                    <TableHead className="text-right">{tCommon('labels.amount')}</TableHead>
+                    <TableHead>{tStale('postedBy')}</TableHead>
+                    <TableHead>{tStale('postedAt')}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {stale.late.map((entry) => (
+                    <TableRow key={entry.entryNumber}>
+                      <TableCell className="font-medium">{entry.entryNumber}</TableCell>
+                      <TableCell>{entry.postingDate}</TableCell>
+                      <TableCell className="text-right tabular-nums">{money(entry.amount)}</TableCell>
+                      <TableCell>{entry.postedBy ?? '—'}</TableCell>
+                      <TableCell>{entry.postedAt ?? '—'}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          ) : null}
+          {stale.reversed.length > 0 ? (
+            <div className="mt-3 space-y-1">
+              <p className="font-medium">{tStale('reversedTitle')}</p>
+              <ul className="list-disc pl-5">
+                {stale.reversed.map((entry) => (
+                  <li key={entry.entryNumber}>
+                    {entry.entryNumber} · {entry.postingDate} · {money(entry.amount)}
+                    {entry.reversal ? ` · ${entry.reversal}` : null}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          <p className="mt-2">{tStale('remedy')}</p>
+        </Alert>
+      ) : null}
+
+      {!signedOff && priorEffects.length > 0 ? (
+        <Alert variant="info">
+          <ul className="list-disc pl-5">
+            {priorEffects.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        </Alert>
+      ) : null}
 
       {signOffError ? (
         <div

@@ -28,7 +28,7 @@ import { PaymentsSectionSlot, RunsSectionSlot } from './payments-slots'
 import { ViewTabs as PaymentsViewTabs } from '../../app/(app)/payments/sections'
 import { ReceiptsViewTabs } from '../../app/(app)/receipts/sections'
 import { Plus } from 'lucide-react'
-import { AccountStats, UnmatchedCountCell, ReconActionCell } from '../../app/(app)/banking/[accountId]/sections'
+import { AccountStats, UnmatchedCountCell, ReconActionCell, StaleBadgeCell } from '../../app/(app)/banking/[accountId]/sections'
 import { StatementDeleteCell } from '../../app/(app)/banking/[accountId]/StatementDeleteCell'
 import { StatementDrawer } from '../../app/(app)/banking/[accountId]/StatementDrawer'
 import { Button } from '@openbooks/ui'
@@ -149,6 +149,8 @@ export const BANKING_WIDGETS = {
       matchedTotal={num(props, 'matchedTotal') ?? 0}
       mParams={props.mParams as ComponentProps<typeof ReconcileWorkspace>['mParams']}
       glClearings={(props.glClearings as ComponentProps<typeof ReconcileWorkspace>['glClearings']) ?? []}
+      stale={(props.stale as ComponentProps<typeof ReconcileWorkspace>['stale']) ?? null}
+      priorEffects={(props.priorEffects as ComponentProps<typeof ReconcileWorkspace>['priorEffects']) ?? []}
     />
   ),
 
@@ -381,6 +383,11 @@ export const BANKING_WIDGETS = {
   ),
   'recon-action-cell': (props) => (
     <ReconActionCell href={str(props, 'href') ?? ''} label={str(props, 'label') ?? ''} />
+  ),
+  /** Null while the sign-off stands, so the column stays empty for fresh
+   *  sessions and carries the "Stale since <date>" badge once stale. */
+  'stale-badge-cell': (props) => (
+    <StaleBadgeCell label={(props.label as string | null) ?? null} />
   ),
   'import-statement': (props) => <ImportStatementButton accountId={str(props, 'accountId') ?? ''} />,
   /** The cross-account history page cannot name an account up front, so the

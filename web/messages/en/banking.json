@@ -571,6 +571,18 @@
     "sourceSignedOffDescription": "Reconciled from {connector} through {date} — {cleared, number} cleared · {uncleared, number} uncleared. No statement was imported.",
     "sourceSignedOffByDescription": "Reconciled from {connector} through {date} by {name} — {cleared, number} cleared · {uncleared, number} uncleared. No statement was imported."
   },
+  "stale": {
+    "badge": "Stale since {date}",
+    "column": "Stale",
+    "lateTitle": "Posted into this period after sign-off",
+    "reversedTitle": "Matched lines reversed after sign-off",
+    "effect": "Effect on cleared balance: {amount}",
+    "postedBy": "Posted by",
+    "postedAt": "Posted at",
+    "reversal": "Reversal {number} on {date}",
+    "remedy": "Match these lines in the next reconciliation session — they appear as outstanding ledger lines.",
+    "openingEffect": "{amount} from entries posted into {period} after its sign-off"
+  },
   "workspace": {
     "signedOffAlert": "This reconciliation is signed off — the matched journal lines below are permanently stamped as reconciled.",
     "autoMatch": "Auto-match",

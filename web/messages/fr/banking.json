@@ -564,6 +564,18 @@
     "sourceSignedOffDescription": "Rapproché depuis {connector} jusqu’au {date} — {cleared, number} appariées · {uncleared, number} en attente. Aucun relevé importé.",
     "sourceSignedOffByDescription": "Rapproché depuis {connector} jusqu’au {date} par {name} — {cleared, number} appariées · {uncleared, number} en attente. Aucun relevé importé."
   },
+  "stale": {
+    "badge": "Obsolète depuis le {date}",
+    "column": "Obsolète",
+    "lateTitle": "Comptabilisé sur cette période après l’approbation",
+    "reversedTitle": "Lignes rapprochées contre-passées après l’approbation",
+    "effect": "Effet sur le solde rapproché : {amount}",
+    "postedBy": "Comptabilisé par",
+    "postedAt": "Comptabilisé le",
+    "reversal": "Contre-passation {number} le {date}",
+    "remedy": "Rapprochez ces lignes lors de la prochaine session de rapprochement — elles y figurent comme lignes comptables en suspens.",
+    "openingEffect": "{amount} d’écritures comptabilisées en {period} après son approbation"
+  },
   "workspace": {
     "signedOffAlert": "Ce rapprochement bancaire est approuvé — les lignes de journal appariées ci-dessous sont marquées définitivement comme rapprochées.",
     "autoMatch": "Appariement automatique",

@@ -28,6 +28,7 @@ import {
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission, can, subsidiaryScopeAllows } from '../../../../lib/authz'
+import { reconciliationStalenessSummaries } from '@openbooks/engine/src/banking/banking.ts'
 import { bankAccount } from '../../../../lib/banking-accounts'
 import { isUuid, mergeHref, parsePrefixedListParams, pickString } from '../../../../lib/list-params'
 import type { StatementDrawer as StatementDrawerComponent } from './StatementDrawer'
@@ -151,6 +152,9 @@ export interface ReconciliationListRow {
   statementBalance: string
   statusLabel: string
   statusVariant: 'success' | 'secondary' | 'warning'
+  /** "Stale since <date>" once late in-period postings or a reversal moved
+   *  the ledger under the sign-off; null while the sign-off still stands. */
+  staleLabel: string | null
   evidenceLabel: string
   evidenceVariant: 'secondary' | 'outline'
   createdAt: string
@@ -215,6 +219,7 @@ export interface BankingAccountData {
   columnThroughDate: string
   columnStatementBalance: string
   columnStatus: string
+  columnStale: string
   columnEvidence: string
   columnStarted: string
   columnSignedOff: string
@@ -449,6 +454,15 @@ export async function loadBankingAccount(
     ? `${typeLabel} · ${account.currency_restriction}`
     : typeLabel
 
+  // One read-time staleness pass for the page's sessions: late in-period
+  // postings and reversed matches surface beside the frozen sign-off
+  // status, reusing the workspace reader so the two can never disagree.
+  const staleness = await reconciliationStalenessSummaries(
+    accountId,
+    recons.rows.map((r) => r.id),
+    { orgId, userId: authz.user.id, allowedSubsidiaryIds: authz.allowedSubsidiaryIds },
+  )
+
   // The native page shows the empty state only when the list is truly empty —
   // a filter that matches nothing renders the table with zero body rows.
   const stmtTotal = Number(stmtCount.rows[0]?.n ?? 0)
@@ -544,6 +558,7 @@ export async function loadBankingAccount(
     columnThroughDate: t('account.columns.throughDate'),
     columnStatementBalance: t('labels.statementBalance'),
     columnStatus: tCommon('labels.status'),
+    columnStale: t('stale.column'),
     columnEvidence: t('account.columns.evidence'),
     columnStarted: t('account.columns.started'),
     columnSignedOff: t('account.columns.signedOff'),
@@ -553,6 +568,9 @@ export async function loadBankingAccount(
       statementBalance: money(r.statement_balance),
       statusLabel: reconStatusLabel(r.status),
       statusVariant: RECON_VARIANT[r.status] ?? 'secondary',
+      staleLabel: staleness[r.id]?.stale && staleness[r.id]?.staleSince
+        ? t('stale.badge', { date: staleness[r.id]!.staleSince as string })
+        : null,
       evidenceLabel: evidenceLabel(r.evidence_kind, r.evidence_connector),
       evidenceVariant: r.evidence_kind === 'source' ? 'secondary' : 'outline',
       createdAt: formatTimestamp(r.created_at),
@@ -768,6 +786,10 @@ export function bankingAccountSpec(data: BankingAccountData): PageSpec {
                 column(rootF('columnStatus'), badge(item('statusLabel'), { variant: item('statusVariant') }), {
                   sort: 'status',
                 }),
+                column(
+                  rootF('columnStale'),
+                  widgetCell('stale-badge-cell', { label: item('staleLabel') }),
+                ),
                 column(rootF('columnEvidence'), badge(item('evidenceLabel'), { variant: item('evidenceVariant') })),
                 column(rootF('columnStarted'), text(item('createdAt')), { sort: 'created', className: MUTED }),
                 column(rootF('columnSignedOff'), text(item('signedOffAt')), { className: MUTED }),

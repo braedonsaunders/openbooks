@@ -564,6 +564,18 @@
     "sourceSignedOffDescription": "已从{connector}对账至{date}——已对账 {cleared, number} 行 · 未对账 {uncleared, number} 行。未导入对账单。",
     "sourceSignedOffByDescription": "已从{connector}对账至{date}（由{name}签核）——已对账 {cleared, number} 行 · 未对账 {uncleared, number} 行。未导入对账单。"
   },
+  "stale": {
+    "badge": "自 {date} 起已过时",
+    "column": "已过时",
+    "lateTitle": "签核后计入本期间的分录",
+    "reversedTitle": "签核后被冲销的已核对行",
+    "effect": "对已核对余额的影响：{amount}",
+    "postedBy": "过账人",
+    "postedAt": "过账时间",
+    "reversal": "冲销 {number}（{date}）",
+    "remedy": "请在下一次对账会话中核对这些行 — 它们显示为未达账项。",
+    "openingEffect": "在签核后计入 {period} 的分录共 {amount}"
+  },
   "workspace": {
     "signedOffAlert": "此对账已签核 — 下方已匹配的日记账明细被永久标记为已对账。",
     "autoMatch": "自动匹配",

@@ -574,6 +574,7 @@ export const WIDGET_FAMILY: Readonly<Record<string, WidgetFamily>> = {
   'show-inactives-toggle': 'controls',
   'single-book-label': 'operations',
   'spend-velocity-view': 'reporting',
+  'stale-badge-cell': 'banking',
   'start-reconciliation': 'banking',
   'statement-delete-cell': 'banking',
   'statement-drawer': 'banking',

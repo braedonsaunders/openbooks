@@ -564,6 +564,18 @@
     "sourceSignedOffDescription": "Aus {connector} bis {date} abgestimmt — {cleared, number} abgeglichen · {uncleared, number} offen. Es wurde kein Kontoauszug importiert.",
     "sourceSignedOffByDescription": "Aus {connector} bis {date} von {name} abgestimmt — {cleared, number} abgeglichen · {uncleared, number} offen. Es wurde kein Kontoauszug importiert."
   },
+  "stale": {
+    "badge": "Veraltet seit {date}",
+    "column": "Veraltet",
+    "lateTitle": "Nach der Abzeichnung in diesen Zeitraum gebucht",
+    "reversedTitle": "Nach der Abzeichnung stornierte abgeglichene Zeilen",
+    "effect": "Auswirkung auf den abgeglichenen Saldo: {amount}",
+    "postedBy": "Gebucht von",
+    "postedAt": "Gebucht am",
+    "reversal": "Storno {number} am {date}",
+    "remedy": "Gleichen Sie diese Zeilen in der nächsten Abstimmungssitzung ab — sie erscheinen dort als offene Hauptbuchzeilen.",
+    "openingEffect": "{amount} aus Buchungen in {period} nach deren Abzeichnung"
+  },
   "workspace": {
     "signedOffAlert": "Diese Abstimmung ist abgezeichnet — die unten zugeordneten Journalzeilen sind dauerhaft als abgestimmt gekennzeichnet.",
     "autoMatch": "Automatisch zuordnen",
