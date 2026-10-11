@@ -482,7 +482,9 @@
     "skippedBalanceRow": "Zeile {line}: „{dateCell}“ sieht wie ein {role} von {amount} aus — übernehmen Sie sie als Saldo, statt sie zu importieren.",
     "mappingMissing": "Der Spaltenzuordnung fehlen noch {columns} — oben auswählen oder Spalten erneut erkennen.",
     "previewEmpty": "Die Vorschau enthält keine Buchungszeilen — Betragsspalte und Datumsformat prüfen, dann Vorschau erneut ausführen.",
-    "previewRequired": "Vor dem Importieren zuerst die Vorschau ausführen."
+    "previewRequired": "Vor dem Importieren zuerst die Vorschau ausführen.",
+    "suggestedOpeningFrom": "Eröffnungssaldo aus dem Schlusssaldo vom {date} übernommen — bei Bedarf anpassen.",
+    "openingMismatch": "Eröffnungssaldo {supplied} weicht vom Schlusssaldo vom {date} ({expected}) ab — auf einen fehlenden Monat prüfen."
   },
   "start": {
     "resume": "Abstimmung fortsetzen",

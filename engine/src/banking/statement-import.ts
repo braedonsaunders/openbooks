@@ -142,6 +142,18 @@ export interface ImportResult {
    * or excludes the line; matching refuses flagged lines until then.
    */
   possibleDuplicates: number;
+  /**
+   * The prior signed-off statement's closing balance for this account, when
+   * one chains into this import: the operator's opening-balance default.
+   * Null when no signed-off history covers an earlier closing.
+   */
+  suggestedOpening: SuggestedStatementOpening | null;
+  /**
+   * Set when the supplied opening balance differs from the chained closing:
+   * a flag for review, never a refusal — a missing month explains most
+   * mismatches, and the operator may know better.
+   */
+  openingMismatch: OpeningBalanceMismatch | null;
   /** The deduped lines (dry-run preview shows exactly what import would write, flags included). */
   lines: FlaggedStatementLine[];
 }
@@ -449,6 +461,46 @@ export async function importStatement(
         );
       }
     }
+    // Chained opening: the latest earlier statement with a closing balance
+    // fully inside signed-off history defaults the next import's opening.
+    // Uncovered closings are skipped — an unproven figure must not seed the
+    // next month. A supplied opening that differs is flagged, never refused.
+    let suggestedOpening: SuggestedStatementOpening | null = null;
+    let openingMismatch: OpeningBalanceMismatch | null = null;
+    {
+      const anchor =
+        opts.statementDate ?? validated.reduce((max, line) => (line.postedOn > max ? line.postedOn : max), validated[0]!.postedOn);
+      if (signedThrough) {
+        const prior = (await tx.execute<{
+          id: string;
+          statement_date: string;
+          closing_balance: string | null;
+        }>(sql`
+          select s.id, s.statement_date::text as statement_date, s.closing_balance::text as closing_balance
+            from bank_statements s
+           where s.org_id = ${ctx.orgId} and s.account_id = ${account.id}
+             and s.closing_balance is not null
+             and s.statement_date < ${anchor}
+             and not exists (
+               select 1 from bank_statement_lines l
+                where l.statement_id = s.id and l.org_id = s.org_id
+                  and l.posted_on > ${signedThrough.through_date}
+             )
+           order by s.statement_date desc, s.imported_at desc
+           limit 1
+        `)).rows[0];
+        if (prior?.closing_balance) {
+          suggestedOpening = {
+            balance: prior.closing_balance,
+            sourceStatementId: prior.id,
+            sourceStatementDate: prior.statement_date,
+          };
+          if (openingBalance && toUnits(openingBalance) !== toUnits(prior.closing_balance)) {
+            openingMismatch = { expected: prior.closing_balance, supplied: openingBalance };
+          }
+        }
+      }
+    }
     if (opts.dryRun || fresh.length === 0) {
       return {
         statementId: null,
@@ -458,6 +510,8 @@ export async function importStatement(
         duplicates,
         possibleDuplicates,
         skipped,
+        suggestedOpening,
+        openingMismatch,
         lines: fresh,
       };
     }
@@ -528,6 +582,8 @@ export async function importStatement(
       duplicates,
       possibleDuplicates,
       skipped,
+      suggestedOpening,
+      openingMismatch,
       lines: fresh,
     };
   });
@@ -544,6 +600,24 @@ export async function importStatement(
  * (clear those flags first). Every removed row is audited with its
  * before-image; nothing posts.
  */
+
+/**
+ * A prior statement's closing balance offered as the next import's opening.
+ * Statement balances share one sign convention, so a closing chains into
+ * the next opening unchanged.
+ */
+export interface SuggestedStatementOpening {
+  /** Canonical decimal string. */
+  balance: string;
+  sourceStatementId: string;
+  sourceStatementDate: string;
+}
+
+/** A supplied opening that differs from the chained closing, for review. */
+export interface OpeningBalanceMismatch {
+  expected: string;
+  supplied: string;
+}
 
 export interface StatementBalanceCorrection {
   /** Signed decimal string; null clears the balance; undefined leaves it. */

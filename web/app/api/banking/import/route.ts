@@ -211,6 +211,8 @@ export const POST = defineRoute({
           possibleDuplicates: result.possibleDuplicates,
           skipped: result.skipped,
           balanceCandidates: result.balanceCandidates,
+          suggestedOpening: result.suggestedOpening,
+          openingMismatch: result.openingMismatch,
           statementDate: meta.statementDate ?? null,
           closingBalance: meta.closingBalance ?? null,
           currency: meta.currency ?? null,

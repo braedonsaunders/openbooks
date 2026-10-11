@@ -482,7 +482,9 @@
     "skippedBalanceRow": "Linha {line}: «{dateCell}» parece um {role} de {amount} — use-a como saldo em vez de importá-la.",
     "mappingMissing": "O mapeamento de colunas ainda precisa de {columns} — escolha acima ou detecte as colunas de novo.",
     "previewEmpty": "A pré-visualização não encontrou linhas de lançamento — confira a coluna de valor e o formato de data e execute de novo.",
-    "previewRequired": "Execute a pré-visualização antes de importar."
+    "previewRequired": "Execute a pré-visualização antes de importar.",
+    "suggestedOpeningFrom": "Saldo inicial preenchido com o saldo final de {date} — ajuste se preciso.",
+    "openingMismatch": "O saldo inicial {supplied} difere do saldo final de {date} ({expected}) — confira se falta algum mês."
   },
   "start": {
     "resume": "Retomar conciliação",

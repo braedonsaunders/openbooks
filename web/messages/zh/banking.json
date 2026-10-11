@@ -482,7 +482,9 @@
     "skippedBalanceRow": "第{line}行（{dateCell}）看起来像金额为{amount}的{role}，请将其用作余额，不要导入。",
     "mappingMissing": "列映射还缺少 {columns} — 请在上方选择，或重新运行检测列。",
     "previewEmpty": "预览未找到交易行 — 请检查金额列和日期格式，然后重新运行预览。",
-    "previewRequired": "请先运行预览，再导入。"
+    "previewRequired": "请先运行预览，再导入。",
+    "suggestedOpeningFrom": "期初余额已取自 {date} 的期末余额 — 可按需修改。",
+    "openingMismatch": "期初余额 {supplied} 与 {date} 的期末余额 {expected} 不一致 — 请检查是否漏掉某个月。"
   },
   "start": {
     "resume": "继续对账",

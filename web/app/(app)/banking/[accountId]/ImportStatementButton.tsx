@@ -38,6 +38,17 @@ interface DialogAccount {
   type: string
 }
 
+interface SuggestedOpening {
+  balance: string
+  sourceStatementId: string
+  sourceStatementDate: string
+}
+
+interface OpeningMismatch {
+  expected: string
+  supplied: string
+}
+
 interface StatementPreview {
   lines: PreviewLine[]
   imported: number
@@ -45,6 +56,8 @@ interface StatementPreview {
   possibleDuplicates: number
   skipped: SkippedRow[]
   balanceCandidates: BalanceCandidate[]
+  suggestedOpening: SuggestedOpening | null
+  openingMismatch: OpeningMismatch | null
   currency: string | null
   sourceRevision: number
   accountId: string
@@ -446,6 +459,8 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
         possibleDuplicates: data.possibleDuplicates ?? 0,
         skipped: data.skipped ?? [],
         balanceCandidates: data.balanceCandidates ?? [],
+        suggestedOpening: data.suggestedOpening ?? null,
+        openingMismatch: data.openingMismatch ?? null,
         currency: data.currency ?? null,
         sourceRevision: requestRevision,
         accountId: requestAccountId,
@@ -453,6 +468,11 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
       const { statementDate: previewStatementDate, closingBalance: previewClosingBalance } = data
       if (previewStatementDate) setStatementDate((current) => current || previewStatementDate)
       if (previewClosingBalance) setClosingBalance((current) => current || previewClosingBalance)
+      // Chain the opening from the prior signed-off closing when the
+      // operator left it empty — still editable, and a mismatch they typed
+      // stays flagged below instead of silently replacing their figure.
+      const suggested = (data.suggestedOpening ?? null) as SuggestedOpening | null
+      if (suggested) setOpeningBalance((current) => current || suggested.balance)
     } catch (e) {
       if (requestRevision === sourceRevision.current) {
         setPreview(null)
@@ -552,6 +572,20 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
             {visiblePreview ? (
               <span className="text-xs text-slate-500 dark:text-slate-400">
                 {t('previewSummary', { imported: visiblePreview.imported, duplicates: visiblePreview.duplicates, possibleDuplicates: visiblePreview.possibleDuplicates })}
+              </span>
+            ) : null}
+            {visiblePreview?.suggestedOpening && openingBalance === visiblePreview.suggestedOpening.balance ? (
+              <span className="text-xs text-slate-500 dark:text-slate-400">
+                {t('suggestedOpeningFrom', { date: visiblePreview.suggestedOpening.sourceStatementDate })}
+              </span>
+            ) : null}
+            {visiblePreview?.openingMismatch ? (
+              <span role="note" className="text-xs text-amber-700 dark:text-amber-300">
+                {t('openingMismatch', {
+                  supplied: visiblePreview.openingMismatch.supplied,
+                  expected: visiblePreview.openingMismatch.expected,
+                  date: visiblePreview.suggestedOpening?.sourceStatementDate ?? '',
+                })}
               </span>
             ) : null}
             <span className="flex-1" />

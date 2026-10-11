@@ -557,3 +557,64 @@ test('import says preview is required before the first preview', async (t) => {
     'the dialog must say Preview comes first',
   )
 })
+
+function openingInput(): HTMLInputElement | null {
+  const label = [...document.querySelectorAll('label')].find(
+    (l) => (l.textContent ?? '').trim() === 'Opening balance',
+  )
+  const id = label?.getAttribute('for')
+  return id ? document.getElementById(id) as HTMLInputElement | null : null
+}
+
+// The prior signed-off closing chains into an empty opening field — still
+// editable — and a typed opening that differs stays flagged, never refused.
+test('opening defaults from the prior closing and flags a mismatch', async (t) => {
+  const { host, root } = await mountDialog()
+  dialogCleanup(t, host, root)
+  await openDialog()
+  globalThis.fetch = (async (url: unknown, init?: { body?: unknown }) => {
+    const target = String(url)
+    const raw = String((init?.body as string) ?? '{}')
+    if (target === '/api/banking/accounts') return Response.json({ ok: true, accounts: dialogScript.accounts })
+    const parsed = JSON.parse(raw) as { mode?: string; openingBalance?: string | null }
+    if (parsed.mode === 'preview') {
+      return Response.json({
+        ...dialogScript.previewImpl(parsed),
+        suggestedOpening: { balance: '1150.00', sourceStatementId: '00000000-0000-4000-8000-000000000001', sourceStatementDate: '2026-10-31' },
+        openingMismatch:
+          parsed.openingBalance && parsed.openingBalance !== '1150.00'
+            ? { expected: '1150.00', supplied: parsed.openingBalance }
+            : null,
+      })
+    }
+    if (parsed.mode === 'import') return Response.json({ imported: 1, duplicates: 0, possibleDuplicates: 0 })
+    throw new Error(`unexpected fetch ${target} ${parsed.mode}`)
+  }) as typeof fetch
+  await pasteText('not ofx at all')
+  await act(async () => {
+    clickButton('Preview').click()
+    await tick()
+    await tick()
+  })
+  const opening = openingInput()
+  assert.ok(opening, 'the dialog offers an opening field')
+  assert.equal(opening.value, '1150.00', 'an empty opening prefills from the prior closing')
+  assert.ok(
+    (document.body.textContent ?? '').includes('Opening defaulted from the 2026-10-31 closing balance'),
+    'the prefill names its source',
+  )
+  await act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
+    setter.call(opening, '900.00')
+    opening.dispatchEvent(new window.Event('input', { bubbles: true }))
+    await tick()
+    clickButton('Preview').click()
+    await tick()
+    await tick()
+  })
+  assert.equal(openingInput()?.value, '900.00', 'a typed opening is never overwritten')
+  assert.ok(
+    (document.body.textContent ?? '').includes('Opening 900.00 differs from the 2026-10-31 closing balance 1150.00'),
+    'a differing opening flags instead of refusing',
+  )
+})

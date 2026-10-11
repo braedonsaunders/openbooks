@@ -489,7 +489,9 @@
     "skippedBalanceRow": "Line {line}: “{dateCell}” looks like a {role} of {amount} — use it as a balance instead of importing it.",
     "mappingMissing": "Column mapping still needs {columns} — pick them above or run Detect columns again.",
     "previewEmpty": "Preview found no transaction lines — check the Amount column and the Date format, then run Preview again.",
-    "previewRequired": "Run Preview before Import."
+    "previewRequired": "Run Preview before Import.",
+    "suggestedOpeningFrom": "Opening defaulted from the {date} closing balance — edit as needed.",
+    "openingMismatch": "Opening {supplied} differs from the {date} closing balance {expected} — check for a missing month."
   },
   "start": {
     "resume": "Resume reconciliation",

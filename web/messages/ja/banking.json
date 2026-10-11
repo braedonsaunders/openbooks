@@ -482,7 +482,9 @@
     "skippedBalanceRow": "行 {line}（{dateCell}）は{amount}の{role}のようです。インポートせず残高として使ってください。",
     "mappingMissing": "列マッピングには {columns} が不足しています — 上で選択するか、列の検出を再実行してください。",
     "previewEmpty": "プレビューに取引行がありません — 金額列と日付形式を確認して、プレビューを再実行してください。",
-    "previewRequired": "インポートの前にプレビューを実行してください。"
+    "previewRequired": "インポートの前にプレビューを実行してください。",
+    "suggestedOpeningFrom": "期首残高に {date} の期末残高を初期設定しました — 必要に応じて編集してください。",
+    "openingMismatch": "期首残高 {supplied} が {date} の期末残高 {expected} と異なります — 抜けている月がないか確認してください。"
   },
   "start": {
     "resume": "消込を再開",

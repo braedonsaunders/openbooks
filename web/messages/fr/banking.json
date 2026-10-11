@@ -482,7 +482,9 @@
     "skippedBalanceRow": "Ligne {line} : « {dateCell} » ressemble à un {role} de {amount} — utilisez-la comme solde au lieu de l’importer.",
     "mappingMissing": "Le mappage des colonnes attend encore {columns} — choisissez-les ci-dessus ou relancez Détecter les colonnes.",
     "previewEmpty": "L'aperçu ne contient aucune ligne d'opération — vérifiez la colonne du montant et le format de date, puis relancez l'aperçu.",
-    "previewRequired": "Lancez l'aperçu avant d'importer."
+    "previewRequired": "Lancez l'aperçu avant d'importer.",
+    "suggestedOpeningFrom": "Solde d'ouverture repris du solde de clôture au {date} — modifiez au besoin.",
+    "openingMismatch": "Le solde d'ouverture {supplied} diffère du solde de clôture au {date} ({expected}) — vérifiez qu'aucun mois ne manque."
   },
   "start": {
     "resume": "Reprendre le rapprochement",
