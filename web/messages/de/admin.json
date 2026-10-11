@@ -4293,7 +4293,6 @@
       "featureType": "Leistungstyp",
       "feeAmountMinor": "Gebührenbetrag",
       "feePercent": "Gebühr in Prozent",
-      "itemCategory": "Artikelkategorie",
       "percentValue": "Rabatt in Prozent",
       "usageCount": "Nutzungen",
       "length": "Länge",
