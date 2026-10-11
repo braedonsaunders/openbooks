@@ -32,7 +32,9 @@ export function historicalEmploymentOverlapsPeriod(c: EmploymentRosterColumns): 
     where roster_employment.org_id = ${c.org}
       and roster_employment.id = ${c.employment}
       and roster_employment.worker_party_id = ${c.employee}
-      and roster_employment.employer_subsidiary_id = ${c.employer}
+      -- A NULL party subsidiary defers to the employment's own legal
+      -- employer; a recorded one must still agree.
+      and (roster_employment.employer_subsidiary_id = ${c.employer} or ${c.employer} is null)
       and roster_version.recorded_until is null
       and roster_version.status in ('active', 'on_leave')
       and roster_version.effective_from <= ${c.periodEnd}::date
@@ -49,7 +51,7 @@ function endedEmploymentIdentity(c: EmploymentRosterColumns): SQL {
       where final_employment.org_id = ${c.org}
         and final_employment.id = ${c.employment}
         and final_employment.worker_party_id = ${c.employee}
-        and final_employment.employer_subsidiary_id = ${c.employer}))`;
+        and (final_employment.employer_subsidiary_id = ${c.employer} or ${c.employer} is null)))`;
 }
 
 export function finalPayEmploymentIdentity(c: EmploymentRosterColumns): SQL {

@@ -171,6 +171,26 @@ export async function acceptOfferAsHire(query: AcceptOfferAsHireQuery): Promise<
     if (!reserved) {
       throw new RecruitingError("REFUSED", "the reserved employment was not stored — no row was written; retry the hire");
     }
+    // (1b) The payroll profile, when one already exists unlinked: the hire
+    // names the employment the pay run reads, so a profile created earlier
+    // through Employees links here instead of stranding readiness on "no
+    // payroll link to their employment". A profile already linked elsewhere
+    // is left alone — a hire never re-points payroll history. No profile is
+    // fabricated when none exists: schedule, country and province are
+    // operator configuration the offer never carries, and inventing them
+    // would be silently-wrong payroll setup.
+    const prelinked = (await db.execute<{ id: string }>(sql`
+      update employee_payroll_profiles
+         set employment_id = ${employmentId}, updated_by = ${actorId},
+             updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond')
+       where org_id = ${orgId} and employee_party_id = ${workerPartyId} and employment_id is null
+       returning id
+    `)).rows[0];
+    if (prelinked) {
+      await db.execute(sql`insert into audit_log(org_id, table_name, row_id, action, changes, actor_id)
+        values (${orgId}, 'employee_payroll_profiles', ${prelinked.id}, 'update',
+          ${JSON.stringify({ before: { employmentId: null }, after: { employmentId }, employeePartyId: workerPartyId, reason: `Hire for requisition ${requisition.requisitionNumber}: ${offer.jobTitle}` })}::jsonb, ${actorId})`);
+    }
 
     // (2) The hire change request through the existing service, submitted
     // for approval through Flows exactly as a manually proposed hire. Both

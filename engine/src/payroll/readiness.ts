@@ -238,7 +238,9 @@ async function scope(
            exists (select 1 from worker_employments employment
              where employment.org_id=prof.org_id and employment.id=prof.employment_id
                and employment.worker_party_id=prof.employee_party_id
-               and employment.employer_subsidiary_id=p.subsidiary_id) as has_employment_link,
+               -- A NULL party subsidiary defers to the employment's own legal
+               -- employer (native Hire mints the party without one).
+               and (employment.employer_subsidiary_id=p.subsidiary_id or p.subsidiary_id is null)) as has_employment_link,
            exists (
              select 1 from party_bank_accounts b
               where b.org_id = prof.org_id and b.party_id = p.id
