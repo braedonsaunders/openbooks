@@ -465,6 +465,7 @@
     "selfApprovalNotice": "この申請を決定できる他の適格な承認者がいないため、証明を添えてご自身の申請を承認できます。自己承認は監査証跡に記録されます。",
     "selfAttestationLabel": "自己承認の証明",
     "selfAttestationConfirm": "他に適格な承認者がおらず、この再オープンが必要であることを証明します。",
+    "selfAttestationNeeded": "承認するには、この再開が必要な理由（10文字以上）を入力し、証明にチェックを入れてください。",
     "conflictNotice": "利益相反: この再オープンでロック解除される{count}件のレコードにあなたが記録されています({examples})。別の承認者に決定を依頼してください。",
     "approve": "承認",
     "reject": "却下",

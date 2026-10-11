@@ -475,6 +475,7 @@
       "reopenSelfApprovalNotice": "Ningún otro aprobador habilitado puede decidir esta reapertura, por lo que puede aprobar su propia solicitud con una declaración. La autoaprobación queda registrada en la auditoría.",
       "reopenSelfAttestationLabel": "Declaración de autoaprobación",
       "reopenSelfAttestationConfirm": "Declaro que no hay ningún otro aprobador habilitado disponible y que esta reapertura es necesaria.",
+      "reopenSelfAttestationNeeded": "Describa por qué es necesaria esta reapertura (al menos 10 caracteres) y marque la declaración para aprobar.",
       "reopenOwnRequestNote": "Usted solicitó esta reapertura; otro aprobador debe decidirla.",
       "closeConfirmTitle": "¿Cerrar {module} para {period}?",
       "closeConfirmBody": "Las nuevas contabilizaciones en {module} serán rechazadas hasta que se apruebe una reapertura controlada. El motivo queda registrado en el historial inmutable del cierre.",

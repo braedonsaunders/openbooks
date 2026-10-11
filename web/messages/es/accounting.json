@@ -465,6 +465,7 @@
     "selfApprovalNotice": "Ningún otro aprobador habilitado puede decidir esta solicitud, por lo que puede aprobar su propia solicitud con una declaración. La autoaprobación queda registrada en la auditoría.",
     "selfAttestationLabel": "Declaración de autoaprobación",
     "selfAttestationConfirm": "Declaro que no hay ningún otro aprobador habilitado disponible y que esta reapertura es necesaria.",
+    "selfAttestationNeeded": "Describa por qué es necesaria esta reapertura (al menos 10 caracteres) y marque la declaración para aprobar.",
     "conflictNotice": "Conflicto de intereses: usted figura en {count} registro(s) que esta reapertura desbloquearía ({examples}). Pida a otro aprobador que decida.",
     "approve": "Aprobar",
     "reject": "Rechazar",

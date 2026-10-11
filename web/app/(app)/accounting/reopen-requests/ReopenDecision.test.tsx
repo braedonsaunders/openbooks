@@ -133,6 +133,9 @@ test('a sole approver self-approves with an attestation', async () => {
     const approve = approveButton()
     assert.ok(approve, 'approve renders')
     assert.equal(approve.disabled, true, 'approve waits for the attestation and checkbox')
+    assert.ok(approve.title, 'the disabled approve names what it waits for')
+    const waiting = approve.title
+    assert.ok(document.body.textContent?.includes(waiting), 'the requirement is stated beside the form, not only on hover')
     await act(async () => {
       setNativeValue(box as HTMLTextAreaElement, 'Only administrator available; this correction is necessary')
       await tick()
@@ -143,6 +146,8 @@ test('a sole approver self-approves with an attestation', async () => {
       checkbox.click()
       await tick()
     })
+    assert.equal(approveButton()!.disabled, false, 'reason and checkbox together enable approve')
+    assert.ok(!document.body.textContent?.includes(waiting), 'the requirement note clears once satisfied')
     await act(async () => {
       approveButton()!.click()
       await tick()

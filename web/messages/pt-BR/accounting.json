@@ -465,6 +465,7 @@
     "selfApprovalNotice": "Nenhum outro aprovador elegível pode decidir esta solicitação, então você pode aprovar sua própria solicitação com uma declaração. A autoaprovação é registrada na trilha de auditoria.",
     "selfAttestationLabel": "Declaração de autoaprovação",
     "selfAttestationConfirm": "Declaro que nenhum outro aprovador elegível está disponível e que esta reabertura é necessária.",
+    "selfAttestationNeeded": "Descreva por que esta reabertura é necessária (pelo menos 10 caracteres) e marque a declaração para aprovar.",
     "conflictNotice": "Conflito de interesses: você está registrado em {count} registro(s) que esta reabertura desbloquearia ({examples}). Peça a outro aprovador que decida.",
     "approve": "Aprovar",
     "reject": "Rejeitar",

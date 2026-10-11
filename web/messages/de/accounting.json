@@ -465,6 +465,7 @@
     "selfApprovalNotice": "Es kann kein anderer berechtigter Genehmiger über diese Anfrage entscheiden, daher dürfen Sie Ihre eigene Anfrage mit einer Bestätigung genehmigen. Die Selbstgenehmigung wird im Prüfprotokoll festgehalten.",
     "selfAttestationLabel": "Bestätigung der Selbstgenehmigung",
     "selfAttestationConfirm": "Ich bestätige, dass kein anderer berechtigter Genehmiger verfügbar ist und diese Wiedereröffnung erforderlich ist.",
+    "selfAttestationNeeded": "Beschreiben Sie, warum diese Wiedereröffnung nötig ist (mindestens 10 Zeichen), und bestätigen Sie die Erklärung, um zu genehmigen.",
     "conflictNotice": "Interessenkonflikt: Sie sind auf {count} Datensätzen erfasst, die diese Wiedereröffnung entsperren würde ({examples}). Bitten Sie einen anderen Genehmiger um die Entscheidung.",
     "approve": "Genehmigen",
     "reject": "Ablehnen",

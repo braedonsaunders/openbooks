@@ -475,6 +475,7 @@
       "reopenSelfApprovalNotice": "Es kann kein anderer berechtigter Genehmiger über diese Wiedereröffnung entscheiden, daher dürfen Sie Ihre eigene Anfrage mit einer Bestätigung genehmigen. Die Selbstgenehmigung wird im Prüfprotokoll festgehalten.",
       "reopenSelfAttestationLabel": "Bestätigung der Selbstgenehmigung",
       "reopenSelfAttestationConfirm": "Ich bestätige, dass kein anderer berechtigter Genehmiger verfügbar ist und diese Wiedereröffnung erforderlich ist.",
+      "reopenSelfAttestationNeeded": "Beschreiben Sie, warum diese Wiedereröffnung nötig ist (mindestens 10 Zeichen), und bestätigen Sie die Erklärung, um zu genehmigen.",
       "reopenOwnRequestNote": "Sie haben diese Wiedereröffnung angefordert — ein anderer Genehmiger muss darüber entscheiden.",
       "closeConfirmTitle": "{module} für {period} schließen?",
       "closeConfirmBody": "Neue Buchungen auf {module} werden abgelehnt, bis eine kontrollierte Wiedereröffnung genehmigt wurde. Der Grund bleibt in der unveränderlichen Abschlusshistorie erhalten.",

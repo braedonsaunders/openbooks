@@ -465,6 +465,7 @@
     "selfApprovalNotice": "No other eligible approver can decide this request, so you may approve your own request with an attestation. The self-approval is recorded in the audit trail.",
     "selfAttestationLabel": "Self-approval attestation",
     "selfAttestationConfirm": "I attest that no other eligible approver is available and this reopening is necessary.",
+    "selfAttestationNeeded": "Describe why this reopen is needed (at least 10 characters) and tick the attestation to approve.",
     "conflictNotice": "Conflict of interest: you are recorded on {count} record(s) this reopen would unlock ({examples}). Ask another approver to decide.",
     "approve": "Approve",
     "reject": "Reject",

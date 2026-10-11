@@ -2305,7 +2305,9 @@ function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
                   ? ownRequest
                     ? t("periods.reopenOwnRequestNote")
                     : t("periods.reopenConflictNotice", { count: conflictTotal, examples: conflictExamples })
-                  : undefined
+                  : selfApproval && !selfAttestationReady
+                    ? t("periods.reopenSelfAttestationNeeded")
+                    : undefined
               }
               onClick={() => decide(true)}
             >
@@ -2348,6 +2350,11 @@ function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
             <Check checked={selfAttested} onChange={setSelfAttested}>
               {t("periods.reopenSelfAttestationConfirm")}
             </Check>
+            {!selfAttestationReady ? (
+              <p className="text-xs text-slate-600 dark:text-slate-300">
+                {t("periods.reopenSelfAttestationNeeded")}
+              </p>
+            ) : null}
           </div>
         ) : null}
         <div>

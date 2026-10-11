@@ -475,6 +475,7 @@
       "reopenSelfApprovalNotice": "Aucun autre approbateur habilité ne peut statuer sur cette réouverture, vous pouvez donc approuver votre propre demande avec une attestation. L'auto-approbation est consignée dans la piste d'audit.",
       "reopenSelfAttestationLabel": "Attestation d'auto-approbation",
       "reopenSelfAttestationConfirm": "J'atteste qu'aucun autre approbateur habilité n'est disponible et que cette réouverture est nécessaire.",
+      "reopenSelfAttestationNeeded": "Indiquez pourquoi cette réouverture est nécessaire (au moins 10 caractères) et cochez l’attestation pour approuver.",
       "reopenOwnRequestNote": "Vous avez demandé cette réouverture — un autre approbateur doit statuer.",
       "closeConfirmTitle": "Clore {module} pour {period} ?",
       "closeConfirmBody": "Les nouvelles écritures sur {module} seront rejetées jusqu'à l'approbation d'une réouverture contrôlée. Le motif est conservé dans l'historique immuable de la clôture.",

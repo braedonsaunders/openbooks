@@ -475,6 +475,7 @@
       "reopenSelfApprovalNotice": "没有其他合格审批人可以决定此次重开，因此您可以附上证明批准自己的申请。自我批准将记录在审计轨迹中。",
       "reopenSelfAttestationLabel": "自我批准证明",
       "reopenSelfAttestationConfirm": "我证明没有其他合格审批人可以决定，且此次重开确有必要。",
+      "reopenSelfAttestationNeeded": "请说明需要重新开放的原因（至少 10 个字符）并勾选证明后再批准。",
       "reopenOwnRequestNote": "此次重开由您申请 — 须由另一位审批人决定。",
       "closeConfirmTitle": "关闭{period}的{module}?",
       "closeConfirmBody": "在受控重开获得批准之前，{module}的新过账将被拒绝。原因将保留在不可变的结账历史记录中。",

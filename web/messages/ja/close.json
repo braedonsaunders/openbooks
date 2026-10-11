@@ -475,6 +475,7 @@
       "reopenSelfApprovalNotice": "この再オープンを決定できる他の適格な承認者がいないため、証明を添えてご自身の申請を承認できます。自己承認は監査証跡に記録されます。",
       "reopenSelfAttestationLabel": "自己承認の証明",
       "reopenSelfAttestationConfirm": "他に適格な承認者がおらず、この再オープンが必要であることを証明します。",
+      "reopenSelfAttestationNeeded": "承認するには、この再開が必要な理由（10文字以上）を入力し、証明にチェックを入れてください。",
       "reopenOwnRequestNote": "ご自身が申請した再オープンです — 別の承認者が決定する必要があります。",
       "closeConfirmTitle": "{period}の{module}を締めますか?",
       "closeConfirmBody": "{module}への新しい記帳は、管理された再オープンが承認されるまで拒否されます。理由は不変の締め履歴に保持されます。",

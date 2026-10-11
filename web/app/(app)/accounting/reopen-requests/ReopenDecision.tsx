@@ -102,9 +102,10 @@ export function ReopenDecision({ requestId, ownRequest }: { requestId: string; o
           <input type="checkbox" className="mt-0.5" checked={attested} onChange={(event) => setAttested(event.target.checked)} />
           {t('selfAttestationConfirm')}
         </label>
+        {!attestationReady ? <p className="text-xs text-slate-600 dark:text-slate-300">{t('selfAttestationNeeded')}</p> : null}
         <div className="flex justify-end gap-2">
           <Button size="sm" variant="outline" disabled={busy} onClick={() => void decide(false)}>{t('reject')}</Button>
-          <Button size="sm" disabled={busy || !attestationReady} onClick={() => void decide(true)}>{t('approve')}</Button>
+          <Button size="sm" disabled={busy || !attestationReady} title={attestationReady ? undefined : t('selfAttestationNeeded')} onClick={() => void decide(true)}>{t('approve')}</Button>
         </div>
         <ActionAlert error={refusal} fallbackMessage={t('decideFailed')} />
       </div>
