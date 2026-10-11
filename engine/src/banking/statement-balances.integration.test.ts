@@ -3,12 +3,16 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import {
+  BankingError,
   correctStatementBalances,
+  correctStatementLine,
   createGlClearingGroup,
   createMatch,
   deleteStatementImport,
+  excludeStatementLine,
   importStatement,
   markReconciled,
+  restoreStatementLine,
   startReconciliation,
   unmatchStatementImport,
 } from "./banking.ts";
@@ -32,7 +36,11 @@ type CsvImportInput = Omit<Parameters<typeof importStatement>[0], "source" | "so
  * the lines into deterministic CSV bytes with that mapping: an identical
  * input reproduces the identical file (and source hash).
  */
-function importCsv(input: CsvImportInput, ctx: Parameters<typeof importStatement>[1]) {
+function importCsv(
+  input: CsvImportInput,
+  ctx: Parameters<typeof importStatement>[1],
+  dryRun = false,
+) {
   const quote = (value: string) => `"${value.replace(/"/g, '""')}"`;
   const content =
     [
@@ -44,6 +52,7 @@ function importCsv(input: CsvImportInput, ctx: Parameters<typeof importStatement
   return importStatement(
     {
       ...input,
+      dryRun,
       sourceEvidence: {
         content,
         filename: "statement.csv",
@@ -306,6 +315,210 @@ test(
   },
 );
 
+async function typedDeleteRefusal(promise: Promise<unknown>, pattern: RegExp, label: string) {
+  // QA-154: every guarded state must refuse with a typed BankingError (the
+  // route renders those as 422 with a remedy). Anything else — a bare
+  // TypeError, a trigger raise — reaches the operator as a 500.
+  const error = await promise.then(
+    () => null,
+    (e: unknown) => e,
+  );
+  assert.ok(error instanceof BankingError, `${label} must refuse typed, got ${String(error)}`);
+  assert.match((error as Error).message, pattern);
+}
+
+test(
+  "delete refuses every guarded state typed, never a bare failure",
+  { skip: !DB },
+  async () => {
+    const a = await setup();
+    const b = await setup();
+    try {
+      // Open-session states live in the first org: one matched line, one
+      // excluded line, and a duplicate pointer aimed at the excluded one.
+      const first = await postBankLine(a.org, a.actor, "100.00", "first");
+      const matchedImport = await importCsv(
+        {
+          accountId: a.org.accounts.bank,
+          source: "csv" as const,
+          statementDate: a.org.date,
+          currency: "CAD",
+          lines: [
+            { postedOn: a.org.date, amount: "100.00", description: "Matched receipt", bankTransactionId: "m1" },
+          ],
+        },
+        a.ctx,
+      );
+      const excludedImport = await importCsv(
+        {
+          accountId: a.org.accounts.bank,
+          source: "csv" as const,
+          statementDate: a.org.date,
+          currency: "CAD",
+          lines: [
+            { postedOn: a.org.date, amount: "200.00", description: "Excluded receipt", bankTransactionId: "x1" },
+          ],
+        },
+        a.ctx,
+      );
+      const lineId = async (orgId: string, statementId: string) =>
+        (await db.execute<{ id: string }>(sql`
+          select id from bank_statement_lines
+           where org_id = ${orgId} and statement_id = ${statementId}
+        `)).rows[0]!.id;
+      const matchedLineId = await lineId(a.org.orgId, matchedImport.statementId!);
+      const excludedLineId = await lineId(a.org.orgId, excludedImport.statementId!);
+      const recon = await startReconciliation(
+        { accountId: a.org.accounts.bank, throughDate: a.org.date, statementBalance: "100.00" },
+        a.ctx,
+      );
+      await createMatch(
+        { reconciliationId: recon.id, statementLineIds: [matchedLineId!], journalLineIds: [first!] },
+        a.ctx,
+      );
+      // Matched in an open session: unmatch first.
+      await typedDeleteRefusal(
+        deleteStatementImport(matchedImport.statementId!, a.ctx),
+        /unmatch them first/,
+        "matched-open",
+      );
+      // Excluded lines carry a review decision: restore first.
+      await excludeStatementLine(excludedLineId!, "opening-balance row, not a transaction", a.ctx);
+      await typedDeleteRefusal(
+        deleteStatementImport(excludedImport.statementId!, a.ctx),
+        /restore them first/,
+        "excluded",
+      );
+      // Another line's possible-duplicate pointer into this import is that
+      // line's review evidence: clear those flags first. Restore the
+      // excluded line so the pointer fence is the one that fires.
+      await restoreStatementLine(excludedLineId!, a.ctx);
+      await db.execute(sql`
+        update bank_statement_lines
+           set possible_duplicate_of = ${excludedLineId}, updated_at = now(), updated_by = ${a.actor}
+         where id = ${matchedLineId} and org_id = ${a.org.orgId}
+      `);
+      await typedDeleteRefusal(
+        deleteStatementImport(excludedImport.statementId!, a.ctx),
+        /clear those flags first/,
+        "inbound-flag",
+      );
+      await db.execute(sql`
+        update bank_statement_lines
+           set possible_duplicate_of = null, updated_at = now(), updated_by = ${a.actor}
+         where id = ${matchedLineId} and org_id = ${a.org.orgId}
+      `);
+      // The second org closes cleanly then receives a backdated import:
+      // every line unmatched, yet inside signed-off history — immutable.
+      const journal = await postBankLine(b.org, b.actor, "100.00", "receipt");
+      const closedImport = await importCsv(
+        {
+          accountId: b.org.accounts.bank,
+          source: "csv" as const,
+          statementDate: b.org.date,
+          currency: "CAD",
+          lines: [
+            { postedOn: b.org.date, amount: "100.00", description: "Client receipt", bankTransactionId: "r1" },
+          ],
+        },
+        b.ctx,
+      );
+      const receiptLineId = await lineId(b.org.orgId, closedImport.statementId!);
+      const closed = await startReconciliation(
+        { accountId: b.org.accounts.bank, throughDate: b.org.date, statementBalance: "100.00" },
+        b.ctx,
+      );
+      await createMatch(
+        { reconciliationId: closed.id, statementLineIds: [receiptLineId!], journalLineIds: [journal!] },
+        b.ctx,
+      );
+      await markReconciled(closed.id, b.ctx);
+      // Matched inside a signed-off session: still typed (unmatch first —
+      // and unmatching itself refuses the closed session, so the chain
+      // ends here, loudly, instead of a 500).
+      await typedDeleteRefusal(
+        deleteStatementImport(closedImport.statementId!, b.ctx),
+        /unmatch them first/,
+        "matched-in-signed-off",
+      );
+      await typedDeleteRefusal(
+        unmatchStatementImport(closedImport.statementId!, b.ctx),
+        /signed-off history is immutable/,
+        "unmatch-in-signed-off",
+      );
+    } finally {
+      await dropScratchOrg(a.org.orgId);
+      await dropScratchOrg(b.org.orgId);
+    }
+  },
+);
+
+test(
+  "correction refuses to backdate a line into signed-off history",
+  { skip: !DB },
+  async () => {
+    const { org, actor, ctx } = await setup();
+    try {
+      // Close July cleanly, then import an August line: the import fence
+      // keeps it out of July, and correction refuses to move it back in —
+      // the loop into closed history stays shut at every verb.
+      const july = await postBankLine(org, actor, "100.00", "july", "2026-07-15");
+      const julyImport = await importCsv(
+        {
+          accountId: org.accounts.bank,
+          source: "csv" as const,
+          statementDate: "2026-07-15",
+          currency: "CAD",
+          lines: [
+            { postedOn: "2026-07-15", amount: "100.00", description: "July receipt", bankTransactionId: "j1" },
+          ],
+        },
+        ctx,
+      );
+      const julyLineId = (await db.execute<{ id: string }>(sql`
+        select id from bank_statement_lines
+         where org_id = ${org.orgId} and statement_id = ${julyImport.statementId!}
+      `)).rows[0]!.id;
+      const julyRecon = await startReconciliation(
+        { accountId: org.accounts.bank, throughDate: "2026-07-15", statementBalance: "100.00" },
+        ctx,
+      );
+      await createMatch(
+        { reconciliationId: julyRecon.id, statementLineIds: [julyLineId!], journalLineIds: [july!] },
+        ctx,
+      );
+      await markReconciled(julyRecon.id, ctx);
+      const augustImport = await importCsv(
+        {
+          accountId: org.accounts.bank,
+          source: "csv" as const,
+          statementDate: "2026-08-05",
+          currency: "CAD",
+          lines: [
+            { postedOn: "2026-08-05", amount: "200.00", description: "August receipt", bankTransactionId: "a1" },
+          ],
+        },
+        ctx,
+      );
+      const augustLineId = (await db.execute<{ id: string }>(sql`
+        select id from bank_statement_lines
+         where org_id = ${org.orgId} and statement_id = ${augustImport.statementId!}
+      `)).rows[0]!.id;
+      const correction = await correctStatementLine(augustLineId!, { postedOn: "2026-07-01" }, ctx).then(
+        () => null,
+        (e: unknown) => e,
+      );
+      assert.ok(
+        correction instanceof BankingError,
+        `backdating into history must refuse typed, got ${String(correction)}`,
+      );
+      assert.match((correction as Error).message, /signed-off history is immutable/);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
 test(
   "unmatch-all refuses inside signed-off history",
   { skip: !DB },
@@ -341,6 +554,146 @@ test(
       await assert.rejects(
         unmatchStatementImport(imported.statementId!, ctx),
         /signed-off history is immutable/,
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "opening chains from the prior covered closing and flags a mismatch",
+  { skip: !DB },
+  async () => {
+    const { org, actor, ctx } = await setup();
+    try {
+      // July closes at 100.00 and signs off: the August preview defaults
+      // its opening from that closing, and a different typed opening flags
+      // instead of refusing.
+      const journal = await postBankLine(org, actor, "100.00", "july", "2026-07-15");
+      const july = await importCsv(
+        {
+          accountId: org.accounts.bank,
+          source: "csv" as const,
+          statementDate: "2026-07-31",
+          currency: "CAD",
+          closingBalance: "100.00",
+          lines: [
+            { postedOn: "2026-07-15", amount: "100.00", description: "July receipt", bankTransactionId: "j1" },
+          ],
+        },
+        ctx,
+      );
+      const [julyLine] = (await db.execute<{ id: string }>(sql`
+        select id from bank_statement_lines
+         where org_id = ${org.orgId} and statement_id = ${july.statementId!}
+      `)).rows.map((row) => row.id);
+      const closed = await startReconciliation(
+        { accountId: org.accounts.bank, throughDate: "2026-07-31", statementBalance: "100.00" },
+        ctx,
+      );
+      await createMatch(
+        { reconciliationId: closed.id, statementLineIds: [julyLine!], journalLineIds: [journal!] },
+        ctx,
+      );
+      await markReconciled(closed.id, ctx);
+      const augustLines: CsvImportInput = {
+        accountId: org.accounts.bank,
+        source: "csv",
+        statementDate: "2026-08-31",
+        currency: "CAD",
+        lines: [
+          { postedOn: "2026-08-05", amount: "50.00", description: "August receipt", bankTransactionId: "a1" },
+        ],
+      };
+      const chained = await importCsv({ ...augustLines }, ctx, true);
+      assert.deepEqual(
+        { balance: chained.suggestedOpening?.balance, date: chained.suggestedOpening?.sourceStatementDate },
+        { balance: "100.0000", date: "2026-07-31" },
+        "the August opening defaults from the July closing",
+      );
+      assert.equal(chained.suggestedOpening?.sourceStatementId, july.statementId);
+      assert.equal(chained.openingMismatch, null, "no supplied opening, no mismatch");
+      const drifted = await importCsv({ ...augustLines, openingBalance: "90.00" }, ctx, true);
+      assert.deepEqual(
+        drifted.openingMismatch,
+        { expected: "100.0000", supplied: "90.0000" },
+        "a typed opening that differs flags for review instead of refusing",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "no chained opening without signed-off history, and uncovered closings skip",
+  { skip: !DB },
+  async () => {
+    const { org, actor, ctx } = await setup();
+    try {
+      // Nothing closed yet: no suggestion.
+      const bare = await importCsv(
+        {
+          accountId: org.accounts.bank,
+          source: "csv" as const,
+          statementDate: "2026-07-31",
+          currency: "CAD",
+          closingBalance: "500.00",
+          lines: [
+            { postedOn: "2026-07-15", amount: "100.00", description: "July receipt", bankTransactionId: "j1" },
+          ],
+        },
+        ctx,
+        true,
+      );
+      assert.equal(bare.suggestedOpening, null, "an unproven closing seeds nothing");
+      // Close June at 300 while July stays open with its own 500 closing:
+      // August chains from covered June, skipping uncovered July.
+      const journal = await postBankLine(org, actor, "300.00", "june", "2026-06-15");
+      const june = await importCsv(
+        {
+          accountId: org.accounts.bank,
+          source: "csv" as const,
+          statementDate: "2026-06-30",
+          currency: "CAD",
+          closingBalance: "300.00",
+          lines: [
+            { postedOn: "2026-06-15", amount: "300.00", description: "June receipt", bankTransactionId: "g1" },
+          ],
+        },
+        ctx,
+      );
+      const [juneLine] = (await db.execute<{ id: string }>(sql`
+        select id from bank_statement_lines
+         where org_id = ${org.orgId} and statement_id = ${june.statementId!}
+      `)).rows.map((row) => row.id);
+      const closed = await startReconciliation(
+        { accountId: org.accounts.bank, throughDate: "2026-06-30", statementBalance: "300.00" },
+        ctx,
+      );
+      await createMatch(
+        { reconciliationId: closed.id, statementLineIds: [juneLine!], journalLineIds: [journal!] },
+        ctx,
+      );
+      await markReconciled(closed.id, ctx);
+      const august = await importCsv(
+        {
+          accountId: org.accounts.bank,
+          source: "csv" as const,
+          statementDate: "2026-08-31",
+          currency: "CAD",
+          lines: [
+            { postedOn: "2026-08-05", amount: "50.00", description: "August receipt", bankTransactionId: "a1" },
+          ],
+        },
+        ctx,
+        true,
+      );
+      assert.deepEqual(
+        { balance: august.suggestedOpening?.balance, date: august.suggestedOpening?.sourceStatementDate },
+        { balance: "300.0000", date: "2026-06-30" },
+        "the chain skips the uncovered July closing for covered June",
       );
     } finally {
       await dropScratchOrg(org.orgId);
