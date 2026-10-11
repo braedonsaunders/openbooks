@@ -7781,9 +7781,13 @@
       "title": "Canaux de vente",
       "description": "Connexions boutique (Shopify), le registre des identités externes et la boîte de réception des commandes."
     },
+    "informationReturns": {
+      "title": "Déclarations de renseignements",
+      "description": "Déclarations de renseignements de fin d'année (1099-NEC/MISC et T4A) pour vos bénéficiaires : saisie du TIN, règles de cases, feuille de travail et production des bénéficiaires."
+    },
     "subcontractorCompliance": {
       "title": "Conformité des sous-traitants",
-      "description": "Attestations d'assurance, renonciations au privilège et déclarations 1099-NEC/MISC et T4A, avec blocage des paiements lorsque la couverture d'un sous-traitant expire."
+      "description": "Attestations d'assurance et renonciations au privilège pour vos bénéficiaires, avec blocage des paiements lorsque la couverture d'un sous-traitant expire."
     },
     "advancedClose": {
       "title": "Gouvernance de clôture avancée",

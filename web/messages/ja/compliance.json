@@ -133,6 +133,11 @@
     "nonprofit": "非営利団体",
     "other": "その他"
   },
+  "taxIdentity": {
+    "heading": "税務識別情報",
+    "description": "年末申告用のW-9識別情報です。番号そのものは二度と表示されず、下4桁のみ表示されます。",
+    "saveFailed": "税務識別情報の保存に失敗しました。"
+  },
   "tinType": {
     "ein": "EIN",
     "ssn": "SSN",

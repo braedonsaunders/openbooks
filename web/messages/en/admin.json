@@ -7853,9 +7853,13 @@
       "title": "Sales channels",
       "description": "Storefront connections (Shopify), the external-identity map, and the inbound order inbox."
     },
+    "informationReturns": {
+      "title": "Information returns",
+      "description": "Year-end information returns (1099-NEC/MISC, T4A) for the people you pay: vendor TIN capture, box rules, and the recipient worksheet and filing."
+    },
     "subcontractorCompliance": {
       "title": "Subcontractor compliance",
-      "description": "Certificates of insurance, lien waivers, and 1099-NEC/MISC and T4A information returns, with payment holds when a subcontractor's coverage lapses."
+      "description": "Certificates of insurance and lien waivers for the people you pay, with payment holds when a subcontractor's coverage lapses."
     },
     "allocations": {
       "title": "Allocations",

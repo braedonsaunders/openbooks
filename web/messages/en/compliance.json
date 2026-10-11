@@ -133,6 +133,11 @@
     "nonprofit": "Non-profit",
     "other": "Other"
   },
+  "taxIdentity": {
+    "heading": "Tax identity",
+    "description": "W-9 identity for year-end filing. The number itself is never shown again — only its last four digits.",
+    "saveFailed": "Saving the tax identity failed."
+  },
   "tinType": {
     "ein": "EIN",
     "ssn": "SSN",

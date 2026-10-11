@@ -133,6 +133,11 @@
     "nonprofit": "非营利组织",
     "other": "其他"
   },
+  "taxIdentity": {
+    "heading": "税务身份",
+    "description": "用于年末申报的 W-9 身份信息。号码本身不再显示，仅显示后四位。",
+    "saveFailed": "保存税务身份失败。"
+  },
   "tinType": {
     "ein": "EIN",
     "ssn": "SSN",

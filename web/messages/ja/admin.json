@@ -7889,8 +7889,12 @@
       "title": "契約コスト",
       "description": "契約または顧客ライフにわたり償却する資産化された販売手数料（ASC 340-40）。"
     },
+    "informationReturns": {
+      "title": "情報申告書",
+      "description": "支払先に対する年末の情報申告書（1099-NEC/MISC・T4A）:TIN登録、ボックスルール、受取人ワークシートと申告を行います。"
+    },
     "subcontractorCompliance": {
-      "description": "保険証券・留置権放棄書・1099-NEC/MISCとT4Aの情報申告書を、下請業者の保証失効時の支払停止付きで管理します。",
+      "description": "支払先の保険証券と留置権放棄書を、保証失効時の支払停止付きで管理します。",
       "title": "下請コンプライアンス"
     },
     "timeTracking": {

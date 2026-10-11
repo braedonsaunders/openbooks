@@ -7781,9 +7781,13 @@
       "title": "Canales de venta",
       "description": "Conexiones de tienda (Shopify), el mapa de identidades externas y la bandeja de pedidos."
     },
+    "informationReturns": {
+      "title": "Declaraciones informativas",
+      "description": "Declaraciones informativas de fin de año (1099-NEC/MISC y T4A) para sus beneficiarios: captura del TIN, reglas de casillas y hoja de trabajo y presentación de beneficiarios."
+    },
     "subcontractorCompliance": {
       "title": "Cumplimiento de subcontratistas",
-      "description": "Certificados de seguro, renuncias de gravamen y declaraciones 1099-NEC/MISC y T4A, con retención de pagos cuando la cobertura de un subcontratista caduca."
+      "description": "Certificados de seguro y renuncias de gravamen para sus beneficiarios, con retención de pagos cuando la cobertura de un subcontratista caduca."
     },
     "advancedClose": {
       "title": "Gobernanza de cierre avanzado",

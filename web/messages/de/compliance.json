@@ -133,6 +133,11 @@
     "nonprofit": "Gemeinnützig",
     "other": "Sonstige"
   },
+  "taxIdentity": {
+    "heading": "Steueridentität",
+    "description": "W-9-Identität für die Jahresmeldung. Die Nummer selbst wird nie wieder angezeigt — nur ihre letzten vier Ziffern.",
+    "saveFailed": "Speichern der Steueridentität fehlgeschlagen."
+  },
   "tinType": {
     "ein": "EIN",
     "ssn": "SSN",

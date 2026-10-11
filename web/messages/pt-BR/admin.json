@@ -7853,9 +7853,13 @@
       "title": "Canais de venda",
       "description": "Conexões de loja (Shopify), o mapa de identidades externas e a caixa de entrada de pedidos."
     },
+    "informationReturns": {
+      "title": "Declarações informativas",
+      "description": "Declarações informativas de fim de ano (1099-NEC/MISC e T4A) para seus beneficiários: captura do TIN, regras de caixas e planilha e apresentação de beneficiários."
+    },
     "subcontractorCompliance": {
       "title": "Conformidade de subcontratados",
-      "description": "Certificados de seguro, quitações e declarações informativas 1099-NEC/MISC e T4A, com travas de pagamento quando a cobertura do subcontratado vence."
+      "description": "Certificados de seguro e quitações para seus beneficiários, com travas de pagamento quando a cobertura do subcontratado vence."
     },
     "allocations": {
       "title": "Rateios",

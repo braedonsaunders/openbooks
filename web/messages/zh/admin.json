@@ -7853,9 +7853,13 @@
       "title": "销售渠道",
       "description": "店面连接（Shopify）、外部身份映射和订单收件箱。"
     },
+    "informationReturns": {
+      "title": "信息申报表",
+      "description": "面向收款人的年末信息申报表（1099-NEC/MISC 与 T4A）：纳税人识别号采集、申报栏位规则，以及收款人工作表与申报。"
+    },
     "subcontractorCompliance": {
       "title": "分包商合规",
-      "description": "保险证书、留置权弃权书，以及 1099-NEC/MISC 与 T4A 信息申报表；分包商保障失效时冻结付款。"
+      "description": "面向收款人的保险证书与留置权弃权书；分包商保障失效时冻结付款。"
     },
     "allocations": {
       "title": "分摊",

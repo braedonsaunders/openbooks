@@ -7889,8 +7889,12 @@
       "title": "Vertragskosten",
       "description": "Aktivierte Verkaufsprovisionen, abgeschrieben über Vertrags- oder Kundenlaufzeit (ASC 340-40)."
     },
+    "informationReturns": {
+      "title": "Informationsmeldungen",
+      "description": "Informationsmeldungen zum Jahresende (1099-NEC/MISC, T4A) für Ihre Zahlungsempfänger: Steuer-ID-Erfassung, Box-Regeln sowie Empfängeraufstellung und Einreichung."
+    },
     "subcontractorCompliance": {
-      "description": "Versicherungszertifikate, Verzichtserklärungen und 1099-NEC/MISC- und T4A-Informationsmeldungen, mit Zahlungssperren bei erloschenem Nachunternehmerschutz.",
+      "description": "Versicherungszertifikate und Verzichtserklärungen für Ihre Nachunternehmer, mit Zahlungssperren bei erloschenem Nachunternehmerschutz.",
       "title": "Nachunternehmer-Compliance"
     },
     "timeTracking": {

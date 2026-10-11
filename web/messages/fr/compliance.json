@@ -133,6 +133,11 @@
     "nonprofit": "Organisme sans but lucratif",
     "other": "Autre"
   },
+  "taxIdentity": {
+    "heading": "Identité fiscale",
+    "description": "Identité W-9 pour la déclaration annuelle. Le numéro lui-même n'est plus jamais affiché — seuls ses quatre derniers chiffres.",
+    "saveFailed": "L'enregistrement de l'identité fiscale a échoué."
+  },
   "tinType": {
     "ein": "EIN",
     "ssn": "SSN",
