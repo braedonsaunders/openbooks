@@ -321,6 +321,10 @@ export interface MeOverviewData {
     inputsTitle: string
     diffTitle: string
     sourcesTitle: string
+    ytdLabel: string
+    maximumLabel: string
+    remainingLabel: string
+    cappedNoteTemplate: string
     trace: ExplainPayTrace | null
   } | null
   // HR-21 end

@@ -488,6 +488,38 @@ export interface PayrollContributionProgram {
 }
 
 /**
+ * One capped deduction or employer contribution whose year-to-date the
+ * payslip explanation shows beside the line (see `annualMaximums` on the
+ * pack). The generic explanation layer sums the history and compares it to
+ * the maximum; the pack only names which stored evidence belongs together.
+ * A pack with no capped programs declares nothing and its lines show no
+ * year-to-date — never a refusal, never a zero.
+ */
+export interface PayrollAnnualMaximum {
+  /** Component system_key, e.g. `ei` — matches the stub line's component. */
+  systemKey: string;
+  /** Which stub lines this covers: a deduction cap and an employer-share cap differ. */
+  kind: "deduction" | "employer_contribution";
+  /**
+   * History sources summed for the year-to-date: each pair is one
+   * `payroll_opening_balances` carry-in column beside one stub `factors`
+   * key accumulated on committed stubs. Several pairs cover a share priced
+   * off two legs (an employer pension share fed by two contribution
+   * factors accumulates both carry-ins and both factor histories).
+   */
+  ytdSources: { openingColumn: string; factorKey: string }[];
+  /**
+   * Annual maximum for the stub's tax year, in the pack's own statutory
+   * words — or null when the share has no single statutory figure (an
+   * employer multiple that varies by program). Null shows the year-to-date
+   * with no maximum and never a capped note.
+   */
+  maximum: string | null;
+  /** Operator label, e.g. `EI premiums`. */
+  label: string;
+}
+
+/**
  * An opening wage-base carry-in scoped to one filing account (see
  * `accountOpeningBases` on the pack). A state unemployment account is keyed
  * by EIN, a federal W-2 program by nothing, and a W-2 program that prints
@@ -805,6 +837,19 @@ export interface PayrollCountryPack {
    * the pack's every program rides the two classic flags.
    */
   contributionPrograms?: readonly PayrollContributionProgram[];
+  /**
+   * Capped deductions and employer contributions whose year-to-date the
+   * payslip explanation shows (see the type). The entries are per tax year
+   * and region, resolved from the pack's own rates for the stub's pay date
+   * — the explanation reads stored calculation evidence through them and
+   * never recomputes the levy. OPTIONAL: absent when the pack prices no
+   * annual maximum, in which case no line carries year-to-date figures.
+   */
+  annualMaximums?: (input: {
+    taxYear: number;
+    payDate: string;
+    region: string;
+  }) => readonly PayrollAnnualMaximum[] | Promise<readonly PayrollAnnualMaximum[]>;
   /**
    * Employer levies assessed on their own earnings bases (see the type).
    * Absent means the pack's levies all assess the stub's gross earnings.

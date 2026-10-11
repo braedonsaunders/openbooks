@@ -11,7 +11,16 @@ import type { MeOverviewData } from '../../../lib/hrm/self-service'
 
 type PayExplain = NonNullable<MeOverviewData['payExplain']>;
 
-function TraceTable({ rows, amountLabel }: { rows: { description: string; hours: string | null; rate: string | null; amount: string; treatment: string | null }[]; amountLabel: string }) {
+type CapLabels = { ytd: string; maximum: string; remaining: string; cappedNoteTemplate: string }
+
+function TraceTable({ rows, amountLabel, capLabels }: {
+  rows: {
+    description: string; hours: string | null; rate: string | null; amount: string; treatment: string | null;
+    ytd?: string | null; annualMaximum?: string | null; remainingBeforeMax?: string | null; capped?: boolean;
+  }[];
+  amountLabel: string;
+  capLabels?: CapLabels | null;
+}) {
   if (rows.length === 0) return null
   return (
     <SharedTable className="w-full text-sm">
@@ -28,6 +37,18 @@ function TraceTable({ rows, amountLabel }: { rows: { description: string; hours:
               {row.treatment ? (
                 <span className="block text-xs text-slate-500 dark:text-slate-400">{row.treatment}</span>
               ) : null}
+              {capLabels && row.ytd != null ? (
+                <span className="block text-xs text-slate-500 tabular-nums dark:text-slate-400">
+                  {capLabels.ytd} {row.ytd}
+                  {row.annualMaximum != null ? ` · ${capLabels.maximum} ${row.annualMaximum}` : null}
+                  {row.remainingBeforeMax != null ? ` · ${capLabels.remaining} ${row.remainingBeforeMax}` : null}
+                </span>
+              ) : null}
+              {capLabels && row.capped ? (
+                <span className="block text-xs font-medium text-slate-700 dark:text-slate-200">
+                  {capLabels.cappedNoteTemplate.replace('{amount}', row.amount)}
+                </span>
+              ) : null}
             </SharedTableCell>
             <SharedTableCell className="py-1 text-right tabular-nums">{row.amount}</SharedTableCell>
           </SharedTableRow>
@@ -43,6 +64,12 @@ function TraceTable({ rows, amountLabel }: { rows: { description: string; hours:
  *  and the figures govern. Renders nothing without an explanation. */
 export function ExplainDrawer({ explain }: { explain: PayExplain | null }) {
   if (!explain) return null
+  const capLabels: CapLabels = {
+    ytd: explain.ytdLabel,
+    maximum: explain.maximumLabel,
+    remaining: explain.remainingLabel,
+    cappedNoteTemplate: explain.cappedNoteTemplate,
+  }
   return (
     <UrlDrawer open closeHref={explain.closeHref} title={explain.title}>
       {explain.missing || !explain.trace ? (
@@ -69,12 +96,12 @@ export function ExplainDrawer({ explain }: { explain: PayExplain | null }) {
           </section>
           <section>
             <h3 className="mb-1 text-sm font-medium">{explain.deductionsTitle}</h3>
-            <TraceTable rows={explain.trace.deductions} amountLabel={explain.deductionsTitle} />
+            <TraceTable rows={explain.trace.deductions} amountLabel={explain.deductionsTitle} capLabels={capLabels} />
           </section>
           {explain.trace.employerContributions.length > 0 ? (
             <section>
               <h3 className="mb-1 text-sm font-medium">{explain.contributionsTitle}</h3>
-              <TraceTable rows={explain.trace.employerContributions} amountLabel={explain.contributionsTitle} />
+              <TraceTable rows={explain.trace.employerContributions} amountLabel={explain.contributionsTitle} capLabels={capLabels} />
             </section>
           ) : null}
           {explain.trace.diffVsPrevious.changes.length > 0 ? (
@@ -97,7 +124,15 @@ export function ExplainDrawer({ explain }: { explain: PayExplain | null }) {
             <h3 className="mb-1 text-sm font-medium">{explain.sourcesTitle}</h3>
             <ul className="text-xs text-slate-500 dark:text-slate-400">
               {explain.trace.sources.map((source) => (
-                <li key={`${source.kind}:${source.id}`}>{source.kind} · {source.id}</li>
+                <li key={`${source.kind}:${source.id}`}>
+                  {source.kind === 'pay_stub' ? (
+                    // The self-service stub view re-checks own-stub scope, so
+                    // this link never opens another person's payslip.
+                    <a className="underline" href={`/me?explain=${source.id}`}>{source.kind} · {source.id}</a>
+                  ) : (
+                    <>{source.kind} · {source.id}</>
+                  )}
+                </li>
               ))}
             </ul>
           </section>

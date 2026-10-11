@@ -1884,7 +1884,11 @@
       "employerCost": "Employer cost",
       "earnings": "Earnings",
       "deductions": "Deductions",
-      "contributions": "Employer contributions"
+      "contributions": "Employer contributions",
+      "ytd": "Year to date",
+      "annualMaximum": "Annual maximum",
+      "remainingBeforeMax": "Remaining before this stub",
+      "cappedNote": "Annual maximum reached — this stub takes only the remaining {amount}"
     },
     "installApp": {
       "action": "Install app",

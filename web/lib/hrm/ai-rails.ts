@@ -313,6 +313,10 @@ export interface MePaySection {
     inputsTitle: string;
     diffTitle: string;
     sourcesTitle: string;
+    ytdLabel: string;
+    maximumLabel: string;
+    remainingLabel: string;
+    cappedNoteTemplate: string;
     trace: ExplainPayTrace | null;
   } | null;
 }
@@ -346,6 +350,14 @@ export async function loadMePaySection(
   let payExplain: MePaySection['payExplain'] = null;
   if (explainStubId) {
     const found = stubs.find((s) => s.id === explainStubId) ?? null;
+    // Capped-share labels ride both branches: the drawer renders them
+    // only with a trace, but the shape stays one object either way.
+    const cappedLabels = {
+      ytdLabel: t('me.pay.ytd'),
+      maximumLabel: t('me.pay.annualMaximum'),
+      remainingLabel: t('me.pay.remainingBeforeMax'),
+      cappedNoteTemplate: t('me.pay.cappedNote'),
+    };
     if (!found) {
       payExplain = {
         stubId: explainStubId,
@@ -361,6 +373,7 @@ export async function loadMePaySection(
         inputsTitle: t('me.pay.inputsTitle'),
         diffTitle: t('me.pay.diffTitle'),
         sourcesTitle: t('me.pay.sourcesTitle'),
+        ...cappedLabels,
         trace: null,
       };
     } else {
@@ -379,6 +392,7 @@ export async function loadMePaySection(
         inputsTitle: t('me.pay.inputsTitle'),
         diffTitle: t('me.pay.diffTitle'),
         sourcesTitle: t('me.pay.sourcesTitle'),
+        ...cappedLabels,
         trace: 'trace' in result ? result.trace : null,
       };
     }

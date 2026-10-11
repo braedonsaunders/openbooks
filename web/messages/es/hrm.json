@@ -1884,7 +1884,11 @@
       "employerCost": "Costo del empleador",
       "earnings": "Ingresos",
       "deductions": "Deducciones",
-      "contributions": "Aportes del empleador"
+      "contributions": "Aportes del empleador",
+      "ytd": "Acumulado anual",
+      "annualMaximum": "Máximo anual",
+      "remainingBeforeMax": "Restante antes de esta nómina",
+      "cappedNote": "Máximo anual alcanzado — esta nómina solo toma los {amount} restantes"
     },
     "installApp": {
       "action": "Instalar aplicación",

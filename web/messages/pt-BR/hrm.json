@@ -1884,7 +1884,11 @@
       "employerCost": "Custo do empregador",
       "earnings": "Proventos",
       "deductions": "Descontos",
-      "contributions": "Contribuições do empregador"
+      "contributions": "Contribuições do empregador",
+      "ytd": "Acumulado no ano",
+      "annualMaximum": "Máximo anual",
+      "remainingBeforeMax": "Restante antes deste holerite",
+      "cappedNote": "Máximo anual atingido — este holerite toma apenas os {amount} restantes"
     },
     "installApp": {
       "action": "Instalar aplicativo",

@@ -2,6 +2,9 @@ import { sql } from "drizzle-orm";
 import { actorHasPermission } from "../../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../../organization/actor-subsidiaries.ts";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
+import { add, cmp, neg } from "../../money/money.ts";
+import { payrollPack } from "../../payroll/packs.ts";
+import type { PayrollAnnualMaximum } from "../../payroll/pack-types.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import {
   HrmAuthorizationError,
@@ -41,6 +44,19 @@ export interface ExplainPayLine {
   rate: string | null;
   amount: string;
   treatment: string | null;
+  /**
+   * Capped-share evidence, read from the stub's stored calculation factors
+   * plus committed prior stubs and the pre-adoption carry-in — never
+   * recomputed. Present only where the stub's country pack declares an
+   * annual maximum for the line's component; otherwise all null and
+   * `capped` false. `ytd` runs through this stub, `remainingBeforeMax` is
+   * the room the maximum still had before this stub, and `capped` marks a
+   * line that reaches the maximum (this stub took only what was left).
+   */
+  ytd: string | null;
+  annualMaximum: string | null;
+  remainingBeforeMax: string | null;
+  capped: boolean;
 }
 
 export interface ExplainPayTrace {
@@ -73,6 +89,10 @@ type StubRow = {
   gross: string;
   netPay: string;
   employerCost: string;
+  taxYear: number;
+  country: string | null;
+  province: string | null;
+  employeePartyId: string | null;
 }
 
 async function assertExplainFeature(exec: SqlExecutor, orgId: string): Promise<void> {
@@ -163,20 +183,21 @@ async function loadStub(
   employmentId: string,
   stubId: string | null,
 ): Promise<StubRow> {
-  const rows = stubId
-    ? (await exec.execute<StubRow>(sql`
+  const columns = sql`
         select id::text as id, employment_id::text as "employmentId",
                pay_run_document_id::text as "payRunDocumentId",
                pay_date::text as "payDate", gross::text as gross,
-               net_pay::text as "netPay", employer_cost::text as "employerCost"
+               net_pay::text as "netPay", employer_cost::text as "employerCost",
+               tax_year as "taxYear", country, province,
+               employee_party_id::text as "employeePartyId"`;
+  const rows = stubId
+    ? (await exec.execute<StubRow>(sql`
+        ${columns}
           from pay_stubs
          where org_id = ${orgId}::uuid and id = ${stubId}::uuid
            and employment_id = ${employmentId}::uuid`)).rows
     : (await exec.execute<StubRow>(sql`
-        select id::text as id, employment_id::text as "employmentId",
-               pay_run_document_id::text as "payRunDocumentId",
-               pay_date::text as "payDate", gross::text as gross,
-               net_pay::text as "netPay", employer_cost::text as "employerCost"
+        ${columns}
           from pay_stubs
          where org_id = ${orgId}::uuid and employment_id = ${employmentId}::uuid
          order by pay_date desc, id desc
@@ -193,10 +214,15 @@ async function loadStub(
   return stub;
 }
 
-async function loadLines(exec: SqlExecutor, orgId: string, stubId: string): Promise<ExplainPayLine[]> {
+async function loadLines(
+  exec: SqlExecutor,
+  orgId: string,
+  stubId: string,
+): Promise<{ lines: ExplainPayLine[]; systemKeys: Map<string, string | null> }> {
   const rows = (await exec.execute<{
     id: string; componentId: string | null; kind: string; description: string;
     hours: string | null; rate: string | null; amount: string; treatment: string | null;
+    systemKey: string | null;
   }>(sql`
     select l.id::text as id, l.component_id::text as "componentId", l.kind,
            l.description, l.hours::text as hours, l.rate::text as rate,
@@ -204,13 +230,24 @@ async function loadLines(exec: SqlExecutor, orgId: string, stubId: string): Prom
            case when l.kind = 'deduction' then c.tax_treatment
                 when l.kind = 'earning' then
                   case when coalesce(c.taxable, true) then 'taxable' else 'non-taxable' end
-                else null end as treatment
+                else null end as treatment,
+           c.system_key as "systemKey"
       from pay_stub_lines l
       left join pay_components c
         on c.org_id = l.org_id and c.id = l.component_id
      where l.org_id = ${orgId}::uuid and l.stub_id = ${stubId}::uuid
      order by l.sequence, l.id`)).rows;
-  return rows;
+  // Capped-share evidence loads separately below; lines start empty so a
+  // pack with no declaration leaves nulls, never zeros or guesses.
+  const lines = rows.map(({ systemKey: _systemKey, ...line }) => ({
+    ...line,
+    ytd: null,
+    annualMaximum: null,
+    remainingBeforeMax: null,
+    capped: false,
+  }));
+  const systemKeys = new Map(rows.map((row) => [row.id, row.systemKey]));
+  return { lines, systemKeys };
 }
 
 /** Deterministic diff: same description lines across two stubs. */
@@ -258,6 +295,105 @@ export function diffStubLines(
   return changes;
 }
 
+/**
+ * Capped-share evidence for deduction and employer-contribution lines.
+ * Every figure comes from stored calculation evidence: this stub's stored
+ * line amounts, the committed prior stubs' factors in the same tax year,
+ * and the pre-adoption carry-in columns — the levy itself is never
+ * recomputed.
+ * A stub whose pack declares nothing (or no pack at all) yields no
+ * evidence, and the lines keep their nulls.
+ */
+async function loadCappedShareEvidence(
+  exec: SqlExecutor,
+  orgId: string,
+  stub: StubRow,
+  lines: ExplainPayLine[],
+  systemKeys: Map<string, string | null>,
+): Promise<void> {
+  if (!stub.country) return;
+  let pack: ReturnType<typeof payrollPack>;
+  try {
+    pack = payrollPack(stub.country);
+  } catch {
+    return;
+  }
+  if (!pack.installable || !pack.annualMaximums) return;
+  let entries: readonly PayrollAnnualMaximum[];
+  try {
+    entries = await pack.annualMaximums({
+      taxYear: stub.taxYear,
+      payDate: stub.payDate,
+      region: stub.province ?? "",
+    });
+  } catch {
+    return;
+  }
+  if (entries.length === 0) return;
+  const partyId = stub.employeePartyId;
+  if (!partyId) return;
+  for (const entry of entries) {
+    const matching = lines.filter(
+      (line) =>
+        (line.kind === "deduction" || line.kind === "employer_contribution") &&
+        line.kind === entry.kind &&
+        systemKeys.get(line.id) === entry.systemKey,
+    );
+    if (matching.length === 0 || entry.ytdSources.length === 0) continue;
+    // One history query per entry: each declared source pairs a carry-in
+    // column with a factor key, summed over committed, unvoided prior
+    // stubs no later than this one. Column names ride the pack's own
+    // declaration, so they are shape-checked here, never interpolated
+    // blind: anything but a plain column name fails closed.
+    for (const source of entry.ytdSources) {
+      if (!/^[a-z][a-z0-9_]*$/.test(source.openingColumn)) {
+        throw new AiRailsError(
+          "ai_invalid_pack",
+          `the ${stub.country} payroll pack declares an unusable year-to-date column for ${entry.systemKey} — correct the pack declaration before explaining payslips`,
+        );
+      }
+    }
+    const history = (await exec.execute<{ prior: string }>(sql`
+      select (${entry.ytdSources
+        .map(
+          (source) => sql`coalesce((select ${sql.raw(source.openingColumn)} from payroll_opening_balances
+            where org_id = ${orgId} and employee_party_id = ${partyId} and tax_year = ${stub.taxYear}), 0)
+            + coalesce(sum((s.factors->>${source.factorKey})::numeric), 0)`,
+        )
+        .reduce((a, b) => sql`${a} + ${b}`)})::text as prior
+        from pay_stubs s
+        join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
+        join documents d on d.id = r.document_id and d.org_id = r.org_id
+       where s.org_id = ${orgId} and s.employee_party_id = ${partyId}
+         and s.tax_year = ${stub.taxYear} and s.pay_run_document_id <> ${stub.payRunDocumentId}::uuid
+         and s.pay_date <= ${stub.payDate}::date
+         and r.run_status = 'committed' and d.status <> 'voided'`)).rows[0];
+    // No prior rows sum to null, not zero: coalesce the absence, never the
+    // carry-in, which the selects above already default.
+    const ytdBefore = history?.prior ?? "0";
+    const entryAmount = matching
+      .map((line) => line.amount)
+      .reduce((a, b) => add(a, b), "0");
+    const ytd = add(ytdBefore, entryAmount);
+    const remainingBefore =
+      entry.maximum === null
+        ? null
+        : cmp(add(ytdBefore, neg(entry.maximum)), "0") > 0
+          ? "0"
+          : add(entry.maximum, neg(ytdBefore));
+    const capped =
+      entry.maximum !== null &&
+      cmp(entryAmount, "0") > 0 &&
+      cmp(add(ytdBefore, entryAmount), entry.maximum) >= 0;
+    for (const line of matching) {
+      line.ytd = ytd;
+      line.annualMaximum = entry.maximum;
+      line.remainingBeforeMax = remainingBefore;
+      line.capped = capped;
+    }
+  }
+}
+
 export async function explainPay(
   exec: SqlExecutor,
   input: {
@@ -274,7 +410,8 @@ export async function explainPay(
   await assertExplainFeature(exec, orgId);
   await assertExplainScope(exec, orgId, actorId, employmentId);
   const stub = await loadStub(exec, orgId, employmentId, input.stubId ?? null);
-  const lines = await loadLines(exec, orgId, stub.id);
+  const { lines, systemKeys } = await loadLines(exec, orgId, stub.id);
+  await loadCappedShareEvidence(exec, orgId, stub, lines, systemKeys);
 
   const benefitInputs = (await exec.execute<{
     id: string; kind: string; amount: string; coverageFrom: string; coverageTo: string; status: string;
@@ -321,14 +458,18 @@ export async function explainPay(
     select id::text as id, employment_id::text as "employmentId",
            pay_run_document_id::text as "payRunDocumentId",
            pay_date::text as "payDate", gross::text as gross,
-           net_pay::text as "netPay", employer_cost::text as "employerCost"
+           net_pay::text as "netPay", employer_cost::text as "employerCost",
+           tax_year as "taxYear", country, province,
+           employee_party_id::text as "employeePartyId"
       from pay_stubs
      where org_id = ${orgId}::uuid and employment_id = ${employmentId}::uuid
        and pay_date < ${stub.payDate}::date
      order by pay_date desc, id desc
      limit 1`)).rows;
   const prev = prevRows[0] ?? null;
-  const prevLines = prev ? await loadLines(exec, orgId, prev.id) : [];
+  // The previous stub feeds only the diff, never capped-share evidence:
+  // its own explanation reads its own history when asked.
+  const prevLines = prev ? (await loadLines(exec, orgId, prev.id)).lines : [];
 
   const sources: { kind: string; id: string }[] = [{ kind: "pay_stub", id: stub.id }];
   for (const b of benefitInputs) sources.push({ kind: "hrm_benefit_payroll_input", id: b.id });

@@ -1884,7 +1884,11 @@
       "employerCost": "Coût employeur",
       "earnings": "Gains",
       "deductions": "Retenues",
-      "contributions": "Cotisations employeur"
+      "contributions": "Cotisations employeur",
+      "ytd": "Cumul annuel",
+      "annualMaximum": "Maximum annuel",
+      "remainingBeforeMax": "Reste avant ce bulletin",
+      "cappedNote": "Maximum annuel atteint — ce bulletin ne prend que les {amount} restants"
     },
     "installApp": {
       "action": "Installer l’application",

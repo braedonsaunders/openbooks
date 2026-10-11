@@ -1884,7 +1884,11 @@
       "employerCost": "Arbeitgeberkosten",
       "earnings": "Bezüge",
       "deductions": "Abzüge",
-      "contributions": "Arbeitgeberbeiträge"
+      "contributions": "Arbeitgeberbeiträge",
+      "ytd": "Jahresstand",
+      "annualMaximum": "Jahreshöchstbetrag",
+      "remainingBeforeMax": "Rest vor dieser Abrechnung",
+      "cappedNote": "Jahreshöchstbetrag erreicht — diese Abrechnung nimmt nur die restlichen {amount}"
     },
     "installApp": {
       "action": "App installieren",

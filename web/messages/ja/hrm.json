@@ -1884,7 +1884,11 @@
       "employerCost": "雇用主負担",
       "earnings": "支給",
       "deductions": "控除",
-      "contributions": "雇用主拠出"
+      "contributions": "雇用主拠出",
+      "ytd": "年初来累計",
+      "annualMaximum": "年間上限",
+      "remainingBeforeMax": "当期前残り",
+      "cappedNote": "年間上限に達しました — 今回は残り{amount}のみ"
     },
     "installApp": {
       "action": "アプリをインストール",

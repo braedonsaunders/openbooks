@@ -18,6 +18,7 @@ import { CA_PACK_RATES, CA_TAX_YEARS, type Province } from "./rates.ts";
 import { CA_EMPLOYEE_FACTS } from "./employee-facts.ts";
 import { CA_EMPLOYER_FACTS } from "./employer-facts.ts";
 import { CA_EMPLOYER_LEVY_PROGRAMS } from "./levy-programs.ts";
+import { caAnnualMaximums } from "./annual-maximums.ts";
 import { provisionCaPayrollDefaults } from "./provision-defaults.ts";
 // HR-13: the CA pack's construction carve-outs (data, beside the pack).
 import { CA_CONSTRUCTION } from "./construction.ts";
@@ -132,6 +133,8 @@ export const CA_PAYROLL_PACK: PayrollCountryPack = {
   // pay: a non-taxable allowance is not assessable, a taxable benefit is,
   // and each component declares its exclusions in program_exclusions.
   employerLevyPrograms: CA_EMPLOYER_LEVY_PROGRAMS,
+  // Capped shares for the payslip explanation (T4127/QPIP annual maximums).
+  annualMaximums: (input) => caAnnualMaximums(input),
   // T4127 factor U1: employee-paid dues reduce taxable income.
   employeeUnionDuesTaxTreatment: "union_dues",
   deductionTreatments: [

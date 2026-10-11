@@ -1884,7 +1884,11 @@
       "employerCost": "雇主成本",
       "earnings": "收入项",
       "deductions": "扣除项",
-      "contributions": "雇主缴纳"
+      "contributions": "雇主缴纳",
+      "ytd": "本年累计",
+      "annualMaximum": "年度上限",
+      "remainingBeforeMax": "本期前剩余",
+      "cappedNote": "已达年度上限 — 本期仅取剩余的{amount}"
     },
     "installApp": {
       "action": "安装应用",
