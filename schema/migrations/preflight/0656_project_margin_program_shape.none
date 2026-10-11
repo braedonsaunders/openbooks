@@ -1,0 +1,1 @@
+Widens one check with a new arm for a metric no existing row uses; every existing row keeps satisfying an unchanged arm.

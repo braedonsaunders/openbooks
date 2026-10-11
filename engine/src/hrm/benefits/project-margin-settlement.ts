@@ -127,12 +127,18 @@ export async function measureProjectMarginSettlement(input: {
     if (margin >= 0n && profitCap !== null && pool > profitCap * PERCENT) pool = profitCap * PERCENT;
     if (margin < 0n && lossCap !== null && pool < -lossCap * PERCENT) pool = -lossCap * PERCENT;
     if (program.poolRounding === "pool") pool = roundDiv(pool, PERCENT * quantum) * quantum * PERCENT;
-    const manager = project.manager_id === null ? undefined : roster.find((m) => m.partyId === project.manager_id && covering(m, project.starts_on!));
+    // Eligibility: some membership of the recipient covers the project's
+    // start. Team role and weight: the membership covering the period end.
+    const eligible = (employmentId: string) => roster.some((m) => m.employmentId === employmentId && covering(m, project.starts_on!));
+    const managing = project.manager_id === null ? [] : roster.filter((m) => m.partyId === project.manager_id);
+    const manager = managing.find((m) => covering(m, periodTo)) ?? managing.find((m) => covering(m, project.starts_on!));
     let recipients: { employmentId: string; weight: bigint }[] = [];
-    if (manager && manager.role) {
-      recipients = roster.filter((m) => m.role === manager.role && covering(m, periodTo) && m.weight !== null && toUnits(m.weight) > 0n
-        && covering(m, project.starts_on!)).map((m) => ({ employmentId: m.employmentId, weight: toUnits(m.weight!) }));
-    } else if (manager) recipients = [{ employmentId: manager.employmentId, weight: 1n }];
+    if (manager && eligible(manager.employmentId)) {
+      if (manager.role) {
+        recipients = roster.filter((m) => m.role === manager.role && covering(m, periodTo) && m.weight !== null && toUnits(m.weight) > 0n && eligible(m.employmentId))
+          .map((m) => ({ employmentId: m.employmentId, weight: toUnits(m.weight!) }));
+      } else recipients = [{ employmentId: manager.employmentId, weight: 1n }];
+    }
     const totalWeight = recipients.reduce((sum, r) => sum + r.weight, 0n);
     const shares = recipients.map((r) => {
       // Each share rounds once to the payable quantum.
