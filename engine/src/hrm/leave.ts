@@ -19,6 +19,7 @@ import { parseCivilDate } from "./temporal.ts";
 import {
   cmpHours,
   eachDayOfRange,
+  findSameSpecificityConflict,
   formatCents,
   parseHoursToCents,
   rangesOverlap,
@@ -26,6 +27,7 @@ import {
   splitHoursAcrossDays,
   type AccrualRule,
   type CarryoverRule,
+  type TargetedPolicyWindow,
 } from "./leave-math.ts";
 import { LeaveError } from "./leave-errors.ts";
 import { setupRemedyFor } from "./self-service/actor.ts";
@@ -35,6 +37,7 @@ import {
   policiesInRange,
   policyScopeForEmployment,
   policyToCandidate,
+  scopeForDay,
   timeBalanceAsOf,
   type PolicyRow,
   type PolicyScope,
@@ -85,10 +88,18 @@ export interface LeaveTypeDTO {
   readonly isActive: boolean;
 }
 
+export interface LeaveAppliesTo {
+  readonly employer_subsidiary_id: string | null;
+  readonly department_id: string | null;
+  /** Targeted employments (null = every employment) and classifications (null = every classification). */
+  readonly employment_ids: string[] | null;
+  readonly classification_ids: string[] | null;
+}
+
 export interface LeavePolicyDTO {
   readonly id: string;
   readonly leaveTypeId: string;
-  readonly appliesTo: { employer_subsidiary_id: string | null; department_id: string | null };
+  readonly appliesTo: LeaveAppliesTo;
   readonly accrualRule: AccrualRule;
   readonly carryoverRule: CarryoverRule;
   readonly minimumNoticeDays: number;
@@ -252,8 +263,44 @@ function validateAccrualRule(rule: unknown): AccrualRule {
         throw new LeaveError("INVALID_INPUT", "a per_period accrual rule must carry periods_per_year (a positive integer) — without it a period cannot be pro-rated");
       }
     }
+    if (record.tiers !== undefined && record.tiers !== null) {
+      validateAccrualTiers(record.tiers);
+    }
+  } else if (record.tiers !== undefined && record.tiers !== null) {
+    throw new LeaveError("INVALID_INPUT", `a ${kind} accrual rule carries no hours, so tiers have nothing to lift — use kind per_year or per_period for service-based tiers`);
   }
   return record as unknown as AccrualRule;
+}
+
+/**
+ * Service-based accrual tiers: a non-empty list of {after_years, hours}
+ * with strictly ascending positive thresholds. Words mirror the balance
+ * read (leave-math requireRuleTiers) so writers and readers refuse the
+ * same shapes with the same message.
+ */
+function validateAccrualTiers(tiers: unknown): void {
+  if (!Array.isArray(tiers) || tiers.length === 0) {
+    throw new LeaveError("INVALID_INPUT", "accrual_rule.tiers is a non-empty list of {after_years, hours} — record the tiers or omit them");
+  }
+  let previous = -1;
+  for (const tier of tiers) {
+    if (typeof tier !== "object" || tier === null) {
+      throw new LeaveError("INVALID_INPUT", "accrual_rule.tiers entries carry after_years and hours — record each tier");
+    }
+    const years = (tier as { after_years?: unknown }).after_years;
+    const hours = (tier as { hours?: unknown }).hours;
+    if (!Number.isInteger(years) || (years as number) < 1) {
+      throw new LeaveError("INVALID_INPUT", "accrual_rule.tiers after_years is a positive whole number of completed service years — record each tier's threshold");
+    }
+    if (typeof hours !== "string") {
+      throw new LeaveError("INVALID_INPUT", "accrual_rule.tiers hours is an exact decimal — record each tier's hours");
+    }
+    requireHours(hours, "accrual_rule.tiers.hours");
+    if ((years as number) <= previous) {
+      throw new LeaveError("INVALID_INPUT", "accrual_rule.tiers after_years ascends strictly — order the tiers by completed service years");
+    }
+    previous = years as number;
+  }
 }
 
 function validateCarryoverRule(rule: unknown): CarryoverRule {
@@ -275,7 +322,7 @@ function validateCarryoverRule(rule: unknown): CarryoverRule {
   return record as unknown as CarryoverRule;
 }
 
-function validateAppliesTo(value: unknown): { employer_subsidiary_id: string | null; department_id: string | null } {
+function validateAppliesTo(value: unknown): LeaveAppliesTo {
   if (typeof value !== "object" || value === null) {
     throw new LeaveError("INVALID_INPUT", "applies_to scopes by employer_subsidiary_id and department_id, each a uuid or null for org-wide — record the scope");
   }
@@ -289,14 +336,41 @@ function validateAppliesTo(value: unknown): { employer_subsidiary_id: string | n
   return {
     employer_subsidiary_id: (record.employer_subsidiary_id as string | null) ?? null,
     department_id: (record.department_id as string | null) ?? null,
+    employment_ids: validateAppliesIdList(record.employment_ids, "applies_to.employment_ids"),
+    classification_ids: validateAppliesIdList(record.classification_ids, "applies_to.classification_ids"),
   };
 }
 
+/**
+ * Targeted id lists: null/undefined means every employment (or every
+ * classification); otherwise a non-empty list of uuids. Shape only — the
+ * create path then proves each id exists in this organization.
+ */
+function validateAppliesIdList(value: unknown, field: string): string[] | null {
+  if (value === null || value === undefined) return null;
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new LeaveError("INVALID_INPUT", `${field} is a non-empty list of uuids, or null for all — record the targets`);
+  }
+  for (const entry of value) {
+    if (!isUuid(entry)) {
+      throw new LeaveError("INVALID_INPUT", `${field} holds uuids — ${JSON.stringify(entry)} is not a uuid; check the ids`);
+    }
+  }
+  return [...new Set(value as string[])];
+}
+
 function toPolicyDTO(row: PolicyRow): LeavePolicyDTO {
+  // Legacy rows predate targeting keys: absent reads as wildcard (null).
+  const applies = (row.applies_to ?? {}) as Record<string, unknown>;
   return {
     id: row.id,
     leaveTypeId: row.leave_type_id,
-    appliesTo: row.applies_to,
+    appliesTo: {
+      employer_subsidiary_id: (applies.employer_subsidiary_id as string | null) ?? null,
+      department_id: (applies.department_id as string | null) ?? null,
+      employment_ids: (applies.employment_ids as string[] | null) ?? null,
+      classification_ids: (applies.classification_ids as string[] | null) ?? null,
+    },
     accrualRule: row.accrual_rule,
     carryoverRule: row.carryover_rule,
     minimumNoticeDays: row.minimum_notice_days,
@@ -338,7 +412,15 @@ export async function createLeavePolicy(query: CreateLeavePolicyQuery): Promise<
     await assertHrmEnabled(db, orgId, actorId);
     const type = await loadLeaveType(db, orgId, leaveTypeId);
     if (!type.is_active) throw new LeaveError("REFUSED", `leave type ${type.code} is inactive — reactivate it before adding a policy`);
+    // Same-type policy writes serialize on a (org, leave type) advisory
+    // lock: the loser waits for the winner's commit, then preflights
+    // against the committed row instead of racing it to the storage
+    // exclusion — so the second of two concurrent creates is refused by
+    // name, deterministically.
+    await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${"openbooks:leave-policy:" + orgId + ":" + leaveTypeId}, 0))`);
+    await assertPolicyTargetsInOrg(db, orgId, appliesTo);
     await assertNoSameScopeOverlap(db, orgId, leaveTypeId, appliesTo, effectiveFrom, effectiveTo);
+    await assertNoSameSpecificityTargetOverlap(db, orgId, leaveTypeId, appliesTo, effectiveFrom, effectiveTo, null);
     let inserted: PolicyRow | undefined;
     try {
       inserted = (await db.execute<PolicyRow>(sql`
@@ -403,6 +485,108 @@ async function assertNoSameScopeOverlap(
     throw new LeaveError(
       "REFUSED",
       `policy ${clash.id} already covers this leave type and scope over ${window} — close that window (set its effective_to before ${effectiveFrom}) or deactivate it before opening ${effectiveFrom} to ${effectiveTo ?? "open"}`,
+    );
+  }
+}
+
+/**
+ * Targeted ids must exist in this organization: a policy that can never
+ * match (an employment or classification from nowhere) is refused by
+ * field name, never stored. Unknown ids read as NOT_FOUND — the org
+ * predicate is the isolation enforcement, so the refusal never says
+ * whether the id lives in another organization.
+ */
+async function assertPolicyTargetsInOrg(
+  exec: SqlExecutor,
+  orgId: string,
+  appliesTo: LeaveAppliesTo,
+): Promise<void> {
+  if (appliesTo.employment_ids !== null) {
+    const missing = (await exec.execute<{ id: string }>(sql`
+      select value as id
+        from jsonb_array_elements_text(${JSON.stringify(appliesTo.employment_ids)}::jsonb)
+       where not exists (
+         select 1 from worker_employments
+          where org_id = ${orgId} and id = value::uuid
+       )
+    `)).rows;
+    if (missing.length > 0) {
+      throw new LeaveError(
+        "NOT_FOUND",
+        "applies_to.employment_ids lists an employment not found in this organization — check the employment ids",
+      );
+    }
+  }
+  if (appliesTo.classification_ids !== null) {
+    const missing = (await exec.execute<{ id: string }>(sql`
+      select value as id
+        from jsonb_array_elements_text(${JSON.stringify(appliesTo.classification_ids)}::jsonb)
+       where not exists (
+         select 1 from hrm_work_classifications
+          where org_id = ${orgId} and id = value::uuid
+       )
+    `)).rows;
+    if (missing.length > 0) {
+      throw new LeaveError(
+        "NOT_FOUND",
+        "applies_to.classification_ids lists a classification not found in this organization — check the classification ids",
+      );
+    }
+  }
+}
+
+/**
+ * Array-dimension overlap preflight for policy windows: a policy whose
+ * window overlaps an active same-type policy of the same specificity
+ * class (identical pin pattern — equal selectPolicy weights) with an
+ * intersecting employee/classification set is refused naming the
+ * conflicting policy. Different classes keep resolving by specificity,
+ * and same (type, subsidiary, department) windows keep the storage
+ * exclusion as the race backstop. ignoreId exempts the row under edit
+ * (Setup updates re-check the edited window against every OTHER row).
+ */
+export async function assertNoSameSpecificityTargetOverlap(
+  exec: SqlExecutor,
+  orgId: string,
+  leaveTypeId: string,
+  appliesTo: LeaveAppliesTo,
+  effectiveFrom: string,
+  effectiveTo: string | null,
+  ignoreId: string | null,
+): Promise<void> {
+  const rows = (await exec.execute<{ id: string; applies_to: LeaveAppliesTo; effective_from: string; effective_to: string | null }>(sql`
+    select id, applies_to, effective_from::text as effective_from, effective_to::text as effective_to
+      from hrm_leave_policies
+     where org_id = ${orgId} and leave_type_id = ${leaveTypeId} and is_active
+       and effective_from <= ${effectiveTo ?? "9999-12-31"}
+       and (effective_to is null or effective_to >= ${effectiveFrom})
+       and (${ignoreId}::uuid is null or id <> ${ignoreId}::uuid)
+  `)).rows;
+  const actives: TargetedPolicyWindow[] = rows.map((row) => ({
+    id: row.id,
+    employerSubsidiaryId: (row.applies_to?.employer_subsidiary_id as string | null) ?? null,
+    departmentId: (row.applies_to?.department_id as string | null) ?? null,
+    employmentIds: (row.applies_to?.employment_ids as string[] | null) ?? null,
+    classificationIds: (row.applies_to?.classification_ids as string[] | null) ?? null,
+    effectiveFrom: String(row.effective_from).slice(0, 10),
+    effectiveTo: row.effective_to ? String(row.effective_to).slice(0, 10) : null,
+  }));
+  const conflict = findSameSpecificityConflict(
+    {
+      employerSubsidiaryId: appliesTo.employer_subsidiary_id,
+      departmentId: appliesTo.department_id,
+      employmentIds: appliesTo.employment_ids,
+      classificationIds: appliesTo.classification_ids,
+      effectiveFrom,
+      effectiveTo,
+    },
+    actives,
+  );
+  if (conflict) {
+    const window = `${conflict.effectiveFrom} to ${conflict.effectiveTo ?? "open"}`;
+    throw new LeaveError(
+      "REFUSED",
+      `policy ${conflict.id} already covers these employees and classifications over ${window} at the same specificity — close that window (set its effective_to before ${effectiveFrom}) or deactivate it before opening ${effectiveFrom} to ${effectiveTo ?? "open"}`,
     );
   }
 }
@@ -569,7 +753,7 @@ async function assertTimeBalance(
   const candidates = rows.map(policyToCandidate);
   let allUnlimited = true;
   for (const day of eachDayOfRange(startsOn, endsOn)) {
-    const pick = selectPolicy(candidates, scope, day);
+    const pick = selectPolicy(candidates, scopeForDay(scope, day), day);
     // No policy declares no entitlement: fail closed by name, never accrue zero.
     // Creating the missing policy needs hrm.leave.manage; anyone else is
     // told to ask HR instead of being sent to do setup they cannot access.

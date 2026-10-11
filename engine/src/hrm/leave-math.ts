@@ -98,10 +98,23 @@ export function rangesOverlap(
   return aStart <= bEnd && bStart <= aEnd;
 }
 
+export interface AccrualTier {
+  /** Completed service years from which this tier's hours apply. */
+  readonly after_years: number;
+  readonly hours: string;
+}
+
 export interface AccrualRule {
   readonly kind: "none" | "per_period" | "per_year" | "unlimited";
   readonly hours?: string;
   readonly periods_per_year?: number;
+  /**
+   * Service-based tiers, ascending by after_years. Null (or absent) means
+   * the base hours apply at every tenure. Below the first tier the base
+   * hours apply; an unknown service start also accrues base hours, and the
+   * balance read flags that so an operator can fix the start date.
+   */
+  readonly tiers?: AccrualTier[] | null;
 }
 
 export interface CarryoverRule {
@@ -111,16 +124,109 @@ export interface CarryoverRule {
 }
 
 /**
+ * Tenure context for service-based tiers: the worker's service start
+ * (YYYY-MM-DD) or null when it is unknown. Unknown tenure accrues base
+ * hours — the balance read flags that separately, never silently.
+ */
+export interface AccrualTenure {
+  readonly serviceStart: string | null;
+}
+
+/**
+ * Shape-checked tiers of a rule: null/undefined/absent means no tiers.
+ * Malformed tiers fail closed (throw) rather than accruing zero — a rule
+ * that still arrives malformed must refuse at the balance read, never
+ * price leave at a rate nobody declared.
+ */
+export function requireRuleTiers(rule: AccrualRule): AccrualTier[] | null {
+  const tiers = rule.tiers;
+  if (tiers === undefined || tiers === null) return null;
+  if (!Array.isArray(tiers) || tiers.length === 0) {
+    throw new LeaveMathError("accrual_rule.tiers is a non-empty list of {after_years, hours} — record the tiers or omit them");
+  }
+  let previous = -1;
+  for (const tier of tiers) {
+    if (typeof tier !== "object" || tier === null) {
+      throw new LeaveMathError("accrual_rule.tiers entries carry after_years and hours — record each tier");
+    }
+    const years = (tier as AccrualTier).after_years;
+    const hours = (tier as AccrualTier).hours;
+    if (!Number.isInteger(years) || (years as number) < 1) {
+      throw new LeaveMathError("accrual_rule.tiers after_years is a positive whole number of completed service years — record each tier's threshold");
+    }
+    if (typeof hours !== "string") {
+      throw new LeaveMathError("accrual_rule.tiers hours is an exact decimal — record each tier's hours");
+    }
+    let cents: HourCents;
+    try {
+      cents = parseHoursToCents(hours);
+    } catch {
+      throw new LeaveMathError("accrual_rule.tiers hours is an exact decimal with at most 2 fraction digits — record each tier's hours");
+    }
+    if (cents <= 0n) {
+      throw new LeaveMathError("accrual_rule.tiers hours must be greater than zero — record each tier's hours");
+    }
+    if ((years as number) <= previous) {
+      throw new LeaveMathError("accrual_rule.tiers after_years ascends strictly — order the tiers by completed service years");
+    }
+    previous = years as number;
+  }
+  return tiers as AccrualTier[];
+}
+
+/** Completed service years on a date: whole anniversaries of serviceStart passed. */
+export function completedServiceYears(serviceStart: string, onDate: string): number {
+  parseCivilDate(serviceStart);
+  parseCivilDate(onDate);
+  // Lexicographic month-day comparison is exact on zero-padded ISO: the
+  // anniversary counts once the month-day has been reached that year.
+  let years = Number(onDate.slice(0, 4)) - Number(serviceStart.slice(0, 4));
+  if (onDate.slice(5) < serviceStart.slice(5)) years -= 1;
+  return Math.max(0, years);
+}
+
+/**
+ * Hours in force on a date under a per_year/per_period rule: the highest
+ * tier whose after_years the completed service covers, else the base
+ * hours. Unknown tenure accrues base hours — flagged by the balance read,
+ * never re-rated retroactively once the start date is fixed.
+ */
+export function tieredHoursForDate(
+  rule: AccrualRule,
+  baseHours: string,
+  serviceStart: string | null,
+  onDate: string,
+): string {
+  const tiers = requireRuleTiers(rule);
+  if (tiers === null) return formatCents(parseHoursToCents(baseHours));
+  if (serviceStart === null) return formatCents(parseHoursToCents(baseHours));
+  const completed = completedServiceYears(serviceStart, onDate);
+  let hours = baseHours;
+  for (const tier of tiers) {
+    if (tier.after_years <= completed) hours = tier.hours;
+    else break;
+  }
+  return formatCents(parseHoursToCents(hours));
+}
+
+/**
  * Hours earned under a rule between yearStart and asOf (both inclusive).
  * Returns null for unlimited (unbounded, never a number). per_period
  * pro-rates by whole elapsed periods: periods_per_year slices the accrual
  * year evenly and only completed slices count, so a mid-period hire never
  * earns the unworked part of the slice.
+ *
+ * Service tiers resolve per accrual event, never once for the whole
+ * range: a per_period slice accrues at the tier in force on its vesting
+ * (completion) date and a per_year grant at the tier in force on asOf, so
+ * the balance day can never re-rate earlier events retroactively and the
+ * entitlement reproduces for any past as-of date.
  */
 export function accrualEarned(
   rule: AccrualRule,
   yearStart: string,
   asOf: string,
+  tenure?: AccrualTenure,
 ): string | null {
   parseCivilDate(yearStart);
   parseCivilDate(asOf);
@@ -138,7 +244,7 @@ export function accrualEarned(
       if (rule.hours == null) {
         throw new LeaveMathError("a per_year accrual rule must carry hours — set hours or use kind none");
       }
-      return formatCents(parseHoursToCents(rule.hours));
+      return tieredHoursForDate(rule, rule.hours, tenure?.serviceStart ?? null, asOf);
     }
     case "per_period": {
       if (rule.hours == null) {
@@ -151,7 +257,22 @@ export function accrualEarned(
         );
       }
       const elapsed = wholePeriodsElapsed(yearStart, asOf, perYear as number);
-      return formatCents(parseHoursToCents(rule.hours) * BigInt(elapsed));
+      const tiers = requireRuleTiers(rule);
+      if (tiers === null) {
+        return formatCents(parseHoursToCents(rule.hours) * BigInt(elapsed));
+      }
+      // Tiered cadence: each completed slice accrues at the tier in force
+      // on its vesting date (its last day), so an anniversary mid-year
+      // lifts later slices without re-rating earlier ones.
+      const yearEnd = addCalendarDays(addMonthsClamped(yearStart, 12), -1);
+      const yearDates = eachDayOfRange(yearStart, yearEnd);
+      let total = 0n;
+      for (let slice = 1; slice <= elapsed; slice += 1) {
+        const endDay = sliceEndDay(slice, yearDates.length, perYear as number);
+        const vesting = yearDates[endDay - 1]!;
+        total += parseHoursToCents(tieredHoursForDate(rule, rule.hours, tenure?.serviceStart ?? null, vesting));
+      }
+      return formatCents(total);
     }
   }
 }
@@ -185,6 +306,7 @@ export function accrualEarnedAcrossSegments(
   segments: readonly AccrualSegment[],
   yearStart: string,
   asOf: string,
+  tenure?: AccrualTenure,
 ): string | null {
   parseCivilDate(yearStart);
   parseCivilDate(asOf);
@@ -214,7 +336,7 @@ export function accrualEarnedAcrossSegments(
         throw new LeaveMathError("a per_year accrual rule must carry hours — set hours or use kind none");
       }
       if (seg.from <= asOf && (seg.to === null || seg.to >= asOf)) {
-        total += parseHoursToCents(rule.hours);
+        total += parseHoursToCents(tieredHoursForDate(rule, rule.hours, tenure?.serviceStart ?? null, asOf));
       }
       continue;
     }
@@ -230,6 +352,29 @@ export function accrualEarnedAcrossSegments(
     const clippedStart = seg.from < yearStart ? yearStart : seg.from;
     const clippedEnd = seg.to === null || seg.to > asOf ? asOf : seg.to;
     if (clippedEnd < clippedStart || clippedStart > yearEnd) continue;
+    const tiered = requireRuleTiers(rule) !== null;
+    if (tiered) {
+      // Tiered cadence prices each vested slice at the tier in force on
+      // its vesting day (bounded: at most periods_per_year slices), so a
+      // mid-window anniversary lifts later slices without re-rating
+      // earlier ones. The untiered closed form below is untouched.
+      const serviceStart = tenure?.serviceStart ?? null;
+      const lo = (dayIndex.get(clippedStart) ?? 0) + 1;
+      const hi = clippedEnd >= yearEnd ? yearDays : (dayIndex.get(clippedEnd) ?? yearDays - 1) + 1;
+      const completed = wholePeriodsElapsed(yearStart, asOf, perYear as number);
+      let first = Math.floor(((lo - 1) * (perYear as number)) / yearDays) + 1;
+      while (sliceStartDay(first, yearDays, perYear as number) < lo) first += 1;
+      while (first > 1 && sliceStartDay(first - 1, yearDays, perYear as number) >= lo) first -= 1;
+      let last = Math.min(completed, Math.floor((hi * (perYear as number)) / yearDays) + 1);
+      while (last >= first && sliceStartDay(last, yearDays, perYear as number) > hi) last -= 1;
+      while (last + 1 <= completed && sliceStartDay(last + 1, yearDays, perYear as number) <= hi) last += 1;
+      for (let slice = Math.max(first, 1); slice <= last; slice += 1) {
+        const endDay = sliceEndDay(slice, yearDays, perYear as number);
+        const vesting = yearDates[endDay - 1]!;
+        total += parseHoursToCents(tieredHoursForDate(rule, rule.hours as string, serviceStart, vesting));
+      }
+      continue;
+    }
     // Slice k (1-based) of this rule's grid starts on day
     // floor(((k-1) * yearDays) / ppy) + 1 and only vests once complete,
     // so k runs over completed slices whose start day the window holds.
@@ -253,9 +398,82 @@ export function accrualEarnedAcrossSegments(
   return formatCents(total);
 }
 
+/**
+ * An effective-dated policy window with its targeting pins, for the
+ * same-specificity overlap check. Null pin lists are wildcards.
+ */
+export interface TargetedPolicyWindow {
+  readonly id: string;
+  readonly employerSubsidiaryId: string | null;
+  readonly departmentId: string | null;
+  readonly employmentIds: readonly string[] | null;
+  readonly classificationIds: readonly string[] | null;
+  readonly effectiveFrom: string;
+  /** Inclusive window end, null = open-ended. */
+  readonly effectiveTo: string | null;
+}
+
+/**
+ * Specificity score of a pin pattern: employment pin 8, classification
+ * pin 4, subsidiary pin 2, department pin 1 — the same weights selectPolicy
+ * resolves by. Binary weights make equal scores mean identical pin
+ * patterns: two policies in one class resolve by start date, so an
+ * overlapping window with intersecting targets is genuinely ambiguous.
+ */
+export function targetingSpecificity(window: Omit<TargetedPolicyWindow, "id" | "effectiveFrom" | "effectiveTo">): number {
+  let score = 0;
+  if (window.employerSubsidiaryId !== null) score += 2;
+  if (window.departmentId !== null) score += 1;
+  if (window.employmentIds != null) score += 8;
+  if (window.classificationIds != null) score += 4;
+  return score;
+}
+
+function targetSetsIntersect(
+  a: readonly string[] | null | undefined,
+  b: readonly string[] | null | undefined,
+): boolean {
+  if (a == null && b == null) return true;
+  if (a == null || b == null) return false;
+  return a.some((id) => b.includes(id));
+}
+
+/**
+ * Same-specificity overlap conflict, if any: the first active window that
+ * shares the candidate's specificity class (identical pin pattern),
+ * overlaps its window, and has intersecting employment AND
+ * classification sets (wildcards intersect only wildcards — a pinned set
+ * never collides with an unpinned one, which specificity resolves).
+ * Pure so every writer (engine create, Setup create/update) refuses the
+ * same conflict with the same policy named.
+ */
+export function findSameSpecificityConflict(
+  candidate: Omit<TargetedPolicyWindow, "id">,
+  actives: readonly TargetedPolicyWindow[],
+): TargetedPolicyWindow | null {
+  const candidateEnd = candidate.effectiveTo ?? "9999-12-31";
+  const classScore = targetingSpecificity(candidate);
+  for (const active of actives) {
+    if (targetingSpecificity(active) !== classScore) continue;
+    if (!rangesOverlap(candidate.effectiveFrom, candidateEnd, active.effectiveFrom, active.effectiveTo ?? "9999-12-31")) {
+      continue;
+    }
+    if (!targetSetsIntersect(candidate.employmentIds, active.employmentIds)) continue;
+    if (!targetSetsIntersect(candidate.classificationIds, active.classificationIds)) continue;
+    return active;
+  }
+  return null;
+}
+
 /** 1-based day number of the year's grid on which slice k starts. */
 function sliceStartDay(k: number, yearDays: number, periodsPerYear: number): number {
   return Math.floor(((k - 1) * yearDays) / periodsPerYear) + 1;
+}
+
+/** 1-based day number of the year's grid on which slice k ends (its vesting day). */
+function sliceEndDay(k: number, yearDays: number, periodsPerYear: number): number {
+  if (k >= periodsPerYear) return yearDays;
+  return sliceStartDay(k + 1, yearDays, periodsPerYear) - 1;
 }
 
 export interface ReignSegment {
@@ -274,10 +492,14 @@ export interface ReignSegment {
  * (which would price org-wide unlimited into a capped worker's balance
  * and grant org + department twice). Gap days carry no reign and earn
  * nothing. Pure and day-walked (at most a civil year plus the tail).
+ *
+ * The scope may be a per-day resolver so classification targeting follows
+ * the classifications the worker actually holds each day: a classification
+ * held for only part of the period governs only that part.
  */
 export function selectReigns<T extends PolicyCandidate & { rule: AccrualRule }>(
   policies: readonly T[],
-  scope: { employerSubsidiaryId: string | null; departmentId: string | null },
+  scope: PolicyMatchScope | ((day: string) => PolicyMatchScope),
   from: string,
   to: string,
 ): ReignSegment[] {
@@ -286,7 +508,7 @@ export function selectReigns<T extends PolicyCandidate & { rule: AccrualRule }>(
   let openRule: AccrualRule | null = null;
   let openFrom = from;
   for (const day of eachDayOfRange(from, to)) {
-    const pick = selectPolicy(policies, scope, day);
+    const pick = selectPolicy(policies, typeof scope === "function" ? scope(day) : scope, day);
     if (pick?.id !== openId) {
       if (openId !== null && openRule !== null) {
         reigns.push({ rule: openRule, from: openFrom, to: addCalendarDays(day, -1) });
@@ -385,20 +607,45 @@ export interface PolicyCandidate {
   readonly id: string;
   readonly employerSubsidiaryId: string | null;
   readonly departmentId: string | null;
+  /**
+   * Targeted employments (null/undefined = every employment) and
+   * classifications (null/undefined = every classification). Absent reads
+   * as wildcard, so candidates built before targeting existed keep
+   * matching exactly as before.
+   */
+  readonly employmentIds?: readonly string[] | null;
+  readonly classificationIds?: readonly string[] | null;
   readonly effectiveFrom: string;
   /** Inclusive window end, null/undefined = open-ended. Absent = no end filter. */
   readonly effectiveTo?: string | null;
 }
 
 /**
- * Most-specific applicable policy: exact (subsidiary + department) beats
- * subsidiary-only and department-only, which beat org-wide; ties break by
- * latest effective_from. Pure so the precedence is unit-tested, never
- * re-derived per call site.
+ * The worker side of policy matching. employmentId and
+ * classificationIds are optional so historic call sites keep compiling;
+ * a policy that pins employments or classifications never matches a
+ * scope that omits that dimension — targeting fails closed, never open.
+ */
+export interface PolicyMatchScope {
+  readonly employerSubsidiaryId: string | null;
+  readonly departmentId: string | null;
+  readonly employmentId?: string | null;
+  readonly classificationIds?: readonly string[] | null;
+}
+
+/**
+ * Most-specific applicable policy. Specificity weights: an employment pin
+ * counts 8, a classification pin 4, a subsidiary pin 2, a department pin
+ * 1 — so a directly targeted worker always beats a broader rule, and a
+ * department rule still beats org-wide. A pinned dimension matches only
+ * its listed values: an employment matches when listed, a classification
+ * dimension matches when any held classification is listed. Ties break by
+ * latest effective_from, then id. Pure so the precedence is unit-tested,
+ * never re-derived per call site.
  */
 export function selectPolicy<T extends PolicyCandidate>(
   policies: readonly T[],
-  scope: { employerSubsidiaryId: string | null; departmentId: string | null },
+  scope: PolicyMatchScope,
   onDate: string,
 ): T | null {
   const scored: { policy: T; score: number }[] = [];
@@ -407,11 +654,20 @@ export function selectPolicy<T extends PolicyCandidate>(
     if (policy.effectiveTo != null && policy.effectiveTo < onDate) continue;
     const subMatch = policy.employerSubsidiaryId === null || policy.employerSubsidiaryId === scope.employerSubsidiaryId;
     const depMatch = policy.departmentId === null || policy.departmentId === scope.departmentId;
-    if (!subMatch || !depMatch) continue;
+    const empMatch =
+      policy.employmentIds == null ||
+      (scope.employmentId != null && policy.employmentIds.includes(scope.employmentId));
+    const clsMatch =
+      policy.classificationIds == null ||
+      (scope.classificationIds != null &&
+        policy.classificationIds.some((pinned) => scope.classificationIds!.includes(pinned)));
+    if (!subMatch || !depMatch || !empMatch || !clsMatch) continue;
     // A null pin is a wildcard, never a match: specificity counts only pins.
     let score = 0;
     if (policy.employerSubsidiaryId !== null) score += 2;
     if (policy.departmentId !== null) score += 1;
+    if (policy.employmentIds != null) score += 8;
+    if (policy.classificationIds != null) score += 4;
     scored.push({ policy, score });
   }
   // Total order: specificity, then latest start, then id. The old comparator

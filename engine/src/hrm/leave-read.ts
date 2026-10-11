@@ -21,13 +21,17 @@ import {
   accrualEarnedAcrossSegments,
   addHours,
   carryoverApplied,
+  requireRuleTiers,
   selectReigns,
   subHours,
   timeBalance,
   selectPolicy,
   type AccrualRule,
+  type AccrualTenure,
+  type AccrualSegment,
   type CarryoverRule,
   type PolicyCandidate,
+  type PolicyMatchScope,
 } from "./leave-math.ts";
 import { inputGuards } from "./input-guards.ts";
 
@@ -46,16 +50,56 @@ import { inputGuards } from "./input-guards.ts";
 
 const { requireOrgId, requireActorId } = inputGuards((message) => new EmploymentReadError(message));
 
+export interface ClassificationWindow {
+  readonly classificationId: string;
+  /** Inclusive window start (YYYY-MM-DD). */
+  readonly from: string;
+  /** Inclusive window end, null = open-ended (construction convention). */
+  readonly to: string | null;
+}
+
+/** Classifications held on a day: every window covering it (inclusive ends). */
+export function classificationsOn(windows: readonly ClassificationWindow[], day: string): string[] {
+  const held: string[] = [];
+  for (const window of windows) {
+    if (window.from <= day && (window.to === null || day <= window.to)) {
+      held.push(window.classificationId);
+    }
+  }
+  return held;
+}
+
 export interface PolicyScope {
   readonly employmentId: string;
   readonly employerSubsidiaryId: string;
   readonly departmentId: string | null;
+  /**
+   * The employment's classification windows. Matching resolves them per
+   * date (a classification held for only part of a period governs only
+   * that part), so the scope carries windows, never a single-day set.
+   */
+  readonly classificationWindows: readonly ClassificationWindow[];
+}
+
+/** The match input for one date: pins plus the classifications held that day. */
+export function scopeForDay(scope: PolicyScope, day: string): PolicyMatchScope {
+  return {
+    employerSubsidiaryId: scope.employerSubsidiaryId,
+    departmentId: scope.departmentId,
+    employmentId: scope.employmentId,
+    classificationIds: classificationsOn(scope.classificationWindows, day),
+  };
 }
 
 export type PolicyRow = {
   readonly id: string;
   readonly leave_type_id: string;
-  readonly applies_to: { employer_subsidiary_id: string | null; department_id: string | null };
+  readonly applies_to: {
+    employer_subsidiary_id: string | null;
+    department_id: string | null;
+    employment_ids?: string[] | null;
+    classification_ids?: string[] | null;
+  };
   readonly accrual_rule: AccrualRule;
   readonly carryover_rule: CarryoverRule;
   readonly minimum_notice_days: number;
@@ -85,7 +129,7 @@ export async function applicablePolicy(
      where org_id = ${orgId} and leave_type_id = ${leaveTypeId} and is_active
        and effective_from <= ${onDate} and (effective_to is null or effective_to >= ${onDate})
   `)).rows;
-  const picked = selectPolicy(rows.map(policyToCandidate), scope, onDate);
+  const picked = selectPolicy(rows.map(policyToCandidate), scopeForDay(scope, onDate), onDate);
   return rows.find((row) => row.id === picked?.id) ?? null;
 }
 
@@ -109,12 +153,15 @@ export async function policiesInRange(
   return rows;
 }
 
-/** Scope + window pins of a policy row for the pure precedence sort. */
+/** Scope + window + targeting pins of a policy row for the pure precedence sort. */
 export function policyToCandidate(row: PolicyRow): PolicyCandidate {
   return {
     id: row.id,
     employerSubsidiaryId: (row.applies_to?.employer_subsidiary_id as string | null) ?? null,
     departmentId: (row.applies_to?.department_id as string | null) ?? null,
+    // Legacy rows predate targeting keys: absent reads as wildcard (null).
+    employmentIds: (row.applies_to?.employment_ids as string[] | null | undefined) ?? null,
+    classificationIds: (row.applies_to?.classification_ids as string[] | null | undefined) ?? null,
     effectiveFrom: String(row.effective_from).slice(0, 10),
     effectiveTo: row.effective_to ? String(row.effective_to).slice(0, 10) : null,
   };
@@ -177,7 +224,53 @@ export async function policyScopeForEmployment(
     employmentId,
     employerSubsidiaryId: employment.employer_subsidiary_id,
     departmentId: assignment?.department_id ?? null,
+    classificationWindows: await classificationWindowsForEmployment(exec, orgId, employmentId),
   };
+}
+
+/**
+ * Every classification window of an employment (inclusive ends, the
+ * construction convention). Loaded once per balance read; matching
+ * resolves the held set per date in memory, so one employment's windows
+ * never cost a query per day.
+ */
+export async function classificationWindowsForEmployment(
+  exec: SqlExecutor,
+  orgId: string,
+  employmentId: string,
+): Promise<ClassificationWindow[]> {
+  const rows = (await exec.execute<{ classification_id: string; effective_from: string; effective_to: string | null }>(sql`
+    select classification_id::text as classification_id,
+           effective_from::text as effective_from, effective_to::text as effective_to
+      from hrm_employment_classifications
+     where org_id = ${orgId} and employment_id = ${employmentId}
+     order by effective_from
+  `)).rows;
+  return rows.map((row) => ({
+    classificationId: row.classification_id,
+    from: String(row.effective_from).slice(0, 10),
+    to: row.effective_to ? String(row.effective_to).slice(0, 10) : null,
+  }));
+}
+
+/**
+ * The service start behind service-based accrual tiers (null = unknown).
+ * Unknown tenure accrues base hours; the balance read flags that so an
+ * operator can fix the start date instead of silently under-accruing.
+ */
+export async function serviceStartForEmployment(
+  exec: SqlExecutor,
+  orgId: string,
+  employmentId: string,
+): Promise<string | null> {
+  const row = (await exec.execute<{ service_start: string | null }>(sql`
+    select service_start::text as service_start from worker_employments
+     where org_id = ${orgId} and id = ${employmentId}
+  `)).rows[0];
+  if (!row) {
+    throw new LeaveError("NOT_FOUND", "employment not found in this organization — check the employment id");
+  }
+  return row.service_start ? String(row.service_start).slice(0, 10) : null;
 }
 
 export interface TimeBalance {
@@ -189,6 +282,12 @@ export interface TimeBalance {
   /** Exact decimal hours, or null for unlimited (unbounded — never a number). */
   readonly balance: string | null;
   readonly unlimited: boolean;
+  /**
+   * True when a tiered policy governed accrual but the employment has no
+   * service start, so tiers priced at base hours. The operator fixes the
+   * start date; the balance never silently under-accrues.
+   */
+  readonly serviceStartUnknown: boolean;
 }
 
 /**
@@ -205,15 +304,20 @@ export async function timeBalanceAsOf(
   asOf: string,
 ): Promise<TimeBalance> {
   const scope = await policyScopeForEmployment(exec, orgId, employmentId, asOf);
+  const serviceStart = await serviceStartForEmployment(exec, orgId, employmentId);
+  // Tiers resolve per accrual event from completed service on that event's
+  // date — never once from the balance day — so the entitlement reproduces
+  // for any past as-of date and an anniversary never re-rates earlier events.
+  const tenure: AccrualTenure = { serviceStart };
   const policy = await applicablePolicy(exec, orgId, leaveTypeId, scope, asOf);
   if (!policy) {
-    return { kind: "time", policyId: null, earned: null, carried: "0", taken: "0", balance: null, unlimited: false };
+    return { kind: "time", policyId: null, earned: null, carried: "0", taken: "0", balance: null, unlimited: false, serviceStartUnknown: false };
   }
   const accrual = policy.accrual_rule as AccrualRule;
   if (accrual.kind === "unlimited") {
     const yearStart = accrualYearOf(asOf);
     const taken = await absenceHoursInWindow(exec, orgId, employmentId, leaveTypeId, yearStart, asOf);
-    return { kind: "time", policyId: policy.id, earned: null, carried: "0", taken, balance: null, unlimited: true };
+    return { kind: "time", policyId: policy.id, earned: null, carried: "0", taken, balance: null, unlimited: true, serviceStartUnknown: false };
   }
   // Accrual is earned per governing reign over its window: each day accrues
   // under its most-specific policy, so a mid-year successor earns the old
@@ -222,7 +326,8 @@ export async function timeBalanceAsOf(
   // with — the org-wide rule for its workers.
   const yearStart = accrualYearOf(asOf);
   const segments = await policiesInRange(exec, orgId, leaveTypeId, yearStart, asOf);
-  const earned = accrualEarnedAcrossSegments(withRules(segments, scope, yearStart, asOf), yearStart, asOf);
+  const reigns = withRules(segments, scope, yearStart, asOf);
+  const earned = accrualEarnedAcrossSegments(reigns, yearStart, asOf, tenure);
   const taken = await absenceHoursInWindow(exec, orgId, employmentId, leaveTypeId, yearStart, asOf);
   // Carryover is earned under the policies in force for the prior year and
   // carried under the rule holding the year boundary — never under the
@@ -232,12 +337,13 @@ export async function timeBalanceAsOf(
   const priorEnd = `${priorYear}-12-31`;
   let carried = "0";
   const priorSegments = await policiesInRange(exec, orgId, leaveTypeId, priorStart, priorEnd);
+  const priorReigns: AccrualSegment[] = priorSegments.length > 0 ? withRules(priorSegments, scope, priorStart, priorEnd) : [];
   if (priorSegments.length > 0) {
-    const priorEarned = accrualEarnedAcrossSegments(withRules(priorSegments, scope, priorStart, priorEnd), priorStart, priorEnd);
+    const priorEarned = accrualEarnedAcrossSegments(priorReigns, priorStart, priorEnd, tenure);
     if (priorEarned !== null) {
       const priorTaken = await absenceHoursInWindow(exec, orgId, employmentId, leaveTypeId, priorStart, priorEnd);
       const unused = subHours(priorEarned, priorTaken);
-      const boundary = selectPolicy(priorSegments.map(policyToCandidate), scope, priorEnd);
+      const boundary = selectPolicy(priorSegments.map(policyToCandidate), scopeForDay(scope, priorEnd), priorEnd);
       const boundaryRow = policyById(priorSegments, boundary?.id);
       if (boundaryRow) {
         carried = carryoverApplied(
@@ -259,6 +365,9 @@ export async function timeBalanceAsOf(
     // Null earned means an in-year unlimited segment made the total
     // unbounded — the honest label is unlimited, not a priced number.
     unlimited: earned === null,
+    serviceStartUnknown:
+      serviceStart === null &&
+      [...reigns, ...priorReigns].some((reign) => requireRuleTiers(reign.rule) !== null),
   };
 }
 
@@ -272,10 +381,10 @@ function withRules(
   scope: PolicyScope,
   from: string,
   to: string,
-) {
+): AccrualSegment[] {
   return selectReigns(
     rows.map((row) => ({ ...policyToCandidate(row), rule: row.accrual_rule as AccrualRule })),
-    scope,
+    (day) => scopeForDay(scope, day),
     from,
     to,
   );
@@ -296,6 +405,8 @@ export interface LeaveTypeBalance {
   /** The time balance (entitlement minus taken), straight from timeBalanceAsOf. */
   readonly balance: string | null;
   readonly unlimited: boolean;
+  /** True when tiered accrual priced at base hours for an unknown service start. */
+  readonly serviceStartUnknown: boolean;
 }
 
 function requireBalanceDate(value: unknown): string {
@@ -361,6 +472,7 @@ export async function leaveEmploymentBalances(
       remaining: entitlement === null ? null : subHours(subHours(entitlement, read.taken), pending),
       balance: read.balance,
       unlimited: read.unlimited,
+      serviceStartUnknown: read.serviceStartUnknown,
     });
   }
   return out;
