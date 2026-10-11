@@ -1459,6 +1459,7 @@ const COGNATES = new Set<string>([
   'fr:accounting.lifecycle.evidence.fields.code|Code',
   'fr:accounting.lifecycle.evidence.fields.version|Version',
   'pt-BR:accounting.lifecycle.evidence.fields.status|Status',
+  'pt-BR:accounting.lifecycle.evidence.fields.itemId|Item',
   'de:entities.propertyManagement.detail.description|{subsidiary} · {location}',
   'de:entities.propertyManagement.detail.fields.name|Name',
   'de:entities.propertyManagement.detail.fields.status|Status',
