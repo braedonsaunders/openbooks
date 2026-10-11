@@ -380,6 +380,7 @@ export async function loadPayRunWizard(
     const [adjustmentsRes, adjustableRes] = (await Promise.all([
       db.execute(sql`
         select a.id, a.employee_party_id, a.adjustment_type, a.component_id, a.amount::text, a.hours::text,
+               a.earned_from::text as earned_from, a.earned_to::text as earned_to,
                a.replace_component, a.note, p.display_name as employee_name, c.name as component_name
           from pay_run_adjustments a
           join parties p on p.id = a.employee_party_id and p.org_id = a.org_id
