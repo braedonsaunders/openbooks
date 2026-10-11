@@ -70,6 +70,7 @@
     "assembly_recovery": "Componente recuperado"
   },
   "drawer": {
+    "postingDate": "Data de lançamento",
     "title": "Movimentação de estoque",
     "post": "Lançar",
     "action": "Ação",

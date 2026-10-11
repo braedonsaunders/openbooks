@@ -70,6 +70,7 @@
     "assembly_recovery": "回収部品"
   },
   "drawer": {
+    "postingDate": "計上日",
     "title": "在庫変動",
     "post": "記帳",
     "action": "アクション",

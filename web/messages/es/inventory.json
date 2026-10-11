@@ -70,6 +70,7 @@
     "assembly_recovery": "Componente recuperado"
   },
   "drawer": {
+    "postingDate": "Fecha de contabilización",
     "title": "Movimiento de inventario",
     "post": "Contabilizar",
     "action": "Acción",

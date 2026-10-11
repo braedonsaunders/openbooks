@@ -70,6 +70,7 @@
     "assembly_recovery": "Zurückgewonnene Komponente"
   },
   "drawer": {
+    "postingDate": "Buchungsdatum",
     "title": "Lagerbewegung",
     "post": "Buchen",
     "action": "Aktion",

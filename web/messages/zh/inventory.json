@@ -70,6 +70,7 @@
     "assembly_recovery": "回收组件"
   },
   "drawer": {
+    "postingDate": "过账日期",
     "title": "库存变动",
     "post": "过账",
     "action": "操作",

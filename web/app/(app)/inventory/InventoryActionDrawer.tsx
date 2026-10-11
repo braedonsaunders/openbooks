@@ -95,11 +95,12 @@ export function InventoryActionDrawer({
     const search = setTimeout(() => { if (usesSource) void loadSources(sourceQuery,null,false) },150)
     return () => { clearTimeout(search); requestState.current++ }
   },[usesSource,sourceQuery,loadSources])
-  // The posting date freezes when the drawer opens — the org's business day
-  // from the server, never the browser's UTC day. The server hashes the date
-  // into the idempotency request, so a retry after a midnight rollover must
-  // carry the SAME date or the key replays as a 409 instead of the posting.
-  const [postingDate] = useState(useBusinessToday())
+  // The posting date defaults to the org's business day when the drawer
+  // opens — from the server, never the browser's UTC day — and stays fixed
+  // across retries, so a retry after a midnight rollover carries the SAME
+  // date. The operator may state an earlier day: a correction or a late
+  // movement belongs to the period it happened in.
+  const [postingDate, setPostingDate] = useState(useBusinessToday())
   // ONE retry identity per intended action: a committed-but-lost response
   // followed by Post again with unchanged fields must replay the posting,
   // not mint a second movement and journal. The key is reused across
@@ -337,6 +338,10 @@ export function InventoryActionDrawer({
               </p>
             </div>
           ) : null}
+          <div className={field}>
+            <Label htmlFor="inventory-posting-date">{t('drawer.postingDate')}</Label>
+            <Input id="inventory-posting-date" type="date" disabled={busy} value={postingDate} onChange={(e) => setPostingDate(e.target.value)} />
+          </div>
           <div className={`${field} sm:col-span-2`}>
             <Label>{usesSource ? t('drawer.movementReason') : tCommon('labels.memo')}</Label>
             <Input disabled={busy} value={memo} onChange={(e) => setMemo(e.target.value)} placeholder={t('drawer.memoPlaceholder')} />

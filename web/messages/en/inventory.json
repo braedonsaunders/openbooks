@@ -70,6 +70,7 @@
     "assembly_recovery": "Recovered component"
   },
   "drawer": {
+    "postingDate": "Posting date",
     "title": "Inventory movement",
     "post": "Post",
     "action": "Action",
