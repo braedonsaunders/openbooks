@@ -583,7 +583,18 @@
       "effectiveFrom": "発効日",
       "title": "税務証明書",
       "loading": "証明書を読み込み中…",
-      "loadFailed": "税務証明書を読み込めませんでした。"
+      "loadFailed": "税務証明書を読み込めませんでした。",
+      "saveNote": "各証明書は独自の発効日で個別に保存されます。",
+      "history": "提出履歴",
+      "statusCurrent": "有効",
+      "statusClosed": "終了",
+      "filedBy": "提出者",
+      "voidTitle": "この提出を取り消す",
+      "voidReason": "取り消しの理由",
+      "voidFiling": "提出を取り消す",
+      "correctionTitle": "発効日を訂正する",
+      "correctionReason": "訂正の理由",
+      "updateFiling": "更新する"
     },
     "serviceCreditLink": "認定勤続期間",
     "vacationTermsLink": "休暇条件"

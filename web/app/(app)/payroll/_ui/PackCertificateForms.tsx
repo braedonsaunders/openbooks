@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Button } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
+import { promptDialog } from '../../../../lib/prompt'
 import { MoneyInput, moneyFieldError } from '../../../../components/money-input'
 
 /**
@@ -44,6 +45,7 @@ export interface DeclaredRowCertificate {
 }
 
 export interface StoredCertificateRow {
+  id?: string
   certificate_key: string
   country: string
   region: string | null
@@ -51,6 +53,10 @@ export interface StoredCertificateRow {
   answers: Record<string, string>
   effective_from: string | null
   superseded_on: string | null
+  created_at?: string | null
+  created_by_name?: string | null
+  updated_at?: string | null
+  updated_by_name?: string | null
 }
 
 /** The latest row in force per certificate key (current first, then history). */
@@ -155,6 +161,10 @@ export function CertificateForm(props: {
   country: string
   certificate: DeclaredRowCertificate
   stored: readonly StoredCertificateRow[]
+  /** Hire date the effective-date input defaults to — never a silent today. */
+  employmentStart?: string | null
+  /** Org business day, the fallback default when no hire date is known. */
+  today?: string | null
   onSaved?: () => void
   /** Values only: no inputs, no save. The employee drawer read mode. */
   readOnly?: boolean
@@ -166,7 +176,7 @@ export function CertificateForm(props: {
    */
   onDirtyChange?: (dirty: boolean) => void
 }) {
-  const { partyId, country, certificate, stored, onSaved, readOnly, onDirtyChange } = props
+  const { partyId, country, certificate, stored, employmentStart, today, onSaved, readOnly, onDirtyChange } = props
   const tc = useTranslations('common')
   const tp = useTranslations('payroll.profiles.certificates')
   // The parent remounts this form (via `key`) whenever the underlying row
@@ -176,8 +186,14 @@ export function CertificateForm(props: {
   const [answers, setAnswers] = useState<Record<string, string>>(
     Object.fromEntries(certificate.fields.map((field) => [field.key, row?.answers[field.key] ?? ''])),
   )
-  const [effectiveFrom, setEffectiveFrom] = useState(row?.effective_from ?? '')
+  // An explicit effective date on every filing, defaulting to the employment
+  // start so a converting org files history as of when it began — never a
+  // silent server-side today the operator never saw.
+  const [effectiveFrom, setEffectiveFrom] = useState(row?.effective_from ?? employmentStart ?? today ?? '')
   const [busy, setBusy] = useState(false)
+  // The last server refusal, rendered inline under the form (besides the
+  // toast) so a 422 names its remedy where the operator files.
+  const [refusal, setRefusal] = useState<string | null>(null)
 
   // Unsaved-draft signal (see onDirtyChange): the mount-time draft is the
   // baseline because the parent remounts on every underlying row change.
@@ -202,6 +218,7 @@ export function CertificateForm(props: {
 
   const save = async () => {
     setBusy(true)
+    setRefusal(null)
     try {
       const res = await fetch('/api/payroll/certificates', {
         method: 'POST',
@@ -211,7 +228,10 @@ export function CertificateForm(props: {
           country,
           certificateKey: certificate.key,
           answers,
-          effectiveFrom: effectiveFrom || null,
+          // Always explicit: the input defaults to the employment start, so
+          // a cleared field falls back to that default rather than a silent
+          // server-side today.
+          effectiveFrom: effectiveFrom || employmentStart || today || null,
         }),
       })
       // The status is checked before the body is parsed: a non-JSON error body
@@ -220,7 +240,67 @@ export function CertificateForm(props: {
       toast.success(tp('saved'))
       onSaved?.()
     } catch (error) {
-      toast.error((error as Error).message)
+      const message = (error as Error).message
+      setRefusal(message)
+      toast.error(message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const voidFiling = async (filing: StoredCertificateRow) => {
+    if (!filing.id) return
+    const reason = await promptDialog({
+      title: tp('voidTitle'),
+      label: tp('voidReason'),
+      multiline: true,
+      confirmLabel: tp('voidFiling'),
+    })
+    if (!reason) return
+    setBusy(true)
+    setRefusal(null)
+    try {
+      const res = await fetch('/api/payroll/certificates', {
+        method: 'DELETE',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id: filing.id, reason }),
+      })
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed to save the certificate'))
+      toast.success(tp('saved'))
+      onSaved?.()
+    } catch (error) {
+      const message = (error as Error).message
+      setRefusal(message)
+      toast.error(message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const correctFilingDate = async (filing: StoredCertificateRow, nextDate: string) => {
+    if (!filing.id || !nextDate || nextDate === filing.effective_from) return
+    const reason = await promptDialog({
+      title: tp('correctionTitle'),
+      label: tp('correctionReason'),
+      initialValue: '',
+      confirmLabel: tp('updateFiling'),
+    })
+    if (!reason) return
+    setBusy(true)
+    setRefusal(null)
+    try {
+      const res = await fetch('/api/payroll/certificates', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id: filing.id, effectiveFrom: nextDate, reason }),
+      })
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed to save the certificate'))
+      toast.success(tp('saved'))
+      onSaved?.()
+    } catch (error) {
+      const message = (error as Error).message
+      setRefusal(message)
+      toast.error(message)
     } finally {
       setBusy(false)
     }
@@ -261,11 +341,19 @@ export function CertificateForm(props: {
     )
   }
 
+  // History, oldest first: every filing on record for this form, so a
+  // back-filled earlier certificate and its later successor are both visible
+  // with the interval each one governs.
+  const history = [...stored]
+    .filter((entry) => entry.certificate_key === certificate.key)
+    .sort((a, b) => (a.effective_from ?? '').localeCompare(b.effective_from ?? ''))
+
   return (
     <section className="rounded border border-slate-200 p-4 dark:border-slate-700">
       <h4 className="text-sm font-semibold">{certificate.label}</h4>
       <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{certificate.form}</p>
       <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{certificate.summary}</p>
+      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{tp('saveNote')}</p>
       <div className="mt-3 grid gap-3">
         {certificate.fields.map((field) => (
           <div key={field.key}>
@@ -288,6 +376,9 @@ export function CertificateForm(props: {
           />
         </label>
       </div>
+      {refusal ? (
+        <p role="alert" className="mt-3 text-sm text-red-700 dark:text-red-300">{refusal}</p>
+      ) : null}
       <button
         type="button"
         disabled={busy || amountRefusal !== null}
@@ -296,7 +387,80 @@ export function CertificateForm(props: {
       >
         {busy ? tp('saving') : tp('save')}
       </button>
+      {history.length > 0 ? (
+        <div className="mt-4 border-t border-slate-200 pt-3 dark:border-slate-700">
+          <h5 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{tp('history')}</h5>
+          <ul className="mt-2 space-y-2">
+            {history.map((filing, index) => (
+              <FilingHistoryRow
+                key={filing.id ?? `${filing.effective_from ?? ''}:${index}`}
+                filing={filing}
+                busy={busy}
+                onVoid={() => voidFiling(filing)}
+                onCorrect={(nextDate) => correctFilingDate(filing, nextDate)}
+              />
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </section>
+  )
+}
+
+function FilingHistoryRow(props: {
+  filing: StoredCertificateRow
+  busy: boolean
+  onVoid: () => void
+  onCorrect: (nextDate: string) => void
+}) {
+  const { filing, busy, onVoid, onCorrect } = props
+  const tp = useTranslations('payroll.profiles.certificates')
+  const [nextDate, setNextDate] = useState(filing.effective_from ?? '')
+  const current = filing.superseded_on === null
+  const filedBy = filing.created_by_name ?? null
+  return (
+    <li className="rounded bg-slate-50 p-2 text-xs dark:bg-slate-800">
+      <p className="font-medium text-slate-800 dark:text-slate-200">
+        {filing.effective_from ?? '—'} → {filing.superseded_on ?? tp('statusCurrent')}
+        {!current ? <span className="ml-2 font-normal text-slate-500 dark:text-slate-400">({tp('statusClosed')})</span> : null}
+      </p>
+      <p className="mt-0.5 text-slate-500 dark:text-slate-400">
+        {tp('filedBy')}: {filedBy ?? '—'}
+        {filing.created_at ? ` · ${filing.created_at.slice(0, 10)}` : ''}
+      </p>
+      {filing.id ? (
+        <div className="mt-1.5 flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-1">
+            <span className="text-slate-500 dark:text-slate-400">{tp('effectiveFrom')}</span>
+            <input
+              type="date"
+              aria-label={tp('effectiveFrom')}
+              className="rounded border border-slate-300 bg-white px-1 py-0.5 dark:border-slate-600 dark:bg-slate-800"
+              value={nextDate}
+              onChange={(event) => setNextDate(event.target.value)}
+            />
+          </label>
+          <button
+            type="button"
+            disabled={busy || !nextDate || nextDate === filing.effective_from}
+            onClick={() => onCorrect(nextDate)}
+            className="rounded border border-slate-300 px-2 py-0.5 font-medium text-slate-700 disabled:opacity-50 dark:border-slate-600 dark:text-slate-200"
+          >
+            {tp('updateFiling')}
+          </button>
+          {current ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={onVoid}
+              className="rounded border border-slate-300 px-2 py-0.5 font-medium text-red-700 disabled:opacity-50 dark:border-slate-600 dark:text-red-300"
+            >
+              {tp('voidFiling')}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+    </li>
   )
 }
 
@@ -314,7 +478,9 @@ export function PackCertificateForms(props: {
     status: 'loading' | 'ready' | 'error'
     certificates: DeclaredRowCertificate[]
     stored: StoredCertificateRow[]
-  }>({ status: 'loading', certificates: [], stored: [] })
+    employmentStart: string | null
+    today: string | null
+  }>({ status: 'loading', certificates: [], stored: [], employmentStart: null, today: null })
   const [version, setVersion] = useState(0)
   const [dirtyFlags, setDirtyFlags] = useState<Record<string, boolean>>({})
   const reportedRef = useRef<boolean | null>(null)
@@ -330,18 +496,22 @@ export function PackCertificateForms(props: {
         const body = (await res.json()) as {
           declarations?: Record<string, { certificates: DeclaredRowCertificate[] }>
           stored?: StoredCertificateRow[]
+          employmentStart?: string | null
+          today?: string | null
         }
         if (!cancelled) {
           setState({
             status: 'ready',
             certificates: body.declarations?.[country]?.certificates ?? [],
             stored: body.stored ?? [],
+            employmentStart: body.employmentStart ?? null,
+            today: body.today ?? null,
           })
         }
       } catch (error) {
         if (!cancelled) {
           toast.error((error as Error).message)
-          setState({ status: 'error', certificates: [], stored: [] })
+          setState({ status: 'error', certificates: [], stored: [], employmentStart: null, today: null })
         }
       }
     })()
@@ -369,7 +539,7 @@ export function PackCertificateForms(props: {
     return (
       <div role="alert" className="mt-6 flex flex-wrap items-center gap-2 text-sm text-red-700 dark:text-red-300">
         <span>{tp('loadFailed')}</span>
-        <Button size="sm" variant="outline" onClick={() => { setState({ status: 'loading', certificates: [], stored: [] }); setVersion((current) => current + 1) }}>
+        <Button size="sm" variant="outline" onClick={() => { setState({ status: 'loading', certificates: [], stored: [], employmentStart: null, today: null }); setVersion((current) => current + 1) }}>
           {commonActions('retry')}
         </Button>
       </div>
@@ -381,11 +551,12 @@ export function PackCertificateForms(props: {
       <h3 className="text-sm font-semibold">{tp('title')}</h3>
       {state.certificates.map((certificate) => {
         const rows = state.stored.filter((row) => row.certificate_key === certificate.key)
-        const latest = latestCertificateRow(rows, certificate.key)
-        // Remount the draft when the underlying row changes (after a save),
-        // so the form always seeds from the latest answers with no syncing
-        // effect.
-        const rowKey = `${latest?.effective_from ?? ''}:${latest?.superseded_on ?? ''}:${JSON.stringify(latest?.answers ?? {})}`
+        // Remount the draft when any underlying filing changes (after a
+        // save, void or correction), so the form always seeds from the
+        // latest answers with no syncing effect.
+        const rowKey = JSON.stringify(rows.map((entry) => [
+          entry.id ?? '', entry.effective_from ?? '', entry.superseded_on ?? '', entry.answers,
+        ]))
         return (
           <CertificateForm
             key={`${certificate.key}:${rowKey}`}
@@ -393,6 +564,8 @@ export function PackCertificateForms(props: {
             country={country}
             certificate={certificate}
             stored={rows}
+            employmentStart={state.employmentStart}
+            today={state.today}
             readOnly={readOnly}
             onSaved={() => setVersion((v) => v + 1)}
             onDirtyChange={(dirty) =>

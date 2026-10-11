@@ -583,7 +583,18 @@
       "effectiveFrom": "Vigente desde",
       "title": "Certificados fiscales",
       "loading": "Cargando certificados…",
-      "loadFailed": "No se pudieron cargar los certificados fiscales."
+      "loadFailed": "No se pudieron cargar los certificados fiscales.",
+      "saveNote": "Cada certificado se guarda por separado con su propia fecha de vigencia.",
+      "history": "Historial de presentaciones",
+      "statusCurrent": "vigente",
+      "statusClosed": "cerrado",
+      "filedBy": "Presentado por",
+      "voidTitle": "Anular esta presentación",
+      "voidReason": "Motivo de la anulación",
+      "voidFiling": "Anular presentación",
+      "correctionTitle": "Corregir la fecha de vigencia",
+      "correctionReason": "Motivo de la corrección",
+      "updateFiling": "Actualizar"
     },
     "serviceCreditLink": "Antigüedad reconocida",
     "vacationTermsLink": "Condiciones de vacaciones"

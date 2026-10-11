@@ -583,7 +583,18 @@
       "effectiveFrom": "Gültig ab",
       "title": "Steuerbescheinigungen",
       "loading": "Zertifikate werden geladen…",
-      "loadFailed": "Steuerbescheinigungen konnten nicht geladen werden."
+      "loadFailed": "Steuerbescheinigungen konnten nicht geladen werden.",
+      "saveNote": "Jedes Zertifikat wird separat mit eigenem Gültigkeitsdatum gespeichert.",
+      "history": "Einreichungsverlauf",
+      "statusCurrent": "aktuell",
+      "statusClosed": "abgeschlossen",
+      "filedBy": "Eingereicht von",
+      "voidTitle": "Diese Einreichung stornieren",
+      "voidReason": "Grund für die Stornierung",
+      "voidFiling": "Einreichung stornieren",
+      "correctionTitle": "Gültigkeitsdatum korrigieren",
+      "correctionReason": "Grund für die Korrektur",
+      "updateFiling": "Aktualisieren"
     },
     "serviceCreditLink": "Angerechnete Dienstzeit",
     "vacationTermsLink": "Urlaubsbedingungen"

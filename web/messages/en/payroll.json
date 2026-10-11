@@ -583,7 +583,18 @@
       "effectiveFrom": "Effective from",
       "title": "Tax certificates",
       "loading": "Loading certificates…",
-      "loadFailed": "Could not load tax certificates."
+      "loadFailed": "Could not load tax certificates.",
+      "saveNote": "Each certificate saves separately with its own effective date.",
+      "history": "Filing history",
+      "statusCurrent": "current",
+      "statusClosed": "closed",
+      "filedBy": "Filed by",
+      "voidTitle": "Void this filing",
+      "voidReason": "Reason for voiding",
+      "voidFiling": "Void filing",
+      "correctionTitle": "Correct the effective date",
+      "correctionReason": "Reason for the correction",
+      "updateFiling": "Update"
     },
     "serviceCreditLink": "Credited service",
     "vacationTermsLink": "Vacation terms"

@@ -583,7 +583,18 @@
       "effectiveFrom": "生效日期",
       "title": "税务证明",
       "loading": "正在加载证明…",
-      "loadFailed": "无法加载税务证明。"
+      "loadFailed": "无法加载税务证明。",
+      "saveNote": "每份证明使用各自的生效日期单独保存。",
+      "history": "申报记录",
+      "statusCurrent": "有效",
+      "statusClosed": "已关闭",
+      "filedBy": "申报人",
+      "voidTitle": "作废此次申报",
+      "voidReason": "作废原因",
+      "voidFiling": "作废申报",
+      "correctionTitle": "更正生效日期",
+      "correctionReason": "更正原因",
+      "updateFiling": "更新"
     },
     "serviceCreditLink": "认可工龄",
     "vacationTermsLink": "休假条款"

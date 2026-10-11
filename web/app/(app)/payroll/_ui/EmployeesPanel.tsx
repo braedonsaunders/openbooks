@@ -240,6 +240,10 @@ export function ProfileEditor(props: {
    *  off the PESEL), served with the profile. Shown where the row is blank
    *  and saved on submit — the visible half of derive-and-prefill. */
   derivedColumns?: Record<string, string>
+  /** Hire date, served with the profile: the effective date the main Save
+   *  files answered row-backed certificates with, so they never stamp a
+   *  silent today. */
+  employmentStart?: string | null
   onClose: () => void
   onSaved: () => void
   /**
@@ -637,6 +641,9 @@ export function ProfileEditor(props: {
                 country,
                 certificateKey: certificate.key,
                 answers,
+                // Explicit like the Tax tab's own form: the employment start
+                // when known, otherwise the server's business-day default.
+                effectiveFrom: props.employmentStart ?? null,
               }),
             })
           } catch (e) {

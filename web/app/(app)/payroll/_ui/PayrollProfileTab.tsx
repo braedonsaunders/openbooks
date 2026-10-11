@@ -63,11 +63,13 @@ export function PayrollProfileTab({
     packProfiles: Record<string, PackProfileDeclaration>
     storedCertificates: StoredCertificateRow[]
     derivedColumns: Record<string, string>
+    employmentStart: string | null
     defaultCountry: ProfileRow['country']
   }>({
     status: 'loading', profile: null, employmentId: null, schedules: [], filingAccounts: [],
     labourJurisdictions: {}, statutoryOccupationClasses: {}, countries: [], packProfiles: {}, storedCertificates: [],
     derivedColumns: {},
+    employmentStart: null,
     defaultCountry: '',
   })
   const [version, setVersion] = useState(0)
@@ -109,6 +111,7 @@ export function PayrollProfileTab({
             packProfiles: j.packProfiles ?? {},
             storedCertificates: Array.isArray(j.storedCertificates) ? j.storedCertificates : [],
             derivedColumns: j.derivedProfileColumns ?? {},
+            employmentStart: typeof j.employmentStart === 'string' ? j.employmentStart : null,
             // The API derives this from the employee's own legal entity (or
             // the root subsidiary, or the org's sole installed pack) —
             // '' when nothing answers, and then the operator chooses.
@@ -231,6 +234,7 @@ export function PayrollProfileTab({
           packProfiles={state.packProfiles}
           storedCertificates={state.storedCertificates}
           derivedColumns={state.derivedColumns}
+          employmentStart={state.employmentStart}
           onClose={() => {}}
           onSaved={() => setVersion((v) => v + 1)}
           onDirtyChange={setEditorDirty}

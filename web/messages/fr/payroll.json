@@ -583,7 +583,18 @@
       "effectiveFrom": "Date d’effet",
       "title": "Certificats fiscaux",
       "loading": "Chargement des certificats…",
-      "loadFailed": "Impossible de charger les certificats fiscaux."
+      "loadFailed": "Impossible de charger les certificats fiscaux.",
+      "saveNote": "Chaque certificat est enregistré séparément avec sa propre date d’effet.",
+      "history": "Historique des déclarations",
+      "statusCurrent": "en vigueur",
+      "statusClosed": "clôturé",
+      "filedBy": "Déclaré par",
+      "voidTitle": "Annuler cette déclaration",
+      "voidReason": "Motif de l’annulation",
+      "voidFiling": "Annuler la déclaration",
+      "correctionTitle": "Corriger la date d’effet",
+      "correctionReason": "Motif de la correction",
+      "updateFiling": "Mettre à jour"
     },
     "serviceCreditLink": "Service reconnu",
     "vacationTermsLink": "Conditions de vacances"

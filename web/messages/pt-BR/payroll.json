@@ -583,7 +583,18 @@
       "effectiveFrom": "Vigente a partir de",
       "title": "Certificados fiscais",
       "loading": "Carregando certificados…",
-      "loadFailed": "Não foi possível carregar os certificados fiscais."
+      "loadFailed": "Não foi possível carregar os certificados fiscais.",
+      "saveNote": "Cada certificado é salvo separadamente com sua própria data de vigência.",
+      "history": "Histórico de apresentações",
+      "statusCurrent": "vigente",
+      "statusClosed": "encerrado",
+      "filedBy": "Apresentado por",
+      "voidTitle": "Anular esta apresentação",
+      "voidReason": "Motivo da anulação",
+      "voidFiling": "Anular apresentação",
+      "correctionTitle": "Corrigir a data de vigência",
+      "correctionReason": "Motivo da correção",
+      "updateFiling": "Atualizar"
     },
     "serviceCreditLink": "Tempo de serviço reconhecido",
     "vacationTermsLink": "Condições de férias"

@@ -202,6 +202,65 @@ test('an unreadable certificate amount names its remedy and blocks the save', ()
   assert.match(html, /<button[^>]*disabled[^>]*>Save certificate<\/button>/)
 })
 
+// History renders every filing on record — type, interval, status and
+// who/when — so a back-filled earlier certificate and its later successor
+// are both visible with the interval each one governs.
+test('filing history shows every certificate with its interval, status and filer', () => {
+  const declared = packCertificates('NL').certificates
+  const certificate = declared[0]!
+  const shape = {
+    key: certificate.key,
+    form: certificate.form,
+    label: certificate.label,
+    scope: certificate.scope,
+    citation: certificate.citation,
+    summary: certificate.summary,
+    fields: certificate.fields,
+  }
+  const html = renderReadOnly(
+    React.createElement(CertificateForm, {
+      partyId: 'employee',
+      country: 'NL',
+      certificate: shape,
+      stored: [
+        {
+          id: 'filing-one',
+          certificate_key: certificate.key,
+          country: 'NL',
+          region: null,
+          sub_region: null,
+          answers: {},
+          effective_from: '2024-01-15',
+          superseded_on: '2026-10-11',
+          created_at: '2026-10-11T10:00:00Z',
+          created_by_name: 'Payroll clerk',
+        },
+        {
+          id: 'filing-two',
+          certificate_key: certificate.key,
+          country: 'NL',
+          region: null,
+          sub_region: null,
+          answers: {},
+          effective_from: '2026-10-11',
+          superseded_on: null,
+          created_at: '2026-10-12T10:00:00Z',
+          created_by_name: 'Payroll clerk',
+        },
+      ],
+      onSaved: () => {},
+    }),
+  )
+  assert.match(html, /Filing history/)
+  assert.match(html, /2024-01-15/)
+  assert.match(html, /2026-10-11/)
+  assert.match(html, /current/)
+  assert.match(html, /closed/)
+  assert.match(html, /Payroll clerk/)
+  assert.match(html, /Void filing/)
+  assert.match(html, /Update/)
+})
+
 // The save confirmation, the save button and the effective-from
 // label resolve through the catalog in every locale — a German operator
 // reads German, not the English literals the form used to carry.
