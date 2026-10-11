@@ -114,6 +114,7 @@ export const PROJECT_REFS: readonly (readonly [table: string, column: string])[]
   ["hrm_per_diem_entries", "project_id"],
   ["hrm_travel_pay_entries", "project_id"],
   ["hrm_compliance_findings", "project_id"],
+  ["expense_amortization_schedules", "project_id"],
 ];
 
 /**

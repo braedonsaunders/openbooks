@@ -316,6 +316,27 @@ export const TENANT_RETIREMENT_GUARDS = [
     "patch": true
   },
   {
+    "name": "expense_amortization_event_guard",
+    "source": "0687_expense_amortization_schedules.sql",
+    "sha256": "d104ac3ef1bde1af08611cfbbcbec156b8f29226b052447e4ff8f01ba039f2b6",
+    "newSha256": "d104ac3ef1bde1af08611cfbbcbec156b8f29226b052447e4ff8f01ba039f2b6",
+    "patch": false
+  },
+  {
+    "name": "expense_amortization_line_guard",
+    "source": "0687_expense_amortization_schedules.sql",
+    "sha256": "0e7d6580116286f0e2bb32b4899cf3f7b96c0577f358413d51f2d681c4616160",
+    "newSha256": "0e7d6580116286f0e2bb32b4899cf3f7b96c0577f358413d51f2d681c4616160",
+    "patch": false
+  },
+  {
+    "name": "expense_amortization_schedule_guard",
+    "source": "0687_expense_amortization_schedules.sql",
+    "sha256": "783345d0c9a8efd5648dc2615e84a9f3177b20b378be3375e412e91f76d13301",
+    "newSha256": "783345d0c9a8efd5648dc2615e84a9f3177b20b378be3375e412e91f76d13301",
+    "patch": false
+  },
+  {
     "name": "field_ticket_labor_line_immutable_guard",
     "source": "0581_field_ticket_evidence_native_sandbox_lifecycle.sql",
     "sha256": "bb9e07caa0c7f8d7fbae3229816bff3683e3862e95ac35ceeef8fcb61e29be4e",
@@ -1742,6 +1763,24 @@ export const TENANT_RETIREMENT_GUARD_ATTRIBUTES = [
   {
     "name": "entitlement_ledger_append_only_guard",
     "config": []
+  },
+  {
+    "name": "expense_amortization_event_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "expense_amortization_line_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "expense_amortization_schedule_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
   },
   {
     "name": "field_ticket_labor_line_immutable_guard",
@@ -4093,6 +4132,21 @@ export const TENANT_RETIREMENT_TRIGGER_CONTRACTS = [
     "table": "payroll_prior_earnings",
     "trigger": "payroll_prior_earnings_guard",
     "function": "payroll_prior_earnings_guard"
+  },
+  {
+    "table": "expense_amortization_schedules",
+    "trigger": "expense_amortization_schedule_guard",
+    "function": "expense_amortization_schedule_guard"
+  },
+  {
+    "table": "expense_amortization_schedule_lines",
+    "trigger": "expense_amortization_line_guard",
+    "function": "expense_amortization_line_guard"
+  },
+  {
+    "table": "expense_amortization_schedule_events",
+    "trigger": "expense_amortization_event_guard",
+    "function": "expense_amortization_event_guard"
   }
 ] as const;
 

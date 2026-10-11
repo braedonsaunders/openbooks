@@ -81,6 +81,11 @@ export const PERMISSION_CATALOGUE = [
   "contract_costs.read",
   "contract_costs.manage",
   "contract_costs.approve",
+  // Expense amortization: read sees templates, schedules and their plans;
+  // manage creates manual schedules, runs amortization and records
+  // schedule changes (hold, re-forecast, reduce, cancel), each with a reason.
+  "amortization.read",
+  "amortization.manage",
   // Customer relationship management
   "crm.accounts.read",
   "crm.accounts.create",
@@ -528,6 +533,14 @@ export const PERMISSION_GROUPS: {
       { key: "contract_costs.read", labelKey: permissionLabelKey("contract_costs.read") },
       { key: "contract_costs.manage", labelKey: permissionLabelKey("contract_costs.manage") },
       { key: "contract_costs.approve", labelKey: permissionLabelKey("contract_costs.approve") },
+    ],
+  },
+  {
+    key: "amortization",
+    labelKey: "permissions.groups.amortization",
+    permissions: [
+      { key: "amortization.read", labelKey: permissionLabelKey("amortization.read") },
+      { key: "amortization.manage", labelKey: permissionLabelKey("amortization.manage") },
     ],
   },
   {
@@ -1092,6 +1105,8 @@ export const BUILT_IN_ROLES: Record<
       "contract_costs.read",
       "contract_costs.manage",
       "contract_costs.approve",
+      "amortization.read",
+      "amortization.manage",
       "crm.accounts.read",
       "crm.accounts.create",
       "crm.accounts.manage",
@@ -1236,6 +1251,9 @@ export const BUILT_IN_ROLES: Record<
       // impairment approval stays with the controller (maker/checker).
       "contract_costs.read",
       "contract_costs.manage",
+      // Amortization runs and schedule upkeep are bookkeeping duties.
+      "amortization.read",
+      "amortization.manage",
       "reports.read",
       "reports.create",
       "budgets.read",
@@ -1337,6 +1355,7 @@ export const BUILT_IN_ROLES: Record<
       // day-to-day capitalization duty.
       "contract_costs.read",
       "contract_costs.approve",
+      "amortization.read",
       "nonprofit.report",
       "funds.read",
       "grants.read",
@@ -1366,7 +1385,7 @@ export const BUILT_IN_ROLES: Record<
     name: "Viewer",
     description:
       "Read-only access to the ledger, subledgers, reports and insights. Cannot create, change, post or pay transactions.",
-    permissions: ["gl.read", "close.read", "ap.read", "purchase_orders.read", "ar.read", "estimates.read", "usage.read", "payment_methods.read", "contract_costs.read", "resourcing.read", "retainers.read", "reports.read", "budgets.read", "allocations.read", "nonprofit.report", "funds.read", "grants.read", "encumbrances.read", "insights.read", "records.read", "items.read", "assets.read", "time.read", "time.clock", "compliance.read", "assistant.use", "documents.read", "feedback.use", "data.export", "apps.use", "hrm.self.read", "hrm.self.request", "hrm.leave.request", "cash_sales.read"],
+    permissions: ["gl.read", "close.read", "ap.read", "purchase_orders.read", "ar.read", "estimates.read", "usage.read", "payment_methods.read", "contract_costs.read", "amortization.read", "resourcing.read", "retainers.read", "reports.read", "budgets.read", "allocations.read", "nonprofit.report", "funds.read", "grants.read", "encumbrances.read", "insights.read", "records.read", "items.read", "assets.read", "time.read", "time.clock", "compliance.read", "assistant.use", "documents.read", "feedback.use", "data.export", "apps.use", "hrm.self.read", "hrm.self.request", "hrm.leave.request", "cash_sales.read"],
   },
   sales_manager: {
     name: "Sales Manager",

@@ -121,3 +121,4 @@ export * from "./manufacturing-trace";
 export * from "./inspections";
 export * from "./manufacturing-subcontract";
 export * from "./tenant-retirement";
+export * from "./expense-amortization";
