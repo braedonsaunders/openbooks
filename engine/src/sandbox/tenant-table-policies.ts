@@ -1,5 +1,23 @@
 /** Explicit clone disposition and identifier-rebase rule for every tenant-owned table. Update when adding a tenant table. */
 export const TENANT_TABLE_POLICIES = {
+  // Financial definitions and retained recognition/rebate evidence use the destination identity graph.
+  "fx_rate_types": "clone:catalog-uuid-rebase",
+  "account_translation_policies": "clone:catalog-uuid-rebase",
+  "subsidiary_accounting_preferences": "clone:catalog-uuid-rebase",
+  "segment_balancing_policies": "clone:catalog-uuid-rebase",
+  "gl_audit_number_policies": "clone:catalog-uuid-rebase",
+  "gl_audit_number_assignments": "clone:catalog-uuid-rebase",
+  "recognition_control_events": "clone:catalog-uuid-rebase",
+  "rebate_agreements": "clone:catalog-uuid-rebase",
+  "rebate_cost_attestations": "clone:catalog-uuid-rebase",
+  "rebate_accruals": "clone:catalog-uuid-rebase",
+  "rebate_claims": "clone:catalog-uuid-rebase",
+  "rebate_settlement_reversals": "clone:catalog-uuid-rebase",
+  // Approved source instructions must not execute again in another environment.
+  // Renewal policies themselves generate reminders, even without copied occurrences.
+  "journal_reversal_instructions": "skip:no-copy",
+  "subscription_renewal_policies": "skip:no-copy",
+  "subscription_renewal_occurrences": "skip:no-copy",
   "warehouse_execution_tasks":"skip:no-copy",
   "warehouse_scan_events":"skip:no-copy",
   "pick_waves":"skip:no-copy",

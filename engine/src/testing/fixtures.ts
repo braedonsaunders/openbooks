@@ -1102,6 +1102,22 @@ const CORE_B = [
  * exclusive lock, so concurrent writers wait and never see the gap.
  */
 const GUARDED_EVIDENCE: { table: string; trigger: string }[] = [
+  // Children leave before their retained financial policy and transaction parents.
+  { table: "journal_reversal_instructions", trigger: "journal_reversal_instruction_guard" },
+  { table: "gl_audit_number_assignments", trigger: "gl_audit_number_assignments_immutable" },
+  { table: "gl_audit_number_policies", trigger: "gl_audit_number_policies_immutable" },
+  { table: "account_translation_policies", trigger: "account_translation_policies_immutable" },
+  { table: "subsidiary_accounting_preferences", trigger: "subsidiary_accounting_preferences_immutable" },
+  { table: "segment_balancing_policies", trigger: "segment_balancing_policies_immutable" },
+  { table: "recognition_control_events", trigger: "recognition_controls_immutable" },
+  { table: "subscription_renewal_occurrences", trigger: "renewal_occurrence_guard" },
+  { table: "subscription_renewal_policies", trigger: "renewal_policy_guard" },
+  { table: "rebate_settlement_reversals", trigger: "rebate_reversals_immutable" },
+  { table: "rebate_claims", trigger: "rebate_claim_guard" },
+  { table: "rebate_accruals", trigger: "rebate_accruals_immutable" },
+  { table: "rebate_cost_attestations", trigger: "rebate_costs_immutable" },
+  { table: "rebate_agreements", trigger: "rebate_agreement_guard" },
+  { table: "fair_value_prices", trigger: "fair_value_used_policy" },
   // Approved plans are immutable even during sandbox wipes. Delete cells
   // before headers, retaining the same scoped, transactional guard handling.
   { table: "budget_lines", trigger: "budget_line_guard" },

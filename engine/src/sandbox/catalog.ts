@@ -34,6 +34,15 @@ const TRIGGER_INSERT_COLUMN_PARENTS: Readonly<Record<string, string>> = {
   subsidiary_id: "subsidiaries",
 };
 const TRIGGER_INSERT_TABLE_PARENTS: Readonly<Record<string, readonly string[]>> = {
+  // Financial history clone admission resolves all referenced tenant parents immediately.
+  fx_rate_types: ["users"],
+  journal_lines: ["journal_entries", "accounts", "subsidiaries", "accounting_periods", "parties", "departments", "projects", "locations", "classes", "equipment_units", "payment_cards", "tax_codes"],
+  account_translation_policies: ["accounts", "users"],
+  subsidiary_accounting_preferences: ["subsidiaries", "fiscal_calendars", "fx_rate_types", "form_layouts", "users"],
+  segment_balancing_policies: ["segment_definitions", "accounts", "users"],
+  gl_audit_number_policies: ["subsidiaries", "users"],
+  gl_audit_number_assignments: ["gl_audit_number_policies", "journal_entries", "journal_lines", "accounting_periods", "accounting_books", "subsidiaries", "users"],
+  rebate_agreements: ["accounts", "parties", "customer_roles", "vendor_roles", "classes", "items", "tax_codes", "users"],
   // Budget guards resolve their book, scenario and accounting dimensions during INSERT.
   budget_scenarios: ["accounting_books", "users"],
   budget_lines: ["budget_scenarios", "accounts", "accounting_periods", "departments", "projects", "locations", "classes"],
@@ -78,6 +87,8 @@ const TRIGGER_INSERT_TABLE_PARENTS: Readonly<Record<string, readonly string[]>> 
  * logs (would carry production PII/history), and the org row itself (created
  * explicitly by the clone). */
 export const EXCLUDE = new Set([
+  // Scheduled source instructions and reminder-producing policies are environment-specific.
+  "journal_reversal_instructions", "subscription_renewal_policies", "subscription_renewal_occurrences",
   // Executable warehouse suggestions and wave releases belong to the source environment.
   "warehouse_execution_tasks", "warehouse_scan_events", "pick_waves", "pick_wave_members",
   // Issued e-invoices and filed withholding returns belong to the source environment.

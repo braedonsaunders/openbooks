@@ -296,6 +296,7 @@ export function generateCopySql(
   // the cabinet remains browsable test data.
   if (opts.masked && t.name === "file_blobs") return null;
 
+  const auditScope = `public.financial_history_clone_scope("scope_key", '${seed}'::uuid)`;
   const cols: string[] = [];
   const exprs: string[] = [];
   for (const c of t.columns) {
@@ -310,6 +311,33 @@ export function generateCopySql(
       || (t.name==='mfg_mrp_runs'&&c.name==='parameters') || (t.name==='mfg_planned_orders'&&c.name==='demand_ref');
     if(nativeProductionEvidence&&tableMask?.has(c.name))throw new Error(`Native production evidence ${t.name}.${c.name} cannot use a whole-column masking transform. Remove that policy; masked copies redact its prose while retaining required quantities, criteria and rebased identity.`);
 
+    if (t.name === "gl_audit_number_assignments" && c.name === "scope_key") {
+      exprs.push(auditScope);
+      continue;
+    }
+    if (t.name === "gl_audit_number_assignments" && c.name === "audit_number") {
+      exprs.push(`(select p.prefix from gl_audit_number_policies p where p.org_id='${prod}'::uuid and p.id="gl_audit_number_assignments".policy_id) || '-' || replace(${auditScope}, ':', '-') || '-' || lpad("ordinal"::text, greatest(6,length("ordinal"::text)), '0')`);
+      continue;
+    }
+    if (["fx_rate_types", "account_translation_policies", "subsidiary_accounting_preferences", "segment_balancing_policies", "gl_audit_number_policies"].includes(t.name)
+        && c.isUuid && ["created_by", "updated_by"].includes(c.name)) {
+      exprs.push(`(case when "${c.name}" is null then null else ob_rebase("${c.name}", '${seed}'::uuid) end)`);
+      continue;
+    }
+    if ((t.name === "recognition_control_events" && ["before_state", "after_state"].includes(c.name))
+        || (t.name === "rebate_cost_attestations" && c.name === "line_basis")
+        || (t.name === "rebate_accruals" && c.name === "basis")
+        || (t.name === "rebate_claims" && ["basis", "settlement_basis"].includes(c.name))) {
+      if (tableMask?.has(c.name)) throw new Error(`Retained financial evidence ${t.name}.${c.name} requires native identity rebasing; remove its whole-column masking policy.`);
+      exprs.push(`public.production_clone_safe_evidence("${c.name}", '${seed}'::uuid, '${c.name}', '${sbx}'::uuid, ${opts.masked ? 'true' : 'false'})`);
+      continue;
+    }
+    if (opts.masked && ["fx_rate_types", "account_translation_policies", "subsidiary_accounting_preferences", "segment_balancing_policies", "gl_audit_number_policies", "rebate_agreements", "rebate_cost_attestations", "rebate_claims", "rebate_settlement_reversals", "recognition_control_events", "journal_lines"].includes(t.name)
+        && ["name", "reason", "memo", "evidence"].includes(c.name)) {
+      const redacted = t.name === "rebate_cost_attestations" && c.name === "evidence" ? "REDACTED FINANCIAL EVIDENCE" : "REDACTED";
+      exprs.push(`(case when "${c.name}" is null then null else '${redacted}' end)`);
+      continue;
+    }
     // Scope membership is canonical JSON identity data and must be rebased before its ownership trigger runs.
     if (t.name === "operating_profile_scopes" && c.name === "profile_ids") {
       if (!rebaseSet.has("operating_profiles") || (opts.onlyTables && !opts.onlyTables.has("operating_profiles"))) {
@@ -501,7 +529,9 @@ export function generateCopySql(
     select child.id, parent.depth + 1 from "${t.name}" child
       join source_tree parent on parent.id = child."${parentColumn}" where child.org_id = '${prod}'
   ) ` : "";
-  const order = parentColumn
+  const order = t.name === "gl_audit_number_assignments"
+    ? " order by book_id, subsidiary_id, scope_key, ordinal"
+    : parentColumn
     ? ` order by (select depth from source_tree where source_tree.id = "${t.name}".id), id`
     : "";
   // Component insertion creates an empty one-to-one classification row.
@@ -509,7 +539,11 @@ export function generateCopySql(
   // duplicate the row or retain the empty defaults in the sandbox.
   const conflict = t.name === "pay_component_earning_classifications"
     ? ` on conflict (org_id, pay_component_id) do update set ${t.columns.filter((c) => c.name !== "org_id" && c.name !== "pay_component_id").map((c) => `"${c.name}" = excluded."${c.name}"`).join(", ")}`
-    : "";
+    : t.name === "fx_rate_types"
+      // Organization insertion seeds these three logical keys. Only those expected
+      // collisions update; custom definitions and unexpected collisions still refuse.
+      ? ` on conflict (org_id, key) do update set ${t.columns.filter(c => c.name !== "org_id" && c.name !== "key").map(c => `"${c.name}" = excluded."${c.name}"`).join(", ")} where public.financial_history_seeded_rate_clone_conflict(to_jsonb("fx_rate_types"),to_jsonb(excluded))`
+      : "";
   return `${tree}insert into "${t.name}" (${cols.join(", ")}) select ${exprs.join(", ")} from "${t.name}" where ${where}${order}${conflict}`;
 }
 
