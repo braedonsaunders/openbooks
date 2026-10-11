@@ -274,6 +274,25 @@ export async function loadCompoundAsset(
   };
 }
 
+/**
+ * Assets that could join a family as components: the parent's legal entity,
+ * top level, owning no components of their own, and not yet disposed.
+ */
+export async function listComponentCandidates(
+  orgId: string,
+  parentAssetId: string,
+): Promise<{ id: string; label: string }[]> {
+  return (await db.execute<{ id: string; label: string }>(sql`
+    select a.id, concat_ws(' · ', a.asset_number, a.name) as label
+      from fixed_assets a
+      join fixed_assets root on root.org_id = a.org_id and root.id = ${parentAssetId}
+     where a.org_id = ${orgId} and a.subsidiary_id = root.subsidiary_id
+       and a.parent_asset_id is null and a.id <> root.id
+       and a.status in ('draft', 'in_service', 'fully_depreciated')
+       and not exists (select 1 from fixed_assets c where c.org_id = a.org_id and c.parent_asset_id = a.id)
+     order by a.asset_number limit 500`)).rows;
+}
+
 export interface CompoundDisposalResult {
   parentAssetId: string;
   disposals: { assetId: string; assetNumber: string; entryId: string | null; proceeds: string; nbv: string; gainLoss: string; status: string }[];

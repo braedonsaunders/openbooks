@@ -1,6 +1,4 @@
 import { z } from "zod";
-import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/platform/db";
 import { NextResponse } from "next/server";
 import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";
@@ -8,6 +6,7 @@ import {
   attachAssetComponent,
   createAssetComponent,
   detachAssetComponent,
+  listComponentCandidates,
   loadCompoundAsset,
 } from "@openbooks/engine/assets/asset-components";
 import { calendarDate, id, money, optionalText, reasonText, scopeOf } from "../../_depth";
@@ -30,16 +29,8 @@ export const GET = defineRoute({
     const scope = scopeOf(gate);
     const view = await loadCompoundAsset(gate.user.orgId, assetId, { allowedSubsidiaryIds: scope });
     if (!view) return notFound("record");
-    const candidates = await db.execute<{ id: string; label: string }>(sql`
-      select a.id, concat_ws(' · ', a.asset_number, a.name) as label
-        from fixed_assets a
-        join fixed_assets root on root.org_id = a.org_id and root.id = ${view.parent.id}
-       where a.org_id = ${gate.user.orgId} and a.subsidiary_id = root.subsidiary_id
-         and a.parent_asset_id is null and a.id <> root.id
-         and a.status in ('draft', 'in_service', 'fully_depreciated')
-         and not exists (select 1 from fixed_assets c where c.org_id = a.org_id and c.parent_asset_id = a.id)
-       order by a.asset_number limit 500`);
-    return NextResponse.json({ ...view, candidates: candidates.rows });
+    const candidates = await listComponentCandidates(gate.user.orgId, view.parent.id);
+    return NextResponse.json({ ...view, candidates });
   },
 });
 
