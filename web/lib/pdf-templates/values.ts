@@ -381,7 +381,7 @@ async function loadPayStubValues(
   const { money } = createMoneyFormatter(locale, String(stub.currency_code ?? org.base_currency))
 
   const lines = (await db.execute<Record<string, unknown>>(sql`
-    select l.kind, l.description, l.hours, l.rate, l.amount, l.payment_kind,
+    select l.kind, coalesce(c.name, l.description) as description, l.hours, l.rate, l.amount, l.payment_kind,
            l.component_id, c.system_key, c.taxable
       from pay_stub_lines l
       left join pay_components c on c.id = l.component_id and c.org_id = l.org_id
@@ -456,7 +456,7 @@ async function loadPayStubValues(
   // paid earlier in the year but not on this stub still prints with a zero
   // current amount, so the employee can reconcile the year on every stub.
   const priorLines = (await db.execute<Record<string, unknown>>(sql`
-    select l.component_id, l.kind, l.payment_kind, max(l.description) as description,
+    select l.component_id, l.kind, l.payment_kind, coalesce(c.name, max(l.description)) as description,
            c.system_key, c.taxable,
            coalesce(sum(l.amount), 0) as amount, coalesce(sum(l.hours), 0) as hours
       from pay_stub_lines l
@@ -469,7 +469,7 @@ async function loadPayStubValues(
        and (s.pay_date, s.created_at, s.id) < ${statementOrder}
        and d.subsidiary_id is not distinct from ${stub.subsidiary_id}
        and s.currency_code = ${stub.currency_code}
-     group by l.component_id, l.kind, l.payment_kind, c.system_key, c.taxable
+     group by l.component_id, l.kind, l.payment_kind, c.name, c.system_key, c.taxable
   `))
   const statement = buildPayStubStatement(
     lines.rows.map(toStatementLine),

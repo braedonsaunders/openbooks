@@ -618,7 +618,8 @@ export async function applyRunLineAdjustments(
       earnedTo: adj.adj_earned_to == null ? null : String(adj.adj_earned_to),
       // Recorded holiday units are ordinary wages, not an alternate-day draw.
       fundedByEntitlementBank: adj.system_key === "stat_holiday" ? false : undefined,
-      description: (adj.note as string | null) || (adj.name as string),
+      // The note is the adjustment's audit memo; the stub shows the earning it pays.
+      description: adj.name as string,
       hours: quantityUnits || adj.adj_hours == null ? undefined : String(adj.adj_hours),
       amount, sequence: Number(adj.sequence),
       taxable: adj.taxable as boolean, pensionable: adj.pensionable as boolean,

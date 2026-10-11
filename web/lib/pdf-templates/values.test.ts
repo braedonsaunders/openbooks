@@ -54,7 +54,7 @@ const harness = {
     if (text.includes('select s.*, r.period_start')) {
       return { rows: [state.stub] }
     }
-    if (text.includes('select l.kind, l.description')) {
+    if (text.includes('select l.kind, coalesce(c.name, l.description) as description')) {
       return {
         rows: [
           { kind: 'earning', component_id: 'regular', description: 'Regular', hours: '80', rate: '50', amount: '4000.0000', taxable: true },
