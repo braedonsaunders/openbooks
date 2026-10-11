@@ -54,6 +54,9 @@ async function gbPayrollOrg() {
     const org = await createScratchOrg()
     state.orgId = org.orgId
     state.actorId = await createScratchUser(org.orgId, 'Payroll clerk', 'admin')
+    // The certificates route locks command authority inside its write
+    // transaction, so the fixture grants the permission it exercises.
+    await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect) values(${org.orgId},${state.actorId},'payroll.manage','grant')`)
     const account = async (number: string, name: string, type: string) => {
       const id = randomUUID()
       await db.execute(sql`

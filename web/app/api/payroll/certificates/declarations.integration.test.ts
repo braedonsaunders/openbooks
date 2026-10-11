@@ -8,7 +8,9 @@ Object.assign(globalThis, { __payrollCertificateState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === '../../../../lib/feature-gates') return virtual(`
+    // The route factory resolves the gate by @/ alias at request time; serve
+    // the same intended session for its literal as for the relative import.
+    if (specifier === '../../../../lib/feature-gates' || specifier === '@/lib/feature-gates') return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__payrollCertificateState;
         return { user: { orgId: s.orgId, id: s.actorId }, allowedSubsidiaryIds: null };
@@ -39,6 +41,9 @@ async function fixture() {
     const org = await createScratchOrg()
     state.orgId = org.orgId
     state.actorId = await createScratchUser(org.orgId, 'Payroll clerk', 'admin')
+    // The certificates route locks command authority inside its write
+    // transaction, so the fixture grants the permission it exercises.
+    await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect) values(${org.orgId},${state.actorId},'payroll.manage','grant')`)
     const employeeId = randomUUID()
     await db.execute(sql`
       insert into parties (id, org_id, kind, display_name, is_active, custom)
