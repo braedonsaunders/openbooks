@@ -68,6 +68,65 @@ export interface CashDepositResult {
 
 const SETTINGS_REMEDY = "Choose the deposit accounts in Company Settings → Cash sales till defaults, then record the drop again.";
 
+/** One recorded till drop against a cash sale, for the sale's drop list. */
+export interface CashDepositRow {
+  transferId: string;
+  documentNumber: string;
+  dropDate: string;
+  /** Decimal amount string in the sale's currency. */
+  amount: string;
+  status: string;
+  slipNumber: string | null;
+}
+
+/**
+ * List a cash sale's recorded till drops (voided drops stay listed: the
+ * bookkeeper sees what was attempted, never a gap). Read-only — safe for
+ * the sale's drop list alongside the deposit form. An unknown sale, a
+ * non-sale, or a subsidiary-hidden sale refuses exactly like a drop
+ * against it, so no sale of another scope leaks its drops.
+ */
+export async function listCashDeposits(
+  orgId: string,
+  saleId: string,
+  allowedSubsidiaryIds?: ReadonlySet<string> | null,
+): Promise<CashDepositRow[]> {
+  return withOrg(orgId, async () => {
+    const saleRows = (await db.execute<{ id: string; subsidiaryId: string | null; kind: string }>(sql`
+      select id, subsidiary_id as "subsidiaryId", kind
+        from documents
+       where org_id = ${orgId} and id = ${saleId}`)).rows;
+    const sale = saleRows[0];
+    if (!sale || sale.kind !== "cash_sale") {
+      throw depositError(
+        "The bank drop names no cash sale in this organization.",
+        404,
+        "Reopen the cash sale and record the drop from it.",
+      );
+    }
+    if (allowedSubsidiaryIds !== undefined &&
+        allowedSubsidiaryIds !== null &&
+        (sale.subsidiaryId === null || !allowedSubsidiaryIds.has(sale.subsidiaryId))) {
+      throw depositError(
+        "The bank drop names no cash sale in this organization.",
+        404,
+        "Reopen the cash sale and record the drop from it.",
+      );
+    }
+    const rows = (await db.execute<CashDepositRow>(sql`
+      select d.id as "transferId", d.document_number as "documentNumber",
+             d.document_date::text as "dropDate",
+             l.amount::text as amount, d.status,
+             d.custom->'cashSaleDeposit'->>'slipNumber' as "slipNumber"
+        from documents d
+        join document_lines l on l.document_id = d.id and l.org_id = d.org_id and l.line_number = 1
+       where d.org_id = ${orgId} and d.kind = 'transfer'
+         and d.custom->'cashSaleDeposit'->>'saleId' = ${sale.id}
+       order by d.document_date, d.document_number`)).rows;
+    return rows;
+  });
+}
+
 function parseDepositInput(input: CashDepositInput): {
   amountMinor: bigint;
   slip: string;

@@ -3,7 +3,7 @@ import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response';
 import { NextResponse } from 'next/server'
 import { randomUUID } from 'node:crypto'
-import { recordCashDeposit } from "@openbooks/engine/src/ledger/cash-deposits.ts";
+import { listCashDeposits, recordCashDeposit } from "@openbooks/engine/src/ledger/cash-deposits.ts";
 import { DocumentCreateConflict } from "../../../../../lib/documents.ts";
 import { getAuthz, can } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
@@ -35,6 +35,36 @@ export const runtime = 'nodejs'
  * posted:false); the refusal rides the response for the bookkeeper to
  * resolve in Banking.
  */
+/**
+ * A sale's recorded till drops, for the drop list beside the deposit form.
+ * Same gate as recording: the list is the cashier's surface, so it reads
+ * through `cash_sales.deposit` with the same subsidiary scope.
+ */
+export const GET = defineRoute({
+  public: 'session',
+  handler: async ({ params: routeParams }) => {
+    const authz = await getAuthz()
+    if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+    const user = authz.user
+    if (!can(authz, 'cash_sales.deposit')) {
+      return NextResponse.json({ error: 'missing permission: cash_sales.deposit' }, { status: 403 })
+    }
+    if (!(await isDocKindEnabled(user.orgId, 'cash_sale'))) {
+      return notFound("record")
+    }
+    const { id } = routeParams as { id?: unknown }
+    if (typeof id !== 'string' || !isUuid(id)) {
+      return notFound("record")
+    }
+    try {
+      const drops = await listCashDeposits(user.orgId, id, authz.allowedSubsidiaryIds ?? null)
+      return NextResponse.json({ drops })
+    } catch (error) {
+      return apiErrorResponse(error)
+    }
+  },
+})
+
 export const POST = defineRoute({
   public: 'session',
   body: POSTBodySchema,

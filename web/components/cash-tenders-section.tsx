@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl'
 import { Badge, Button, FieldLabel, Input, SearchSelect, Select } from '@openbooks/ui'
 import { useMoney } from '@/components/money-provider'
 import { add } from '@openbooks/engine/money'
-import { CASH_TENDER_KINDS } from '@openbooks/engine/sales/cash-tenders'
+import { CASH_TENDER_KINDS, expectedTenderedForCloseout } from '@openbooks/engine/sales/cash-tenders'
 import { canonicalDecimal, compareDecimal, isZeroDecimal } from '@/lib/exact-decimal'
 
 export interface TenderDraft {
@@ -34,7 +34,10 @@ export interface TenderDraft {
  *  fees on save, so the two can never drift. */
 export interface CloseoutDraft {
   overShort: string
-  serverPartyId?: string
+  /** Staff the tips belong to; null pools them for the house split. An
+   *  explicit null clears a previously named server on save, while an
+   *  absent key keeps the stored one. */
+  serverPartyId?: string | null
 }
 
 const CARD_FAMILY_KINDS = ['card', 'bank_transfer', 'wallet', 'gateway'] as const
@@ -92,6 +95,46 @@ export function parseCloseoutDraft(raw: unknown): CloseoutDraft {
     ? entry.serverPartyId
     : undefined
   return { overShort, ...(serverPartyId ? { serverPartyId } : {}) }
+}
+
+/**
+ * Fold a stored close-out's per-tender parts back into tender drafts by
+ * position. Tender rows persist only the gross collected amounts — tips and
+ * fees ride the sale's close-out — so a reload that seeds the editor from
+ * the table alone would show blank tips, misstate the balance, and wipe the
+ * stored close-out on the next save. Parts fill only blank tip/fee fields,
+ * so an in-progress edit always wins over storage.
+ */
+export function mergeCloseoutPartsIntoTenders(tenders: unknown, closeout: unknown): unknown {
+  if (!Array.isArray(tenders)) return tenders
+  const bag = closeout && typeof closeout === 'object' && !Array.isArray(closeout)
+    ? (closeout as Record<string, unknown>)
+    : null
+  const parts = Array.isArray(bag?.parts) ? (bag.parts as unknown[]) : []
+  if (parts.length === 0) return tenders
+  const byPosition = new Map<number, { tip?: string; fee?: string }>()
+  for (const part of parts) {
+    if (!part || typeof part !== 'object' || Array.isArray(part)) continue
+    const row = part as Record<string, unknown>
+    if (typeof row.position !== 'number' || !Number.isInteger(row.position)) continue
+    byPosition.set(row.position, {
+      ...(typeof row.tip === 'string' && row.tip !== '' ? { tip: row.tip } : {}),
+      ...(typeof row.fee === 'string' && row.fee !== '' ? { fee: row.fee } : {}),
+    })
+  }
+  if (byPosition.size === 0) return tenders
+  return tenders.map((entry, index) => {
+    const part = byPosition.get(index + 1)
+    if (!part) return entry
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return entry
+    const row = entry as Record<string, unknown>
+    // Table rows and drafts share the writer's camelCase shape; a field the
+    // draft already names stays untouched so an edit always wins.
+    const merged: Record<string, unknown> = { ...row }
+    if (part.tip !== undefined && typeof row.tipAmount !== 'string') merged.tipAmount = part.tip
+    if (part.fee !== undefined && typeof row.feeAmount !== 'string') merged.feeAmount = part.fee
+    return merged
+  })
 }
 
 /**
@@ -178,14 +221,11 @@ export function CashTendersSection({
   }, [tenders])
   const expected = useMemo(() => {
     try {
-      let sum = add(total || '0', closeoutTotals.tips)
-      if (!isZeroDecimal(closeoutTotals.fees)) {
-        const negated = canonicalDecimal(`-${closeoutTotals.fees}`, 4)
-        if (negated !== null) sum = add(sum, negated)
-      }
+      // One derivation with the posting kernel
+      // (expectedTenderedForCloseout): adding nothing when a leg is blank
+      // states the same total as skipping it.
       const overShort = closeout.overShort !== '' ? canonicalDecimal(closeout.overShort, 4) : '0'
-      if (overShort !== null) sum = add(sum, overShort)
-      return sum
+      return expectedTenderedForCloseout(total || '0', closeoutTotals.tips, closeoutTotals.fees, overShort ?? '0')
     } catch {
       return total || '0'
     }
@@ -452,8 +492,10 @@ export function CashTendersSection({
                   <SearchSelect
                     options={serverOptions}
                     value={closeout.serverPartyId ?? ''}
-                    onChange={(v) => onCloseoutChange({ ...closeout, ...(v ? { serverPartyId: v } : { serverPartyId: undefined }) })}
+                    onChange={(v) => onCloseoutChange({ ...closeout, serverPartyId: v === '' ? null : v })}
                     placeholder={t('tenders.serverPooled')}
+                    clearable
+                    emptyLabel={t('tenders.serverPooled')}
                   />
                 ) : (
                   <p className="text-xs text-slate-500 dark:text-slate-400">{t('tenders.serverPooled')}</p>

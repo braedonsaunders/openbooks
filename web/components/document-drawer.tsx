@@ -46,7 +46,7 @@ import {
 } from './allocations/distribution-groups'
 import { useEntryCandidates } from './allocations/use-entry-candidates'
 import { DistributionDialog, type DistributionDialogChild } from './allocations/DistributionDialog'
-import { CashTendersSection, parseTenderDrafts } from './cash-tenders-section'
+import { CashTendersSection, mergeCloseoutPartsIntoTenders, parseCloseoutDraft, parseTenderDrafts } from './cash-tenders-section'
 import { CashDepositSection } from './cash-deposit-section'
 import { CustomFieldInputs, customFieldColumns, type CustomFieldDefClient } from './custom-field-inputs'
 import { CustomFieldInput } from './custom-field-input'
@@ -1345,13 +1345,28 @@ export function DocumentDrawer({
   const initialCustomValues = (
     docCustom: Record<string, unknown> | null,
     payloadTenders: unknown,
-  ): Record<string, unknown> => ({
-    ...(docCustom ?? {}),
-    tenders:
-      payloadTenders
-      ?? (docCustom as Record<string, unknown> | null)?.tenders
-      ?? [],
-  })
+  ): Record<string, unknown> => {
+    // The table owns tenders and custom owns the close-out: fold the stored
+    // parts back into the drafts by position, so tips, fees and the balance
+    // survive a reload instead of blanking and wiping on the next save. The
+    // close-out reseeds as its draft shape only (over/short and server):
+    // totals and parts derive from the tenders on save, so resending the
+    // stored ones would refuse a legitimate tip removal against stale
+    // arithmetic.
+    const storedCloseout = (docCustom as Record<string, unknown> | null)?.closeout
+    return {
+      ...(docCustom ?? {}),
+      tenders: mergeCloseoutPartsIntoTenders(
+        payloadTenders
+        ?? (docCustom as Record<string, unknown> | null)?.tenders
+        ?? [],
+        storedCloseout,
+      ),
+      ...(storedCloseout !== undefined && storedCloseout !== null
+        ? { closeout: parseCloseoutDraft(storedCloseout) }
+        : {}),
+    }
+  }
   const [customValues, setCustomValues] = useState<Record<string, unknown>>(() =>
     initialCustomValues(doc.custom, (payload as { tenders?: unknown }).tenders),
   )
@@ -3558,15 +3573,23 @@ export function DocumentDrawer({
               serverOptions={serverOptions}
             />
             {/* Till drop beside the settled cash: a posted sale's cashier
-                records the bank drop here; drafts hold no till cash yet. */}
-            {config.kind === 'cash_sale' && isPosted && canDeposit ? (
-              <CashDepositSection
-                saleId={String(doc.id)}
-                currency={doc.currency}
-                defaultDate={depositDefaultDate || documentDate || ''}
-                bankOptions={depositAccountOptions}
-                sourceOptions={cashSourceOptions}
-              />
+                records the bank drop here; drafts hold no till cash yet.
+                Without the deposit grant the surface names the permission
+                instead of hiding, so the operator learns the next step. */}
+            {config.kind === 'cash_sale' && isPosted ? (
+              canDeposit ? (
+                <CashDepositSection
+                  saleId={String(doc.id)}
+                  currency={doc.currency}
+                  defaultDate={depositDefaultDate || documentDate || ''}
+                  bankOptions={depositAccountOptions}
+                  sourceOptions={cashSourceOptions}
+                />
+              ) : (
+                <p className="border-t border-slate-200 pt-3 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                  {t('tenders.depositRequiresPermission')}
+                </p>
+              )
             ) : null}
           </>
         ),
@@ -3658,6 +3681,17 @@ export function DocumentDrawer({
             ) : null}
             {doc.kind === 'cash_sale' && isPosted && refundHref && canCreate ? (
               <Button variant="outline" asChild><Link href={refundHref}>{t('tenders.refundAction')}</Link></Button>
+            ) : null}
+            {/* Till drop beside the settled cash: deep-link the Tenders tab
+                where the deposit form (or the permission it needs) lives. */}
+            {doc.kind === 'cash_sale' && isPosted ? (
+              canDeposit ? (
+                <Button variant="outline" asChild>
+                  <Link href={`${basePath}?doc=${String(doc.id)}&transactionTab=tenders`}>{t('tenders.depositAction')}</Link>
+                </Button>
+              ) : (
+                <Button variant="outline" disabled title={t('tenders.depositRequiresPermission')}>{t('tenders.depositAction')}</Button>
+              )
             ) : null}
             {doc.kind === 'vendor_bill' && isPosted && creditHref && canCreate ? (
               <Button variant="outline" asChild><Link href={creditHref}>{t('actions.newCredit')}</Link></Button>

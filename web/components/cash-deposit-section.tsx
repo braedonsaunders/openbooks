@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Button, FieldLabel, Input, Select } from '@openbooks/ui'
@@ -44,6 +44,28 @@ export function CashDepositSection({
   const [busy, setBusy] = useState(false)
   const [refusal, setRefusal] = useState<string | null>(null)
   const [savedNumber, setSavedNumber] = useState<string | null>(null)
+  const [drops, setDrops] = useState<
+    { transferId: string; documentNumber: string; dropDate: string; amount: string; status: string; slipNumber: string | null }[] | null
+  >(null)
+  const [reload, setReload] = useState(0)
+
+  // Recorded drops beside the form: the cashier sees what already left the
+  // till (a refused POST still records a draft drop), so a double drop
+  // reads as a duplicate before it is recorded, never after.
+  useEffect(() => {
+    let live = true
+    fetch(`/api/cash-sales/${saleId}/deposit`, { headers: { accept: 'application/json' } })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body) => {
+        if (!live) return
+        const rows = (body as { drops?: unknown } | null)?.drops
+        if (Array.isArray(rows)) setDrops(rows as NonNullable<typeof drops>)
+      })
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+  }, [saleId, reload])
 
   const selectedBank = bankOptions.some((o) => o.value === bankAccountId)
     ? bankAccountId
@@ -76,6 +98,7 @@ export function CashDepositSection({
       setSavedNumber(documentNumber)
       setAmount('')
       setSlipNumber('')
+      setReload((n) => n + 1)
       toast.success(t('tenders.depositSaved', { documentNumber }))
     } catch {
       setRefusal(t('tenders.depositFailed'))
@@ -149,6 +172,22 @@ export function CashDepositSection({
           </div>
         </>
       )}
+      {drops !== null && drops.length > 0 ? (
+        <div className="space-y-1 pt-1">
+          <FieldLabel fieldName={t('tenders.depositHistory')}>{t('tenders.depositHistory')}</FieldLabel>
+          <ul className="space-y-1">
+            {drops.map((drop) => (
+              <li key={drop.transferId} className="flex flex-wrap items-baseline gap-x-2 text-xs text-slate-600 dark:text-slate-300">
+                <span className="font-medium tabular-nums">{drop.documentNumber}</span>
+                <span className="tabular-nums">{drop.dropDate}</span>
+                <span className="tabular-nums">{drop.amount} {currency}</span>
+                <span>{drop.status}</span>
+                {drop.slipNumber ? <span className="text-slate-500 dark:text-slate-400">{drop.slipNumber}</span> : null}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </div>
   )
 }
