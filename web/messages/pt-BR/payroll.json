@@ -1213,7 +1213,60 @@
     "dueOn": "Vence em {dueDate} · {authority}",
     "apNote": "Faturas de recolhimento são faturas comuns de fornecedor:",
     "apLink": "abrir faturas de fornecedor",
-    "translated": "Convertido para {currency} à taxa consolidada derivada"
+    "translated": "Convertido para {currency} à taxa consolidada derivada",
+    "columns": {
+      "destination": "Destino",
+      "due": "Vencimento",
+      "components": "Componentes",
+      "employees": "Funcionários",
+      "gross": "Folha bruta",
+      "actions": "Ações"
+    }
+  },
+  "workLocations": {
+    "title": "Locais de trabalho da folha",
+    "description": "Registre a evidência de local de trabalho para vínculos sem lançamentos de horas datados e aprovados. Períodos de folha confirmados ficam bloqueados.",
+    "record": "Registrar alocação",
+    "update": "Atualizar alocação",
+    "editorDescription": "Use lançamentos de horas aprovados quando cobrirem o período. Informe uma alocação de RH para trabalho sem lançamento de horas, com a origem e o motivo.",
+    "loadFailed": "Não foi possível carregar os locais de trabalho da folha.",
+    "saveFailed": "Não foi possível salvar o local de trabalho da folha.",
+    "recorded": "Local de trabalho da folha registrado.",
+    "updated": "Local de trabalho da folha atualizado.",
+    "empty": "Escolha um funcionário e um período para revisar as alocações salvas.",
+    "emptyScope": "Nenhuma alocação registrada para este funcionário e período.",
+    "shareValue": "Proporção {share}",
+    "daysValue": "{days, plural, one {# dia} other {# dias}}",
+    "columns": {
+      "region": "Região",
+      "measure": "Dado do período",
+      "source": "Tipo de evidência",
+      "document": "Documento de evidência",
+      "reason": "Motivo"
+    },
+    "sources": {
+      "hr_records": "Registros de RH",
+      "certificate": "Certificado",
+      "adequate_records": "Registros adequados"
+    },
+    "filters": {
+      "employment": "Funcionário",
+      "clearPeriod": "Limpar período"
+    },
+    "fields": {
+      "employment": "Funcionário e empregador legal",
+      "chooseEmployment": "Escolher vínculo",
+      "periodStart": "Início do período",
+      "periodEnd": "Fim do período",
+      "region": "Região",
+      "regionPlaceholder": "Código do estado ou jurisdição",
+      "subregion": "Sub-região (opcional)",
+      "measure": "Medida de alocação",
+      "serviceDays": "Dias de serviço",
+      "wageShare": "Proporção salarial (0–1)",
+      "wageShareOption": "Proporção salarial",
+      "evidenceDocument": "ID do documento de evidência (opcional)"
+    }
   },
   "yearEnd": {
     "title": "Fechamento anual",

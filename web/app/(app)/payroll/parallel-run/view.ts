@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
-import { page, pageHeader, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
+import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import {
   comparablePayRuns,
   comparableSlots,
@@ -47,6 +47,15 @@ type WorkspaceProps = Parameters<typeof ParallelRunView>[0]
 export interface ParallelRunData {
   title: string
   description: string
+  /** Header actions. Comparing and tolerances are payroll.manage work; a
+   * comparison needs an imported register and a comparable run. */
+  actions: {
+    importLabel: string
+    exportLabel: string
+    tolerancesLabel: string
+    newComparisonLabel: string
+    canCompare: boolean
+  }
   workspace: {
     registers: WorkspaceProps['registers']
     runs: WorkspaceProps['runs']
@@ -77,12 +86,20 @@ export async function loadParallelRun(): Promise<ParallelRunData> {
     parallelTolerances(orgId),
     comparableSlots(orgId),
   ])
+  const canManage = can(authz, 'payroll.manage')
   return {
     title: text('parallelRun.title', 'Parallel run'),
     description: text(
       'parallelRun.description',
       'Check a pay period against the payroll system you are leaving, penny by penny. Import the old provider’s register, pick the run that covers the same period, and compare.',
     ),
+    actions: {
+      importLabel: text('parallelRun.importRegister', 'Import a register'),
+      exportLabel: text('parallelRun.export', 'Export'),
+      tolerancesLabel: `${text('parallelRun.tolerances', 'Tolerances')} (${tolerances.length})`,
+      newComparisonLabel: text('parallelRun.workspace.newComparison', 'New comparison'),
+      canCompare: canManage && registers.length > 0 && runs.length > 0,
+    },
     workspace: {
       registers,
       runs,
@@ -94,7 +111,7 @@ export async function loadParallelRun(): Promise<ParallelRunData> {
         slot: slot.slot,
         label: slot.label,
       })),
-      canManage: can(authz, 'payroll.manage'),
+      canManage,
     },
   }
 }
@@ -106,11 +123,18 @@ export function parallelRunSpec(_data: ParallelRunData): PageSpec {
     route: '/payroll/parallel-run',
     layout: 'list',
     header: [
-      // Module tabs live in the shared payroll navigation; the header keeps
-      // only the title the loader resolves.
+      // Module tabs live in the shared payroll navigation. The actions sit
+      // beside them; the drawers they open belong to the workspace.
       pageHeader({
         title: f('title'),
         description: f('description'),
+        actionsClassName: 'flex flex-wrap items-center justify-end gap-2',
+        actions: [
+          widget('link-button', { href: '/data/import', label: f('actions.importLabel'), variant: 'outline' }),
+          widget('link-button', { href: '/data/export', label: f('actions.exportLabel'), variant: 'outline' }),
+          widget('link-button', { href: '/payroll/parallel-run?tolerances=1', label: f('actions.tolerancesLabel'), variant: 'outline' }, f('workspace.canManage')),
+          widget('link-button', { href: '/payroll/parallel-run?new=1', label: f('actions.newComparisonLabel'), iconKey: 'plus' }, f('actions.canCompare')),
+        ],
       }),
     ],
     body: [

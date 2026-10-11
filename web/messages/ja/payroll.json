@@ -1213,7 +1213,60 @@
     "dueOn": "納期限 {dueDate} · {authority}",
     "apNote": "納付請求書は通常の仕入請求書です:",
     "apLink": "買掛請求書を開く",
-    "translated": "導出連結レートで{currency}に換算済み"
+    "translated": "導出連結レートで{currency}に換算済み",
+    "columns": {
+      "destination": "納付先",
+      "due": "期限",
+      "components": "項目",
+      "employees": "従業員",
+      "gross": "総支給額",
+      "actions": "操作"
+    }
+  },
+  "workLocations": {
+    "title": "給与の勤務地",
+    "description": "承認済みの日付付き勤怠記録がない雇用について、勤務地の根拠を記録します。確定済みの給与期間はロックされます。",
+    "record": "配分を記録",
+    "update": "配分を更新",
+    "editorDescription": "期間をカバーする承認済みの勤怠記録がある場合はそれを使用します。勤怠記録のない勤務には、根拠と理由を添えて人事上の配分を入力します。",
+    "loadFailed": "給与の勤務地を読み込めませんでした。",
+    "saveFailed": "給与の勤務地を保存できませんでした。",
+    "recorded": "給与の勤務地を記録しました。",
+    "updated": "給与の勤務地を更新しました。",
+    "empty": "保存済みの配分を確認するには、従業員と期間を選択してください。",
+    "emptyScope": "この従業員と期間に記録された配分はありません。",
+    "shareValue": "割合 {share}",
+    "daysValue": "{days, plural, other {#日}}",
+    "columns": {
+      "region": "地域",
+      "measure": "期間の入力値",
+      "source": "根拠の種類",
+      "document": "根拠書類",
+      "reason": "理由"
+    },
+    "sources": {
+      "hr_records": "人事記録",
+      "certificate": "証明書",
+      "adequate_records": "適切な記録"
+    },
+    "filters": {
+      "employment": "従業員",
+      "clearPeriod": "期間をクリア"
+    },
+    "fields": {
+      "employment": "従業員と法的雇用主",
+      "chooseEmployment": "雇用を選択",
+      "periodStart": "期間開始日",
+      "periodEnd": "期間終了日",
+      "region": "地域",
+      "regionPlaceholder": "州または管轄区域コード",
+      "subregion": "下位地域（任意）",
+      "measure": "配分の基準",
+      "serviceDays": "勤務日数",
+      "wageShare": "賃金割合（0–1）",
+      "wageShareOption": "賃金割合",
+      "evidenceDocument": "根拠書類ID（任意）"
+    }
   },
   "yearEnd": {
     "title": "年末調整",

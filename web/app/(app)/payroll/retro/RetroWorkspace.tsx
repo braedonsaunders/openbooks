@@ -4,7 +4,7 @@ import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { AlertTriangle, History, Plus, Search } from 'lucide-react'
+import { AlertTriangle, History, Search } from 'lucide-react'
 import {
   Badge,
   Button,
@@ -25,6 +25,7 @@ import { useBusinessToday } from '../../../../components/business-date-provider'
 import { useMoney } from '../../../../components/money-provider'
 import { compareDecimal } from '@openbooks/engine/money/decimal'
 import { readApiErrorMessage } from '../../../../lib/api-error'
+import { useHeaderAction } from '../_ui/use-header-action'
 
 /* ------------------------------------------------------------------ */
 /* Shapes (mirror engine/src/payroll/retro-store.ts)                   */
@@ -149,7 +150,8 @@ export function RetroWorkspace({
   const text = (key: string, fallback: string) =>
     t.has(key as never) ? t(key as never) : fallback
 
-  const [scopeOpen, setScopeOpen] = useState(false)
+  // The header's New review action opens the scope drawer (?new=1).
+  const [scopeOpen, setScopeOpen] = useHeaderAction('new')
   const [review, setReview] = useState<'payable' | 'attention' | 'all'>(
     'payable',
   )
@@ -360,23 +362,11 @@ export function RetroWorkspace({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="text-sm text-slate-500 dark:text-slate-400">
-          {proposal
-            ? `${schedules.find((schedule) => schedule.id === scheduleId)?.name ?? ''} · ${payDate} · ${proposal.taxYear}`
-            : text(
-                'retro.workspace.context',
-                'Review backdated changes before creating a pay run.',
-              )}
-        </div>
-        <Button
-          onClick={() => setScopeOpen(true)}
-          disabled={busy || schedules.length === 0}
-        >
-          <Plus size={14} aria-hidden />
-          {text('retro.workspace.newReview', 'New review')}
-        </Button>
-      </div>
+      {proposal ? (
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          {`${schedules.find((schedule) => schedule.id === scheduleId)?.name ?? ''} · ${payDate} · ${proposal.taxYear}`}
+        </p>
+      ) : null}
       <Drawer
         open={scopeOpen}
         onClose={() => {

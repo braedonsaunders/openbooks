@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
-import { page, pageHeader, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
+import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { scopedRetroSchedules } from '../../../../lib/payroll-scoped-views'
@@ -38,6 +38,8 @@ import type { RetroSchedule } from './RetroWorkspace'
 export interface PayrollRetroData {
   title: string
   description: string
+  /** The header's primary action; reviews need a pay schedule to scope them. */
+  newReview: { href: string; label: string; available: boolean }
   workspace: {
     schedules: RetroSchedule[]
     canRun: boolean
@@ -61,6 +63,11 @@ export async function loadPayrollRetro(): Promise<PayrollRetroData> {
       'retro.description',
       'A raise backdated over periods that have already been paid. Recalculate each of those periods, see what it should have paid against what it did, and pay the difference — taxed as the jurisdiction requires and costed to the jobs the hours were charged to.',
     ),
+    newReview: {
+      href: '/payroll/retro?new=1',
+      label: text('retro.workspace.newReview', 'New review'),
+      available: schedules.length > 0,
+    },
     workspace: {
       schedules,
       canRun: can(authz, 'payroll.run'),
@@ -75,11 +82,14 @@ export function payrollRetroSpec(_data: PayrollRetroData): PageSpec {
     route: '/payroll/retro',
     layout: 'list',
     header: [
-      // Module tabs live in the shared payroll navigation; the header keeps
-      // only the title the loader resolves.
+      // Module tabs live in the shared payroll navigation. The primary
+      // action sits beside them and opens the workspace's scope drawer.
       pageHeader({
         title: f('title'),
         description: f('description'),
+        actions: [
+          widget('link-button', { href: f('newReview.href'), label: f('newReview.label'), iconKey: 'plus' }, f('newReview.available')),
+        ],
       }),
     ],
     body: [

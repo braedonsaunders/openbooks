@@ -1213,7 +1213,60 @@
     "dueOn": "Échéance le {dueDate} · {authority}",
     "apNote": "Les factures de versement sont des factures fournisseurs ordinaires :",
     "apLink": "ouvrir les factures fournisseurs",
-    "translated": "Converti en {currency} au taux consolidé dérivé"
+    "translated": "Converti en {currency} au taux consolidé dérivé",
+    "columns": {
+      "destination": "Destinataire",
+      "due": "Échéance",
+      "components": "Composantes",
+      "employees": "Employés",
+      "gross": "Masse salariale brute",
+      "actions": "Opérations"
+    }
+  },
+  "workLocations": {
+    "title": "Lieux de travail de la paie",
+    "description": "Consignez les preuves de lieu de travail pour les emplois sans saisies de temps datées et approuvées. Les périodes de paie validées sont verrouillées.",
+    "record": "Consigner une répartition",
+    "update": "Mettre à jour la répartition",
+    "editorDescription": "Utilisez les saisies de temps approuvées lorsqu’elles couvrent la période. Saisissez une répartition RH pour le travail non chronométré, avec sa source et son motif.",
+    "loadFailed": "Impossible de charger les lieux de travail de la paie.",
+    "saveFailed": "Impossible d’enregistrer le lieu de travail de la paie.",
+    "recorded": "Lieu de travail de la paie consigné.",
+    "updated": "Lieu de travail de la paie mis à jour.",
+    "empty": "Choisissez un employé et une période pour consulter les répartitions enregistrées.",
+    "emptyScope": "Aucune répartition n’est consignée pour cet employé et cette période.",
+    "shareValue": "Part {share}",
+    "daysValue": "{days, plural, one {# jour} other {# jours}}",
+    "columns": {
+      "region": "Région",
+      "measure": "Donnée de la période",
+      "source": "Type de preuve",
+      "document": "Document justificatif",
+      "reason": "Motif"
+    },
+    "sources": {
+      "hr_records": "Dossiers RH",
+      "certificate": "Attestation",
+      "adequate_records": "Registres adéquats"
+    },
+    "filters": {
+      "employment": "Employé",
+      "clearPeriod": "Effacer la période"
+    },
+    "fields": {
+      "employment": "Employé et employeur légal",
+      "chooseEmployment": "Choisir l’emploi",
+      "periodStart": "Début de période",
+      "periodEnd": "Fin de période",
+      "region": "Région",
+      "regionPlaceholder": "Code d’État ou de territoire",
+      "subregion": "Sous-région (facultatif)",
+      "measure": "Mesure de répartition",
+      "serviceDays": "Jours de service",
+      "wageShare": "Part salariale (0–1)",
+      "wageShareOption": "Part salariale",
+      "evidenceDocument": "ID du document justificatif (facultatif)"
+    }
   },
   "yearEnd": {
     "title": "Fin d'année",

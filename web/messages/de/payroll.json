@@ -1213,7 +1213,60 @@
     "dueOn": "Fällig am {dueDate} · {authority}",
     "apNote": "Abführungsrechnungen sind gewöhnliche Lieferantenrechnungen:",
     "apLink": "Kreditorenrechnungen öffnen",
-    "translated": "Zum abgeleiteten konsolidierten Kurs in {currency} umgerechnet"
+    "translated": "Zum abgeleiteten konsolidierten Kurs in {currency} umgerechnet",
+    "columns": {
+      "destination": "Empfänger",
+      "due": "Fällig",
+      "components": "Bestandteile",
+      "employees": "Mitarbeitende",
+      "gross": "Bruttolohnsumme",
+      "actions": "Aktionen"
+    }
+  },
+  "workLocations": {
+    "title": "Lohnabrechnungs-Arbeitsorte",
+    "description": "Erfassen Sie Arbeitsortnachweise für Beschäftigungen ohne genehmigte datierte Zeiteinträge. Festgeschriebene Abrechnungszeiträume sind gesperrt.",
+    "record": "Zuordnung erfassen",
+    "update": "Zuordnung aktualisieren",
+    "editorDescription": "Verwenden Sie genehmigte Zeiteinträge, wo sie den Zeitraum abdecken. Erfassen Sie für nicht erfasste Arbeit eine HR-Zuordnung mit Quelle und Begründung.",
+    "loadFailed": "Die Lohnabrechnungs-Arbeitsorte konnten nicht geladen werden.",
+    "saveFailed": "Der Lohnabrechnungs-Arbeitsort konnte nicht gespeichert werden.",
+    "recorded": "Lohnabrechnungs-Arbeitsort erfasst.",
+    "updated": "Lohnabrechnungs-Arbeitsort aktualisiert.",
+    "empty": "Wählen Sie Mitarbeitende und Zeitraum, um gespeicherte Zuordnungen zu prüfen.",
+    "emptyScope": "Für diese Person und diesen Zeitraum sind keine Zuordnungen erfasst.",
+    "shareValue": "Anteil {share}",
+    "daysValue": "{days, plural, one {# Tag} other {# Tage}}",
+    "columns": {
+      "region": "Gebiet",
+      "measure": "Zeitraumangabe",
+      "source": "Nachweisart",
+      "document": "Nachweisdokument",
+      "reason": "Begründung"
+    },
+    "sources": {
+      "hr_records": "Personalunterlagen",
+      "certificate": "Bescheinigung",
+      "adequate_records": "Ausreichende Aufzeichnungen"
+    },
+    "filters": {
+      "employment": "Mitarbeitende",
+      "clearPeriod": "Zeitraum zurücksetzen"
+    },
+    "fields": {
+      "employment": "Mitarbeitende und rechtlicher Arbeitgeber",
+      "chooseEmployment": "Beschäftigung wählen",
+      "periodStart": "Zeitraumbeginn",
+      "periodEnd": "Zeitraumende",
+      "region": "Gebiet",
+      "regionPlaceholder": "Bundesland- oder Hoheitsgebietscode",
+      "subregion": "Teilregion (optional)",
+      "measure": "Zuordnungsmaß",
+      "serviceDays": "Arbeitstage",
+      "wageShare": "Lohnanteil (0–1)",
+      "wageShareOption": "Lohnanteil",
+      "evidenceDocument": "Nachweisdokument-ID (optional)"
+    }
   },
   "yearEnd": {
     "title": "Jahresabschluss",

@@ -6,13 +6,13 @@ export const dynamic = "force-dynamic";
 
 export async function generateMetadata() {
   const t = await getTranslations("payroll");
-  return { title: t.has("workLocations.title" as never) ? t("workLocations.title" as never) : "Payroll work locations" };
+  return { title: t("workLocations.title") };
 }
 
 export default async function PayrollWorkLocationsPage({ searchParams }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const sp = await searchParams;
-  const data = await loadWorkLocations();
+  const data = await loadWorkLocations(sp);
   return <ModuleView spec={workLocationsSpec(data)} data={data} searchParams={sp} trusted />;
 }

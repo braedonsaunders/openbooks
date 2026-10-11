@@ -1,6 +1,5 @@
 'use client'
 
-import { Table as SharedTable, TableBody as SharedTableBody, TableRow as SharedTableRow, TableCell as SharedTableCell } from "@openbooks/ui"
 import Link from 'next/link'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -9,22 +8,22 @@ import { toast } from 'sonner'
 import { Alert, AlertDescription, Badge, Button, Input } from '@openbooks/ui'
 import type { RemittanceEntitySlice, RemittanceGroup } from '@openbooks/engine/payroll/remittance'
 import { readApiErrorMessage } from '../../../../lib/api-error'
-import { PagedTable } from '../../../../components/paged-table'
+import { PagedTable, type PagedColumn } from '../../../../components/paged-table'
 import { useMoney } from '../../../../components/money-provider'
 
 /**
- * Remittance cockpit: one card per destination (CRA vendor, union funds,
+ * Remittances list: one row per destination (CRA vendor, union funds,
  * unassigned components) and payroll filing account, with the period's accrued
  * amounts per component and a one-click draft vendor bill. Already-raised
  * bills for the same period show inline so a double remittance is an explicit,
  * visible choice.
  */
 
-/** Card identity — mirrors the engine's (destination, filing account) group. */
+/** Row identity — mirrors the engine's (destination, filing account) group. */
 const groupKey = (partyId: string | null, filingAccountId: string | null) =>
   `${partyId ?? 'unassigned'}::${filingAccountId ?? ''}`
 
-/** Search text mirrors the displayed card: destination, filing account,
+/** Search text mirrors the displayed row: destination, filing account,
 // currency and component names. Internal accrual rows never cross over. */
 function groupSearchText(group: RemittanceGroup): string {
   return [
@@ -67,7 +66,7 @@ export function RemittancesView({
   const rangeChanged = range.from !== from || range.to !== to
 
   async function createBill(partyId: string, filingAccountId: string | null, subsidiaryId: string | null) {
-    // The cards and their totals represent the server-applied period. Never
+    // The rows and their totals represent the server-applied period. Never
     // create a bill for dates that the operator has only entered as a draft.
     if (rangeChanged) {
       toast.error(t('applyPeriodFirst'))
@@ -101,75 +100,188 @@ export function RemittancesView({
     }
   }
 
-  return (
-    <div className="space-y-4">
-      <form
-        className="flex flex-wrap items-end gap-2"
-        action="/payroll/remittances"
-        method="get"
-      >
-        <label className="text-sm">
-          <span className="mb-1 block text-xs text-slate-500 dark:text-slate-400">{t('from')}</span>
-          <Input type="date" name="from" value={range.from} onChange={(e) => setRange((r) => ({ ...r, from: e.target.value }))} />
-        </label>
-        <label className="text-sm">
-          <span className="mb-1 block text-xs text-slate-500 dark:text-slate-400">{t('to')}</span>
-          <Input type="date" name="to" value={range.to} onChange={(e) => setRange((r) => ({ ...r, to: e.target.value }))} />
-        </label>
-        <Button type="submit" variant="outline">{t('apply')}</Button>
-      </form>
+  // The period sits on the list toolbar beside search, like every other
+  // list filter. It applies explicitly: bill actions always act on the
+  // period the rows were read for, never on an unapplied draft.
+  const period = (
+    <form
+      className="flex flex-wrap items-center gap-1.5"
+      action="/payroll/remittances"
+      method="get"
+    >
+      <Input
+        type="date"
+        name="from"
+        aria-label={t('from')}
+        className="w-auto"
+        value={range.from}
+        onChange={(e) => setRange((r) => ({ ...r, from: e.target.value }))}
+      />
+      <span aria-hidden className="text-slate-400 dark:text-slate-500">–</span>
+      <Input
+        type="date"
+        name="to"
+        aria-label={t('to')}
+        className="w-auto"
+        value={range.to}
+        onChange={(e) => setRange((r) => ({ ...r, to: e.target.value }))}
+      />
+      <Button type="submit" variant="outline">{t('apply')}</Button>
       {rangeChanged ? (
         <p role="status" className="text-xs text-amber-700 dark:text-amber-300">{t('applyPeriodFirst')}</p>
       ) : null}
+    </form>
+  )
 
-      {populationRefusal ? (
+  if (populationRefusal) {
+    return (
+      <div className="space-y-3">
+        {period}
         <Alert variant="warning">
           <AlertDescription>{populationRefusal}</AlertDescription>
         </Alert>
-      ) : (
-        // The destination collection renders through the shared table (one
-        // card per row) so search, paging and the empty state match every
-        // other collection. Each card keeps its bill/attribute actions, its
-        // existing-bill links and its per-slice buttons.
-        <PagedTable
-          source="payroll_remittance_groups"
-          rows={groups}
-          rowKey={(group) => groupKey(group.partyId, group.filingAccount.id)}
-          searchable
-          empty={(
-            <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-              {t('empty')}
-            </div>
-          )}
-          columns={[
-            {
-              key: 'destination',
-              header: <span className="sr-only">{t('title')}</span>,
-              cell: (group) => (
-                <RemittanceGroupCard
-                  group={group}
-                  canCreate={canCreate}
-                  busy={busyParty !== null}
-                  rangeChanged={rangeChanged}
-                  onCreate={(subsidiaryId) => void createBill(group.partyId!, group.filingAccount.id, subsidiaryId)}
-                />
-              ),
-              search: groupSearchText,
-            },
-          ]}
+      </div>
+    )
+  }
+
+  const columns: PagedColumn<RemittanceGroup>[] = [
+    {
+      key: 'destination',
+      header: t('columns.destination'),
+      cell: (group) => <DestinationCell group={group} />,
+      search: groupSearchText,
+    },
+    {
+      key: 'due',
+      header: t('columns.due'),
+      cell: (group) => group.schedule ? (
+        // A pack-declared destination schedule (Revenu Québec's) dates the
+        // bill from the destination's own timetable and names the rule.
+        // Destinations without one show nothing: their due date is stamped
+        // when the bill is created.
+        <div className="min-w-40">
+          <p className="text-sm text-slate-700 dark:text-slate-300">
+            {t('dueOn', { dueDate: group.schedule.dueDate, authority: group.schedule.authority })}
+          </p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">{group.schedule.rule}</p>
+        </div>
+      ) : <span className="text-slate-400">—</span>,
+    },
+    {
+      key: 'components',
+      header: t('columns.components'),
+      cell: (group) => <ComponentsCell group={group} />,
+    },
+    {
+      key: 'employees',
+      header: t('columns.employees'),
+      align: 'right',
+      cell: (group) => <span className="tabular-nums">{group.employeeCount}</span>,
+    },
+    {
+      key: 'gross',
+      header: t('columns.gross'),
+      align: 'right',
+      cell: (group) => <GroupAmount currency={group.currency} amount={group.grossPayroll} />,
+    },
+    {
+      key: 'total',
+      header: t('total'),
+      align: 'right',
+      cell: (group) => <GroupAmount currency={group.currency} amount={group.total} strong />,
+    },
+    {
+      key: 'actions',
+      header: <span className="sr-only">{t('columns.actions')}</span>,
+      align: 'right',
+      cell: (group) => (
+        <GroupActions
+          group={group}
+          canCreate={canCreate}
+          busy={busyParty !== null}
+          rangeChanged={rangeChanged}
+          onCreate={(subsidiaryId) => void createBill(group.partyId!, group.filingAccount.id, subsidiaryId)}
         />
+      ),
+    },
+  ]
+
+  return (
+    <PagedTable
+      source="payroll_remittance_groups"
+      rows={groups}
+      rowKey={(group) => groupKey(group.partyId, group.filingAccount.id)}
+      searchable
+      emptyAsRow
+      toolbarAfter={period}
+      empty={t('empty')}
+      columns={columns}
+    />
+  )
+}
+
+/** An amount stated in the group's own currency — a EUR-only scope under a
+ * GBP org formats as euros, never pounds. */
+function GroupAmount({ currency, amount, strong }: { currency: string; amount: string; strong?: boolean }) {
+  const { money } = useMoney(currency)
+  return <span className={strong ? 'font-semibold tabular-nums' : 'tabular-nums'}>{money(amount)}</span>
+}
+
+function DestinationCell({ group }: { group: RemittanceGroup }) {
+  const t = useTranslations('payroll.remittances')
+  return (
+    <div className="min-w-48 space-y-1">
+      <p className="font-medium text-slate-900 dark:text-slate-100">{group.partyName ?? t('unassigned')}</p>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {/* A PD7A is filed per payroll program account, so each account
+            remits on its own bill. */}
+        {group.filingAccount.accountNumber && (
+          <Badge variant="outline">
+            {group.filingAccount.accountNumber}
+            {group.filingAccount.name ? ` · ${group.filingAccount.name}` : ''}
+          </Badge>
+        )}
+        {/* The stated currency of every amount in the row. An ISO code, like
+            the account number beside it, is data rather than prose. */}
+        {group.currency && <Badge variant="outline">{group.currency}</Badge>}
+      </div>
+      {group.translated && (
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          {t('translated', { currency: group.currency })}
+        </p>
       )}
     </div>
   )
 }
 
-/**
- * One destination card. Every amount on it is stated in the group's own
- * currency — a EUR-only scope under a GBP org formats as euros, never
- * pounds — so the formatter is built from the group, not the org. Translated
- * scopes name the presentation currency they were translated into.
- */
-function RemittanceGroupCard({
+/** The period's accrued components for one destination, each with its kind
+ * and liability account, in the group's currency. */
+function ComponentsCell({ group }: { group: RemittanceGroup }) {
+  const t = useTranslations('payroll.remittances')
+  const { money } = useMoney(group.currency)
+  if (group.components.length === 0) return <span className="text-slate-400">—</span>
+  return (
+    <ul className="min-w-56 space-y-0.5">
+      {group.components.map((component) => (
+        <li key={component.componentId} className="flex items-baseline justify-between gap-3">
+          <span className="min-w-0">
+            <span className="text-slate-700 dark:text-slate-200">{component.name}</span>
+            <span className="ml-1.5 text-xs text-slate-500 dark:text-slate-400">
+              {component.kind === 'deduction' ? t('withheld') : t('employer')}
+              {' · '}
+              {component.accountLabel ?? t('noAccount')}
+            </span>
+          </span>
+          <span className="shrink-0 tabular-nums">{money(component.amount)}</span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+/** Already-raised bills for the period plus the one available remedy: create
+ * a bill, attribute the runs to a legal entity, or assign a vendor. */
+function GroupActions({
   group,
   canCreate,
   busy,
@@ -183,132 +295,64 @@ function RemittanceGroupCard({
   onCreate: (subsidiaryId: string | null) => void
 }) {
   const t = useTranslations('payroll.remittances')
-  const { money } = useMoney(group.currency)
-
   return (
-    <section
-      className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"
-    >
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h3 className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
-            {group.partyName ?? t('unassigned')}
-            {/* A PD7A is filed per payroll program account, so each
-                account remits on its own bill. */}
-            {group.filingAccount.accountNumber && (
-              <Badge variant="outline">
-                {group.filingAccount.accountNumber}
-                {group.filingAccount.name ? ` · ${group.filingAccount.name}` : ''}
-              </Badge>
-            )}
-            {/* The stated currency of every amount on this card. An ISO code,
-                like the account number beside it, is data rather than prose. */}
-            {group.currency && (
-              <Badge variant="outline">{group.currency}</Badge>
-            )}
-          </h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            {t('context', { gross: money(group.grossPayroll), employees: group.employeeCount })}
-          </p>
-          {group.translated && (
-            <p className="text-xs text-slate-400 dark:text-slate-500">
-              {t('translated', { currency: group.currency })}
-            </p>
-          )}
-          {/* A pack-declared destination schedule (Revenu Québec's) dates
-              the bill from the destination's own timetable and names the
-              rule, so an RQ card never shows — or implies — a CRA date.
-              Destinations without a declared schedule show nothing: the
-              legacy CRA-function date is stamped at bill creation. */}
-          {group.schedule && (
-            <>
-              <p className="text-xs font-medium text-slate-700 dark:text-slate-300">
-                {t('dueOn', { dueDate: group.schedule.dueDate, authority: group.schedule.authority })}
-              </p>
-              <p className="text-xs text-slate-400 dark:text-slate-500">{group.schedule.rule}</p>
-            </>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          {group.existingBills.map((bill) => (
-            <Link
-              key={bill.documentId}
-              href={`/ap/bills?doc=${bill.documentId}` as never}
-              className="inline-flex items-center gap-1.5 text-xs"
-            >
-              <Badge variant="outline">{bill.documentNumber} · {bill.status}</Badge>
-            </Link>
-          ))}
-          {group.hasEntitylessAccruals ? (
-            <Link
-              className="text-xs font-medium text-teal-700 underline dark:text-teal-300"
-              href={'/payroll/runs' as never}
-            >
-              {t('attributeEntity')}
-            </Link>
-          ) : group.partyId ? (
-            canCreate && (
-              group.slices.length > 1 ? (
-                <span className="flex flex-wrap items-center gap-2">
-                  {group.slices.map((slice) => (
-                    <SliceBillButton
-                      key={slice.subsidiaryId}
-                      slice={slice}
-                      busy={busy || rangeChanged}
-                      onCreate={() => onCreate(slice.subsidiaryId)}
-                    />
-                  ))}
-                </span>
-              ) : (
-                <Button
-                  size="sm"
-                  disabled={busy || rangeChanged}
-                  onClick={() => onCreate(
-                    group.slices.length === 1 ? group.slices[0]!.subsidiaryId : null,
-                  )}
-                >
-                  {group.existingBills.length > 0 ? t('createAnother') : t('createBill')}
-                </Button>
-              )
-            )
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      {group.existingBills.map((bill) => (
+        <Link
+          key={bill.documentId}
+          href={`/ap/bills?doc=${bill.documentId}` as never}
+          className="inline-flex items-center gap-1.5 text-xs"
+        >
+          <Badge variant="outline">{bill.documentNumber} · {bill.status}</Badge>
+        </Link>
+      ))}
+      {group.hasEntitylessAccruals ? (
+        <Link
+          className="text-xs font-medium text-teal-700 underline dark:text-teal-300"
+          href={'/payroll/runs' as never}
+        >
+          {t('attributeEntity')}
+        </Link>
+      ) : group.partyId ? (
+        canCreate && (
+          group.slices.length > 1 ? (
+            group.slices.map((slice) => (
+              <SliceBillButton
+                key={slice.subsidiaryId}
+                slice={slice}
+                busy={busy || rangeChanged}
+                onCreate={() => onCreate(slice.subsidiaryId)}
+              />
+            ))
           ) : (
-            <Link
-              className="text-xs font-medium text-teal-700 underline dark:text-teal-300"
-              href={'/admin/setup/payroll?tab=components' as never}
+            <Button
+              size="sm"
+              disabled={busy || rangeChanged}
+              onClick={() => onCreate(
+                group.slices.length === 1 ? group.slices[0]!.subsidiaryId : null,
+              )}
             >
-              {t('assignVendor')}
-            </Link>
-          )}
-        </div>
-      </div>
-      <SharedTable className="w-full text-sm">
-        <SharedTableBody>
-          {group.components.map((component) => (
-            <SharedTableRow key={component.componentId} className="border-t border-slate-100 dark:border-slate-800">
-              <SharedTableCell className="py-1.5">{component.name}</SharedTableCell>
-              <SharedTableCell className="py-1.5 text-xs text-slate-400">
-                {component.kind === 'deduction' ? t('withheld') : t('employer')}
-              </SharedTableCell>
-              <SharedTableCell className="py-1.5 text-xs text-slate-400">{component.accountLabel ?? t('noAccount')}</SharedTableCell>
-              <SharedTableCell className="py-1.5 text-right tabular-nums">{money(component.amount)}</SharedTableCell>
-            </SharedTableRow>
-          ))}
-          <SharedTableRow className="border-t border-slate-200 font-semibold dark:border-slate-700">
-            <SharedTableCell className="py-1.5" colSpan={3}>{t('total')}</SharedTableCell>
-            <SharedTableCell className="py-1.5 text-right tabular-nums">{money(group.total)}</SharedTableCell>
-          </SharedTableRow>
-        </SharedTableBody>
-      </SharedTable>
-    </section>
+              {group.existingBills.length > 0 ? t('createAnother') : t('createBill')}
+            </Button>
+          )
+        )
+      ) : (
+        <Link
+          className="text-xs font-medium text-teal-700 underline dark:text-teal-300"
+          href={'/admin/setup/payroll?tab=components' as never}
+        >
+          {t('assignVendor')}
+        </Link>
+      )}
+    </div>
   )
 }
 
 /**
- * One bill button per legal entity. A multi-entity group's card shows the
- * consolidated total above, so each button names its own entity and native
- * share — formatted in the entity's currency, never the org's — or the
- * operator cannot tell the two drafts apart. Single-entity groups keep the
- * historical single button in the card body above.
+ * One bill button per legal entity. A multi-entity group's row shows the
+ * consolidated total, so each button names its own entity and native share —
+ * formatted in the entity's currency, never the org's — or the operator
+ * cannot tell the two drafts apart. Single-entity groups show one button.
  */
 function SliceBillButton({
   slice,

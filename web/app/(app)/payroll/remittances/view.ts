@@ -21,21 +21,20 @@ import type { RemittanceGroup } from '@openbooks/engine/payroll/remittance'
 /**
  * Payroll remittances, split into a loader and a spec.
  *
- * The native page is a per-destination cockpit: one card per (remittance
- * party, filing account) with the period's accrued components, the gross /
- * headcount context, already-raised bills, and a one-click draft-bill
- * action — behind a from/to date form and the module tab strip.
+ * The page is one list: a row per (remittance party, filing account) with the
+ * period's accrued components, the gross / headcount context, already-raised
+ * bills, and a one-click draft-bill action, with search and the period filter
+ * on the shared list toolbar.
  *
- * Like the AP cockpit, the body stays whole: every card carries conditional
- * pairs a spec cannot express — the filing-account badge (optional number
- * plus optional name join), the existing-bill link list, the create-bill
- * button vs the assign-vendor link, the withheld/employer kind label, the
- * accountLabel-or-fallback pair — so the spec places the cockpit through
- * one widget and the page and the widget registry share the implementation in
- * ./sections (re-exported from RemittancesView). The widget receives the
- * engine groups verbatim plus from/to/canCreate; money and messages
- * resolve inside the client component via useMoney/useTranslations,
- * identically wherever it renders.
+ * Every row carries conditional pairs a spec cannot express — the
+ * filing-account badge (optional number plus optional name join), the
+ * existing-bill link list, the create-bill button vs the assign-vendor link,
+ * the withheld/employer kind label, the accountLabel-or-fallback pair — so the
+ * spec places the list through one widget and the page and the widget registry
+ * share the implementation in ./sections (re-exported from RemittancesView).
+ * The widget receives the engine groups verbatim plus from/to/canCreate;
+ * money and messages resolve inside the client component via
+ * useMoney/useTranslations, identically wherever it renders.
  *
  * Loader work is copied verbatim from page.tsx: the `payroll.read` gate,
  * the `payroll` feature gate (404 when disabled), the PD7A previous-month
@@ -127,7 +126,7 @@ export function remittancesSpec(data: RemittancesData): PageSpec {
       }),
     ],
     body: [
-      // One client cockpit — the period form, the per-destination cards and
+      // One client list — the period filter, the per-destination rows and
       // the empty state. The groups travel verbatim; money and messages
       // resolve inside via useMoney/useTranslations, identically on both
       // paths, so no loader formatting can drift between the renders.

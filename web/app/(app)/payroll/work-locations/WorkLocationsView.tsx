@@ -1,12 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { Button, Drawer, Input, Label, Select } from "@openbooks/ui";
 import {
   PagedTable,
   type PagedColumn,
 } from "../../../../components/paged-table";
+import { ListFilterSelect } from "../../../../components/list-filter-select";
+import { DateRangeFilter } from "../../../../components/date-range-filter";
+import { readApiErrorMessage } from "../../../../lib/api-error";
+import { useHeaderAction } from "../_ui/use-header-action";
 
 interface EmployeeChoice {
   employmentId: string;
@@ -24,115 +30,143 @@ interface AllocationRow {
   changeReason: string;
 }
 
-async function fetchWorkLocations(
-  employmentId: string,
-  periodStart: string,
-  periodEnd: string,
-) {
+type EvidenceSource = "hr_records" | "certificate" | "adequate_records";
+const SOURCES: EvidenceSource[] = ["hr_records", "certificate", "adequate_records"];
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** The list's scope lives in the address: employment plus period. */
+export interface WorkLocationScope {
+  employmentId: string;
+  periodStart: string;
+  periodEnd: string;
+}
+
+/** Saved allocations are read only for one complete, ordered scope; the API
+ * refuses a partial one, so an incomplete filter reads the employee choices
+ * alone. */
+export function completeScope(scope: WorkLocationScope): boolean {
+  return Boolean(
+    scope.employmentId &&
+      DATE.test(scope.periodStart) &&
+      DATE.test(scope.periodEnd) &&
+      scope.periodStart <= scope.periodEnd,
+  );
+}
+
+async function fetchWorkLocations(scope: WorkLocationScope | null, fallback: string) {
   const params = new URLSearchParams();
-  if (employmentId) params.set("employmentId", employmentId);
-  if (periodStart) params.set("periodStart", periodStart);
-  if (periodEnd) params.set("periodEnd", periodEnd);
-  const response = await fetch(`/api/payroll/work-locations?${params}`);
-  if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    throw new Error(
-      body?.error ??
-        `Could not load payroll work locations (${response.status})`,
-    );
+  if (scope) {
+    params.set("employmentId", scope.employmentId);
+    params.set("periodStart", scope.periodStart);
+    params.set("periodEnd", scope.periodEnd);
   }
+  const query = params.toString();
+  const response = await fetch(`/api/payroll/work-locations${query ? `?${query}` : ""}`);
+  if (!response.ok) throw new Error(await readApiErrorMessage(response, fallback));
   return response.json() as Promise<{
     employees: EmployeeChoice[];
     rows?: AllocationRow[];
   }>;
 }
 
-const columns: PagedColumn<AllocationRow>[] = [
-  {
-    key: "region",
-    header: "Region",
-    cell: (row) => `${row.region}${row.subregion ? ` · ${row.subregion}` : ""}`,
-    search: (row) => `${row.region} ${row.subregion ?? ""}`,
-  },
-  {
-    key: "measure",
-    header: "Period input",
-    cell: (row) =>
-      row.serviceDays == null
-        ? `${row.workShare ?? "—"} share`
-        : `${row.serviceDays} days`,
-  },
-  {
-    key: "source",
-    header: "Evidence type",
-    cell: (row) => row.source.replaceAll("_", " "),
-  },
-  {
-    key: "document",
-    header: "Evidence document",
-    cell: (row) => row.evidenceDocumentId ?? "—",
-  },
-  { key: "reason", header: "Reason", cell: (row) => row.changeReason },
-];
-
+/**
+ * Payroll work locations: the allocation evidence recorded for employments
+ * whose work is not covered by approved dated time entries. Search, the
+ * employment filter and the period sit on the shared list toolbar; the
+ * header's Record allocation action (?new=1) and a row click open one editor
+ * drawer.
+ */
 export function WorkLocationsView() {
+  const t = useTranslations("payroll.workLocations");
+  const tCommon = useTranslations("common");
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const scope: WorkLocationScope = {
+    employmentId: searchParams?.get("employment") ?? "",
+    periodStart: searchParams?.get("from") ?? "",
+    periodEnd: searchParams?.get("to") ?? "",
+  };
+  const currentParams = Object.fromEntries(searchParams?.entries() ?? []);
+  const scoped = completeScope(scope);
+
   const [employees, setEmployees] = useState<EmployeeChoice[]>([]);
   const [rows, setRows] = useState<AllocationRow[]>([]);
-  const [employmentId, setEmploymentId] = useState("");
-  const [periodStart, setPeriodStart] = useState("");
-  const [periodEnd, setPeriodEnd] = useState("");
+  const [reload, setReload] = useState(0);
+  const [editorOpen, setEditorOpen] = useHeaderAction("new");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draftScope, setDraftScope] = useState<WorkLocationScope>(scope);
   const [region, setRegion] = useState("");
   const [subregion, setSubregion] = useState("");
   const [measure, setMeasure] = useState<"days" | "share">("days");
   const [serviceDays, setServiceDays] = useState("");
   const [workShare, setWorkShare] = useState("");
-  const [source, setSource] = useState<
-    "hr_records" | "certificate" | "adequate_records"
-  >("hr_records");
+  const [source, setSource] = useState<EvidenceSource>("hr_records");
   const [evidenceDocumentId, setEvidenceDocumentId] = useState("");
   const [changeReason, setChangeReason] = useState("");
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [editorOpen, setEditorOpen] = useState(false);
 
-  const refresh = useCallback(async () => {
-    const body = await fetchWorkLocations(employmentId, periodStart, periodEnd);
-    setEmployees(body.employees ?? []);
-    setRows(body.rows ?? []);
-  }, [employmentId, periodStart, periodEnd]);
+  // A new allocation starts from the list's current scope each time the
+  // header action opens the editor.
+  const [wasOpen, setWasOpen] = useState(editorOpen);
+  if (editorOpen !== wasOpen) {
+    setWasOpen(editorOpen);
+    if (editorOpen && editingId === null) setDraftScope(scope);
+  }
 
   useEffect(() => {
     let cancelled = false;
-    const load = async () => {
-      try {
-        const body = await fetchWorkLocations(
-          employmentId,
-          periodStart,
-          periodEnd,
-        );
-        if (!cancelled) {
-          setEmployees(body.employees ?? []);
-          setRows(body.rows ?? []);
-        }
-      } catch (error) {
-        if (!cancelled)
-          toast.error(
-            error instanceof Error
-              ? error.message
-              : "Could not load payroll work locations",
-          );
-      }
-    };
-    void load();
+    const requested = scoped ? scope : null;
+    fetchWorkLocations(requested, t("loadFailed"))
+      .then((body) => {
+        if (cancelled) return;
+        setEmployees(body.employees ?? []);
+        setRows(requested ? (body.rows ?? []) : []);
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) toast.error(error instanceof Error ? error.message : t("loadFailed"));
+      });
     return () => {
       cancelled = true;
     };
-  }, [employmentId, periodStart, periodEnd]);
+    // The scope fields are the dependency; the object is rebuilt each render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scope.employmentId, scope.periodStart, scope.periodEnd, scoped, reload]);
 
-  const selectedEmployee = useMemo(
-    () => employees.find((employee) => employee.employmentId === employmentId),
-    [employees, employmentId],
+  const draftEmployee = employees.find(
+    (employee) => employee.employmentId === draftScope.employmentId,
   );
+
+  function resetFields() {
+    setRegion("");
+    setSubregion("");
+    setMeasure("days");
+    setServiceDays("");
+    setWorkShare("");
+    setSource("hr_records");
+    setEvidenceDocumentId("");
+    setChangeReason("");
+  }
+
+  function close() {
+    setEditorOpen(false);
+    setEditingId(null);
+    resetFields();
+  }
+
+  function edit(row: AllocationRow) {
+    setEditingId(row.id);
+    setDraftScope(scope);
+    setRegion(row.region);
+    setSubregion(row.subregion ?? "");
+    setMeasure(row.serviceDays == null ? "share" : "days");
+    setServiceDays(row.serviceDays == null ? "" : String(row.serviceDays));
+    setWorkShare(row.workShare ?? "");
+    setSource(row.source as EvidenceSource);
+    setEvidenceDocumentId(row.evidenceDocumentId ?? "");
+    setChangeReason("");
+    setEditorOpen(true);
+  }
 
   async function save() {
     setBusy(true);
@@ -142,9 +176,9 @@ export function WorkLocationsView() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           id: editingId,
-          employmentId,
-          periodStart,
-          periodEnd,
+          employmentId: draftScope.employmentId,
+          periodStart: draftScope.periodStart,
+          periodEnd: draftScope.periodEnd,
           region: region.trim(),
           subregion: subregion.trim() || null,
           serviceDays: measure === "days" ? Number(serviceDays) : null,
@@ -154,54 +188,81 @@ export function WorkLocationsView() {
           changeReason: changeReason.trim(),
         }),
       });
-      if (!response.ok) {
-        const body = await response.json().catch(() => null);
-        throw new Error(
-          body?.error ??
-            `Could not save payroll work location (${response.status})`,
-        );
-      }
+      if (!response.ok) throw new Error(await readApiErrorMessage(response, t("saveFailed")));
       await response.json();
-      toast.success(
-        editingId
-          ? "Payroll work location updated"
-          : "Payroll work location recorded",
-      );
-      setEditingId(null);
-      setRegion("");
-      setSubregion("");
-      setServiceDays("");
-      setWorkShare("");
-      setEvidenceDocumentId("");
-      setChangeReason("");
-      await refresh();
-      setEditorOpen(false);
+      toast.success(editingId ? t("updated") : t("recorded"));
+      const saved = draftScope;
+      close();
+      // Show the saved allocation in its own scope.
+      if (
+        saved.employmentId !== scope.employmentId ||
+        saved.periodStart !== scope.periodStart ||
+        saved.periodEnd !== scope.periodEnd
+      ) {
+        const next = new URLSearchParams(searchParams?.toString() ?? "");
+        next.delete("new");
+        next.set("employment", saved.employmentId);
+        next.set("from", saved.periodStart);
+        next.set("to", saved.periodEnd);
+        router.replace(`${pathname}?${next.toString()}` as never);
+      } else {
+        setReload((count) => count + 1);
+      }
     } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Could not save payroll work location",
-      );
+      toast.error(error instanceof Error ? error.message : t("saveFailed"));
     } finally {
       setBusy(false);
     }
   }
 
-  function edit(row: AllocationRow) {
-    setEditingId(row.id);
-    setRegion(row.region);
-    setSubregion(row.subregion ?? "");
-    setMeasure(row.serviceDays == null ? "share" : "days");
-    setServiceDays(row.serviceDays == null ? "" : String(row.serviceDays));
-    setWorkShare(row.workShare ?? "");
-    setSource(row.source as typeof source);
-    setEvidenceDocumentId(row.evidenceDocumentId ?? "");
-    setChangeReason("");
-    setEditorOpen(true);
-  }
+  const columns: PagedColumn<AllocationRow>[] = [
+    {
+      key: "region",
+      header: t("columns.region"),
+      cell: (row) => `${row.region}${row.subregion ? ` · ${row.subregion}` : ""}`,
+      search: (row) => `${row.region} ${row.subregion ?? ""}`,
+    },
+    {
+      key: "measure",
+      header: t("columns.measure"),
+      cell: (row) =>
+        row.serviceDays == null
+          ? t("shareValue", { share: row.workShare ?? "—" })
+          : t("daysValue", { days: row.serviceDays }),
+    },
+    {
+      key: "source",
+      header: t("columns.source"),
+      cell: (row) =>
+        SOURCES.includes(row.source as EvidenceSource)
+          ? t(`sources.${row.source as EvidenceSource}`)
+          : row.source,
+      search: (row) => row.source,
+    },
+    {
+      key: "document",
+      header: t("columns.document"),
+      cell: (row) => row.evidenceDocumentId ?? "—",
+    },
+    {
+      key: "reason",
+      header: t("columns.reason"),
+      cell: (row) => row.changeReason,
+      search: (row) => row.changeReason,
+    },
+  ];
+
+  const draftComplete = completeScope(draftScope);
+  const invalid =
+    busy ||
+    !draftEmployee ||
+    !draftComplete ||
+    !region.trim() ||
+    !changeReason.trim() ||
+    (measure === "days" ? serviceDays === "" : workShare === "");
 
   return (
-    <div className="space-y-5">
+    <>
       <PagedTable
         source="payroll_work_locations"
         rows={rows}
@@ -210,96 +271,112 @@ export function WorkLocationsView() {
         searchable
         emptyAsRow
         pageSize={10}
+        rowLabel={(row) => row.region}
         onRowClick={edit}
-        empty="Choose an employee and period to review saved allocations."
-        toolbarAlign="end"
+        empty={scoped ? t("emptyScope") : t("empty")}
         toolbarAfter={
           <>
-            <div className="space-y-1 min-w-64 flex-1">
-              <Label htmlFor="employment">Employee and legal employer</Label>
-              <Select
-                id="employment"
-                value={employmentId}
-                onChange={(event) => setEmploymentId(event.target.value)}
-              >
-                <option value="">Choose employment</option>
-                {employees.map((employee) => (
-                  <option
-                    key={employee.employmentId}
-                    value={employee.employmentId}
-                  >
-                    {employee.employeeName} · {employee.subsidiaryName}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div className="grid w-full grid-cols-2 gap-2 sm:w-auto">
-            <div className="space-y-1">
-              <Label htmlFor="period-start">Period start</Label>
-              <Input
-                id="period-start"
-                type="date"
-                value={periodStart}
-                onChange={(event) => setPeriodStart(event.target.value)}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="period-end">Period end</Label>
-              <Input
-                id="period-end"
-                type="date"
-                value={periodEnd}
-                onChange={(event) => setPeriodEnd(event.target.value)}
-              />
-            </div>
-            </div>
-            <Button
-              className="w-full sm:w-auto"
-              disabled={!selectedEmployee || !periodStart || !periodEnd}
-              onClick={() => {
-                setEditingId(null);
-                setRegion("");
-                setSubregion("");
-                setMeasure("days");
-                setServiceDays("");
-                setWorkShare("");
-                setSource("hr_records");
-                setEvidenceDocumentId("");
-                setChangeReason("");
-                setEditorOpen(true);
-              }}
-            >
-              Record allocation
-            </Button>
+            <ListFilterSelect
+              basePath={pathname ?? "/payroll/work-locations"}
+              currentParams={currentParams}
+              paramKey="employment"
+              label={t("filters.employment")}
+              allLabel={t("fields.chooseEmployment")}
+              options={employees.map((employee) => ({
+                value: employee.employmentId,
+                label: `${employee.employeeName} · ${employee.subsidiaryName}`,
+              }))}
+            />
+            <DateRangeFilter
+              fromLabel={t("fields.periodStart")}
+              toLabel={t("fields.periodEnd")}
+              clearLabel={t("filters.clearPeriod")}
+            />
           </>
         }
       />
       <Drawer
         open={editorOpen}
         onClose={() => {
-          if (!busy) setEditorOpen(false);
+          if (!busy) close();
         }}
-        title={editingId ? "Update allocation" : "Record allocation"}
-        description="Use approved time entries where they cover the period. Enter an HR allocation for untimed work, with its source and reason."
+        title={editingId ? t("update") : t("record")}
+        description={t("editorDescription")}
+        footer={
+          <div className="flex items-center justify-end gap-2">
+            <Button variant="ghost" disabled={busy} onClick={close}>
+              {tCommon("actions.cancel")}
+            </Button>
+            <Button disabled={invalid} onClick={() => void save()}>
+              {busy ? tCommon("actions.saving") : editingId ? t("update") : t("record")}
+            </Button>
+          </div>
+        }
       >
         <div className="grid gap-4 md:grid-cols-2">
-          <p className="text-sm text-slate-500 md:col-span-2">
-            {selectedEmployee
-              ? `${selectedEmployee.employeeName} · ${selectedEmployee.subsidiaryName}`
-              : ""}{" "}
-            · {periodStart} – {periodEnd}
-          </p>
+          {editingId ? (
+            // An allocation belongs to its employment and period; an update
+            // corrects the evidence, never the scope.
+            <p className="text-sm text-slate-500 md:col-span-2 dark:text-slate-400">
+              {draftEmployee
+                ? `${draftEmployee.employeeName} · ${draftEmployee.subsidiaryName} · `
+                : ""}
+              {draftScope.periodStart} – {draftScope.periodEnd}
+            </p>
+          ) : (
+            <>
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="work-location-employment">{t("fields.employment")}</Label>
+                <Select
+                  id="work-location-employment"
+                  value={draftScope.employmentId}
+                  onChange={(event) =>
+                    setDraftScope((current) => ({ ...current, employmentId: event.target.value }))
+                  }
+                >
+                  <option value="">{t("fields.chooseEmployment")}</option>
+                  {employees.map((employee) => (
+                    <option key={employee.employmentId} value={employee.employmentId}>
+                      {employee.employeeName} · {employee.subsidiaryName}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="work-location-start">{t("fields.periodStart")}</Label>
+                <Input
+                  id="work-location-start"
+                  type="date"
+                  value={draftScope.periodStart}
+                  onChange={(event) =>
+                    setDraftScope((current) => ({ ...current, periodStart: event.target.value }))
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="work-location-end">{t("fields.periodEnd")}</Label>
+                <Input
+                  id="work-location-end"
+                  type="date"
+                  value={draftScope.periodEnd}
+                  onChange={(event) =>
+                    setDraftScope((current) => ({ ...current, periodEnd: event.target.value }))
+                  }
+                />
+              </div>
+            </>
+          )}
           <div className="space-y-2">
-            <Label htmlFor="region">Region</Label>
+            <Label htmlFor="region">{t("fields.region")}</Label>
             <Input
               id="region"
               value={region}
               onChange={(event) => setRegion(event.target.value)}
-              placeholder="State or jurisdiction code"
+              placeholder={t("fields.regionPlaceholder")}
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="subregion">Subregion (optional)</Label>
+            <Label htmlFor="subregion">{t("fields.subregion")}</Label>
             <Input
               id="subregion"
               value={subregion}
@@ -307,21 +384,19 @@ export function WorkLocationsView() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="measure">Allocation measure</Label>
+            <Label htmlFor="measure">{t("fields.measure")}</Label>
             <Select
               id="measure"
               value={measure}
-              onChange={(event) =>
-                setMeasure(event.target.value as "days" | "share")
-              }
+              onChange={(event) => setMeasure(event.target.value as "days" | "share")}
             >
-              <option value="days">Service days</option>
-              <option value="share">Wage share</option>
+              <option value="days">{t("fields.serviceDays")}</option>
+              <option value="share">{t("fields.wageShareOption")}</option>
             </Select>
           </div>
           {measure === "days" ? (
             <div className="space-y-2">
-              <Label htmlFor="service-days">Service days</Label>
+              <Label htmlFor="service-days">{t("fields.serviceDays")}</Label>
               <Input
                 id="service-days"
                 inputMode="numeric"
@@ -331,7 +406,7 @@ export function WorkLocationsView() {
             </div>
           ) : (
             <div className="space-y-2">
-              <Label htmlFor="work-share">Wage share (0–1)</Label>
+              <Label htmlFor="work-share">{t("fields.wageShare")}</Label>
               <Input
                 id="work-share"
                 value={workShare}
@@ -341,23 +416,21 @@ export function WorkLocationsView() {
             </div>
           )}
           <div className="space-y-2">
-            <Label htmlFor="source">Evidence type</Label>
+            <Label htmlFor="source">{t("columns.source")}</Label>
             <Select
               id="source"
               value={source}
-              onChange={(event) =>
-                setSource(event.target.value as typeof source)
-              }
+              onChange={(event) => setSource(event.target.value as EvidenceSource)}
             >
-              <option value="hr_records">HR records</option>
-              <option value="certificate">Certificate</option>
-              <option value="adequate_records">Adequate records</option>
+              {SOURCES.map((value) => (
+                <option key={value} value={value}>
+                  {t(`sources.${value}`)}
+                </option>
+              ))}
             </Select>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="evidence-document">
-              Evidence document ID (optional)
-            </Label>
+            <Label htmlFor="evidence-document">{t("fields.evidenceDocument")}</Label>
             <Input
               id="evidence-document"
               value={evidenceDocumentId}
@@ -365,42 +438,15 @@ export function WorkLocationsView() {
             />
           </div>
           <div className="space-y-2 md:col-span-2">
-            <Label htmlFor="change-reason">Reason</Label>
+            <Label htmlFor="change-reason">{t("columns.reason")}</Label>
             <Input
               id="change-reason"
               value={changeReason}
               onChange={(event) => setChangeReason(event.target.value)}
             />
           </div>
-          <div className="flex items-end gap-2">
-            <Button
-              disabled={
-                busy ||
-                !selectedEmployee ||
-                !periodStart ||
-                !periodEnd ||
-                !region.trim() ||
-                !changeReason.trim() ||
-                (measure === "days" ? serviceDays === "" : workShare === "")
-              }
-              onClick={() => void save()}
-            >
-              {busy
-                ? "Saving…"
-                : editingId
-                  ? "Update allocation"
-                  : "Record allocation"}
-            </Button>
-            <Button
-              variant="outline"
-              disabled={busy}
-              onClick={() => setEditorOpen(false)}
-            >
-              Cancel
-            </Button>
-          </div>
         </div>
       </Drawer>
-    </div>
+    </>
   );
 }

@@ -207,9 +207,10 @@ export const LOCAL_NAVIGATION: LocalNavigationSet[] = [
   { id: 'payroll', label: 'Payroll', feature: 'payroll', tabs: [
     { href: '/payroll', ns: 'payroll', key: 'home.tabs.overview', permission: 'payroll.read' },
     { href: '/payroll/runs', iconKey: 'circle-dollar-sign', ns: 'payroll', key: 'home.tabs.runs', permission: 'payroll.read', prefix: true },
-    { href: '/payroll/anomalies', secondary: true, iconKey: 'shield', ns: 'payroll', key: 'home.tabs.checks', permission: 'payroll.read' },
     { href: '/payroll/remittances', iconKey: 'landmark', ns: 'payroll', key: 'home.tabs.remittances', permission: 'payroll.read' },
-    { href: '/payroll/separations', secondary: true, iconKey: 'user-minus', ns: 'payroll', key: 'home.tabs.separations', permission: 'payroll.read' },
+    { href: '/payroll/anomalies', iconKey: 'shield', ns: 'payroll', key: 'home.tabs.checks', permission: 'payroll.read' },
+    { href: '/payroll/separations', iconKey: 'user-minus', ns: 'payroll', key: 'home.tabs.separations', permission: 'payroll.read' },
+    // Periodic and adoption work stays one step away in the More menu.
     { href: '/payroll/year-end', iconKey: 'calendar-check', ns: 'payroll', key: 'home.tabs.yearEnd', permission: 'payroll.read', secondary: true, menuParent: 'payroll' },
     ...[
       ['opening-balances', 'payroll.read'],
@@ -217,7 +218,7 @@ export const LOCAL_NAVIGATION: LocalNavigationSet[] = [
       ['parallel-run', 'payroll.read'],
       ['work-locations', 'payroll.manage'],
     ].map(([route, permission]) => ({
-      href: `/payroll/${route}`, ns: 'nav', key: `modules.payroll-${route}`, permission,
+      href: `/payroll/${route}`, ns: 'nav', key: `modules.payroll-${route}`, permission, secondary: true,
     })),
   ] },
   { id: 'resourcing', label: 'Resourcing', feature: 'resourcing', tabs: [
