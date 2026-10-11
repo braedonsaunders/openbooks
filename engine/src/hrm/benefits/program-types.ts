@@ -132,6 +132,8 @@ export interface BenefitProgramMember {
   readonly effectiveTo: string | null;
   readonly weight: string | null;
   readonly role: string | null;
+  /** Removes the employment from an employer-wide program over these dates. */
+  readonly excluded: boolean;
 }
 
 export interface BenefitAward {

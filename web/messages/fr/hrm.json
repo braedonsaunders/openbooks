@@ -3045,7 +3045,9 @@
       "role": "Rôle",
       "rolePlaceholder": "Contributeur",
       "roleHint": "Rôle enregistré pour cette adhésion ; les poids de répartition sont configurés séparément.",
-      "employerWide": "Tous les employés de l’employeur en service actif pendant la période sont admissibles ; les règles du programme déterminent qui est payé."
+      "employerWide": "Tous les employés de l’employeur en service actif pendant la période sont admissibles ; les règles du programme déterminent qui est payé.",
+      "excludedRole": "Exclu",
+      "excludeLabel": "Exclure cet employé du programme"
     },
     "addMember": "Ajouter un membre",
     "removeMember": "Mettre fin à l'adhésion",

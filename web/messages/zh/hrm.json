@@ -3045,7 +3045,9 @@
       "role": "角色",
       "rolePlaceholder": "成员",
       "roleHint": "此成员记录的角色；分配权重单独配置。",
-      "employerWide": "期间内在职的雇主全体员工均有资格；由计划规则决定向谁支付。"
+      "employerWide": "期间内在职的雇主全体员工均有资格；由计划规则决定向谁支付。",
+      "excludedRole": "已排除",
+      "excludeLabel": "将该员工排除在计划之外"
     },
     "addMember": "添加成员",
     "removeMember": "结束成员资格",

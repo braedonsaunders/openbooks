@@ -3045,7 +3045,9 @@
       "role": "Rolle",
       "rolePlaceholder": "Mitwirkender",
       "roleHint": "Für diese Mitgliedschaft dokumentierte Rolle; Verteilungsgewichte werden separat konfiguriert.",
-      "employerWide": "Alle Beschäftigten des Arbeitgebers, die im Zeitraum aktiv beschäftigt sind, sind berechtigt; die Programmregeln bestimmen, wer bezahlt wird."
+      "employerWide": "Alle Beschäftigten des Arbeitgebers, die im Zeitraum aktiv beschäftigt sind, sind berechtigt; die Programmregeln bestimmen, wer bezahlt wird.",
+      "excludedRole": "Ausgeschlossen",
+      "excludeLabel": "Diese Person vom Programm ausschließen"
     },
     "addMember": "Mitglied hinzufügen",
     "removeMember": "Mitgliedschaft beenden",

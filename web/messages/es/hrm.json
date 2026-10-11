@@ -3045,7 +3045,9 @@
       "role": "Rol",
       "rolePlaceholder": "Colaborador",
       "roleHint": "Rol registrado en esta afiliación; los pesos de asignación se configuran por separado.",
-      "employerWide": "Todos los empleados del empleador en servicio activo durante el período son elegibles; las reglas del programa deciden a quién se paga."
+      "employerWide": "Todos los empleados del empleador en servicio activo durante el período son elegibles; las reglas del programa deciden a quién se paga.",
+      "excludedRole": "Excluido",
+      "excludeLabel": "Excluir a este empleado del programa"
     },
     "addMember": "Agregar miembro",
     "removeMember": "Terminar membresía",

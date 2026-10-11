@@ -389,9 +389,10 @@ async function loadSettlementContext(
     basis = { kind: "calendar" };
   }
 
-  const named = await listProgramMemberships({ orgId, actorId, programId });
+  const memberships = await listProgramMemberships({ orgId, actorId, programId });
+  const named = memberships.filter((m) => !m.excluded);
   const members = program.eligibility === "all_employees"
-    ? [...named, ...(await employerWideMembers(orgId, program, named, periodFrom, periodTo))]
+    ? [...named, ...(await employerWideMembers(orgId, program, memberships, periodFrom, periodTo))]
     : named;
   const minorUnits = await currencyMinorUnits(orgId, program.currency);
   return {
@@ -404,7 +405,8 @@ async function loadSettlementContext(
  * Employer-wide eligibility: every employment of the program's employer in
  * active service during the period is a member for the whole period, with
  * equal weight. Named memberships still carry roles and weights and take
- * precedence for their employments.
+ * precedence for their employments; an excluded membership touching the
+ * period removes its employment.
  */
 async function employerWideMembers(
   orgId: string,
@@ -413,6 +415,8 @@ async function employerWideMembers(
   periodFrom: string,
   periodTo: string,
 ): Promise<BenefitProgramMember[]> {
+  // Named inclusions and exclusions touching the period both take the
+  // employment out of the employer-wide set.
   const namedIds = new Set(named.filter((m) => m.effectiveFrom <= periodTo && (m.effectiveTo === null || m.effectiveTo >= periodFrom)).map((m) => m.employmentId));
   const rows = (await db.execute<{ id: string }>(sql`
     select w.id::text as id from worker_employments w
@@ -426,7 +430,7 @@ async function employerWideMembers(
   `)).rows;
   return rows.filter((r) => !namedIds.has(r.id)).map((r) => ({
     id: `employer:${r.id}`, programId: program.id, employmentId: r.id,
-    effectiveFrom: periodFrom, effectiveTo: periodTo, weight: "1", role: null,
+    effectiveFrom: periodFrom, effectiveTo: periodTo, weight: "1", role: null, excluded: false,
   }));
 }
 

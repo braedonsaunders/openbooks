@@ -102,6 +102,7 @@ export const POST = defineRoute({
       effectiveTo: civilDateInput().nullish(),
       weight: z.string().trim().min(1).max(64).nullish(),
       role: z.string().trim().max(120).nullish(),
+      excluded: z.boolean().optional(),
     }),
     z.object({
       action: z.literal("removeMember"),
@@ -133,6 +134,7 @@ export const POST = defineRoute({
           effectiveTo: body.effectiveTo ?? null,
           weight: body.weight ?? null,
           role: body.role ?? null,
+          excluded: body.excluded === true,
         });
         return NextResponse.json({ member });
       }

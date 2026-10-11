@@ -653,7 +653,7 @@ export async function loadBenefitsPortfolio(
           rangeLabel:
             member.effectiveTo !== null ? `${member.effectiveFrom} – ${member.effectiveTo}` : t('portfolio.effectiveOpen', { date: member.effectiveFrom }),
           weight: member.weight,
-          role: member.role,
+          role: member.excluded ? t('portfolio.members.excludedRole') : member.role,
         })),
         membersEmpty: t('portfolio.membersEmpty'),
         sources: sources.map((source) => {

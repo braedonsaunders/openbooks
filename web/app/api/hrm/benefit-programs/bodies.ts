@@ -114,6 +114,7 @@ const addMemberBody = z.object({
   effectiveTo: civilDate.nullish(),
   weight: decimal,
   role: z.string().trim().max(120).nullish(),
+  excluded: z.boolean().optional(),
 });
 const removeMemberBody = z.object({
   action: z.literal("removeMember"),

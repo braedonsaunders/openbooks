@@ -3045,7 +3045,9 @@
       "role": "Papel",
       "rolePlaceholder": "Colaborador",
       "roleHint": "Função registrada nesta participação; os pesos de alocação são configurados separadamente.",
-      "employerWide": "Todos os funcionários do empregador em serviço ativo no período são elegíveis; as regras do programa definem quem é pago."
+      "employerWide": "Todos os funcionários do empregador em serviço ativo no período são elegíveis; as regras do programa definem quem é pago.",
+      "excludedRole": "Excluído",
+      "excludeLabel": "Excluir este funcionário do programa"
     },
     "addMember": "Adicionar membro",
     "removeMember": "Encerrar participação",

@@ -3045,7 +3045,9 @@
       "role": "Role",
       "rolePlaceholder": "Contributor",
       "roleHint": "Role recorded with this membership; allocation weights are configured separately.",
-      "employerWide": "Everyone at the employer in active service during a period is eligible; the program rules decide who is paid."
+      "employerWide": "Everyone at the employer in active service during a period is eligible; the program rules decide who is paid.",
+      "excludedRole": "Excluded",
+      "excludeLabel": "Exclude this employee from the program"
     },
     "addMember": "Add member",
     "removeMember": "End membership",

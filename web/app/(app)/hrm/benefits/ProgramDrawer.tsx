@@ -57,6 +57,7 @@ export function ProgramDrawer({
     effectiveTo: '',
     weight: '',
     role: '',
+    excluded: false,
   })
   const [memberError, setMemberError] = useState<string | null>(null)
   const program = drawer.program
@@ -100,7 +101,7 @@ export function ProgramDrawer({
 
   async function addMember() {
     const errors = validateMembershipDraft(member)
-    if (program.allocation === 'role' && member.weight.trim() === '') errors.weight = 'portfolio.validation.weight'
+    if (program.allocation === 'role' && !member.excluded && member.weight.trim() === '') errors.weight = 'portfolio.validation.weight'
     const first = errors.employmentId ?? errors.effectiveFrom ?? errors.effectiveTo ?? errors.weight
     if (first) {
       setMemberError(t(first))
@@ -121,6 +122,7 @@ export function ProgramDrawer({
           effectiveTo: member.effectiveTo === '' ? null : member.effectiveTo,
           weight: member.weight.trim() === '' ? null : member.weight.trim(),
           role: member.role.trim() === '' ? null : member.role.trim(),
+          excluded: member.excluded === true,
         }),
       })
       if (!res.ok) {
@@ -128,7 +130,7 @@ export function ProgramDrawer({
         return
       }
       setAdding(false)
-      setMember({ employmentId: '', effectiveFrom: program.effectiveFrom, effectiveTo: '', weight: '', role: '' })
+      setMember({ employmentId: '', effectiveFrom: program.effectiveFrom, effectiveTo: '', weight: '', role: '', excluded: false })
       router.refresh()
     } catch {
       toast.error(t('portfolio.programActionFailed'))
@@ -415,6 +417,12 @@ export function ProgramDrawer({
                   ))}
                 </Select>
               </div>
+              {program.eligibility === 'all_employees' ? (
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={member.excluded === true} onChange={(e) => setMember((c) => ({ ...c, excluded: e.target.checked }))} />
+                  {t('portfolio.members.excludeLabel')}
+                </label>
+              ) : null}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label htmlFor="program-member-from">{t('portfolio.builder.fields.effectiveFrom')}</Label>

@@ -435,6 +435,7 @@ async function recordAward(
       await db.execute<{ id: string }>(sql`
         select id from hrm_benefit_program_members
          where org_id = ${orgId} and program_id = ${programId} and employment_id = ${employmentId}
+           and not excluded
            and effective_from <= ${periodFrom}::date
            and (effective_to is null or effective_to >= ${periodTo ?? periodFrom}::date)
          limit 1
@@ -442,6 +443,15 @@ async function recordAward(
     ).rows;
     // Employer-wide programs need no named membership; active service in
     // the period (checked below) is the eligibility.
+    const excludedOverPeriod = program.eligibility === "all_employees" && (await db.execute(sql`
+        select 1 from hrm_benefit_program_members
+         where org_id = ${orgId} and program_id = ${programId} and employment_id = ${employmentId} and excluded
+           and effective_from <= ${periodTo ?? periodFrom}::date and (effective_to is null or effective_to >= ${periodFrom}::date)
+         limit 1
+      `)).rows.length > 0;
+    if (adjustsAwardId === null && excludedOverPeriod) {
+      throw new BenefitsError("REFUSED", `this employment is excluded from program ${program.code} over ${periodFrom}..${periodTo ?? periodFrom} — end the exclusion before issuing an award`);
+    }
     if (adjustsAwardId === null && covering.length === 0 && program.eligibility !== "all_employees") {
       throw new BenefitsError(
         "REFUSED",

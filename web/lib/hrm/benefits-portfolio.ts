@@ -518,6 +518,8 @@ export interface MembershipDraft {
   effectiveTo: string
   weight: string
   role: string
+  /** Employer-wide programs: exclude this employee over the dates. */
+  excluded?: boolean
 }
 
 export type MembershipFieldErrors = Partial<Record<keyof MembershipDraft | 'form', string>>

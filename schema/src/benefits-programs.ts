@@ -243,6 +243,8 @@ export const benefitProgramMembers = pgTable(
     effectiveTo: date("effective_to"),
     weight: numeric("weight", { precision: 19, scale: 4 }),
     role: text("role"),
+    /** Removes the employment from an employer-wide program over the membership dates. */
+    excluded: boolean("excluded").notNull().default(false),
     ...auditColumns,
   },
   (t) => [

@@ -78,7 +78,7 @@ const participantProjection = sql`
   select e.id,e.org_id,e.plan_id as program_id,'enrollment'::text as native_kind,e.employment_id,e.status,e.effective_from,e.effective_to
     from hrm_benefit_enrollments e
   union all
-  select m.id,m.org_id,m.program_id,'membership',m.employment_id,'assigned',m.effective_from,m.effective_to from hrm_benefit_program_members m
+  select m.id,m.org_id,m.program_id,'membership',m.employment_id,case when m.excluded then 'excluded' else 'assigned' end,m.effective_from,m.effective_to from hrm_benefit_program_members m
   union all
   select t.id,t.org_id,t.plan_id,'vacation_terms',t.employment_id,'assigned',t.effective_from,t.effective_to from payroll_vacation_terms t`;
 

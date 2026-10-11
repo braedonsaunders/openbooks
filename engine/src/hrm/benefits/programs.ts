@@ -1501,6 +1501,7 @@ function toMember(row: Record<string, unknown>): BenefitProgramMember {
     effectiveTo: row.effectiveTo != null ? String(row.effectiveTo).slice(0, 10) : null,
     weight: row.weight != null ? String(row.weight) : null,
     role: row.role != null ? String(row.role) : null,
+    excluded: row.excluded === true,
   };
 }
 
@@ -1520,7 +1521,7 @@ export async function listProgramMemberships(query: {
         select id, program_id as "programId", employment_id as "employmentId",
                effective_from::text as "effectiveFrom",
                effective_to::text as "effectiveTo",
-               weight::text as "weight", role
+               weight::text as "weight", role, excluded
           from hrm_benefit_program_members
          where org_id = ${orgId} and program_id = ${programId}
          order by effective_from
@@ -1539,6 +1540,8 @@ export async function addProgramMembership(query: {
   readonly effectiveTo?: string | null;
   readonly weight?: string | number | null;
   readonly role?: string | null;
+  /** Employer-wide programs only: exclude this employment over the dates. */
+  readonly excluded?: boolean;
 }): Promise<BenefitProgramMember> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
@@ -1574,7 +1577,11 @@ export async function addProgramMembership(query: {
       );
     }
     const program = await getBenefitProgram(db, orgId, actorId, programId);
-    if (program.allocation === "role" && (weight === null || BigInt(weight.replace(".", "")) <= 0n)) {
+    const excluded = query.excluded === true;
+    if (excluded && program.eligibility !== "all_employees") {
+      throw new BenefitsError("REFUSED", `program ${program.code} pays named members only — end the membership instead of excluding it, or make everyone at the employer eligible first`);
+    }
+    if (!excluded && program.allocation === "role" && (weight === null || BigInt(weight.replace(".", "")) <= 0n)) {
       throw new BenefitsError("REFUSED", `program ${program.code} allocates by role weight — enter a positive membership weight before enrolling this employee`);
     }
     if (program.status === "closed") {
@@ -1627,14 +1634,14 @@ export async function addProgramMembership(query: {
         await db.execute<Record<string, unknown>>(sql`
           insert into hrm_benefit_program_members
             (org_id, program_id, employment_id, effective_from, effective_to,
-             weight, role, created_by, updated_by)
+             weight, role, excluded, created_by, updated_by)
           values (${orgId}, ${programId}, ${employmentId},
                   ${effectiveFrom}::date, ${effectiveTo}::date,
-                  ${weight}, ${role}, ${actorId}, ${actorId})
+                  ${excluded ? null : weight}, ${excluded ? null : role}, ${excluded}, ${actorId}, ${actorId})
           returning id, program_id as "programId", employment_id as "employmentId",
                     effective_from::text as "effectiveFrom",
                     effective_to::text as "effectiveTo",
-                    weight::text as "weight", role
+                    weight::text as "weight", role, excluded
         `)
       ).rows,
       "recording program membership",
@@ -1754,7 +1761,7 @@ export async function removeProgramMembership(query: {
           returning id, program_id as "programId", employment_id as "employmentId",
                     effective_from::text as "effectiveFrom",
                     effective_to::text as "effectiveTo",
-                    weight::text as "weight", role
+                    weight::text as "weight", role, excluded
         `)
       ).rows,
       "ending program membership",
