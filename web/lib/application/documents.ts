@@ -5,7 +5,7 @@ import {
   DocumentVoidError,
   requestDocumentVoid,
 } from "@openbooks/engine/documents";
-import { submitAndReleaseIfUngated } from "@openbooks/engine/flows/module";
+import { SubmitError, submitAndReleaseIfUngated } from "@openbooks/engine/flows/module";
 import { ControlAccountsIncompleteError } from "@openbooks/engine/records/control-accounts";
 import { postDocument } from "@openbooks/engine/documents";
 import { PostingError } from "@openbooks/engine/journal/contracts";
@@ -117,6 +117,7 @@ export function domainFailure(error: unknown): never {
     || error instanceof DocumentEditError
     || error instanceof PostingError
     || error instanceof ControlAccountsIncompleteError
+    || error instanceof SubmitError
   ) {
     throw new ApplicationError(
       (error instanceof DocumentEditError || error instanceof DocumentVoidError) && error.status === 409 ? "conflict" : "invalid_input",

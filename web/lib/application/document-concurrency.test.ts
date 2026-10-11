@@ -8,6 +8,7 @@ const { applicationWriteValue, normalizeDocumentRecordRevisions } = await import
 const { applicationTool } = await import("./tool-catalog.ts");
 const { domainFailure } = await import("./documents.ts");
 const { DocumentEditError } = await import("@openbooks/engine/records/document-edit-policy");
+const { SubmitError } = await import("@openbooks/engine/flows/submit");
 
 const EXACT_REVISION = "2026-08-24T12:34:56.123456Z";
 const ID = "00000000-0000-4000-8000-000000000001";
@@ -109,6 +110,17 @@ test("document update and correction tool schemas require the exact persisted to
     const parsed = parsedCorrection.data as { correction: { expectedUpdatedAt: string } };
     assert.equal(parsed.correction.expectedUpdatedAt, EXACT_REVISION);
   }
+});
+
+test("a before_submit script veto reaches the operator as a 422 carrying the script reason", () => {
+  const reason = 'submission vetoed by script "Require PO": provide a purchase order';
+  assert.throws(
+    () => domainFailure(new SubmitError(reason)),
+    (error: unknown) => error instanceof ApplicationError
+      && error.code === "invalid_input"
+      && error.status === 422
+      && error.message === reason,
+  );
 });
 
 test("stale generic and correction writes surface a 409 conflict", () => {

@@ -27,9 +27,11 @@ import { isVendorBillApprovalRequired, VENDOR_BILL_KIND } from "./vendor-bill-ap
  */
 /**
  * A submission lifecycle refusal: the target is not in a submittable state
- * (already submitted, approved, or otherwise transitioned). Callers map this
- * to a 4xx — a double-clicked or replayed submit is request state, not a
- * server defect, and must never surface as a 500.
+ * (already submitted, approved, or otherwise transitioned), or a before_submit
+ * script vetoed the submission and its message names the script's reason.
+ * Callers map this to a 4xx carrying the message — a double-clicked or
+ * replayed submit is request state, not a server defect, and must never
+ * surface as a 500.
  */
 export class SubmitError extends Error {
   readonly name = "SubmitError";
@@ -122,12 +124,13 @@ async function submitForApprovalLocked(
     };
     const outcomes = await runTriggerScripts("before_submit", scriptCtx, doc.id);
     const bad = outcomes.find((o) => o.status !== "ok");
+    if (bad?.status === "aborted") {
+      // The script's reason is the operator's remedy: a submission refusal
+      // (4xx) that names it, rolled back with the rest of the submission.
+      throw new SubmitError(`submission vetoed by script "${bad.name}": ${bad.abortReason}`);
+    }
     if (bad) {
-      throw new Error(
-        bad.status === "aborted"
-          ? `submission vetoed by script "${bad.name}": ${bad.abortReason}`
-          : `script "${bad.name}" ${bad.status}: ${bad.abortReason ?? ""}`,
-      );
+      throw new Error(`script "${bad.name}" ${bad.status}: ${bad.abortReason ?? ""}`);
     }
     const mutations = Object.assign({}, ...outcomes.map((o) => o.set ?? {}));
     if (Object.keys(mutations).length > 0) {

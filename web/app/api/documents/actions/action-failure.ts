@@ -2,10 +2,12 @@ import { ControlAccountsIncompleteError } from '@openbooks/engine/records/contro
 import { PostingError } from "@openbooks/engine/journal/contracts";
 import { PayrollError } from '@openbooks/engine/payroll/error'
 import { InventoryError, InventoryOwnershipError } from '@openbooks/engine/inventory/contracts/module'
+import { SubmitError } from '@openbooks/engine/flows/submit'
 
 /**
  * Map an action failure to its response. Typed kernel, inventory, control-
- * account, payroll, and invoice-backup refusals keep their message (422) —
+ * account, payroll, submission (including a before_submit script veto), and
+ * invoice-backup refusals keep their message (422) —
  * the operator can act on them. Anything else is a server defect: the detail
  * goes to the server log and the client gets a stable code, never driver
  * text, bind params, or internal ids. Clients render their own localized
@@ -26,6 +28,7 @@ export function toActionFailure(error: unknown): { status: 403 | 422 | 500; body
     error instanceof PostingError ||
     error instanceof ControlAccountsIncompleteError ||
     error instanceof PayrollError ||
+    error instanceof SubmitError ||
     (error instanceof Error && (error as { code?: unknown }).code === 'invoice_backup_required')
   ) {
     // A typed refusal may carry its machine identity for the operator's

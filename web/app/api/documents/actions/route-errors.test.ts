@@ -10,6 +10,7 @@ const { ControlAccountsIncompleteError } = await import('@openbooks/engine/recor
 const { PayrollError } = await import('@openbooks/engine/payroll/error')
 const { InventoryError, InventoryOwnershipError } = await import('@openbooks/engine/inventory/contracts/module')
 const { PostingEffectsReplayError } = await import('@openbooks/engine/ledger/posting-effects')
+const { SubmitError } = await import('@openbooks/engine/flows/submit')
 const { postingRefusal } = await import('@/lib/api/responses')
 
 test('typed refusals keep their message as a 422', () => {
@@ -23,6 +24,13 @@ test('typed refusals keep their message as a 422', () => {
     assert.equal(mapped.status, 422)
     assert.equal(mapped.body.error, (error as Error).message)
   }
+})
+
+test('a before_submit script veto keeps the script reason as a 422', () => {
+  const reason = 'submission vetoed by script "Require PO": provide a purchase order'
+  const mapped = toActionFailure(new SubmitError(reason)) as { status: number; body: Record<string, unknown> }
+  assert.equal(mapped.status, 422)
+  assert.deepEqual(mapped.body, { error: reason })
 })
 
 test('a stock movement into another legal entity refuses as an authorization boundary', () => {
