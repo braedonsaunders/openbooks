@@ -104,7 +104,7 @@ export async function loadBalanceSheet(
   let view: Awaited<ReturnType<typeof balanceSheetView>> | null = null
   let ratesBlocked: RatesBlockedNotice | null = null
   try {
-    subView = await reportSubsidiaryView(q.subsidiaryId, period.to)
+    subView = await reportSubsidiaryView(q.subsidiaryId, period.to, selectedBook.id)
     view = await balanceSheetView({ from: period.from, to: period.to }, period.label, labels, {
       breakout: q.breakout,
       compare: q.compare,

@@ -50,7 +50,9 @@
       "statementsTitle": "Extractos de clientes",
       "statementsDescription": "Elija un cliente para abrir su extracto: partidas abiertas, pagos y antigüedad del periodo.",
       "statementBatchesTitle": "Envíos de extractos",
-      "statementBatchesDescription": "Envíe extractos a todos los clientes con saldo y siga cada envío hasta su entrega."
+      "statementBatchesDescription": "Envíe extractos a todos los clientes con saldo y siga cada envío hasta su entrega.",
+      "bookDifferencesTitle": "Diferencias entre libros",
+      "bookDifferencesDescription": "Cada cuenta del libro principal junto a un libro secundario, con la diferencia"
     },
     "groups": {
       "financial": "Estados financieros",
@@ -3153,7 +3155,8 @@
       "gift": "Donación",
       "grant": "Subvención",
       "release": "Liberación de restricciones",
-      "manufacturing": "Fabricación"
+      "manufacturing": "Fabricación",
+      "book_opening": "Saldos de apertura del libro"
     },
     "columns": {
       "detail": "Tercero / nota"
@@ -3331,6 +3334,23 @@
       "originalPrice": "Precio original",
       "currentPrice": "Precio actual",
       "invoicedToDate": "Facturado a la fecha"
+    }
+  },
+  "bookDifferences": {
+    "title": "Diferencias entre libros",
+    "asOf": "{primary} comparado con {compare} · al {date}",
+    "compareBook": "Comparar con",
+    "empty": "Ninguno de los libros tiene saldo para la selección.",
+    "unavailableTitle": "No hay libro para comparar",
+    "setupBooks": "Libros contables",
+    "currencyNote": "El libro principal presenta esta vista en {primary} y el libro comparado en {compare}, por lo que no se calcula diferencia.",
+    "retainedEarningsPrior": "Ganancias retenidas (ejercicios anteriores)",
+    "columns": {
+      "accountNumber": "Cuenta",
+      "accountName": "Nombre",
+      "primary": "Saldo {book} ({currency})",
+      "compare": "Saldo {book} ({currency})",
+      "difference": "Diferencia"
     }
   }
 }

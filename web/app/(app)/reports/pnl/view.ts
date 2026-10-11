@@ -98,7 +98,7 @@ export async function loadPnl(sp: Record<string, string | undefined>): Promise<P
   let view: StatementView | null = null
   let ratesBlocked: RatesBlockedNotice | null = null
   try {
-    subView = await reportSubsidiaryView(q.subsidiaryId, period.to)
+    subView = await reportSubsidiaryView(q.subsidiaryId, period.to, selectedBook.id)
     view = await profitAndLossView({ from: period.from, to: period.to }, period.label, labels, {
       breakout: q.breakout,
       compare: q.compare,

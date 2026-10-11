@@ -102,6 +102,10 @@ export async function reportsHubFor(
     authz ? isFeatureEnabled(authz.user.orgId, 'warehousing') : Promise.resolve(false),
     authz && can(authz, 'resourcing.read') ? isFeatureEnabled(authz.user.orgId, 'resourcing') : Promise.resolve(false),
   ])
+  // Multi-book accounting gates the book-to-book comparison.
+  const multiBookEnabled = authz && can(authz, 'gl.read')
+    ? await isFeatureEnabled(authz.user.orgId, 'multiBookAccounting')
+    : false
   // Projects → Progress tracking gates the Earned value report.
   const progressEnabled = projectsEnabled && authz && can(authz, 'projects.read')
     ? await isFeatureEnabled(authz.user.orgId, 'projectProgress')
@@ -216,6 +220,7 @@ export async function reportsHubFor(
         card('cashFlow', '/reports/cash-flow', 'Waves', 'statement'),
         card('cashFlowIndirect', '/reports/cash-flow-indirect', 'Waves', 'statement'),
         card('trialBalance', '/reports/trial-balance', 'ClipboardList', 'ledger'),
+        ...(multiBookEnabled ? [card('bookDifferences', '/reports/book-differences', 'BookOpen', 'ledger')] : []),
       ],
     },
     {
@@ -370,6 +375,7 @@ export async function reportsHubFor(
             warehousing: warehousingEnabled,
             resourcing: resourcingEnabled,
             payroll: payrollEnabled && Boolean(authz && can(authz, 'payroll.read')),
+            multiBookAccounting: multiBookEnabled,
           }),
         ).map((s) => {
           const qs = new URLSearchParams(s.params ?? {}).toString()

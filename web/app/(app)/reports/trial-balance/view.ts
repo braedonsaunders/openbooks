@@ -116,7 +116,7 @@ export async function loadTrialBalance(
   let ratesBlocked: RatesBlockedNotice | null = null
   let currencyBasisBlocked: CurrencyBasisNotice | null = null
   try {
-    subView = await reportSubsidiaryView(q.subsidiaryId, date)
+    subView = await reportSubsidiaryView(q.subsidiaryId, date, selectedBook.id)
     rows = await trialBalance(date, { ...q.dims, subsidiaryIds: subView.subsidiary?.ids }, undefined, selectedBook.id)
   } catch (e) {
     // Underived consolidated rates must not throw out of SSR:

@@ -1453,7 +1453,8 @@
     "purchase_orders_read": "View purchase orders and receipts",
     "purchase_orders_create": "Create, change and void purchase orders",
     "goods_receipts_create": "Receive goods against purchase orders",
-    "time_self": "Enter and submit own time"
+    "time_self": "Enter and submit own time",
+    "gl_post_book_specific": "Post book-specific journals"
   },
   "ai": {
     "metaTitle": "AI providers",
@@ -3740,6 +3741,21 @@
         "title": "Job descriptions",
         "singularTitle": "Job description",
         "description": "Reusable posting content a new requisition starts from: title, employment type, pay range and description."
+      },
+      "accounting-book-currencies": {
+        "title": "Book currencies",
+        "description": "The base currency and translation rate type a secondary book keeps for each subsidiary, by effective date.",
+        "singularTitle": "Book currency"
+      },
+      "accounting-book-account-maps": {
+        "title": "Book account mappings",
+        "description": "The account a secondary book carries a chart account in, by effective date and optionally per subsidiary.",
+        "singularTitle": "Book account mapping"
+      },
+      "accounting-book-replication": {
+        "title": "Book replication",
+        "description": "Activate, catch up or stop replicating every transaction into a secondary book, with the history of each change.",
+        "singularTitle": "Replication change"
       }
     },
     "fields": {
@@ -5753,7 +5769,9 @@
         "draftInformationReturns": "{count, plural, one {# information return in progress} other {# information returns in progress}}",
         "unfiledInformationReturns": "{count, plural, one {# finalized information return that has not been filed} other {# finalized information returns that have not been filed}}",
         "activeAllocationRules": "{count, plural, one {# active allocation rule} other {# active allocation rules}}",
-        "previewedAllocationRuns": "{count, plural, one {# previewed allocation run} other {# previewed allocation runs}}"
+        "previewedAllocationRuns": "{count, plural, one {# previewed allocation run} other {# previewed allocation runs}}",
+        "fullReplicationBooks": "Books replicating every transaction",
+        "bookSpecificJournals": "Book-specific journals"
       },
       "errors": {
         "blocked": "This feature can't be turned off — its data is load-bearing for the ledger.",
@@ -7332,6 +7350,62 @@
       "4": "Thursday",
       "5": "Friday",
       "6": "Saturday"
+    },
+    "multiBook": {
+      "currencyFormDescription": "A secondary book can keep a subsidiary in its own base currency. Postings into the book translate at the chosen rate type on their date. A version never changes under entries the book already holds; change the rate type by adding a version from a later date.",
+      "mapFormDescription": "Carry a chart account as another account in one book. The mapping keeps the statement class, honours currency restrictions and applies to every entry replicated or generated into the book from its start date.",
+      "replicationFormDescription": "Each change is recorded with its reason. Activation replicates every transaction from the start date in the same step, and brings earlier history in as opening balances or as full history.",
+      "fields": {
+        "bookId": "Book",
+        "subsidiaryId": "Subsidiary",
+        "mapSubsidiaryId": "Subsidiary (optional)",
+        "currency": "Book currency",
+        "rateType": "Rate type",
+        "effectiveFrom": "Effective from",
+        "effectiveTo": "Effective to",
+        "reason": "Reason",
+        "sourceAccountId": "Chart account",
+        "targetAccountId": "Book account",
+        "kind": "Change",
+        "modeAfter": "Mode",
+        "replicationMode": "Replication",
+        "replicationFrom": "Replicate from",
+        "replicatedCount": "Entries replicated",
+        "createdAt": "Recorded",
+        "openingStrategy": "Earlier history",
+        "currencyDifferenceAccountId": "Currency difference account"
+      },
+      "help": {
+        "bookId": "A secondary book. The primary book is the chart of record and takes no book configuration.",
+        "currency": "One book keeps one currency per subsidiary.",
+        "rateType": "Spot uses the latest rate on or before the posting date; monthly average uses the mean of the month’s spot rates.",
+        "effectiveTo": "Leave empty to keep the version in effect. It cannot end before entries the book already holds under it.",
+        "reason": "Recorded in the audit trail with the change.",
+        "targetAccountId": "Must keep the chart account’s statement class and currency restriction.",
+        "mapSubsidiaryId": "Leave empty to map the account for every subsidiary; a subsidiary mapping wins over an organization-wide one.",
+        "kind": "Activate starts full replication; catch up fills any gap; deactivate stops replication; settings changes the currency difference account.",
+        "replicationFrom": "The first posting date the book receives. Fixed once set.",
+        "openingStrategy": "Opening balances post each account’s balance before the start date; full history requires the primary book to have nothing earlier.",
+        "currencyDifferenceAccountId": "An income, expense or equity account for differences left when a mixed-currency posting translates into the book currency."
+      },
+      "rateTypes": {
+        "spot": "Spot",
+        "month_average": "Monthly average"
+      },
+      "changeKinds": {
+        "activation": "Activate full replication",
+        "catch_up": "Catch up",
+        "deactivation": "Deactivate replication",
+        "settings": "Change settings"
+      },
+      "openingStrategies": {
+        "opening_balances": "Opening balances",
+        "full_history": "Full history"
+      },
+      "modes": {
+        "adjustment_only": "Adjustment only",
+        "full": "Full"
+      }
     }
   },
   "flows": {
@@ -8055,6 +8129,10 @@
     "manufacturingSubcontract": {
       "title": "External manufacturing",
       "description": "Send components to a vendor, record processing services and return production onto the work order."
+    },
+    "multiBookAccounting": {
+      "title": "Multi-book accounting",
+      "description": "Keep secondary accounting books in their own base currency per subsidiary, map accounts per book, replicate every transaction into full books, post book-specific journals and compare books side by side."
     }
   },
   "backupsManager": {

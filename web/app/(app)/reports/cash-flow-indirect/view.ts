@@ -95,7 +95,7 @@ export async function loadCashFlowIndirect(
   let ratesBlocked: RatesBlockedNotice | null = null
   let currencyBasisBlocked: CurrencyBasisNotice | null = null
   try {
-    subView = await reportSubsidiaryView(q.subsidiaryId, period.to)
+    subView = await reportSubsidiaryView(q.subsidiaryId, period.to, selectedBook.id)
     cf = await cashFlowIndirect(from, to, { ...q.dims, subsidiaryIds: subView.subsidiary?.ids }, undefined, selectedBook.id)
   } catch (e) {
     // A multi-currency viewed set is a NAMED refusal, not a defect: the

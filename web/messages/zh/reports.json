@@ -50,7 +50,9 @@
       "statementsTitle": "客户对账单",
       "statementsDescription": "选择客户以打开其对账单 — 该期间的未结项、回款和账龄。",
       "statementBatchesTitle": "对账单批量发送",
-      "statementBatchesDescription": "向所有有余额的客户发送对账单，并跟踪每批直至送达。"
+      "statementBatchesDescription": "向所有有余额的客户发送对账单，并跟踪每批直至送达。",
+      "bookDifferencesTitle": "账簿差异",
+      "bookDifferencesDescription": "主账簿各科目与辅助账簿并列，并显示差异"
     },
     "groups": {
       "financial": "财务报表",
@@ -3173,7 +3175,8 @@
       "gift": "捐赠",
       "grant": "资助",
       "release": "解除用途限制",
-      "manufacturing": "生产制造"
+      "manufacturing": "生产制造",
+      "book_opening": "账簿期初余额"
     },
     "columns": {
       "detail": "往来方 / 备注"
@@ -3331,6 +3334,23 @@
       "originalPrice": "原始价格",
       "currentPrice": "当前价格",
       "invoicedToDate": "截至目前已开票"
+    }
+  },
+  "bookDifferences": {
+    "title": "账簿差异",
+    "asOf": "{primary} 与 {compare} 比较 · 截至 {date}",
+    "compareBook": "比较对象",
+    "empty": "两个账簿在所选范围内均无余额。",
+    "unavailableTitle": "没有可比较的账簿",
+    "setupBooks": "会计账簿",
+    "currencyNote": "主账簿以 {primary} 列示此视图，比较账簿以 {compare} 列示，因此不计算差异。",
+    "retainedEarningsPrior": "留存收益（以前年度）",
+    "columns": {
+      "accountNumber": "科目",
+      "accountName": "名称",
+      "primary": "{book}余额（{currency}）",
+      "compare": "{book}余额（{currency}）",
+      "difference": "差异"
     }
   }
 }

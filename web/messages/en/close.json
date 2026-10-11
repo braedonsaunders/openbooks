@@ -218,6 +218,10 @@
     "commerce-exceptions-open": {
       "title": "Channel exceptions are parked",
       "message": "{count, plural, one {# parked order or event still needs a remedy.} other {# parked orders or events still need a remedy.}}"
+    },
+    "book-replication-incomplete": {
+      "title": "Full books are missing transactions",
+      "message": "{count, plural, one {# transaction has not been replicated into a full book. Record a catch-up under Book replication.} other {# transactions have not been replicated into a full book. Record a catch-up under Book replication.}}"
     }
   },
   "severity": {
@@ -430,6 +434,10 @@
     "commerce-complete": {
       "title": "Prove commerce complete",
       "description": "Every storefront sale is in the ledger: orders match the storefront, payouts are posted, clearing is zero, and liability roll-forwards tie."
+    },
+    "book-replication-complete": {
+      "title": "Confirm full books are complete",
+      "description": "Every transaction through period end is replicated into each book that replicates in full."
     }
   },
   "setup": {

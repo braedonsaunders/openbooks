@@ -218,6 +218,10 @@
     "commerce-exceptions-open": {
       "title": "Des exceptions du canal sont en attente",
       "message": "{count, plural, one {# commande ou événement en attente attend encore sa solution.} other {# commandes ou événements en attente attendent encore leur solution.}}"
+    },
+    "book-replication-incomplete": {
+      "title": "Des transactions manquent dans les livres complets",
+      "message": "{count, plural, one {# transaction n’a pas été répliquée dans un livre complet. Enregistrez un rattrapage dans Réplication des livres.} other {# transactions n’ont pas été répliquées dans un livre complet. Enregistrez un rattrapage dans Réplication des livres.}}"
     }
   },
   "severity": {
@@ -430,6 +434,10 @@
     "commerce-complete": {
       "title": "Prouver l’exhaustivité du commerce",
       "description": "Chaque vente de la boutique est au grand livre : les commandes correspondent à la boutique, les versements sont comptabilisés, les comptes d’attente sont à zéro et les passifs concordent."
+    },
+    "book-replication-complete": {
+      "title": "Confirmer que les livres complets sont exhaustifs",
+      "description": "Chaque transaction jusqu’à la fin de période est répliquée dans chaque livre en réplication complète."
     }
   },
   "setup": {

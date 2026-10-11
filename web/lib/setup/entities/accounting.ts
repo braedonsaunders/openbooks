@@ -21,6 +21,11 @@ export const ACCOUNTING_ENTITIES: SetupEntity[] = [
       { key: 'name', kind: 'text' },
       { key: 'code', kind: 'code' },
       { key: 'isPrimary', kind: 'boolean' },
+      // Changed only through a recorded replication change (Book replication).
+      { key: 'replicationMode', kind: 'badge', labelKey: 'multiBook.fields.replicationMode', options: [
+        { value: 'adjustment_only', labelKey: 'multiBook.modes.adjustment_only' },
+        { value: 'full', labelKey: 'multiBook.modes.full' },
+      ] },
       { key: 'isActive', kind: 'badge-active' },
     ],
     fields: [

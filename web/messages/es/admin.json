@@ -1453,7 +1453,8 @@
     "purchase_orders_read": "Ver órdenes de compra y recepciones",
     "purchase_orders_create": "Crear, modificar y anular órdenes de compra",
     "goods_receipts_create": "Recibir mercancía contra órdenes de compra",
-    "time_self": "Registrar y enviar el propio tiempo"
+    "time_self": "Registrar y enviar el propio tiempo",
+    "gl_post_book_specific": "Registrar asientos específicos de un libro"
   },
   "ai": {
     "metaTitle": "Proveedores de IA",
@@ -3665,6 +3666,21 @@
         "title": "Descripciones de puesto",
         "singularTitle": "Descripción de puesto",
         "description": "Contenido de publicación reutilizable para nuevas solicitudes: título, tipo de empleo, rango salarial y descripción."
+      },
+      "accounting-book-currencies": {
+        "title": "Monedas de libro",
+        "description": "La moneda base y el tipo de cambio de conversión que un libro secundario mantiene para cada subsidiaria, por fecha de vigencia.",
+        "singularTitle": "Moneda de libro"
+      },
+      "accounting-book-account-maps": {
+        "title": "Asignaciones de cuentas por libro",
+        "description": "La cuenta en la que un libro secundario registra una cuenta del plan, por fecha de vigencia y opcionalmente por subsidiaria.",
+        "singularTitle": "Asignación de cuenta"
+      },
+      "accounting-book-replication": {
+        "title": "Replicación de libros",
+        "description": "Active, ponga al día o detenga la replicación de cada transacción en un libro secundario, con el historial de cada cambio.",
+        "singularTitle": "Cambio de replicación"
       }
     },
     "fields": {
@@ -5680,7 +5696,9 @@
         "scheduledTasks": "{count, plural, one {# actividad programada} other {# actividades programadas}}",
         "securityDepositTransactions": "{count, plural, one {# operación de depósito en garantía} other {# operaciones de depósito en garantía}}",
         "submittedTimeEntries": "{count, plural, one {# registro de horas enviado pendiente de revisión} other {# registros de horas enviados pendientes de revisión}}",
-        "subsidiaryTxns": "{count, plural, one {# filial tiene} other {# filiales tienen}} transacciones contabilizadas"
+        "subsidiaryTxns": "{count, plural, one {# filial tiene} other {# filiales tienen}} transacciones contabilizadas",
+        "fullReplicationBooks": "Libros que replican cada transacción",
+        "bookSpecificJournals": "Asientos específicos de un libro"
       },
       "runWizard": "Ejecutar el asistente de configuración",
       "errors": {
@@ -7332,6 +7350,62 @@
       "4": "Jueves",
       "5": "Viernes",
       "6": "Sábado"
+    },
+    "multiBook": {
+      "currencyFormDescription": "Un libro secundario puede mantener una subsidiaria en su propia moneda base. Los registros en el libro se convierten al tipo de cambio elegido en su fecha. Una versión nunca cambia bajo asientos que el libro ya contiene; cambie el tipo de cambio agregando una versión desde una fecha posterior.",
+      "mapFormDescription": "Registre una cuenta del plan como otra cuenta en un libro. La asignación conserva la clase del estado financiero, respeta las restricciones de moneda y se aplica a cada asiento replicado o generado en el libro desde su fecha de inicio.",
+      "replicationFormDescription": "Cada cambio se registra con su motivo. La activación replica cada transacción desde la fecha de inicio en el mismo paso e incorpora el historial anterior como saldos de apertura o como historial completo.",
+      "fields": {
+        "bookId": "Libro",
+        "subsidiaryId": "Subsidiaria",
+        "mapSubsidiaryId": "Subsidiaria (opcional)",
+        "currency": "Moneda del libro",
+        "rateType": "Tipo de cambio",
+        "effectiveFrom": "Vigente desde",
+        "effectiveTo": "Vigente hasta",
+        "reason": "Motivo",
+        "sourceAccountId": "Cuenta del plan",
+        "targetAccountId": "Cuenta en el libro",
+        "kind": "Cambio",
+        "modeAfter": "Modo",
+        "replicationMode": "Replicación",
+        "replicationFrom": "Replicar desde",
+        "replicatedCount": "Asientos replicados",
+        "createdAt": "Registrado",
+        "openingStrategy": "Historial anterior",
+        "currencyDifferenceAccountId": "Cuenta de diferencias de cambio"
+      },
+      "help": {
+        "bookId": "Un libro secundario. El libro principal es el libro de referencia y no admite configuración de libro.",
+        "currency": "Un libro mantiene una moneda por subsidiaria.",
+        "rateType": "Contado usa el último tipo en la fecha de registro o antes; promedio mensual usa la media de los tipos de contado del mes.",
+        "effectiveTo": "Déjelo vacío para mantener la versión vigente. No puede terminar antes de asientos que el libro ya contiene bajo ella.",
+        "reason": "Se registra en el registro de auditoría con el cambio.",
+        "targetAccountId": "Debe conservar la clase de estado financiero y la restricción de moneda de la cuenta.",
+        "mapSubsidiaryId": "Déjelo vacío para asignar la cuenta en todas las subsidiarias; una asignación por subsidiaria prevalece sobre una de toda la organización.",
+        "kind": "Activar inicia la replicación completa; poner al día cubre cualquier hueco; desactivar detiene la replicación; configuración cambia la cuenta de diferencias de cambio.",
+        "replicationFrom": "La primera fecha de registro que recibe el libro. Fija una vez establecida.",
+        "openingStrategy": "Los saldos de apertura registran el saldo de cada cuenta antes de la fecha de inicio; el historial completo requiere que el libro principal no tenga nada anterior.",
+        "currencyDifferenceAccountId": "Una cuenta de ingresos, gastos o patrimonio para las diferencias que quedan al convertir un registro de varias monedas a la moneda del libro."
+      },
+      "rateTypes": {
+        "spot": "Contado",
+        "month_average": "Promedio mensual"
+      },
+      "changeKinds": {
+        "activation": "Activar replicación completa",
+        "catch_up": "Poner al día",
+        "deactivation": "Desactivar replicación",
+        "settings": "Cambiar configuración"
+      },
+      "openingStrategies": {
+        "opening_balances": "Saldos de apertura",
+        "full_history": "Historial completo"
+      },
+      "modes": {
+        "adjustment_only": "Solo ajustes",
+        "full": "Completo"
+      }
     }
   },
   "flows": {
@@ -8055,6 +8129,10 @@
     "manufacturingSubcontract": {
       "title": "Fabricación externa",
       "description": "Envíe componentes a un proveedor, registre servicios y devuelva la producción a la orden."
+    },
+    "multiBookAccounting": {
+      "title": "Contabilidad multilibro",
+      "description": "Mantenga libros secundarios en su propia moneda base por subsidiaria, asigne cuentas por libro, replique cada transacción en los libros completos, registre asientos específicos de un libro y compare libros lado a lado."
     }
   },
   "backupsManager": {

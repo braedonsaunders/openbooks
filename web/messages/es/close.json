@@ -218,6 +218,10 @@
     "commerce-exceptions-open": {
       "title": "Hay excepciones del canal en espera",
       "message": "{count, plural, one {Queda # pedido o evento en espera sin solución.} other {Quedan # pedidos o eventos en espera sin solución.}}"
+    },
+    "book-replication-incomplete": {
+      "title": "A los libros completos les faltan transacciones",
+      "message": "{count, plural, one {# transacción no se ha replicado en un libro completo. Registre una puesta al día en Replicación de libros.} other {# transacciones no se han replicado en un libro completo. Registre una puesta al día en Replicación de libros.}}"
     }
   },
   "severity": {
@@ -430,6 +434,10 @@
     "commerce-complete": {
       "title": "Probar la integridad del comercio",
       "description": "Cada venta de la tienda está en el mayor: los pedidos coinciden con la tienda, los pagos están contabilizados, la compensación queda en cero y los pasivos cuadran."
+    },
+    "book-replication-complete": {
+      "title": "Confirmar que los libros completos están completos",
+      "description": "Cada transacción hasta el cierre del período está replicada en cada libro con replicación completa."
     }
   },
   "setup": {

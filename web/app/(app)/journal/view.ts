@@ -23,6 +23,8 @@ import { resolveFormLayout } from '../../../lib/customization/resolve'
 import { customSegmentOptions } from '../../../lib/segments'
 import type { JournalDrawer } from './JournalDrawer'
 import type { ModuleHomeTab } from '../../../components/module-home/tab-types'
+import { journalBookOptions } from '../../../lib/journal-book'
+import { isFeatureEnabled } from '../../../lib/features'
 
 interface PickerResult<T> { rows: T[] }
 interface PartyPickerRow { id: string; display_name: string }
@@ -169,6 +171,10 @@ export async function loadJournal(
       })()
     : null
 
+  // The book selector appears only when Multi-book accounting offers a choice.
+  const books = (openJournal || newJournalPayload) && pickers && await isFeatureEnabled(authz.user.orgId, 'multiBookAccounting')
+    ? await journalBookOptions(authz.user.orgId)
+    : []
   const drawer: JournalDrawerProps | null =
     (openJournal || newJournalPayload) && pickers
       ? {
@@ -179,6 +185,8 @@ export async function loadJournal(
           departments: pickers[2].rows,
           projects: pickers[3].rows,
           subsidiaries: pickers[6] ?? undefined,
+          books: books.length > 1 ? books : undefined,
+          canPostBookSpecific: can(authz, 'gl.post_book_specific'),
           headerDefs: visibleCustomFieldDefs(pickers[4], customFieldViewerFor(authz)) as unknown as import('../../../components/custom-field-inputs').CustomFieldDefClient[],
           customFieldViewer: customFieldViewerFor(authz),
           lineDefs: pickers[5] as unknown as import('../../../components/custom-field-inputs').CustomFieldDefClient[],

@@ -50,7 +50,9 @@
       "statementsTitle": "Kundenkontoauszüge",
       "statementsDescription": "Kunden wählen, um den Kontoauszug zu öffnen – offene Posten, Zahlungen und Fälligkeiten im Zeitraum.",
       "statementBatchesTitle": "Sammelversand",
-      "statementBatchesDescription": "Kontoauszüge an alle Kunden mit Saldo senden und jeden Versand nachverfolgen."
+      "statementBatchesDescription": "Kontoauszüge an alle Kunden mit Saldo senden und jeden Versand nachverfolgen.",
+      "bookDifferencesTitle": "Buchdifferenzen",
+      "bookDifferencesDescription": "Jedes Konto im Hauptbuch neben einem Nebenbuch, mit der Differenz"
     },
     "groups": {
       "financial": "Finanzberichte",
@@ -3173,7 +3175,8 @@
       "gift": "Spende",
       "grant": "Zuschuss",
       "release": "Freigabe aus Zweckbindungen",
-      "manufacturing": "Fertigung"
+      "manufacturing": "Fertigung",
+      "book_opening": "Eröffnungssalden des Buchs"
     },
     "columns": {
       "detail": "Geschäftspartner / Notiz"
@@ -3331,6 +3334,23 @@
       "originalPrice": "Ursprünglicher Preis",
       "currentPrice": "Aktueller Preis",
       "invoicedToDate": "Bisher fakturiert"
+    }
+  },
+  "bookDifferences": {
+    "title": "Buchdifferenzen",
+    "asOf": "{primary} verglichen mit {compare} · Stand {date}",
+    "compareBook": "Vergleichen mit",
+    "empty": "Keines der Bücher weist für die Auswahl einen Saldo aus.",
+    "unavailableTitle": "Kein Buch zum Vergleichen",
+    "setupBooks": "Bücher",
+    "currencyNote": "Das Hauptbuch weist diese Ansicht in {primary} aus und das Vergleichsbuch in {compare}; daher wird keine Differenz berechnet.",
+    "retainedEarningsPrior": "Gewinnvortrag (Vorjahre)",
+    "columns": {
+      "accountNumber": "Konto",
+      "accountName": "Kontobezeichnung",
+      "primary": "Saldo {book} ({currency})",
+      "compare": "Saldo {book} ({currency})",
+      "difference": "Differenz"
     }
   }
 }

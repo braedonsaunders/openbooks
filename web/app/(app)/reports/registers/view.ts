@@ -149,7 +149,7 @@ export async function loadRegisters(sp: Record<string, string | undefined>): Pro
   let currencyBasisBlocked: CurrencyBasisNotice | null = null
   let reg: Awaited<ReturnType<typeof partyRegister>> | null = null
   try {
-    subView = await reportSubsidiaryView(q.subsidiaryId, period.to)
+    subView = await reportSubsidiaryView(q.subsidiaryId, period.to, selectedBook.id)
     reg = await partyRegister(side, {
       bookId: selectedBook.id,
       from: period.from,

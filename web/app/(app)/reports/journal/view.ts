@@ -141,7 +141,7 @@ export async function loadJournal(sp: Record<string, string | undefined>): Promi
   let currencyBasisBlocked: CurrencyBasisNotice | null = null
   let journal: Awaited<ReturnType<typeof journalReport>> | null = null
   try {
-    subView = await reportSubsidiaryView(q.subsidiaryId, period.to)
+    subView = await reportSubsidiaryView(q.subsidiaryId, period.to, selectedBook.id)
     journal = await journalReport(period.from, period.to, {
       dims: { ...q.dims, subsidiaryIds: subView.subsidiary?.ids },
       bookId: selectedBook?.id,

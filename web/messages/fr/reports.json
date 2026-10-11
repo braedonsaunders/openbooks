@@ -50,7 +50,9 @@
       "statementsTitle": "Relevés clients",
       "statementsDescription": "Choisissez un client pour ouvrir son relevé : pièces ouvertes, paiements et ancienneté de la période.",
       "statementBatchesTitle": "Envois de relevés",
-      "statementBatchesDescription": "Envoyez les relevés à tous les clients avec un solde, puis suivez chaque envoi jusqu’à sa livraison."
+      "statementBatchesDescription": "Envoyez les relevés à tous les clients avec un solde, puis suivez chaque envoi jusqu’à sa livraison.",
+      "bookDifferencesTitle": "Écarts entre livres",
+      "bookDifferencesDescription": "Chaque compte du livre principal à côté d’un livre secondaire, avec l’écart"
     },
     "groups": {
       "financial": "États financiers",
@@ -3153,7 +3155,8 @@
       "gift": "Don",
       "grant": "Subvention",
       "release": "Levée des restrictions",
-      "manufacturing": "Fabrication"
+      "manufacturing": "Fabrication",
+      "book_opening": "Soldes d’ouverture du livre"
     },
     "columns": {
       "detail": "Tiers / mémo"
@@ -3331,6 +3334,23 @@
       "originalPrice": "Prix initial",
       "currentPrice": "Prix actuel",
       "invoicedToDate": "Facturé à ce jour"
+    }
+  },
+  "bookDifferences": {
+    "title": "Écarts entre livres",
+    "asOf": "{primary} comparé à {compare} · au {date}",
+    "compareBook": "Comparer avec",
+    "empty": "Aucun des deux livres n’a de solde pour la sélection.",
+    "unavailableTitle": "Aucun livre à comparer",
+    "setupBooks": "Livres comptables",
+    "currencyNote": "Le livre principal présente cette vue en {primary} et le livre comparé en {compare} ; aucun écart n’est donc calculé.",
+    "retainedEarningsPrior": "Résultats non distribués (exercices antérieurs)",
+    "columns": {
+      "accountNumber": "Compte",
+      "accountName": "Nom",
+      "primary": "Solde {book} ({currency})",
+      "compare": "Solde {book} ({currency})",
+      "difference": "Écart"
     }
   }
 }

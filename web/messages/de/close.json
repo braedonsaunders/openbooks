@@ -218,6 +218,10 @@
     "commerce-exceptions-open": {
       "title": "Kanalausnahmen warten",
       "message": "{count, plural, one {# geparkte Bestellung oder geparktes Ereignis braucht noch eine Lösung.} other {# geparkte Bestellungen oder Ereignisse brauchen noch eine Lösung.}}"
+    },
+    "book-replication-incomplete": {
+      "title": "Vollständigen Büchern fehlen Buchungen",
+      "message": "{count, plural, one {# Buchung wurde nicht in ein vollständiges Buch übernommen. Erfassen Sie unter Buchübernahme eine Aktualisierung.} other {# Buchungen wurden nicht in ein vollständiges Buch übernommen. Erfassen Sie unter Buchübernahme eine Aktualisierung.}}"
     }
   },
   "severity": {
@@ -430,6 +434,10 @@
     "commerce-complete": {
       "title": "Commerce-Vollständigkeit nachweisen",
       "description": "Jeder Shopverkauf steht im Hauptbuch: Bestellungen stimmen mit dem Shop überein, Auszahlungen sind gebucht, Verrechnungskonten sind null, und Schuldabstimmungen stimmen."
+    },
+    "book-replication-complete": {
+      "title": "Vollständigkeit der vollständigen Bücher bestätigen",
+      "description": "Jede Buchung bis zum Periodenende ist in jedes Buch mit vollständiger Übernahme übernommen."
     }
   },
   "setup": {

@@ -218,6 +218,10 @@
     "commerce-exceptions-open": {
       "title": "チャネル例外が保留中です",
       "message": "{count, plural, one {# 件の保留中の注文またはイベントが対応を待っています。} other {# 件の保留中の注文またはイベントが対応を待っています。}}"
+    },
+    "book-replication-incomplete": {
+      "title": "フル帳簿に取引の欠落があります",
+      "message": "{count, plural, other {# 件の取引がフル帳簿に複製されていません。帳簿の複製で追いつきを記録してください。}}"
     }
   },
   "severity": {
@@ -430,6 +434,10 @@
     "commerce-complete": {
       "title": "コマースの完全性を証明する",
       "description": "すべての店舗売上は元帳にあります。注文は店舗と一致し、精算は転記済み、クリアリングはゼロ、負債の繰越は一致しています。"
+    },
+    "book-replication-complete": {
+      "title": "フル帳簿の完全性を確認",
+      "description": "期末までのすべての取引が、完全複製の各帳簿に複製されています。"
     }
   },
   "setup": {
