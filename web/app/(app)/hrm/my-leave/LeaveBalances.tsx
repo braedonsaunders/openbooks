@@ -17,6 +17,7 @@ export function LeaveBalances({
   takenLabel,
   pendingLabel,
   remainingLabel,
+  serviceStartUnknownLabel,
   empty,
 }: {
   balances: {
@@ -30,6 +31,7 @@ export function LeaveBalances({
     taken: string | null
     pending: string | null
     remaining: string | null
+    serviceStartUnknown?: boolean
   }[]
   timeKindLabel: string
   valueKindLabel: string
@@ -38,6 +40,7 @@ export function LeaveBalances({
   takenLabel: string
   pendingLabel: string
   remainingLabel: string
+  serviceStartUnknownLabel?: string
   empty: string
 }) {
   if (balances.length === 0) {
@@ -60,6 +63,11 @@ export function LeaveBalances({
               <span className="block text-xs font-normal tabular-nums text-slate-400 dark:text-slate-500">
                 {entitlementLabel} {row.entitlement ?? '—'} · {takenLabel} {row.taken ?? '—'} ·{' '}
                 {pendingLabel} {row.pending ?? '—'} · {remainingLabel} {row.remaining ?? '—'}
+              </span>
+            ) : null}
+            {row.kind === 'time' && row.serviceStartUnknown && serviceStartUnknownLabel ? (
+              <span className="block text-xs font-normal text-amber-600 dark:text-amber-400">
+                {serviceStartUnknownLabel}
               </span>
             ) : null}
           </span>

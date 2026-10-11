@@ -928,7 +928,8 @@
     "balancePerson": "Auf Personenebene",
     "timeKind": "Zeit",
     "valueKind": "Geldwert",
-    "unlimited": "Unbegrenzt"
+    "unlimited": "Unbegrenzt",
+    "serviceStartUnknown": "Mit Basisstunden bewertet — kein Dienstbeginn erfasst. Bitten Sie die Personalabteilung, das Eintrittsdatum zu erfassen."
   },
   "recruiting": {
     "title": "Einstellung",

@@ -693,6 +693,7 @@ const hrmLeave: AssistantToolDef = {
         earned: string | null;
         carried: string;
         taken: string;
+        serviceStartUnknown: boolean;
       }[] | null = null;
       if (a.includeBalances) {
         if (!a.employmentId) return { ok: false, error: "balances_need_employment" };
@@ -709,6 +710,7 @@ const hrmLeave: AssistantToolDef = {
             earned: read.earned,
             carried: read.carried,
             taken: read.taken,
+            serviceStartUnknown: read.serviceStartUnknown,
           });
         }
       }

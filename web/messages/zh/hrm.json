@@ -928,7 +928,8 @@
     "balancePerson": "个人级别",
     "timeKind": "时间",
     "valueKind": "金额",
-    "unlimited": "无限制"
+    "unlimited": "无限制",
+    "serviceStartUnknown": "按基准小时数计算——未记录服务开始日期。请让人事部门记录开始日期。"
   },
   "recruiting": {
     "title": "招聘",

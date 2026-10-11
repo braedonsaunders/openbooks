@@ -928,7 +928,8 @@
     "balancePerson": "Person-level",
     "timeKind": "time",
     "valueKind": "value",
-    "unlimited": "Unlimited"
+    "unlimited": "Unlimited",
+    "serviceStartUnknown": "Priced at base hours — no service start is recorded. Ask HR to record the start date."
   },
   "recruiting": {
     "title": "Recruiting",

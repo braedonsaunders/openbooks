@@ -80,6 +80,7 @@ export function myLeaveSpec(data: MyLeaveData): PageSpec {
                 takenLabel: data.takenLabel,
                 pendingLabel: data.pendingLabel,
                 remainingLabel: data.remainingLabel,
+                serviceStartUnknownLabel: data.serviceStartUnknownLabel,
                 empty: data.balancesEmpty,
               }),
             ],

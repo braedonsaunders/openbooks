@@ -137,6 +137,7 @@ export function meSpec(data: MeOverviewData): PageSpec {
             timeKindLabel: data.timeKindLabel,
             valueKindLabel: data.valueKindLabel,
             unlimitedLabel: data.unlimitedLabel,
+            serviceStartUnknownLabel: data.serviceStartUnknownLabel,
             empty: data.balancesEmpty,
           }),
 // HR-14 begin: the viewer's own certifications needing action —

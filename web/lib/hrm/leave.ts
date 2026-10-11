@@ -479,6 +479,8 @@ export interface MyLeaveBalance {
   taken: string | null
   pending: string | null
   remaining: string | null
+  /** True when tiered accrual priced at base hours for an unknown service start. */
+  serviceStartUnknown: boolean
 }
 
 export interface MyLeaveData {
@@ -500,6 +502,7 @@ export interface MyLeaveData {
   takenLabel: string
   pendingLabel: string
   remainingLabel: string
+  serviceStartUnknownLabel: string
   columns: { employee: string; type: string; range: string; hours: string; status: string }
   emptyTitle: string
   emptyDescription: string
@@ -552,6 +555,7 @@ export async function loadMyLeave(
     takenLabel: t('leave.balanceTaken'),
     pendingLabel: t('leave.balancePending'),
     remainingLabel: t('leave.balanceRemaining'),
+    serviceStartUnknownLabel: t('myLeave.serviceStartUnknown'),
     queue: { notAvailable: t('queue.notAvailable'), openEmployee: t('queue.openEmployee') },
     openRequest: t('leave.openRequest'),
     fileHref: leaveHref('/hrm/my-leave', undefined, { file: '1' }),
@@ -631,6 +635,7 @@ export async function loadMyLeave(
           taken: row.taken,
           pending: row.pending,
           remaining: row.remaining,
+          serviceStartUnknown: row.serviceStartUnknown,
         })
       }
     }
@@ -640,7 +645,7 @@ export async function loadMyLeave(
     if (party) {
       const banks = await payrollBankBalances(orgId, party, { asOf })
       for (const bank of banks) {
-        balances.push({ leaveTypeCode: bank.planCode, kind: 'value', employmentId: null, scopeLabel: t('myLeave.balancePerson'), balance: bank.balance, unlimited: false, entitlement: null, taken: null, pending: null, remaining: null })
+        balances.push({ leaveTypeCode: bank.planCode, kind: 'value', employmentId: null, scopeLabel: t('myLeave.balancePerson'), balance: bank.balance, unlimited: false, entitlement: null, taken: null, pending: null, remaining: null, serviceStartUnknown: false })
       }
     }
   }

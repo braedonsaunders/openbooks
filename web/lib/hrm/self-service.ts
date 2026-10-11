@@ -324,6 +324,7 @@ export interface MeOverviewData {
   timeKindLabel: string
   valueKindLabel: string
   unlimitedLabel: string
+  serviceStartUnknownLabel: string
   leaveHref: string
   viewLeave: string
   extensionsTitle: string
@@ -447,6 +448,7 @@ export async function loadMeOverview(authz: Authz): Promise<MeOverviewData> {
     timeKindLabel: t('myLeave.timeKind'),
     valueKindLabel: t('myLeave.valueKind'),
     unlimitedLabel: t('myLeave.unlimited'),
+    serviceStartUnknownLabel: t('myLeave.serviceStartUnknown'),
     leaveHref: '/hrm/my-leave',
     viewLeave: t('me.overview.viewLeave'),
     extensionsTitle: t('me.overview.extensionsTitle'),

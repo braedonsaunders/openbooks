@@ -413,6 +413,7 @@ export const HRM_WIDGETS = {
       takenLabel={str(props, 'takenLabel') ?? ''}
       pendingLabel={str(props, 'pendingLabel') ?? ''}
       remainingLabel={str(props, 'remainingLabel') ?? ''}
+      serviceStartUnknownLabel={str(props, 'serviceStartUnknownLabel') ?? ''}
       empty={str(props, 'empty') ?? ''}
     />
   ),

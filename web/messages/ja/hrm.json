@@ -928,7 +928,8 @@
     "balancePerson": "個人単位",
     "timeKind": "時間",
     "valueKind": "金額",
-    "unlimited": "無制限"
+    "unlimited": "無制限",
+    "serviceStartUnknown": "基本時間で計算されています — 勤務開始日が未登録です。人事に開始日の登録を依頼してください。"
   },
   "recruiting": {
     "title": "採用",

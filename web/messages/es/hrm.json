@@ -928,7 +928,8 @@
     "balancePerson": "A nivel de persona",
     "timeKind": "tiempo",
     "valueKind": "valor",
-    "unlimited": "Ilimitado"
+    "unlimited": "Ilimitado",
+    "serviceStartUnknown": "Calculado con horas base — no hay fecha de inicio registrada. Pida a RR. HH. que registre la fecha de inicio."
   },
   "recruiting": {
     "title": "Contratación",
