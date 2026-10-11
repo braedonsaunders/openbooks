@@ -188,3 +188,26 @@ test("costing read names the company received-not-billed default", async () => {
     await dropScratchOrg(fx.orgId);
   }
 });
+
+test("a unit-conversion row saves through the costing section with a before/after audit", async () => {
+  const fx = await fixture();
+  try {
+    const before = await profile(fx);
+    // The Unit conversions section's add-row posts the whole map; the item
+    // starts with no conversions.
+    const response = await call(PUT, fx.itemId, { ...putBody(fx, before.updated_at, "12.50"), unitConversions: { box: 12 } });
+    assert.equal(response.status, 200, JSON.stringify(await response.json().catch(() => null)));
+    const stored = (await withBypassContext(() => db.execute<{ unit_conversions: unknown }>(sql`
+      select unit_conversions from item_inventory_profiles where org_id = ${fx.orgId} and item_id = ${fx.itemId}`))).rows[0];
+    assert.deepEqual(stored?.unit_conversions, { box: 12 }, "the conversion row persists");
+    const audit = (await withBypassContext(() => db.execute<{ action: string; changes: Record<string, any> }>(sql`
+      select action, changes from audit_log
+       where org_id = ${fx.orgId} and table_name = 'item_inventory_profiles' and row_id = ${fx.itemId}
+       order by at desc, id desc limit 1`))).rows[0];
+    assert.equal(audit?.action, "update");
+    assert.deepEqual(audit?.changes.after.unit_conversions, { box: 12 }, "the audit carries the added row");
+    assert.ok(!("box" in ((audit?.changes.before.unit_conversions ?? {}) as Record<string, unknown>)), "the audit shows the row as new");
+  } finally {
+    await dropScratchOrg(fx.orgId);
+  }
+});

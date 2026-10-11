@@ -420,6 +420,30 @@ async function readReceiptRefusalMessage(res: Response, fallback: string): Promi
   return remedy && !message.includes(remedy) ? `${message} — ${remedy}` : message
 }
 
+interface UnitConversionRemedyTarget {
+  itemId: string
+  itemName: string | null
+  unit: string | null
+}
+
+async function readUnitConversionRemedyTarget(res: Response): Promise<UnitConversionRemedyTarget | null> {
+  if (res.ok || typeof res.clone !== 'function') return null
+  const body = (await res.clone().json().catch(() => null)) as {
+    code?: unknown
+    details?: unknown
+  } | null
+  if (!body || typeof body !== 'object' || body.code !== 'ITEM_MISSING_UNIT_CONVERSION') return null
+  const details = body.details as { itemId?: unknown; itemName?: unknown; unit?: unknown } | null
+  if (!details || typeof details !== 'object' || typeof details.itemId !== 'string' || details.itemId === '') {
+    return null
+  }
+  return {
+    itemId: details.itemId,
+    itemName: typeof details.itemName === 'string' && details.itemName !== '' ? details.itemName : null,
+    unit: typeof details.unit === 'string' && details.unit !== '' ? details.unit : null,
+  }
+}
+
 async function readRnbRemedyTarget(res: Response): Promise<RnbRemedyTarget | null> {
   if (res.ok || typeof res.clone !== 'function') return null
   const body = (await res.clone().json().catch(() => null)) as {
@@ -750,6 +774,9 @@ export function OrderDrawer({
   // panel below can link its costing profile. Cleared with every new convert
   // and shown only while the matching refusal is pinned.
   const [rnbRemedy, setRnbRemedy] = useState<RnbRemedyTarget | null>(null)
+  // Unit-conversion remedy: the refused response names the item whose
+  // costing section gains the conversion row; the section links there.
+  const [unitConversionRemedy, setUnitConversionRemedy] = useState<UnitConversionRemedyTarget | null>(null)
   // Frozen while an action is in flight (the same busy convention the buttons
   // already use): the grid otherwise accepts typing during the save PATCH,
   // and those un-sent edits would be shown as saved and lost on close.
@@ -1651,6 +1678,7 @@ export function OrderDrawer({
     // retries with the same idempotency key and replays instead of doubling.
     let outcome: { ok: true } | { ok: false; message: string } = { ok: false, message: t('receive.receiptFailed') }
     setRnbRemedy(null)
+    setUnitConversionRemedy(null)
     await execute<ConvertedDocument>(async () => {
       const res = await fetch(`${apiBase}/${doc.id}/receive`, {
         method: 'POST',
@@ -1660,9 +1688,11 @@ export function OrderDrawer({
       // The status decides refused vs saved — never a bespoke body field.
       // Clone reads run before the action reader consumes the body.
       const remedy = await readRnbRemedyTarget(res)
+      const conversionRemedy = await readUnitConversionRemedyTarget(res)
       const refusalMessage = !res.ok ? await readReceiptRefusalMessage(res, t('receive.receiptFailed')) : null
       const result = await readAppActionResult<ConvertedDocument>(res, { fallback: t('receive.receiptFailed') })
       if (!result.ok && remedy) setRnbRemedy(remedy)
+      if (!result.ok && conversionRemedy) setUnitConversionRemedy(conversionRemedy)
       outcome = result.ok || refusalMessage === null
         ? { ok: true }
         : { ok: false, message: refusalMessage }
@@ -1734,6 +1764,7 @@ export function OrderDrawer({
     // Goods receipts never post from here: "Convert to Goods receipt" opens
     // the prefilled receipt form, which posts only on explicit save.
     setRnbRemedy(null)
+    setUnitConversionRemedy(null)
     await execute<ConvertedDocument | { creditOverrideNeeded: true }>(async () => {
       const res = await fetch(`${apiBase}/${doc.id}/convert`, {
         method: 'POST',
@@ -1745,8 +1776,10 @@ export function OrderDrawer({
         }),
       })
       const remedy = await readRnbRemedyTarget(res)
+      const conversionRemedy = await readUnitConversionRemedyTarget(res)
       const result = await readAppActionResult<ConvertedDocument>(res, { fallback: t('convertFailed') })
       if (!result.ok && remedy) setRnbRemedy(remedy)
+      if (!result.ok && conversionRemedy) setUnitConversionRemedy(conversionRemedy)
       if (
         !result.ok
         && result.error.code === 'CUSTOMER_CREDIT_LIMIT_EXCEEDED'
@@ -2323,6 +2356,19 @@ export function OrderDrawer({
               </Button>
               <Button variant="ghost" size="sm" asChild>
                 <Link href="/admin/setup/company">{t('rnbRemedyCompanyDefault')}</Link>
+              </Button>
+            </div>
+          </section>
+        ) : null}
+        {refusal?.code === 'ITEM_MISSING_UNIT_CONVERSION' && unitConversionRemedy ? (
+          <section aria-label={t('unitConversionRemedyTitle')} className="space-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+            <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{t('unitConversionRemedyTitle')}</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">{t('unitConversionRemedyHint')}</p>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" asChild>
+                <Link href={`/items?item=${encodeURIComponent(unitConversionRemedy.itemId)}&itemTab=costing`}>
+                  {t('unitConversionRemedyOpenCosting', { item: unitConversionRemedy.itemName ?? t('rnbRemedyThisItem'), unit: unitConversionRemedy.unit ?? '' })}
+                </Link>
               </Button>
             </div>
           </section>

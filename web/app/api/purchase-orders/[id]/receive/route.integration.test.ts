@@ -359,12 +359,22 @@ test("unit aliases receive against the base unit; unknown units refuse with a me
       lines: [{ sourceLineId: refusedLine, quantity: "10" }],
     });
     assert.equal(refused.status, 422);
-    const body = (await refused.json()) as { error?: unknown };
+    const body = (await refused.json()) as {
+      error?: unknown
+      code?: unknown
+      details?: { itemId?: unknown; itemName?: unknown; unit?: unknown; baseUnit?: unknown }
+    };
     assert.match(
       String(body.error ?? ""),
       /no conversion to the item's base unit/,
       "the refusal renders its remedy instead of an empty answer",
     );
+    // The drawer links the refusal to the item's costing section, so the
+    // code and item identity ride the body — never message text alone.
+    assert.equal(body.code, "ITEM_MISSING_UNIT_CONVERSION");
+    assert.equal(body.details?.itemId, org.items.fifo);
+    assert.equal(typeof body.details?.itemName, "string");
+    assert.equal(body.details?.unit, "crate");
     const refusedFacts = await receiptFacts(org.orgId, refusedLine);
     assert.equal(toUnits(refusedFacts.received), toUnits("0"), "a refused save advances nothing");
     assert.equal(refusedFacts.receipts, 1, "only the aliased receipt exists");

@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { lineRequiresReceipt } from '@openbooks/engine/src/records/stock-receipt.ts'
-import { InventoryError, InventoryOwnershipError } from '@openbooks/engine/src/inventory/contracts.ts'
+import { InventoryError, InventoryOwnershipError, UnitConversionError } from '@openbooks/engine/src/inventory/contracts.ts'
 import { resolveDefaultWarehouse, WarehouseRefusal } from '@openbooks/engine/src/inventory/warehouses.ts'
 import { defineRoute } from '@/lib/api/route'
 import { notFound } from '@/lib/api/responses'
@@ -172,6 +172,14 @@ export const POST = defineRoute({
       if (error instanceof WarehouseRefusal) {
         return NextResponse.json(
           { error: error.message, code: error.code, details: { remedy: error.remedy } },
+          { status: error.status },
+        )
+      }
+      // A missing unit conversion keeps its code and item identity so the
+      // drawer links the refusal to the item's costing section.
+      if (error instanceof UnitConversionError) {
+        return NextResponse.json(
+          { error: error.message, code: error.code, details: error.details },
           { status: error.status },
         )
       }

@@ -48,6 +48,28 @@ export class DownstreamConsumptionError extends InventoryError {
   }
 }
 
+/** Machine-readable code for a movement refused until its unit gains a conversion row. */
+export const ITEM_MISSING_UNIT_CONVERSION = "ITEM_MISSING_UNIT_CONVERSION";
+
+/**
+ * A line raised in a unit the item cannot convert to its base unit. The
+ * message names the remedy that exists (raise the line in the base unit, or
+ * add the conversion under Unit conversions on the item's Inventory costing
+ * section); `details` carries the machine-readable item identity the
+ * document drawer offers as a link to that section.
+ */
+export class UnitConversionError extends InventoryError {
+  readonly code = ITEM_MISSING_UNIT_CONVERSION;
+  readonly status = 422;
+  constructor(
+    message: string,
+    readonly details: { itemId: string | null; itemName: string | null; unit: string; baseUnit: string },
+  ) {
+    super(message);
+    this.name = "UnitConversionError";
+  }
+}
+
 /** Machine-readable code for a vendor bill refused until its stocked lines are matched to their purchase-order lines. */
 export const BILL_LINES_UNMATCHED = "BILL_LINES_UNMATCHED";
 

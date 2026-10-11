@@ -80,6 +80,7 @@ export async function loadDocumentInventoryLines(
       line_id: string;
       line_number: number;
       item_id: string;
+      item_name: string;
       quantity: string;
       unit: string | null;
       amount: string;
@@ -101,6 +102,7 @@ export async function loadDocumentInventoryLines(
       custom: unknown;
     }>(sql`
     select dl.id as line_id, dl.line_number, dl.item_id, i.kind as item_kind,
+           coalesce(nullif(i.code, ''), i.name) as item_name,
            dl.quantity, dl.unit, dl.amount,
            dl.stock_location_id, d.subsidiary_id as document_subsidiary_id,
            d.kind as document_kind,
@@ -182,6 +184,7 @@ export async function loadDocumentInventoryLines(
       parseUnitConversions(row.unit_conversions, lineLabel),
       row.base_unit,
       lineLabel,
+      { id: row.item_id, name: row.item_name },
     );
     out.push({
       lineId: row.line_id,

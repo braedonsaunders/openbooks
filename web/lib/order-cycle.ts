@@ -30,7 +30,7 @@ import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform
 import { applyPurchaseReceiptInventory } from "@openbooks/engine/src/inventory/documents-purchasing.ts";
 import { applySalesFulfillmentInventoryIssues } from "@openbooks/engine/src/inventory/documents-sales.ts";
 import { assertStockLocationAdmitsSubsidiary } from "@openbooks/engine/src/inventory/profile-policy.ts";
-import { InventoryError, InventoryOwnershipError } from "@openbooks/engine/src/inventory/contracts.ts";
+import { InventoryError, InventoryOwnershipError, UnitConversionError } from "@openbooks/engine/src/inventory/contracts.ts";
 import { WarehouseRefusal } from "@openbooks/engine/src/inventory/warehouses.ts";
 import { loadSubsidiaryContext } from '@openbooks/engine/src/organization/subsidiaries.ts'
 import { issueSalesOrder } from '@openbooks/engine/src/sales/sales-orders.ts'
@@ -1779,6 +1779,11 @@ export async function convertOrder(
     } catch (error) {
       if (error instanceof ConversionError) throw error
       if (error instanceof InventoryOwnershipError) throw new ConversionError(error.message, 403)
+      // A missing unit conversion keeps its code and item identity so the
+      // drawer links the refusal to the item's costing section.
+      if (error instanceof UnitConversionError) {
+        throw new ConversionError(error.message, error.status, error.code, error.details)
+      }
       if (error instanceof InventoryError) throw new ConversionError(error.message, 422)
       throw error
     }

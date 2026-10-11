@@ -1,6 +1,12 @@
 import { fromUnits, normalizeDecimal, roundDiv, toUnits } from "../money/money.ts";
 import { canonicalDecimal, multiplyDecimal } from "../money/exact-decimal.ts";
-import { InventoryError } from "./contracts.ts";
+import { InventoryError, UnitConversionError } from "./contracts.ts";
+
+/** Item identity a conversion refusal carries so the drawer can link to the item's costing section. */
+export interface ConversionItemRef {
+  id: string | null;
+  name: string | null;
+}
 
 /**
  * Inventory costing — the pure, exact math behind the subledger. Quantities and
@@ -135,8 +141,9 @@ export function toBaseQuantity(
   conversions: Record<string, number>,
   baseUnit: string,
   lineLabel = "inventory line",
+  item?: ConversionItemRef,
 ): string {
-  const factor = inventoryConversionFactor(unit, conversions, baseUnit, lineLabel);
+  const factor = inventoryConversionFactor(unit, conversions, baseUnit, lineLabel, item);
   return fromUnits(mulUnits(toUnits(quantity), toUnits(factor)));
 }
 
@@ -147,10 +154,11 @@ export function toExactBaseQuantity(
   conversions: Record<string, number>,
   baseUnit: string,
   lineLabel = "inventory line",
+  item?: ConversionItemRef,
 ): string {
   const exact = canonicalDecimal(quantity, 8);
   if (exact === null) throw new InventoryError(`${lineLabel} quantity must be exact decimal text with at most eight places`);
-  return multiplyDecimal(exact, inventoryConversionFactor(unit, conversions, baseUnit, lineLabel), 12);
+  return multiplyDecimal(exact, inventoryConversionFactor(unit, conversions, baseUnit, lineLabel, item), 12);
 }
 
 /** Directed stock quantities must fit the stored scale without changing the document quantity. */
@@ -160,8 +168,9 @@ export function toExactStockQuantity(
   conversions: Record<string, number>,
   baseUnit: string,
   lineLabel = "inventory line",
+  item?: ConversionItemRef,
 ): string {
-  const exact = toExactBaseQuantity(quantity, unit, conversions, baseUnit, lineLabel);
+  const exact = toExactBaseQuantity(quantity, unit, conversions, baseUnit, lineLabel, item);
   try {
     // This normalizer rejects every nonzero digit beyond the stored scale; it never rounds.
     return normalizeDecimal(exact, 4);
@@ -178,6 +187,7 @@ function inventoryConversionFactor(
   conversions: Record<string, number>,
   baseUnit: string,
   lineLabel: string,
+  item?: ConversionItemRef,
 ): string {
   const folded = normalizeInventoryUnit(unit);
   // No unit — or the base unit under any spelling — needs no conversion.
@@ -196,18 +206,24 @@ function inventoryConversionFactor(
       );
       return key === undefined ? undefined : conversions[key];
     })();
+  // Both refusals below carry the item identity the document drawer offers
+  // as a link to the item's Inventory costing section; the message still
+  // names the section in words for surfaces that render text only.
+  const details = { itemId: item?.id ?? null, itemName: item?.name ?? null, unit: trimmed, baseUnit };
   if (typeof factor !== "number" || !Number.isFinite(factor) || factor <= 0) {
-    throw new InventoryError(
+    throw new UnitConversionError(
       `${lineLabel} is raised in unit "${trimmed}" with no conversion to the item's base unit "${baseUnit}" — ` +
         `enter the quantity in ${baseUnit}, or add a "${trimmed}" row under Unit conversions ` +
         `on the item's Inventory costing section`,
+      details,
     );
   }
   const exact = canonicalDecimal(String(factor), 4);
   if (exact === null) {
-    throw new InventoryError(
+    throw new UnitConversionError(
       `${lineLabel} unit "${trimmed}" converts at ${factor} ${baseUnit} per ${trimmed}, which cannot be expressed exactly — ` +
         `configure an exact conversion under Unit conversions on the item's Inventory costing section`,
+      details,
     );
   }
   return exact;

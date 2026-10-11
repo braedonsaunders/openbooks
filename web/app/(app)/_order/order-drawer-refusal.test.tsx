@@ -253,6 +253,54 @@ test('a credit-limit refusal prompts for an override on the stable code', async 
   assert.equal(globalThis.__dashRouter.pushes.length, 1, 'the overridden convert must navigate once')
 })
 
+test('a unit-conversion refusal links to the item costing section', async (t) => {
+  const restoreFetch = scriptFetch(
+    flowsQuiet((url, init) => {
+      if (url === `/api/purchase-orders/${APPROVED_ID}/convert` && init?.method === 'POST') {
+        return Response.json(
+          {
+            error: 'document line 1 (item item-expense) is raised in unit "crate" with no conversion to the item\'s base unit "ea" — enter the quantity in ea, or add a "crate" row under Unit conversions on the item\'s Inventory costing section',
+            code: 'ITEM_MISSING_UNIT_CONVERSION',
+            details: { itemId: 'item-expense', itemName: 'Consulting', unit: 'crate', baseUnit: 'ea' },
+          },
+          { status: 422 },
+        )
+      }
+      return null
+    }),
+  )
+  t.after(restoreFetch)
+  const { unmount } = await mountOrder(
+    {
+      doc: baseDoc({ id: APPROVED_ID, status: 'approved', document_number: 'PO-1002' }),
+      lines: baseLines(),
+      links: [],
+    },
+    'purchase_order',
+  )
+  t.after(unmount)
+  await openActions()
+  // "Convert to Goods receipt" opens the prefilled receipt form; the bill
+  // target posts a conversion, which is the path under test.
+  const convert = buttonsContaining('Convert to Bill')[0]
+  assert.ok(convert, 'an approved purchase order must offer bill conversion')
+  await click(convert)
+  await tick()
+  await tick()
+  const alert = document.querySelector('[role="alert"]')
+  assert.ok(alert, 'the conversion refusal must pin as an alert')
+  assert.match(alert.textContent ?? '', /no conversion/, "the alert must carry the server's reason")
+  const section = document.querySelector('section[aria-label="Add the missing unit conversion"]')
+  assert.ok(section, 'the refusal must offer the costing-section remedy')
+  const link = section.querySelector('a')
+  assert.ok(link, 'the remedy must link somewhere')
+  assert.ok(
+    (link.getAttribute('href') ?? '').includes('/items?item=item-expense&itemTab=costing'),
+    'the remedy must link to the item costing tab',
+  )
+  assert.match(link.textContent ?? '', /crate/, 'the link must name the missing unit')
+})
+
 test('a refused save releases busy and stays in edit mode', async (t) => {
   const restoreFetch = scriptFetch(
     flowsQuiet((url, init) => {

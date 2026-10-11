@@ -22,7 +22,7 @@ import {
   sumOriginalCosts,
 } from "./original-cost.ts";
 import { unitCostPerQuantity } from "./costing.ts";
-import { InventoryError } from "./contracts.ts";
+import { InventoryError, ITEM_MISSING_UNIT_CONVERSION, UnitConversionError } from "./contracts.ts";
 import { getOnHand } from "./position.ts";
 import { issueInventory, receiveInventory } from "./movements.ts";
 import { buildAssembly } from "./assembly.ts";
@@ -64,6 +64,29 @@ test("toBaseQuantity applies the item's unit conversion and refuses unknown unit
     () => toBaseQuantity("2", "box", { box: 1 / 3 }, "ea"),
     /cannot be expressed exactly/,
   );
+});
+
+test("a missing unit conversion refuses with the linkable item identity", () => {
+  const itemId = randomUUID();
+  try {
+    toBaseQuantity("2", "crate", {}, "ea", "document line 1 (item x)", { id: itemId, name: "Widget" });
+    assert.fail("expected a UnitConversionError");
+  } catch (error) {
+    assert.ok(error instanceof UnitConversionError, "typed for the drawer link");
+    assert.ok(error instanceof InventoryError, "existing inventory handling still catches it");
+    assert.equal(error.code, ITEM_MISSING_UNIT_CONVERSION);
+    assert.equal(error.status, 422);
+    assert.deepEqual(error.details, { itemId, itemName: "Widget", unit: "crate", baseUnit: "ea" });
+    assert.match(error.message, /add a "crate" row under Unit conversions/);
+  }
+  // Without identity the message still guides, with nulls in the details.
+  try {
+    toExactBaseQuantity("1", "crate", {}, "ea");
+    assert.fail("expected a UnitConversionError");
+  } catch (error) {
+    assert.ok(error instanceof UnitConversionError);
+    assert.deepEqual((error as UnitConversionError).details, { itemId: null, itemName: null, unit: "crate", baseUnit: "ea" });
+  }
 });
 
 test("directed stock converts eight-place documents exactly and refuses unrepresentable base units", () => {
