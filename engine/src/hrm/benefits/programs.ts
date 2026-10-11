@@ -1217,7 +1217,10 @@ async function setProgramStatus(
         const policy=await readTransactionPolicy(db,orgId,programId);
         if (!policy) throw new BenefitsError("REFUSED","Configure transaction source items, recipient positions, dated assignments and group ceiling decisions in this program's Transaction rules before activation.");
         await validateTransactionPolicy(db,orgId,before.legalEntityId,policy,before.currency);
-        if (!policy.responsibilities.length || !policy.limits.length) throw new BenefitsError("REFUSED","Record dated recipient responsibilities and explicit group ceilings in Transaction rules before activation.");
+        // Recipients come from dated assignments or from roles recorded on the
+        // sources; ceilings come from per-group decisions or the budget ceiling.
+        const assigned = policy.positions.some((position) => (position.recipientSource ?? "assignment") === "assignment");
+        if ((assigned && !policy.responsibilities.length) || (!policy.limits.length && (policy.capPercent ?? null) === null)) throw new BenefitsError("REFUSED","Record dated recipient responsibilities for assigned positions and explicit group ceilings or a budget ceiling in Transaction rules before activation.");
       }
       const storedAccounts = (
         await db.execute<{ account_id: string }>(sql`
