@@ -29,8 +29,9 @@ function baseData(): Record<string, unknown> {
     bankTitle: "Direct deposit",
     bankFacts: [],
     noBank: "No bank details on file",
-    bankEditButton: "Update bank details",
+    bankEditButton: "Update direct deposit",
     bankEditHref: "/me/profile?bank=1",
+    bankRefusal: null,
     bankDialogOpen: false,
     bankDialogCloseHref: "/me/profile",
     bankDialog: null,
@@ -66,5 +67,27 @@ test("the bank panel and dialog wire through masked data only", () => {
   const json = specJson(data);
   assert.ok(json.includes("Direct deposit"), "the bank panel title renders");
   assert.ok(json.includes("•••• 6789"), "the masked echo renders, never the number");
-  assert.ok(json.includes("/me/profile?bank=1"), "the bank edit entry opens the bank dialog");
+  assert.ok(json.includes('{"$":"bankEditHref"}'), "the bank edit entry binds the dialog href");
+  assert.ok(!json.includes("bankRefusal"), "no refusal renders while filing is offered");
+});
+
+test("a refused bank filing names the refusal instead of the facts empty line", () => {
+  const data = baseData();
+  data.bankEditHref = null;
+  data.bankRefusal = "Updating direct deposit needs the hrm.self.request permission — ask an administrator";
+  const json = specJson(data);
+  assert.ok(
+    json.includes("Updating direct deposit needs the hrm.self.request permission"),
+    "the refusal reason shows instead of the no-details line",
+  );
+});
+
+test("a refusal still shows beside existing bank facts", () => {
+  const data = baseData();
+  data.bankFacts = [{ label: "First Bank •••• 6789", value: "Active" }];
+  data.bankEditHref = null;
+  data.bankRefusal = "Updating direct deposit needs the hrm.self.request permission — ask an administrator";
+  const json = specJson(data);
+  assert.ok(json.includes("•••• 6789"), "existing accounts still render");
+  assert.ok(json.includes('{"$":"bankRefusal"}'), "the refusal binds its own line below the accounts");
 });

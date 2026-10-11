@@ -228,6 +228,37 @@ export interface MeFact {
   value: string
 }
 
+/**
+ * Bank-edit offer for the profile panel: the employee may file a
+ * direct-deposit change only with the self.request grant on their own
+ * record and an employment to bind it to. Anything else names the
+ * refusal the panel shows instead of the action — the dialog route and
+ * the submit path refuse the same two ways, so the panel never offers
+ * what the submit would reject.
+ */
+export type BankEditOffer = "offer" | "no-grant" | "no-employment";
+
+export function resolveBankEditOffer(mayFile: boolean, employmentCount: number): BankEditOffer {
+  if (!mayFile) return "no-grant";
+  if (employmentCount < 1) return "no-employment";
+  return "offer";
+}
+
+function bankEditOffer(
+  t: (key: string) => string,
+  authz: Authz,
+  employmentCount: number,
+): { bankEditHref: string | null; bankRefusal: string | null } {
+  switch (resolveBankEditOffer(can(authz, "hrm.self.request"), employmentCount)) {
+    case "offer":
+      return { bankEditHref: "/me/profile?bank=1", bankRefusal: null };
+    case "no-employment":
+      return { bankEditHref: null, bankRefusal: t("me.profile.noEmployment") };
+    case "no-grant":
+      return { bankEditHref: null, bankRefusal: t("me.bank.noGrant") };
+  }
+}
+
 export interface MeStepRow extends MyStep {
   statusLabel: string
   statusVariant: StatusVariant
@@ -588,7 +619,8 @@ export interface MeProfileData {
   bankFacts: MeFact[]
   noBank: string
   bankEditButton: string
-  bankEditHref: string
+  bankEditHref: string | null
+  bankRefusal: string | null
   bankDialogOpen: boolean
   bankDialogCloseHref: string
   bankDialog: {
@@ -644,7 +676,8 @@ export async function loadMeProfile(
     bankTitle: t('me.bank.title'),
     noBank: t('me.bank.noBank'),
     bankEditButton: t('me.bank.edit'),
-    bankEditHref: '/me/profile?bank=1',
+    bankEditHref: null,
+    bankRefusal: null,
     bankDialogOpen: false,
     bankDialogCloseHref: '/me/profile',
     bankDialog: null,
@@ -700,6 +733,10 @@ export async function loadMeProfile(
             label: `${account.bankName ?? t('me.overview.notAvailable')} •••• ${account.lastFour ?? '····'}`,
             value: account.isActive ? t('me.bank.statusActive') : t('me.bank.statusPending'),
           })),
+      // The panel offers the direct-deposit action only when the
+      // employee may actually file it; otherwise the refusal reason
+      // shows instead of an action the submit would reject.
+      ...bankEditOffer(t, authz, profile.employments.length),
       bankDialogOpen: sp.bank !== undefined,
       bankDialog: sp.bank !== undefined
         ? {
