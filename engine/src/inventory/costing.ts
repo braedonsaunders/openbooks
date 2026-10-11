@@ -104,13 +104,29 @@ export function exactCostFragments(quantity: string, value: string, sourceUnitCo
  * unit, or configure the conversion on the item's costing profile).
  */
 /**
+ * Canonical spellings for the stocking-unit aliases operators actually type
+ * on documents ("Each" for "ea", "pcs"/"piece"/"pieces" for "pc"). Folding
+ * here makes the alias identical to the base unit everywhere quantities are
+ * compared or converted, so a line raised as "each" posts 1:1 against base
+ * "ea" with no conversion row. Anything outside this closed set still
+ * refuses: an explicitly configured conversion always wins (raw keys are
+ * looked up before folded ones), and unknown units never silently post 1:1.
+ */
+const INVENTORY_UNIT_ALIASES: Record<string, string> = {
+  each: "ea",
+  pcs: "pc",
+  piece: "pc",
+  pieces: "pc",
+};
+
+/**
  * Fold a unit spelling for comparison: surrounding whitespace and letter case
- * carry no meaning ("EA", "Ea" and " ea" are the base unit "ea"). Genuine
- * aliases ("Each" vs "ea") do NOT fold together — they are configured once
- * as a conversion, not guessed at posting time.
+ * carry no meaning ("EA", "Ea" and " ea" are the base unit "ea"), and the
+ * canonical aliases above fold to their base ("Each" is "ea").
  */
 export function normalizeInventoryUnit(unit: string | null | undefined): string {
-  return (unit ?? "").trim().toLowerCase();
+  const folded = (unit ?? "").trim().toLowerCase();
+  return INVENTORY_UNIT_ALIASES[folded] ?? folded;
 }
 
 export function toBaseQuantity(

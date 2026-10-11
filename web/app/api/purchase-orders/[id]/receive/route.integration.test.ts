@@ -48,6 +48,7 @@ async function seedApprovedPo(
   assetAccountId: string,
   stockLocationId: string,
   number: string,
+  unit = "ea",
 ): Promise<{ orderId: string; lineId: string }> {
   const orderId = randomUUID();
   const lineId = randomUUID();
@@ -68,7 +69,7 @@ async function seedApprovedPo(
        quantity_fulfilled, quantity_billed, stock_location_id, custom)
     values (
       ${lineId}, ${orgId}, ${orderId}, 1, ${itemId}, ${assetAccountId}, 'Widget',
-      '10', 'ea', '2', '20', '0', '0', '0', ${stockLocationId}, '{}'::jsonb
+      '10', ${unit}, '2', '20', '0', '0', '0', ${stockLocationId}, '{}'::jsonb
     )`);
   // Approved lines are storage-immutable: issue the order only after its
   // lines exist.
@@ -179,6 +180,55 @@ test("explicit receive refuses without an idempotency key and over-receipt commi
     assert.equal(toUnits(facts.received), toUnits("0"), "a refused save advances nothing");
     assert.equal(facts.receipts, 0, "a refused save creates no receipt");
     assert.equal(toUnits(facts.moved), toUnits("0"), "a refused save moves no stock");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+/**
+ * A line raised in an aliased unit ("Each" for the item's base "ea") posts
+ * 1:1 with no conversion row; a genuinely unmapped unit ("crate") refuses
+ * with its remedy and receives nothing.
+ */
+test("unit aliases receive against the base unit; unknown units refuse with a message", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = await createScratchUser(org.orgId, "Receiving Clerk", "admin");
+    state.user = { orgId: org.orgId, id: actorId };
+    const aliased = await seedApprovedPo(
+      org.orgId, actorId, org.vendorId, org.subsidiaryId, org.date,
+      org.items.fifo, org.accounts.invAsset, org.stockLocationId, "PO-RCV-3",
+      "Each",
+    );
+    const saved = await postReceive(aliased.orderId, randomUUID(), {
+      receiptDate: org.date,
+      lines: [{ sourceLineId: aliased.lineId, quantity: "10" }],
+    });
+    assert.equal(saved.status, 200, `an aliased unit saves, got: ${await saved.text()}`);
+    const savedFacts = await receiptFacts(org.orgId, aliased.lineId);
+    assert.equal(toUnits(savedFacts.received), toUnits("10"), "the alias receives in full");
+    assert.equal(toUnits(savedFacts.moved), toUnits("10"), "the alias moves 1:1 against the base unit");
+
+    const { orderId: refusedId, lineId: refusedLine } = await seedApprovedPo(
+      org.orgId, actorId, org.vendorId, org.subsidiaryId, org.date,
+      org.items.fifo, org.accounts.invAsset, org.stockLocationId, "PO-RCV-4",
+      "crate",
+    );
+    const refused = await postReceive(refusedId, randomUUID(), {
+      receiptDate: org.date,
+      lines: [{ sourceLineId: refusedLine, quantity: "10" }],
+    });
+    assert.equal(refused.status, 422);
+    const body = (await refused.json()) as { error?: unknown };
+    assert.match(
+      String(body.error ?? ""),
+      /no conversion to the item's base unit/,
+      "the refusal renders its remedy instead of an empty answer",
+    );
+    const refusedFacts = await receiptFacts(org.orgId, refusedLine);
+    assert.equal(toUnits(refusedFacts.received), toUnits("0"), "a refused save advances nothing");
+    assert.equal(refusedFacts.receipts, 1, "only the aliased receipt exists");
+    assert.equal(toUnits(refusedFacts.moved), toUnits("10"), "a refused save moves no further stock");
   } finally {
     await dropScratchOrg(org.orgId);
   }
