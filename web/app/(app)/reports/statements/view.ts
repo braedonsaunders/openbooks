@@ -3,7 +3,7 @@ import { reportBookSelection } from '../../../../lib/report-books'
 
 
 import { getTranslations } from 'next-intl/server'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import {
   column,
   field,

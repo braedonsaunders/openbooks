@@ -5,8 +5,8 @@ import { NextResponse } from 'next/server'
 import { and, eq, sql } from 'drizzle-orm'
 import { db, schema, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { returnDocumentToDraft, ReturnToDraftError, submitAndReleaseIfUngated, withdrawDocumentSubmission, WithdrawSubmissionError, VENDOR_BILL_APPROVAL_REQUIRED_MESSAGE } from '@openbooks/engine/src/flows/index.ts'
-import { documentKindPermissions } from '@openbooks/engine/src/records/document-kind-permissions.ts'
-import { ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { documentKindPermissions } from '@openbooks/engine/records/document-kind-permissions'
+import { ScopeNotFoundError } from '@openbooks/engine/organization/scope'
 import { postDocument } from "@openbooks/engine/src/ledger/posting-document.ts";
 import { runPostDocumentEffects } from "@openbooks/engine/src/ledger/posting-dispatch.ts";
 import { getAuthz, can, guardSubsidiaryScope, type Authz } from '../../../../lib/authz'

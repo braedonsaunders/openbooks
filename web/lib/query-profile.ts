@@ -2,8 +2,8 @@ import "server-only";
 import { appendFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { workAsyncStorage } from "next/dist/server/app-render/work-async-storage.external";
-import { registerQueryObserver } from "@openbooks/engine/src/platform/query-observer.ts";
-import type { SpanProcessor } from "@openbooks/engine/src/platform/telemetry.ts";
+import { registerQueryObserver } from "@openbooks/engine/platform/query-observer";
+import type { SpanProcessor } from "@openbooks/engine/platform/telemetry";
 import { createRenderProfile } from "./render-profile";
 
 /**

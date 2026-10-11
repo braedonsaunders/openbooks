@@ -2,8 +2,8 @@ import { z } from 'zod'
 import { NextResponse } from 'next/server'
 import { defineRoute } from '@/lib/api/route'
 import { guardPermission } from '@/lib/authz'
-import { db,withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { searchOperatingDepartments } from '@openbooks/engine/src/organization/operating-profiles.ts'
+import { db,withOrgTransaction } from '@openbooks/engine/platform/db'
+import { searchOperatingDepartments } from '@openbooks/engine/organization/operating-profiles'
 const Query=z.strictObject({family:z.enum(['project','production']),q:z.string().max(200).optional(),selected:z.uuid().optional()})
 export const runtime='nodejs'
 export const GET=defineRoute({

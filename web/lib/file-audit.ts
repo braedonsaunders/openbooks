@@ -11,7 +11,7 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
  * Pass `executor` (a transaction) so evidence commits or rolls back atomically
  * with the mutation it describes; without one it writes on the pooled db.
  */
-export { recordFileEvent, type FileEvent } from '@openbooks/engine/src/platform/file-audit.ts'
+export { recordFileEvent, type FileEvent } from '@openbooks/engine/platform/file-audit'
 
 export type FileActivityEntry = {
   id: string

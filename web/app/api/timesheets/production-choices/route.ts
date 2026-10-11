@@ -1,7 +1,7 @@
 import { z } from 'zod'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { lockActorCommandAuthority } from '@openbooks/engine/src/organization/actor-command-authority.ts'
-import { searchProductionTimeChoices } from '@openbooks/engine/src/manufacturing/workspace.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
+import { lockActorCommandAuthority } from '@openbooks/engine/organization/actor-command-authority'
+import { searchProductionTimeChoices } from '@openbooks/engine/manufacturing/workspace'
 import { defineRoute } from '@/lib/api/route'
 import { authorizeTimeWorkspace } from '@/lib/time-workspace'
 const Query = z.strictObject({ workFamily: z.literal('production'), q:z.string().max(200).optional(), selected:z.uuid().optional(), workOrderId:z.uuid().optional() })

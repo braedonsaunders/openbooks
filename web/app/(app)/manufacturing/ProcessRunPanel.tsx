@@ -4,7 +4,7 @@ import {Button,EmptyState} from '@openbooks/ui';
 import {PagedTable} from '@/components/paged-table';
 import {formatDecimal} from '@/lib/money-format';
 import {dateLabel,dateTime} from '@/lib/format';
-import type {ManufacturingRecordData,ManufacturingRow} from '@openbooks/engine/src/manufacturing/workspace.ts';
+import type {ManufacturingRecordData,ManufacturingRow} from '@openbooks/engine/manufacturing/workspace';
 
 /** A scoped run view reads the same posted movements used by inventory and genealogy. */
 export function ProcessRunPanel({data,onOpen}:{data:ManufacturingRecordData;onOpen:(tab:string)=>void}) {

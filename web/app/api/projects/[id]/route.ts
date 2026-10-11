@@ -14,7 +14,7 @@ import { moneyRefusal } from '../../../../lib/payroll-decimal-refusal'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { normalizeSubdivisionCode } from '@openbooks/engine/src/compliance/lien-jurisdictions.ts'
 import { listScopedPartyOptions } from '../../../../lib/scoped-options'
-import { pinInternalPerson } from '@openbooks/engine/src/organization/internal-person.ts'
+import { pinInternalPerson } from '@openbooks/engine/organization/internal-person'
 import { acquireFeatureGateLock, isFeatureEnabled } from '../../../../lib/features'
 import { notFound } from "@/lib/api/responses";
 import { getTranslations } from 'next-intl/server'

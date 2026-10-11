@@ -3,7 +3,7 @@ import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response';
 import { NextResponse } from 'next/server'
 import { randomUUID } from 'node:crypto'
-import { listCashDeposits, recordCashDeposit } from "@openbooks/engine/src/ledger/cash-deposits.ts";
+import { listCashDeposits, recordCashDeposit } from "@openbooks/engine/ledger/cash-deposits/module";
 import { DocumentCreateConflict } from "../../../../../lib/documents.ts";
 import { getAuthz, can } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'

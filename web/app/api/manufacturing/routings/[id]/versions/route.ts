@@ -1,4 +1,4 @@
-import { lockManufacturingRoutingAuthority } from "@openbooks/engine/src/manufacturing/authority.ts";
+import { lockManufacturingRoutingAuthority } from "@openbooks/engine/manufacturing/authority";
 import { z } from "zod";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { createNextRoutingVersion, getRouting } from "@openbooks/engine/src/manufacturing/routings.ts";

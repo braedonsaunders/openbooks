@@ -3,12 +3,12 @@ import { defineRoute } from '@/lib/api/route'
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { notFound } from '@/lib/api/responses'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import {
   DocumentDefaultsError,
   resolveDocumentLineDefaults,
   resolveTermsDueDate,
-} from '@openbooks/engine/src/ledger/document-defaults.ts'
+} from '@openbooks/engine/ledger/document-defaults'
 import { guardPermission } from '../../../../lib/authz'
 import { isDocKindEnabled } from '../../../../lib/documents.ts'
 import { DOC_KINDS, documentEditPermission } from '../../../../lib/document-kinds.ts'

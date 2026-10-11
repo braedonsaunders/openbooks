@@ -5,7 +5,7 @@ import { z } from 'zod'
 import {
   getStatementBatchRun,
   listStatementBatchItems,
-} from '@openbooks/engine/src/receivables/statement-batches.ts'
+} from '@openbooks/engine/receivables/statement-batches'
 import { can } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 

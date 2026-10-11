@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { recognitionAccounts } from '@openbooks/engine/src/projects/recognition.ts'
-import { projectBudgetComparison } from '@openbooks/engine/src/projects/budget-baselines.ts'
+import { projectBudgetComparison } from '@openbooks/engine/projects/budget-baselines'
 import { projectTimeSummary, projectUnbilled } from '../../../lib/project-costing'
 import { resolveProjectFinancials } from '../../../lib/project-financials'
 import { loadProjectType } from '../../../lib/project-type'

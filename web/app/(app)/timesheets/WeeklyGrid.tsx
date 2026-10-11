@@ -14,7 +14,7 @@
 
 import Link from 'next/link'
 import { RemoteRecordChoice } from '@/components/remote-record-choice'
-import type { TimeWorkFamily } from '@openbooks/engine/src/projects/time-work-target.ts'
+import type { TimeWorkFamily } from '@openbooks/engine/projects/time-work-target'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'

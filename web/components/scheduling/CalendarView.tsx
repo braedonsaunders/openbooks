@@ -6,9 +6,9 @@ import { cn } from '@openbooks/ui'
 import { filterBoardRows } from './legend'
 import { CHIP_COLORS, chipStyle } from './BookingChip'
 import { SourceRecordChip } from './SourceRecord'
-import type { BoardSourceRecord } from '@openbooks/engine/src/schedule-boards/source-history.ts'
+import type { BoardSourceRecord } from '@openbooks/engine/schedule-boards/source-history'
 import { targetHue, targetShortLabel, presentedBoardEntries, type BoardEntry, type BoardTarget } from './model'
-import type { BoardWindow } from '@openbooks/engine/src/schedule-boards/window.ts'
+import type { BoardWindow } from '@openbooks/engine/schedule-boards/window'
 
 /** The month at a glance: who is where each day, or one person's month. */
 export function CalendarView({ window: board, month, personId, search, today, onOpenEntry, onOpenSourceRecord }: {

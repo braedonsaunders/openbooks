@@ -20,7 +20,7 @@ import { ReverseAssetChange } from "./ReverseAssetChange";
 import { ChangeActions } from "./ChangeActions";
 import { ChangeGateDecision } from "./ChangeGateDecision";
 import type { DelegateOption } from "../../inbox/GateActions";
-import { gateDecisionCapability } from "@openbooks/engine/src/flows/index.ts";
+import { gateDecisionCapability } from "@openbooks/engine/flows/module";
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata() {

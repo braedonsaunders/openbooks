@@ -4,7 +4,7 @@ import { useTranslations, useLocale } from "next-intl";
 import { EmptyState } from "@openbooks/ui";
 import { PagedTable } from "@/components/paged-table";
 import { formatDecimal } from "@/lib/money-format";
-import type { GenealogyEdge } from "@openbooks/engine/src/manufacturing/genealogy.ts";
+import type { GenealogyEdge } from "@openbooks/engine/manufacturing/genealogy";
 
 export function GenealogyTable({ edges }: { edges: GenealogyEdge[] }) {
   const t = useTranslations("manufacturing.genealogy"), locale = useLocale();

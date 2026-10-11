@@ -9,7 +9,7 @@ import { InventoryTrackingFields } from '@/components/inventory-tracking-fields'
 import { readApiErrorMessage } from '@/lib/api-error';
 import { confirmDialog } from '@/lib/confirm';
 import { formatDecimal } from '@/lib/money-format';
-import type { readManufacturingInspection } from '@openbooks/engine/src/manufacturing/quality-workspace.ts';
+import type { readManufacturingInspection } from '@openbooks/engine/manufacturing/quality-workspace';
 type Detail=Awaited<ReturnType<typeof readManufacturingInspection>>;
 
 export function InspectionHost({recordId,closeHref,canInspect,canPost,scrapReasons}:{recordId?:string;closeHref:string;canInspect:boolean;canPost:boolean;scrapReasons:Array<{value:string;label:string}>}) {

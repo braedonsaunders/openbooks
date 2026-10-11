@@ -4,15 +4,15 @@ import { db, withOrgTransaction } from "@openbooks/engine/platform/database";
 import {
   confirmExecutionTask,
   executionTaskView,
-} from "@openbooks/engine/src/inventory/directed-execution.ts";
+} from "@openbooks/engine/inventory/directed-execution";
 import {
   suggestPickConfirmation,
   executePickDirection,
-} from "@openbooks/engine/src/sales/pick-execution.ts";
+} from "@openbooks/engine/sales/pick-execution";
 import {
   suggestPackConfirmation,
   executePackDirection,
-} from "@openbooks/engine/src/sales/handling-units.ts";
+} from "@openbooks/engine/sales/handling-units";
 import { defineRoute } from "@/lib/api/route";
 import { uuidId } from "@/lib/api/json";
 import {

@@ -1,4 +1,4 @@
-import { readWorkListPresentation } from '@openbooks/engine/src/organization/list-presentation.ts'
+import { readWorkListPresentation } from '@openbooks/engine/organization/list-presentation'
 import { WorkListPresentation } from './work-list-presentation'
 import { RecordBoard } from './record-board'
 import { getMoneyFormatter } from '@/lib/money-server'

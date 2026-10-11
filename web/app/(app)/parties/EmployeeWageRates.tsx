@@ -1,6 +1,6 @@
 'use client'
 
-import { type PayrollAmountRounding } from '@openbooks/engine/src/projects/payroll-wage-rounding.ts'
+import { type PayrollAmountRounding } from '@openbooks/engine/projects/payroll-wage-rounding'
 
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'

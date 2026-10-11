@@ -16,7 +16,7 @@ import {
   selfWorkspaceCapabilities,
 } from '@openbooks/engine/src/hrm/self-service/my-work.ts'
 import { getTeamView, type TeamView } from '@openbooks/engine/src/hrm/self-service/team-read.ts'
-import { listOwnBankAccounts } from '@openbooks/engine/src/hrm/self-service/bank-changes.ts'
+import { listOwnBankAccounts } from '@openbooks/engine/hrm/self-service/bank-changes'
 import { HrmAuthorizationError } from '@openbooks/engine/src/hrm/authorization.ts'
 import { employmentChangeFlowsEnabled } from '@openbooks/engine/hrm/change-requests'
 import { SelfServiceError } from '@openbooks/engine/src/hrm/self-service/actor.ts'

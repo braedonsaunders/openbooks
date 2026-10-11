@@ -27,7 +27,7 @@ import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { FieldTimeError } from '@openbooks/engine/src/hrm/field-time/errors.ts'
 import { listCrewBatches, getBatchDetail } from '@openbooks/engine/src/hrm/field-time/reads.ts'
 import { loadFieldTimeSettings } from '@openbooks/engine/src/hrm/field-time/settings.ts'
-import { scheduledWork } from '@openbooks/engine/src/schedule-boards/prefill.ts'
+import { scheduledWork } from '@openbooks/engine/schedule-boards/prefill'
 
 /**
  * The foreman crew page: batches per project per day as a shared

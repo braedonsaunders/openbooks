@@ -8,8 +8,8 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import {
   boardAuthority,
   getBoard,
-} from "@openbooks/engine/src/schedule-boards/boards.ts";
-import { scheduleBoardTimerGraph } from "@openbooks/engine/src/flows/schedule-board-adapter.ts";
+} from "@openbooks/engine/schedule-boards/boards";
+import { scheduleBoardTimerGraph } from "@openbooks/engine/flows/schedule-board-adapter";
 import { emptyAutomationGraph } from '@openbooks/forms-core'
 import { flowSubjectProfileForOrg, lintFlowGraphForSubject, listFlowSubjectProfiles } from '@openbooks/engine/src/flows/index.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'

@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import { defineRoute } from '@/lib/api/route';
-import { documentRevisionCounterSql } from '@openbooks/engine/src/records/revision.ts'
+import { documentRevisionCounterSql } from '@openbooks/engine/records/revision'
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
+import { isDocumentRevisionToken } from '@openbooks/engine/records/revision'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'

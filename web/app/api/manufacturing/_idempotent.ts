@@ -1,5 +1,5 @@
-import { lockManufacturingManageAuthority } from "@openbooks/engine/src/manufacturing/authority.ts";
-import { assertManufacturingFeature } from "@openbooks/engine/src/manufacturing/gate.ts";
+import { lockManufacturingManageAuthority } from "@openbooks/engine/manufacturing/authority";
+import { assertManufacturingFeature } from "@openbooks/engine/manufacturing/gate";
 import { sql } from "drizzle-orm";
 import { ManufacturingError, ManufacturingIdempotencyConflictError } from "@openbooks/engine/src/manufacturing/errors.ts";
 import { db } from "@openbooks/engine/src/platform/db.ts";

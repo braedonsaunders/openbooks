@@ -17,7 +17,7 @@ import {
   type Cadence,
   type CatchUpMode,
 } from "@openbooks/engine/src/billing/recurring.ts";
-import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import { can, type Authz } from "../../../../lib/authz";
 import { defineRoute } from "../../../../lib/api/route";
 import { isDocKindEnabled } from "../../../../lib/documents.ts";

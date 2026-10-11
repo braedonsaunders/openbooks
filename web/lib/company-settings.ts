@@ -21,7 +21,7 @@ import {
   taxClassificationsFor,
   taxIdScheme,
   type LegalForm,
-} from "@openbooks/engine/src/organization/company-identity.ts";
+} from "@openbooks/engine/organization/company-identity";
 import { isFeatureEnabled } from "./features";
 import { isUuid } from "./list-params";
 import { DEFAULT_LOCALE, isLocale } from "../i18n/config";
@@ -30,7 +30,7 @@ import {
   periodDerivationSql,
   periodDerivationStagingSql,
 } from "./fiscal-periods";
-import { PARTYLESS_CONTROL_POLICIES, parsePartylessControlPolicy, type PartylessControlPolicy } from "@openbooks/engine/src/ledger/partyless-control-policy.ts";
+import { PARTYLESS_CONTROL_POLICIES, parsePartylessControlPolicy, type PartylessControlPolicy } from "@openbooks/engine/ledger/partyless-control-policy";
 
 
 /** Transport-neutral outcome: the HTTP status the route would answer with and

@@ -7,8 +7,8 @@ import { Check, CircleAlert } from "lucide-react";
 import { OperatingProfileCards } from "@/components/operating-profile-cards";
 import { RemoteRecordChoice } from "@/components/remote-record-choice";
 import { readApiErrorMessage } from "@/lib/api-error";
-import type { OperatingProfileChoice } from "@openbooks/engine/src/organization/operating-profiles.ts";
-import type { readOperatingSetupJourney } from "@openbooks/engine/src/manufacturing/setup-journey.ts";
+import type { OperatingProfileChoice } from "@openbooks/engine/organization/operating-profiles";
+import type { readOperatingSetupJourney } from "@openbooks/engine/manufacturing/setup-journey";
 
 export function SetupJourneyContent({choices,entities,canCreateProject,canCreateProduction}:{choices:OperatingProfileChoice[];entities:{value:string;label:string}[];canCreateProject:boolean;canCreateProduction:boolean}) {
   const t=useTranslations("manufacturing.setupJourney"),o=useTranslations("operatingProfiles"),id=useId();

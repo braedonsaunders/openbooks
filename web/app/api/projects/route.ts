@@ -10,7 +10,7 @@ import {
   createProject,
   PROJECT_STATUSES,
   ProjectCreateError,
-} from '@openbooks/engine/src/projects/project-create.ts'
+} from '@openbooks/engine/projects/project-create'
 
 
 const projectCreateBody = z.object({

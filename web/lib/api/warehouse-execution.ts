@@ -22,10 +22,10 @@ export const confirmExecutionBody = z.object({
 });
 export const executionKey = z.string().min(8).max(200);
 
-import { InventoryError } from "@openbooks/engine/src/inventory/contracts.ts";
+import { InventoryError } from "@openbooks/engine/inventory/contracts/module";
 import { apiErrorResponse } from "./error-response";
 import { inventoryErrorStatus } from "./inventory-errors";
-import { PackingRefusal } from "@openbooks/engine/src/sales/handling-unit-state.ts";
+import { PackingRefusal } from "@openbooks/engine/sales/handling-unit-state";
 export async function warehouseExecutionResponse(
   work: () => Promise<Response>,
 ): Promise<Response> {

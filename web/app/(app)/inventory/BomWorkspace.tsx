@@ -8,7 +8,7 @@ import { readApiErrorMessage } from '@/lib/api-error'
 import { toast } from 'sonner'
 import { Plus } from 'lucide-react'
 import { Button, Label, SearchSelect, Textarea, UrlDrawer } from '@openbooks/ui'
-import { isAssemblyCapableKind } from '@openbooks/engine/src/inventory/public-contracts.ts'
+import { isAssemblyCapableKind } from '@openbooks/engine/inventory/contracts'
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
 import { PagedTable, type PagedColumn } from '../../../components/paged-table'
 

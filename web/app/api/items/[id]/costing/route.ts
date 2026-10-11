@@ -12,8 +12,8 @@ import { InventoryError, CostingPolicyChangeBlockedError } from "@openbooks/engi
 import { inventoryOffsetAccountProblem } from "@openbooks/engine/src/inventory/journal.ts";
 import { assertCostingAccountChangeAllowed, assertCostingPolicyChangeAllowed, lockItemInventoryProfile, parseCostingMethod, parseTrackingMode, parseUnitConversions } from "@openbooks/engine/src/inventory/profile-policy.ts";
 import { revalueOpenLayersToStandardCost } from "@openbooks/engine/src/inventory/revaluation.ts";
-import { loadCompanyReceivedNotBilledAccount } from "@openbooks/engine/src/records/control-accounts.ts";
-import { lineRequiresReceipt } from "@openbooks/engine/src/records/stock-receipt.ts";
+import { loadCompanyReceivedNotBilledAccount } from "@openbooks/engine/records/control-accounts";
+import { lineRequiresReceipt } from "@openbooks/engine/records/stock-receipt";
 import { isUuid } from '../../../../../lib/list-params'
 import { canonicalDecimal } from '../../../../../lib/exact-decimal'
 import { moneyRefusal } from '../../../../../lib/payroll-decimal-refusal'

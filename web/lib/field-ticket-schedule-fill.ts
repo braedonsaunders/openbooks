@@ -1,5 +1,5 @@
-import { add, cmp } from '@openbooks/engine/src/money/money.ts'
-import type { ScheduledWork } from '@openbooks/engine/src/schedule-boards/prefill.ts'
+import { add, cmp } from '@openbooks/engine/money/money'
+import type { ScheduledWork } from '@openbooks/engine/schedule-boards/prefill'
 
 interface CrewRow {
   employeePartyId: string

@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { NextResponse } from 'next/server'
 import { schedulingBoardRouteAuthority } from '@/lib/scheduling/board-route-authority'
 import { defineRoute } from '@/lib/api/route'
-import { searchTargets } from '@openbooks/engine/src/schedule-boards/targets.ts'
+import { searchTargets } from '@openbooks/engine/schedule-boards/targets'
 
 /** Booking targets matching what the scheduler typed: codes, customers, projects and locations. */
 export const GET = defineRoute({

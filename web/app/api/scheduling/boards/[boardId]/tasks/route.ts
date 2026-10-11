@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { NextResponse } from 'next/server'
 import { schedulingBoardRouteAuthority } from '@/lib/scheduling/board-route-authority'
 import { defineRoute } from '@/lib/api/route'
-import { listProjectTaskOptions } from '@openbooks/engine/src/schedule-boards/targets.ts'
+import { listProjectTaskOptions } from '@openbooks/engine/schedule-boards/targets'
 
 /** Open tasks of a project, for booking a person onto a specific task. */
 export const GET = defineRoute({

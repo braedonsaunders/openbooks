@@ -1,6 +1,6 @@
 /** Split from web/lib/file-cabinet.ts; moved without behavior changes. */
 import 'server-only'
-import { uploadCabinetAttachment } from '@openbooks/engine/src/platform/record-attachments.ts'
+import { uploadCabinetAttachment } from '@openbooks/engine/platform/record-attachments'
 import { RETAINED_ATTACHMENT, lockRetainedAttachmentTarget } from './files'
 import { type FileMutationAudit, runMutation } from './mutation'
 import { sql } from 'drizzle-orm'

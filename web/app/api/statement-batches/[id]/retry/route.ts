@@ -4,7 +4,7 @@ import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { enqueueStatementBatchJobs } from '@openbooks/jobs'
-import { retryStatementBatchRun } from '@openbooks/engine/src/receivables/statement-batches.ts'
+import { retryStatementBatchRun } from '@openbooks/engine/receivables/statement-batches'
 import { can } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 

@@ -1,6 +1,6 @@
-import { ScopeNotFoundError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
+import { ScopeNotFoundError } from "@openbooks/engine/organization/scope";
 import { uuidId } from "@/lib/api/json-schema";
-import { PAYROLL_AMOUNT_ROUNDING } from "@openbooks/engine/src/projects/payroll-wage-rounding.ts";
+import { PAYROLL_AMOUNT_ROUNDING } from "@openbooks/engine/projects/payroll-wage-rounding";
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
@@ -9,7 +9,7 @@ import { NextResponse } from 'next/server'
 import { sql, type SQL } from 'drizzle-orm'
 import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-feature-lock.ts'
+import { lockAndCheckOrgFeature } from '@openbooks/engine/organization/org-feature-lock'
 import { lockLedgerSetupFence } from '@openbooks/engine/src/organization/ledger-setup-fence.ts'
 import {
   can,
@@ -37,8 +37,8 @@ import { PAY_RATE_BASES } from '@openbooks/engine/projects/pay-rate-basis'
 import { decimalNullRefusal } from '@openbooks/engine/src/money/decimal-refusal.ts'
 import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decimal'
 import { isFeatureEnabled } from '../../../../../lib/features'
-import { acquireOrgFeatureGateLock } from '@openbooks/engine/src/organization/org-feature-lock.ts'
-import { lockActorCommandAuthority } from '@openbooks/engine/src/organization/actor-command-authority.ts'
+import { acquireOrgFeatureGateLock } from '@openbooks/engine/organization/org-feature-lock'
+import { lockActorCommandAuthority } from '@openbooks/engine/organization/actor-command-authority'
 import { notFound } from "@/lib/api/responses";
 
 const decimalText = (field: string, noun: string) => z.unknown().transform((value, ctx) => {

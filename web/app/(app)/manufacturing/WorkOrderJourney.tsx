@@ -6,8 +6,8 @@ import { Badge, Button } from "@openbooks/ui";
 import { Check, Circle, Package, Play, ShieldCheck } from "lucide-react";
 import { RecordKindCard } from "@/components/record-kind-cards";
 import { formatDecimal } from "@/lib/money-format";
-import type { ManufacturingRecordData, ManufacturingRow } from "@openbooks/engine/src/manufacturing/workspace.ts";
-import { productionJourney } from "@openbooks/engine/src/manufacturing/journey.ts";
+import type { ManufacturingRecordData, ManufacturingRow } from "@openbooks/engine/manufacturing/workspace";
+import { productionJourney } from "@openbooks/engine/manufacturing/journey";
 import type { Command } from "./commands";
 import { readApiErrorMessage } from "@/lib/api-error";
 

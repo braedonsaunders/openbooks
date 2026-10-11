@@ -9,8 +9,8 @@ import { SetupEntitySection } from '../../admin/setup/[entity]/SetupEntitySectio
 import {
   getBoard,
   boardAuthority,
-} from '@openbooks/engine/src/schedule-boards/boards.ts'
-import { withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+} from '@openbooks/engine/schedule-boards/boards'
+import { withOrgTransaction } from '@openbooks/engine/platform/db'
 export async function ResourceRecipients({
   searchParams,
   projectId,

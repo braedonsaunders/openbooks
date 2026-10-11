@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { engineSourceSpecifier } from "../../../../testing/engine-resolve-hooks.ts";
 import { registerHooks } from "node:module";
 import nodeTest from "node:test";
 import { NextResponse } from "next/server";
@@ -76,7 +77,7 @@ const mockUrls = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, _context, nextResolve) {
-    const mocked = mockUrls.get(specifier);
+    const mocked = mockUrls.get(specifier) ?? mockUrls.get(engineSourceSpecifier(specifier) ?? '');
     if (mocked) return { url: mocked, shortCircuit: true };
     return nextResolve(specifier);
   },

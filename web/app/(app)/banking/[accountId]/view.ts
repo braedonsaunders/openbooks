@@ -28,7 +28,7 @@ import {
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission, can, subsidiaryScopeAllows } from '../../../../lib/authz'
-import { reconciliationStalenessSummaries } from '@openbooks/engine/src/banking/banking.ts'
+import { reconciliationStalenessSummaries } from '@openbooks/engine/banking/banking'
 import { bankAccount } from '../../../../lib/banking-accounts'
 import { isUuid, mergeHref, parsePrefixedListParams, pickString } from '../../../../lib/list-params'
 import type { StatementDrawer as StatementDrawerComponent } from './StatementDrawer'

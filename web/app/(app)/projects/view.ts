@@ -11,13 +11,13 @@ import { can, requirePermission } from '../../../lib/authz'
 import { isUuid, mergeHref, pickString } from '../../../lib/list-params'
 import { subsidiaryUiOptions } from '../../../lib/subsidiaries'
 import { listScopedPartyOptions } from '../../../lib/scoped-options'
-import { listInternalPersonOptions } from '@openbooks/engine/src/organization/internal-person.ts'
+import { listInternalPersonOptions } from '@openbooks/engine/organization/internal-person'
 import { resolveFormLayout } from '../../../lib/customization/resolve'
 import { loadFieldDefs } from '../../../lib/custom-fields'
 import { loadProject } from '../../api/projects/_lib'
 import { loadProjectCockpit } from './_cockpit-data'
 import type { ProjectDrawer } from './ProjectDrawer'
-import { listOperatingProfileChoices, readPinnedOperatingProfile } from '@openbooks/engine/src/organization/operating-profiles.ts'
+import { listOperatingProfileChoices, readPinnedOperatingProfile } from '@openbooks/engine/organization/operating-profiles'
 
 /**
  * The project list, split into a loader and a spec.

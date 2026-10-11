@@ -65,7 +65,7 @@ import { add, cmp, fromUnits, normalizeMoney, roundDiv, sum } from '@openbooks/e
 import { computeLineTaxes, type TaxComponentConfig } from '@openbooks/engine/src/tax/tax.ts'
 import { confirmDialog } from '../lib/confirm'
 import { previewPostedCorrection } from '../lib/posted-correction-preview'
-import { postedCorrectionFieldClass } from '@openbooks/engine/src/ledger/posted-correction-fields.ts'
+import { postedCorrectionFieldClass } from '@openbooks/engine/ledger/posted-correction-fields'
 import { promptDialog } from '../lib/prompt'
 import { promptVoidReversalPeriod } from '../lib/void-reversal-period'
 import { runClientScripts } from '../lib/client-scripts'

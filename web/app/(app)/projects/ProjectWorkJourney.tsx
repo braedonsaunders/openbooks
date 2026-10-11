@@ -4,7 +4,7 @@ import { useLocale, useTranslations } from 'next-intl'
 import { Button } from '@openbooks/ui'
 import { Clock, ListChecks, Package } from 'lucide-react'
 import { RecordKindCard } from '@/components/record-kind-cards'
-import type { OperatingProfileDefinition } from '@openbooks/engine/src/organization/operating-profile-model.ts'
+import type { OperatingProfileDefinition } from '@openbooks/engine/organization/operating-profile-model'
 
 /** Shortcuts reuse the current project, native timesheet and existing transaction editors. */
 export function ProjectWorkJourney({definition,quickTimeHref,hours,onTime,onCharge,onBreakdown}:{

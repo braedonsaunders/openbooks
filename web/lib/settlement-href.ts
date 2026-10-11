@@ -1,4 +1,4 @@
-import { canonicalDecimal, compareDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
+import { canonicalDecimal, compareDecimal } from '@openbooks/engine/money/decimal'
 
 /**
  * Where a party or open document is settled: the new customer receipt

@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
-import { withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { isUuid } from '@openbooks/engine/src/platform/uuid.ts'
-import { boardAuthority, getBoard } from '@openbooks/engine/src/schedule-boards/boards.ts'
-import { scheduleDatabaseRefusal } from '@openbooks/engine/src/schedule-boards/errors.ts'
+import { withOrgTransaction } from '@openbooks/engine/platform/db'
+import { isUuid } from '@openbooks/engine/platform/identifiers'
+import { boardAuthority, getBoard } from '@openbooks/engine/schedule-boards/boards'
+import { scheduleDatabaseRefusal } from '@openbooks/engine/schedule-boards/errors'
 import { getAuthz } from '@/lib/authz'
 import { notFound } from '@/lib/api/responses'
 

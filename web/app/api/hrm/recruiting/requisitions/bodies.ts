@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { civilDateInput } from "@/lib/api/civil-date";
 import { isUuid } from "../../../../../lib/list-params";
-import { REQUISITION_DESCRIPTION_MAX_LENGTH } from "@openbooks/engine/src/hrm/recruiting/requisitions.ts";
+import { REQUISITION_DESCRIPTION_MAX_LENGTH } from "@openbooks/engine/hrm/recruiting/requisitions";
 
 /**
  * Typed request bodies for /api/hrm/recruiting/requisitions/* (financial

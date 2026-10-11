@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { CommerceError } from "@openbooks/engine/commerce/contracts";
-import { ConsolidationError } from "@openbooks/engine/src/consolidation/consolidation.ts";
+import { ConsolidationError } from "@openbooks/engine/consolidation/consolidation";
 import { PostingError } from "@openbooks/engine/src/journal/posting-contracts.ts";
-import { PeriodClosedError } from "@openbooks/engine/src/periods/period-policy.ts";
+import { PeriodClosedError } from "@openbooks/engine/periods/period-policy";
 import { InventoryError } from "@openbooks/engine/src/inventory/contracts.ts";
 import { PaymentError } from "@openbooks/engine/src/payments-core/payment-errors.ts";
 import { PayrollError } from "@openbooks/engine/src/payroll/error.ts";

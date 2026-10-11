@@ -1,7 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { OperatingProfilePicker } from "@/components/operating-profile-picker";
-import type { OperatingProfileChoice } from "@openbooks/engine/src/organization/operating-profiles.ts";
+import type { OperatingProfileChoice } from "@openbooks/engine/organization/operating-profiles";
 
 /** Starting from the cockpit carries the selected composition into the same native create drawer. */
 export function WorkflowStart({ choices }: { choices: OperatingProfileChoice[] }) {

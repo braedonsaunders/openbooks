@@ -15,7 +15,7 @@ import { rendererUnavailableResponse } from '@/lib/api/pdf-renderer'
 import { guardSubsidiaryScope } from '@/lib/authz';
 import { guardInformationReturnsFeature, loadInformationReturnFilingScope } from '@/lib/compliance'
 import { maskTin, type RecipientFormData } from '@/lib/information-return-form'
-import { payerTaxIdentifier } from '@openbooks/engine/src/organization/company-identity.ts'
+import { payerTaxIdentifier } from '@openbooks/engine/organization/company-identity'
 import { renderInformationReturnBatchPdf, renderInformationReturnPdf } from '@/lib/information-return-pdf'
 import { isUuid } from '@/lib/list-params'
 import { notFound } from "@/lib/api/responses";

@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { defineRoute } from '@/lib/api/route'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { OperatingProfileError, saveOperatingProfileScope } from '@openbooks/engine/src/organization/operating-profiles.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
+import { OperatingProfileError, saveOperatingProfileScope } from '@openbooks/engine/organization/operating-profiles'
 import { ScopeBody } from '../contract'
 export const PATCH = defineRoute({ permission: 'admin.setup.manage', scope: 'unrestricted', feature: { none: 'The command fences the selected native work-family and capture features.' }, params: z.object({ id: z.string().uuid() }).strict(), body: ScopeBody,
   handler: async ({ authz, body, params }) => {

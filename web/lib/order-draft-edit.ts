@@ -11,7 +11,7 @@ import { documentWorkDatesRefusal } from '@openbooks/engine/records/work-period'
 import { listScopedAccountOptions, listScopedDepartmentOptions, listScopedPartyOptions, listScopedProjectOptions } from './scoped-options';
 import { notFound } from './api/responses';
 import type { OrderKind } from './order-cycle';
-import { CrmLifecycleRefusalError } from '@openbooks/engine/src/crm/crm.ts';
+import { CrmLifecycleRefusalError } from '@openbooks/engine/crm/crm';
 import { findDocumentByExternalRef, isExternalRefConflict, resolveExternalRefPair } from './external-ref';
 
 export interface OrderHandlerConfig {
@@ -47,7 +47,7 @@ export interface OrderEditServices {
   bills: Pick<typeof import('./bills'), 'persistLineTaxComponents'>;
   stockLocations: Pick<typeof import('./stock-locations'), 'activeStockLocations' | 'profiledItemIds' | 'resolveLineStockLocation'>;
   segments: Pick<typeof import('./segments'), 'segmentRegistry' | 'validateExtraDims'>;
-  crm: Pick<typeof import('@openbooks/engine/src/crm/crm.ts'), 'promoteCrmAccount'>;
+  crm: Pick<typeof import('@openbooks/engine/crm/crm'), 'promoteCrmAccount'>;
   features: Pick<typeof import('./features'), 'isFeatureEnabled' | 'subsidiaryFeatureEnabled'>;
   flows: Pick<typeof import('@openbooks/engine/src/flows/index.ts'), 'submitAndReleaseIfUngated'>;
   sales: Pick<typeof import('@openbooks/engine/src/sales/sales-orders.ts'), 'issueSalesOrder' | 'SalesOrderIssueError'>;

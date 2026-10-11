@@ -1,5 +1,5 @@
 import { authorizeTimeWorkspace, refuseOthersTime, timeWorkFamily } from "@/lib/time-workspace";
-import { lockSharedTimeAuthority, TimeWorkTargetError } from "@openbooks/engine/src/projects/time-work-target.ts";
+import { lockSharedTimeAuthority, TimeWorkTargetError } from "@openbooks/engine/projects/time-work-target";
 import { z } from "zod";
 import { isoDate, uuidId } from "@/lib/api/json";
 import { defineRoute } from "@/lib/api/route";
@@ -30,7 +30,7 @@ import { TimeApprovalRefusal } from "../../../lib/time-approval-refusal";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { canonicalDecimal, compareDecimal } from "../../../lib/exact-decimal";
 import { canonicalJson } from "@openbooks/engine/src/platform/canonical-json.ts";
-import { lockTimeWorkOrderTarget } from "@openbooks/engine/src/projects/time-work-target.ts";
+import { lockTimeWorkOrderTarget } from "@openbooks/engine/projects/time-work-target";
 import {
   isIsoDate,
   loadWeek,

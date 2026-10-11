@@ -5,8 +5,8 @@ import { isUuid } from '../../../../../lib/list-params'
 import { notFound } from '@/lib/api/responses'
 import { partyPhotoResponse } from '../../../../../lib/party-photo-response'
 import { isMaskedFileContentError } from '../../../../../lib/file-storage'
-import { MAX_PARTY_PHOTO_BYTES, PARTY_PHOTO_CONTENT_TYPES, readPartyPhoto, removePartyPhoto, storePartyPhoto } from '@openbooks/engine/src/organization/party-photos.ts'
-import { ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { MAX_PARTY_PHOTO_BYTES, PARTY_PHOTO_CONTENT_TYPES, readPartyPhoto, removePartyPhoto, storePartyPhoto } from '@openbooks/engine/organization/party-photos'
+import { ScopeNotFoundError } from '@openbooks/engine/organization/scope'
 
 export const runtime = 'nodejs'
 const FEATURE = { none: 'Party records are shared master data; a photo is part of the record every role reads.' } as const

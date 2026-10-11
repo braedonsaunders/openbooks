@@ -1,9 +1,9 @@
 import { z } from 'zod';
 import { defineRoute } from '@/lib/api/route';
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts';
-import { readManufacturingInspection } from '@openbooks/engine/src/manufacturing/quality-workspace.ts';
-import { recordQualityInspection } from '@openbooks/engine/src/manufacturing/quality-execution.ts';
-import { disposeQualityInspection } from '@openbooks/engine/src/manufacturing/quality-disposition.ts';
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db';
+import { readManufacturingInspection } from '@openbooks/engine/manufacturing/quality-workspace';
+import { recordQualityInspection } from '@openbooks/engine/manufacturing/quality-execution';
+import { disposeQualityInspection } from '@openbooks/engine/manufacturing/quality-disposition';
 const params=z.object({id:z.string().uuid()}).strict();
 export const GET=defineRoute({permission:'manufacturing.read',feature:'manufacturing',params,handler:async({authz,params})=>withOrgTransaction(authz.user.orgId,async()=>Response.json(await readManufacturingInspection(db,authz.user.orgId,authz.user.id,params.id)))});
 const body=z.discriminatedUnion('command',[

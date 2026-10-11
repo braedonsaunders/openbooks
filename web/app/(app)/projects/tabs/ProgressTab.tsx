@@ -25,8 +25,8 @@ import { promptDialog } from '@/lib/prompt'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { KpiStrip, type Kpi } from '../../../../components/kpi-strip'
 import { PagedTable } from '../../../../components/paged-table'
-import { roundDecimal } from '@openbooks/engine/src/projects/earned-value-math.ts'
-import { compareDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
+import { roundDecimal } from '@openbooks/engine/projects/earned-value-math'
+import { compareDecimal } from '@openbooks/engine/money/decimal'
 
 /**
  * Progress & earned value for one project: installed quantities against the

@@ -1,4 +1,4 @@
-import { workProfileFilter,workDepartmentFilter } from "@openbooks/engine/src/organization/work-list-filters.ts";
+import { workProfileFilter,workDepartmentFilter } from "@openbooks/engine/organization/work-list-filters";
 import "server-only";
 import { sql, type SQL } from "drizzle-orm";
 import type { ListViewConfig, FilterClause } from "@openbooks/customization";

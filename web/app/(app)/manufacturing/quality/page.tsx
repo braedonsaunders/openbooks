@@ -1,11 +1,11 @@
 import Link from 'next/link';
 import { z } from 'zod';
 import { getTranslations,getLocale } from 'next-intl/server';
-import { db } from '@openbooks/engine/src/platform/db.ts';
-import { withScopeSnapshot } from '@openbooks/engine/src/organization/subsidiary-scope.ts';
-import { listManufacturingInspections } from '@openbooks/engine/src/manufacturing/quality-workspace.ts';
-import { manufacturingOptions } from '@openbooks/engine/src/manufacturing/workspace.ts';
-import { lockManufacturingReadAuthority } from '@openbooks/engine/src/manufacturing/authority.ts';
+import { db } from '@openbooks/engine/platform/db';
+import { withScopeSnapshot } from '@openbooks/engine/organization/scope';
+import { listManufacturingInspections } from '@openbooks/engine/manufacturing/quality-workspace';
+import { manufacturingOptions } from '@openbooks/engine/manufacturing/workspace';
+import { lockManufacturingReadAuthority } from '@openbooks/engine/manufacturing/authority';
 import { requirePermission,can } from '@/lib/authz';
 import { requireFeatureEnabled } from '@/lib/feature-gates';
 import { PageHeader,Button,EmptyState,Select,Label,Badge } from '@openbooks/ui';

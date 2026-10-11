@@ -13,7 +13,7 @@ import {
 import { requirePermission } from '../../../../../lib/authz'
 import { statementReportSpec } from '@/lib/reports/statement-report-spec'
 import { orgInfo } from '../../../../../lib/data'
-import { listStatementBatchRuns } from '@openbooks/engine/src/receivables/statement-batches.ts'
+import { listStatementBatchRuns } from '@openbooks/engine/receivables/statement-batches'
 
 /**
  * Statement batch history: every run with its period, recipient count,

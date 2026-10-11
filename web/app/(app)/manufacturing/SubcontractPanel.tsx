@@ -11,7 +11,7 @@ import {InventoryTrackingFields} from '@/components/inventory-tracking-fields';
 import {confirmDialog} from '@/lib/confirm';
 import {readApiErrorMessage} from '@/lib/api-error';
 import {formatDecimal} from '@/lib/money-format';
-import type {readSubcontractWorkspace} from '@openbooks/engine/src/manufacturing/subcontract-workspace.ts';
+import type {readSubcontractWorkspace} from '@openbooks/engine/manufacturing/subcontract-workspace';
 type Workspace=Awaited<ReturnType<typeof readSubcontractWorkspace>>;
 type Stage='ship'|'service'|'return'|'components';
 

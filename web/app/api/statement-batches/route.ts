@@ -4,11 +4,11 @@ import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { enqueueStatementBatchJobs } from '@openbooks/jobs'
-import { resolveOrgEmailTransport } from '@openbooks/engine/src/delivery/email-config.ts'
+import { resolveOrgEmailTransport } from '@openbooks/engine/delivery/email-config/module'
 import {
   createStatementBatchRun,
   listStatementBatchRuns,
-} from '@openbooks/engine/src/receivables/statement-batches.ts'
+} from '@openbooks/engine/receivables/statement-batches'
 import { ReportCurrencyBasisError } from '../../../lib/reports/currency-basis'
 import { buildStatementBatchPreview } from '../../../lib/statement-batch'
 import { can, type Authz } from '../../../lib/authz'

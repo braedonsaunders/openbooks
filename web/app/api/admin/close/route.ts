@@ -10,7 +10,7 @@ import { CLOSE_MODULES, CloseError, type CloseModule } from "@openbooks/engine/s
 import { consumeReopenRequestsForClosedModules, decidePeriodReopen, extendReopenRequest, recloseApprovedReopen, reopenDecisionPreview, requestPeriodReopen } from "@openbooks/engine/src/close/reopening.ts";
 import { generateAccountingPeriods } from "@openbooks/engine/src/close/calendar.ts";
 import { closePeriodAllModules, setPeriodLockState } from "@openbooks/engine/src/periods/period-locks.ts";
-import { auditBankingModuleClose, bankingCloseStatus, bankingUnmatchedStatementLines, evaluateBankingModuleClose } from "@openbooks/engine/src/close/banking-close.ts";
+import { auditBankingModuleClose, bankingCloseStatus, bankingUnmatchedStatementLines, evaluateBankingModuleClose } from "@openbooks/engine/close/banking-close";
 import { can, getAuthz, guardSubsidiaryScope } from "../../../../lib/authz";
 import { isUuid } from "../../../../lib/list-params";
 import { isFeatureEnabled } from "../../../../lib/features";

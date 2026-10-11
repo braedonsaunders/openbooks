@@ -1,6 +1,6 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { fileBankDetailsChange } from "@openbooks/engine/src/hrm/self-service/bank-changes.ts";
+import { fileBankDetailsChange } from "@openbooks/engine/hrm/self-service/bank-changes";
 import { normalizeCountryCode } from "../../../../../lib/countries";
 import { meErrorResponse } from "../_lib";
 import { fileBankChangeBody } from "../bodies";

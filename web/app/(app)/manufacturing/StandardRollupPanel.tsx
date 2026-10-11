@@ -9,8 +9,8 @@ import { readApiErrorMessage } from "@/lib/api-error";
 import { PagedTable } from "@/components/paged-table";
 import { formatDecimal } from "@/lib/money-format";
 import { useLocale } from "next-intl";
-import type { ManufacturingOptions } from "@openbooks/engine/src/manufacturing/workspace.ts";
-import type { previewStandardRollup } from "@openbooks/engine/src/manufacturing/standard-rollup.ts";
+import type { ManufacturingOptions } from "@openbooks/engine/manufacturing/workspace";
+import type { previewStandardRollup } from "@openbooks/engine/manufacturing/standard-rollup";
 type Preview=Awaited<ReturnType<typeof previewStandardRollup>>;
 
 /** Measurement and application remain in the native cost/revaluation services. */

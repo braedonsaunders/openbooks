@@ -3,8 +3,8 @@ import type {
   ManufacturingRecordData,
   ManufacturingRow,
   ManufacturingView,
-} from "@openbooks/engine/src/manufacturing/workspace.ts";
-import { add,neg,cmp } from "@openbooks/engine/src/money/money.ts";
+} from "@openbooks/engine/manufacturing/workspace";
+import { add,neg,cmp } from "@openbooks/engine/money/money";
 export type Choice = { value: string; label: string; parentId?: string | null };
 export interface Field {
   key: string;

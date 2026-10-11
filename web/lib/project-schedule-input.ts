@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
+import { isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
 import { canonicalDecimal } from './exact-decimal'
 import { moneyRefusal } from './payroll-decimal-refusal'
 

@@ -9,7 +9,7 @@ import { getLocale, getTranslations } from 'next-intl/server'
 import { decimalLabel } from '../../../../../lib/format'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { TAX_RETURN_PACKS } from '@openbooks/engine/src/tax/seed-tax-forms.ts'
-import { ensureAiRailsSettingsForOrg } from '@openbooks/engine/src/hrm/ai/settings.ts'
+import { ensureAiRailsSettingsForOrg } from '@openbooks/engine/hrm/ai/settings'
 import {
   badge,
   column,

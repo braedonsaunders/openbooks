@@ -1,4 +1,4 @@
-import { OPERATING_PRESETS } from '@openbooks/engine/src/organization/operating-profile-model.ts'
+import { OPERATING_PRESETS } from '@openbooks/engine/organization/operating-profile-model'
 import type { SetupEntity, SetupField } from '../types'
 const label = (key: string) => `operatingProfiles.${key}`
 const field = (key: string, kind: SetupField['kind'], extra: Partial<SetupField> = {}): SetupField => ({ key, kind, labelKey: label(`fields.${key}`), ...extra })

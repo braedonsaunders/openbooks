@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { NextResponse } from 'next/server'
 import { defineRoute } from '@/lib/api/route'
 import { schedulingBoardRouteAuthority } from '@/lib/scheduling/board-route-authority'
-import { withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { withOrgTransaction } from '@openbooks/engine/platform/db'
 import { updateSetupRecord } from '@/lib/setup/write'
 
 export const PATCH = defineRoute({

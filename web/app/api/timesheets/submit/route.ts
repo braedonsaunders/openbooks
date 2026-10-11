@@ -1,5 +1,5 @@
 import { authorizeTimeWorkspace, refuseOthersTime, timeWorkFamily } from "@/lib/time-workspace";
-import { lockSharedTimeAuthority, TimeWorkTargetError } from "@openbooks/engine/src/projects/time-work-target.ts";
+import { lockSharedTimeAuthority, TimeWorkTargetError } from "@openbooks/engine/projects/time-work-target";
 import { TimeApprovalRefusal } from "@/lib/time-approval-refusal";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { z } from "zod";

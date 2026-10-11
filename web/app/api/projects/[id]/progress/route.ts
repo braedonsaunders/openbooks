@@ -4,7 +4,7 @@ import { defineRoute } from '@/lib/api/route'
 import { notFound } from '@/lib/api/responses'
 import { isUuid } from '../../../../../lib/list-params'
 import { progressErrorResponse } from '../../../../../lib/project-progress-api'
-import { listProgress, recordProgress, reverseProgress } from '@openbooks/engine/src/projects/progress.ts'
+import { listProgress, recordProgress, reverseProgress } from '@openbooks/engine/projects/progress'
 
 const params = z.object({ id: z.string() })
 const progressBody = z.discriminatedUnion('action', [

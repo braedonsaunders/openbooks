@@ -2,12 +2,12 @@ import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { subsidiaryVisibleFilter } from '@openbooks/engine/organization/scope'
 import {
   projectBudgetComparison,
   type BudgetComparison,
-} from '@openbooks/engine/src/projects/budget-baselines.ts'
+} from '@openbooks/engine/projects/budget-baselines'
 import type { Authz } from './authz'
 import type { ExportData } from './report-pdf'
 

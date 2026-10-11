@@ -22,7 +22,7 @@ import {
   type CompanyAddress,
   type LegalForm,
   type TaxClassification,
-} from '@openbooks/engine/src/organization/company-identity.ts'
+} from '@openbooks/engine/organization/company-identity'
 import { countryOptions } from '../../../../lib/countries'
 
 /** The company's legal identity as the form edits it. */

@@ -1,9 +1,9 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { writeNotification } from '@openbooks/engine/src/inbox/adapters/notification.ts'
-import type { ScheduleNotice } from '@openbooks/engine/src/schedule-boards/entries.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { writeNotification } from '@openbooks/engine/inbox/adapters/notification'
+import type { ScheduleNotice } from '@openbooks/engine/schedule-boards/entries'
 export interface ScheduleDelivery {
   readonly people: number
   readonly notified: number

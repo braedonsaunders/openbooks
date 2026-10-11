@@ -8,7 +8,7 @@ import { db, withOrgContext, withOrgTransaction } from '@openbooks/engine/src/pl
 import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/submit.ts'
 import { controlDeps } from '@openbooks/engine/src/ledger/document-service.ts'
 import { postDocument } from '@openbooks/engine/src/ledger/posting-document.ts'
-import { postedDocumentControlAccount } from '@openbooks/engine/src/ledger/posting-control-account.ts'
+import { postedDocumentControlAccount } from '@openbooks/engine/ledger/posting-control-account'
 import { runPostDocumentEffects } from '@openbooks/engine/src/ledger/posting-dispatch.ts'
 import { runRecordFlows } from '@openbooks/engine/src/flows/index.ts'
 import { canonicalDecimal, compareDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'

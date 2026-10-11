@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { NextResponse } from 'next/server'
 import { schedulingBoardRouteAuthority } from '@/lib/scheduling/board-route-authority'
 import { defineRoute } from '@/lib/api/route'
-import { publishBoard } from '@openbooks/engine/src/schedule-boards/entries.ts'
+import { publishBoard } from '@openbooks/engine/schedule-boards/entries'
 import { deliverScheduleNotices } from '@/lib/scheduling/notify'
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)

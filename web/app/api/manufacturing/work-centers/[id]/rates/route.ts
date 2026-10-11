@@ -1,4 +1,4 @@
-import { lockManufacturingCenterAuthority } from "@openbooks/engine/src/manufacturing/authority.ts";
+import { lockManufacturingCenterAuthority } from "@openbooks/engine/manufacturing/authority";
 import { z } from "zod";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { addWorkCenterRate, getWorkCenter, getWorkCenterRate } from "@openbooks/engine/src/manufacturing/work-centers.ts";

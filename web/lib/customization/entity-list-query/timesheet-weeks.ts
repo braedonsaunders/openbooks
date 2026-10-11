@@ -1,4 +1,4 @@
-import { orderResourcesVisible } from "@openbooks/engine/src/manufacturing/workspace.ts";
+import { orderResourcesVisible } from "@openbooks/engine/manufacturing/workspace";
 import "server-only";
 import { sql, type SQL } from "drizzle-orm";
 import type { ListViewConfig, FilterClause } from "@openbooks/customization";

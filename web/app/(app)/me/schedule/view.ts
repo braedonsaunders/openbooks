@@ -2,13 +2,13 @@ import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { addCalendarDays, businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { ScheduleError } from '@openbooks/engine/src/schedule-boards/errors.ts'
-import { loadMySchedule } from '@openbooks/engine/src/schedule-boards/mine.ts'
-import type { BoardEntry } from '@openbooks/engine/src/schedule-boards/window.ts'
+import { addCalendarDays, businessToday } from '@openbooks/engine/platform/business-date/module'
+import { ScheduleError } from '@openbooks/engine/schedule-boards/errors'
+import { loadMySchedule } from '@openbooks/engine/schedule-boards/mine'
+import type { BoardEntry } from '@openbooks/engine/schedule-boards/window'
 import { getAuthz } from '@/lib/authz'
 import { meTabs } from '@/lib/hrm/self-service'
-import { isIsoCalendarDate } from '@openbooks/engine/src/platform/iso-date.ts'
+import { isIsoCalendarDate } from '@openbooks/engine/platform/iso-date'
 
 /** The employee's own published schedule: where to be and when, four weeks out. */
 export interface MyScheduleData {

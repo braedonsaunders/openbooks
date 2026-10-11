@@ -5,7 +5,7 @@ import { History } from 'lucide-react'
 import { targetHue } from './model'
 import { CHIP_COLORS, chipStyle } from './BookingChip'
 import { Drawer, cn } from '@openbooks/ui'
-import type { BoardSourceRecord } from '@openbooks/engine/src/schedule-boards/source-history.ts'
+import type { BoardSourceRecord } from '@openbooks/engine/schedule-boards/source-history'
 
 export function SourceRecordChip({ records, compact = false, workerName, subjectOnly = false, dimmed = false, onOpen }: {
   records: readonly BoardSourceRecord[]

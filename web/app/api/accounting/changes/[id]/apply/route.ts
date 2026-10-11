@@ -1,7 +1,7 @@
-import {applyProductionLoss} from "@openbooks/engine/src/manufacturing/loss-disposition.ts";
-import { applyBomRevision } from "@openbooks/engine/src/inventory/bom-policy.ts";
-import { applyRoutingActivation } from "@openbooks/engine/src/manufacturing/routings.ts";
-import { applyStandardRollup } from "@openbooks/engine/src/manufacturing/standard-rollup.ts";
+import {applyProductionLoss} from "@openbooks/engine/manufacturing/loss-disposition";
+import { applyBomRevision } from "@openbooks/engine/inventory/bom-policy";
+import { applyRoutingActivation } from "@openbooks/engine/manufacturing/routings";
+import { applyStandardRollup } from "@openbooks/engine/manufacturing/standard-rollup";
 import { applyNetInvestmentAssessment,applyNetInvestmentReversal } from '@openbooks/engine/consolidation'
 import { applyDropShipAssessment } from '@openbooks/engine/inventory'
 import { applyExpectedBreakage } from '@openbooks/engine/revenue'
@@ -19,8 +19,8 @@ import { applyAssetChange } from "@openbooks/engine/src/assets/asset-changes.ts"
 import { applyLeaseChange } from "@openbooks/engine/src/revenue/lease-changes.ts";
 import { applyRevenueModification } from "@openbooks/engine/src/revenue/contract-modifications.ts";
 import { authorizeChange } from "../../_authorization";
-import { applyHolidayObligation } from "@openbooks/engine/src/payroll/holiday-obligations.ts";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { applyHolidayObligation } from "@openbooks/engine/payroll/holiday-obligations";
+import { db } from "@openbooks/engine/platform/db";
 import { accessAtLeast, fileAccessLevel } from "@/lib/file-cabinet";
 import { fileViewer } from "@/app/api/file-cabinet/lib";
 export const runtime = "nodejs";

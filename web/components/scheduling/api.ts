@@ -2,8 +2,8 @@
 
 import type { BoardChange, BoardTarget, BoardWindow, ChangeResult } from './model'
 import { refusalMessageFromBody } from '../../lib/api-error'
-import type { ProjectProgress } from '@openbooks/engine/src/schedule-boards/progress.ts'
-import type { ProjectTaskOption } from '@openbooks/engine/src/schedule-boards/targets.ts'
+import type { ProjectProgress } from '@openbooks/engine/schedule-boards/progress'
+import type { ProjectTaskOption } from '@openbooks/engine/schedule-boards/targets'
 
 /** A refusal as the server worded it, with its supported remedy. */
 export class SchedulingRequestError extends Error {

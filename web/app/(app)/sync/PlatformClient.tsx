@@ -22,8 +22,8 @@ import {
 import { MIGRATION_WORKSPACE_HREF } from "@/lib/migration/links";
 import Link from "next/link";
 import { ConnectionMappingWorkspace, ConnectionSyncContent, type MappingDrafts } from "./ConnectionContent";
-import { decodeEntityMappings } from "@openbooks/engine/src/sync/entity-mapping-contract.ts";
-import { connectorSettings, resolveSyncSelection, migrateConnectionEntityMappings, validateStructuredConnectionMappings, type MappingGroup, type SyncCapabilities, type SyncContentKey } from "@openbooks/engine/src/sync/connection-settings.ts";
+import { decodeEntityMappings } from "@openbooks/engine/sync/entity-mapping-contract";
+import { connectorSettings, resolveSyncSelection, migrateConnectionEntityMappings, validateStructuredConnectionMappings, type MappingGroup, type SyncCapabilities, type SyncContentKey } from "@openbooks/engine/sync/connection-settings";
 import { RecordTabs } from "@/components/module-home/record-tabs";
 import { readApiErrorMessage, refusalMessageFromBody } from "../../../lib/api-error";
 import { confirmDialog } from "@/lib/confirm";

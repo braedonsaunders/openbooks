@@ -6,7 +6,7 @@ import { Button, Drawer, Input, Select, RichTextEditor } from "@openbooks/ui";
 import { configuredSchedulePdfLayout, plainTextDocument, richTextPlainText, type RichTextDocument, type SchedulePdfLayout } from "@openbooks/forms-core";
 import type { BoardWindow } from './model'
 import { refusalMessageFromBody } from '../../lib/api-error'
-import type { ScheduleDistributionPreview } from '@openbooks/engine/src/schedule-boards/distribution.ts'
+import type { ScheduleDistributionPreview } from '@openbooks/engine/schedule-boards/distribution'
 import { SchedulePdfFields } from './SchedulePdfFields'
 import { SchedulingAlert } from './SchedulingAlert'
 import { SchedulingRequestError } from './api'

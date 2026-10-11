@@ -38,3 +38,16 @@ export function resolveEngineSpecifier(specifier: string): string | null {
   if (subpath.startsWith("src/")) return new URL(subpath, engineRoot).href;
   return null;
 }
+
+/**
+ * The implementation-path spelling (`@openbooks/engine/src/<path>.ts`) of a
+ * named engine contract, so a test that mocks a module by its source path
+ * still intercepts application code importing it through the contract.
+ * Null for anything that is not a named contract onto one source file.
+ */
+export function engineSourceSpecifier(specifier: string): string | null {
+  const prefix = "@openbooks/engine/";
+  if (!specifier.startsWith(prefix) || specifier.startsWith(`${prefix}src/`)) return null;
+  const mapped = engineExports[`./${specifier.slice(prefix.length)}`];
+  return typeof mapped === "string" && mapped.startsWith("./src/") ? `${prefix}${mapped.slice(2)}` : null;
+}

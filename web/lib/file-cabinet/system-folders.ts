@@ -1,7 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-export { ensureAttachmentsRoot, ensureRecordFolder } from '@openbooks/engine/src/platform/record-folders.ts'
+export { ensureAttachmentsRoot, ensureRecordFolder } from '@openbooks/engine/platform/record-folders'
 
 /** System intake folder for AP capture source packets. */
 export async function ensureApCaptureRoot(orgId: string, createdBy: string): Promise<string> {

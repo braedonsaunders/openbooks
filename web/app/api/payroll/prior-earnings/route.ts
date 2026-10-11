@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import { NextResponse } from 'next/server';
-import { db } from '@openbooks/engine/src/platform/db.ts';
-import { PayrollError } from '@openbooks/engine/src/payroll/error.ts';
-import { payrollPriorEarningsForEmployee, savePayrollPriorEarnings } from '@openbooks/engine/src/payroll/prior-earnings.ts';
+import { db } from '@openbooks/engine/platform/db';
+import { PayrollError } from '@openbooks/engine/payroll/error';
+import { payrollPriorEarningsForEmployee, savePayrollPriorEarnings } from '@openbooks/engine/payroll/prior-earnings';
 import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response';
 import { uuidId } from '@/lib/api/json-schema';

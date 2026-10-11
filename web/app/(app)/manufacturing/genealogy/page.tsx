@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { z } from "zod";
 import { getTranslations } from "next-intl/server";
-import { db, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
-import { traceManufacturingGenealogy } from "@openbooks/engine/src/manufacturing/genealogy.ts";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
+import { traceManufacturingGenealogy } from "@openbooks/engine/manufacturing/genealogy";
 import { requirePermission } from "@/lib/authz";
 import { requireFeatureEnabled } from "@/lib/feature-gates";
 import { PageHeader, EmptyState } from "@openbooks/ui";

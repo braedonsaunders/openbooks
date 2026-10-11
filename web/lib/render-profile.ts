@@ -1,7 +1,7 @@
 import "server-only";
 import { AppRenderSpan } from "next/dist/server/lib/trace/constants";
 import { normalizeAppPath } from "next/dist/shared/lib/router/utils/app-paths";
-import type { SpanProcessor } from "@openbooks/engine/src/platform/telemetry.ts";
+import type { SpanProcessor } from "@openbooks/engine/platform/telemetry";
 
 const MAX_COMPLETED_RENDERS = 10_000;
 

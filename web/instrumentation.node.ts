@@ -1,8 +1,8 @@
 /** Node-only OpenBooks process services registered by Next.js instrumentation. */
-import type { SpanProcessor } from '@openbooks/engine/src/platform/telemetry.ts'
+import type { SpanProcessor } from '@openbooks/engine/platform/telemetry'
 
 export async function registerNodeInstrumentation() {
-  const { startTelemetry } = await import('@openbooks/engine/src/platform/telemetry.ts')
+  const { startTelemetry } = await import('@openbooks/engine/platform/telemetry')
   // Per-route database profile (see lib/query-profile.ts). Off by default:
   // when the flag is unset neither the profiler nor its observer is loaded.
   const localSpanProcessors: SpanProcessor[] = []

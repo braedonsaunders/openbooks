@@ -3,7 +3,7 @@ import { z } from "zod";
 import {
   releasePickWave,
   setPickDispatchPolicy,
-} from "@openbooks/engine/src/sales/pick-execution.ts";
+} from "@openbooks/engine/sales/pick-execution";
 import { defineRoute } from "@/lib/api/route";
 import { uuidId } from "@/lib/api/json";
 import {

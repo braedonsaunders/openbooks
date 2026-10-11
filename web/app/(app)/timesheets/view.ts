@@ -1,10 +1,10 @@
-import { withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { lockSharedTimeAuthority, type TimeWorkFamily } from '@openbooks/engine/src/projects/time-work-target.ts'
+import { withOrgTransaction } from '@openbooks/engine/platform/db'
+import { lockSharedTimeAuthority, type TimeWorkFamily } from '@openbooks/engine/projects/time-work-target'
 import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { can, getAuthz, requirePermission } from '../../../lib/authz'
 import { ownTimeOnly, supervisesTime as supervisesTimeCommand, timeCommandGrants } from '../../../lib/time-workspace'
@@ -16,7 +16,7 @@ import { loadOpenFlagsForWeek, type WeekFlagChip } from '../../../lib/hrm/ai-rai
 import { loadTimePolicy } from '../../../lib/time-policy'
 // HR-20: approver flag chips over the week's clock pairs.
 import { approvalFlags } from '@openbooks/engine/src/hrm/field-time/reads.ts'
-import { TIMESHEET_WEEK_SUBJECT_KIND } from '@openbooks/engine/src/flows/timesheet-weeks-adapter.ts'
+import { TIMESHEET_WEEK_SUBJECT_KIND } from '@openbooks/engine/flows/timesheet-weeks-adapter'
 import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
 import {
   currentWeekStart,
@@ -30,7 +30,7 @@ import {
 } from '../../api/timesheets/_lib'
 import type { WeeklyGrid } from './WeeklyGrid'
 import { managesOthersTime, resolveNewTimesheetStart } from './new-timesheet'
-import { listDirectApprovalWeeks } from '@openbooks/engine/src/inbox/adapters/timesheet-approval.ts'
+import { listDirectApprovalWeeks } from '@openbooks/engine/inbox/adapters/timesheet-approval'
 import { APPROVALS_BULK_BATCH_MAX } from '../../../lib/approvals-limits'
 import type { BulkApproveWeek } from './TimesheetBulkApprove'
 

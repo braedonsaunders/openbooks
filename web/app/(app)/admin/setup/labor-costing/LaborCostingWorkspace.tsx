@@ -1,7 +1,7 @@
 'use client'
 
 import { PayrollWageRoundingFields } from '../../../../../components/payroll-wage-rounding-fields'
-import { type PayrollAmountRounding } from '@openbooks/engine/src/projects/payroll-wage-rounding.ts'
+import { type PayrollAmountRounding } from '@openbooks/engine/projects/payroll-wage-rounding'
 
 import Link from 'next/link'
 import { useState } from 'react'

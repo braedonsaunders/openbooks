@@ -17,4 +17,4 @@ export async function enqueueCabinetCleanup(
     })
   }
 }
-export { titleizeKind, deriveFileType } from '@openbooks/engine/src/platform/file-names.ts'
+export { titleizeKind, deriveFileType } from '@openbooks/engine/platform/file-names'

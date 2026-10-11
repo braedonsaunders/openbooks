@@ -6,7 +6,7 @@ import { ListPageLayout } from '../../../../components/page-layout'
 import { SetupEntitySection } from '../../admin/setup/[entity]/SetupEntitySection'
 import { requirePermission, can } from '../../../../lib/authz'
 import { SETUP_ENTITY_BY_KEY } from '../../../../lib/setup/registry'
-import { boardAuthority, enabledBoardKinds, listBoards } from '@openbooks/engine/src/schedule-boards/boards.ts'
+import { boardAuthority, enabledBoardKinds, listBoards } from '@openbooks/engine/schedule-boards/boards'
 
 export const dynamic = 'force-dynamic'
 

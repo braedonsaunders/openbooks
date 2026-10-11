@@ -4,7 +4,7 @@ import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
 import { guardPermission } from "../../../../lib/authz";
-import { LEGAL_FORMS, TAX_CLASSIFICATIONS } from "@openbooks/engine/src/organization/company-identity.ts";
+import { LEGAL_FORMS, TAX_CLASSIFICATIONS } from "@openbooks/engine/organization/company-identity";
 import {
   readCompanySettings,
   SETTINGS_READ_PERMISSION,

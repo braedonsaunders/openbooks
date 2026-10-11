@@ -15,7 +15,7 @@ import { EmailScheduleDrawer } from './EmailScheduleDrawer'
 import { DownloadScheduleDrawer } from './DownloadScheduleDrawer'
 import { BookingDrawer } from './BookingDrawer'
 import { SourceRecordDrawer } from './SourceRecord'
-import type { BoardSourceRecord } from '@openbooks/engine/src/schedule-boards/source-history.ts'
+import type { BoardSourceRecord } from '@openbooks/engine/schedule-boards/source-history'
 import { CalendarView } from './CalendarView'
 import { NewBoardDrawer, type ScopeOptions } from './NewBoardDrawer'
 import { PeopleGrid } from './PeopleGrid'
@@ -27,7 +27,7 @@ import { boardLegend } from './legend'
 import { publish, SchedulingRequestError } from './api'
 import { addDays, viewRange, type BoardEntry, type BoardWindow, type GroupBy, targetHue } from './model'
 import { useBoard } from './use-board'
-import type { ScheduleBoard } from '@openbooks/engine/src/schedule-boards/boards.ts'
+import type { ScheduleBoard } from '@openbooks/engine/schedule-boards/boards'
 
 export interface BoardSummary {
   readonly id: string

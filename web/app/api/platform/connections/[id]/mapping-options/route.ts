@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";
-import { buildSource, getConnection } from "@openbooks/engine/src/sync/connection.ts";
-import { connectorSettings } from "@openbooks/engine/src/sync/connection-settings.ts";
+import { buildSource, getConnection } from "@openbooks/engine/sync/connection";
+import { connectorSettings } from "@openbooks/engine/sync/connection-settings";
 import { connectionConfigUrlRefusal } from "../../_connector-guard";
 
 export const runtime = "nodejs";

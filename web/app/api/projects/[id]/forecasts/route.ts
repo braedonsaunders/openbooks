@@ -4,7 +4,7 @@ import { defineRoute } from '@/lib/api/route'
 import { notFound } from '@/lib/api/responses'
 import { isUuid } from '../../../../../lib/list-params'
 import { progressErrorResponse } from '../../../../../lib/project-progress-api'
-import { listForecasts, recordForecast } from '@openbooks/engine/src/projects/forecasts.ts'
+import { listForecasts, recordForecast } from '@openbooks/engine/projects/forecasts'
 
 const params = z.object({ id: z.string() })
 const forecastBody = z.object({

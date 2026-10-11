@@ -2,7 +2,7 @@ import "server-only";
 import { analyticsQuery } from "./query";
 import { sql } from "drizzle-orm";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
-import { utcDateFromParts } from "@openbooks/engine/src/platform/business-date.ts";
+import { utcDateFromParts } from "@openbooks/engine/platform/business-date/module";
 
 export interface HistoryWindow {
   /** Inclusive ISO start of one prior window. */

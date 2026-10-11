@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { withScopeSnapshot } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
-import { manufacturingTracking } from "@openbooks/engine/src/manufacturing/workspace.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { withScopeSnapshot } from "@openbooks/engine/organization/scope";
+import { manufacturingTracking } from "@openbooks/engine/manufacturing/workspace";
 import { defineRoute } from "@/lib/api/route";
 export const GET = defineRoute({
   permission: "manufacturing.read",

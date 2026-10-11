@@ -1,4 +1,4 @@
-import { postedCorrectionFieldClass } from '@openbooks/engine/src/ledger/posted-correction-fields.ts'
+import { postedCorrectionFieldClass } from '@openbooks/engine/ledger/posted-correction-fields'
 
 /**
  * Posted-document consequence preview for the drawer save flow. It answers

@@ -1,22 +1,22 @@
-import { readWorkListFilters } from "@openbooks/engine/src/organization/work-list-filters.ts";
-import { readWorkListPresentation } from "@openbooks/engine/src/organization/list-presentation.ts";
+import { readWorkListFilters } from "@openbooks/engine/organization/work-list-filters";
+import { readWorkListPresentation } from "@openbooks/engine/organization/list-presentation";
 import { WorkListPresentation } from "@/components/work-list-presentation";
-import { manufacturingFeatureEnabled } from "@openbooks/engine/src/manufacturing/gate.ts";
+import { manufacturingFeatureEnabled } from "@openbooks/engine/manufacturing/gate";
 import { RecordBoard } from '@/components/record-board';
-import { listOperatingProfileChoices } from '@openbooks/engine/src/organization/operating-profiles.ts';
+import { listOperatingProfileChoices } from '@openbooks/engine/organization/operating-profiles';
 import Link from "next/link";
 import { getTranslations, getLocale } from "next-intl/server";
 import { z } from "zod";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { withScopeSnapshot } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { withScopeSnapshot } from "@openbooks/engine/organization/scope";
 import {
   listManufacturingRecords,
   manufacturingOptions,
   searchManufacturingChoices,
   type ManufacturingRow,
   type ManufacturingView,
-} from "@openbooks/engine/src/manufacturing/workspace.ts";
-import { routingDirectApplyAllowed } from "@openbooks/engine/src/manufacturing/routings.ts";
+} from "@openbooks/engine/manufacturing/workspace";
+import { routingDirectApplyAllowed } from "@openbooks/engine/manufacturing/routings";
 import { requirePermission, can } from "@/lib/authz";
 import { requireFeatureEnabled } from "@/lib/feature-gates";
 import {

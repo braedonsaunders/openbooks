@@ -23,7 +23,7 @@ import {
 } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../lib/authz'
 import { isFeatureEnabled } from '../../../lib/features'
-import { FORM_TYPES } from '@openbooks/engine/src/compliance/information-returns.ts'
+import { FORM_TYPES } from '@openbooks/engine/compliance/information-returns'
 import {
   buildListDrawerHref,
   isUuid,

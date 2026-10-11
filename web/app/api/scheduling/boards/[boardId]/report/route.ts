@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { NextResponse } from 'next/server'
 import { schedulePdfLayoutSchema } from '@openbooks/forms-core'
-import { previewScheduleBoardReport, downloadScheduleBoardReport } from '@openbooks/engine/src/schedule-boards/board-report.ts'
+import { previewScheduleBoardReport, downloadScheduleBoardReport } from '@openbooks/engine/schedule-boards/board-report'
 import { defineRoute } from '@/lib/api/route'
 import { schedulingBoardRouteAuthority } from '@/lib/scheduling/board-route-authority'
 const windowFields = {from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), through: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), layout: schedulePdfLayoutSchema.optional()}

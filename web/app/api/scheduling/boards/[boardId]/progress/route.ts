@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { NextResponse } from 'next/server'
 import { defineRoute } from '@/lib/api/route'
-import { loadProjectProgress } from '@openbooks/engine/src/schedule-boards/progress.ts'
+import { loadProjectProgress } from '@openbooks/engine/schedule-boards/progress'
 
 /** Production progress for one project on a task board. */
 export const GET = defineRoute({

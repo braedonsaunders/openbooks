@@ -7,7 +7,7 @@ import { isUuid } from "../../../../lib/list-params";
 import { ScopeNotFoundError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
 import { approveSubmittedTimeEntries } from "../../../../lib/time-approval";
 import { TimeApprovalRefusal } from "../../../../lib/time-approval-refusal";
-import { TimeWorkTargetError } from "@openbooks/engine/src/projects/time-work-target.ts";
+import { TimeWorkTargetError } from "@openbooks/engine/projects/time-work-target";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { isIsoDate, loadWeek, pinTimekeeper, weekStart } from "../_lib";
 import { notFound } from "@/lib/api/responses";

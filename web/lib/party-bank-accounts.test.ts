@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { engineSourceSpecifier } from '../testing/engine-resolve-hooks.ts'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 
@@ -116,7 +117,7 @@ const mockUrls = new Map<string, string>([
 registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier.endsWith('/lib/authz')) return { url: 'mock:authz', shortCircuit: true }
-    const mocked = mockUrls.get(specifier)
+    const mocked = mockUrls.get(specifier) ?? mockUrls.get(engineSourceSpecifier(specifier) ?? '')
     if (mocked) return { url: mocked, shortCircuit: true }
     return nextResolve(specifier, context)
   },

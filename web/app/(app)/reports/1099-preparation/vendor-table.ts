@@ -9,7 +9,7 @@ import {
   type Column,
   type Value,
 } from '@braedonsaunders/appkit-viewspec'
-import type { NecPreparationVendor } from '@openbooks/engine/src/compliance/information-returns.ts'
+import type { NecPreparationVendor } from '@openbooks/engine/compliance/information-returns'
 
 /**
  * 1099-NEC preparation vendor rows and their report columns.

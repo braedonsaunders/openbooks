@@ -20,7 +20,7 @@ import {
   runSubscriptionCatchUp,
   type Interval,
 } from "@openbooks/engine/src/billing/subscription-billing.ts";
-import { CATCH_UP_CHOICE_THRESHOLD } from "@openbooks/engine/src/billing/recurring.ts";
+import { CATCH_UP_CHOICE_THRESHOLD } from "@openbooks/engine/billing/recurring";
 import { ScopeNotFoundError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
 import { add, mulDecimal } from "@openbooks/engine/src/money/money.ts";
 import { guardSubsidiaryScope, guardUnrestrictedScope, type Authz } from "../../../lib/authz";

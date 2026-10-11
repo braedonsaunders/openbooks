@@ -2,7 +2,7 @@
 
 import { Label, Select } from '@openbooks/ui'
 import { useTranslations } from 'next-intl'
-import { type PayrollAmountRounding, requirePayrollWageRounding } from '@openbooks/engine/src/projects/payroll-wage-rounding.ts'
+import { type PayrollAmountRounding, requirePayrollWageRounding } from '@openbooks/engine/projects/payroll-wage-rounding'
 
 /** Explicit dated payroll policy in advanced labor-costing setup. */
 export function PayrollWageRoundingFields(props: {

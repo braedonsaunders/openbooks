@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { traceManufacturingGenealogy } from "@openbooks/engine/src/manufacturing/genealogy.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { traceManufacturingGenealogy } from "@openbooks/engine/manufacturing/genealogy";
 import { defineRoute } from "@/lib/api/route";
 import { manufacturingTransaction } from "../_transaction";
 

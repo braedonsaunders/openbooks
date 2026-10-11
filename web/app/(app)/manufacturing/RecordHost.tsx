@@ -19,15 +19,15 @@ import type {
   ManufacturingRecordData,
   ManufacturingRow,
   ManufacturingView,
-} from "@openbooks/engine/src/manufacturing/workspace.ts";
+} from "@openbooks/engine/manufacturing/workspace";
 import {
   childCommands,
   headerCommand,
   recordCommands,
   type Command,
 } from "./commands";
-import type { OperatingProfileChoice } from "@openbooks/engine/src/organization/operating-profiles.ts";
-import { cmp, add, neg } from "@openbooks/engine/src/money/money.ts";
+import type { OperatingProfileChoice } from "@openbooks/engine/organization/operating-profiles";
+import { cmp, add, neg } from "@openbooks/engine/money/money";
 import { StandardRollupPanel } from "./StandardRollupPanel";
 import { WorkOrderJourney } from "./WorkOrderJourney";
 import { SubcontractPanel } from "./SubcontractPanel";

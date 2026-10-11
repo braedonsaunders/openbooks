@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { defineRoute } from '@/lib/api/route'
 import { guardPermission } from '@/lib/authz'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { listOperatingProfileChoices } from '@openbooks/engine/src/organization/operating-profiles.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
+import { listOperatingProfileChoices } from '@openbooks/engine/organization/operating-profiles'
 export const GET = defineRoute({
   authorize: async ({ request }) => {
     const family = new URL(request.url).searchParams.get('family')

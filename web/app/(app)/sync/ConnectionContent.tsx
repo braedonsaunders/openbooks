@@ -5,13 +5,13 @@ import { useTranslations } from 'next-intl'
 import { Badge, Button, Label, SearchSelect, Select } from '@openbooks/ui'
 import { RecordTabs } from '../../../components/module-home/record-tabs'
 import { EntityMappingEditor } from './EntityMappingEditor'
-import { decodeEntityMappings, type ConnectionEntityMappings } from '@openbooks/engine/src/sync/entity-mapping-contract.ts'
+import { decodeEntityMappings, type ConnectionEntityMappings } from '@openbooks/engine/sync/entity-mapping-contract'
 import { readApiErrorMessage } from '../../../lib/api-error'
 import { confirmDialog } from '../../../lib/confirm'
 import {
   decodeConnectionMappings, resolveSyncSelection, SYNC_CONTENT_KEYS,
   type MappingGroup, type SyncCapabilities,
-} from '@openbooks/engine/src/sync/connection-settings.ts'
+} from '@openbooks/engine/sync/connection-settings'
 
 export function ConnectionSyncContent({ capabilities, value, onChange, attachmentUnavailableReason }: {
   capabilities: SyncCapabilities

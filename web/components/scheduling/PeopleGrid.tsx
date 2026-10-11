@@ -8,7 +8,7 @@ import { ContextMenu, cn, useContextMenu, type ContextMenuEntry } from '@openboo
 import { AbsenceChip, BookingChip } from './BookingChip'
 import { SourceRecordChip } from './SourceRecord'
 import { bookingLegendKey, filterBoardRows, sourceLegendKey } from './legend'
-import type { BoardSourceRecord } from '@openbooks/engine/src/schedule-boards/source-history.ts'
+import type { BoardSourceRecord } from '@openbooks/engine/schedule-boards/source-history'
 import { TargetPicker, type PickedTarget } from './TargetPicker'
 import { searchTargets } from './api'
 import {
@@ -17,7 +17,7 @@ import {
   type ClipCell, type GroupBy, type Rect, type Selection, type SpanInput,
 } from './model'
 import type { BoardController } from './use-board'
-import type { BoardWindow } from '@openbooks/engine/src/schedule-boards/window.ts'
+import type { BoardWindow } from '@openbooks/engine/schedule-boards/window'
 
 const NAME_W = 232
 const TOTAL_W = 64

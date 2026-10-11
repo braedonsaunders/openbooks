@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import { defineRoute } from '@/lib/api/route';
 import { NextResponse } from 'next/server'
-import { db, withOrgContext } from '@openbooks/engine/src/platform/db.ts'
-import { readTipsPayableExposure } from "@openbooks/engine/src/sales/cash-closeout.ts";
+import { db, withOrgContext } from '@openbooks/engine/platform/db'
+import { readTipsPayableExposure } from "@openbooks/engine/sales/cash-closeout";
 import { getAuthz, can } from '../../../../lib/authz'
 import { isDocKindEnabled } from "../../../../lib/documents.ts";
 import { notFound } from "@/lib/api/responses";

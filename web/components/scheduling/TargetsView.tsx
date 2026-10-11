@@ -6,11 +6,11 @@ import { Plus, Users } from 'lucide-react'
 import { cn } from '@openbooks/ui'
 import { CHIP_COLORS, chipStyle } from './BookingChip'
 import { SourceRecordChip } from './SourceRecord'
-import type { BoardSourceRecord } from '@openbooks/engine/src/schedule-boards/source-history.ts'
+import type { BoardSourceRecord } from '@openbooks/engine/schedule-boards/source-history'
 import { TargetPicker } from './TargetPicker'
 import { cellKey, indexAbsences, initials, presentedBoardEntries, targetHue, type BoardEntry, type BoardTarget, type SpanInput } from './model'
 import type { BoardController } from './use-board'
-import type { BoardWindow } from '@openbooks/engine/src/schedule-boards/window.ts'
+import type { BoardWindow } from '@openbooks/engine/schedule-boards/window'
 
 import { filterBoardRows } from './legend'
 

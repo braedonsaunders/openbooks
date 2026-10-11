@@ -3,7 +3,7 @@ import { sql, type SQL } from "drizzle-orm";
 import type { ListViewConfig } from "@openbooks/customization";
 import type { EntityAdhoc } from "./adhoc";
 import { subsidiaryVisibleFilter } from "../../subsidiaries";
-import {orderResourcesVisible} from "@openbooks/engine/src/organization/production-resource-scope.ts";
+import {orderResourcesVisible} from "@openbooks/engine/organization/production-resource-scope";
 
 const AWAITING_STATUSES = ["draft", "pending", "approved"] as const;
 

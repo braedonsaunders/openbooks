@@ -1,9 +1,9 @@
 import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { leaveToday, leaveBalancesForEmployment } from "@openbooks/engine/src/hrm/leave-read.ts";
-import { subHours } from "@openbooks/engine/src/hrm/leave-math.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { leaveToday, leaveBalancesForEmployment } from "@openbooks/engine/hrm/leave-read";
+import { subHours } from "@openbooks/engine/hrm/leave-math";
 import { can, guardPermission } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { isUuid } from "../../../../lib/list-params";

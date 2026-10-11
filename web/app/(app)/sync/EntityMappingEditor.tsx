@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { Badge, Button, FieldHelp, Input, Label, SearchSelect, Select } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../lib/api-error'
-import { decodeEntityMappings, validateEntityMappingCatalog, type ConnectionEntityMappings, type EntityFieldMapping, type EntityMappingField, type EntityMappingMetadata, type MappingScalar } from '@openbooks/engine/src/sync/entity-mapping-contract.ts'
+import { decodeEntityMappings, validateEntityMappingCatalog, type ConnectionEntityMappings, type EntityFieldMapping, type EntityMappingField, type EntityMappingMetadata, type MappingScalar } from '@openbooks/engine/sync/entity-mapping-contract'
 
 export function EntityMappingEditor({ connectionId, value, onChange, onPendingChange }: {
   connectionId?: string; value: unknown; onChange: (value: ConnectionEntityMappings) => void; onPendingChange: (pending: boolean) => void

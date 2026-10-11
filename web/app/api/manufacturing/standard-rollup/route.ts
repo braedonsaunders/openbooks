@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { previewStandardRollup, proposeStandardRollup } from "@openbooks/engine/src/manufacturing/standard-rollup.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { previewStandardRollup, proposeStandardRollup } from "@openbooks/engine/manufacturing/standard-rollup";
 import { defineRoute } from "@/lib/api/route";
 import { manufacturingTransaction } from "../_transaction";
 

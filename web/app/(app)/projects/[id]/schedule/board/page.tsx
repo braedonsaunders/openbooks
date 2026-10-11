@@ -4,7 +4,7 @@ import { loadSchedulingPage } from '../../../../scheduling/view'
 import { SETUP_ENTITY_BY_KEY } from '@/lib/setup/registry'
 import { getAuthz } from '@/lib/authz'
 import { pickString } from '@/lib/list-params'
-import { isUuid } from '@openbooks/engine/src/platform/uuid.ts'
+import { isUuid } from '@openbooks/engine/platform/identifiers'
 import { notFound } from 'next/navigation'
 export const dynamic = 'force-dynamic'
 /** A project-owned schedule body never appears in the general board picker. */

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
-import { linkManualDepreciationEntry } from "@openbooks/engine/src/assets/depreciation.ts";
+import { linkManualDepreciationEntry } from "@openbooks/engine/assets/depreciation";
 import { isUuid } from "../../../../../lib/list-params";
 
 const postBodySchema0 = z.strictObject({

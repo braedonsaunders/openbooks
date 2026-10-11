@@ -1,6 +1,6 @@
-import { canonicalConnectionMappingConfig } from '@openbooks/engine/src/sync/connection-settings.ts';
+import { canonicalConnectionMappingConfig } from '@openbooks/engine/sync/connection-settings';
 import { parseJsonBody } from "@/lib/api/json";
-import { ConnectionMappingError, decodeEntityMappings } from '@openbooks/engine/src/sync/entity-mapping-contract.ts';
+import { ConnectionMappingError, decodeEntityMappings } from '@openbooks/engine/sync/entity-mapping-contract';
 import { apiErrorResponse } from '@/lib/api/error-response';
 import { defineRoute } from '@/lib/api/route'
 import { z } from "zod";

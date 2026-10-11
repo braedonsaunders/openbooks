@@ -1,10 +1,10 @@
 import { z } from "zod";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { withScopeSnapshot } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { withScopeSnapshot } from "@openbooks/engine/organization/scope";
 import {
   manufacturingOptions,
   searchManufacturingChoices,
-} from "@openbooks/engine/src/manufacturing/workspace.ts";
+} from "@openbooks/engine/manufacturing/workspace";
 import { can } from "@/lib/authz";
 import { defineRoute } from "@/lib/api/route";
 const Query = z

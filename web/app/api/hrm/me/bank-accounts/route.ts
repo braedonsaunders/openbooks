@@ -1,6 +1,6 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { listOwnBankAccounts } from "@openbooks/engine/src/hrm/self-service/bank-changes.ts";
+import { listOwnBankAccounts } from "@openbooks/engine/hrm/self-service/bank-changes";
 import { meErrorResponse } from "../_lib";
 
 /**

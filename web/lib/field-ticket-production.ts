@@ -1,16 +1,16 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db, withOrg } from '@openbooks/engine/src/platform/db.ts'
-import { lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-feature-lock.ts'
-import { documentRevisionCounterSql } from '@openbooks/engine/src/records/revision.ts'
-import { runDocumentVersionedTransaction } from '@openbooks/engine/src/records/document-edit-policy.ts'
+import { db, withOrg } from '@openbooks/engine/platform/db'
+import { lockAndCheckOrgFeature } from '@openbooks/engine/organization/org-feature-lock'
+import { documentRevisionCounterSql } from '@openbooks/engine/records/revision'
+import { runDocumentVersionedTransaction } from '@openbooks/engine/records/document-edit-policy'
 import {
   assertProgressEnabled,
   assertQuantityMatchesBudget,
   lockProgressTask,
   parsePositiveQuantity,
   ProjectProgressError,
-} from '@openbooks/engine/src/projects/progress.ts'
+} from '@openbooks/engine/projects/progress'
 import { acquireFeatureGateLock } from './features'
 import { subsidiaryScopeAllows } from './authz'
 import { FieldTicketError, FieldTicketNotFoundError } from './field-tickets'

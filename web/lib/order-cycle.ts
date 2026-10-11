@@ -16,7 +16,7 @@ import {
 import { promoteCrmAccount } from '@openbooks/engine/src/crm/crm.ts'
 import { add, cmp, mulRatio, neg, sum } from '@openbooks/engine/src/money/money.ts'
 import { kitComponentQuantities, loadKitComponents } from '@openbooks/engine/inventory'
-import { lineRequiresReceipt } from '@openbooks/engine/src/records/stock-receipt.ts'
+import { lineRequiresReceipt } from '@openbooks/engine/records/stock-receipt'
 import {
   billableRemainderQuantityUnits,
   fromQuantityUnits,
@@ -28,17 +28,17 @@ import { overReceiptAllowanceUnits, resolveOverReceiptTolerance } from './purcha
 import { isFeatureEnabled } from './features'
 import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { applyPurchaseReceiptInventory } from "@openbooks/engine/src/inventory/documents-purchasing.ts";
-import { linkedBillReceivedCover } from "@openbooks/engine/src/inventory/bill-matchable-lines.ts";
+import { linkedBillReceivedCover } from "@openbooks/engine/inventory/bill-matchable-lines";
 import { applySalesFulfillmentInventoryIssues } from "@openbooks/engine/src/inventory/documents-sales.ts";
 import { assertStockLocationAdmitsSubsidiary } from "@openbooks/engine/src/inventory/profile-policy.ts";
 import { InventoryError, InventoryOwnershipError, UnitConversionError } from "@openbooks/engine/src/inventory/contracts.ts";
-import { WarehouseRefusal } from "@openbooks/engine/src/inventory/warehouses.ts";
+import { WarehouseRefusal } from "@openbooks/engine/inventory/warehouses";
 import { loadSubsidiaryContext } from '@openbooks/engine/src/organization/subsidiaries.ts'
 import { issueSalesOrder } from '@openbooks/engine/src/sales/sales-orders.ts'
 import { openQuantitySql, orderedNetOfCancelledSql } from '@openbooks/engine/src/records/order-line-remainders.ts'
-import { receivedNotBilledMissingMessage, resolveReceivedNotBilledAccount } from '@openbooks/engine/src/records/control-accounts.ts'
+import { receivedNotBilledMissingMessage, resolveReceivedNotBilledAccount } from '@openbooks/engine/records/control-accounts'
 import { activeStockLocations, resolveLineStockLocation } from './stock-locations'
-import { ensureDefaultWarehouse } from '@openbooks/engine/src/inventory/warehouses.ts'
+import { ensureDefaultWarehouse } from '@openbooks/engine/inventory/warehouses'
 import { isUuid } from './list-params'
 import { WORK_PERIOD_DOCUMENT_KINDS } from '@openbooks/engine/records/work-period'
 

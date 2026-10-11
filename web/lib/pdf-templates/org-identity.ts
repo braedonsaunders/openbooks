@@ -3,7 +3,7 @@ import {
   formatTaxIds,
   readCompanyAddress,
   readTaxIds,
-} from '@openbooks/engine/src/organization/company-identity.ts'
+} from '@openbooks/engine/organization/company-identity'
 
 /** The organization columns every PDF loader reads for its seller block. */
 export type OrgIdentityRow = {

@@ -6,7 +6,7 @@ import {
   sealHandlingUnit,
   moveHandlingUnit,
   handlingUnitBinOptions,
-} from "@openbooks/engine/src/sales/handling-units.ts";
+} from "@openbooks/engine/sales/handling-units";
 import { defineRoute } from "@/lib/api/route";
 import { isoDate, uuidId } from "@/lib/api/json";
 import {

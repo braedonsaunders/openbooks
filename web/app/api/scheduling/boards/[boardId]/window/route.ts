@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { NextResponse } from 'next/server'
 import { schedulingBoardRouteAuthority } from '@/lib/scheduling/board-route-authority'
 import { defineRoute } from '@/lib/api/route'
-import { loadBoardWindow } from '@openbooks/engine/src/schedule-boards/window.ts'
+import { loadBoardWindow } from '@openbooks/engine/schedule-boards/window'
 
 /** The people-board read model for a date window. */
 export const GET = defineRoute({

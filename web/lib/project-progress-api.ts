@@ -1,6 +1,6 @@
 import 'server-only'
 import { NextResponse } from 'next/server'
-import { ProjectProgressError } from '@openbooks/engine/src/projects/progress.ts'
+import { ProjectProgressError } from '@openbooks/engine/projects/progress'
 import { apiErrorResponse } from './api/error-response'
 import { notFound } from './api/responses'
 

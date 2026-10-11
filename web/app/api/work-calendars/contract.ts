@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { isIsoCalendarDate } from '@openbooks/engine/src/platform/iso-date.ts';
+import { isIsoCalendarDate } from '@openbooks/engine/platform/iso-date';
 const date = z.string().refine(isIsoCalendarDate, 'Enter a valid calendar date.');
 export const WorkCalendarBody = z.object({
   name: z.string().trim().min(1).max(120), description: z.string().max(2000).nullable().optional(), isDefault: z.boolean(),

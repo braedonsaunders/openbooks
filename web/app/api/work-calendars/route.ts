@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { defineRoute } from '@/lib/api/route';
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts';
-import { saveCompanyWorkCalendar } from '@openbooks/engine/src/organization/work-calendars.ts';
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db';
+import { saveCompanyWorkCalendar } from '@openbooks/engine/organization/work-calendars';
 import { WorkCalendarBody } from './contract';
 export const POST = defineRoute({ permission: 'admin.setup.manage', scope: 'unrestricted',
   feature: { none: 'The native command checks Manufacturing or Project Scheduling in its transaction.' }, body: WorkCalendarBody,

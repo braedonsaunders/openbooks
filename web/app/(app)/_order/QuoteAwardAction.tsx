@@ -14,7 +14,7 @@ import {
   type AwardPlan,
   type AwardSourceLine,
   type AwardTaskSpec,
-} from '@openbooks/engine/src/projects/award-plan.ts'
+} from '@openbooks/engine/projects/award-plan'
 import { readApiErrorMessage } from '../../../lib/api-error'
 import { PermissionHint } from '../../../components/permission-hint'
 

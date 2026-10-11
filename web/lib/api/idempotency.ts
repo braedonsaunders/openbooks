@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { resolveIdempotentReplay } from '@openbooks/engine/src/records/idempotent-replay.ts'
+import { resolveIdempotentReplay } from '@openbooks/engine/records/idempotent-replay'
 import type { SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
 
 // The narrowest runner every caller already satisfies: full transaction

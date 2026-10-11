@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
-import { db, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
-import { listOperatingProfileChoices } from "@openbooks/engine/src/organization/operating-profiles.ts";
-import { lockActorCommandAuthority } from "@openbooks/engine/src/organization/actor-command-authority.ts";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
+import { listOperatingProfileChoices } from "@openbooks/engine/organization/operating-profiles";
+import { lockActorCommandAuthority } from "@openbooks/engine/organization/actor-command-authority";
 import { getAuthz, can } from "@/lib/authz";
 import { isFeatureEnabled } from "@/lib/features";
 import { SetupJourneyContent } from "./SetupJourneyContent";

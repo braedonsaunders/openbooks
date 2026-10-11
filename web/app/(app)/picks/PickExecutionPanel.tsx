@@ -9,7 +9,7 @@ import {
   executionRequest,
   useDirectedExecution,
 } from "@/components/directed-execution";
-import type { FulfillmentDocumentView } from "@openbooks/engine/src/sales/fulfillment.ts";
+import type { FulfillmentDocumentView } from "@openbooks/engine/sales/fulfillment/module";
 
 function localCutoff(value: string | null | undefined): string {
   if (!value) return "";

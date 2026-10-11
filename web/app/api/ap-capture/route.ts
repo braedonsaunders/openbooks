@@ -9,7 +9,7 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { extractNativeInvoice } from '@openbooks/engine/payables/einvoice'
 import { orgFeatureEnabled } from '@openbooks/engine/organization/features'
 import { captureContentMatchesMime } from '@openbooks/engine/src/payables/ap-capture.ts'
-import { EInvoiceParseError } from '@openbooks/engine/src/einvoice/parse.ts'
+import { EInvoiceParseError } from '@openbooks/engine/einvoice/parse'
 import { getDocumentCaptureRuntimeConfig, type DocumentCaptureRuntimeConfig } from '@openbooks/engine/src/payables/ap-capture-config.ts'
 import '../../../lib/authz';
 import { createFile, deleteFile, ensureApCaptureRoot } from '../../../lib/file-cabinet'

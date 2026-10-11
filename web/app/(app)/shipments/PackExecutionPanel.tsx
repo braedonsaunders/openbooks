@@ -10,7 +10,7 @@ import {
 } from "@/components/directed-execution";
 import { readApiErrorMessage } from "@/lib/api-error";
 import { useBusinessToday } from "@/components/business-date-provider";
-import type { FulfillmentDocumentView } from "@openbooks/engine/src/sales/fulfillment.ts";
+import type { FulfillmentDocumentView } from "@openbooks/engine/sales/fulfillment/module";
 export interface UnitView {
   id: string;
   code: string;

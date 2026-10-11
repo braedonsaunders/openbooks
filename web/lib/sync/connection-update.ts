@@ -1,8 +1,8 @@
-import { canonicalConnectionMappingConfig } from '@openbooks/engine/src/sync/connection-settings.ts';
+import { canonicalConnectionMappingConfig } from '@openbooks/engine/sync/connection-settings';
 import "server-only";
-import { buildSource } from '@openbooks/engine/src/sync/connection.ts';
-import { ConnectionMappingError, decodeEntityMappings } from '@openbooks/engine/src/sync/entity-mapping-contract.ts';
-import { validateConnectionEntityMappings } from '@openbooks/engine/src/sync/entity-mappings.ts';
+import { buildSource } from '@openbooks/engine/sync/connection';
+import { ConnectionMappingError, decodeEntityMappings } from '@openbooks/engine/sync/entity-mapping-contract';
+import { validateConnectionEntityMappings } from '@openbooks/engine/sync/entity-mappings';
 import { z } from "zod";
 import { and, eq } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/database";

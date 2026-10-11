@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { withScopeSnapshot } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
-import { listManufacturingRecords } from "@openbooks/engine/src/manufacturing/workspace.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { withScopeSnapshot } from "@openbooks/engine/organization/scope";
+import { listManufacturingRecords } from "@openbooks/engine/manufacturing/workspace";
 import { defineRoute } from "@/lib/api/route";
 const Query = z
   .object({

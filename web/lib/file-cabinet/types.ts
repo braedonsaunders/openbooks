@@ -91,7 +91,7 @@ export type FolderNode = {
   fileCount: number
 };
 
-export type FileMeta = import('@openbooks/engine/src/platform/file-ingestion.ts').FileMeta
+export type FileMeta = import('@openbooks/engine/platform/file-ingestion').FileMeta
 
 export interface FileDetail extends FileMeta {
   versions: FileVersion[]

@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { LineGrid } from "@/components/line-grid";
-import { cmp } from "@openbooks/engine/src/money/money.ts";
+import { cmp } from "@openbooks/engine/money/money";
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
@@ -16,8 +16,8 @@ import { RemoteRecordChoice } from "@/components/remote-record-choice";
 import { fetchAppAction, readApiErrorMessage } from "@/lib/api-error";
 import { toast } from "sonner";
 import { OperatingProfilePicker } from "@/components/operating-profile-picker";
-import type { OperatingProfileChoice } from "@openbooks/engine/src/organization/operating-profiles.ts";
-import type { ManufacturingRecordData } from "@openbooks/engine/src/manufacturing/workspace.ts";
+import type { OperatingProfileChoice } from "@openbooks/engine/organization/operating-profiles";
+import type { ManufacturingRecordData } from "@openbooks/engine/manufacturing/workspace";
 import { commandBody, type Choice, type Command, type Field } from "./commands";
 
 type Line = Record<string, string> & { key: string };

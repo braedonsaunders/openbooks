@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { NextResponse } from "next/server";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { proposeHolidayObligation } from "@openbooks/engine/src/payroll/holiday-obligations.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { proposeHolidayObligation } from "@openbooks/engine/payroll/holiday-obligations";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { uuidId } from "@/lib/api/json-schema";

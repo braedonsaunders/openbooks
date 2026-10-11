@@ -1,5 +1,5 @@
-import { applyProductionTimeCorrections } from '@openbooks/engine/src/manufacturing/conversion.ts'
-import { lockSharedTimeAuthority, type TimeCommandPermission, type TimeWorkFamily } from '@openbooks/engine/src/projects/time-work-target.ts'
+import { applyProductionTimeCorrections } from '@openbooks/engine/manufacturing/conversion'
+import { lockSharedTimeAuthority, type TimeCommandPermission, type TimeWorkFamily } from '@openbooks/engine/projects/time-work-target'
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'

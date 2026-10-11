@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { withScopeSnapshot } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
-import { readManufacturingRecord } from "@openbooks/engine/src/manufacturing/workspace.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { withScopeSnapshot } from "@openbooks/engine/organization/scope";
+import { readManufacturingRecord } from "@openbooks/engine/manufacturing/workspace";
 import { defineRoute } from "@/lib/api/route";
 const Params = z.object({
   view: z.enum(["work-orders", "work-centers", "routings", "mrp"]),

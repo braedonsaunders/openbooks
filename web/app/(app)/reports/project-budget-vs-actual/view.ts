@@ -14,7 +14,7 @@ import {
 } from '@braedonsaunders/appkit-viewspec'
 import { getMoneyFormatter } from '@/lib/money-server'
 import { statementReportSpec } from '@/lib/reports/statement-report-spec'
-import { projectBudgetComparison } from '@openbooks/engine/src/projects/budget-baselines.ts'
+import { projectBudgetComparison } from '@openbooks/engine/projects/budget-baselines'
 import { requirePermission } from '../../../../lib/authz'
 import { requireProjectsFeature } from '../../../../lib/projects-gate'
 import { orgInfo } from '../../../../lib/data'

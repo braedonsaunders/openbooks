@@ -1,5 +1,5 @@
 import { authorizeTimeWorkspace, timeWorkFamily } from "@/lib/time-workspace";
-import { lockSharedTimeAuthority, TimeWorkTargetError } from "@openbooks/engine/src/projects/time-work-target.ts";
+import { lockSharedTimeAuthority, TimeWorkTargetError } from "@openbooks/engine/projects/time-work-target";
 import { TimeApprovalRefusal } from "@/lib/time-approval-refusal";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { z } from "zod";
@@ -7,7 +7,7 @@ import { isoDate, uuidId } from "@/lib/api/json";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
 import { isUuid } from "../../../../lib/list-params";
 import {
   customKey,

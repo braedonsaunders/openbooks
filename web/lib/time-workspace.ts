@@ -5,7 +5,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/database'
 import { can, guardPermission, type Authz } from './authz'
 import { grantsConferring } from './permissions'
-import { selfServiceTimeRefusal, type TimeCommandPermission, type TimeWorkFamily } from '@openbooks/engine/src/projects/time-work-target.ts'
+import { selfServiceTimeRefusal, type TimeCommandPermission, type TimeWorkFamily } from '@openbooks/engine/projects/time-work-target'
 
 export function timeWorkFamily(request: Request): TimeWorkFamily {
   const value = new URL(request.url).searchParams.get('workFamily')

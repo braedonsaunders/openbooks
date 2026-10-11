@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import {
   controlAccountChoices,
   controlAccountLookupScope,
   DOCUMENT_CONTROL_SIDE,
-} from '@openbooks/engine/src/ledger/posting-control-account.ts'
+} from '@openbooks/engine/ledger/posting-control-account'
 import { guardPermission, guardSubsidiaryScope } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import { readPermission } from '../../../../lib/document-kinds'

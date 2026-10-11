@@ -6,7 +6,7 @@ import {
   lockAndCheckPayrollRunPopulation,
   payrollSubsidiaryScopeFilter,
 } from '@openbooks/engine/src/payroll/scope.ts'
-import { loadWageTimeEntries, sumWageHoursByEmployee } from '@openbooks/engine/src/payroll/wage-hours.ts'
+import { loadWageTimeEntries, sumWageHoursByEmployee } from '@openbooks/engine/payroll/wage-hours'
 import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'

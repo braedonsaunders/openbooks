@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { engineSourceSpecifier } from "../../../../../testing/engine-resolve-hooks.ts";
 import { registerHooks } from "node:module";
 import test from "node:test";
 
@@ -189,8 +190,9 @@ const CONTRACT_MOCKS: Record<string, string> = {
 };
 
 const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const mocked = CONTRACT_MOCKS[specifier] ??
+  resolve(rawSpecifier, context, nextResolve) {
+    const specifier = engineSourceSpecifier(rawSpecifier) ?? rawSpecifier;
+    const mocked = CONTRACT_MOCKS[rawSpecifier] ?? CONTRACT_MOCKS[specifier] ??
       (specifier === "../../../../../lib/authz"
           ? "mock:authz"
           : specifier === "@openbooks/engine/src/platform/db.ts"
@@ -211,7 +213,7 @@ const hooks = registerHooks({
                           ? "mock:drizzle"
                           : undefined);
     if (mocked) return { url: mocked, shortCircuit: true };
-    return nextResolve(specifier, context);
+    return nextResolve(rawSpecifier, context);
   },
   load(url, context, nextLoad) {
     const source = mockSources.get(url);

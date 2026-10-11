@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { defineRoute } from '@/lib/api/route'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { OperatingProfileError, publishOperatingProfile } from '@openbooks/engine/src/organization/operating-profiles.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
+import { OperatingProfileError, publishOperatingProfile } from '@openbooks/engine/organization/operating-profiles'
 import { ProfileBody } from './contract'
 export const POST = defineRoute({ permission: 'admin.setup.manage', feature: { none: 'Profile definitions check their native work-family feature in the publishing transaction.' }, scope: 'unrestricted', body: ProfileBody,
   handler: async ({ request, authz, body }) => {

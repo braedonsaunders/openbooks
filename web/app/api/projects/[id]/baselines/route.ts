@@ -8,7 +8,7 @@ import {
   BudgetBaselineError,
   captureBudgetBaseline,
   listBudgetBaselines,
-} from '@openbooks/engine/src/projects/budget-baselines.ts'
+} from '@openbooks/engine/projects/budget-baselines'
 
 export const runtime = 'nodejs'
 

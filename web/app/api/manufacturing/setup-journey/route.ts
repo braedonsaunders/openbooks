@@ -1,5 +1,5 @@
-import { db } from '@openbooks/engine/src/platform/db.ts';
-import { readOperatingSetupJourney } from '@openbooks/engine/src/manufacturing/setup-journey.ts';
+import { db } from '@openbooks/engine/platform/db';
+import { readOperatingSetupJourney } from '@openbooks/engine/manufacturing/setup-journey';
 import { defineRoute } from '@/lib/api/route';
 import { SetupJourneyBody } from '../../operating-profiles/setup-journey/contract';
 import { manufacturingTransaction } from '../_transaction';

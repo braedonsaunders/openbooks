@@ -2,7 +2,7 @@
 import { BriefcaseBusiness, Factory, FlaskConical, HardHat, Wrench } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { RecordKindCards } from './record-kind-cards'
-import type { OperatingProfileChoice } from '@openbooks/engine/src/organization/operating-profiles.ts'
+import type { OperatingProfileChoice } from '@openbooks/engine/organization/operating-profiles'
 
 export function OperatingProfileCards({ choices, value, onChoose }: {
   choices: OperatingProfileChoice[]; value: string | null; onChoose: (choice: OperatingProfileChoice) => void

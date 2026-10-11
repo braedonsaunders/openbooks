@@ -7,7 +7,7 @@ import {
   previewScheduleDistribution,serializeSchedulePreview,
   sendScheduleDistribution,
   searchScheduleContacts,previewSchedulePdf,
-} from '@openbooks/engine/src/schedule-boards/distribution.ts'
+} from '@openbooks/engine/schedule-boards/distribution'
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
 const audience = z.strictObject({
   visibility: z.enum(['personal', 'board']),

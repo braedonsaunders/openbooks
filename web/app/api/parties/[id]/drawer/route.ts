@@ -11,7 +11,7 @@ import { isUuid } from '../../../../../lib/list-params'
 import { subsidiaryUiOptions, subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
 import { loadParty } from '../../_lib'
 import { loadComplianceClasses, loadVendorComplianceClass, vendorTaxIdentityFromRole } from '../../../../../lib/compliance'
-import { FORM_TYPES } from '@openbooks/engine/src/compliance/information-returns.ts'
+import { FORM_TYPES } from '@openbooks/engine/compliance/information-returns'
 import { notFound } from "@/lib/api/responses";
 
 

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { isoDate } from "@/lib/api/json";
 import { completeWorkOrder } from "@openbooks/engine/src/manufacturing/completion.ts";
-import { executeManufacturingReceipt } from "@openbooks/engine/src/manufacturing/execution.ts";
+import { executeManufacturingReceipt } from "@openbooks/engine/manufacturing/execution";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { can } from "@/lib/authz";
 import { defineRoute } from "@/lib/api/route";

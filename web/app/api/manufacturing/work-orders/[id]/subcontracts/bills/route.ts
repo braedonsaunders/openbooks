@@ -1,7 +1,7 @@
 import {z} from 'zod';
 import {defineRoute} from '@/lib/api/route';
-import {db,withOrgTransaction} from '@openbooks/engine/src/platform/db.ts';
-import {searchProductionServiceBills} from '@openbooks/engine/src/manufacturing/subcontract-workspace.ts';
+import {db,withOrgTransaction} from '@openbooks/engine/platform/db';
+import {searchProductionServiceBills} from '@openbooks/engine/manufacturing/subcontract-workspace';
 const params=z.object({id:z.uuid()}).strict();
 export const GET=defineRoute({permission:'ap.read',feature:'manufacturingSubcontract',params,handler:({authz,params,request})=>{
  const query=z.object({contractId:z.uuid(),q:z.string().max(200).optional(),selected:z.uuid().optional()}).strict().safeParse(Object.fromEntries(new URL(request.url).searchParams));

@@ -1,5 +1,5 @@
 import { ResourceRecipients } from '../../../../scheduling/recipients/view'
-import { isUuid } from '@openbooks/engine/src/platform/uuid.ts'
+import { isUuid } from '@openbooks/engine/platform/identifiers'
 import { notFound } from 'next/navigation'
 export const dynamic = 'force-dynamic'
 export default async function ProjectRecipients({

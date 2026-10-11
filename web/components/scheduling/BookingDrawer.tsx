@@ -9,8 +9,8 @@ import { TargetPicker } from './TargetPicker'
 import { CHIP_COLORS, chipStyle } from './BookingChip'
 import { entryTemplate, formatMinutes, targetHue, type BoardChange, type BoardEntry, type BoardTarget, type SpanInput } from './model'
 import type { BoardController } from './use-board'
-import type { BoardWindow } from '@openbooks/engine/src/schedule-boards/window.ts'
-import type { ProjectTaskOption } from '@openbooks/engine/src/schedule-boards/targets.ts'
+import type { BoardWindow } from '@openbooks/engine/schedule-boards/window'
+import type { ProjectTaskOption } from '@openbooks/engine/schedule-boards/targets'
 
 const newId = () => crypto.randomUUID()
 

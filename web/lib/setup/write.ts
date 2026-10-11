@@ -1,6 +1,6 @@
 import { lockAndCheckOrgFeature } from '@openbooks/engine/organization/features'
 import 'server-only'
-import { validateSubcontractLocationConfiguration } from '@openbooks/engine/src/inventory/subcontract-custody.ts'
+import { validateSubcontractLocationConfiguration } from '@openbooks/engine/inventory/subcontract-custody'
 import { setupReferenceSubsidiarySource } from './subsidiary-scope'
 import { randomUUID } from 'node:crypto'
 import { uuidId } from '../api/json-schema'
@@ -18,7 +18,7 @@ import { canonicalDecimal, compareDecimal } from '@openbooks/engine/money/decima
 import { decimalNullRefusal } from '../payroll-decimal-refusal'
 import { compileFormula } from '@openbooks/engine/src/assets/depreciation-formula.ts'
 import { declaredPayrollFilings, filingAccountProblem } from '@openbooks/engine/src/payroll/filing-registry.ts'
-import { collidingSequenceKind } from '@openbooks/engine/src/records/numbering.ts'
+import { collidingSequenceKind } from '@openbooks/engine/records/numbering'
 import { payPeriodsPerYearProblem, semiMonthlyAnchorProblem } from "@openbooks/engine/src/payroll/run-calendar.ts";
 import { payScheduleSubsidiaryProblem, rescopePayScheduleRuns } from "@openbooks/engine/src/payroll/run-lifecycle.ts";
 import { payComponentTreatmentProblem } from '@openbooks/engine/src/payroll/treatment-bases.ts'
@@ -32,8 +32,8 @@ import { CANONICAL_RATING_KEYS } from '@openbooks/engine/src/hrm/recruiting/kits
 import { RecruitingError } from '@openbooks/engine/src/hrm/recruiting/errors.ts'
 import { parseClauses } from '@openbooks/engine/src/hrm/recruiting/offers-signing.ts'
 import { validateAvailabilityWindows } from '@openbooks/engine/src/hrm/recruiting/scheduling.ts'
-import { requireCompensation } from '@openbooks/engine/src/hrm/recruiting/requisitions.ts'
-import { jobDescriptionDeleteRefusal } from '@openbooks/engine/src/hrm/recruiting/job-descriptions.ts'
+import { requireCompensation } from '@openbooks/engine/hrm/recruiting/requisitions'
+import { jobDescriptionDeleteRefusal } from '@openbooks/engine/hrm/recruiting/job-descriptions'
 // HR-18 end
 import { SETUP_ENTITY_BY_KEY, resolveSetupEntityGate, setupEntityForFeatureState, setupEntitySubsidiaryField, setupEntitySubsidiaryReferenceFields, toSnake, type SetupEntity } from './registry'
 import { permissionSetCovers } from '../permissions'
@@ -60,7 +60,7 @@ import { validateTemplateInput } from '@openbooks/engine/src/hrm/documents/templ
 import { benefitPlanShapeProblem, normalizeHrmBenefitPlanInput } from './hrm-benefits'
 import { benefitProgramShapeProblem } from './benefit-programs'
 import { leavePolicyRuleProblem, normalizeHrmLeavePolicyInput } from './hrm-leave-policy'
-import { findSameSpecificityConflict, pinnedIds, targetingSpecificity } from '@openbooks/engine/src/hrm/leave-math.ts'
+import { findSameSpecificityConflict, pinnedIds, targetingSpecificity } from '@openbooks/engine/hrm/leave-math'
 import { mergeTemplateSlots, normalizeHrmDocumentTemplateInput } from './hrm-document-template'
 import { applyRuleSlotColumns } from './hrm-rule-slots'
 import { normalizeTaxReturnFormInput } from './tax-return-form'

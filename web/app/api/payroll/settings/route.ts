@@ -8,7 +8,7 @@ import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { lockLedgerSetupFence } from '@openbooks/engine/src/organization/ledger-setup-fence.ts'
 import { payrollSettings, seedPayrollComponents, statutoryHolidayPayEnabled } from "@openbooks/engine/src/payroll/run-setup.ts";
-import { PAYROLL_ACCOUNT_SETTING_KEYS } from "@openbooks/engine/src/payroll/settings-references.ts";
+import { PAYROLL_ACCOUNT_SETTING_KEYS } from "@openbooks/engine/payroll/settings-references";
 import { type PayrollSubsidiaryScope } from "@openbooks/engine/src/payroll/scope.ts";
 import {
   declaredRemittanceFrequencySettingsKeys,

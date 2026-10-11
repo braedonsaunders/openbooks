@@ -25,7 +25,7 @@ import {
   getRequisitionDetail,
   listRequisitions,
 } from '@openbooks/engine/src/hrm/recruiting/recruiting-read.ts'
-import { listActiveJobDescriptions } from '@openbooks/engine/src/hrm/recruiting/job-descriptions.ts'
+import { listActiveJobDescriptions } from '@openbooks/engine/hrm/recruiting/job-descriptions'
 import { hrmGroupTabs } from '../../../../components/module-home/group-tabs'
 import { can, requirePermission, type Authz } from '../../../../lib/authz'
 

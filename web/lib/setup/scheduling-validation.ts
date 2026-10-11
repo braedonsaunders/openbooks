@@ -1,7 +1,7 @@
 import "server-only";
 import { automaticScheduleDeliverySchema } from "@openbooks/forms-core";
 import { sql } from 'drizzle-orm'
-import { lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-feature-lock.ts'
+import { lockAndCheckOrgFeature } from '@openbooks/engine/organization/org-feature-lock'
 import type { SetupEntityValidationHook } from './types'
 
 const PEOPLE_VIEWS = new Set(['grid', 'targets', 'timeline', 'calendar'])

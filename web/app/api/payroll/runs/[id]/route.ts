@@ -12,7 +12,7 @@ import { attributePayRunEntity, discardPayRun } from "@openbooks/engine/src/payr
 import { PayrollError } from "@openbooks/engine/src/payroll/error.ts";
 import { recordPayRunPayment } from '@openbooks/engine/src/payroll/payment.ts'
 import { assertPayRunNotStale } from '@openbooks/engine/src/payroll/readiness.ts'
-import { resolvePayrollProfileEmploymentLinks } from '@openbooks/engine/src/payroll/profile-employment.ts'
+import { resolvePayrollProfileEmploymentLinks } from '@openbooks/engine/payroll/profile-employment'
 import {
   assertPayRunApprovalReleased, payRunApprovalState,
 } from '@openbooks/engine/src/payroll/approval.ts'

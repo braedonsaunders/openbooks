@@ -4,7 +4,7 @@ import {useRouter} from 'next/navigation';
 import {useTranslations} from 'next-intl';
 import {Button} from '@openbooks/ui';
 import {readApiErrorMessage} from '@/lib/api-error';
-import type {WorkListContext,WorkListPresentation} from '@openbooks/engine/src/organization/list-presentation.ts';
+import type {WorkListContext,WorkListPresentation} from '@openbooks/engine/organization/list-presentation';
 export function WorkListPresentation({context,value,basePath,currentParams}:{context:WorkListContext;value:WorkListPresentation;basePath:string;currentParams:Record<string,string|string[]|undefined>}) {
   const t=useTranslations('operatingProfiles.views'),router=useRouter(),lock=useRef(false);
   const [busy,setBusy]=useState(false),[error,setError]=useState<string|null>(null);

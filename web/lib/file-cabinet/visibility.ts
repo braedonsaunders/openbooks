@@ -6,7 +6,7 @@ import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
 
 // --- helpers ----------------------------------------------------------------
 
-export { deriveExtension } from '@openbooks/engine/src/platform/file-names.ts'
+export { deriveExtension } from '@openbooks/engine/platform/file-names'
 
 /**
  * Resolve the set of folder ids hidden from this viewer — private folders owned

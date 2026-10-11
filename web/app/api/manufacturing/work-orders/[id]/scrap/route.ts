@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { recordNormalScrap } from "@openbooks/engine/src/manufacturing/scrap.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { recordNormalScrap } from "@openbooks/engine/manufacturing/scrap";
 import { manufacturingTransaction } from "../../../_transaction";
 import { can } from "@/lib/authz";
 import { defineRoute } from "@/lib/api/route";

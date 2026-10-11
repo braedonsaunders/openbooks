@@ -1,6 +1,6 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { proposeFirstEmployment } from "@openbooks/engine/src/hrm/first-employment.ts";
+import { proposeFirstEmployment } from "@openbooks/engine/hrm/first-employment";
 import { changeRequestErrorResponse } from "../change-requests/_lib";
 import { hireEmploymentBody } from "./bodies";
 

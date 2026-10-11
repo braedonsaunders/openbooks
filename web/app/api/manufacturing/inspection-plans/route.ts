@@ -1,6 +1,6 @@
 import { defineRoute } from '@/lib/api/route';
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts';
-import { saveInspectionPlan } from '@openbooks/engine/src/inventory/inspections.ts';
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db';
+import { saveInspectionPlan } from '@openbooks/engine/inventory/inspections';
 import { InspectionPlanBody } from './contract';
 import { z } from 'zod';
 export const POST=defineRoute({permission:'admin.setup.manage',scope:'unrestricted',feature:'manufacturing',body:InspectionPlanBody,handler:async({request,authz,body})=>{

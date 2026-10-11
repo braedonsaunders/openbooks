@@ -1,5 +1,5 @@
 import { authorizeTimeWorkspace, timeWorkFamily } from "@/lib/time-workspace";
-import { lockSharedTimeAuthority } from "@openbooks/engine/src/projects/time-work-target.ts";
+import { lockSharedTimeAuthority } from "@openbooks/engine/projects/time-work-target";
 import { z } from "zod";
 import { isoDate, uuidId } from "@/lib/api/json";
 import { defineRoute } from "@/lib/api/route";

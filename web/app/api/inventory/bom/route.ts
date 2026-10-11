@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { BomPolicyError, saveBomPolicy, readBomPolicyVersion } from '@openbooks/engine/src/inventory/bom-policy.ts'
+import { BomPolicyError, saveBomPolicy, readBomPolicyVersion } from '@openbooks/engine/inventory/bom-policy'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { can } from '@/lib/authz'

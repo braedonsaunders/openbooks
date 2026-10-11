@@ -1,4 +1,4 @@
-import { createCabinetFile } from '@openbooks/engine/src/platform/file-ingestion.ts'
+import { createCabinetFile } from '@openbooks/engine/platform/file-ingestion'
 /** Split from web/lib/file-cabinet.ts; moved without behavior changes. */
 import 'server-only'
 import { enqueueCabinetCleanup, deriveFileType } from './shared'

@@ -6,7 +6,7 @@ import {
   financialChangeEventLabel,
   loadFinancialChangeSubjectLabel,
   type FinancialChangeDomain,
-} from '@openbooks/engine/src/platform/financial-changes.ts'
+} from '@openbooks/engine/platform/financial-changes'
 import { pgTextArrayLiteral } from './pg-array'
 import { isUuid } from '@openbooks/engine/src/platform/uuid.ts'
 

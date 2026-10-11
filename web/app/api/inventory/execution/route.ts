@@ -4,13 +4,13 @@ import { db, withOrgTransaction } from "@openbooks/engine/platform/database";
 import {
   confirmExecutionTask,
   executionTaskView,
-} from "@openbooks/engine/src/inventory/directed-execution.ts";
+} from "@openbooks/engine/inventory/directed-execution";
 import {
   suggestReceiptConfirmation,
   suggestPutaway,
   suggestCountObservation,
   executeInventoryDirection,
-} from "@openbooks/engine/src/inventory/warehouse-directions.ts";
+} from "@openbooks/engine/inventory/warehouse-directions";
 import { defineRoute } from "@/lib/api/route";
 import { exactMoney, isoDate, uuidId } from "@/lib/api/json";
 import {

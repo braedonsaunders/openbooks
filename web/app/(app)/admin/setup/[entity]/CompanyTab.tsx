@@ -13,10 +13,10 @@ import {
   isTaxClassification,
   readCompanyAddress,
   readTaxIds,
-} from '@openbooks/engine/src/organization/company-identity.ts'
+} from '@openbooks/engine/organization/company-identity'
 import { readBillingSettings, readCashSalesSettings } from '../../../../../lib/company-settings'
 import { SampleCompanyPicker } from '../../../../../components/sample-company-picker'
-import { parsePartylessControlPolicy } from '@openbooks/engine/src/ledger/partyless-control-policy.ts'
+import { parsePartylessControlPolicy } from '@openbooks/engine/ledger/partyless-control-policy'
 
 /**
  * Company & Accounting settings, rendered as the Setup "Company" tab. This is

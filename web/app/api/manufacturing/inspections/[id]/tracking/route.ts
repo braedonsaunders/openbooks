@@ -1,9 +1,9 @@
 import { z } from 'zod';
 import { defineRoute } from '@/lib/api/route';
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts';
-import { readManufacturingInspection } from '@openbooks/engine/src/manufacturing/quality-workspace.ts';
-import { inventoryTrackingOptions } from '@openbooks/engine/src/inventory/tracking-options.ts';
-import { registerInspectionIdentifier } from '@openbooks/engine/src/manufacturing/quality-execution.ts';
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db';
+import { readManufacturingInspection } from '@openbooks/engine/manufacturing/quality-workspace';
+import { inventoryTrackingOptions } from '@openbooks/engine/inventory/tracking-options';
+import { registerInspectionIdentifier } from '@openbooks/engine/manufacturing/quality-execution';
 import { isoDate } from '@/lib/api/json';
 export const GET=defineRoute({permission:'manufacturing.read',feature:'manufacturing',params:z.object({id:z.string().uuid()}).strict(),handler:async({request,authz,params})=>withOrgTransaction(authz.user.orgId,async()=>{
   const inspection=await readManufacturingInspection(db,authz.user.orgId,authz.user.id,params.id);

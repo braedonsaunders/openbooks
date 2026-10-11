@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { issueMaterials } from "@openbooks/engine/src/manufacturing/materials.ts";
-import { executeManufacturingIssue } from "@openbooks/engine/src/manufacturing/execution.ts";
+import { executeManufacturingIssue } from "@openbooks/engine/manufacturing/execution";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { can } from "@/lib/authz";
 import { defineRoute } from "@/lib/api/route";

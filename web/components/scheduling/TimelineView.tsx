@@ -6,12 +6,12 @@ import { EmptyBoardScope } from './EmptyBoardScope'
 import { cn } from '@openbooks/ui'
 import { CHIP_COLORS, chipStyle } from './BookingChip'
 import { SourceRecordChip } from './SourceRecord'
-import type { BoardSourceRecord } from '@openbooks/engine/src/schedule-boards/source-history.ts'
+import type { BoardSourceRecord } from '@openbooks/engine/schedule-boards/source-history'
 import { filterBoardRows } from './legend'
 import { TargetPicker, type PickedTarget } from './TargetPicker'
 import { formatMinutes, groupRows, initials, presentedBoardEntries, targetHue, targetShortLabel, type BoardEntry, type GroupBy } from './model'
 import type { BoardController } from './use-board'
-import type { BoardWindow } from '@openbooks/engine/src/schedule-boards/window.ts'
+import type { BoardWindow } from '@openbooks/engine/schedule-boards/window'
 
 const NAME_W = 200
 const ROW_H = 40
