@@ -60,6 +60,7 @@ import { validateTemplateInput } from '@openbooks/engine/src/hrm/documents/templ
 import { benefitPlanShapeProblem, normalizeHrmBenefitPlanInput } from './hrm-benefits'
 import { benefitProgramShapeProblem } from './benefit-programs'
 import { leavePolicyRuleProblem, normalizeHrmLeavePolicyInput } from './hrm-leave-policy'
+import { findSameSpecificityConflict } from '@openbooks/engine/src/hrm/leave-math.ts'
 import { mergeTemplateSlots, normalizeHrmDocumentTemplateInput } from './hrm-document-template'
 import { applyRuleSlotColumns } from './hrm-rule-slots'
 import { normalizeTaxReturnFormInput } from './tax-return-form'
@@ -1357,6 +1358,7 @@ export async function validateEntityIntegrity(
   // HRM leave policies (0194): the rule shapes are refused with the engine's
   // own words before the write, and the applies_to targets must be visible
   // in this org — a policy that can never apply is refused by field name.
+  // Every policy change records a reason into the audit before/after image.
   if (entity.key === 'leave-policies') {
     const problem = leavePolicyRuleProblem({
       appliesTo: body.appliesTo,
@@ -1364,7 +1366,13 @@ export async function validateEntityIntegrity(
       carryoverRule: body.carryoverRule,
     })
     if (problem) return problem
-    const applies = (body.appliesTo ?? null) as { employer_subsidiary_id?: unknown; department_id?: unknown } | null
+    if (typeof body.reason !== 'string' || body.reason.trim().length === 0) {
+      return 'A leave policy change needs a reason — record why this policy changes'
+    }
+    const applies = (body.appliesTo ?? null) as {
+      employer_subsidiary_id?: unknown; department_id?: unknown;
+      employment_ids?: unknown; classification_ids?: unknown;
+    } | null
     if (applies) {
       const subsidiary = (applies.employer_subsidiary_id ?? null) as string | null
       const department = (applies.department_id ?? null) as string | null
@@ -1375,6 +1383,22 @@ export async function validateEntityIntegrity(
       `)
       if (!refs.rows[0]?.subsidiary_ok) return 'The applies-to subsidiary is not visible in this organization'
       if (!refs.rows[0]?.department_ok) return 'The applies-to department is not visible in this organization'
+      const employments = Array.isArray(applies.employment_ids) ? (applies.employment_ids as unknown[]).map(String) : null
+      if (employments) {
+        const missing = (await executor.execute(sql`
+          select value as id from jsonb_array_elements_text(${JSON.stringify(employments)}::jsonb)
+           where not exists (select 1 from worker_employments where org_id = ${orgId} and id = value::uuid)
+        `)).rows
+        if (missing.length > 0) return 'The applies-to employments must be employments in this organization'
+      }
+      const classifications = Array.isArray(applies.classification_ids) ? (applies.classification_ids as unknown[]).map(String) : null
+      if (classifications) {
+        const missing = (await executor.execute(sql`
+          select value as id from jsonb_array_elements_text(${JSON.stringify(classifications)}::jsonb)
+           where not exists (select 1 from hrm_work_classifications where org_id = ${orgId} and id = value::uuid)
+        `)).rows
+        if (missing.length > 0) return 'The applies-to classifications must be classifications in this organization'
+      }
     }
   }
   // Offer identity and contribution pricing have separate owners. The native
@@ -2129,6 +2153,73 @@ function overlapConflict(entityKey: string): { status: 409; body: { error: strin
 }
 
 /**
+ * Leave-policy targeting guard: same-type policy writes serialize on a
+ * (org, leave type) advisory lock, then a resulting active window that
+ * overlaps an active same-type policy of the same specificity class with
+ * intersecting employee/classification sets is refused naming the
+ * conflicting policy (409 overlap, the drawer code). Same (type,
+ * subsidiary, department) windows keep the storage exclusion as the race
+ * backstop. Runs inside the write transaction on create and on every
+ * update/end path (window, target, or active-flag edits, reactivations),
+ * so concurrent writers observe each other's committed rows.
+ */
+async function guardLeavePolicyWindow(
+  tx: SetupTransaction,
+  orgId: string,
+  window: {
+    leaveTypeId: string
+    appliesTo: Record<string, unknown> | null
+    effectiveFrom: string
+    effectiveTo: string | null
+    isActive: boolean
+  },
+  ignoreId: string | null,
+): Promise<void> {
+  if (!window.isActive) return
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${'openbooks:leave-policy:' + orgId + ':' + window.leaveTypeId}, 0))`)
+  const rows = (await tx.execute<{ id: string; applies_to: unknown; effective_from: string; effective_to: string | null }>(sql`
+    select id, applies_to, effective_from::text as effective_from, effective_to::text as effective_to
+      from hrm_leave_policies
+     where org_id = ${orgId} and leave_type_id = ${window.leaveTypeId} and is_active
+       and effective_from <= ${window.effectiveTo ?? '9999-12-31'}
+       and (effective_to is null or effective_to >= ${window.effectiveFrom})
+       and (${ignoreId}::uuid is null or id <> ${ignoreId}::uuid)
+  `)).rows
+  const applies = window.appliesTo ?? {}
+  const pins = (stored: unknown) => (typeof stored === 'object' && stored !== null ? stored as Record<string, unknown> : {})
+  const conflict = findSameSpecificityConflict(
+    {
+      employerSubsidiaryId: (applies.employer_subsidiary_id as string | null) ?? null,
+      departmentId: (applies.department_id as string | null) ?? null,
+      employmentIds: (applies.employment_ids as string[] | null | undefined) ?? null,
+      classificationIds: (applies.classification_ids as string[] | null | undefined) ?? null,
+      effectiveFrom: window.effectiveFrom,
+      effectiveTo: window.effectiveTo,
+    },
+    rows.map((row) => {
+      const stored = pins(row.applies_to)
+      return {
+        id: String(row.id),
+        employerSubsidiaryId: (stored.employer_subsidiary_id as string | null) ?? null,
+        departmentId: (stored.department_id as string | null) ?? null,
+        employmentIds: (stored.employment_ids as string[] | null | undefined) ?? null,
+        classificationIds: (stored.classification_ids as string[] | null | undefined) ?? null,
+        effectiveFrom: String(row.effective_from).slice(0, 10),
+        effectiveTo: row.effective_to ? String(row.effective_to).slice(0, 10) : null,
+      }
+    }),
+  )
+  if (conflict) {
+    const span = `${conflict.effectiveFrom} to ${conflict.effectiveTo ?? 'open'}`
+    throw new SetupWriteRefusal(
+      `Policy ${conflict.id} already covers these employees and classifications over ${span} at the same specificity — close its window or deactivate it before saving.`,
+      409,
+      'overlap',
+    )
+  }
+}
+
+/**
  * Create one setup record (the POST semantics of /api/admin/setup/[entity]).
  *
  * Every create carries an idempotency key that becomes the new row's id (or,
@@ -2321,6 +2412,11 @@ export async function createSetupRecord(
     cols = cols.filter((column) => column.column !== 'supplemental_wage_category'
       && column.column !== 'statutory_reporting_category'
       && column.column !== 'statutory_exemption_category')
+  }
+  if (entity.key === 'leave-policies') {
+    // The change reason rides into the audit image, never into a column —
+    // hrm_leave_policies has no reason column.
+    cols = cols.filter((column) => column.column !== 'reason')
   }
   if (entity.key === 'fx-rates' || entity.key === 'consolidated-fx-rates') {
     try {
@@ -2515,6 +2611,19 @@ export async function createSetupRecord(
       // an exact retry returns having written neither.
       const claim = await claimSetupCreate(tx, claimMatch)
       if (claim.kind === 'replay') return claim.id
+      if (entity.key === 'leave-policies') {
+        // Same-type policy creates serialize here (the guard holds the
+        // advisory lock for the rest of this transaction): the loser
+        // preflights against the winner's committed row and is refused by
+        // name instead of racing to the storage exclusion.
+        await guardLeavePolicyWindow(tx, orgId, {
+          leaveTypeId: String(body.leaveTypeId),
+          appliesTo: (body.appliesTo ?? null) as Record<string, unknown> | null,
+          effectiveFrom: String(body.effectiveFrom),
+          effectiveTo: body.effectiveTo == null || body.effectiveTo === '' ? null : String(body.effectiveTo),
+          isActive: body.isActive === undefined ? true : coerceBoolean(body.isActive),
+        }, null)
+      }
       const inserted = ((await tx.execute(sql`
         insert into ${sql.raw(entity.table)} (${colSql}) values (${valSql})
         -- A concurrent create claim is verified against its audited payload below before replaying.
@@ -2544,7 +2653,13 @@ export async function createSetupRecord(
         table: entity.table,
         rowId: id,
         action: 'insert',
-        changes: { after: await loadSetupAuditRow(entity, orgId, id, tx), match },
+        changes: {
+          after: await loadSetupAuditRow(entity, orgId, id, tx),
+          match,
+          ...(entity.key === 'leave-policies' && typeof body.reason === 'string'
+            ? { reason: body.reason.trim() }
+            : {}),
+        },
         actorId,
         requestId,
       }, tx)
@@ -3114,6 +3229,11 @@ export async function updateSetupRecord(
       && column.column !== 'statutory_reporting_category'
       && column.column !== 'statutory_exemption_category')
   }
+  if (entity.key === 'leave-policies') {
+    // The change reason rides into the audit image, never into a column —
+    // hrm_leave_policies has no reason column.
+    updateCols = updateCols.filter((column) => column.column !== 'reason')
+  }
   if (entity.key === 'fx-rates' || entity.key === 'consolidated-fx-rates') {
     try {
       updateCols = persistFxRateCols(updateCols)
@@ -3153,6 +3273,26 @@ export async function updateSetupRecord(
       if (entity.key==='stock-locations') await validateSubcontractLocationConfiguration(tx,orgId,actorId,body,id)
       const before = await loadSetupAuditRow(entity, orgId, id, tx, true)
       if (!before) return false
+      if (entity.key === 'leave-policies') {
+        // Window, target, and active-flag edits re-check the resulting
+        // window under the advisory lock: ending a policy early, extending
+        // it, retargeting it, or reactivating it must observe concurrent
+        // writers instead of racing them. Submitted values win; anything
+        // omitted keeps the stored row (the drawer always submits full
+        // bodies, so it sees no difference).
+        const submittedApplies = (body.appliesTo ?? null) as Record<string, unknown> | null
+        await guardLeavePolicyWindow(tx, orgId, {
+          leaveTypeId: body.leaveTypeId !== undefined ? String(body.leaveTypeId) : String(before.leave_type_id),
+          appliesTo: submittedApplies ?? ((before.applies_to ?? null) as Record<string, unknown> | null),
+          effectiveFrom: body.effectiveFrom !== undefined
+            ? String(body.effectiveFrom)
+            : String(before.effective_from).slice(0, 10),
+          effectiveTo: body.effectiveTo === undefined
+            ? (before.effective_to ? String(before.effective_to).slice(0, 10) : null)
+            : (body.effectiveTo == null || body.effectiveTo === '' ? null : String(body.effectiveTo)),
+          isActive: body.isActive === undefined ? Boolean(before.is_active) : coerceBoolean(body.isActive),
+        }, id)
+      }
       const updated = ((await tx.execute(sql`
         update ${sql.raw(entity.table)} set ${sql.join(setParts, sql`, `)}
          where ${sql.raw(idColumn(entity))} = ${id}${orgFilter}
@@ -3195,7 +3335,13 @@ export async function updateSetupRecord(
         table: entity.table,
         rowId: id,
         action: 'update',
-        changes: { before, after },
+        changes: {
+          before,
+          after,
+          ...(entity.key === 'leave-policies' && typeof body.reason === 'string'
+            ? { reason: body.reason.trim() }
+            : {}),
+        },
         actorId,
       }, tx)
       if (entity.key === 'pay-schedules') {

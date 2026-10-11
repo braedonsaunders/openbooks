@@ -31,13 +31,16 @@ interface RuleSlotEntity {
    *  requiredness the folded object satisfies once the normalizer runs.
    *  `members` names array-membership booleans (slot → stored element)
    *  for array folds the drawer splits into checkboxes: readable
-   *  prefills, never written. */
+   *  prefills, never written. `arrays` names drawer fields that carry a
+   *  whole stored array prop (leave-policy targeting ids, service tiers):
+   *  readable prefills, never written, folded back by the normalizer. */
   readonly folded: readonly {
     key: string
     column: string
     kind?: 'object' | 'array'
     slots?: readonly string[]
     members?: readonly { slot: string; value: string }[]
+    arrays?: readonly { slot: string; prop: string }[]
   }[]
 }
 
@@ -67,10 +70,34 @@ export const RULE_SLOT_ENTITIES: Readonly<Record<string, RuleSlotEntity>> = {
       'carryover_kind',
       'carryover_hours',
       'carryover_expires_after_days',
+      // Virtual slot keys with no column: the targeting pickers and the
+      // tier table fold into the rule jsonb and prefill straight off it
+      // (projectRuleSlotPrefills), so like the projections above they are
+      // readable, never written — buildRow still emits them for absent
+      // optional fields, and this list strips them from the write.
+      'applies_employment_ids',
+      'applies_classification_ids',
+      'accrual_tiers',
     ],
     folded: [
-      { key: 'appliesTo', column: 'applies_to' },
-      { key: 'accrualRule', column: 'accrual_rule' },
+      {
+        key: 'appliesTo',
+        column: 'applies_to',
+        // The picker fields below fold into applies_to through
+        // normalizeHrmLeavePolicyInput; the folded object satisfies their
+        // requiredness once the normalizer runs, and buildRow skips them.
+        slots: ['appliesEmploymentIds', 'appliesClassificationIds'],
+        arrays: [
+          { slot: 'appliesEmploymentIds', prop: 'employment_ids' },
+          { slot: 'appliesClassificationIds', prop: 'classification_ids' },
+        ],
+      },
+      {
+        key: 'accrualRule',
+        column: 'accrual_rule',
+        slots: ['accrualTiers'],
+        arrays: [{ slot: 'accrualTiers', prop: 'tiers' }],
+      },
       { key: 'carryoverRule', column: 'carryover_rule' },
     ],
   },
@@ -174,10 +201,12 @@ function storedJson(value: unknown): unknown {
  * write fold persists. Scalar-split objects expand through `slots` (a
  * slot names its folded key as prefix: ratingScaleMin reads the `min`
  * prop of the ratingScale fold); array-membership booleans expand through
- * `members`. Real columns always win: a present snake slot key is never
- * overwritten, and unknown entities pass through untouched. Whole-object
- * and whole-array fields need no projection — their snake column already
- * carries the value the drawer reads.
+ * `members`; whole stored array props expand through `arrays` (a picker
+ * or tier table reads its prop straight off the stored object). Real
+ * columns always win: a present snake slot key is never overwritten, and
+ * unknown entities pass through untouched. Whole-object and whole-array
+ * fields need no projection — their snake column already carries the
+ * value the drawer reads.
  */
 export function projectRuleSlotPrefills(
   entityKey: string,
@@ -201,6 +230,17 @@ export function projectRuleSlotPrefills(
       for (const member of entry.members ?? []) {
         const column = toSnake(member.slot)
         if (out[column] === undefined) out[column] = stored.includes(member.value)
+      }
+    }
+    // Whole array props (targeting ids, service tiers): the drawer field
+    // reads the stored prop straight, so clearing the control and saving
+    // can never silently keep a stale stored array behind.
+    if (stored !== null && typeof stored === 'object' && !Array.isArray(stored)) {
+      for (const array of entry.arrays ?? []) {
+        const column = toSnake(array.slot)
+        if (out[column] !== undefined) continue
+        const value = (stored as Record<string, unknown>)[array.prop]
+        if (Array.isArray(value)) out[column] = value
       }
     }
   }

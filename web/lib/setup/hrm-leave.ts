@@ -16,7 +16,9 @@ import type { SetupEntity } from './types'
  * Policies never edit raw JSON (a json-kind field on a workforce entity is
  * barred by registry.test.ts). The drawer edits scope, accrual, and
  * carryover through typed slot controls backed by 0194 STORED GENERATED
- * columns (readable for prefill, never written); normalizeHrmLeavePolicyInput
+ * columns (readable for prefill, never written), plus targeting pickers
+ * and the service-tier table that prefill straight off the stored jsonb;
+ * normalizeHrmLeavePolicyInput
  * folds the slots back into applies_to, accrual_rule, and carryover_rule
  * before buildRow, write.ts persists the folded objects explicitly, and
  * leavePolicyRuleProblem refuses malformed shapes with the engine's own
@@ -97,6 +99,12 @@ export const LEAVE_POLICIES_ENTITY: SetupEntity = {
     // persists the folded objects. Empty scope slots mean the whole org.
     { key: 'appliesEmployerSubsidiaryId', kind: 'ref', ref: 'subsidiaries', helpTextKey: 'fieldHelp.leaveAppliesSubsidiary' },
     { key: 'appliesDepartmentId', kind: 'ref', ref: 'departments', helpTextKey: 'fieldHelp.leaveAppliesDepartment' },
+    // Targeting pickers: chip controls with type-ahead over employments
+    // and classifications. Empty means all; the fold carries selections
+    // into applies_to, never a member table (so kind 'stringArray', never
+    // 'multiref' — multiref syncs a join table this entity does not have).
+    { key: 'appliesEmploymentIds', kind: 'stringArray', ref: 'worker-employments', helpTextKey: 'fieldHelp.leaveAppliesEmployments' },
+    { key: 'appliesClassificationIds', kind: 'stringArray', ref: 'construction-classifications', helpTextKey: 'fieldHelp.leaveAppliesClassifications' },
     {
       key: 'accrualKind', kind: 'select', defaultValue: 'none', helpTextKey: 'fieldHelp.leaveAccrualKind',
       options: [
@@ -108,6 +116,18 @@ export const LEAVE_POLICIES_ENTITY: SetupEntity = {
     },
     { key: 'accrualHours', kind: 'text', helpTextKey: 'fieldHelp.leaveAccrualHours' },
     { key: 'accrualPeriodsPerYear', kind: 'integer', helpTextKey: 'fieldHelp.leaveAccrualPeriodsPerYear' },
+    // Service tiers: base hours below the first tier, each tier's hours
+    // from its anniversary on. Stored items keep snake_case props
+    // (after_years, hours), the same shape the stored tiers keep, so the
+    // fold and the prefill projection pass rows through untouched.
+    {
+      key: 'accrualTiers', kind: 'objectArray', helpTextKey: 'fieldHelp.leaveAccrualTiers',
+      itemTitleKey: 'setup.fields.leaveAccrualTier', itemTitleField: 'after_years', addLabelKey: 'setup.fields.leaveAccrualTierAdd',
+      fields: [
+        { key: 'after_years', labelKey: 'setup.fields.leaveAccrualTierAfterYears', kind: 'integer', required: true, min: 1 },
+        { key: 'hours', labelKey: 'setup.fields.leaveAccrualTierHours', kind: 'text', required: true },
+      ],
+    },
     {
       key: 'carryoverKind', kind: 'select', defaultValue: 'none', helpTextKey: 'fieldHelp.leaveCarryoverKind',
       options: [
@@ -121,6 +141,10 @@ export const LEAVE_POLICIES_ENTITY: SetupEntity = {
     { key: 'minimumNoticeDays', kind: 'integer', keepDefault: true, defaultValue: 0 },
     { key: 'effectiveFrom', kind: 'date', required: true },
     { key: 'effectiveTo', kind: 'date' },
+    // Every policy change records why: the reason rides into the audit
+    // before/after image, never into a column. Blanked on each edit so a
+    // new change cannot reuse the previous reason.
+    { key: 'reason', kind: 'textarea', required: true, resetOnEdit: true },
     { key: 'isActive', kind: 'boolean', defaultValue: true },
   ],
 }

@@ -37,6 +37,7 @@ function policyBody(overrides: Record<string, unknown> = {}) {
     carryoverKind: "none",
     minimumNoticeDays: 0,
     isActive: true,
+    reason: "overlap guard proof",
     ...overrides,
   };
 }
@@ -53,7 +54,9 @@ test("an overlapping leave-policy create conflicts typed with the remedy, never 
     })));
     assert.equal(retry.status, 409);
     assert.equal((retry.body as { code?: string }).code, "overlap");
-    assert.match(String((retry.body as { error?: string }).error), /Another policy already covers this leave type and scope/);
+    // The in-transaction preflight names the conflicting policy; storage
+    // stays the race backstop with the scope wording.
+    assert.match(String((retry.body as { error?: string }).error), /Policy [0-9a-f-]{36} already covers/);
     assert.doesNotMatch(String((retry.body as { error?: string }).error), /exclusion|conflicting key|SQLSTATE|gist/i);
     const count = (await withBypass(() => db.execute<{ n: number }>(sql`
       select count(*)::int as n from hrm_leave_policies
@@ -83,7 +86,7 @@ test("stretching a policy window into its neighbour conflicts typed and moves no
     }));
     assert.equal(stretched.status, 409);
     assert.equal((stretched.body as { code?: string }).code, "overlap");
-    assert.match(String((stretched.body as { error?: string }).error), /Another policy already covers this leave type and scope/);
+    assert.match(String((stretched.body as { error?: string }).error), /Policy [0-9a-f-]{36} already covers/);
     const kept = (await withBypass(() => db.execute<{ from: string }>(sql`
       select effective_from::text as from from hrm_leave_policies where id = ${neighbourId}
     `))).rows[0]?.from;

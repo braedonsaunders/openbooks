@@ -21,7 +21,7 @@ test('generated slot columns are stripped and folded rule objects are appended',
   ])
 })
 
-test('leave policies persist all three rules and none of their eight slots', () => {
+test('leave policies persist all three rules and none of their slots', () => {
   const cols = RULE_SLOT_ENTITIES['leave-policies']!.generated.map((column) => ({ column, value: null }))
   cols.push({ column: 'minimum_notice_days', value: 0 as unknown as null })
   const res = applyRuleSlotColumns(

@@ -55,6 +55,7 @@ test("a leave policy's scope, accrual and carryover slots persist as its rules a
       minimumNoticeDays: 2,
       effectiveFrom: "2026-01-01",
       isActive: true,
+      reason: "slots proof",
     }));
     const stored = (await db.execute<{
       applies_to: { employer_subsidiary_id: string | null; department_id: string | null };
@@ -66,7 +67,12 @@ test("a leave policy's scope, accrual and carryover slots persist as its rules a
     }>(sql`
       select applies_to, accrual_rule, carryover_rule, applies_department_id, accrual_kind, carryover_hours
         from hrm_leave_policies where id = ${policyId} and org_id = ${org.orgId}`)).rows[0]!;
-    assert.deepEqual(stored.applies_to, { employer_subsidiary_id: org.subsidiaryId, department_id: org.departmentId });
+    assert.deepEqual(stored.applies_to, {
+      employer_subsidiary_id: org.subsidiaryId,
+      department_id: org.departmentId,
+      employment_ids: null,
+      classification_ids: null,
+    });
     assert.deepEqual(stored.accrual_rule, { kind: "per_year", hours: "120" });
     assert.deepEqual(stored.carryover_rule, { kind: "carry_up_to", hours: "40", expires_after_days: 90 });
     // The generated slots read the folded rules back for prefill.
@@ -90,12 +96,18 @@ test("a leave policy's scope, accrual and carryover slots persist as its rules a
       minimumNoticeDays: 3,
       effectiveFrom: "2026-01-01",
       isActive: true,
+      reason: "slots proof edit",
     });
     assert.equal(edited.status, 200, `edit refused: ${JSON.stringify(edited.body)}`);
     const after = (await db.execute<{ applies_to: unknown; accrual_rule: unknown; carryover_rule: unknown; minimum_notice_days: number }>(sql`
       select applies_to, accrual_rule, carryover_rule, minimum_notice_days
         from hrm_leave_policies where id = ${policyId} and org_id = ${org.orgId}`)).rows[0]!;
-    assert.deepEqual(after.applies_to, { employer_subsidiary_id: null, department_id: org.departmentId });
+    assert.deepEqual(after.applies_to, {
+      employer_subsidiary_id: null,
+      department_id: org.departmentId,
+      employment_ids: null,
+      classification_ids: null,
+    });
     assert.deepEqual(after.accrual_rule, { kind: "per_period", hours: "8", periods_per_year: 26 });
     assert.deepEqual(after.carryover_rule, { kind: "none" });
     assert.equal(after.minimum_notice_days, 3);
@@ -103,7 +115,7 @@ test("a leave policy's scope, accrual and carryover slots persist as its rules a
     // A malformed rule is refused with the engine's words, and nothing moves.
     const refused = await updateSetupRecord(org.actor, "leave-policies", {
       id: policyId, leaveTypeId: type, accrualKind: "per_year", accrualHours: "", carryoverKind: "none",
-      effectiveFrom: "2026-01-01", isActive: true,
+      effectiveFrom: "2026-01-01", isActive: true, reason: "slots proof refusal",
     });
     assert.equal(refused.status, 400, `a per_year rule without hours must be refused: ${JSON.stringify(refused.body)}`);
     assert.match(JSON.stringify(refused.body), /per_year accrual rule must carry hours/);

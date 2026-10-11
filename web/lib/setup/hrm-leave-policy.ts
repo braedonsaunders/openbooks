@@ -12,12 +12,15 @@ import { isUuid } from "@openbooks/engine/src/platform/uuid.ts";
  *
  * The Setup drawer edits the three rule jsonb columns through structured
  * controls backed by STORED GENERATED columns (readable for prefill, never
- * written): two ref slots for the applies_to scope (empty means all), a
- * select plus two numeric slots for the accrual rule, and a select plus two
- * numeric slots for the carryover rule. This fold runs before buildRow on
- * both create and edit so the virtual slot keys never reach the column
- * writer; the folded jsonb objects are persisted explicitly in write.ts
- * (buildRow only emits declared fields) and the shape proofs stay in
+ * written): two ref slots plus two id-picker slots for the applies_to scope
+ * (empty means all), a select plus two numeric slots plus the service-tier
+ * table for the accrual rule, and a select plus two numeric slots for the
+ * carryover rule. Picker and tier slots have no generated projection, so
+ * they prefill through projectRuleSlotPrefills straight off the stored
+ * jsonb. This fold runs before buildRow on both create and edit so the
+ * virtual slot keys never reach the column writer; the folded jsonb
+ * objects are persisted explicitly in write.ts (buildRow only emits
+ * declared fields) and the shape proofs stay in
  * validateEntityIntegrity.
  *
  * Refused shapes throw with the engine's own words: the accrual and
@@ -35,8 +38,9 @@ import { isUuid } from "@openbooks/engine/src/platform/uuid.ts";
 // the probe is sensitive only to rule shape, never to the calendar.
 const PROBE_DATE = "2000-01-01";
 
-const APPLIES_SLOTS = ["appliesEmployerSubsidiaryId", "appliesDepartmentId"] as const;
+const APPLIES_SLOTS = ["appliesEmployerSubsidiaryId", "appliesDepartmentId", "appliesEmploymentIds", "appliesClassificationIds"] as const;
 const ACCRUAL_SLOTS = ["accrualKind", "accrualHours", "accrualPeriodsPerYear"] as const;
+const ACCRUAL_TIERS_SLOT = "accrualTiers";
 const CARRYOVER_SLOTS = ["carryoverKind", "carryoverHours", "carryoverExpiresAfterDays"] as const;
 
 const ACCRUAL_KINDS = ["none", "per_period", "per_year", "unlimited"] as const;
@@ -70,6 +74,65 @@ export interface LeavePolicyRuleValues {
  * fold (which throws) and the write-path integrity check (which returns)
  * refuse the same shapes with the same words.
  */
+/**
+ * Targeted id lists: null/undefined means all; otherwise a non-empty list
+ * of uuids. Words mirror the engine write path (validateAppliesIdList)
+ * so the drawer and the API refuse the same shapes with the same message.
+ */
+function targetListProblem(value: unknown, field: string): string | null {
+  if (value === null || value === undefined) return null;
+  if (!Array.isArray(value) || value.length === 0) {
+    return `The applies-to ${field} must be a non-empty list of ids, or null for all`;
+  }
+  for (const entry of value) {
+    if (!isUuid(entry)) return `The applies-to ${field} must be ids, or null for all`;
+  }
+  return null;
+}
+
+/**
+ * Service tiers: a non-empty list of {after_years, hours} with strictly
+ * ascending positive thresholds. Words mirror the engine write path
+ * (validateAccrualTiers) so the drawer and the API refuse the same
+ * shapes with the same message.
+ */
+function accrualTiersProblem(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  if (!Array.isArray(value) || value.length === 0) {
+    return "accrual_rule.tiers is a non-empty list of {after_years, hours} — record the tiers or omit them";
+  }
+  let previous = -1;
+  for (const tier of value) {
+    if (typeof tier !== "object" || tier === null || Array.isArray(tier)) {
+      return "accrual_rule.tiers entries carry after_years and hours — record each tier";
+    }
+    const record = tier as Record<string, unknown>;
+    if (!Number.isInteger(record.after_years) || (record.after_years as number) < 1) {
+      return "accrual_rule.tiers after_years is a positive whole number of completed service years — record each tier's threshold";
+    }
+    if (typeof record.hours !== "string") {
+      return "accrual_rule.tiers hours is an exact decimal — record each tier's hours";
+    }
+    try {
+      accrualEarned(
+        { kind: "per_year", hours: record.hours } as Parameters<typeof accrualEarned>[0],
+        PROBE_DATE,
+        PROBE_DATE,
+      );
+    } catch {
+      return "accrual_rule.tiers hours is an exact decimal with at most 2 fraction digits — record each tier's hours";
+    }
+    if (record.hours.trim() === "" || Number(record.hours) <= 0) {
+      return "accrual_rule.tiers.hours must be greater than zero";
+    }
+    if ((record.after_years as number) <= previous) {
+      return "accrual_rule.tiers after_years ascends strictly — order the tiers by completed service years";
+    }
+    previous = record.after_years as number;
+  }
+  return null;
+}
+
 export function leavePolicyRuleProblem(values: LeavePolicyRuleValues): string | null {
   if (values.appliesTo !== undefined) {
     const raw = values.appliesTo;
@@ -83,6 +146,10 @@ export function leavePolicyRuleProblem(values: LeavePolicyRuleValues): string | 
         return "The applies-to subsidiary and department must be ids, or null for all";
       }
     }
+    for (const [prop, field] of [["employment_ids", "employments"], ["classification_ids", "classifications"]] as const) {
+      const problem = targetListProblem(record[prop], field);
+      if (problem) return problem;
+    }
   }
   if (values.accrualRule !== undefined) {
     const raw = values.accrualRule;
@@ -93,6 +160,12 @@ export function leavePolicyRuleProblem(values: LeavePolicyRuleValues): string | 
     if (!(ACCRUAL_KINDS as readonly unknown[]).includes(record.kind)) {
       return "accrual_rule kind is one of none, per_period, per_year, unlimited — record the rule";
     }
+    if (record.tiers !== undefined && record.tiers !== null
+      && record.kind !== "per_year" && record.kind !== "per_period") {
+      return `a ${String(record.kind)} accrual rule carries no hours, so tiers have nothing to lift — use kind per_year or per_period for service-based tiers`;
+    }
+    const tiersProblem = accrualTiersProblem(record.tiers);
+    if (tiersProblem) return tiersProblem;
     try {
       accrualEarned(
         record as unknown as Parameters<typeof accrualEarned>[0],
@@ -131,13 +204,48 @@ export function leavePolicyRuleProblem(values: LeavePolicyRuleValues): string | 
   return null;
 }
 
+/**
+ * Targeted id slots: an empty selection means all (null), matching the
+ * subsidiary/department empty-means-all convention. Values ride through
+ * untouched for the integrity check to refuse with the engine's words.
+ */
+function idListSlot(value: unknown): string[] | null {
+  if (value === undefined || value === null) return null;
+  if (!Array.isArray(value)) return value as unknown as string[];
+  const ids = [...new Set(value.map((entry) => String(entry).trim()).filter((entry) => entry.length > 0))];
+  return ids.length === 0 ? null : ids;
+}
+
+/**
+ * Service-tier rows: drawer items carry snake_case props (after_years,
+ * hours), the same shape the stored tiers keep. The fold never throws —
+ * malformed rows ride through for validateEntityIntegrity to refuse.
+ */
+function tiersSlot(value: unknown): unknown[] | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (!Array.isArray(value)) return value as unknown as unknown[];
+  if (value.length === 0) return undefined;
+  // Malformed rows ride through untouched for validateEntityIntegrity to
+  // refuse — the fold drops nothing it was given.
+  return value.map((entry) => {
+    if (typeof entry !== "object" || entry === null || Array.isArray(entry)) return entry;
+    const record = entry as Record<string, unknown>;
+    const years = record.after_years ?? record.afterYears;
+    const hours = record.hours;
+    return {
+      after_years: years,
+      hours: typeof hours === "string" ? hours.trim() : hours,
+    };
+  });
+}
+
 export function normalizeHrmLeavePolicyInput(
   entityKey: string,
   body: Record<string, unknown>,
 ): Record<string, unknown> {
   if (entityKey !== "leave-policies") return body;
   const hasSlot = (keys: readonly string[]): boolean => keys.some((key) => body[key] !== undefined);
-  if (!hasSlot(APPLIES_SLOTS) && !hasSlot(ACCRUAL_SLOTS) && !hasSlot(CARRYOVER_SLOTS)) {
+  if (!hasSlot(APPLIES_SLOTS) && !hasSlot(ACCRUAL_SLOTS) && body[ACCRUAL_TIERS_SLOT] === undefined && !hasSlot(CARRYOVER_SLOTS)) {
     return foldDirectRuleNumerics(body);
   }
   const out: Record<string, unknown> = { ...body };
@@ -147,15 +255,19 @@ export function normalizeHrmLeavePolicyInput(
     out.appliesTo = {
       employer_subsidiary_id: idSlot(body.appliesEmployerSubsidiaryId),
       department_id: idSlot(body.appliesDepartmentId),
+      employment_ids: idListSlot(body.appliesEmploymentIds),
+      classification_ids: idListSlot(body.appliesClassificationIds),
     };
   }
-  if (hasSlot(ACCRUAL_SLOTS)) {
+  if (hasSlot(ACCRUAL_SLOTS) || body[ACCRUAL_TIERS_SLOT] !== undefined) {
     const rule: Record<string, unknown> = {
       kind: blank(body.accrualKind) ? "none" : String(body.accrualKind),
     };
     if (!blank(body.accrualHours)) rule.hours = String(body.accrualHours).trim();
     const periods = intSlot(body.accrualPeriodsPerYear);
     if (periods !== undefined) rule.periods_per_year = periods;
+    const tiers = tiersSlot(body[ACCRUAL_TIERS_SLOT]);
+    if (tiers !== undefined) rule.tiers = tiers;
     out.accrualRule = rule;
   }
   if (hasSlot(CARRYOVER_SLOTS)) {
@@ -168,9 +280,10 @@ export function normalizeHrmLeavePolicyInput(
     out.carryoverRule = rule;
   }
   // The slot keys never reach the column writer: they are folded above and
-  // hrm-rule-slots.ts strips their generated columns from whatever buildRow
-  // emits for the declared slot fields, so nothing generated is written.
-  for (const key of [...APPLIES_SLOTS, ...ACCRUAL_SLOTS, ...CARRYOVER_SLOTS]) delete out[key];
+  // hrm-rule-slots.ts strips their generated columns (and skips the folded
+  // array slots through coveredSlotFields) from whatever buildRow emits for
+  // the declared slot fields, so nothing generated is written.
+  for (const key of [...APPLIES_SLOTS, ...ACCRUAL_SLOTS, ACCRUAL_TIERS_SLOT, ...CARRYOVER_SLOTS]) delete out[key];
   // The fold never throws: the shape refusal is raised by
   // validateEntityIntegrity in write.ts through leavePolicyRuleProblem, so
   // the caller receives a 400 with the engine's words, not an exception.

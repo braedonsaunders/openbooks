@@ -60,7 +60,12 @@ test('scope and rule slots fold into the stored jsonb before the column writer',
   })
   assert.deepEqual(folded, {
     leaveTypeId: SUBSIDIARY,
-    appliesTo: { employer_subsidiary_id: SUBSIDIARY, department_id: null },
+    appliesTo: {
+      employer_subsidiary_id: SUBSIDIARY,
+      department_id: null,
+      employment_ids: null,
+      classification_ids: null,
+    },
     accrualRule: { kind: 'per_year', hours: '120' },
     carryoverRule: { kind: 'carry_up_to', hours: '40', expires_after_days: 90 },
   })
@@ -84,7 +89,12 @@ test('slot keys win when both slots and a direct object arrive', () => {
     appliesDepartmentId: '',
   })
   assert.deepEqual(folded, {
-    appliesTo: { employer_subsidiary_id: null, department_id: null },
+    appliesTo: {
+      employer_subsidiary_id: null,
+      department_id: null,
+      employment_ids: null,
+      classification_ids: null,
+    },
   })
 })
 
