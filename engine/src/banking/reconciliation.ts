@@ -983,7 +983,10 @@ export async function markReconciled(
          and closing_balance is not null
     `));
     for (const stmt of cutoffStatements.rows) {
-      if (toUnits(stmt.closing_balance) !== toUnits(recon.statement_balance)) {
+      // Card statements disagree on sign (OFX carries the GL-signed balance,
+      // the session holds it owing-positive), so a liability account
+      // compares under its statement sign convention, like the matches.
+      if (!statementTotalsAgree(toUnits(stmt.closing_balance), toUnits(recon.statement_balance), recon.account_type)) {
         throw new BankingError(
           `Cannot sign off: the imported statement closing balance ${fromUnits(toUnits(stmt.closing_balance))} for ${recon.through_date} does not match the session statement balance ${fromUnits(toUnits(recon.statement_balance))} — adjust the session balance to the imported closing balance`,
         );

@@ -384,3 +384,39 @@ test(
     }
   },
 );
+
+test(
+  "a card statement's GL-signed closing balance signs off against the owing-positive session balance",
+  { skip: !DB },
+  async () => {
+    const { org, actor, ctx } = await setup("liability_card");
+    try {
+      // OFX reports the card's ledger balance GL-signed (-1,236.90); the
+      // session holds the statement balance owing-positive (1,236.90).
+      const journal = await postCardJournal(org, actor, "-1236.90", org.date, "ofx-close");
+      const imported = await importCsv(
+        {
+          accountId: org.accounts.bank,
+          source: "csv" as const,
+          statementDate: org.date,
+          closingBalance: "-1236.90",
+          currency: "CAD",
+          lines: [
+            { postedOn: org.date, amount: "-1236.90", description: "Card charge", bankTransactionId: "ofx-close" },
+          ],
+        },
+        ctx,
+      );
+      const [charge] = await statementLineIds(org.orgId, imported.statementId!);
+      const recon = await startReconciliation(
+        { accountId: org.accounts.bank, throughDate: org.date, statementBalance: "1236.90" },
+        ctx,
+      );
+      await createMatch({ reconciliationId: recon.id, statementLineIds: [charge!], journalLineIds: [journal!] }, ctx);
+      const signed = await markReconciled(recon.id, ctx);
+      assert.equal(signed.journalLinesReconciled, 1);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
