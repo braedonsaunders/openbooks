@@ -7,7 +7,7 @@ import { HeaderFact } from './run-wizard-controls'
 import { Fragment, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { AlertTriangle, FileDown, Loader2 } from 'lucide-react'
-import { Button, Drawer, FieldHelp, cn } from '@openbooks/ui'
+import { Button, Drawer, FieldHelp, Select, cn } from '@openbooks/ui'
 import { MoneyInput, moneyFieldError } from '../../../../../components/money-input'
 import { useDirtyClose } from '../../../../../lib/use-dirty-close'
 import { type RegisterBucket } from '../../../../../lib/payroll-register-buckets'
@@ -286,11 +286,10 @@ export function StubDrawer({
             {canAdjust && (
               <div className="space-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
                 <div className="grid grid-cols-2 gap-2">
-                  <select
+                  <Select
                     aria-label={t('wizard.adjust.component')}
                     value={adjComponent}
                     onChange={(e) => { setAdjComponent(e.target.value); setAdjEarnedFrom(''); setAdjEarnedTo('') }}
-                    className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
                   >
                     <option value="">{t('wizard.adjust.component')}</option>
                     <optgroup label={t('wizard.adjust.earnings')}>
@@ -303,7 +302,7 @@ export function StubDrawer({
                         <option key={c.id} value={c.id}>{c.name}</option>
                       ))}
                     </optgroup>
-                  </select>
+                  </Select>
                   <MoneyInput
                     ariaLabel={t('wizard.adjust.amount')}
                     value={adjAmount}

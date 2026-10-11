@@ -5,7 +5,7 @@ import { type ComponentOption } from './run-wizard-model'
 import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Loader2 } from 'lucide-react'
-import { Button, Drawer, FieldHelp } from '@openbooks/ui'
+import { Button, Drawer, FieldHelp, Select } from '@openbooks/ui'
 import { MoneyInput, moneyFieldError } from '../../../../../components/money-input'
 import { confirmDialog } from '../../../../../lib/confirm'
 
@@ -84,11 +84,10 @@ export function BulkEditDrawer({
       }
     >
       <div className="space-y-3">
-        <select
+        <Select
           aria-label={t('wizard.adjust.component')}
           value={componentId}
           onChange={(e) => setComponentId(e.target.value)}
-          className="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
         >
           <option value="">{t('wizard.adjust.component')}</option>
           <optgroup label={t('wizard.adjust.earnings')}>
@@ -101,7 +100,7 @@ export function BulkEditDrawer({
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </optgroup>
-        </select>
+        </Select>
         <MoneyInput
           ariaLabel={t('wizard.adjust.amount')}
           value={amount}

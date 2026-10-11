@@ -8,7 +8,9 @@ import { bootJsdomEnvironment } from '../../../../../testing/jsdom-env'
 // The drawer now reads through the shared money input: every unreadable
 // value names its cause and remedy under the field. Mounts the real drawer
 // under jsdom and drives the amount paths.
-await bootJsdomEnvironment({ url: 'http://localhost:4800/payroll/runs/doc-1', matchMediaMatches: false })
+// The shared picker dispatches its change through the global Event, so the
+// test realm uses jsdom's own Event constructor.
+await bootJsdomEnvironment({ url: 'http://localhost:4800/payroll/runs/doc-1', matchMediaMatches: false, event: 'jsdom' })
 const React = await import('react')
 Object.assign(globalThis, { React })
 const { createRoot } = await import('react-dom/client')
@@ -100,15 +102,12 @@ test('a decimal comma names the dotted rewrite and keeps Apply disabled', async 
 test('a server-valid four-decimal amount enables Apply and posts it', async (t) => {
   const applied: Record<string, unknown>[] = []
   await mount(t, applied)
-  const select = document.querySelector('select[aria-label="Component"]') as HTMLSelectElement | null
-  assert.ok(select, 'the component picker must render')
-  await act(async () => {
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value')?.set
-    setter?.call(select, 'comp-bonus')
-    select.dispatchEvent(new window.Event('change', { bubbles: true }))
-    await tick()
-    await tick()
-  })
+  const trigger = document.querySelector('button[aria-label="Component"]') as HTMLButtonElement | null
+  assert.ok(trigger, 'the component picker must render')
+  await click(trigger)
+  const option = [...document.querySelectorAll('[role="option"]')].find((o) => o.textContent?.includes('Bonus')) as HTMLButtonElement | undefined
+  assert.ok(option, 'the Bonus option must be offered by the picker')
+  await click(option)
   await typeAmount('1234.5678')
   assert.ok(!applyButton().disabled, 'a four-decimal amount the server reads must enable Apply')
   await click(applyButton())
