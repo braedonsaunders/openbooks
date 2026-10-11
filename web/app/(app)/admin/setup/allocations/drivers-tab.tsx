@@ -22,6 +22,7 @@ import {
 import { PagedTable } from '../../../../../components/paged-table'
 import { ShowInactivePill } from '../../../../../components/show-inactive-pill'
 import { confirmDialog } from '../../../../../lib/confirm'
+import { readApiErrorMessage } from '../../../../../lib/api-error'
 import {
   driverPayloadFromForm,
   formFromDriver,
@@ -260,7 +261,7 @@ function ManualValuesSection({
         body: JSON.stringify({ driverId: driver.id, ...valuePayloadFromForm(valueDraft) }),
       })
       if (!res.ok) {
-        setError((await res.json().catch(() => ({})) as { error?: string }).error ?? t('saveFailed'))
+        setError(await readApiErrorMessage(res, t('saveFailed')))
         return
       }
     } catch {
@@ -279,7 +280,7 @@ function ManualValuesSection({
         body: JSON.stringify(patch),
       })
       if (!res.ok) {
-        setError((await res.json().catch(() => ({})) as { error?: string }).error ?? t('saveFailed'))
+        setError(await readApiErrorMessage(res, t('saveFailed')))
         return
       }
     } catch {
@@ -294,7 +295,7 @@ function ManualValuesSection({
     try {
       const res = await fetch(`/api/allocations/driver-values/${row.id}`, { method: 'DELETE' })
       if (!res.ok) {
-        setError((await res.json().catch(() => ({})) as { error?: string }).error ?? t('deleteFailed'))
+        setError(await readApiErrorMessage(res, t('deleteFailed')))
         return
       }
     } catch {
@@ -541,9 +542,11 @@ export function DriversTab() {
           body: JSON.stringify(payload),
         },
       )
-      const body = (await res.json().catch(() => ({}))) as { driver?: Driver; error?: string }
+      // The body parses from a clone so the refusal can read through the
+      // shared helper while the success path keeps the saved driver.
+      const body = (await res.clone().json().catch(() => ({}))) as { driver?: Driver; error?: string }
       if (!res.ok) {
-        setError(body.error ?? t('saveFailed'))
+        setError(await readApiErrorMessage(res, t('saveFailed')))
         return
       }
       // A manual driver saved for the first time stays open with its values
@@ -577,7 +580,7 @@ export function DriversTab() {
     try {
       const res = await fetch(`/api/allocations/drivers/${driver.id}`, { method: 'DELETE' })
       if (!res.ok) {
-        setError((await res.json().catch(() => ({})) as { error?: string }).error ?? t('deleteFailed'))
+        setError(await readApiErrorMessage(res, t('deleteFailed')))
         return
       }
     } catch {
@@ -598,9 +601,11 @@ export function DriversTab() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body),
       })
-      const json = (await res.json().catch(() => ({}))) as { rows?: PreviewRow[]; errorCode?: string; error?: string }
+      // The body parses from a clone so the engine-pending status keeps its
+      // copy while every other refusal reads through the shared helper.
+      const json = (await res.clone().json().catch(() => ({}))) as { rows?: PreviewRow[]; errorCode?: string; error?: string }
       if (!res.ok) {
-        setPreviewNote(res.status === 503 ? t('enginePending') : (json.error ?? t('previewFailed')))
+        setPreviewNote(res.status === 503 ? t('enginePending') : await readApiErrorMessage(res, t('previewFailed')))
         return
       }
       setPreviewRows(json.rows ?? [])

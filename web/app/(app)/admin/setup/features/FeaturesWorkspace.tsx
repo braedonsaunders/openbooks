@@ -11,6 +11,7 @@ import { FEATURE_CATEGORIES, FEATURE_GROUPS, type FeatureCategory } from '@openb
 import { ModuleHomeTabs } from '@/components/module-home/tabs'
 import { SearchInput } from '@/components/search-input'
 import { confirmDialog } from '../../../../../lib/confirm'
+import { readApiErrorMessage } from '../../../../../lib/api-error'
 import {
   buildFeatureTree,
   summarizeFeatures,
@@ -151,8 +152,15 @@ export function FeaturesWorkspace({
         body: JSON.stringify({ features: { [key]: next } }),
       })
       if (!res.ok) {
-        const payload = await res.json().catch(() => ({}))
-        throw new Error(featureToggleRefusalMessage(payload, (key, params) => t(key, params)))
+        // The payload parses from a clone so the dependency branches keep
+        // their mapped copy while every other refusal reads through the
+        // shared helper with message, remedy and code.
+        const payload = await res.clone().json().catch(() => ({}))
+        throw new Error(featureToggleRefusalMessage(
+          payload,
+          (key, params) => t(key, params),
+          await readApiErrorMessage(res, t('setup.features.errors.blocked')),
+        ))
       }
       toast.success(t(next ? 'setup.features.enabled' : 'setup.features.disabled', { name: t(`features.${key}.title`) }))
       setAwaitingRefresh(true)

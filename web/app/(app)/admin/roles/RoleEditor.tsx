@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Badge, Button, Drawer, Input, Label, SearchSelect, Select, Textarea } from '@openbooks/ui'
 import { confirmDialog } from '@/lib/confirm'
+import { readApiErrorMessage } from '@/lib/api-error'
 import {
   PERMISSION_GROUPS,
   PERMISSION_IMPLICATIONS,
@@ -250,9 +251,11 @@ function RoleDrawer({
       body: JSON.stringify(payload),
     })
     setBusy(false)
+    // The refusal reads through the shared helper so message, remedy and
+    // code render instead of a bare fallback; the success body parses after
+    // the ok check.
     if (!res.ok) {
-      const data = await res.json().catch(() => ({}))
-      toast.error(data.error ?? t('drawer.saveFailed'))
+      toast.error(await readApiErrorMessage(res, t('drawer.saveFailed')))
       return
     }
     if (isEdit) {
@@ -298,9 +301,10 @@ function RoleDrawer({
       body: JSON.stringify({ id: role.id }),
     })
     setBusy(false)
+    // The refusal reads through the shared helper so message, remedy and
+    // code render instead of a bare fallback.
     if (!res.ok) {
-      const data = await res.json().catch(() => ({}))
-      toast.error(data.error ?? t('drawer.deleteFailed'))
+      toast.error(await readApiErrorMessage(res, t('drawer.deleteFailed')))
       return
     }
     toast.success(t('drawer.deleted'))

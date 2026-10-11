@@ -19,6 +19,7 @@ import {
   allocationTargetBasisFromLine,
   type AllocationLine,
 } from '../../../../../components/allocations/split-lines-model.ts'
+import { refusalMessageFromBody } from '@/lib/api-error'
 
 /** Rule head fields the General tab edits (order stays text until save). */
 export interface GeneralForm {
@@ -447,8 +448,11 @@ export interface ApiError {
 
 /** Normalize a rule-API failure: server message wins, 409/STALE asks for reload. */
 export function apiError(status: number, body: unknown, fallback: string): ApiError {
+  // The message reads through the shared refusal vocabulary so message,
+  // nested error, remedy and code render instead of a bare fallback; the
+  // problems array and the stale reload signal stay domain-owned.
   const record = typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : null
-  const message = typeof record?.['error'] === 'string' && record['error'] !== '' ? record['error'] : fallback
+  const message = refusalMessageFromBody(body, { fallback }) ?? fallback
   const problems = Array.isArray(record?.['problems'])
     ? (record['problems'] as ApiError['problems'])
     : []

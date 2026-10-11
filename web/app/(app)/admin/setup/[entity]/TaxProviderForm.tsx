@@ -6,6 +6,7 @@ import { useLocale, useTranslations } from 'next-intl'
 import { CircleAlert } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge, Button, DisclosureSection, Input, Label, Select } from '@openbooks/ui'
+import { readApiErrorMessage } from '../../../../../lib/api-error'
 
 type Provider = 'avalara' | 'taxjar' | 'custom_http' | 'manual'
 type Config = {
@@ -54,9 +55,10 @@ export function TaxProviderForm({ initial }: { initial: Config | null }) {
           expectedUpdatedAt: initial?.updatedAt ?? null,
         }),
       })
-      const data = await res.json().catch(() => ({}))
+      // The refusal reads through the shared helper so message, remedy and
+      // code render instead of a bare fallback.
       if (!res.ok) {
-        toast.error(typeof data.error === 'string' ? data.error : tc('feedback.saveFailed'))
+        toast.error(await readApiErrorMessage(res, tc('feedback.saveFailed')))
         return
       }
       toast.success(t('saved'))

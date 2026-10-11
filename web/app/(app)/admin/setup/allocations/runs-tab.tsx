@@ -21,6 +21,7 @@ import {
 import { PagedTable } from '../../../../../components/paged-table'
 import { confirmDialog } from '../../../../../lib/confirm'
 import { promptDialog } from '../../../../../lib/prompt'
+import { readApiErrorMessage } from '../../../../../lib/api-error'
 import { LineagePanel } from '../../../../../components/allocations/LineagePanel'
 import { shortId } from '../../../../../components/allocations/lineage-helpers'
 
@@ -301,9 +302,11 @@ export function RunsTab() {
           subsidiaryId: previewForm.subsidiaryId || null,
         }),
       })
-      const json = (await res.json().catch(() => ({}))) as { computation?: Computation; errorCode?: string; error?: string }
+      // The body parses from a clone so the engine-pending status keeps its
+      // copy while every other refusal reads through the shared helper.
+      const json = (await res.clone().json().catch(() => ({}))) as { computation?: Computation; errorCode?: string; error?: string }
       if (!res.ok) {
-        setNotice(res.status === 503 ? t('enginePending') : (json.error ?? t('loadFailed')))
+        setNotice(res.status === 503 ? t('enginePending') : await readApiErrorMessage(res, t('loadFailed')))
         return
       }
       if (json.computation) setPreview(json.computation)
@@ -345,12 +348,14 @@ export function RunsTab() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body),
       })
-      const json = (await res.json().catch(() => ({}))) as { errorCode?: string; error?: string }
       if (!res.ok) {
+        // The refusal reads through the shared helper so message, remedy and
+        // code render instead of a bare fallback; the engine-pending status
+        // keeps its copy.
         setNotice(
           res.status === 503
             ? t('enginePending')
-            : (json.error ?? t(kind === 'post' ? 'postFailed' : kind === 'reverse' ? 'reverseFailed' : 'rerunFailed')),
+            : await readApiErrorMessage(res, t(kind === 'post' ? 'postFailed' : kind === 'reverse' ? 'reverseFailed' : 'rerunFailed')),
         )
         return
       }

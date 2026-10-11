@@ -19,7 +19,7 @@ import type { LaborCostComponent, LaborCostingSettings } from '@openbooks/engine
 import { useBusinessToday } from '../../../../../components/business-date-provider'
 import { LaborCostingWizard } from './LaborCostingWizard'
 import { InteractiveTableRow } from '@/components/interactive-table-row'
-import { apiJson } from '@/lib/api-error'
+import { apiJson, readApiErrorMessage } from '@/lib/api-error'
 import { confirmDialog } from '@/lib/confirm'
 import { createMoneyFormatter } from '@/lib/money-format'
 import { canonicalDecimal } from '@/lib/exact-decimal'
@@ -238,7 +238,9 @@ export function LaborCostingWorkspace(props: {
           payrollVariance: payrollVariance || null,
         }),
       })
-      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? 'failed')
+      // The refusal reads through the shared helper so message, remedy and
+      // code render instead of a bare string.
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed'))
       toast.success(t('saved'))
       setSavedSnap(currentSnap)
       router.refresh()
@@ -953,7 +955,9 @@ function RateDrawer({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     })
-    if (!response.ok) throw new Error((await response.json().catch(() => null))?.error ?? tc('feedback.saveFailed'))
+    // The refusal reads through the shared helper so message, remedy and
+    // code render instead of a bare fallback.
+    if (!response.ok) throw new Error(await readApiErrorMessage(response, tc('feedback.saveFailed')))
   }
 
   async function save() {

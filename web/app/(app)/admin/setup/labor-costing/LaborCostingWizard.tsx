@@ -10,6 +10,7 @@ import { Button, Input, Label, Select, UrlDrawer, cn } from '@openbooks/ui'
 import type { LaborCostComponent } from '@openbooks/engine/src/projects/labor-costing.ts'
 import { add, mulDecimal, mulPercent } from '@openbooks/engine/src/money/money.ts'
 import { useBusinessToday } from '@/components/business-date-provider'
+import { readApiErrorMessage } from '@/lib/api-error'
 import { useMoney } from '@/components/money-provider'
 import { canonicalDecimal, compareDecimal } from '@/lib/exact-decimal'
 
@@ -107,7 +108,9 @@ export function LaborCostingWizard(props: {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         })
-        if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? 'failed')
+        // The refusal reads through the shared helper so message, remedy and
+        // code render instead of a bare string.
+        if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed'))
       }
       if (exactFallbackRate !== null && compareDecimal(exactFallbackRate, '0') > 0) {
         await call('POST', {

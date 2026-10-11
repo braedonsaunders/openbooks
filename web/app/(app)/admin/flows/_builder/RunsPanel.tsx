@@ -17,6 +17,7 @@ import {
   TableRow,
 } from '@openbooks/ui'
 import { dateTime } from '../../../../../lib/format'
+import { readApiErrorMessage } from '../../../../../lib/api-error'
 
 /**
  * Read-only run history for one flow: status, trigger, subject, timing, and
@@ -56,11 +57,10 @@ export function RunsPanel({ runs }: { runs: FlowRunRow[] }) {
     setBusyRunId(runId)
     try {
       const res = await fetch(`/api/flows/runs/${runId}/retry`, { method: 'POST' })
-      const data = await res.json().catch(() => ({}))
+      // The refusal reads through the shared helper so message, remedy and
+      // code render instead of a bare fallback.
       if (!res.ok) {
-        toast.error(
-          typeof data.error === 'string' && data.error ? data.error : t('retryFailed'),
-        )
+        toast.error(await readApiErrorMessage(res, t('retryFailed')))
       } else {
         toast.success(t('retried'))
       }

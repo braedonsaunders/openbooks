@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { Badge, Drawer, Select } from '@openbooks/ui'
 import { PagedTable, type PagedColumn } from '../../../../components/paged-table'
 import { DuplicateTemplateButton, NewTemplateButton, uniqueTemplateName } from './TemplateActions'
+import { readApiErrorMessage } from '../../../../lib/api-error'
 
 export type TemplateRow = {
   id: string
@@ -119,10 +120,9 @@ export function TemplatesList({
             marginMm: preview.marginMm,
           }),
         })
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}))
-          throw new Error(data.error ?? t('list.previewFailed'))
-        }
+        // The refusal reads through the shared helper so message, remedy and
+        // code render instead of a bare fallback.
+        if (!res.ok) throw new Error(await readApiErrorMessage(res, t('list.previewFailed')))
         url = URL.createObjectURL(await res.blob())
         if (!cancelled) setPreviewUrl(url)
       } catch (e) {

@@ -23,6 +23,7 @@ import {
   type SelectOption,
 } from '@openbooks/ui'
 import { LOCALES, isLocale, type Locale } from '../../../../i18n/config'
+import { readApiErrorMessage } from '../../../../lib/api-error'
 import { SaasMetricsNormalization } from './SaasMetricsNormalization'
 import type { ControlAccountRole } from '@openbooks/engine/src/records/control-accounts.ts'
 import { countryOptions } from '../../../../lib/countries'
@@ -267,12 +268,15 @@ export function SettingsForm({
     })
     setSaving(false)
     if (!res.ok) {
-      const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
+      // The domain mappers need the parsed body while the final fallback
+      // reads through the shared helper, so the body parses from a clone
+      // and message, remedy and code render instead of a bare fallback.
+      const data = (await res.clone().json().catch(() => ({}))) as Record<string, unknown>
       if (data.code === 'invalid-tax-id' && typeof data.scheme === 'string') setInvalidTaxId(data.scheme)
       toast.error(
         controlAccountRefusal(data)
           ?? legalIdentityRefusal(data)
-          ?? (typeof data.error === 'string' && data.error ? data.error : tCommon('feedback.saveFailed')),
+          ?? await readApiErrorMessage(res, tCommon('feedback.saveFailed')),
       )
       return
     }

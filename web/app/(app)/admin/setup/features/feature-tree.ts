@@ -29,6 +29,10 @@ export type FeatureSwitchState = Record<string, boolean>
 export function featureToggleRefusalMessage(
   payload: unknown,
   t: (key: string, params?: Record<string, string>) => string,
+  // Enriched server refusal (message with remedy and code) when the caller
+  // read one; the generic blocked copy otherwise. Domain branches win over
+  // both, so dependency guidance never degrades to a bare fallback.
+  fallback?: string,
 ): string {
   const body = (payload ?? {}) as {
     error?: unknown
@@ -46,7 +50,7 @@ export function featureToggleRefusalMessage(
   if (body.error === 'feature-dependents-enabled') {
     return t('setup.features.errors.dependents', { features: titles(body.dependentKeys) })
   }
-  return t('setup.features.errors.blocked')
+  return fallback ?? t('setup.features.errors.blocked')
 }
 
 export interface FeatureTreeNode {

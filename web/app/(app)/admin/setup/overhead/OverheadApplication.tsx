@@ -10,6 +10,7 @@ import { PagedTable } from '../../../../../components/paged-table'
 import { useMoney } from '@/components/money-provider'
 import { formatDecimal } from '@/lib/money-format'
 import { enumLabel } from '@/lib/enum-label'
+import { readApiErrorMessage } from '@/lib/api-error'
 
 type OverheadJournalStatus = 'posted' | 'voided' | 'reversed'
 
@@ -66,9 +67,11 @@ export function OverheadApplication(props: {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     })
-    const j = await res.json().catch(() => ({}))
-    if (!res.ok) throw new Error(tFailure('errors.requestFailed'))
-    return j
+    // The refusal reads through the shared helper so message, remedy and
+    // code render instead of a bare fallback; the success body parses after
+    // the ok check.
+    if (!res.ok) throw new Error(await readApiErrorMessage(res, tFailure('errors.requestFailed')))
+    return res.json().catch(() => ({}))
   }
 
   async function saveMode() {

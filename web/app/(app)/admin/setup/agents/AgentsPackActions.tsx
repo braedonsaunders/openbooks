@@ -8,6 +8,7 @@ import { Loader2, Play } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@openbooks/ui'
 import { Switch } from '@/components/switch'
+import { readApiErrorMessage } from '@/lib/api-error'
 import { postAgentScan } from './run-agent-scan'
 
 /**
@@ -57,11 +58,14 @@ export function AgentsPackActions({
         body: JSON.stringify({ ...policy, enabled: next }),
       })
       if (!res.ok) {
-        const payload = (await res.json().catch(() => ({}))) as { error?: string }
+        // The body parses from a clone so the feature_disabled code keeps
+        // its mapped copy while every other refusal reads through the
+        // shared helper with message, remedy and code.
+        const payload = (await res.clone().json().catch(() => ({}))) as { error?: string }
         if (payload.error === 'feature_disabled') {
           throw new Error(t('setup.agents.overview.featureOffError'))
         }
-        throw new Error(payload.error ?? t('setup.agents.overview.toggleFailed'))
+        throw new Error(await readApiErrorMessage(res, t('setup.agents.overview.toggleFailed')))
       }
       toast.success(t(next ? 'setup.agents.overview.enabled' : 'setup.agents.overview.disabled', { name: packTitle }))
       router.refresh()

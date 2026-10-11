@@ -7,6 +7,7 @@ import { Bell, ListChecks, Settings2, Sparkles, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge, Button, Card, CardContent, Input, Label, SearchSelect, cn } from '@openbooks/ui'
 import { Switch } from '@/components/switch'
+import { readApiErrorMessage } from '@/lib/api-error'
 import { createMoneyFormatter } from '@/lib/money-format'
 
 /** Serializable slices the loader hands over (JSON-safe engine policy JSON). */
@@ -298,10 +299,9 @@ export function AgentPolicyForm({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...draft, notification: routing }),
       })
-      if (!res.ok) {
-        const payload = (await res.json().catch(() => ({}))) as { error?: string }
-        throw new Error(payload.error ?? t('ai.agents.configurationSaveFailed'))
-      }
+      // The refusal reads through the shared helper so message, remedy and
+      // code render instead of a bare fallback.
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, t('ai.agents.configurationSaveFailed')))
       toast.success(t('ai.agents.configurationSaved'))
       router.refresh()
     } catch (e) {

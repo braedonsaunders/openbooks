@@ -6,6 +6,7 @@ import { useLocale, useTranslations } from 'next-intl'
 import { CheckCircle2, CircleAlert, Clock3, KeyRound, RefreshCw, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge, Button, Input, Label, SearchSelect, Select } from '@openbooks/ui'
+import { readApiErrorMessage } from '../../../../../lib/api-error'
 
 type Provider = 'bank_of_canada' | 'ecb' | 'open_exchange_rates'
 type Schedule = 'manual' | 'daily' | 'weekdays' | 'weekly'
@@ -91,9 +92,10 @@ export function FxProviderForm({
           apiKey: clearSecret ? null : apiKey.trim() || undefined,
         }),
       })
-      const data = await res.json().catch(() => ({}))
+      // The refusal reads through the shared helper so message, remedy and
+      // code render instead of a bare fallback.
       if (!res.ok) {
-        toast.error(data.error ?? tc('feedback.saveFailed'))
+        toast.error(await readApiErrorMessage(res, tc('feedback.saveFailed')))
         return false
       }
       setApiKey('')
@@ -130,8 +132,10 @@ export function FxProviderForm({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: kind }),
       })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) toast.error(data.error ?? t(`${kind}Failed`))
+      // The body parses from a clone so the refusal can read through the
+      // shared helper while the success path keeps its result counts.
+      const data = await res.clone().json().catch(() => ({})) as { result?: { observationsReceived?: unknown; normalizedRates?: unknown } }
+      if (!res.ok) toast.error(await readApiErrorMessage(res, t(`${kind}Failed`)))
       else {
         toast.success(t(kind === 'test' ? 'testPassed' : 'syncPassed', {
           observations: data.result?.observationsReceived ?? 0,

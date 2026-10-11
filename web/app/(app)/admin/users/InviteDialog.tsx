@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Button, Drawer, Input, Label, Select } from '@openbooks/ui'
 import { InviteLinkDrawer } from './InviteLinkDrawer'
+import { readApiErrorMessage } from '@/lib/api-error'
 
 /**
  * Invite-user entry point for the Users page header. Mirrors the roles
@@ -81,8 +82,9 @@ function InviteDrawer({
         body: JSON.stringify({ action: 'invite', email: email.trim(), roleId }),
       })
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        toast.error(res.status === 429 ? t('inviteTooManyAttempts') : (data.error ?? t('requestFailed')))
+        // The rate-limit copy stays domain-owned while every other refusal
+        // reads through the shared helper with message, remedy and code.
+        toast.error(res.status === 429 ? t('inviteTooManyAttempts') : await readApiErrorMessage(res, t('requestFailed')))
         return
       }
       const payload = await res.json().catch(() => ({}))

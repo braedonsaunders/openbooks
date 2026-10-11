@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Button } from '@openbooks/ui'
+import { readApiErrorMessage } from '@/lib/api-error'
 
 /**
  * One pack's install action for the Agents library card footer (the
@@ -40,11 +41,14 @@ export function AgentsPackInstallButton({
         body: JSON.stringify({ ...policy, enabled: true }),
       })
       if (!res.ok) {
-        const payload = (await res.json().catch(() => ({}))) as { error?: string }
+        // The body parses from a clone so the feature_disabled code keeps
+        // its mapped copy while every other refusal reads through the
+        // shared helper with message, remedy and code.
+        const payload = (await res.clone().json().catch(() => ({}))) as { error?: string }
         throw new Error(
           payload.error === 'feature_disabled'
             ? t('setup.agents.overview.featureOffError')
-            : (payload.error ?? t('setup.agents.library.installFailed')),
+            : await readApiErrorMessage(res, t('setup.agents.library.installFailed')),
         )
       }
       toast.success(t('setup.agents.library.installedToast', { name: packTitle }))

@@ -62,6 +62,7 @@ import { nameFlowWarnings } from '../_builder/warnings'
 import { NODE_TYPES } from '../_builder/nodes'
 import { Inspector } from '../_builder/Inspector'
 import { RunsPanel, type FlowRunRow } from '../_builder/RunsPanel'
+import { readApiErrorMessage } from '../../../../../lib/api-error'
 
 /**
  * The flow builder: canvas left (React Flow), inspector right (360px).
@@ -288,10 +289,16 @@ export default function FlowBuilder({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ expectedUpdatedAt: revision, enabled: next }),
       })
-      const data = (await res.json().catch(() => ({}))) as { updatedAt?: string; enabled?: unknown; errors?: unknown }
+      // The body parses from a clone so the refusal can read through the
+      // shared helper: message, remedy and code render in the pin and the
+      // toast instead of a bare fallback.
+      const data = (await res.clone().json().catch(() => ({}))) as { updatedAt?: string; enabled?: unknown; errors?: unknown }
       if (!res.ok) {
-        setSaveErrors(Array.isArray(data.errors) ? data.errors.map(String) : [String((data as { error?: unknown }).error ?? res.status)])
-        toast.error(t('actions.updateFailed'))
+        const refusal = Array.isArray(data.errors) && data.errors.length > 0
+          ? data.errors.map(String)
+          : [await readApiErrorMessage(res, t('actions.updateFailed'))]
+        setSaveErrors(refusal)
+        toast.error(refusal[0] ?? t('actions.updateFailed'))
         return
       }
       // Render the persisted flag the server returns — the switch shows the

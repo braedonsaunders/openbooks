@@ -21,6 +21,7 @@ import {
 } from '@openbooks/customization'
 import type { CustomFieldDefClient } from '../../../../components/custom-field-inputs'
 import { confirmDialog } from '@/lib/confirm'
+import { readApiErrorMessage } from '@/lib/api-error'
 
 interface ViewDef {
   id?: string
@@ -154,9 +155,10 @@ export function ListViewDesigner({
     // Error bodies are checked before they are parsed. A 401/403/500 with a
     // non-JSON body must surface as saveFailed, never throw past the busy
     // reset and leave the button stuck on Saving.
+    // The refusal reads through the shared helper so message, remedy and
+    // code render instead of a bare fallback.
     if (!res.ok) {
-      const data = (await res.json().catch(() => ({}))) as { error?: string }
-      toast.error(data.error ?? t('designer.list.saveFailed'))
+      toast.error(await readApiErrorMessage(res, t('designer.list.saveFailed')))
       setBusy(false)
       return
     }
@@ -171,8 +173,9 @@ export function ListViewDesigner({
     const res = await fetch(`/api/customization/list-views/${def.id}`, { method: 'DELETE' })
     if (res.ok) { toast.success(t('designer.list.deleted')); router.push(`/admin/customization?recordType=${recordType}&tab=views`); router.refresh() }
     else {
-      const data = (await res.json().catch(() => ({}))) as { error?: string }
-      toast.error(data.error ?? t('designer.list.saveFailed'))
+      // The refusal reads through the shared helper so message, remedy and
+      // code render instead of a bare fallback.
+      toast.error(await readApiErrorMessage(res, t('designer.list.saveFailed')))
       setBusy(false)
     }
   }

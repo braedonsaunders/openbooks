@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Badge, Button, Input, Label, Select, cn } from '@openbooks/ui'
 import { EMAIL_PROVIDER_SPECS, type EmailProvider } from '@openbooks/emails/providers'
+import { readApiErrorMessage } from '@/lib/api-error'
 
 type View = {
   enabled?: boolean
@@ -69,8 +70,10 @@ export function EmailSettingsForm({ initial }: { initial: View }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
+      // The refusal reads through the shared helper so the server's reason
+      // renders instead of a bare fallback.
       if (!res.ok) {
-        toast.error(t('email.saveFailed'))
+        toast.error(await readApiErrorMessage(res, t('email.saveFailed')))
         return
       }
       const data = await res.json()
@@ -94,8 +97,10 @@ export function EmailSettingsForm({ initial }: { initial: View }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ to: testTo.trim() }),
       })
+      // The refusal reads through the shared helper so the server's reason
+      // renders instead of a bare fallback.
       if (!res.ok) {
-        toast.error(t('email.testFailed'))
+        toast.error(await readApiErrorMessage(res, t('email.testFailed')))
         return
       }
       const data = await res.json()
