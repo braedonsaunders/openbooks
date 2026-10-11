@@ -698,6 +698,8 @@ export const TENANT_TABLE_POLICIES = {
   "source_deletion_resolutions": "clone:catalog-uuid-rebase",
   "source_reconciliation_state": "clone:catalog-uuid-rebase",
   "sov_lines": "clone:catalog-uuid-rebase",
+  "statement_batch_items": "clone:catalog-uuid-rebase",
+  "statement_batch_runs": "clone:catalog-uuid-rebase",
   "statement_layouts": "clone:catalog-uuid-rebase",
   "stock_count_lines": "clone:catalog-uuid-rebase",
   "stock_counts": "clone:catalog-uuid-rebase",

@@ -1,0 +1,1 @@
+New-table migration: statement_batch_runs and statement_batch_items arrive empty with no backfill, so there is nothing to probe before install.

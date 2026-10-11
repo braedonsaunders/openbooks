@@ -381,6 +381,7 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   // notification emails), emptied where delivery must simply not resolve.
   { tableName: "crm_activity_participants", columnName: "email", transform: "faker_email" },
   { tableName: "dunning_log", columnName: "to_email", transform: "faker_email" },
+  { tableName: "statement_batch_items", columnName: "to_email", transform: "faker_email" },
   { tableName: "vendor_roles", columnName: "eft_notification_email", transform: "faker_email" },
   { tableName: "report_runs", columnName: "recipient_emails", transform: "null_out" },
   { tableName: "report_schedules", columnName: "recipient_emails", transform: "null_out" },
