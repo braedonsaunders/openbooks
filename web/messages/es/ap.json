@@ -71,7 +71,8 @@
     "controlAccountPartyDefault": "Predeterminada del proveedor — {account}",
     "controlAccountOrganizationDefault": "Predeterminada de la organización — {account}",
     "controlAccountUnset": "No hay cuenta por pagar configurada: defina una en Configuración → Empresa y contabilidad → Cuentas de control",
-    "matchBanner": "Algunas líneas de existencias no están asociadas a una orden de compra — la factura no se puede contabilizar hasta asociarlas."
+    "matchBanner": "Algunas líneas de existencias no están asociadas a una orden de compra — la factura no se puede contabilizar hasta asociarlas.",
+    "controlAccountIntercompany": "Intercompañía — {account}"
   },
   "capture": {
     "title": "Captura de facturas",

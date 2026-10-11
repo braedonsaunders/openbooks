@@ -50,7 +50,9 @@
       "statementsTitle": "Relevés clients",
       "statementsDescription": "Choisissez un client pour ouvrir son relevé : pièces ouvertes, paiements et ancienneté de la période.",
       "statementBatchesTitle": "Envois de relevés",
-      "statementBatchesDescription": "Envoyez les relevés à tous les clients avec un solde, puis suivez chaque envoi jusqu’à sa livraison."
+      "statementBatchesDescription": "Envoyez les relevés à tous les clients avec un solde, puis suivez chaque envoi jusqu’à sa livraison.",
+      "intercompanyReconciliationTitle": "Rapprochement intercompagnies",
+      "intercompanyReconciliationDescription": "Soldes de chaque paire intercompagnies par devise dans les livres des deux entités et écart restant à rapprocher."
     },
     "groups": {
       "financial": "États financiers",

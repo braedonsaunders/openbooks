@@ -218,6 +218,10 @@
     "commerce-exceptions-open": {
       "title": "Kanalausnahmen warten",
       "message": "{count, plural, one {# geparkte Bestellung oder geparktes Ereignis braucht noch eine Lösung.} other {# geparkte Bestellungen oder Ereignisse brauchen noch eine Lösung.}}"
+    },
+    "intercompany-unreconciled": {
+      "title": "Konzerninterne Salden stimmen nicht überein",
+      "message": "{count, plural, one {# konzerninternes Paar hat Salden, die zwischen seinen Gesellschaften nicht übereinstimmen. Prüfen Sie die Konzernabstimmung vor dem Abschluss.} other {# konzerninterne Paare haben Salden, die zwischen ihren Gesellschaften nicht übereinstimmen. Prüfen Sie die Konzernabstimmung vor dem Abschluss.}}"
     }
   },
   "severity": {

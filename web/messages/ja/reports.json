@@ -50,7 +50,9 @@
       "statementsTitle": "得意先別明細",
       "statementsDescription": "得意先を選んで明細を開く。期間内の未決済項目、入金、滞留残高を表示します。",
       "statementBatchesTitle": "明細一括送信",
-      "statementBatchesDescription": "残高のあるすべての得意先に明細を送信し、各送信の完了まで追跡します。"
+      "statementBatchesDescription": "残高のあるすべての得意先に明細を送信し、各送信の完了まで追跡します。",
+      "intercompanyReconciliationTitle": "法人間残高照合",
+      "intercompanyReconciliationDescription": "各法人の帳簿における法人間残高を通貨別に表示し、照合が必要な差額を確認します。"
     },
     "groups": {
       "financial": "財務諸表",

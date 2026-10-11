@@ -5,6 +5,7 @@ import { PartyReadOnlyField, PartySummary, ReadOnlyLineSublist } from './PartySu
 import { SublistAddButton } from '../../../components/drawer-sublist'
 import { ContactForm, AddressForm } from './PartyContactForms'
 import { BankAccountsPanel } from './PartyBankAccountsPanel'
+import { IntercompanyRepresentationNote } from './IntercompanyRepresentationNote'
 import { PartyPaymentMethodsPanel } from './PartyPaymentMethodsPanel'
 import { PartyAutopayPanel } from './PartyAutopayPanel'
 import { PartyDebitMandatesPanel } from './PartyDebitMandatesPanel'
@@ -1339,7 +1340,7 @@ export function PartyDrawer({
       case 'website': return <><Label>{label(placement, t('website'))}</Label>{editable ? <Input value={website} onChange={(event) => setWebsite(event.target.value)} placeholder={t('websitePlaceholder')} /> : partyValue(website)}</>
       case 'subsidiary_id':
         if (!multiSubsidiary) return null
-        return <><Label>{label(placement, t('primarySubsidiary'))}</Label>{editable ? <Select value={subsidiaryId} onChange={(event) => setSubsidiaryId(event.target.value)}>{subsidiaries.filter((item) => !item.isElimination).map((item) => <option key={item.id} value={item.id}>{`${'— '.repeat(item.depth)}${item.name ?? ''}`}</option>)}</Select> : partyValue(optionName(subsidiaries, subsidiaryId))}<p className="text-xs text-slate-500 dark:text-slate-400">{t('primarySubsidiaryHint')}</p></>
+        return <><Label>{label(placement, t('primarySubsidiary'))}</Label>{editable ? <Select value={subsidiaryId} onChange={(event) => setSubsidiaryId(event.target.value)}>{subsidiaries.filter((item) => !item.isElimination).map((item) => <option key={item.id} value={item.id}>{`${'— '.repeat(item.depth)}${item.name ?? ''}`}</option>)}</Select> : partyValue(optionName(subsidiaries, subsidiaryId))}<p className="text-xs text-slate-500 dark:text-slate-400">{t('primarySubsidiaryHint')}</p>{!createMode ? <IntercompanyRepresentationNote partyId={String(p.id)} /> : null}</>
       case 'additional_subsidiaries':
         if (!multiSubsidiary) return null
         return <><Label>{label(placement, t('additionalSubsidiaries'))}</Label>{editable ? <div className="max-h-44 overflow-y-auto rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-800">{subsidiaries.filter((item) => !item.isElimination && item.id !== subsidiaryId).map((item) => <label key={item.id} className="flex cursor-pointer items-center gap-2.5 py-1.5"><input type="checkbox" checked={additionalSubsidiaryIds.has(item.id)} onChange={(event) => setAdditionalSubsidiaryIds((previous) => { const next = new Set(previous); if (event.target.checked) next.add(item.id); else next.delete(item.id); return next })} className={checkboxClass} /><span className="text-sm text-slate-800 dark:text-slate-200" style={{ paddingLeft: `${item.depth * 12}px` }}>{item.name}</span></label>)}</div> : partyValue(subsidiaries.filter((item) => additionalSubsidiaryIds.has(item.id)).map((item) => item.name).filter(Boolean).join(', '))}<p className="text-xs text-slate-500 dark:text-slate-400">{t('additionalSubsidiariesHint')}</p></>
@@ -1729,6 +1730,7 @@ export function PartyDrawer({
                 <p className="text-xs text-slate-500 dark:text-slate-400">{t('additionalSubsidiariesHint')}</p>
               </div>
             </div>
+            {!createMode ? <IntercompanyRepresentationNote partyId={String(p.id)} /> : null}
           </section>
         ) : null}
         </>

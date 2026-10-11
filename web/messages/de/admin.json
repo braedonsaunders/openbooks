@@ -1275,7 +1275,8 @@
       "purchasing": "Einkauf",
       "parties": "Personen & Unternehmen",
       "banking": "Bankwesen",
-      "expenses": "Spesenabrechnungen"
+      "expenses": "Spesenabrechnungen",
+      "intercompany": "Konzernverrechnung"
     },
     "gl_read": "Journale und Salden anzeigen",
     "gl_manage": "Kontenplan verwalten",
@@ -1453,7 +1454,11 @@
     "purchase_orders_read": "Bestellungen und Wareneingänge anzeigen",
     "purchase_orders_create": "Bestellungen erstellen, ändern und stornieren",
     "goods_receipts_create": "Wareneingänge zu Bestellungen buchen",
-    "time_self": "Eigene Zeit erfassen und einreichen"
+    "time_self": "Eigene Zeit erfassen und einreichen",
+    "intercompany_read": "Konzerninterne Paare, Verrechnungsläufe, Überweisungen und Abstimmung anzeigen",
+    "intercompany_manage": "Konzerninterne Paare erstellen, verknüpfen und trennen; Verrechnungsläufe vorschlagen und abbrechen",
+    "intercompany_settle": "Verrechnungsläufe und konzerninterne Überweisungen buchen und stornieren",
+    "intercompany_approve": "Konzerninterne Verrechnungsläufe genehmigen oder ablehnen"
   },
   "ai": {
     "metaTitle": "KI-Einstellungen",
@@ -3793,6 +3798,14 @@
         "title": "Stellenbeschreibungen",
         "singularTitle": "Stellenbeschreibung",
         "description": "Wiederverwendbare Ausschreibungsinhalte für neue Stellenanforderungen: Titel, Beschäftigungsart, Gehaltsspanne und Beschreibung."
+      },
+      "intercompany-representing-parties": {
+        "title": "Konzerninterne vertretende Geschäftspartner",
+        "description": "Der Kunde und der Lieferant, die jede Tochtergesellschaft vertreten, wenn Schwestergesellschaften mit ihr Handel treiben."
+      },
+      "intercompany-transfer-pricing": {
+        "title": "Konzerninterne Verrechnungspreise",
+        "description": "Datierte Preisgestaltung für Waren, die eine Gesellschaft für eine andere erfüllt: eine Preisstufe oder Kosten zuzüglich Aufschlag."
       }
     },
     "fields": {
@@ -4420,7 +4433,18 @@
       "compensationMin": "Gehalt Minimum",
       "compensationMax": "Gehalt Maximum",
       "compensationCurrency": "Gehaltswährung",
-      "compensationBasis": "Gehaltsbasis"
+      "compensationBasis": "Gehaltsbasis",
+      "customerPartyId": "Vertretender Kunde",
+      "vendorPartyId": "Vertretender Lieferant",
+      "fromReceivableAccountId": "Konzerninterne Forderung der Absendergesellschaft",
+      "fromPayableAccountId": "Konzerninterne Verbindlichkeit der Absendergesellschaft",
+      "toReceivableAccountId": "Konzerninterne Forderung der Empfängergesellschaft",
+      "toPayableAccountId": "Konzerninterne Verbindlichkeit der Empfängergesellschaft",
+      "sellerSubsidiaryId": "Verkaufende Tochtergesellschaft",
+      "buyerSubsidiaryId": "Kaufende Tochtergesellschaft",
+      "markupPercent": "Aufschlag in %",
+      "revenueAccountId": "Konzerninternes Erlöskonto",
+      "costAccountId": "Konzerninternes Aufwandskonto"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Tage zwischen dem neuesten verwendbaren Kurs und dem Periodenende, ab denen Bewertung und Konsolidierung den Kurs ablehnen. Stichtagskurse zählen ab dem Datum des Kassakurses zum Periodenende, Durchschnittskurse ab der neuesten einbezogenen Notierung. Standard ohne Richtlinie: 31 Tage.",
@@ -4599,7 +4623,16 @@
       "hrmJobDescriptionTitle": "Der Stellentitel, den Bewerbende in der Ausschreibung sehen.",
       "hrmJobDescriptionKind": "Zum Beispiel Vollzeit, Teilzeit, saisonal oder befristet.",
       "hrmJobDescriptionPay": "Optional. Minimum, Maximum, Währung und Basis gemeinsam angeben oder alle vier leer lassen.",
-      "hrmJobDescriptionBody": "Der Ausschreibungstext. Neue Stellenanforderungen übernehmen eine Kopie; Änderungen hier wirken nicht auf bestehende Stellen."
+      "hrmJobDescriptionBody": "Der Ausschreibungstext. Neue Stellenanforderungen übernehmen eine Kopie; Änderungen hier wirken nicht auf bestehende Stellen.",
+      "representedSubsidiary": "Die Tochtergesellschaft, die diese Geschäftspartner in den Büchern anderer Gesellschaften vertreten.",
+      "representingCustomer": "Schwestergesellschaften stellen diesem Kunden Rechnungen, wenn sie an die Tochtergesellschaft verkaufen. Er darf mit der Tochtergesellschaft selbst noch keine Geschäfte tätigen.",
+      "representingVendor": "Schwestergesellschaften erhalten Rechnungen von diesem Lieferanten, wenn sie bei der Tochtergesellschaft einkaufen. Er darf mit der Tochtergesellschaft selbst noch keine Geschäfte tätigen.",
+      "transferPricingSeller": "Die Gesellschaft, die die Waren erfüllt und dafür berechnet.",
+      "transferPricingBuyer": "Leer lassen, um für jede kaufende Gesellschaft ohne eigene Regelung zu gelten.",
+      "transferPricingMarkup": "Wird auf die Kosten der erfüllenden Gesellschaft aufgeschlagen. 10 bedeutet Kosten plus 10 %.",
+      "transferPricingRevenue": "Der konzerninterne Erlös der erfüllenden Gesellschaft. Muss bei der Konsolidierung als „Eliminieren“ markiert sein.",
+      "transferPricingCost": "Der Aufwand der verkaufenden Gesellschaft zum Verrechnungspreis. Muss bei der Konsolidierung als „Eliminieren“ markiert sein.",
+      "intercompanyControlAccount": "Konzerninterne Ausgangs- und Eingangsrechnungen an oder von den vertretenden Geschäftspartnern buchen ihre offenen Posten auf diese Konten. Jedes muss bei der Konsolidierung als „Eliminieren“ markiert sein."
     },
     "options": {
       "withholdingCondominiumPayer": "Wohnungseigentümergemeinschaft als Zahler",
@@ -5409,6 +5442,10 @@
       "schedulePdfColorTreatment": {
         "subtle": "Dezente Akzente",
         "strong": "Kräftige Flächen"
+      },
+      "transferPricingMethod": {
+        "price_level": "Preisstufe",
+        "cost_plus": "Kosten plus Aufschlag"
       }
     },
     "bankFeeds": {
@@ -6395,7 +6432,8 @@
       "scheduleBoardBooking": "Einplanung",
       "scheduleBoardBookingHelp": "Ganztägige Einplanungen verwenden diese Arbeitszeiten in der Zeitzone der Plantafel.",
       "scheduleBoardAutomation": "Automatisierung",
-      "scheduleBoardAutomationHelp": "Was geschieht, nachdem eine Einplanung auf dieser Plantafel veröffentlicht wurde."
+      "scheduleBoardAutomationHelp": "Was geschieht, nachdem eine Einplanung auf dieser Plantafel veröffentlicht wurde.",
+      "intercompanyControlAccounts": "Konten für konzerninterne Forderungen und Verbindlichkeiten"
     },
     "segmentValues": {
       "builtinLink": "{name} öffnen",
@@ -8055,6 +8093,18 @@
     "manufacturingSubcontract": {
       "title": "Externe Fertigung",
       "description": "Komponenten an Lieferanten senden, Bearbeitungsleistungen erfassen und Produktion auf den Fertigungsauftrag zurücknehmen."
+    },
+    "intercompanyTransactions": {
+      "title": "Konzerninterne Transaktionen",
+      "description": "Vertretende Kunden und Lieferanten je Gesellschaft, Konten für konzerninterne Forderungen und Verbindlichkeiten, zugeordnete konzerninterne Belege und Verrechnungspreise."
+    },
+    "intercompanyNetting": {
+      "title": "Konzerninterne Verrechnung",
+      "description": "Konzerninterne Salden zwischen Gesellschaften mit Genehmigung verrechnen und ausgleichen sowie Geld zwischen den Bankkonten der Gesellschaften übertragen."
+    },
+    "crossSubsidiaryFulfillment": {
+      "title": "Gesellschaftsübergreifende Auftragserfüllung",
+      "description": "Kundenaufträge einer Gesellschaft aus dem Lager einer anderen Gesellschaft erfüllen, mit einer konzerninternen Weiterbelastung zum Verrechnungspreis."
     }
   },
   "extensions": {

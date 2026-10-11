@@ -1,0 +1,257 @@
+{
+  "title": "Intercompany",
+  "description": "Pair intercompany orders, invoices and credits between your entities, and find documents that are missing a counterpart or disagree with it.",
+  "openReconciliation": "Intercompany reconciliation",
+  "truncated": "Showing the first {count} documents. Narrow the list by entity to see the rest.",
+  "tabs": {
+    "pairing": "Pairing",
+    "netting": "Netting",
+    "transfers": "Transfers"
+  },
+  "views": {
+    "unpaired": "Unpaired",
+    "mismatched": "Mismatched",
+    "paired": "Paired"
+  },
+  "empty": {
+    "unpaired": {
+      "title": "Every intercompany document is paired",
+      "description": "Documents to or from a representing customer or vendor appear here until they are paired with the other entity's counterpart."
+    },
+    "mismatched": {
+      "title": "No mismatched pairs",
+      "description": "Pairs whose documents disagree on currency, total or quantities, or where one side was voided, appear here."
+    },
+    "paired": {
+      "title": "No paired documents yet",
+      "description": "Create a counterpart or link an existing document from the Unpaired view."
+    }
+  },
+  "columns": {
+    "document": "Document",
+    "kind": "Type",
+    "entity": "Entity",
+    "counterparty": "Counterparty",
+    "party": "Party",
+    "date": "Date",
+    "amount": "Amount",
+    "status": "Status",
+    "actions": "Actions",
+    "pair": "Pair",
+    "seller": "Seller",
+    "buyer": "Buyer",
+    "entities": "Entities",
+    "sellerAmount": "Seller amount",
+    "buyerAmount": "Buyer amount",
+    "state": "State",
+    "issues": "Issues"
+  },
+  "kinds": {
+    "sales_order": "Sales order",
+    "purchase_order": "Purchase order",
+    "customer_invoice": "Invoice",
+    "vendor_bill": "Bill",
+    "customer_credit": "Credit memo",
+    "vendor_credit": "Vendor credit"
+  },
+  "statuses": {
+    "draft": "Draft",
+    "pending_approval": "Pending approval",
+    "approved": "Approved",
+    "posted": "Posted",
+    "voided": "Voided"
+  },
+  "pairKinds": {
+    "order": "Order pair",
+    "invoice": "Invoice and bill",
+    "credit": "Credit pair"
+  },
+  "origins": {
+    "generated": "Generated",
+    "linked": "Linked"
+  },
+  "states": {
+    "in_sync": "In sync",
+    "awaiting_counterpart": "Awaiting counterpart",
+    "mismatched": "Mismatched"
+  },
+  "mismatch": {
+    "currency": "Currency differs: seller {seller}, buyer {buyer}",
+    "amount": "Totals differ by {difference}",
+    "quantity": "{item}: seller quantity {seller}, buyer quantity {buyer}",
+    "sellerVoided": "The seller's document was voided",
+    "buyerVoided": "The buyer's document was voided"
+  },
+  "actions": {
+    "generate": "Create counterpart",
+    "link": "Link"
+  },
+  "errors": {
+    "generateFailed": "The counterpart could not be created.",
+    "unlinkFailed": "The pair could not be unlinked.",
+    "linkFailed": "The documents could not be linked.",
+    "nettingFailed": "The netting run could not be updated.",
+    "transferFailed": "The transfer could not be completed."
+  },
+  "pair": {
+    "unlinkTitle": "Unlink this pair",
+    "unlinkReason": "Why are these documents no longer paired?",
+    "unlinked": "Pair unlinked",
+    "unlink": "Unlink",
+    "seller": "Seller document",
+    "buyer": "Buyer document",
+    "linkedOn": "Linked on",
+    "linkReason": "Link reason"
+  },
+  "link": {
+    "title": "Link {document} to a counterpart",
+    "submit": "Link documents",
+    "noCandidates": "The other entity has no unpaired document of the matching type for this party.",
+    "counterpart": "Counterpart document",
+    "reason": "Reason"
+  },
+  "netting": {
+    "title": "Netting runs",
+    "description": "Net intercompany receivables and payables between entities as of a date, optionally settle the remainder in cash, and post the result after approval.",
+    "new": "New netting run",
+    "empty": {
+      "title": "No netting runs yet",
+      "description": "Preview a netting run to see what each pair of entities owes the other."
+    },
+    "columns": {
+      "run": "Run",
+      "asOf": "As of",
+      "entities": "Entities",
+      "pairs": "Pairs",
+      "lines": "Lines",
+      "cash": "Cash settlement",
+      "status": "Status"
+    },
+    "cashYes": "Yes",
+    "cashNo": "No",
+    "statuses": {
+      "proposed": "Proposed",
+      "pending_approval": "Pending approval",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "posted": "Posted",
+      "cancelled": "Cancelled",
+      "reversed": "Reversed"
+    },
+    "components": {
+      "open_item": "Open item",
+      "due_position": "Due-to/due-from position",
+      "cash": "Cash"
+    },
+    "newTitle": "New netting run",
+    "newDescription": "Choose the entities and the date. Preview the run before proposing it; the proposal is what gets approved and posted.",
+    "preview": "Preview",
+    "propose": "Propose run",
+    "asOf": "As of date",
+    "settleCash": "Settle the remainder in cash",
+    "subsidiaries": "Entities",
+    "bankFor": "Bank account for {entity}",
+    "chooseBank": "Choose a bank account",
+    "reason": "Reason",
+    "previewTitle": "Preview: {lines} lines",
+    "pairColumns": {
+      "pair": "Pair",
+      "currency": "Currency",
+      "fromNet": "From entity net",
+      "toNet": "To entity net",
+      "unreconciled": "Unreconciled",
+      "netted": "Netted",
+      "cash": "Cash"
+    },
+    "cancelTitle": "Cancel netting run",
+    "cancelReason": "Why is this run being cancelled?",
+    "reverseTitle": "Reverse netting run",
+    "reverseReason": "Why is this run being reversed?",
+    "submit": "Submit for approval",
+    "post": "Post",
+    "reversalDate": "Reversal date",
+    "reverse": "Reverse",
+    "cancel": "Cancel run",
+    "decisionNote": "Decision note",
+    "fingerprint": "Proposal fingerprint",
+    "pairsTitle": "Pairs",
+    "linesTitle": "Lines",
+    "lineColumns": {
+      "component": "Component",
+      "entity": "Entity",
+      "reference": "Reference",
+      "open": "Open",
+      "netted": "Netted",
+      "cash": "Cash",
+      "rate": "Settlement rate",
+      "realizedFx": "Realized FX"
+    },
+    "entryLink": "Journal entry {number}"
+  },
+  "transfers": {
+    "title": "Intercompany transfers",
+    "description": "Move cash from one entity's bank account to another's. Each entity's books balance through the pair's due-to/due-from accounts.",
+    "new": "New transfer",
+    "empty": {
+      "title": "No intercompany transfers yet",
+      "description": "Transfers between bank accounts of the same entity stay in Banking."
+    },
+    "columns": {
+      "transfer": "Transfer",
+      "date": "Date",
+      "route": "From → To",
+      "amount": "Amount",
+      "status": "Status"
+    },
+    "statuses": {
+      "posted": "Posted",
+      "reversed": "Reversed"
+    },
+    "newTitle": "New intercompany transfer",
+    "newDescription": "The paying entity credits its bank account; the receiving entity debits its bank account. Both accounts must hold the same currency.",
+    "post": "Post transfer",
+    "fromLegend": "From",
+    "toLegend": "To",
+    "subsidiary": "Entity",
+    "chooseSubsidiary": "Choose an entity",
+    "bankAccount": "Bank account",
+    "chooseBank": "Choose a bank account",
+    "date": "Date",
+    "amount": "Amount",
+    "currency": "Currency",
+    "memo": "Memo",
+    "reason": "Reason",
+    "reverseTitle": "Reverse transfer",
+    "reverseReason": "Why is this transfer being reversed?",
+    "reversalDate": "Reversal date",
+    "reverse": "Reverse",
+    "entry": "Journal entry",
+    "reversalEntry": "Reversal entry"
+  },
+  "reconciliation": {
+    "title": "Intercompany reconciliation",
+    "description": "Each intercompany pair's balances by currency in both entities' ledgers, and the difference left to reconcile.",
+    "asOf": "As of {date}",
+    "openWorkspace": "Open the pairing workspace",
+    "empty": "No intercompany balances as of this date.",
+    "columns": {
+      "currency": "Currency",
+      "entity": "Entity",
+      "receivable": "Intercompany receivable",
+      "payable": "Intercompany payable",
+      "position": "Due-to/due-from",
+      "net": "Net",
+      "functionalNet": "Net (functional currency)"
+    },
+    "summary": {
+      "balances": "Pair balances",
+      "unreconciled": "Unreconciled"
+    },
+    "difference": "Difference"
+  },
+  "party": {
+    "representsAsCustomer": "Represents {subsidiary} as an intercompany customer",
+    "representsAsVendor": "Represents {subsidiary} as an intercompany vendor",
+    "manageRepresentation": "Manage representing parties"
+  }
+}

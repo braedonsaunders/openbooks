@@ -74,6 +74,7 @@ import { weekStartOf } from '@openbooks/engine/resourcing/weeks'
 import { reportRunLabels } from './report-labels'
 import { runResourcingReport, type ResourcingReportKey } from './resourcing/report-facts'
 import { getTranslations } from 'next-intl/server'
+import { intercompanyReconciliationExportData } from './intercompany-report'
 
 /**
  * The single catalog of built-in report "kinds" and the one place that turns
@@ -109,6 +110,7 @@ export const REPORT_KINDS = [
   'resourcing-bench',
   'resourcing-capacity-demand',
   'resourcing-engagement',
+  'intercompany-reconciliation',
 ] as const
 export type ReportKind = (typeof REPORT_KINDS)[number]
 
@@ -155,6 +157,8 @@ export function statementPageHref(statement: { kind?: string; params?: Record<st
       return '/reports/earned-value'
     case 'true-cost':
       return '/reports/true-cost'
+    case 'intercompany-reconciliation':
+      return '/reports/intercompany-reconciliation'
     case 'availability':
       return '/reports/availability'
     case 'replenishment':
@@ -460,6 +464,13 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
     }
     case 'true-cost':
       return { render: 'data', data: await trueCostExportData(orgId, period) }
+    case 'intercompany-reconciliation':
+      // Balances as of the window end, within the reader's legal entities.
+      return {
+        render: 'data',
+        data: await intercompanyReconciliationExportData(orgId, authz.allowedSubsidiaryIds, period.to, period.label),
+        requiredPermissions: ['intercompany.read'],
+      }
     case 'project-profitability':
       return {
         render: 'data',

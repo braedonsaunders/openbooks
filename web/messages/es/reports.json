@@ -50,7 +50,9 @@
       "statementsTitle": "Extractos de clientes",
       "statementsDescription": "Elija un cliente para abrir su extracto: partidas abiertas, pagos y antigüedad del periodo.",
       "statementBatchesTitle": "Envíos de extractos",
-      "statementBatchesDescription": "Envíe extractos a todos los clientes con saldo y siga cada envío hasta su entrega."
+      "statementBatchesDescription": "Envíe extractos a todos los clientes con saldo y siga cada envío hasta su entrega.",
+      "intercompanyReconciliationTitle": "Conciliación intercompañía",
+      "intercompanyReconciliationDescription": "Los saldos de cada par intercompañía por moneda en los libros de ambas entidades y la diferencia pendiente de conciliar."
     },
     "groups": {
       "financial": "Estados financieros",

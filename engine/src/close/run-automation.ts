@@ -131,7 +131,7 @@ export async function refreshCloseRun(
       }
       await tx.execute(sql`update close_exceptions set status='resolved', resolved_at=now(), resolved_by=${actorId ?? null},
         resolution='group-consolidation-not-applicable-to-entity-close', updated_at=now()
-        where org_id=${orgId} and run_id=${runId} and code in ('intercompany-residual','consolidated-rates-missing') and status='open'`);
+        where org_id=${orgId} and run_id=${runId} and code in ('intercompany-residual','intercompany-unreconciled','consolidated-rates-missing') and status='open'`);
     }
     for (const check of checks) {
       const task = (await tx.execute<{ id: string }>(sql`

@@ -152,7 +152,8 @@
     "controlAccountHelp": "Le compte client sur lequel ce document est comptabilisé. Les paiements et avoirs le soldent sur ce même compte. Laissez vide pour utiliser le compte par défaut.",
     "controlAccountPartyDefault": "Défaut du client — {account}",
     "controlAccountOrganizationDefault": "Défaut de l’organisation — {account}",
-    "controlAccountUnset": "Aucun compte client configuré — définissez-en un dans Configuration → Société et comptabilité → Comptes de contrôle"
+    "controlAccountUnset": "Aucun compte client configuré — définissez-en un dans Configuration → Société et comptabilité → Comptes de contrôle",
+    "controlAccountIntercompany": "Intercompagnies — {account}"
   },
   "dailySummary": {
     "date": "Date",

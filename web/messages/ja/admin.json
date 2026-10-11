@@ -1275,7 +1275,8 @@
       "purchasing": "購買",
       "parties": "人と会社",
       "banking": "銀行",
-      "expenses": "経費精算"
+      "expenses": "経費精算",
+      "intercompany": "会社間"
     },
     "gl_read": "仕訳と残高を表示",
     "gl_manage": "会計科目表を管理",
@@ -1453,7 +1454,11 @@
     "purchase_orders_read": "発注書と入荷を表示",
     "purchase_orders_create": "発注書を作成、変更、取消",
     "goods_receipts_create": "発注書に対して入荷を記録",
-    "time_self": "自分の工数を入力および提出"
+    "time_self": "自分の工数を入力および提出",
+    "intercompany_read": "法人間伝票の組、相殺、振替、残高照合を閲覧",
+    "intercompany_manage": "法人間伝票の組を作成・関連付け・解除し、相殺処理を提案・取消",
+    "intercompany_settle": "法人間相殺と資金振替を計上・反対仕訳",
+    "intercompany_approve": "法人間相殺処理を承認または却下"
   },
   "ai": {
     "metaTitle": "AI設定",
@@ -3793,6 +3798,14 @@
         "title": "職務記述書",
         "singularTitle": "職務記述書",
         "description": "新しい採用申請の起点となる再利用可能な求人内容：職名、雇用形態、給与レンジ、説明。"
+      },
+      "intercompany-representing-parties": {
+        "title": "法人間代表取引先",
+        "description": "他法人との取引で各法人を代表する顧客と仕入先。"
+      },
+      "intercompany-transfer-pricing": {
+        "title": "法人間移転価格",
+        "description": "別法人向け出荷に適用する有効期間付き価格設定：価格レベルまたは原価に利益率を加算。"
       }
     },
     "fields": {
@@ -4420,7 +4433,18 @@
       "compensationMin": "給与下限",
       "compensationMax": "給与上限",
       "compensationCurrency": "給与通貨",
-      "compensationBasis": "給与基準"
+      "compensationBasis": "給与基準",
+      "customerPartyId": "代表顧客",
+      "vendorPartyId": "代表仕入先",
+      "fromReceivableAccountId": "起点法人の法人間債権",
+      "fromPayableAccountId": "起点法人の法人間債務",
+      "toReceivableAccountId": "相手法人の法人間債権",
+      "toPayableAccountId": "相手法人の法人間債務",
+      "sellerSubsidiaryId": "売手法人",
+      "buyerSubsidiaryId": "買手法人",
+      "markupPercent": "マークアップ率（%）",
+      "revenueAccountId": "法人間収益勘定",
+      "costAccountId": "法人間原価勘定"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "使用可能な最新レートから期末までの日数がこれを超えると、再評価と連結はそのレートを拒否します。期末レートは期末スポットレートの日付から、平均レートは平均に含まれる最新の相場の日付から数えます。ポリシー未設定時の既定値: 31日。",
@@ -4599,7 +4623,16 @@
       "hrmJobDescriptionTitle": "求人で応募者に表示される職名。",
       "hrmJobDescriptionKind": "例：正社員、パートタイム、季節雇用、契約。",
       "hrmJobDescriptionPay": "任意。下限・上限・通貨・基準をすべて入力するか、4つとも空欄にします。",
-      "hrmJobDescriptionBody": "求人本文。新しい採用申請にコピーされるため、ここでの編集は既存の求人に影響しません。"
+      "hrmJobDescriptionBody": "求人本文。新しい採用申請にコピーされるため、ここでの編集は既存の求人に影響しません。",
+      "representedSubsidiary": "これらの取引先が他法人の帳簿で代表する法人。",
+      "representingCustomer": "他法人はこの法人への販売時にこの顧客へ請求します。顧客は代表する法人自身との既存取引がないことが必要です。",
+      "representingVendor": "他法人はこの法人からの購入時にこの仕入先から請求を受けます。仕入先は代表する法人自身との既存取引がないことが必要です。",
+      "transferPricingSeller": "商品を出荷し、その代金を請求する法人。",
+      "transferPricingBuyer": "空欄の場合、独自の方針を持たないすべての買手法人に適用します。",
+      "transferPricingMarkup": "出荷法人の原価に加算します。10 は原価に 10% を加算することを意味します。",
+      "transferPricingRevenue": "出荷法人の法人間収益。連結時消去を指定する必要があります。",
+      "transferPricingCost": "移転価格による販売法人の原価。連結時消去を指定する必要があります。",
+      "intercompanyControlAccount": "代表取引先の法人間請求書の未決済項目はこれらの勘定に計上されます。各勘定で連結時消去を指定してください。"
     },
     "options": {
       "withholdingCondominiumPayer": "集合住宅管理組合の支払者",
@@ -5409,6 +5442,10 @@
       "schedulePdfColorTreatment": {
         "subtle": "控えめなアクセント",
         "strong": "濃い背景色"
+      },
+      "transferPricingMethod": {
+        "price_level": "価格レベル",
+        "cost_plus": "原価に利益率を加算"
       }
     },
     "invoicing": {
@@ -6395,7 +6432,8 @@
       "scheduleBoardBooking": "割り当て",
       "scheduleBoardBookingHelp": "終日の割り当てには、ボードのタイムゾーンでこの勤務時間が使われます。",
       "scheduleBoardAutomation": "自動化",
-      "scheduleBoardAutomationHelp": "このボードで割り当てが公開された後の処理。"
+      "scheduleBoardAutomationHelp": "このボードで割り当てが公開された後の処理。",
+      "intercompanyControlAccounts": "法人間債権・債務勘定"
     },
     "segmentValues": {
       "builtinLink": "{name}を開く",
@@ -8055,6 +8093,18 @@
     "manufacturingSubcontract": {
       "title": "外注製造",
       "description": "部品を仕入先に送り、加工サービスを記録し、生産数量を製造オーダーに戻します。"
+    },
+    "intercompanyTransactions": {
+      "title": "法人間取引",
+      "description": "各法人の代表顧客・仕入先、法人間債権債務勘定、対応付けられた伝票、移転価格。"
+    },
+    "intercompanyNetting": {
+      "title": "法人間相殺",
+      "description": "承認を経て法人間残高を相殺・決済し、各法人の銀行口座間で資金を振り替えます。"
+    },
+    "crossSubsidiaryFulfillment": {
+      "title": "法人をまたぐ出荷",
+      "description": "別法人の倉庫から販売注文を出荷し、移転価格で法人間請求を計上します。"
     }
   },
   "extensions": {

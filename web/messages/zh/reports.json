@@ -50,7 +50,9 @@
       "statementsTitle": "客户对账单",
       "statementsDescription": "选择客户以打开其对账单 — 该期间的未结项、回款和账龄。",
       "statementBatchesTitle": "对账单批量发送",
-      "statementBatchesDescription": "向所有有余额的客户发送对账单，并跟踪每批直至送达。"
+      "statementBatchesDescription": "向所有有余额的客户发送对账单，并跟踪每批直至送达。",
+      "intercompanyReconciliationTitle": "公司间对账",
+      "intercompanyReconciliationDescription": "按币种显示每对法人双方账簿中的公司间余额，以及待核对的差额。"
     },
     "groups": {
       "financial": "财务报表",

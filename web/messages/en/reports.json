@@ -50,7 +50,9 @@
       "statementsTitle": "Customer statements",
       "statementsDescription": "Pick a customer to open their statement — open items, payments and aging for the period.",
       "statementBatchesTitle": "Statement batches",
-      "statementBatchesDescription": "Send statements to every customer with a balance, then follow each batch to delivered."
+      "statementBatchesDescription": "Send statements to every customer with a balance, then follow each batch to delivered.",
+      "intercompanyReconciliationTitle": "Intercompany reconciliation",
+      "intercompanyReconciliationDescription": "Each intercompany pair's balances by currency in both entities' ledgers and the difference left to reconcile."
     },
     "groups": {
       "financial": "Financial Statements",

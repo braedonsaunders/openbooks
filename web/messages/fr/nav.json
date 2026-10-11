@@ -165,7 +165,9 @@
     "manufacturing-mrp": "Calculs MRP",
     "manufacturing-time": "Temps de production",
     "manufacturing-quality": "Qualité",
-    "close-reopen-requests": "Demandes de réouverture"
+    "close-reopen-requests": "Demandes de réouverture",
+    "intercompany": "Intercompagnie",
+    "intercompany-netting": "Compensation intercompagnies"
   },
   "modulesShort": {
     "hrm-performance-cycles": "Gérer les évaluations",
@@ -262,7 +264,8 @@
     "setup-tax-depreciation": "Amortissement fiscal",
     "setup-overhead": "Frais généraux",
     "crm-sales": "Ventes",
-    "hrm-compensation": "Rémunération"
+    "hrm-compensation": "Rémunération",
+    "intercompany": "Intercompagnie"
   },
   "moduleKeywords": {
     "receipts": "reçu, reçus, recevoir un paiement, paiement, encaissement, paiement client",

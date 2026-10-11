@@ -10,13 +10,14 @@ import {
   intercompanyBalancingLegs,
   loadSubsidiaryContext,
   SubsidiaryError,
+  uuidArray,
   validateSubsidiaryRestrictions,
   type SubLine,
 } from "../organization/subsidiaries.ts";
 import { loadIntercompanyPair } from "../organization/intercompany-accounts.ts";
 import { postEntry, type PostEntryResult } from "../journal/post-entry.ts";
 import { allocateDocumentNumber } from "../records/numbering.ts";
-import { auditIntercompany, IntercompanyError, INTERCOMPANY_NETTING_DISABLED, requireOneRow } from "./errors.ts";
+import { auditIntercompany, IntercompanyError, INTERCOMPANY_NETTING_DISABLED, requireOneRow, requireIntercompanyPermission } from "./errors.ts";
 import {
   assertIntercompanyPeriodOpen,
   intercompanyPostingBook,
@@ -119,15 +120,17 @@ export async function postIntercompanyFundTransfer(
     refuse("a chosen subsidiary is outside your visible subsidiaries", 404);
   }
   const id = await withOrgTransaction(orgId, async () => {
+    await requireIntercompanyPermission(db, orgId, actorId, "intercompany.settle");
     if (!(await lockAndCheckOrgFeature(db, orgId, FEATURE))) refuse(INTERCOMPANY_NETTING_DISABLED);
     if (input.idempotencyKey) {
       await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`intercompany-transfer:${orgId}:${input.idempotencyKey}`}, 0))`);
       const prior = (await db.execute<{
         id: string; from_bank_account_id: string; to_bank_account_id: string; amount: string; transfer_date: string;
         from_subsidiary_id: string; to_subsidiary_id: string;
+        currency: string; memo: string | null; reason: string;
       }>(sql`
         select id, from_bank_account_id, to_bank_account_id, amount::text as amount, transfer_date::text as transfer_date,
-               from_subsidiary_id, to_subsidiary_id
+               from_subsidiary_id, to_subsidiary_id, currency, memo, reason
           from intercompany_fund_transfers
          where org_id = ${orgId} and idempotency_key = ${input.idempotencyKey}`)).rows[0];
       if (prior) {
@@ -136,7 +139,10 @@ export async function postIntercompanyFundTransfer(
           && prior.from_subsidiary_id === input.fromSubsidiaryId
           && prior.to_subsidiary_id === input.toSubsidiaryId
           && toUnits(prior.amount) === toUnits(input.amount)
-          && prior.transfer_date === input.transferDate;
+          && prior.transfer_date === input.transferDate
+          && (input.currency == null || prior.currency === input.currency)
+          && prior.memo === (input.memo ?? null)
+          && prior.reason === input.reason;
         if (!same) refuse("this request key already recorded a different transfer; use a new key for a new transfer", 409);
         return prior.id;
       }
@@ -285,6 +291,7 @@ export async function reverseIntercompanyFundTransfer(
   if (!reason) refuse("a reversal reason is required");
   if (!isUuid(transferId)) refuse("transfer not found", 404);
   await withOrgTransaction(orgId, async () => {
+    await requireIntercompanyPermission(db, orgId, actorId, "intercompany.settle");
     if (!(await lockAndCheckOrgFeature(db, orgId, FEATURE))) refuse(INTERCOMPANY_NETTING_DISABLED);
     const transfer = (await db.execute<{
       status: string; entry_id: string; transfer_number: string; transfer_date: string;
@@ -379,4 +386,25 @@ export async function loadIntercompanyFundTransfer(
     createdBy: row.created_by,
     createdAt: row.created_at,
   };
+}
+
+/** Transfers the caller can see in full (both entities in scope), newest first. */
+export async function listIntercompanyFundTransfers(
+  orgId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+  options: { limit?: number } = {},
+): Promise<FundTransferDetail[]> {
+  const limit = Math.min(Math.max(options.limit ?? 200, 1), 500);
+  const allowed = allowedSubsidiaryIds === null ? null : [...allowedSubsidiaryIds];
+  const rows = (await db.execute<{ id: string }>(sql`
+    select id from intercompany_fund_transfers
+     where org_id = ${orgId}
+       and (${allowed === null}::boolean
+            or (from_subsidiary_id = any(${uuidArray(allowed ?? [])}::uuid[])
+                and to_subsidiary_id = any(${uuidArray(allowed ?? [])}::uuid[])))
+     order by transfer_date desc, transfer_number desc
+     limit ${limit}`)).rows;
+  const out: FundTransferDetail[] = [];
+  for (const row of rows) out.push(await loadIntercompanyFundTransfer(orgId, row.id, allowedSubsidiaryIds));
+  return out;
 }

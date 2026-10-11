@@ -71,7 +71,8 @@
     "controlAccountPartyDefault": "Padrão do fornecedor — {account}",
     "controlAccountOrganizationDefault": "Padrão da organização — {account}",
     "controlAccountUnset": "Nenhuma conta a pagar configurada — defina uma em Configuração → Empresa e Contabilidade → Contas de controle",
-    "matchBanner": "Algumas linhas de estoque não estão vinculadas a um pedido de compra — a fatura só pode ser lançada após vinculá-las."
+    "matchBanner": "Algumas linhas de estoque não estão vinculadas a um pedido de compra — a fatura só pode ser lançada após vinculá-las.",
+    "controlAccountIntercompany": "Entre empresas — {account}"
   },
   "capture": {
     "title": "Captura de contas a pagar",

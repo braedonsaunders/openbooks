@@ -152,7 +152,8 @@
     "controlAccountHelp": "La cuenta por cobrar en la que se contabiliza este documento. Los pagos y créditos lo liquidan en la misma cuenta. Déjela vacía para usar la predeterminada.",
     "controlAccountPartyDefault": "Predeterminada del cliente — {account}",
     "controlAccountOrganizationDefault": "Predeterminada de la organización — {account}",
-    "controlAccountUnset": "No hay cuenta por cobrar configurada: defina una en Configuración → Empresa y contabilidad → Cuentas de control"
+    "controlAccountUnset": "No hay cuenta por cobrar configurada: defina una en Configuración → Empresa y contabilidad → Cuentas de control",
+    "controlAccountIntercompany": "Intercompañía — {account}"
   },
   "dailySummary": {
     "date": "Fecha",

@@ -1275,7 +1275,8 @@
       "purchasing": "Compras",
       "parties": "Personas y empresas",
       "banking": "Bancos",
-      "expenses": "Informes de gastos"
+      "expenses": "Informes de gastos",
+      "intercompany": "Intercompañía"
     },
     "gl_read": "Ver asientos y saldos",
     "gl_manage": "Gestionar el plan de cuentas",
@@ -1453,7 +1454,11 @@
     "purchase_orders_read": "Ver órdenes de compra y recepciones",
     "purchase_orders_create": "Crear, modificar y anular órdenes de compra",
     "goods_receipts_create": "Recibir mercancía contra órdenes de compra",
-    "time_self": "Registrar y enviar el propio tiempo"
+    "time_self": "Registrar y enviar el propio tiempo",
+    "intercompany_read": "Ver pares intercompañía, ejecuciones de compensación, transferencias y conciliación",
+    "intercompany_manage": "Crear, vincular y desvincular pares intercompañía; proponer y cancelar ejecuciones de compensación",
+    "intercompany_settle": "Contabilizar y revertir ejecuciones de compensación y transferencias intercompañía",
+    "intercompany_approve": "Aprobar o rechazar ejecuciones de compensación intercompañía"
   },
   "ai": {
     "metaTitle": "Proveedores de IA",
@@ -3665,6 +3670,14 @@
         "title": "Descripciones de puesto",
         "singularTitle": "Descripción de puesto",
         "description": "Contenido de publicación reutilizable para nuevas solicitudes: título, tipo de empleo, rango salarial y descripción."
+      },
+      "intercompany-representing-parties": {
+        "title": "Terceros representantes intercompañía",
+        "description": "El cliente y el proveedor que representan a cada subsidiaria cuando las entidades hermanas operan con ella."
+      },
+      "intercompany-transfer-pricing": {
+        "title": "Precios de transferencia intercompañía",
+        "description": "Precios con fecha de vigencia para los bienes que una entidad despacha a otra: un nivel de precios o el costo más un margen."
       }
     },
     "fields": {
@@ -4292,7 +4305,18 @@
       "compensationMin": "Salario mínimo",
       "compensationMax": "Salario máximo",
       "compensationCurrency": "Moneda del salario",
-      "compensationBasis": "Base salarial"
+      "compensationBasis": "Base salarial",
+      "customerPartyId": "Cliente representante",
+      "vendorPartyId": "Proveedor representante",
+      "fromReceivableAccountId": "Cuenta por cobrar intercompañía de la subsidiaria de origen",
+      "fromPayableAccountId": "Cuenta por pagar intercompañía de la subsidiaria de origen",
+      "toReceivableAccountId": "Cuenta por cobrar intercompañía de la subsidiaria de destino",
+      "toPayableAccountId": "Cuenta por pagar intercompañía de la subsidiaria de destino",
+      "sellerSubsidiaryId": "Subsidiaria vendedora",
+      "buyerSubsidiaryId": "Subsidiaria compradora",
+      "markupPercent": "Margen %",
+      "revenueAccountId": "Cuenta de ingresos intercompañía",
+      "costAccountId": "Cuenta de costos intercompañía"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Días entre el tipo utilizable más reciente y el cierre del período a partir de los cuales la revaluación y la consolidación rechazan el tipo. Los tipos de cierre se cuentan desde la fecha del tipo al contado de cierre; los promedio, desde la cotización más reciente promediada. Valor predeterminado sin política: 31 días.",
@@ -4471,7 +4495,16 @@
       "hrmJobDescriptionTitle": "El título del puesto que ven los candidatos en la publicación.",
       "hrmJobDescriptionKind": "Por ejemplo jornada completa, media jornada, temporal o por contrato.",
       "hrmJobDescriptionPay": "Opcional. Indique mínimo, máximo, moneda y base juntos, o deje los cuatro vacíos.",
-      "hrmJobDescriptionBody": "El texto de la publicación. Las nuevas solicitudes lo copian, así que editarlo aquí no cambia una vacante existente."
+      "hrmJobDescriptionBody": "El texto de la publicación. Las nuevas solicitudes lo copian, así que editarlo aquí no cambia una vacante existente.",
+      "representedSubsidiary": "La subsidiaria a la que estos terceros representan en los libros de otras entidades.",
+      "representingCustomer": "Las entidades hermanas facturan a este cliente cuando venden a la subsidiaria. No debe operar ya con la propia subsidiaria.",
+      "representingVendor": "Las entidades hermanas reciben facturas de este proveedor cuando compran a la subsidiaria. No debe operar ya con la propia subsidiaria.",
+      "transferPricingSeller": "La entidad que despacha los bienes y los cobra.",
+      "transferPricingBuyer": "Déjelo vacío para aplicarlo a toda entidad compradora que no tenga una política propia.",
+      "transferPricingMarkup": "Se suma al costo de la entidad que despacha. 10 significa costo más 10 %.",
+      "transferPricingRevenue": "Los ingresos intercompañía de la entidad que despacha. Debe estar marcada como Eliminar en la consolidación.",
+      "transferPricingCost": "El costo de la entidad vendedora al precio de transferencia. Debe estar marcada como Eliminar en la consolidación.",
+      "intercompanyControlAccount": "Las facturas intercompañía hacia o desde los terceros representantes contabilizan sus partidas abiertas en estas cuentas. Cada una debe estar marcada como Eliminar en la consolidación."
     },
     "options": {
       "withholdingCondominiumPayer": "Pagador: comunidad de propietarios",
@@ -5281,6 +5314,10 @@
       "schedulePdfColorTreatment": {
         "subtle": "Acentos sutiles",
         "strong": "Rellenos intensos"
+      },
+      "transferPricingMethod": {
+        "price_level": "Nivel de precios",
+        "cost_plus": "Costo más margen"
       }
     },
     "laborCosting": {
@@ -6395,7 +6432,8 @@
       "scheduleBoardBooking": "Asignación",
       "scheduleBoardBookingHelp": "Las asignaciones de jornada completa usan este horario laboral en la zona horaria del tablero.",
       "scheduleBoardAutomation": "Automatización",
-      "scheduleBoardAutomationHelp": "Lo que ocurre después de publicar una asignación en este tablero."
+      "scheduleBoardAutomationHelp": "Lo que ocurre después de publicar una asignación en este tablero.",
+      "intercompanyControlAccounts": "Cuentas por cobrar y por pagar intercompañía"
     },
     "segmentValues": {
       "builtinLink": "Abrir {name}",
@@ -8055,6 +8093,18 @@
     "manufacturingSubcontract": {
       "title": "Fabricación externa",
       "description": "Envíe componentes a un proveedor, registre servicios y devuelva la producción a la orden."
+    },
+    "intercompanyTransactions": {
+      "title": "Transacciones intercompañía",
+      "description": "Clientes y proveedores representantes de cada entidad, cuentas por cobrar y por pagar intercompañía, documentos intercompañía emparejados y precios de transferencia."
+    },
+    "intercompanyNetting": {
+      "title": "Compensación intercompañía",
+      "description": "Compense y liquide los saldos intercompañía entre entidades con aprobación, y transfiera efectivo entre las cuentas bancarias de las entidades."
+    },
+    "crossSubsidiaryFulfillment": {
+      "title": "Cumplimiento entre subsidiarias",
+      "description": "Cumpla los pedidos de venta de una entidad desde el almacén de otra, con un cargo intercompañía al precio de transferencia."
     }
   },
   "backupsManager": {

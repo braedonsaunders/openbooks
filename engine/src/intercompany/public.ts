@@ -7,6 +7,7 @@ export {
 } from "./errors.ts";
 export {
   intercompanyDocument,
+  intercompanyRepresentationsOfParty,
   intercompanyWorkspace,
   linkIntercompanyDocuments,
   loadIntercompanyPairDetail,
@@ -33,6 +34,7 @@ export {
 } from "./pairing-compare.ts";
 export {
   cancelNettingRun,
+  listNettingRuns,
   loadNettingRun,
   postNettingRun,
   previewNetting,
@@ -43,9 +45,11 @@ export {
   type NettingRunDetail,
   type NettingRunLine,
   type NettingRunStatus,
+  type NettingRunSummary,
   type ProposeNettingInput,
 } from "./netting.ts";
 export {
+  listIntercompanyFundTransfers,
   loadIntercompanyFundTransfer,
   postIntercompanyFundTransfer,
   reverseIntercompanyFundTransfer,

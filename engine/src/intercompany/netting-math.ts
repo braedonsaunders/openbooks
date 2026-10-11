@@ -151,13 +151,24 @@ export function allocatePairNetting(input: {
   settleCash: boolean;
   rateFor: (subsidiaryId: string) => string;
 }): NettingPairResult {
+  if (input.fromSubsidiaryId === input.toSubsidiaryId) {
+    throw new NettingMathError("a netting pair must contain two different entities");
+  }
   const remaining = new Map<string, bigint>();
   for (const component of input.components) {
+    if (remaining.has(component.key)) {
+      throw new NettingMathError("a netting component identity must occur only once");
+    }
     if (component.pairId !== input.pairId || component.currency !== input.currency) {
       throw new NettingMathError("a netting component does not belong to the pair and currency being allocated");
     }
     if (component.subsidiaryId !== input.fromSubsidiaryId && component.subsidiaryId !== input.toSubsidiaryId) {
       throw new NettingMathError("a netting component belongs to neither entity of the pair");
+    }
+    const counterparty = component.subsidiaryId === input.fromSubsidiaryId
+      ? input.toSubsidiaryId : input.fromSubsidiaryId;
+    if (component.counterpartySubsidiaryId !== counterparty) {
+      throw new NettingMathError("a netting component must identify the other entity of its pair");
     }
     const open = toUnits(component.openTransaction);
     const carrying = toUnits(component.openCarrying);

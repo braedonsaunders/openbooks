@@ -1,6 +1,7 @@
 /** Setup-registry accounting entities (split from registry.ts; pure moves only). */
 import type { SetupEntity } from '../types'
 import { CONSOLIDATION_METHODS, NCI_MEASUREMENTS } from '../options'
+import { INTERCOMPANY_REPRESENTING_PARTIES_ENTITY, INTERCOMPANY_TRANSFER_PRICING_ENTITY } from '../intercompany'
 
 export const ACCOUNTING_ENTITIES: SetupEntity[] = [
   // --- Accounting --------------------------------------------------------
@@ -95,9 +96,17 @@ export const ACCOUNTING_ENTITIES: SetupEntity[] = [
       { key: 'toSubsidiaryId', kind: 'ref', ref: 'subsidiaries', required: true },
       { key: 'dueFromAccountId', kind: 'ref', ref: 'accounts', required: true },
       { key: 'dueToAccountId', kind: 'ref', ref: 'accounts', required: true },
+      // Intercompany receivable and payable control accounts per side: the
+      // accounts a representing party's invoices and bills post to.
+      { key: 'fromReceivableAccountId', kind: 'ref', ref: 'accounts', refAccountTypes: ['asset_receivable'], sectionKey: 'sections.intercompanyControlAccounts', helpTextKey: 'fieldHelp.intercompanyControlAccount' },
+      { key: 'fromPayableAccountId', kind: 'ref', ref: 'accounts', refAccountTypes: ['liability_payable'], sectionKey: 'sections.intercompanyControlAccounts' },
+      { key: 'toReceivableAccountId', kind: 'ref', ref: 'accounts', refAccountTypes: ['asset_receivable'], sectionKey: 'sections.intercompanyControlAccounts' },
+      { key: 'toPayableAccountId', kind: 'ref', ref: 'accounts', refAccountTypes: ['liability_payable'], sectionKey: 'sections.intercompanyControlAccounts' },
       { key: 'isActive', kind: 'boolean' },
     ],
   },
+  INTERCOMPANY_REPRESENTING_PARTIES_ENTITY,
+  INTERCOMPANY_TRANSFER_PRICING_ENTITY,
   {
     key: 'subsidiary-ownership-interests',
     table: 'subsidiary_ownership_interests',

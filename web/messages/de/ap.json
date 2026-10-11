@@ -71,7 +71,8 @@
     "controlAccountPartyDefault": "Lieferantenstandard — {account}",
     "controlAccountOrganizationDefault": "Unternehmensstandard — {account}",
     "controlAccountUnset": "Kein Verbindlichkeitenkonto eingerichtet – legen Sie eines unter Einrichtung → Unternehmen & Buchhaltung → Kontrollkonten fest",
-    "matchBanner": "Einige Lagerzeilen sind keiner Bestellung zugeordnet — die Rechnung kann erst gebucht werden, wenn sie zugeordnet sind."
+    "matchBanner": "Einige Lagerzeilen sind keiner Bestellung zugeordnet — die Rechnung kann erst gebucht werden, wenn sie zugeordnet sind.",
+    "controlAccountIntercompany": "Konzernintern — {account}"
   },
   "capture": {
     "title": "Rechnungserfassung",

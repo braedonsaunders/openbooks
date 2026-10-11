@@ -165,7 +165,9 @@
     "manufacturing-mrp": "MRP运行",
     "manufacturing-time": "生产工时",
     "manufacturing-quality": "质量",
-    "close-reopen-requests": "重新打开申请"
+    "close-reopen-requests": "重新打开申请",
+    "intercompany": "公司间",
+    "intercompany-netting": "公司间抵销结算"
   },
   "groups": {
     "manufacturing": "制造",
@@ -262,7 +264,8 @@
     "setup-tax-depreciation": "税务折旧",
     "setup-overhead": "间接费用",
     "crm-sales": "销售",
-    "hrm-compensation": "薪酬"
+    "hrm-compensation": "薪酬",
+    "intercompany": "公司间"
   },
   "moduleKeywords": {
     "receipts": "收据, 收款, 收到付款, 付款, 客户付款, 回款",

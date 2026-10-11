@@ -47,7 +47,7 @@ export async function assertIntercompanyPeriodOpen(
 /** Translate posting refusals into intercompany refusals, keeping the cause. */
 export function intercompanyPostingRefusal(error: unknown): never {
   if (error instanceof PostingError || error instanceof CloseError) {
-    throw new IntercompanyError(error.message);
+    throw new IntercompanyError(error.message, 422, undefined, error);
   }
   throw error;
 }

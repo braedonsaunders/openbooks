@@ -50,7 +50,9 @@
       "statementsTitle": "Kundenkontoauszüge",
       "statementsDescription": "Kunden wählen, um den Kontoauszug zu öffnen – offene Posten, Zahlungen und Fälligkeiten im Zeitraum.",
       "statementBatchesTitle": "Sammelversand",
-      "statementBatchesDescription": "Kontoauszüge an alle Kunden mit Saldo senden und jeden Versand nachverfolgen."
+      "statementBatchesDescription": "Kontoauszüge an alle Kunden mit Saldo senden und jeden Versand nachverfolgen.",
+      "intercompanyReconciliationTitle": "Konzernabstimmung",
+      "intercompanyReconciliationDescription": "Die Salden jedes konzerninternen Paars nach Währung in den Hauptbüchern beider Gesellschaften und die noch abzustimmende Differenz."
     },
     "groups": {
       "financial": "Finanzberichte",

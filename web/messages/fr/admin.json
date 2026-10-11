@@ -1275,7 +1275,8 @@
       "purchasing": "Achats",
       "parties": "Personnes et entreprises",
       "banking": "Banque",
-      "expenses": "Notes de frais"
+      "expenses": "Notes de frais",
+      "intercompany": "Intercompagnie"
     },
     "gl_read": "Consulter les journaux et les soldes",
     "gl_manage": "Gérer le plan comptable",
@@ -1453,7 +1454,11 @@
     "purchase_orders_read": "Consulter les bons de commande et les réceptions",
     "purchase_orders_create": "Créer, modifier et annuler des bons de commande",
     "goods_receipts_create": "Réceptionner des marchandises sur bons de commande",
-    "time_self": "Saisir et soumettre son propre temps"
+    "time_self": "Saisir et soumettre son propre temps",
+    "intercompany_read": "Consulter les paires, compensations, transferts et rapprochements intercompagnies",
+    "intercompany_manage": "Créer, associer et dissocier des paires ; proposer et annuler des compensations",
+    "intercompany_settle": "Comptabiliser et contrepasser les compensations et transferts intercompagnies",
+    "intercompany_approve": "Approuver ou rejeter les compensations intercompagnies"
   },
   "ai": {
     "metaTitle": "Fournisseurs d'IA",
@@ -3665,6 +3670,14 @@
         "title": "Descriptions de poste",
         "singularTitle": "Description de poste",
         "description": "Contenu d'annonce réutilisable pour les nouvelles demandes : intitulé, type d'emploi, fourchette de rémunération et description."
+      },
+      "intercompany-representing-parties": {
+        "title": "Tiers représentants intercompagnies",
+        "description": "Client et fournisseur représentant chaque filiale dans ses échanges avec les autres entités."
+      },
+      "intercompany-transfer-pricing": {
+        "title": "Prix de transfert intercompagnies",
+        "description": "Tarification datée des biens livrés par une entité pour une autre : grille tarifaire ou coût majoré."
       }
     },
     "fields": {
@@ -4292,7 +4305,18 @@
       "compensationMin": "Rémunération minimale",
       "compensationMax": "Rémunération maximale",
       "compensationCurrency": "Devise de rémunération",
-      "compensationBasis": "Base de rémunération"
+      "compensationBasis": "Base de rémunération",
+      "customerPartyId": "Client représentant",
+      "vendorPartyId": "Fournisseur représentant",
+      "fromReceivableAccountId": "Créances intercompagnies de la filiale d'origine",
+      "fromPayableAccountId": "Dettes intercompagnies de la filiale d'origine",
+      "toReceivableAccountId": "Créances intercompagnies de la filiale destinataire",
+      "toPayableAccountId": "Dettes intercompagnies de la filiale destinataire",
+      "sellerSubsidiaryId": "Filiale vendeuse",
+      "buyerSubsidiaryId": "Filiale acheteuse",
+      "markupPercent": "Majoration %",
+      "revenueAccountId": "Compte de produits intercompagnies",
+      "costAccountId": "Compte de coûts intercompagnies"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Nombre de jours entre le taux utilisable le plus récent et la fin de période au-delà duquel la réévaluation et la consolidation refusent le taux. Les taux de clôture se comptent depuis la date du taux comptant de fin de période ; les taux moyens depuis la cotation la plus récente incluse dans la moyenne. Valeur par défaut sans politique : 31 jours.",
@@ -4471,7 +4495,16 @@
       "hrmJobDescriptionTitle": "L'intitulé de poste affiché aux candidats dans l'annonce.",
       "hrmJobDescriptionKind": "Par exemple temps plein, temps partiel, saisonnier ou contractuel.",
       "hrmJobDescriptionPay": "Facultatif. Saisissez ensemble le minimum, le maximum, la devise et la base, ou laissez les quatre vides.",
-      "hrmJobDescriptionBody": "Le texte de l'annonce. Les nouvelles demandes le copient : le modifier ici ne change jamais un poste existant."
+      "hrmJobDescriptionBody": "Le texte de l'annonce. Les nouvelles demandes le copient : le modifier ici ne change jamais un poste existant.",
+      "representedSubsidiary": "Filiale représentée par ces tiers dans les livres des autres entités.",
+      "representingCustomer": "Les autres entités facturent ce client lorsqu'elles vendent à la filiale. Il ne doit pas déjà effectuer de transactions avec la filiale elle-même.",
+      "representingVendor": "Les autres entités reçoivent les factures de ce fournisseur lorsqu'elles achètent à la filiale. Il ne doit pas déjà effectuer de transactions avec la filiale elle-même.",
+      "transferPricingSeller": "Entité qui livre les biens et les facture.",
+      "transferPricingBuyer": "Laissez vide pour appliquer à toutes les entités acheteuses sans politique propre.",
+      "transferPricingMarkup": "Majoration du coût de l'entité exécutante. 10 signifie coût majoré de 10 %.",
+      "transferPricingRevenue": "Produits intercompagnies de l'entité exécutante. Doit être marqué Éliminer à la consolidation.",
+      "transferPricingCost": "Coût de l'entité vendeuse au prix de transfert. Doit être marqué Éliminer à la consolidation.",
+      "intercompanyControlAccount": "Les factures intercompagnies des tiers représentants comptabilisent leurs postes ouverts dans ces comptes. Chacun doit être marqué Éliminer à la consolidation."
     },
     "options": {
       "withholdingCondominiumPayer": "Payeur : copropriété",
@@ -5281,6 +5314,10 @@
       "schedulePdfColorTreatment": {
         "subtle": "Accents discrets",
         "strong": "Aplats soutenus"
+      },
+      "transferPricingMethod": {
+        "price_level": "Niveau de prix",
+        "cost_plus": "Coût majoré"
       }
     },
     "laborCosting": {
@@ -6395,7 +6432,8 @@
       "scheduleBoardBooking": "Affectation",
       "scheduleBoardBookingHelp": "Les affectations à la journée utilisent ces heures de travail dans le fuseau horaire du tableau.",
       "scheduleBoardAutomation": "Automatisation",
-      "scheduleBoardAutomationHelp": "Ce qui se passe après la publication d’une affectation sur ce tableau."
+      "scheduleBoardAutomationHelp": "Ce qui se passe après la publication d’une affectation sur ce tableau.",
+      "intercompanyControlAccounts": "Comptes de créances et dettes intercompagnies"
     },
     "segmentValues": {
       "builtinLink": "Ouvrir {name}",
@@ -8055,6 +8093,18 @@
     "manufacturingSubcontract": {
       "title": "Fabrication externe",
       "description": "Envoyez des composants à un fournisseur, enregistrez les services et retournez la production sur l’ordre."
+    },
+    "intercompanyTransactions": {
+      "title": "Transactions intercompagnies",
+      "description": "Clients et fournisseurs représentants, comptes de créances et dettes intercompagnies, documents associés et prix de transfert."
+    },
+    "intercompanyNetting": {
+      "title": "Compensation intercompagnies",
+      "description": "Compensez et réglez les soldes intercompagnies après approbation et transférez des fonds entre les comptes bancaires des entités."
+    },
+    "crossSubsidiaryFulfillment": {
+      "title": "Exécution entre filiales",
+      "description": "Exécutez les commandes d'une entité depuis l'entrepôt d'une autre avec une refacturation intercompagnies au prix de transfert."
     }
   },
   "backupsManager": {

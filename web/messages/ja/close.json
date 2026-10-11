@@ -218,6 +218,10 @@
     "commerce-exceptions-open": {
       "title": "チャネル例外が保留中です",
       "message": "{count, plural, one {# 件の保留中の注文またはイベントが対応を待っています。} other {# 件の保留中の注文またはイベントが対応を待っています。}}"
+    },
+    "intercompany-unreconciled": {
+      "title": "法人間残高が一致しません",
+      "message": "{count, plural, one {# 組の法人間残高が一致していません。締め前に法人間残高照合を確認してください。} other {# 組の法人間残高が一致していません。締め前に法人間残高照合を確認してください。}}"
     }
   },
   "severity": {

@@ -71,7 +71,8 @@
     "controlAccountPartyDefault": "Défaut du fournisseur — {account}",
     "controlAccountOrganizationDefault": "Défaut de l’organisation — {account}",
     "controlAccountUnset": "Aucun compte fournisseur configuré — définissez-en un dans Configuration → Société et comptabilité → Comptes de contrôle",
-    "matchBanner": "Certaines lignes de stock ne sont rattachées à aucune commande — la facture ne peut être comptabilisée qu'une fois rattachées."
+    "matchBanner": "Certaines lignes de stock ne sont rattachées à aucune commande — la facture ne peut être comptabilisée qu'une fois rattachées.",
+    "controlAccountIntercompany": "Intercompagnies — {account}"
   },
   "capture": {
     "title": "Capture de factures",

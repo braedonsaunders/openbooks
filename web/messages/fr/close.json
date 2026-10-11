@@ -218,6 +218,10 @@
     "commerce-exceptions-open": {
       "title": "Des exceptions du canal sont en attente",
       "message": "{count, plural, one {# commande ou événement en attente attend encore sa solution.} other {# commandes ou événements en attente attendent encore leur solution.}}"
+    },
+    "intercompany-unreconciled": {
+      "title": "Les soldes intercompagnies ne concordent pas",
+      "message": "{count, plural, one {# paire intercompagnies présente des soldes discordants entre ses entités. Examinez le rapprochement intercompagnies avant de clôturer.} other {# paires intercompagnies présentent des soldes discordants entre leurs entités. Examinez le rapprochement intercompagnies avant de clôturer.}}"
     }
   },
   "severity": {

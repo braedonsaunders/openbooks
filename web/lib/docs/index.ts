@@ -4,6 +4,7 @@
 
 import type { DocArticle, DocCategory, DocSection } from './types'
 import { allocations } from './articles/allocations'
+import { intercompany } from './articles/intercompany'
 import { welcome } from './articles/welcome'
 import { projectTypes } from './articles/project-types'
 import { overheadCosting } from './articles/overhead-costing'
@@ -258,6 +259,7 @@ const ARTICLE_SECTION_BY_SLUG: Record<string, string> = {
   'revenue-recognition': 'accounting-advanced',
   'fixed-assets-depreciation': 'accounting-advanced',
   'allocations': 'accounting-advanced',
+  intercompany: 'accounting-advanced',
   'sales-workflow': 'transactions-daily',
   'electronic-invoicing': 'transactions-daily',
   'purchasing-workflow': 'transactions-daily',
@@ -332,6 +334,7 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   revenueRecognition,
   fixedAssetsDepreciation,
   allocations,
+  intercompany,
   salesWorkflow,
   electronicInvoicing,
   purchasingWorkflow,

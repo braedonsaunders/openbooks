@@ -9,6 +9,7 @@ import { commerceCloseChecks, type CommerceCloseCheck } from "./commerce-close.t
 import { sourceEvidencePolicyActive } from "../banking/banking.ts";
 import { defaultPostingSubsidiaryId, loadSubsidiaryContext } from "../organization/subsidiaries.ts";
 import { unbilledAccrualReadiness } from "../projects/unbilled-accrual.ts";
+import { unreconciledIntercompanyCount } from "../intercompany/reconciliation.ts";
 const nonPostingKindList = () => sql.join(NON_POSTING_DOCUMENT_KINDS.map((k) => sql`${k}`), sql`, `);
 
 type ReadinessCheck = {
@@ -632,6 +633,21 @@ export async function readinessChecks(
       title: "close.diagnostics.intercompany-residual.title",
       message: "close.diagnostics.intercompany-residual.message",
       count: Number(intercompany.rows[0]?.count ?? 0),
+    },
+    {
+      // Pair balances the two entities record differently at period end
+      // (an invoice without its bill, a settlement one side has not posted).
+      code: "intercompany-unreconciled",
+      taskKey: "intercompany-balanced",
+      category: "intercompany",
+      severity: "warning",
+      title: "close.diagnostics.intercompany-unreconciled.title",
+      message: "close.diagnostics.intercompany-unreconciled.message",
+      count: await unreconciledIntercompanyCount(orgId, {
+        asOfDate: (ctx.ends_on as unknown) instanceof Date ? (ctx.ends_on as unknown as Date).toISOString().slice(0, 10) : String(ctx.ends_on).slice(0, 10),
+        bookId: ctx.book_id,
+        subsidiaryIds,
+      }),
     },
     {
       code: "consolidated-rates-missing",

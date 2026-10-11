@@ -48,11 +48,11 @@ type BalanceRow = { subsidiary_id: string; account_id: string; currency: string;
 export async function intercompanyReconciliation(
   orgId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
-  input: { asOfDate: string },
+  input: { asOfDate: string; bookId?: string | null },
   runner: SqlExecutor = db,
 ): Promise<ReconciliationRow[]> {
   if (!isIsoCalendarDate(input.asOfDate)) throw new IntercompanyError("the reconciliation date must be a valid calendar date (YYYY-MM-DD)");
-  const bookId = await activePostingPrimaryBookId(orgId, runner);
+  const bookId = input.bookId ?? (await activePostingPrimaryBookId(orgId, runner));
   if (!bookId) throw new IntercompanyError("there is no active primary accounting book; set one in Setup → Accounting → Accounting books");
   const pairs = (await loadActiveIntercompanyPairs(runner, orgId)).filter((pair) =>
     allowedSubsidiaryIds === null || (allowedSubsidiaryIds.has(pair.fromSubsidiaryId) && allowedSubsidiaryIds.has(pair.toSubsidiaryId)));
@@ -120,11 +120,11 @@ export async function intercompanyReconciliation(
 /** How many pair/currency balances disagree as of a date (close readiness). */
 export async function unreconciledIntercompanyCount(
   orgId: string,
-  input: { asOfDate: string; subsidiaryIds?: readonly string[] | null },
+  input: { asOfDate: string; bookId?: string | null; subsidiaryIds?: readonly string[] | null },
   runner: SqlExecutor = db,
 ): Promise<number> {
   const scope = input.subsidiaryIds && input.subsidiaryIds.length > 0 ? new Set(input.subsidiaryIds) : null;
-  const rows = await intercompanyReconciliation(orgId, null, { asOfDate: input.asOfDate }, runner);
+  const rows = await intercompanyReconciliation(orgId, null, { asOfDate: input.asOfDate, bookId: input.bookId }, runner);
   return rows.filter((row) =>
     toUnits(row.difference) !== 0n
     && (scope === null || scope.has(row.from.subsidiaryId) || scope.has(row.to.subsidiaryId))).length;

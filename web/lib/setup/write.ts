@@ -1142,6 +1142,23 @@ export async function validateEntityIntegrity(
     if (!String(dueFrom.type).startsWith('asset_')) return 'The due-from account must be an asset'
     if (!String(dueTo.type).startsWith('liability_')) return 'The due-to account must be a liability'
     if (!dueFrom.eliminate || !dueTo.eliminate) return 'Both intercompany accounts must be marked for elimination'
+    // Optional intercompany receivable/payable control accounts per side:
+    // eliminated posting accounts of the control type.
+    for (const [key, column, type, label] of [
+      ['fromReceivableAccountId', 'from_receivable_account_id', 'asset_receivable', 'from-side intercompany receivable'],
+      ['fromPayableAccountId', 'from_payable_account_id', 'liability_payable', 'from-side intercompany payable'],
+      ['toReceivableAccountId', 'to_receivable_account_id', 'asset_receivable', 'to-side intercompany receivable'],
+      ['toPayableAccountId', 'to_payable_account_id', 'liability_payable', 'to-side intercompany payable'],
+    ] as const) {
+      const raw = body[key] !== undefined ? body[key] : current?.[column]
+      if (raw === null || raw === undefined || raw === '') continue
+      if (!isUuid(String(raw))) return `Choose a valid ${label} account`
+      const control = ((await executor.execute<{ type: string; eliminate: boolean; is_active: boolean; is_summary: boolean }>(sql`
+        select type, eliminate, is_active, is_summary from accounts where org_id = ${orgId} and id = ${String(raw)}`))).rows[0]
+      if (!control || !control.is_active || control.is_summary) return `Choose an active posting account for the ${label} account`
+      if (control.type !== type) return `The ${label} account must be a ${type === 'asset_receivable' ? 'receivable' : 'payable'} account`
+      if (!control.eliminate) return `The ${label} account must be marked for elimination`
+    }
     const duplicate = ((await executor.execute(sql`
       select 1 from intercompany_pairs where org_id = ${orgId}
        and id is distinct from ${rowId ?? null}

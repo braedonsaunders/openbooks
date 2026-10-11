@@ -226,3 +226,16 @@ function formatUnits(units: bigint): string {
   const magnitude = negative ? -units : units;
   return `${negative ? "-" : ""}${magnitude / 10_000n}.${(magnitude % 10_000n).toString().padStart(4, "0")}`;
 }
+
+for (const [title, components, from, to, refusal] of [
+  ["duplicate component identities cannot clear an open item twice", [item("same", A, "100"), item("same", A, "100"), item("payable", B, "-200")], A, B, /only once/],
+  ["a netting component cannot name an unrelated counterparty", [item("receivable", A, "100", { counterpartySubsidiaryId: "another-entity" })], A, B, /other entity/],
+  ["an entity cannot net against itself", [], A, A, /different entities/],
+] as const) {
+  test(title, () => {
+    assert.throws(() => allocatePairNetting({
+      pairId: PAIR, currency: "USD", fromSubsidiaryId: from, toSubsidiaryId: to,
+      components: [...components], settleCash: true, rateFor: par,
+    }), refusal);
+  });
+}

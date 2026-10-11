@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { SqlExecutor } from "../platform/db.ts";
+import { actorHasPermission } from "../organization/actor-permissions.ts";
 
 /**
  * A refusal from the intercompany services. `status` is the HTTP answer an
@@ -14,10 +15,23 @@ export class IntercompanyError extends Error {
 
   constructor(
     message: string,
-    readonly status: 404 | 409 | 422 = 422,
+    readonly status: 403 | 404 | 409 | 422 = 422,
     readonly details?: Record<string, unknown>,
+    cause?: unknown,
   ) {
-    super(message);
+    super(message, cause === undefined ? undefined : { cause });
+  }
+}
+
+/** Commands resolve live authority even when invoked outside an HTTP route. */
+export async function requireIntercompanyPermission(
+  runner: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  permission: "intercompany.manage" | "intercompany.settle" | "intercompany.approve",
+): Promise<void> {
+  if (!(await actorHasPermission(runner, orgId, actorId, permission))) {
+    throw new IntercompanyError(`permission required: ${permission}`, 403);
   }
 }
 

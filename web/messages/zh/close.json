@@ -218,6 +218,10 @@
     "commerce-exceptions-open": {
       "title": "有渠道异常待处理",
       "message": "{count, plural, one {有 # 个挂起的订单或事件待处理。} other {有 # 个挂起的订单或事件待处理。}}"
+    },
+    "intercompany-unreconciled": {
+      "title": "公司间余额不一致",
+      "message": "{count, plural, one {# 对法人的公司间余额不一致。关账前请检查公司间对账。} other {# 对法人的公司间余额不一致。关账前请检查公司间对账。}}"
     }
   },
   "severity": {

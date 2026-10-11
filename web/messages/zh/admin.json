@@ -1275,7 +1275,8 @@
       "purchasing": "采购",
       "parties": "人员和公司",
       "banking": "银行业务",
-      "expenses": "费用报告"
+      "expenses": "费用报告",
+      "intercompany": "公司间"
     },
     "gl_read": "查看日记账和余额",
     "gl_manage": "管理会计科目表",
@@ -1453,7 +1454,11 @@
     "purchase_orders_read": "查看采购订单和收货单",
     "purchase_orders_create": "创建、修改和作废采购订单",
     "goods_receipts_create": "按采购订单收货",
-    "time_self": "录入并提交本人工时"
+    "time_self": "录入并提交本人工时",
+    "intercompany_read": "查看公司间配对、抵销结算批次、资金划转和对账",
+    "intercompany_manage": "创建、关联及解除公司间配对；提出和取消抵销结算方案",
+    "intercompany_settle": "过账和冲销公司间抵销结算及资金划转",
+    "intercompany_approve": "审批或拒绝公司间抵销结算批次"
   },
   "ai": {
     "metaTitle": "AI 设置",
@@ -3740,6 +3745,14 @@
         "title": "职位描述",
         "singularTitle": "职位描述",
         "description": "新招聘申请可复用的发布内容：职位名称、雇用类型、薪酬范围和说明。"
+      },
+      "intercompany-representing-parties": {
+        "title": "公司间代表往来方",
+        "description": "在与其他法人交易时代表各法人的客户和供应商。"
+      },
+      "intercompany-transfer-pricing": {
+        "title": "公司间转移定价",
+        "description": "为另一法人交付货物的有效期价格策略：价格等级或成本加成。"
       }
     },
     "fields": {
@@ -4367,7 +4380,18 @@
       "compensationMin": "薪酬下限",
       "compensationMax": "薪酬上限",
       "compensationCurrency": "薪酬币种",
-      "compensationBasis": "薪酬基准"
+      "compensationBasis": "薪酬基准",
+      "customerPartyId": "代表客户",
+      "vendorPartyId": "代表供应商",
+      "fromReceivableAccountId": "起始法人的公司间应收款",
+      "fromPayableAccountId": "起始法人的公司间应付款",
+      "toReceivableAccountId": "对应法人的公司间应收款",
+      "toPayableAccountId": "对应法人的公司间应付款",
+      "sellerSubsidiaryId": "销售法人",
+      "buyerSubsidiaryId": "采购法人",
+      "markupPercent": "加价率（%）",
+      "revenueAccountId": "公司间收入科目",
+      "costAccountId": "公司间成本科目"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "最新可用汇率距期末的天数超过此值时，重估和合并将拒绝该汇率。期末汇率从期末即期汇率的日期起算；平均汇率从计入平均的最新报价日期起算。未设置政策时的默认值：31 天。",
@@ -4546,7 +4570,16 @@
       "hrmJobDescriptionTitle": "求职者在职位发布中看到的职位名称。",
       "hrmJobDescriptionKind": "例如：全职、兼职、季节性或合同制。",
       "hrmJobDescriptionPay": "可选。请同时填写下限、上限、币种和基准，或四项全部留空。",
-      "hrmJobDescriptionBody": "职位发布文本。新招聘申请会复制该文本，因此在此编辑不会更改已有职位。"
+      "hrmJobDescriptionBody": "职位发布文本。新招聘申请会复制该文本，因此在此编辑不会更改已有职位。",
+      "representedSubsidiary": "这些往来方在其他法人账簿中代表的法人。",
+      "representingCustomer": "其他法人向该法人销售时向此客户开票。此客户不得已与其代表的法人自身发生交易。",
+      "representingVendor": "其他法人向该法人采购时从此供应商收票。此供应商不得已与其代表的法人自身发生交易。",
+      "transferPricingSeller": "交付货物并收费的法人。",
+      "transferPricingBuyer": "留空则适用于所有没有单独策略的采购法人。",
+      "transferPricingMarkup": "在交付法人的成本上加成。10 表示成本加 10%。",
+      "transferPricingRevenue": "交付法人的公司间收入。必须标记为合并抵销。",
+      "transferPricingCost": "销售法人按转移价格计算的成本。必须标记为合并抵销。",
+      "intercompanyControlAccount": "代表往来方的公司间销售和采购发票将未结项过账至这些科目。每个科目均须标记为合并抵销。"
     },
     "options": {
       "withholdingCondominiumPayer": "公寓业主共同体付款人",
@@ -5356,6 +5389,10 @@
       "schedulePdfColorTreatment": {
         "subtle": "柔和强调",
         "strong": "浓色填充"
+      },
+      "transferPricingMethod": {
+        "price_level": "价格级别",
+        "cost_plus": "成本加成"
       }
     },
     "payroll": {
@@ -6323,7 +6360,8 @@
       "scheduleBoardBooking": "安排",
       "scheduleBoardBookingHelp": "全天安排按排程板时区使用这些工作时间。",
       "scheduleBoardAutomation": "自动化",
-      "scheduleBoardAutomationHelp": "在此排程板上发布安排后执行的操作。"
+      "scheduleBoardAutomationHelp": "在此排程板上发布安排后执行的操作。",
+      "intercompanyControlAccounts": "公司间应收应付科目"
     },
     "constructionRateEditor": {
       "tab": "适用范围和工资率"
@@ -8055,6 +8093,18 @@
     "manufacturingSubcontract": {
       "title": "外协制造",
       "description": "向供应商发送组件，记录加工服务，并将生产数量返回生产订单。"
+    },
+    "intercompanyTransactions": {
+      "title": "公司间交易",
+      "description": "各法人的代表客户和供应商、公司间应收应付科目、配对单据及转移定价。"
+    },
+    "intercompanyNetting": {
+      "title": "公司间抵销结算",
+      "description": "经审批抵销并结算各法人之间的余额，并在各法人银行账户之间划转资金。"
+    },
+    "crossSubsidiaryFulfillment": {
+      "title": "跨法人履约",
+      "description": "从另一法人的仓库履行销售订单，并按转移价格计入公司间收费。"
     }
   },
   "backupsManager": {

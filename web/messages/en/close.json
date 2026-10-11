@@ -218,6 +218,10 @@
     "commerce-exceptions-open": {
       "title": "Channel exceptions are parked",
       "message": "{count, plural, one {# parked order or event still needs a remedy.} other {# parked orders or events still need a remedy.}}"
+    },
+    "intercompany-unreconciled": {
+      "title": "Intercompany balances do not agree",
+      "message": "{count, plural, one {# intercompany pair has balances that do not agree between its entities. Review the intercompany reconciliation before closing.} other {# intercompany pairs have balances that do not agree between their entities. Review the intercompany reconciliation before closing.}}"
     }
   },
   "severity": {

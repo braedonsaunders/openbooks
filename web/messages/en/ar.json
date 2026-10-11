@@ -152,7 +152,8 @@
     "controlAccountHelp": "The receivable this document posts to. Payments and credits settle it on the same account. Leave empty to use the default.",
     "controlAccountPartyDefault": "Customer default — {account}",
     "controlAccountOrganizationDefault": "Organization default — {account}",
-    "controlAccountUnset": "No receivable account configured — set one in Setup → Company & Accounting → Control accounts"
+    "controlAccountUnset": "No receivable account configured — set one in Setup → Company & Accounting → Control accounts",
+    "controlAccountIntercompany": "Intercompany — {account}"
   },
   "dailySummary": {
     "date": "Date",

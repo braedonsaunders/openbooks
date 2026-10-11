@@ -1,0 +1,257 @@
+{
+  "title": "Intercompagnie",
+  "description": "Associez les commandes, factures et avoirs intercompagnies entre vos entités et repérez les documents sans contrepartie ou présentant des écarts.",
+  "openReconciliation": "Rapprochement intercompagnies",
+  "truncated": "Les {count} premiers documents sont affichés. Filtrez par entité pour voir les autres.",
+  "tabs": {
+    "pairing": "Association",
+    "netting": "Compensation",
+    "transfers": "Virements"
+  },
+  "views": {
+    "unpaired": "Non associés",
+    "mismatched": "En écart",
+    "paired": "Associés"
+  },
+  "empty": {
+    "unpaired": {
+      "title": "Tous les documents intercompagnies sont associés",
+      "description": "Les documents des clients ou fournisseurs représentant une entité apparaissent ici jusqu'à leur association avec la contrepartie de l'autre entité."
+    },
+    "mismatched": {
+      "title": "Aucune paire en écart",
+      "description": "Les paires dont les devises, totaux ou quantités diffèrent, ou dont un document est annulé, apparaissent ici."
+    },
+    "paired": {
+      "title": "Aucun document associé",
+      "description": "Créez une contrepartie ou associez un document existant depuis la vue Non associés."
+    }
+  },
+  "columns": {
+    "document": "N° de document",
+    "kind": "Catégorie",
+    "entity": "Entité",
+    "counterparty": "Contrepartie",
+    "party": "Tiers",
+    "date": "Date d'opération",
+    "amount": "Montant",
+    "status": "Statut",
+    "actions": "Opérations",
+    "pair": "Paire",
+    "seller": "Vendeur",
+    "buyer": "Acheteur",
+    "entities": "Entités",
+    "sellerAmount": "Montant vendeur",
+    "buyerAmount": "Montant de l’acheteur",
+    "state": "État",
+    "issues": "Problèmes"
+  },
+  "kinds": {
+    "sales_order": "Commande client",
+    "purchase_order": "Bon de commande",
+    "customer_invoice": "Facture",
+    "vendor_bill": "Facture fournisseur",
+    "customer_credit": "Avoir client",
+    "vendor_credit": "Avoir fournisseur"
+  },
+  "statuses": {
+    "draft": "Brouillon",
+    "pending_approval": "En attente d’approbation",
+    "approved": "Approuvé",
+    "posted": "Comptabilisé",
+    "voided": "Annulée le"
+  },
+  "pairKinds": {
+    "order": "Paire de commandes",
+    "invoice": "Factures client et fournisseur",
+    "credit": "Paire d'avoirs"
+  },
+  "origins": {
+    "generated": "Généré",
+    "linked": "Associé"
+  },
+  "states": {
+    "in_sync": "Synchronisé",
+    "awaiting_counterpart": "En attente de contrepartie",
+    "mismatched": "En écart"
+  },
+  "mismatch": {
+    "currency": "Devises différentes : vendeur {seller}, acheteur {buyer}",
+    "amount": "Écart entre les totaux : {difference}",
+    "quantity": "{item} : quantité vendeur {seller}, quantité acheteur {buyer}",
+    "sellerVoided": "Le document du vendeur a été annulé",
+    "buyerVoided": "Le document de l'acheteur a été annulé"
+  },
+  "actions": {
+    "generate": "Créer la contrepartie",
+    "link": "Lier"
+  },
+  "errors": {
+    "generateFailed": "La contrepartie n'a pas pu être créée.",
+    "unlinkFailed": "L'association n'a pas pu être supprimée.",
+    "linkFailed": "Les documents n'ont pas pu être associés.",
+    "nettingFailed": "Le traitement de compensation n'a pas pu être mis à jour.",
+    "transferFailed": "Le transfert n'a pas pu être effectué."
+  },
+  "pair": {
+    "unlinkTitle": "Dissocier cette paire",
+    "unlinkReason": "Pourquoi ces documents ne sont-ils plus associés ?",
+    "unlinked": "Paire dissociée",
+    "unlink": "Dissocier",
+    "seller": "Document du vendeur",
+    "buyer": "Document de l'acheteur",
+    "linkedOn": "Date d'association",
+    "linkReason": "Motif d'association"
+  },
+  "link": {
+    "title": "Associer {document} à une contrepartie",
+    "submit": "Associer les documents",
+    "noCandidates": "L'autre entité n'a aucun document non associé du type correspondant pour ce tiers.",
+    "counterpart": "Document de contrepartie",
+    "reason": "Motif"
+  },
+  "netting": {
+    "title": "Traitements de compensation",
+    "description": "Compensez les créances et dettes intercompagnies à une date donnée, réglez éventuellement le solde en trésorerie et comptabilisez après approbation.",
+    "new": "Nouveau traitement de compensation",
+    "empty": {
+      "title": "Aucun traitement de compensation",
+      "description": "Prévisualisez un traitement pour voir les montants dus entre chaque paire d'entités."
+    },
+    "columns": {
+      "run": "Exécuter",
+      "asOf": "Au",
+      "entities": "Entités",
+      "pairs": "Paires",
+      "lines": "Lignes",
+      "cash": "Règlement en trésorerie",
+      "status": "Statut"
+    },
+    "cashYes": "Oui",
+    "cashNo": "Non",
+    "statuses": {
+      "proposed": "Proposée",
+      "pending_approval": "En attente d’approbation",
+      "approved": "Approuvé",
+      "rejected": "Rejeté",
+      "posted": "Comptabilisé",
+      "cancelled": "Annulée",
+      "reversed": "Contre-passé"
+    },
+    "components": {
+      "open_item": "Poste ouvert",
+      "due_position": "Position des comptes réciproques",
+      "cash": "Comptabilité de caisse"
+    },
+    "newTitle": "Nouveau traitement de compensation",
+    "newDescription": "Choisissez les entités et la date. Prévisualisez le traitement avant de le proposer ; la proposition sera approuvée puis comptabilisée.",
+    "preview": "Aperçu",
+    "propose": "Proposer le traitement",
+    "asOf": "Date de référence",
+    "settleCash": "Régler le solde en trésorerie",
+    "subsidiaries": "Entités",
+    "bankFor": "Compte bancaire de {entity}",
+    "chooseBank": "Choisir un compte bancaire",
+    "reason": "Motif",
+    "previewTitle": "Aperçu : {lines} lignes",
+    "pairColumns": {
+      "pair": "Paire",
+      "currency": "Devise",
+      "fromNet": "Solde net de l'entité d'origine",
+      "toNet": "Solde net de l'entité destinataire",
+      "unreconciled": "Non rapproché",
+      "netted": "Compensé",
+      "cash": "Comptabilité de caisse"
+    },
+    "cancelTitle": "Annuler le traitement de compensation",
+    "cancelReason": "Pourquoi ce traitement est-il annulé ?",
+    "reverseTitle": "Contrepasser le traitement de compensation",
+    "reverseReason": "Pourquoi ce traitement est-il contrepassé ?",
+    "submit": "Soumettre pour approbation",
+    "post": "Comptabiliser",
+    "reversalDate": "Date de contre-passation",
+    "reverse": "Contre-passer",
+    "cancel": "Annuler le lot",
+    "decisionNote": "Note de décision",
+    "fingerprint": "Empreinte de la proposition",
+    "pairsTitle": "Paires",
+    "linesTitle": "Lignes",
+    "lineColumns": {
+      "component": "Composante",
+      "entity": "Entité",
+      "reference": "N° de référence",
+      "open": "Restante",
+      "netted": "Compensé",
+      "cash": "Comptabilité de caisse",
+      "rate": "Taux de règlement",
+      "realizedFx": "Écart de change réalisé"
+    },
+    "entryLink": "Écriture comptable {number}"
+  },
+  "transfers": {
+    "title": "Transferts intercompagnies",
+    "description": "Transférez des fonds entre les comptes bancaires de deux entités. Les comptes réciproques de la paire équilibrent les livres de chaque entité.",
+    "new": "Nouveau transfert",
+    "empty": {
+      "title": "Aucun transfert intercompagnies",
+      "description": "Les transferts entre comptes bancaires d'une même entité restent dans Banque."
+    },
+    "columns": {
+      "transfer": "Virement",
+      "date": "Date d'opération",
+      "route": "De → À",
+      "amount": "Montant",
+      "status": "Statut"
+    },
+    "statuses": {
+      "posted": "Comptabilisé",
+      "reversed": "Contre-passé"
+    },
+    "newTitle": "Nouveau transfert intercompagnies",
+    "newDescription": "L'entité payeuse crédite son compte bancaire ; l'entité bénéficiaire débite le sien. Les deux comptes doivent détenir la même devise.",
+    "post": "Comptabiliser le transfert",
+    "fromLegend": "Du",
+    "toLegend": "Au",
+    "subsidiary": "Entité",
+    "chooseSubsidiary": "Choisir une entité",
+    "bankAccount": "Compte bancaire",
+    "chooseBank": "Choisir un compte bancaire",
+    "date": "Date d'opération",
+    "amount": "Montant",
+    "currency": "Devise",
+    "memo": "Note",
+    "reason": "Motif",
+    "reverseTitle": "Contrepasser le transfert",
+    "reverseReason": "Pourquoi ce transfert est-il contrepassé ?",
+    "reversalDate": "Date de contre-passation",
+    "reverse": "Contre-passer",
+    "entry": "Écriture",
+    "reversalEntry": "Écriture de contre-passation"
+  },
+  "reconciliation": {
+    "title": "Rapprochement intercompagnies",
+    "description": "Soldes de chaque paire intercompagnies par devise dans les livres des deux entités et écart restant à rapprocher.",
+    "asOf": "Au {date}",
+    "openWorkspace": "Ouvrir l'espace d'association",
+    "empty": "Aucun solde intercompagnies à cette date.",
+    "columns": {
+      "currency": "Devise",
+      "entity": "Entité",
+      "receivable": "Créance intercompagnies",
+      "payable": "Dette intercompagnies",
+      "position": "Comptes réciproques",
+      "net": "Solde net",
+      "functionalNet": "Solde net (devise fonctionnelle)"
+    },
+    "summary": {
+      "balances": "Soldes des paires",
+      "unreconciled": "Non rapproché"
+    },
+    "difference": "Différence"
+  },
+  "party": {
+    "representsAsCustomer": "Représente {subsidiary} comme client intercompagnies",
+    "representsAsVendor": "Représente {subsidiary} comme fournisseur intercompagnies",
+    "manageRepresentation": "Gérer les tiers représentants"
+  }
+}

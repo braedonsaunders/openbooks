@@ -1,0 +1,257 @@
+{
+  "title": "Intercompañía",
+  "description": "Empareje pedidos, facturas y notas de crédito intercompañía entre sus entidades y encuentre los documentos que carecen de contraparte o que no coinciden con ella.",
+  "openReconciliation": "Conciliación intercompañía",
+  "truncated": "Se muestran los primeros {count} documentos. Acote la lista por entidad para ver el resto.",
+  "tabs": {
+    "pairing": "Emparejamiento",
+    "netting": "Compensación",
+    "transfers": "Transferencias"
+  },
+  "views": {
+    "unpaired": "Sin emparejar",
+    "mismatched": "Con discrepancias",
+    "paired": "Emparejados"
+  },
+  "empty": {
+    "unpaired": {
+      "title": "Todos los documentos intercompañía están emparejados",
+      "description": "Los documentos hacia o desde un cliente o proveedor representante aparecen aquí hasta que se emparejan con la contraparte de la otra entidad."
+    },
+    "mismatched": {
+      "title": "No hay pares con discrepancias",
+      "description": "Aquí aparecen los pares cuyos documentos difieren en moneda, total o cantidades, o en los que uno de los lados fue anulado."
+    },
+    "paired": {
+      "title": "Aún no hay documentos emparejados",
+      "description": "Cree una contraparte o vincule un documento existente desde la vista Sin emparejar."
+    }
+  },
+  "columns": {
+    "document": "Documento",
+    "kind": "Tipo",
+    "entity": "Entidad",
+    "counterparty": "Contraparte",
+    "party": "Tercero",
+    "date": "Fecha",
+    "amount": "Importe",
+    "status": "Estado",
+    "actions": "Acciones",
+    "pair": "Par",
+    "seller": "Vendedor",
+    "buyer": "Comprador",
+    "entities": "Entidades",
+    "sellerAmount": "Importe del vendedor",
+    "buyerAmount": "Importe del comprador",
+    "state": "Situación",
+    "issues": "Incidencias"
+  },
+  "kinds": {
+    "sales_order": "Pedido de venta",
+    "purchase_order": "Orden de compra",
+    "customer_invoice": "Factura",
+    "vendor_bill": "Factura de proveedor",
+    "customer_credit": "Nota de crédito",
+    "vendor_credit": "Crédito de proveedor"
+  },
+  "statuses": {
+    "draft": "Borrador",
+    "pending_approval": "Pendiente de aprobación",
+    "approved": "Aprobado",
+    "posted": "Contabilizado",
+    "voided": "Anulado"
+  },
+  "pairKinds": {
+    "order": "Par de pedidos",
+    "invoice": "Factura y factura de proveedor",
+    "credit": "Par de créditos"
+  },
+  "origins": {
+    "generated": "Generado",
+    "linked": "Vinculado"
+  },
+  "states": {
+    "in_sync": "Sincronizado",
+    "awaiting_counterpart": "Esperando contraparte",
+    "mismatched": "Con discrepancias"
+  },
+  "mismatch": {
+    "currency": "La moneda difiere: vendedor {seller}, comprador {buyer}",
+    "amount": "Los totales difieren en {difference}",
+    "quantity": "{item}: cantidad del vendedor {seller}, cantidad del comprador {buyer}",
+    "sellerVoided": "El documento del vendedor fue anulado",
+    "buyerVoided": "El documento del comprador fue anulado"
+  },
+  "actions": {
+    "generate": "Crear contraparte",
+    "link": "Vincular"
+  },
+  "errors": {
+    "generateFailed": "No se pudo crear la contraparte.",
+    "unlinkFailed": "No se pudo desvincular el par.",
+    "linkFailed": "No se pudieron vincular los documentos.",
+    "nettingFailed": "No se pudo actualizar la ejecución de compensación.",
+    "transferFailed": "No se pudo completar la transferencia."
+  },
+  "pair": {
+    "unlinkTitle": "Desvincular este par",
+    "unlinkReason": "¿Por qué ya no están emparejados estos documentos?",
+    "unlinked": "Par desvinculado",
+    "unlink": "Desvincular",
+    "seller": "Documento del vendedor",
+    "buyer": "Documento del comprador",
+    "linkedOn": "Vinculado el",
+    "linkReason": "Motivo de la vinculación"
+  },
+  "link": {
+    "title": "Vincular {document} con una contraparte",
+    "submit": "Vincular documentos",
+    "noCandidates": "La otra entidad no tiene ningún documento sin emparejar del tipo correspondiente para este tercero.",
+    "counterpart": "Documento de contraparte",
+    "reason": "Motivo"
+  },
+  "netting": {
+    "title": "Ejecuciones de compensación",
+    "description": "Compense las cuentas por cobrar y por pagar intercompañía entre entidades a una fecha determinada, liquide opcionalmente el saldo restante en efectivo y contabilice el resultado tras su aprobación.",
+    "new": "Nueva ejecución de compensación",
+    "empty": {
+      "title": "Aún no hay ejecuciones de compensación",
+      "description": "Previsualice una ejecución de compensación para ver lo que cada par de entidades se debe mutuamente."
+    },
+    "columns": {
+      "run": "Ejecución",
+      "asOf": "Al",
+      "entities": "Entidades",
+      "pairs": "Pares",
+      "lines": "Líneas",
+      "cash": "Liquidación en efectivo",
+      "status": "Estado"
+    },
+    "cashYes": "Sí",
+    "cashNo": "No",
+    "statuses": {
+      "proposed": "Propuesta",
+      "pending_approval": "Pendiente de aprobación",
+      "approved": "Aprobada",
+      "rejected": "Rechazada",
+      "posted": "Contabilizada",
+      "cancelled": "Cancelada",
+      "reversed": "Revertida"
+    },
+    "components": {
+      "open_item": "Partida abierta",
+      "due_position": "Posición por cobrar/por pagar entre compañías",
+      "cash": "Efectivo"
+    },
+    "newTitle": "Nueva ejecución de compensación",
+    "newDescription": "Elija las entidades y la fecha. Previsualice la ejecución antes de proponerla; la propuesta es lo que se aprueba y se contabiliza.",
+    "preview": "Previsualizar",
+    "propose": "Proponer ejecución",
+    "asOf": "Fecha de corte",
+    "settleCash": "Liquidar el saldo restante en efectivo",
+    "subsidiaries": "Entidades",
+    "bankFor": "Cuenta bancaria de {entity}",
+    "chooseBank": "Elija una cuenta bancaria",
+    "reason": "Motivo",
+    "previewTitle": "Vista previa: {lines} líneas",
+    "pairColumns": {
+      "pair": "Par",
+      "currency": "Moneda",
+      "fromNet": "Neto de la entidad de origen",
+      "toNet": "Neto de la entidad de destino",
+      "unreconciled": "Sin conciliar",
+      "netted": "Compensado",
+      "cash": "Efectivo"
+    },
+    "cancelTitle": "Cancelar ejecución de compensación",
+    "cancelReason": "¿Por qué se cancela esta ejecución?",
+    "reverseTitle": "Revertir ejecución de compensación",
+    "reverseReason": "¿Por qué se revierte esta ejecución?",
+    "submit": "Enviar a aprobación",
+    "post": "Contabilizar",
+    "reversalDate": "Fecha de reversión",
+    "reverse": "Revertir",
+    "cancel": "Cancelar ejecución",
+    "decisionNote": "Nota de la decisión",
+    "fingerprint": "Huella de la propuesta",
+    "pairsTitle": "Pares",
+    "linesTitle": "Líneas",
+    "lineColumns": {
+      "component": "Componente",
+      "entity": "Entidad",
+      "reference": "Referencia",
+      "open": "Abierto",
+      "netted": "Compensado",
+      "cash": "Efectivo",
+      "rate": "Tipo de cambio de liquidación",
+      "realizedFx": "Diferencia cambiaria realizada"
+    },
+    "entryLink": "Asiento contable {number}"
+  },
+  "transfers": {
+    "title": "Transferencias intercompañía",
+    "description": "Mueva efectivo de la cuenta bancaria de una entidad a la de otra. Los libros de cada entidad cuadran mediante las cuentas por cobrar/por pagar entre compañías del par.",
+    "new": "Nueva transferencia",
+    "empty": {
+      "title": "Aún no hay transferencias intercompañía",
+      "description": "Las transferencias entre cuentas bancarias de la misma entidad permanecen en Bancos."
+    },
+    "columns": {
+      "transfer": "Transferencia",
+      "date": "Fecha",
+      "route": "De → A",
+      "amount": "Importe",
+      "status": "Estado"
+    },
+    "statuses": {
+      "posted": "Contabilizada",
+      "reversed": "Revertida"
+    },
+    "newTitle": "Nueva transferencia intercompañía",
+    "newDescription": "La entidad pagadora acredita su cuenta bancaria; la entidad receptora debita la suya. Ambas cuentas deben estar en la misma moneda.",
+    "post": "Contabilizar transferencia",
+    "fromLegend": "Origen",
+    "toLegend": "Destino",
+    "subsidiary": "Entidad",
+    "chooseSubsidiary": "Elija una entidad",
+    "bankAccount": "Cuenta bancaria",
+    "chooseBank": "Elija una cuenta bancaria",
+    "date": "Fecha",
+    "amount": "Importe",
+    "currency": "Moneda",
+    "memo": "Nota",
+    "reason": "Motivo",
+    "reverseTitle": "Revertir transferencia",
+    "reverseReason": "¿Por qué se revierte esta transferencia?",
+    "reversalDate": "Fecha de reversión",
+    "reverse": "Revertir",
+    "entry": "Asiento contable",
+    "reversalEntry": "Asiento de reversión"
+  },
+  "reconciliation": {
+    "title": "Conciliación intercompañía",
+    "description": "Los saldos de cada par intercompañía por moneda en los libros de ambas entidades y la diferencia pendiente de conciliar.",
+    "asOf": "Al {date}",
+    "openWorkspace": "Abrir el espacio de emparejamiento",
+    "empty": "No hay saldos intercompañía a esta fecha.",
+    "columns": {
+      "currency": "Moneda",
+      "entity": "Entidad",
+      "receivable": "Cuenta por cobrar intercompañía",
+      "payable": "Cuenta por pagar intercompañía",
+      "position": "Por cobrar/por pagar entre compañías",
+      "net": "Neto",
+      "functionalNet": "Neto (moneda funcional)"
+    },
+    "summary": {
+      "balances": "Saldos de los pares",
+      "unreconciled": "Sin conciliar"
+    },
+    "difference": "Diferencia"
+  },
+  "party": {
+    "representsAsCustomer": "Representa a {subsidiary} como cliente intercompañía",
+    "representsAsVendor": "Representa a {subsidiary} como proveedor intercompañía",
+    "manageRepresentation": "Administrar terceros representantes"
+  }
+}

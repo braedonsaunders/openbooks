@@ -1,0 +1,257 @@
+{
+  "title": "公司间",
+  "description": "配对各法人之间的公司间订单、发票和贷项，查找缺少对应单据或存在差异的单据。",
+  "openReconciliation": "公司间对账",
+  "truncated": "显示前 {count} 份单据。按法人筛选以查看其余单据。",
+  "tabs": {
+    "pairing": "单据配对",
+    "netting": "抵销结算",
+    "transfers": "转账"
+  },
+  "views": {
+    "unpaired": "未配对",
+    "mismatched": "不匹配",
+    "paired": "已配对"
+  },
+  "empty": {
+    "unpaired": {
+      "title": "所有公司间单据均已配对",
+      "description": "与代表客户或供应商往来的单据在与另一法人的对应单据配对之前显示在此处。"
+    },
+    "mismatched": {
+      "title": "没有不匹配的单据对",
+      "description": "币种、总额或数量不一致的单据对，以及一方单据已作废的单据对，显示在此处。"
+    },
+    "paired": {
+      "title": "暂无已配对单据",
+      "description": "从未配对视图创建对应单据或关联现有单据。"
+    }
+  },
+  "columns": {
+    "document": "单据",
+    "kind": "类型",
+    "entity": "实体",
+    "counterparty": "交易对方",
+    "party": "往来方",
+    "date": "日期",
+    "amount": "金额",
+    "status": "状态",
+    "actions": "操作",
+    "pair": "配对",
+    "seller": "卖方",
+    "buyer": "采购员",
+    "entities": "实体",
+    "sellerAmount": "卖方金额",
+    "buyerAmount": "买方金额",
+    "state": "州",
+    "issues": "问题"
+  },
+  "kinds": {
+    "sales_order": "销售订单",
+    "purchase_order": "采购订单",
+    "customer_invoice": "发票",
+    "vendor_bill": "应付账单",
+    "customer_credit": "贷记通知单",
+    "vendor_credit": "供应商贷记"
+  },
+  "statuses": {
+    "draft": "草稿",
+    "pending_approval": "待审批",
+    "approved": "已审批",
+    "posted": "已过账",
+    "voided": "作废时间"
+  },
+  "pairKinds": {
+    "order": "订单对",
+    "invoice": "销售发票与采购发票",
+    "credit": "贷项对"
+  },
+  "origins": {
+    "generated": "已生成",
+    "linked": "已关联"
+  },
+  "states": {
+    "in_sync": "已同步",
+    "awaiting_counterpart": "等待对应单据处理",
+    "mismatched": "不匹配"
+  },
+  "mismatch": {
+    "currency": "币种不同：卖方 {seller}，买方 {buyer}",
+    "amount": "总额相差 {difference}",
+    "quantity": "{item}：卖方数量 {seller}，买方数量 {buyer}",
+    "sellerVoided": "卖方单据已作废",
+    "buyerVoided": "买方单据已作废"
+  },
+  "actions": {
+    "generate": "创建对应单据",
+    "link": "关联"
+  },
+  "errors": {
+    "generateFailed": "无法创建对应单据。",
+    "unlinkFailed": "无法解除单据配对。",
+    "linkFailed": "无法关联单据。",
+    "nettingFailed": "无法更新抵销结算批次。",
+    "transferFailed": "无法完成资金划转。"
+  },
+  "pair": {
+    "unlinkTitle": "解除此配对",
+    "unlinkReason": "为什么这些单据不再配对？",
+    "unlinked": "已解除配对",
+    "unlink": "取消关联",
+    "seller": "卖方单据",
+    "buyer": "买方单据",
+    "linkedOn": "关联日期",
+    "linkReason": "关联原因"
+  },
+  "link": {
+    "title": "将 {document} 关联到对应单据",
+    "submit": "关联单据",
+    "noCandidates": "另一法人没有该往来方相应类型的未配对单据。",
+    "counterpart": "对应单据",
+    "reason": "原因"
+  },
+  "netting": {
+    "title": "抵销结算批次",
+    "description": "抵销指定日期的公司间应收与应付，可选择以现金结清余额，并在审批后过账。",
+    "new": "新建抵销结算批次",
+    "empty": {
+      "title": "暂无抵销结算批次",
+      "description": "预览抵销结算，查看每对法人之间的欠款。"
+    },
+    "columns": {
+      "run": "运行",
+      "asOf": "截至",
+      "entities": "实体",
+      "pairs": "法人对",
+      "lines": "明细行",
+      "cash": "现金结算",
+      "status": "状态"
+    },
+    "cashYes": "赞成",
+    "cashNo": "反对",
+    "statuses": {
+      "proposed": "建议评级",
+      "pending_approval": "待审批",
+      "approved": "已审批",
+      "rejected": "已拒绝",
+      "posted": "已过账",
+      "cancelled": "已取消",
+      "reversed": "已冲销"
+    },
+    "components": {
+      "open_item": "未清项目",
+      "due_position": "公司间往来余额",
+      "cash": "收付实现制"
+    },
+    "newTitle": "新建抵销结算批次",
+    "newDescription": "选择法人和日期。提出方案前先预览；方案内容将作为审批和过账的依据。",
+    "preview": "预览",
+    "propose": "提交结算方案",
+    "asOf": "基准日期",
+    "settleCash": "以现金结清余额",
+    "subsidiaries": "实体",
+    "bankFor": "{entity} 的银行账户",
+    "chooseBank": "选择银行账户",
+    "reason": "原因",
+    "previewTitle": "预览：{lines} 行",
+    "pairColumns": {
+      "pair": "配对",
+      "currency": "币种",
+      "fromNet": "起始法人净额",
+      "toNet": "对应法人净额",
+      "unreconciled": "未对账",
+      "netted": "已抵销",
+      "cash": "收付实现制"
+    },
+    "cancelTitle": "取消抵销结算批次",
+    "cancelReason": "为什么取消此结算批次？",
+    "reverseTitle": "冲销抵销结算批次",
+    "reverseReason": "为什么冲销此结算批次？",
+    "submit": "提交审批",
+    "post": "过账",
+    "reversalDate": "冲销日期",
+    "reverse": "冲销",
+    "cancel": "取消批次",
+    "decisionNote": "审批说明",
+    "fingerprint": "方案指纹",
+    "pairsTitle": "法人对",
+    "linesTitle": "明细行",
+    "lineColumns": {
+      "component": "薪酬项目",
+      "entity": "实体",
+      "reference": "参考号",
+      "open": "未交",
+      "netted": "已抵销",
+      "cash": "收付实现制",
+      "rate": "结算汇率",
+      "realizedFx": "已实现汇兑损益"
+    },
+    "entryLink": "会计分录 {number}"
+  },
+  "transfers": {
+    "title": "公司间资金划转",
+    "description": "从一个法人的银行账户向另一法人划转资金。通过法人对的往来科目保持各法人账簿平衡。",
+    "new": "新建资金划转",
+    "empty": {
+      "title": "暂无公司间资金划转",
+      "description": "同一法人银行账户之间的划转仍在银行模块处理。"
+    },
+    "columns": {
+      "transfer": "转账",
+      "date": "日期",
+      "route": "调出 → 调入",
+      "amount": "金额",
+      "status": "状态"
+    },
+    "statuses": {
+      "posted": "已过账",
+      "reversed": "已冲销"
+    },
+    "newTitle": "新建公司间资金划转",
+    "newDescription": "付款法人贷记银行账户；收款法人借记银行账户。两个账户必须使用相同币种。",
+    "post": "过账资金划转",
+    "fromLegend": "自",
+    "toLegend": "至",
+    "subsidiary": "实体",
+    "chooseSubsidiary": "选择实体",
+    "bankAccount": "银行账户",
+    "chooseBank": "选择银行账户",
+    "date": "日期",
+    "amount": "金额",
+    "currency": "币种",
+    "memo": "备注",
+    "reason": "原因",
+    "reverseTitle": "冲销资金划转",
+    "reverseReason": "为什么冲销此资金划转？",
+    "reversalDate": "冲销日期",
+    "reverse": "冲销",
+    "entry": "日记账分录",
+    "reversalEntry": "冲销凭证"
+  },
+  "reconciliation": {
+    "title": "公司间对账",
+    "description": "按币种显示每对法人双方账簿中的公司间余额，以及待核对的差额。",
+    "asOf": "截至 {date}",
+    "openWorkspace": "打开单据配对工作区",
+    "empty": "截至此日期无公司间余额。",
+    "columns": {
+      "currency": "币种",
+      "entity": "实体",
+      "receivable": "公司间应收款",
+      "payable": "公司间应付款",
+      "position": "公司间往来",
+      "net": "净额",
+      "functionalNet": "净额（功能币）"
+    },
+    "summary": {
+      "balances": "法人对余额",
+      "unreconciled": "未对账"
+    },
+    "difference": "差异"
+  },
+  "party": {
+    "representsAsCustomer": "作为公司间客户代表 {subsidiary}",
+    "representsAsVendor": "作为公司间供应商代表 {subsidiary}",
+    "manageRepresentation": "管理代表往来方"
+  }
+}

@@ -642,6 +642,28 @@ export const NAV_MODULES: NavModule[] = [
     recordTarget: { kind: 'query', param: 'doc' },
   },
   {
+    key: 'intercompany',
+    href: '/intercompany',
+    label: 'Intercompany',
+    iconKey: 'git-branch',
+    group: 'accounting',
+    subgroup: 'ledger',
+    requiredPermission: 'intercompany.read',
+    featureKey: 'intercompanyTransactions',
+    recordTarget: { kind: 'query', param: 'pair' },
+  },
+  {
+    key: 'intercompany-netting',
+    href: '/intercompany/netting',
+    label: 'Intercompany Netting',
+    iconKey: 'workflow',
+    group: 'accounting',
+    subgroup: 'ledger',
+    requiredPermission: 'intercompany.read',
+    featureKey: 'intercompanyNetting',
+    recordTarget: { kind: 'query', param: 'run' },
+  },
+  {
     key: 'accounts',
     href: '/accounts',
     label: 'Chart of Accounts',
@@ -1303,6 +1325,8 @@ export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
     'nonprofit',
     // Within the ledger section, after Journals and Chart of Accounts.
     'internal-billing',
+    'intercompany',
+    'intercompany-netting',
   ],
   insights: ['reports', 'analytics', 'insights', 'saved-searches'],
   settings: [

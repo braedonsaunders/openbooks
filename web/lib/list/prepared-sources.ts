@@ -239,6 +239,10 @@ const SOURCES = {
     rowKeyField: 'id',
     mode: 'loaded',
   },
+  intercompany_unpaired: { route: '/intercompany', rowsField: 'unpairedRows', rowKeyField: 'id', mode: 'loaded' },
+  intercompany_pairs: { route: '/intercompany', rowsField: 'pairRows', rowKeyField: 'id', mode: 'loaded' },
+  intercompany_netting_runs: { route: '/intercompany/netting', rowsField: 'rows', rowKeyField: 'id', mode: 'loaded' },
+  intercompany_transfers: { route: '/intercompany/transfers', rowsField: 'rows', rowKeyField: 'id', mode: 'loaded' },
   compliance_information_returns: {
     route: '/compliance/information-returns',
     rowsField: 'rows',

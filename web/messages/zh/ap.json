@@ -71,7 +71,8 @@
     "controlAccountPartyDefault": "供应商默认 — {account}",
     "controlAccountOrganizationDefault": "组织默认 — {account}",
     "controlAccountUnset": "未配置应付科目 — 请在“设置 → 公司与会计 → 控制科目”中设置",
-    "matchBanner": "部分库存行尚未匹配采购订单 — 匹配后才能过账该账单。"
+    "matchBanner": "部分库存行尚未匹配采购订单 — 匹配后才能过账该账单。",
+    "controlAccountIntercompany": "公司间 — {account}"
   },
   "capture": {
     "title": "账单采集",

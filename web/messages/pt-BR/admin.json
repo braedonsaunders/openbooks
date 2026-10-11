@@ -1275,7 +1275,8 @@
       "purchasing": "Compras",
       "parties": "Pessoas e empresas",
       "banking": "Banco",
-      "expenses": "Relatórios de despesas"
+      "expenses": "Relatórios de despesas",
+      "intercompany": "Entre empresas"
     },
     "gl_read": "Ver lançamentos e saldos",
     "gl_manage": "Gerenciar o plano de contas",
@@ -1453,7 +1454,11 @@
     "purchase_orders_read": "Ver pedidos de compra e recebimentos",
     "purchase_orders_create": "Criar, alterar e anular pedidos de compra",
     "goods_receipts_create": "Receber mercadorias de pedidos de compra",
-    "time_self": "Registrar e enviar o próprio tempo"
+    "time_self": "Registrar e enviar o próprio tempo",
+    "intercompany_read": "Consultar pares, compensações, transferências e conciliação entre empresas",
+    "intercompany_manage": "Criar, vincular e desvincular pares; propor e cancelar compensações",
+    "intercompany_settle": "Contabilizar e estornar compensações e transferências entre empresas",
+    "intercompany_approve": "Aprovar ou rejeitar compensações entre empresas"
   },
   "ai": {
     "metaTitle": "Configurações de IA",
@@ -3740,6 +3745,14 @@
         "title": "Descrições de cargo",
         "singularTitle": "Descrição de cargo",
         "description": "Conteúdo de vaga reutilizável para novas requisições: título, tipo de contratação, faixa salarial e descrição."
+      },
+      "intercompany-representing-parties": {
+        "title": "Partes representantes entre empresas",
+        "description": "Cliente e fornecedor que representam cada subsidiária em transações com as demais entidades."
+      },
+      "intercompany-transfer-pricing": {
+        "title": "Preços de transferência entre empresas",
+        "description": "Preços com vigência definida para mercadorias entregues por uma entidade para outra: tabela de preços ou custo acrescido de margem."
       }
     },
     "fields": {
@@ -4367,7 +4380,18 @@
       "compensationMin": "Salário mínimo",
       "compensationMax": "Salário máximo",
       "compensationCurrency": "Moeda do salário",
-      "compensationBasis": "Base salarial"
+      "compensationBasis": "Base salarial",
+      "customerPartyId": "Cliente representante",
+      "vendorPartyId": "Fornecedor representante",
+      "fromReceivableAccountId": "Recebível entre empresas da subsidiária de origem",
+      "fromPayableAccountId": "Obrigação entre empresas da subsidiária de origem",
+      "toReceivableAccountId": "Recebível entre empresas da subsidiária de destino",
+      "toPayableAccountId": "Obrigação entre empresas da subsidiária de destino",
+      "sellerSubsidiaryId": "Subsidiária vendedora",
+      "buyerSubsidiaryId": "Subsidiária compradora",
+      "markupPercent": "% de markup",
+      "revenueAccountId": "Conta de receita entre empresas",
+      "costAccountId": "Conta de custo entre empresas"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Dias entre a taxa utilizável mais recente e o fim do período a partir dos quais a reavaliação e a consolidação recusam a taxa. Taxas de fechamento contam a partir da data da taxa à vista de fim de período; taxas médias, a partir da cotação mais recente incluída na média. Padrão sem política: 31 dias.",
@@ -4546,7 +4570,16 @@
       "hrmJobDescriptionTitle": "O título do cargo que os candidatos veem na vaga.",
       "hrmJobDescriptionKind": "Por exemplo integral, meio período, temporário ou por contrato.",
       "hrmJobDescriptionPay": "Opcional. Informe mínimo, máximo, moeda e base juntos, ou deixe os quatro vazios.",
-      "hrmJobDescriptionBody": "O texto da vaga. Novas requisições o copiam, então editá-lo aqui nunca altera uma vaga existente."
+      "hrmJobDescriptionBody": "O texto da vaga. Novas requisições o copiam, então editá-lo aqui nunca altera uma vaga existente.",
+      "representedSubsidiary": "Subsidiária representada por estas partes nos livros das outras entidades.",
+      "representingCustomer": "As outras entidades faturam este cliente quando vendem à subsidiária. Ele não deve já transacionar com a própria subsidiária.",
+      "representingVendor": "As outras entidades recebem contas deste fornecedor quando compram da subsidiária. Ele não deve já transacionar com a própria subsidiária.",
+      "transferPricingSeller": "Entidade que entrega e cobra as mercadorias.",
+      "transferPricingBuyer": "Deixe vazio para aplicar a todas as entidades compradoras sem política própria.",
+      "transferPricingMarkup": "Acrescido ao custo da entidade que entrega. 10 significa custo mais 10%.",
+      "transferPricingRevenue": "Receita entre empresas da entidade que entrega. Deve ser marcada para eliminação na consolidação.",
+      "transferPricingCost": "Custo da entidade vendedora ao preço de transferência. Deve ser marcado para eliminação na consolidação.",
+      "intercompanyControlAccount": "Faturas e contas das partes representantes registram seus títulos em aberto nestas contas. Cada uma deve ser marcada para eliminação na consolidação."
     },
     "options": {
       "withholdingCondominiumPayer": "Pagador: condomínio",
@@ -5356,6 +5389,10 @@
       "schedulePdfColorTreatment": {
         "subtle": "Destaques sutis",
         "strong": "Preenchimentos fortes"
+      },
+      "transferPricingMethod": {
+        "price_level": "Nível de preço",
+        "cost_plus": "Custo acrescido de margem"
       }
     },
     "payroll": {
@@ -6323,7 +6360,8 @@
       "scheduleBoardBooking": "Alocação",
       "scheduleBoardBookingHelp": "As alocações de dia inteiro usam este expediente no fuso horário do quadro.",
       "scheduleBoardAutomation": "Automação",
-      "scheduleBoardAutomationHelp": "O que acontece depois que uma alocação é publicada neste quadro."
+      "scheduleBoardAutomationHelp": "O que acontece depois que uma alocação é publicada neste quadro.",
+      "intercompanyControlAccounts": "Contas a receber e a pagar entre empresas"
     },
     "constructionRateEditor": {
       "tab": "Escopo e tarifas"
@@ -8055,6 +8093,18 @@
     "manufacturingSubcontract": {
       "title": "Produção externa",
       "description": "Envie componentes a um fornecedor, registre serviços e devolva a produção à ordem."
+    },
+    "intercompanyTransactions": {
+      "title": "Transações entre empresas",
+      "description": "Clientes e fornecedores representantes, contas a receber e a pagar entre empresas, documentos vinculados e preços de transferência."
+    },
+    "intercompanyNetting": {
+      "title": "Compensação entre empresas",
+      "description": "Compense e liquide saldos entre entidades com aprovação e transfira dinheiro entre suas contas bancárias."
+    },
+    "crossSubsidiaryFulfillment": {
+      "title": "Atendimento entre subsidiárias",
+      "description": "Atenda pedidos de uma entidade pelo depósito de outra com cobrança entre empresas pelo preço de transferência."
     }
   },
   "backupsManager": {

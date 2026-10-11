@@ -218,6 +218,10 @@
     "commerce-exceptions-open": {
       "title": "Hay excepciones del canal en espera",
       "message": "{count, plural, one {Queda # pedido o evento en espera sin solución.} other {Quedan # pedidos o eventos en espera sin solución.}}"
+    },
+    "intercompany-unreconciled": {
+      "title": "Los saldos intercompañía no coinciden",
+      "message": "{count, plural, one {# par intercompañía tiene saldos que no coinciden entre sus entidades. Revise la conciliación intercompañía antes de cerrar.} other {# pares intercompañía tienen saldos que no coinciden entre sus entidades. Revise la conciliación intercompañía antes de cerrar.}}"
     }
   },
   "severity": {

@@ -247,6 +247,14 @@ export const LOCAL_NAVIGATION: LocalNavigationSet[] = [
     { href: '/assets/leases', ns: 'nav', key: 'modules.leases', permission: 'assets.read', feature: 'fixedAssets', prefix: true },
     { href: '/assets/equipment', ns: 'nav', key: 'modules.equipment', permission: 'assets.read', feature: 'equipment' },
   ] },
+  // Pairing rides Intercompany transactions; netting runs and transfers ride
+  // Intercompany netting. No set-level feature: either switch alone keeps
+  // its own tabs.
+  { id: 'intercompany', label: 'Intercompany', tabs: [
+    { href: '/intercompany', iconKey: 'git-branch', ns: 'intercompany', key: 'tabs.pairing', permission: 'intercompany.read', feature: 'intercompanyTransactions' },
+    { href: '/intercompany/netting', iconKey: 'workflow', ns: 'intercompany', key: 'tabs.netting', permission: 'intercompany.read', feature: 'intercompanyNetting' },
+    { href: '/intercompany/transfers', iconKey: 'banknote', ns: 'intercompany', key: 'tabs.transfers', permission: 'intercompany.read', feature: 'intercompanyNetting' },
+  ] },
   // No set-level feature: the overview/vendors tabs need subcontractor
   // compliance while information returns ride their own tax switch, so the
   // workspace renders while EITHER switch is on and each tab enforces its own.

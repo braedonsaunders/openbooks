@@ -152,7 +152,8 @@
     "controlAccountHelp": "此单据过账的应收科目。收款和贷项在同一科目上核销。留空则使用默认科目。",
     "controlAccountPartyDefault": "客户默认 — {account}",
     "controlAccountOrganizationDefault": "组织默认 — {account}",
-    "controlAccountUnset": "未配置应收科目 — 请在“设置 → 公司与会计 → 控制科目”中设置"
+    "controlAccountUnset": "未配置应收科目 — 请在“设置 → 公司与会计 → 控制科目”中设置",
+    "controlAccountIntercompany": "公司间 — {account}"
   },
   "dailySummary": {
     "date": "日期",

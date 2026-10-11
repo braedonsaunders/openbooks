@@ -152,7 +152,8 @@
     "controlAccountHelp": "A conta a receber em que este documento é lançado. Pagamentos e créditos o liquidam na mesma conta. Deixe em branco para usar o padrão.",
     "controlAccountPartyDefault": "Padrão do cliente — {account}",
     "controlAccountOrganizationDefault": "Padrão da organização — {account}",
-    "controlAccountUnset": "Nenhuma conta a receber configurada — defina uma em Configuração → Empresa e Contabilidade → Contas de controle"
+    "controlAccountUnset": "Nenhuma conta a receber configurada — defina uma em Configuração → Empresa e Contabilidade → Contas de controle",
+    "controlAccountIntercompany": "Entre empresas — {account}"
   },
   "dailySummary": {
     "date": "Data",

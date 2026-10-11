@@ -152,7 +152,8 @@
     "controlAccountHelp": "Das Forderungskonto, auf das dieser Beleg gebucht wird. Zahlungen und Gutschriften gleichen ihn auf demselben Konto aus. Leer lassen, um den Standard zu verwenden.",
     "controlAccountPartyDefault": "Kundenstandard — {account}",
     "controlAccountOrganizationDefault": "Unternehmensstandard — {account}",
-    "controlAccountUnset": "Kein Forderungskonto eingerichtet – legen Sie eines unter Einrichtung → Unternehmen & Buchhaltung → Kontrollkonten fest"
+    "controlAccountUnset": "Kein Forderungskonto eingerichtet – legen Sie eines unter Einrichtung → Unternehmen & Buchhaltung → Kontrollkonten fest",
+    "controlAccountIntercompany": "Konzernintern — {account}"
   },
   "dailySummary": {
     "date": "Datum",

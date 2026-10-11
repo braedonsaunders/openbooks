@@ -50,7 +50,9 @@
       "statementsTitle": "Extratos de clientes",
       "statementsDescription": "Escolha um cliente para abrir o extrato: itens em aberto, pagamentos e saldos por vencimento no período.",
       "statementBatchesTitle": "Envios de extratos",
-      "statementBatchesDescription": "Envie extratos a todos os clientes com saldo e acompanhe cada envio até a entrega."
+      "statementBatchesDescription": "Envie extratos a todos os clientes com saldo e acompanhe cada envio até a entrega.",
+      "intercompanyReconciliationTitle": "Conciliação entre empresas",
+      "intercompanyReconciliationDescription": "Saldos de cada par de empresas por moeda nos livros das duas entidades e diferença a conciliar."
     },
     "groups": {
       "financial": "Demonstrações Financeiras",

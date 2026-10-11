@@ -218,6 +218,10 @@
     "commerce-exceptions-open": {
       "title": "Há exceções do canal aguardando",
       "message": "{count, plural, one {Resta # pedido ou evento aguardando solução.} other {Restam # pedidos ou eventos aguardando solução.}}"
+    },
+    "intercompany-unreconciled": {
+      "title": "Os saldos entre empresas divergem",
+      "message": "{count, plural, one {# par de empresas tem saldos divergentes entre suas entidades. Revise a conciliação entre empresas antes de fechar.} other {# pares de empresas têm saldos divergentes entre suas entidades. Revise a conciliação entre empresas antes de fechar.}}"
     }
   },
   "severity": {

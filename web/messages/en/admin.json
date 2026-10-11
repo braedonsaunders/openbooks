@@ -1264,7 +1264,8 @@
       "purchasing": "Purchasing",
       "parties": "People & companies",
       "banking": "Banking",
-      "expenses": "Expense reports"
+      "expenses": "Expense reports",
+      "intercompany": "Intercompany"
     },
     "gl_read": "View journals and balances",
     "gl_manage": "Manage the chart of accounts",
@@ -1453,7 +1454,11 @@
     "purchase_orders_read": "View purchase orders and receipts",
     "purchase_orders_create": "Create, change and void purchase orders",
     "goods_receipts_create": "Receive goods against purchase orders",
-    "time_self": "Enter and submit own time"
+    "time_self": "Enter and submit own time",
+    "intercompany_read": "View intercompany pairs, netting runs, transfers and reconciliation",
+    "intercompany_manage": "Create, link and unlink intercompany pairs; propose and cancel netting runs",
+    "intercompany_settle": "Post and reverse netting runs and intercompany transfers",
+    "intercompany_approve": "Approve or reject intercompany netting runs"
   },
   "ai": {
     "metaTitle": "AI providers",
@@ -3740,6 +3745,14 @@
         "title": "Job descriptions",
         "singularTitle": "Job description",
         "description": "Reusable posting content a new requisition starts from: title, employment type, pay range and description."
+      },
+      "intercompany-representing-parties": {
+        "title": "Intercompany Representing Parties",
+        "description": "The customer and vendor that stand for each subsidiary when sister entities trade with it."
+      },
+      "intercompany-transfer-pricing": {
+        "title": "Intercompany Transfer Pricing",
+        "description": "Effective-dated pricing for goods one entity fulfills for another: a price level or cost plus a markup."
       }
     },
     "fields": {
@@ -4367,7 +4380,18 @@
       "compensationMin": "Pay minimum",
       "compensationMax": "Pay maximum",
       "compensationCurrency": "Pay currency",
-      "compensationBasis": "Pay basis"
+      "compensationBasis": "Pay basis",
+      "customerPartyId": "Representing customer",
+      "vendorPartyId": "Representing vendor",
+      "fromReceivableAccountId": "From subsidiary intercompany receivable",
+      "fromPayableAccountId": "From subsidiary intercompany payable",
+      "toReceivableAccountId": "To subsidiary intercompany receivable",
+      "toPayableAccountId": "To subsidiary intercompany payable",
+      "sellerSubsidiaryId": "Selling subsidiary",
+      "buyerSubsidiaryId": "Buying subsidiary",
+      "markupPercent": "Markup %",
+      "revenueAccountId": "Intercompany revenue account",
+      "costAccountId": "Intercompany cost account"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Days between the newest usable rate and the period end beyond which revaluation and consolidation refuse the rate. Closing rates count from the date of the period-end spot rate; average rates from the newest quote averaged. Default when no policy is set: 31 days.",
@@ -4546,7 +4570,16 @@
       "hrmJobDescriptionTitle": "The job title applicants see on the posting.",
       "hrmJobDescriptionKind": "For example full-time, part-time, seasonal or contract.",
       "hrmJobDescriptionPay": "Optional. Enter minimum, maximum, currency and basis together, or leave all four empty.",
-      "hrmJobDescriptionBody": "The posting text. New requisitions copy it, so editing it here never changes an existing opening."
+      "hrmJobDescriptionBody": "The posting text. New requisitions copy it, so editing it here never changes an existing opening.",
+      "representedSubsidiary": "The subsidiary these parties stand for in other entities' books.",
+      "representingCustomer": "Sister entities invoice this customer when they sell to the subsidiary. It must not already transact with the subsidiary itself.",
+      "representingVendor": "Sister entities are billed by this vendor when they buy from the subsidiary. It must not already transact with the subsidiary itself.",
+      "transferPricingSeller": "The entity that fulfills the goods and charges for them.",
+      "transferPricingBuyer": "Leave empty to apply to every buying entity without its own policy.",
+      "transferPricingMarkup": "Added to the fulfilling entity's cost. 10 means cost plus 10%.",
+      "transferPricingRevenue": "The fulfilling entity's intercompany revenue. Must be marked Eliminate on consolidation.",
+      "transferPricingCost": "The selling entity's cost at the transfer price. Must be marked Eliminate on consolidation.",
+      "intercompanyControlAccount": "Intercompany invoices and bills to or from the representing parties post their open items to these accounts. Each must be marked Eliminate on consolidation."
     },
     "options": {
       "withholdingCondominiumPayer": "Condominium payer",
@@ -5356,6 +5389,10 @@
       "schedulePdfColorTreatment": {
         "subtle": "Subtle accents",
         "strong": "Strong fills"
+      },
+      "transferPricingMethod": {
+        "price_level": "Price level",
+        "cost_plus": "Cost plus markup"
       }
     },
     "payroll": {
@@ -6323,7 +6360,8 @@
       "scheduleBoardBooking": "Booking",
       "scheduleBoardBookingHelp": "Whole-day bookings use these working hours in the board's time zone.",
       "scheduleBoardAutomation": "Automation",
-      "scheduleBoardAutomationHelp": "What happens after a booking is published on this board."
+      "scheduleBoardAutomationHelp": "What happens after a booking is published on this board.",
+      "intercompanyControlAccounts": "Intercompany receivable and payable accounts"
     },
     "constructionRateEditor": {
       "tab": "Scope & rates"
@@ -8055,6 +8093,18 @@
     "manufacturingSubcontract": {
       "title": "External manufacturing",
       "description": "Send components to a vendor, record processing services and return production onto the work order."
+    },
+    "intercompanyTransactions": {
+      "title": "Intercompany transactions",
+      "description": "Representing customers and vendors for each entity, intercompany receivable and payable accounts, paired intercompany documents and transfer pricing."
+    },
+    "intercompanyNetting": {
+      "title": "Intercompany netting",
+      "description": "Net and settle intercompany balances between entities with approval, and transfer cash between entities' bank accounts."
+    },
+    "crossSubsidiaryFulfillment": {
+      "title": "Cross-subsidiary fulfillment",
+      "description": "Fulfill one entity's sales orders from another entity's warehouse, with an intercompany cross-charge at the transfer price."
     }
   },
   "backupsManager": {

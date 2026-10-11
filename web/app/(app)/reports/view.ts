@@ -102,6 +102,9 @@ export async function reportsHubFor(
     authz ? isFeatureEnabled(authz.user.orgId, 'warehousing') : Promise.resolve(false),
     authz && can(authz, 'resourcing.read') ? isFeatureEnabled(authz.user.orgId, 'resourcing') : Promise.resolve(false),
   ])
+  // Intercompany reconciliation reads every multi-entity ledger.
+  const multiSubsidiaryEnabled = authz ? await isFeatureEnabled(authz.user.orgId, 'multiSubsidiary') : false
+  const intercompanyReportVisible = multiSubsidiaryEnabled && Boolean(authz && can(authz, 'intercompany.read'))
   // Projects → Progress tracking gates the Earned value report.
   const progressEnabled = projectsEnabled && authz && can(authz, 'projects.read')
     ? await isFeatureEnabled(authz.user.orgId, 'projectProgress')
@@ -225,6 +228,7 @@ export async function reportsHubFor(
       cards: [
         card('generalLedger', '/reports/general-ledger', 'BookOpen', 'ledger'),
         card('journal', '/reports/journal', 'NotebookPen', 'ledger'),
+        ...(intercompanyReportVisible ? [card('intercompanyReconciliation', '/reports/intercompany-reconciliation', 'Scale', 'ledger')] : []),
         ...definitionCards(ledgerDefinitions, 'BookOpen', t('hub.cards.builtInDescription')),
       ],
     },
@@ -370,6 +374,7 @@ export async function reportsHubFor(
             warehousing: warehousingEnabled,
             resourcing: resourcingEnabled,
             payroll: payrollEnabled && Boolean(authz && can(authz, 'payroll.read')),
+            multiSubsidiary: intercompanyReportVisible,
           }),
         ).map((s) => {
           const qs = new URLSearchParams(s.params ?? {}).toString()

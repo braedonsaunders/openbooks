@@ -152,7 +152,8 @@
     "controlAccountHelp": "この伝票が計上される売掛金勘定です。入金とクレジットは同じ勘定で消し込まれます。空欄の場合は既定の勘定を使用します。",
     "controlAccountPartyDefault": "得意先の既定 — {account}",
     "controlAccountOrganizationDefault": "組織の既定 — {account}",
-    "controlAccountUnset": "売掛金勘定が設定されていません — 「セットアップ → 会社と会計 → 統制勘定」で設定してください"
+    "controlAccountUnset": "売掛金勘定が設定されていません — 「セットアップ → 会社と会計 → 統制勘定」で設定してください",
+    "controlAccountIntercompany": "法人間 — {account}"
   },
   "dailySummary": {
     "date": "日付",

@@ -19,7 +19,7 @@ import { runRecordFlows } from "../flows/run.ts";
 import { cancelDispatchRuns, dispatchFailureReason } from "../flows/dispatch-result.ts";
 import { completedGateAllowsSelfApproval } from "../flows/approval-decision-policy.ts";
 import { INTERCOMPANY_NETTING_RUN_SUBJECT_KIND } from "../flows/intercompany-netting-runs-adapter.ts";
-import { auditIntercompany, IntercompanyError, INTERCOMPANY_NETTING_DISABLED, requireOneRow } from "./errors.ts";
+import { auditIntercompany, IntercompanyError, INTERCOMPANY_NETTING_DISABLED, requireOneRow, requireIntercompanyPermission } from "./errors.ts";
 import {
   allocatePairNetting,
   carryingForSettlement,
@@ -146,6 +146,7 @@ export interface NettingRunDetail {
     counterpartySubsidiaryName: string;
     accountLabel: string;
     documentNumber: string | null;
+    documentKind: string | null;
     settlementEntryId: string | null;
   })[];
   flowRunId: string | null;
@@ -622,6 +623,7 @@ export async function proposeNettingRun(
   const input = validateProposal(raw);
   if (!scopeCovers(allowedSubsidiaryIds, input.subsidiaryIds)) refuse("a chosen subsidiary is outside your visible subsidiaries", 404);
   const runId = await withOrgTransaction(orgId, async () => {
+    await requireIntercompanyPermission(db, orgId, actorId, "intercompany.manage");
     await assertNettingEnabled(db, orgId);
     await lockNetting(db, orgId);
     const request = canonicalJson({
@@ -668,7 +670,7 @@ export async function proposeNettingRun(
     requireOneRow(inserted, "the netting run could not be stored");
     const id = inserted[0]!.id;
     for (const line of lines) {
-      await db.execute(sql`
+      const written = (await db.execute<{ id: string }>(sql`
         insert into intercompany_netting_lines
           (org_id, run_id, line_number, pair_id, currency, subsidiary_id, counterparty_subsidiary_id,
            component, account_id, journal_line_id, document_id, functional_currency,
@@ -677,7 +679,9 @@ export async function proposeNettingRun(
         values (${orgId}, ${id}, ${line.lineNumber}, ${line.pairId}, ${line.currency}, ${line.subsidiaryId},
                 ${line.counterpartySubsidiaryId}, ${line.component}, ${line.accountId}, ${line.journalLineId},
                 ${line.documentId}, ${line.functionalCurrency}, ${line.openTransaction}, ${line.openCarrying},
-                ${line.netted}, ${line.cash}, ${line.rate}, ${line.realizedFx})`);
+                ${line.netted}, ${line.cash}, ${line.rate}, ${line.realizedFx})
+        returning id`)).rows;
+      requireOneRow(written, "a netting proposal line could not be stored");
     }
     await auditIntercompany(db, {
       orgId,
@@ -736,6 +740,7 @@ export async function submitNettingRun(
   // A failed routing returns its refusal so the cancellation of whatever the
   // dispatch opened commits; the run itself stays proposed.
   const outcome = await withOrgTransaction(orgId, async (): Promise<SubmitOutcome> => {
+    await requireIntercompanyPermission(db, orgId, actorId, "intercompany.manage");
     await assertNettingEnabled(db, orgId);
     const run = await lockRun(db, orgId, runId, allowedSubsidiaryIds);
     if (run.status !== "proposed") refuse(`only a proposed netting run can be submitted; this one is ${run.status.replace("_", " ")}`, 409);
@@ -790,6 +795,8 @@ export async function releaseNettingRunApproval(args: {
 }): Promise<void> {
   const { orgId, runId, actorId, outcome } = args;
   if (!actorId) refuse("a netting run approval must be decided by a signed-in user");
+  await requireIntercompanyPermission(db, orgId, actorId, "intercompany.approve");
+  await assertNettingEnabled(db, orgId);
   const run = (await db.execute<{ status: string; proposed_by: string; submitted_by: string | null }>(sql`
     select status, proposed_by, submitted_by from intercompany_netting_runs
      where org_id = ${orgId} and id = ${runId}
@@ -838,6 +845,8 @@ export async function cancelNettingRun(
 ): Promise<NettingRunDetail> {
   const reason = cleanReason(reasonInput, "a cancellation reason");
   await withOrgTransaction(orgId, async () => {
+    await requireIntercompanyPermission(db, orgId, actorId, "intercompany.manage");
+    await assertNettingEnabled(db, orgId);
     const run = await lockRun(db, orgId, runId, allowedSubsidiaryIds);
     if (!["proposed", "pending_approval", "approved"].includes(run.status)) {
       refuse(`a ${run.status.replace("_", " ")} netting run cannot be cancelled`, 409);
@@ -896,6 +905,7 @@ export async function postNettingRun(
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<NettingRunDetail> {
   await withOrgTransaction(orgId, async () => {
+    await requireIntercompanyPermission(db, orgId, actorId, "intercompany.settle");
     await assertNettingEnabled(db, orgId);
     await lockNetting(db, orgId);
     const run = await lockRun(db, orgId, runId, allowedSubsidiaryIds);
@@ -1203,6 +1213,7 @@ export async function reverseNettingRun(
   if (!isIsoCalendarDate(input.reversalDate)) refuse("the reversal date must be a valid calendar date (YYYY-MM-DD)");
   const reason = cleanReason(input.reason, "a reversal reason");
   await withOrgTransaction(orgId, async () => {
+    await requireIntercompanyPermission(db, orgId, actorId, "intercompany.settle");
     await assertNettingEnabled(db, orgId);
     await lockNetting(db, orgId);
     const run = await lockRun(db, orgId, runId, allowedSubsidiaryIds);
@@ -1281,7 +1292,7 @@ export async function loadNettingRun(
     document_id: string | null; party_id: string | null; functional_currency: string; open_transaction_amount: string;
     open_carrying_amount: string; netted_amount: string; cash_amount: string; settlement_rate: string;
     realized_fx: string; settlement_entry_id: string | null; subsidiary_name: string; counterparty_name: string;
-    account_label: string; document_number: string | null;
+    account_label: string; document_number: string | null; document_kind: string | null;
   }>(sql`
     select l.line_number, l.pair_id, l.currency, l.subsidiary_id, l.counterparty_subsidiary_id, l.component,
            l.account_id, l.journal_line_id, l.document_id, jl.party_id, l.functional_currency,
@@ -1290,7 +1301,7 @@ export async function loadNettingRun(
            l.netted_amount::text as netted_amount, l.cash_amount::text as cash_amount,
            l.settlement_rate::text as settlement_rate, l.realized_fx::text as realized_fx,
            l.settlement_entry_id, s.name as subsidiary_name, c.name as counterparty_name,
-           concat_ws(' · ', a.number, a.name) as account_label, d.document_number
+           concat_ws(' · ', a.number, a.name) as account_label, d.document_number, d.kind as document_kind
       from intercompany_netting_lines l
       join subsidiaries s on s.org_id = l.org_id and s.id = l.subsidiary_id
       join subsidiaries c on c.org_id = l.org_id and c.id = l.counterparty_subsidiary_id
@@ -1339,6 +1350,7 @@ export async function loadNettingRun(
         counterpartySubsidiaryName: line.counterparty_name,
         accountLabel: line.account_label,
         documentNumber: line.document_number,
+        documentKind: line.document_kind,
         settlementEntryId: line.settlement_entry_id,
       };
     }),
@@ -1356,4 +1368,50 @@ export async function loadNettingRun(
     reversalDate: run.reversal_date,
     entryIds: [...new Set(lines.map((line) => line.settlement_entry_id).filter((id): id is string => Boolean(id)))],
   };
+}
+
+export interface NettingRunSummary {
+  id: string;
+  runNumber: string;
+  status: NettingRunStatus;
+  asOfDate: string;
+  subsidiaryIds: string[];
+  settleCash: boolean;
+  pairCount: number;
+  lineCount: number;
+  proposedAt: string;
+}
+
+/** Runs the caller can see in full (every entity in scope), newest first. */
+export async function listNettingRuns(
+  orgId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+  options: { limit?: number } = {},
+): Promise<NettingRunSummary[]> {
+  const limit = Math.min(Math.max(options.limit ?? 200, 1), 500);
+  const rows = (await db.execute<{
+    id: string; run_number: string; status: NettingRunStatus; as_of_date: string; subsidiary_ids: string[];
+    settle_cash: boolean; pair_count: number; line_count: number; proposed_at: string;
+  }>(sql`
+    select r.id, r.run_number, r.status, r.as_of_date::text as as_of_date, r.subsidiary_ids, r.settle_cash,
+           coalesce(jsonb_array_length(r.computation->'pairs'), 0)::int as pair_count,
+           (select count(*)::int from intercompany_netting_lines l where l.org_id = r.org_id and l.run_id = r.id) as line_count,
+           r.proposed_at::text as proposed_at
+      from intercompany_netting_runs r
+     where r.org_id = ${orgId}
+       and (${allowedSubsidiaryIds === null}::boolean
+            or r.subsidiary_ids <@ ${uuidArray(allowedSubsidiaryIds === null ? [] : [...allowedSubsidiaryIds])}::uuid[])
+     order by r.proposed_at desc, r.run_number desc
+     limit ${limit}`)).rows;
+  return rows.map((row) => ({
+    id: row.id,
+    runNumber: row.run_number,
+    status: row.status,
+    asOfDate: row.as_of_date,
+    subsidiaryIds: row.subsidiary_ids,
+    settleCash: row.settle_cash,
+    pairCount: row.pair_count,
+    lineCount: row.line_count,
+    proposedAt: row.proposed_at,
+  }));
 }

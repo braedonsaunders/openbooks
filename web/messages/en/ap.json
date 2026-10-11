@@ -71,7 +71,8 @@
     "controlAccountPartyDefault": "Vendor default — {account}",
     "controlAccountOrganizationDefault": "Organization default — {account}",
     "controlAccountUnset": "No payable account configured — set one in Setup → Company & Accounting → Control accounts",
-    "matchBanner": "Some stocked lines are not matched to a purchase order — the bill cannot post until they are matched."
+    "matchBanner": "Some stocked lines are not matched to a purchase order — the bill cannot post until they are matched.",
+    "controlAccountIntercompany": "Intercompany — {account}"
   },
   "capture": {
     "title": "Bill capture",

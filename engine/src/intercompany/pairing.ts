@@ -6,10 +6,11 @@ import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { uuidArray } from "../organization/subsidiaries.ts";
 import {
   INTERCOMPANY_TRANSACTIONS_FEATURE,
+  loadPartyRepresentation,
   loadSubsidiaryRepresentatives,
   rootSubsidiaryId,
 } from "../organization/intercompany-accounts.ts";
-import { auditIntercompany, IntercompanyError, INTERCOMPANY_TRANSACTIONS_DISABLED, requireOneRow } from "./errors.ts";
+import { auditIntercompany, IntercompanyError, INTERCOMPANY_TRANSACTIONS_DISABLED, requireOneRow, requireIntercompanyPermission } from "./errors.ts";
 import {
   BUYER_KIND,
   comparePairedDocuments,
@@ -149,6 +150,7 @@ export async function linkIntercompanyDocuments(
   const origin = input.origin ?? "linked";
   if (origin === "linked" && !reason) refuse("a reason is required to link two documents by hand");
   const pairId = await withOrgTransaction(orgId, async () => {
+    await requireIntercompanyPermission(db, orgId, actorId, "intercompany.manage");
     await assertTransactionsEnabled(db, orgId);
     // Lock both documents in a stable order before reading either side.
     const ordered = [input.sellerDocumentId, input.buyerDocumentId].sort();
@@ -219,6 +221,7 @@ export async function unlinkIntercompanyPair(
   if (reason.length > 2000) refuse("the reason must be at most 2000 characters");
   if (!isUuid(pairId)) refuse("pair not found", 404);
   await withOrgTransaction(orgId, async () => {
+    await requireIntercompanyPermission(db, orgId, actorId, "intercompany.manage");
     await assertTransactionsEnabled(db, orgId);
     const pair = (await db.execute<{ status: string; seller_subsidiary_id: string; buyer_subsidiary_id: string }>(sql`
       select status, seller_subsidiary_id, buyer_subsidiary_id from intercompany_transaction_pairs
@@ -543,4 +546,18 @@ export async function planIntercompanyCounterpart(
       lines: planned,
     };
   });
+}
+
+/** The subsidiaries a party represents, by role (for the party record). */
+export async function intercompanyRepresentationsOfParty(
+  orgId: string,
+  partyId: string,
+): Promise<{ role: "customer" | "vendor"; subsidiaryId: string; subsidiaryName: string }[]> {
+  if (!isUuid(partyId)) return [];
+  const out: { role: "customer" | "vendor"; subsidiaryId: string; subsidiaryName: string }[] = [];
+  for (const role of ["customer", "vendor"] as const) {
+    const representation = await loadPartyRepresentation(db, orgId, partyId, role);
+    if (representation) out.push({ role, subsidiaryId: representation.subsidiaryId, subsidiaryName: representation.subsidiaryName });
+  }
+  return out;
 }
