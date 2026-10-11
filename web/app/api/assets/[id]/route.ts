@@ -888,6 +888,24 @@ export const DELETE = defineRoute({
       );
     }
 
+    // A draft created by an accepted proposal or a capitalization carries
+    // cost a posted reclassification moved into its account; it leaves only
+    // by reversing that acceptance or capitalization.
+    const capitalized = await db.execute(sql`
+    select 1 from asset_proposal_allocations where org_id = ${user.orgId} and asset_id = ${id}
+    union all
+    select 1 from asset_cip_capitalization_lines where org_id = ${user.orgId} and asset_id = ${id}
+     limit 1`);
+    if (capitalized.rows[0]) {
+      return NextResponse.json(
+        {
+          error:
+            "This asset was capitalized from posted transactions. Reverse its proposal acceptance (Fixed Assets → Proposals) or construction-in-progress capitalization instead.",
+        },
+        { status: 409 },
+      );
+    }
+
     const evidence = await db.execute(sql`
     select 1
       from depreciation_schedules s
