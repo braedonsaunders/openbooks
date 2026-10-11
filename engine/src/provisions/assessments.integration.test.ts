@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import test from 'node:test'
+import pg from 'pg'
 import { sql } from 'drizzle-orm'
 import { db, withBypassContext, withOrgContext } from '../platform/db.ts'
 import { createScratchOrg, dropScratchOrg, seedFlowActors, seedApprovalFlow } from '../testing/fixtures.ts'
@@ -8,6 +9,8 @@ import { submitFinancialChange } from '../flows/financial-changes-adapter.ts'
 import { decideGate } from '../flows/gates.ts'
 import { proposeProvisionAssessment, applyProvisionAssessment, type ProvisionProposal } from './assessments.ts'
 import { measureProvision } from './measurement.ts'
+
+const RUNTIME_DB = process.env.OPENBOOKS_RUNTIME_DB_URL
 
 test('independent provision assessments recognize and remeasure one tenant liability without duplicate or stale posting', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await createScratchOrg()
@@ -84,9 +87,25 @@ test('independent provision assessments recognize and remeasure one tenant liabi
         values (${org.orgId},${org.periodId},${org.bookId},${org.subsidiaryId},'gl','closed',now(),'Completed period close')`))
       await assert.rejects(applyProvisionAssessment(org.orgId, unchanged, actors.submitterId), /controlled reopen workflow/)
       assert.equal((await db.execute<{ status: string }>(sql`select status from financial_changes where org_id=${org.orgId} and id=${unchanged}`)).rows[0]!.status, 'approved')
-      await withOrgContext(randomUUID(), async () => {
-        assert.equal((await db.execute(sql`select id from provision_obligations where id=${input.obligation.id}`)).rows.length, 0)
-      })
+      // Tenant isolation holds at the storage fence, so prove it through the
+      // login production traffic uses. PostgreSQL does not apply row
+      // security (forced included) to the harness superuser login, so a raw
+      // cross-organization read through the pool sees every row and proves
+      // nothing — the runtime login is the role the policy constrains.
+      if (RUNTIME_DB) {
+        const probe = new pg.Client({ connectionString: RUNTIME_DB })
+        try {
+          await probe.connect()
+          await probe.query(`select set_config('app.current_org', $1, false), set_config('app.bypass_rls', 'off', false)`, [randomUUID()])
+          const hidden = await probe.query(`select id from provision_obligations where id = $1`, [input.obligation.id])
+          assert.deepEqual(hidden.rows, [], 'another organization must not see this obligation')
+          await probe.query(`select set_config('app.current_org', $1, false), set_config('app.bypass_rls', 'off', false)`, [org.orgId])
+          const seen = await probe.query<{ id: string }>(`select id from provision_obligations where id = $1`, [input.obligation.id])
+          assert.deepEqual(seen.rows.map((row) => row.id), [input.obligation.id], 'the owning organization must still see it')
+        } finally {
+          await probe.end().catch(() => {})
+        }
+      }
     })
   } finally { await dropScratchOrg(org.orgId) }
 })
