@@ -146,12 +146,12 @@ export async function loadTax(
         ? sql`created_at ${list.dir === 'asc' ? sql`asc` : sql`desc`}`
         : sql`period_to ${list.dir === 'asc' ? sql`asc` : sql`desc`}, version desc`
 
-  // Total filings drives the History tab's count badge (always cheap); the full
-  // history rows are only queried when that tab is open. The Activity tab's
-  // badge counts failed commits — the rows that need the operator.
-  const [badgeResult, failedResult, historyResult, countResult, selectedResult, activityResult] = await Promise.all([
+  // The History badge and the list total come from one count over the same
+  // filters the list applies, so the badge always matches the rows listed.
+  // The full history rows are only queried when that tab is open. The Activity
+  // tab's badge counts failed provider commits — the rows that need the operator.
+  const [failedResult, historyResult, countResult, selectedResult, activityResult] = await Promise.all([
     db.execute<{ count: number }>(sql`select count(*)::int as count from tax_provider_transactions where org_id = ${orgId} and status = 'failed'`),
-    db.execute<{ count: number }>(sql`select count(*)::int as count from tax_filings where org_id = ${orgId}`),
     tab === 'history'
       ? db.execute<FilingRow>(sql`
           select id, form_name, form_code, country, period_from::text, period_to::text,
@@ -160,9 +160,7 @@ export async function loadTax(
            order by ${order}
            limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`)
       : Promise.resolve({ rows: [] as FilingRow[] }),
-    tab === 'history'
-      ? db.execute<{ count: number }>(sql`select count(*)::int as count from tax_filings ${filters}`)
-      : Promise.resolve({ rows: [{ count: 0 }] }),
+    db.execute<{ count: number }>(sql`select count(*)::int as count from tax_filings ${filters}`),
     filingId && isUuid(filingId)
       ? db.execute<FilingHistoryRecord>(sql`
           select id, form_name, form_code, country, period_from::text, period_to::text,
@@ -182,7 +180,6 @@ export async function loadTax(
            where t.id = ${activityId} and t.org_id = ${orgId} limit 1`)
       : Promise.resolve({ rows: [] as ProviderActivityPayload[] }),
   ])
-  const badgeCount = Number(badgeResult.rows[0]?.count ?? 0)
   const failedCount = Number(failedResult.rows[0]?.count ?? 0)
   const history = historyResult.rows
   const total = Number(countResult.rows[0]?.count ?? 0)
@@ -216,7 +213,7 @@ export async function loadTax(
     onActivity: tab === 'activity',
     tabs: [
       { key: 'prepare', label: t('tabs.prepare'), href: '/tax', active: tab === 'prepare', count: null },
-      { key: 'history', label: t('tabs.history'), href: '/tax?tab=history', active: tab === 'history', count: badgeCount },
+      { key: 'history', label: t('tabs.history'), href: '/tax?tab=history', active: tab === 'history', count: total },
       { key: 'activity', label: t('tabs.activity'), href: '/tax?tab=activity', active: tab === 'activity', count: failedCount },
     ],
     currentParams: sp,

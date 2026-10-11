@@ -1209,6 +1209,7 @@
     "createBill": "Criar fatura de recolhimento",
     "createAnother": "Criar outra fatura",
     "billCreated": "Rascunho de fatura {number} criado. Revise e contabilize no contas a pagar.",
+    "applyPeriodFirst": "Aplique o período acima para criar faturas para ele.",
     "dueOn": "Vence em {dueDate} · {authority}",
     "apNote": "Faturas de recolhimento são faturas comuns de fornecedor:",
     "apLink": "abrir faturas de fornecedor",

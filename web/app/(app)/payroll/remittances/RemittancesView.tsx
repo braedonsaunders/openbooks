@@ -54,13 +54,25 @@ export function RemittancesView({
   const t = useTranslations('payroll.remittances')
   const router = useRouter()
   const [busyParty, setBusyParty] = useState<string | null>(null)
+  // The applied period arrives as props on every navigation (Apply, browser
+  // Back and Forward) while this view stays mounted. The draft follows the
+  // applied period, so a stale draft can never silently disable the bill
+  // actions.
+  const [applied, setApplied] = useState({ from, to })
   const [range, setRange] = useState({ from, to })
+  if (applied.from !== from || applied.to !== to) {
+    setApplied({ from, to })
+    setRange({ from, to })
+  }
   const rangeChanged = range.from !== from || range.to !== to
 
   async function createBill(partyId: string, filingAccountId: string | null, subsidiaryId: string | null) {
     // The cards and their totals represent the server-applied period. Never
     // create a bill for dates that the operator has only entered as a draft.
-    if (rangeChanged) return
+    if (rangeChanged) {
+      toast.error(t('applyPeriodFirst'))
+      return
+    }
     setBusyParty(`${groupKey(partyId, filingAccountId)}::${subsidiaryId ?? ''}`)
     try {
       const res = await fetch('/api/payroll/remittances', {
@@ -106,6 +118,9 @@ export function RemittancesView({
         </label>
         <Button type="submit" variant="outline">{t('apply')}</Button>
       </form>
+      {rangeChanged ? (
+        <p role="status" className="text-xs text-amber-700 dark:text-amber-300">{t('applyPeriodFirst')}</p>
+      ) : null}
 
       {populationRefusal ? (
         <Alert variant="warning">

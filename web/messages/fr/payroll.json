@@ -1209,6 +1209,7 @@
     "createBill": "Créer la facture de versement",
     "createAnother": "Créer une autre facture",
     "billCreated": "Brouillon de facture {number} créé. Vérifiez-le et affichez-le dans les comptes fournisseurs.",
+    "applyPeriodFirst": "Appliquez la période ci-dessus pour créer les factures correspondantes.",
     "dueOn": "Échéance le {dueDate} · {authority}",
     "apNote": "Les factures de versement sont des factures fournisseurs ordinaires :",
     "apLink": "ouvrir les factures fournisseurs",

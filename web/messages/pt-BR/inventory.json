@@ -281,7 +281,7 @@
     },
     "secondCount": "Salvar segunda contagem",
     "secondReason": "Observação da segunda contagem",
-    "secondReasonHint": "Se a segunda contagem diferir da primeira, explique a diferença. Caso contrário, você pode cancelar esta solicitação de motivo."
+    "secondReasonHint": "A segunda contagem difere da primeira. Explique a diferença (pelo menos 5 caracteres) para registrá-la com esta contagem."
   },
   "create": {
     "subsidiary": "Subsidiária proprietária",

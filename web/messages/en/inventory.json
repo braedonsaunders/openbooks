@@ -281,7 +281,7 @@
     },
     "secondCount": "Save second count",
     "secondReason": "Second count observation",
-    "secondReasonHint": "If the second count differs from the first, explain the difference. Otherwise you may cancel this reason prompt."
+    "secondReasonHint": "The second count differs from the first. Explain the difference (at least 5 characters) so it is recorded with this count."
   },
   "create": {
     "subsidiary": "Owning subsidiary",

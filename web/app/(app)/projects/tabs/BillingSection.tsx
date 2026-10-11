@@ -15,12 +15,19 @@ import {
   ApplicationsBillingWorkspace,
   type ApplicationIncomeAccount,
 } from '../../construction/ConstructionClient'
+/** The banner's figure on the project's billing basis (see lib/project-available-to-bill). */
+export type AvailableToBillClient =
+  | { basis: 'rates'; amount: string }
+  | { basis: 'contract'; amount: string; contractValue: string; invoicedToDate: string }
+  | { basis: 'contract_unset'; invoicedToDate: string }
+
 export interface UnbilledClient {
   revenue: string
   cost: string
   hours: number
   timeEntryCount: number
   costLineCount: number
+  availableToBill: AvailableToBillClient
 }
 
 /** Effective invoicing/backup defaults for this project, resolved through the
@@ -301,9 +308,26 @@ export function BillingSection({
           <div className="text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">
             {t('availableToBill')}
           </div>
-          <div className="text-2xl font-semibold tabular-nums text-teal-700 dark:text-teal-300">
-            {money(unbilled.revenue)}
-          </div>
+          {unbilled.availableToBill.basis === 'contract_unset' ? (
+            <>
+              <div className="text-base font-medium text-amber-700 dark:text-amber-300">{t('contractUnset')}</div>
+              <div className="text-xs text-slate-500 dark:text-slate-400">{t('contractUnsetRemedy')}</div>
+            </>
+          ) : (
+            <>
+              <div className="text-2xl font-semibold tabular-nums text-teal-700 dark:text-teal-300">
+                {money(unbilled.availableToBill.amount)}
+              </div>
+              {unbilled.availableToBill.basis === 'contract' ? (
+                <div className="text-xs text-slate-500 dark:text-slate-400">
+                  {t('contractRemaining', {
+                    contract: money(unbilled.availableToBill.contractValue),
+                    invoiced: money(unbilled.availableToBill.invoicedToDate),
+                  })}
+                </div>
+              ) : null}
+            </>
+          )}
           <div className="text-xs text-slate-500 dark:text-slate-400">
             {t('unbilledDetail', {
               entries: unbilled.timeEntryCount,

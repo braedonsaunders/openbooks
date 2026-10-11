@@ -1209,6 +1209,7 @@
     "createBill": "Abführungsrechnung erstellen",
     "createAnother": "Weitere Rechnung erstellen",
     "billCreated": "Rechnungsentwurf {number} erstellt. Prüfen und buchen Sie ihn in den Kreditoren.",
+    "applyPeriodFirst": "Wenden Sie oben den Zeitraum an, um Rechnungen dafür zu erstellen.",
     "dueOn": "Fällig am {dueDate} · {authority}",
     "apNote": "Abführungsrechnungen sind gewöhnliche Lieferantenrechnungen:",
     "apLink": "Kreditorenrechnungen öffnen",

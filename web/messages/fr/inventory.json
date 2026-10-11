@@ -281,7 +281,7 @@
     },
     "secondCount": "Enregistrer le second comptage",
     "secondReason": "Observation du second comptage",
-    "secondReasonHint": "Si le second comptage diffère du premier, expliquez l'écart. Sinon, vous pouvez annuler cette demande de motif."
+    "secondReasonHint": "Le second comptage diffère du premier. Expliquez l'écart (au moins 5 caractères) pour qu'il soit enregistré avec ce comptage."
   },
   "create": {
     "subsidiary": "Filiale propriétaire",

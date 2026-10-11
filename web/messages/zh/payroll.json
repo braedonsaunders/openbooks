@@ -1209,6 +1209,7 @@
     "createBill": "创建代缴账单",
     "createAnother": "再创建一张账单",
     "billCreated": "账单草稿 {number} 已创建。请在应付账款中复核并过账。",
+    "applyPeriodFirst": "请先应用上方的期间，再为其创建账单。",
     "dueOn": "{dueDate} 到期 · {authority}",
     "apNote": "代缴账单是普通的供应商账单:",
     "apLink": "打开应付账单",

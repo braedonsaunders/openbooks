@@ -1209,6 +1209,7 @@
     "createBill": "Crear factura de remesa",
     "createAnother": "Crear otra factura",
     "billCreated": "Borrador de factura {number} creado. Revíselo y contabilícelo en cuentas por pagar.",
+    "applyPeriodFirst": "Aplique el período de arriba para crear facturas para él.",
     "dueOn": "Vence el {dueDate} · {authority}",
     "apNote": "Las facturas de remesa son facturas de proveedor ordinarias:",
     "apLink": "abrir facturas de proveedor",

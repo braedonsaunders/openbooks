@@ -42,6 +42,7 @@ const { NextIntlClientProvider } = await import("next-intl");
 const messages = (await import("../../../../messages/en")).default;
 const { MoneyProvider } = await import("../../../../components/money-provider");
 const { BillingSection } = await import("./BillingSection");
+const { renderToStaticMarkup } = await import("react-dom/server");
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
@@ -67,7 +68,14 @@ const REQUEST = {
 function props() {
   return {
     projectId: "22222222-2222-4222-8222-222222222222",
-    unbilled: { revenue: "0", cost: "0", hours: 0, timeEntryCount: 0, costLineCount: 0 },
+    unbilled: {
+      revenue: "0",
+      cost: "0",
+      hours: 0,
+      timeEntryCount: 0,
+      costLineCount: 0,
+      availableToBill: { basis: "rates" as const, amount: "0" },
+    },
     requests: [{ ...REQUEST }],
     fieldTickets: [],
     invoicing: {
@@ -176,4 +184,43 @@ test("a created invoice navigates to its edit page", async (t) => {
   };
   await click(createInvoiceButton(drawer.host));
   assert.equal(pushed, "/ar/invoices?doc=doc-9&mode=edit");
+});
+
+function renderBanner(availableToBill: unknown): string {
+  const base = props();
+  return renderToStaticMarkup(
+    <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+      <MoneyProvider currency="USD">
+        <BillingSection
+          {...base}
+          unbilled={{ ...base.unbilled, availableToBill: availableToBill as never }}
+        />
+      </MoneyProvider>
+    </NextIntlClientProvider>,
+  );
+}
+
+test("a fixed-price project shows the contract remaining, never time at rates", () => {
+  const html = renderBanner({
+    basis: "contract",
+    amount: "54500.0000",
+    contractValue: "100000.0000",
+    invoicedToDate: "45500.0000",
+  });
+  assert.ok(html.includes("$54,500.00"), "the contract remaining is the banner figure");
+  assert.ok(html.includes(messages.projects.billing.contractRemaining.replace("{contract}", "$100,000.00").replace("{invoiced}", "$45,500.00")));
+  assert.ok(!html.includes("$54,000.00"), "the valued-work figure never shows for a fixed-price contract");
+});
+
+test("a fixed-price project without a contract value names the remedy instead of showing zero", () => {
+  const html = renderBanner({ basis: "contract_unset", invoicedToDate: "0.0000" });
+  assert.ok(html.includes(messages.projects.billing.contractUnset));
+  assert.ok(html.includes(messages.projects.billing.contractUnsetRemedy));
+  assert.ok(!html.includes("$0.00"), "an unknown remaining amount is never a zero balance");
+});
+
+test("time-and-materials projects keep the valued-work figure", () => {
+  const html = renderBanner({ basis: "rates", amount: "54000.0000" });
+  assert.ok(html.includes("$54,000.00"));
+  assert.ok(!html.includes(messages.projects.billing.contractRemaining.split(" ")[0]));
 });

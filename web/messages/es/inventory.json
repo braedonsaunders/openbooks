@@ -281,7 +281,7 @@
     },
     "secondCount": "Guardar segundo conteo",
     "secondReason": "Observación del segundo conteo",
-    "secondReasonHint": "Si el segundo conteo difiere del primero, explique la diferencia. En caso contrario, puede cancelar este mensaje."
+    "secondReasonHint": "El segundo conteo difiere del primero. Explique la diferencia (al menos 5 caracteres) para registrarla con este conteo."
   },
   "create": {
     "subsidiary": "Filial propietaria",

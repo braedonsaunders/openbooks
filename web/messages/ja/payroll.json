@@ -1209,6 +1209,7 @@
     "createBill": "納付請求書を作成",
     "createAnother": "別の請求書を作成",
     "billCreated": "請求書ドラフト {number} を作成しました。買掛金で確認・転記してください。",
+    "applyPeriodFirst": "上の期間を適用してから請求書を作成してください。",
     "dueOn": "納期限 {dueDate} · {authority}",
     "apNote": "納付請求書は通常の仕入請求書です:",
     "apLink": "買掛請求書を開く",

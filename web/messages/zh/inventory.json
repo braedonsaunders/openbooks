@@ -281,7 +281,7 @@
     },
     "secondCount": "保存第二次盘点",
     "secondReason": "第二次盘点实测",
-    "secondReasonHint": "如果第二次盘点与第一次不同，请说明差异原因；否则可以取消此原因输入。"
+    "secondReasonHint": "第二次盘点与第一次不同。请说明差异原因（至少5个字符），以便与本次盘点一并记录。"
   },
   "create": {
     "subsidiary": "所属子公司",

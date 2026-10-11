@@ -113,6 +113,84 @@ test('bill creation refuses an unapplied date draft', async (t) => {
     await tick()
   })
   assert.deepEqual(requests, [], 'an unapplied date draft never bills')
+  assert.ok(
+    document.body.textContent?.includes(messages.remittances.applyPeriodFirst),
+    'the unapplied draft names the remedy beside the bill action',
+  )
+})
+
+test('browser navigation to another applied period resyncs the draft and bills that period', async (t) => {
+  const group: RemittanceGroup = {
+    partyId: '11111111-1111-4111-8111-111111111111',
+    partyName: 'Receiver General',
+    filingAccount: { id: '22222222-2222-4222-8222-222222222222', accountNumber: null, name: null, remitterType: null },
+    hasUnknownFilingAccount: false,
+    hasEntitylessAccruals: false,
+    regionalCalendar: null,
+    vendorKeys: [],
+    schedule: null,
+    provinces: ['ON'],
+    components: [],
+    total: '0.00',
+    currency: 'CAD',
+    translated: false,
+    slices: [],
+    grossPayroll: '0.00',
+    employeeCount: 1,
+    existingBills: [],
+  }
+  const host = document.createElement('div')
+  document.body.appendChild(host)
+  const root = createRoot(host)
+  t.after(async () => {
+    await act(async () => root.unmount())
+    host.remove()
+  })
+  const view = (from: string, to: string) => (
+    <NextIntlClientProvider locale="en-CA" timeZone="UTC" messages={catalogMessages}>
+      <MoneyProvider currency="CAD">
+        <RemittancesView groups={[group]} from={from} to={to} canCreate />
+      </MoneyProvider>
+    </NextIntlClientProvider>
+  )
+  await act(async () => {
+    root.render(view('2026-07-01', '2026-07-31'))
+    await tick()
+  })
+  // Back navigation re-renders the same mounted view with an earlier applied period.
+  await act(async () => {
+    root.render(view('2026-06-01', '2026-06-30'))
+    await tick()
+  })
+  const from = document.querySelector('input[name="from"]') as HTMLInputElement | null
+  assert.equal(from?.value, '2026-06-01', 'the date fields show the applied period')
+  const create = [...document.querySelectorAll('button')].find((button) =>
+    button.textContent?.includes(messages.remittances.createBill),
+  )
+  assert.ok(create, 'the bill action is available')
+  assert.equal(create.disabled, false, 'a resynced draft does not disable the bill action')
+  assert.equal(document.body.textContent?.includes(messages.remittances.applyPeriodFirst), false)
+
+  const requests: { body: unknown }[] = []
+  const priorFetch = globalThis.fetch
+  globalThis.fetch = (async (_input: unknown, init?: RequestInit) => {
+    requests.push({ body: JSON.parse(String(init?.body)) })
+    return Response.json({ documentNumber: 'RB-105' })
+  }) as typeof fetch
+  t.after(() => { globalThis.fetch = priorFetch })
+  await act(async () => {
+    create.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await tick()
+  })
+  assert.equal(requests.length, 1)
+  assert.deepEqual(requests[0]!.body, {
+    action: 'create-bill',
+    partyId: group.partyId,
+    filingAccountId: group.filingAccount.id,
+    subsidiaryId: null,
+    from: '2026-06-01',
+    to: '2026-06-30',
+  })
 })
 
 test('refused remittance view renders an alert and date form, without an empty balance or bill action', () => {

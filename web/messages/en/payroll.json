@@ -1209,6 +1209,7 @@
     "createBill": "Create remittance bill",
     "createAnother": "Create another bill",
     "billCreated": "Draft bill {number} created. Review and post it in AP.",
+    "applyPeriodFirst": "Apply the period above to create bills for it.",
     "dueOn": "Due {dueDate} · {authority}",
     "apNote": "Remittance bills are ordinary vendor bills:",
     "apLink": "open AP bills",

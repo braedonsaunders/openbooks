@@ -11,8 +11,10 @@ import test from 'node:test'
 const stateKey = Symbol.for('openbooks.tax-view-grants-test')
 interface ViewState {
   grants: Set<string>
+  filingCount: number
+  failedCount: number
 }
-const viewState: ViewState = { grants: new Set() }
+const viewState: ViewState = { grants: new Set(), filingCount: 0, failedCount: 0 }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = viewState
 
 function sqlText(query: unknown): string {
@@ -80,7 +82,9 @@ const mockSources = new Map<string, string>([
         async execute(query) {
           const text = (${sqlText.toString()})(query)
           if (text.includes('where id')) return { rows: [${JSON.stringify(FILING_ROW)}] }
-          if (text.includes('count(*)')) return { rows: [{ count: 0 }] }
+          const state = globalThis[Symbol.for('openbooks.tax-view-grants-test')]
+          if (text.includes('count(*)') && text.includes('tax_filings')) return { rows: [{ count: state.filingCount }] }
+          if (text.includes('count(*)')) return { rows: [{ count: state.failedCount }] }
           return { rows: [] }
         },
       }
@@ -171,5 +175,17 @@ test('mark-filed follows the filing grant on the history drawer', async () => {
     reset(grants)
     const data = await loadTax({ filing: '11111111-1111-4111-8111-111111111111' })
     assert.equal(data.drawer?.canFile, expected)
+  }
+})
+
+test('the History badge counts the filings the list shows; Activity counts failed commits', async () => {
+  viewState.filingCount = 2
+  viewState.failedCount = 1
+  reset(['reports.read'])
+  for (const sp of [{}, { tab: 'history' }]) {
+    const data = await loadTax(sp)
+    assert.equal(data.tabs.find((tab) => tab.key === 'history')?.count, 2)
+    assert.equal(data.tabs.find((tab) => tab.key === 'activity')?.count, 1)
+    assert.equal(data.history.total, 2)
   }
 })

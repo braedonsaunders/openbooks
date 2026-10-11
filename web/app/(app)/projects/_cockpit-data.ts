@@ -7,6 +7,7 @@ import { resolveProjectFinancials } from '../../../lib/project-financials'
 import { loadProjectType } from '../../../lib/project-type'
 import { listBillableFieldTickets, listBillingRequests } from '../../../lib/billing-requests'
 import { resolveInvoicingPreference } from '../../../lib/invoicing-preference'
+import { availableToBill } from '../../../lib/project-available-to-bill'
 // HR-20 begin: crew-today rows for the cockpit.
 import { crewToday } from '@openbooks/engine/hrm/field-time/reads'
 // HR-20 end
@@ -72,11 +73,14 @@ export async function loadProjectCockpit(
   // moving the project between the header read and these reads. Unknown or
   // out-of-scope projects read as absent, exactly like the header loader.
   const scope = options.allowedSubsidiaryIds ?? null;
-  const locked = await db.execute(sql`
-    select id from projects where id = ${projectId} and org_id = ${orgId}
+  // The contract value is read raw (nullable): a fixed-price project with no
+  // contract must refuse by name, not be coerced to zero.
+  const locked = await db.execute<{ contractValue: string | null }>(sql`
+    select id, contract_value::text as "contractValue" from projects where id = ${projectId} and org_id = ${orgId}
       ${subsidiaryVisibleFilter(sql`subsidiary_id`, scope)}
       for share`);
   if (!locked.rows[0]) return null;
+  const contractValue = locked.rows[0].contractValue ?? null;
   const [projectType, fieldTicketsEnabled, equipmentEnabled, inventoryEnabled, today, fieldTimeEnabled, primaryBookId] = await Promise.all([
     loadProjectType(orgId, projectId),
     isFeatureEnabled(orgId, 'fieldTickets'),
@@ -218,7 +222,17 @@ export async function loadProjectCockpit(
     // HR-20: crew-today rows ride alongside the time summary.
     crewToday: crewTodayRows,
     showFieldTime: fieldTimeEnabled,
-    unbilled,
+    unbilled: {
+      ...unbilled,
+      // The banner's figure follows the billing method: rate-valued work for
+      // time-and-materials, contract remaining for fixed price.
+      availableToBill: availableToBill({
+        billingMethod: projectType.billingMethod,
+        ratesRevenue: unbilled.revenue,
+        contractValue,
+        invoicedToDate: String(financials.measures.invoiced_to_date ?? '0'),
+      }),
+    },
     billingRequests: billingRequests as ProjectCockpitData['billingRequests'],
     billableFieldTickets: billableFieldTickets as ProjectCockpitData['billableFieldTickets'],
     invoicing: {

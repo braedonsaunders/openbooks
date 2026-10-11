@@ -281,7 +281,7 @@
     },
     "secondCount": "Zweite Zählung speichern",
     "secondReason": "Zweite Zählbeobachtung",
-    "secondReasonHint": "Wenn die zweite Zählung von der ersten abweicht, begründen Sie die Differenz. Andernfalls können Sie diese Abfrage abbrechen."
+    "secondReasonHint": "Die zweite Zählung weicht von der ersten ab. Erklären Sie die Abweichung (mindestens 5 Zeichen), damit sie mit dieser Zählung erfasst wird."
   },
   "create": {
     "subsidiary": "Zuständige Tochtergesellschaft",

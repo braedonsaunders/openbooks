@@ -17,6 +17,7 @@ import { useDirtyClose } from '../../../../lib/use-dirty-close'
 import { optionalScanResolver } from '../../../../lib/scan'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import type { StockCountDetail, StockCountSummary } from '@openbooks/engine/inventory/stock-count-queries'
+import { secondObservationNeedsReason } from './observation-reason'
 
 const field = 'space-y-1.5'
 const OPEN_NEW_COUNT = 'openbooks:inventory-new-count'
@@ -644,6 +645,26 @@ function CountDetailBody({
   const itemLabel = (id: string) => itemOptions.find((o) => o.value === id)?.label ?? id
   const locLabel = (id: string) => stockLocationOptions.find((o) => o.value === id)?.label ?? id
 
+  // A second observation that agrees with the first is requested as is. One
+  // that differs is explained first: the reason is required, and cancelling
+  // the prompt abandons the observation (the engine refuses a differing second
+  // count without a reason, so proceeding would only defer that refusal).
+  async function observeCount(line: StockCountDetail['lines'][number]) {
+    const quantity = (counted[line.id] ?? '').trim()
+    let reason: string | null = null
+    if (line.secondCountRequired && secondObservationNeedsReason(quantity, line.countedQuantity)) {
+      reason = await promptDialog({ title: t('counts.secondReason'), message: t('counts.secondReasonHint') })
+      if (reason === null) return
+    }
+    await execution.prepare({
+      action: 'count',
+      lineId: line.id,
+      quantity,
+      observation: line.secondCountRequired ? 'second' : 'first',
+      ...(reason ? { reason } : {}),
+    })
+  }
+
   async function run(label: string, body: Record<string, unknown>) {
     setBusy(true)
     setPostError(null)
@@ -710,10 +731,7 @@ function CountDetailBody({
             <Button
               size="sm"
               disabled={busy || execution.busy || !(counted[l.id] ?? '').trim()}
-              onClick={() =>
-                void (async()=>{ const reason=l.secondCountRequired?await promptDialog({title:t('counts.secondReason'),message:t('counts.secondReasonHint')}):null; await execution.prepare({action:'count',lineId:l.id,quantity:(counted[l.id]??'').trim(),
-                  observation:l.secondCountRequired?'second':'first',...(reason?{reason}:{})}); })()
-              }
+              onClick={() => void observeCount(l)}
             >
               {l.secondCountRequired?t('counts.secondCount'):t('counts.actions.save')}
             </Button>
