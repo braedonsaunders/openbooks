@@ -1,0 +1,1 @@
+Additive: custom roles with employee holders and no self-service grant gain the employee self-service baseline (hrm.self.read, hrm.self.request, hrm.leave.request); one audit row per widened role, built-in roles untouched.
