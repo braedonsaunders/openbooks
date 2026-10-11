@@ -406,6 +406,10 @@ export const DSAR_EXCLUDED_TABLES: readonly DsarExcludedTable[] = [
     table: "party_subsidiaries",
     reason: "org membership administration; platform remit.",
   },
+  {
+    table: "intercompany_representing_parties",
+    reason: "intercompany configuration naming the customer and vendor that stand for a legal entity; finance remit.",
+  },
 ];
 
 export interface DsarCoverageManifest {

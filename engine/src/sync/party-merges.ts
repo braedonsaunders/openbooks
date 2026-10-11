@@ -386,6 +386,19 @@ const GUARDED_PARTY_REFS: readonly GuardedPartyRef[] = [
     conflict: "s.subsidiary_id = d.subsidiary_id",
   },
   {
+    // A party represents at most one subsidiary as its active customer. A
+    // survivor that already represents one keeps it; the absorbed party's
+    // representation stays with the absorbed party for review.
+    table: "intercompany_representing_parties",
+    column: "customer_party_id",
+    conflict: "s.org_id = d.org_id and s.is_active and d.is_active",
+  },
+  {
+    table: "intercompany_representing_parties",
+    column: "vendor_party_id",
+    conflict: "s.org_id = d.org_id and s.is_active and d.is_active",
+  },
+  {
     table: "pay_run_adjustments",
     column: "employee_party_id",
     conflict:

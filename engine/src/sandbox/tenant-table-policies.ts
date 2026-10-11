@@ -812,6 +812,16 @@ export const TENANT_TABLE_POLICIES = {
   "webhook_deliveries": "skip:no-copy",
   "webhook_endpoints": "skip:no-copy",
   "webhook_events": "skip:no-copy",
+  "intercompany_representing_parties": "clone:catalog-uuid-rebase",
+  "intercompany_transaction_pairs": "clone:catalog-uuid-rebase",
+  "intercompany_transfer_pricing_policies": "clone:catalog-uuid-rebase",
+  "intercompany_fulfillment_charges": "clone:catalog-uuid-rebase",
+  // Netting runs reference intercompany pairs, which sandboxes configure
+  // afresh, and fund transfers are the source environment's settlement
+  // evidence. The posted ledger effects are copied with the journal.
+  "intercompany_netting_runs": "skip:no-copy",
+  "intercompany_netting_lines": "skip:no-copy",
+  "intercompany_fund_transfers": "skip:no-copy",
 } as const satisfies Record<string, "clone:catalog-uuid-rebase" | "clone:parent-filter" | "skip:no-copy">;
 
 export type TenantTablePolicy = (typeof TENANT_TABLE_POLICIES)[keyof typeof TENANT_TABLE_POLICIES];
