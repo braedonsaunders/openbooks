@@ -4,7 +4,7 @@ import { Plus, X } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { Button, Input, SearchSelect, Select } from '@openbooks/ui'
 import type { FlowSubjectProfile, RecipientTarget } from '@openbooks/forms-core'
-import type { OrgRole, OrgUser } from './graph'
+import { defaultTargetRow, type OrgRole, type OrgUser } from './graph'
 
 /**
  * Assignee / recipient target editors. One row = one target; the type select
@@ -145,7 +145,7 @@ export function TargetsEditor({
   allowEmail: boolean
   addLabel: string
 }) {
-  const rows = value.length > 0 ? value : [{ type: 'submitter' } as RecipientTarget]
+  const rows = value.length > 0 ? value : [defaultTargetRow(profile, allowEmail)]
   return (
     <div className="space-y-2">
       {rows.map((target, i) => (
@@ -160,7 +160,7 @@ export function TargetsEditor({
           allowEmail={allowEmail}
         />
       ))}
-      <Button variant="outline" size="sm" onClick={() => onChange([...rows, { type: 'submitter' }])}>
+      <Button variant="outline" size="sm" onClick={() => onChange([...rows, defaultTargetRow(profile, allowEmail)])}>
         <Plus size={13} /> {addLabel}
       </Button>
     </div>

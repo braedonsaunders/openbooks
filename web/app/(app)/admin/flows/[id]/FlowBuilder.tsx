@@ -42,6 +42,7 @@ import {
 } from '@openbooks/forms-core'
 import {
   CANVAS_CONNECTION_MODE,
+  autoWireEdge,
   buildConnectEdge,
   canAddTrigger,
   defaultNodeData,
@@ -198,11 +199,20 @@ export default function FlowBuilder({
       toast.error(t('builder.singleTrigger'))
       return
     }
+    // A palette-added step arrives wired after the selected node (or the
+    // tail of a linear graph) through the single edge path — the canvas no
+    // longer needs a manual drag before the step can run.
     const id = newId(kind)
-    setNodes((ns) => [
-      ...ns.map((n) => ({ ...n, selected: false })),
-      { id, type: kind, position: nextPosition(kind, ns), data: defaultNodeData(kind, profile), selected: true },
-    ])
+    const node: FlowNode = {
+      id,
+      type: kind,
+      position: nextPosition(kind, nodes),
+      data: defaultNodeData(kind, profile),
+      selected: true,
+    }
+    const edge = autoWireEdge(id, [...nodes, node], edges, selectedNodeId ?? undefined, edgeLabels)
+    setNodes([...nodes.map((n) => ({ ...n, selected: false })), node])
+    if (edge) setEdges((eds) => addEdge(edge, eds))
     setSelectedNodeId(id)
     markDirty()
   }

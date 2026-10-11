@@ -5,6 +5,7 @@ import type {
   AutomationGraph,
   AutomationNode,
   FlowSubjectProfile,
+  RecipientTarget,
   TriggerData,
   TriggerKind,
 } from '@openbooks/forms-core'
@@ -235,6 +236,18 @@ export function buildAction(kind: ActionKind, profile: FlowSubjectProfile): Acti
   }
 }
 
+/**
+ * The default approver for a fresh approval gate: ONE role, never a
+ * broadcast and never the submitter (who could sign off their own record).
+ * The org's admins own the first approval until the author says otherwise —
+ * the same default the one-step setup uses — falling back to the profile's
+ * first role when no admin role exists.
+ */
+export function defaultGateRole(profile: FlowSubjectProfile): string {
+  if (profile.roles?.includes('admin')) return 'admin'
+  return profile.roles?.[0] ?? 'approver'
+}
+
 /** Default payload for a node freshly dropped from the palette. */
 export function defaultNodeData(kind: NodeKind, profile: FlowSubjectProfile): NodeData {
   switch (kind) {
@@ -249,11 +262,69 @@ export function defaultNodeData(kind: NodeKind, profile: FlowSubjectProfile): No
         kind: 'gate',
         gate: {
           title: 'Approval',
-          assignees: [{ type: 'role', role: profile.roles?.[0] ?? 'approver' }],
+          assignees: [{ type: 'role', role: defaultGateRole(profile) }],
           mode: 'any',
+          preventSelfApproval: true,
         },
       }
   }
+}
+
+/**
+ * Auto-wire a palette-added node: connect it after the anchor (the selected
+ * node, or the tail of a linear graph) through the single edge path, so a
+ * fresh node arrives working instead of orphaned. Branch anchors wire from
+ * their first unused handle, so adding after a condition takes the open
+ * branch instead of doubling one. Triggers are entry points and never wire
+ * after anything; a graph with no tail wires nothing.
+ */
+export function autoWireEdge(
+  newId: string,
+  nodes: FlowNode[],
+  edges: Edge[],
+  anchorId: string | undefined,
+  labels: Record<string, string>,
+): Edge | null {
+  const fresh = nodes.find((n) => n.id === newId)
+  if (!fresh || fresh.data.kind === 'trigger') return null
+  const anchor =
+    nodes.find((n) => n.id === anchorId && n.id !== newId) ?? tailNode(newId, nodes, edges)
+  if (!anchor) return null
+  const used = new Set(
+    edges.filter((e) => e.source === anchor.id).map((e) => e.sourceHandle ?? 'next'),
+  )
+  const handles = connectHandles(anchor.data.kind)
+  const handle = handles.find((h) => !used.has(h)) ?? handles[0]
+  if (!handle) return null
+  return buildConnectEdge({ source: anchor.id, sourceHandle: handle, target: newId }, nodes, labels)
+}
+
+/**
+ * The tail of the canvas: a step with no outgoing edge, furthest right on
+ * ties. A linear graph has exactly one, so palette adds extend the chain;
+ * a branched graph extends its rightmost open end.
+ */
+function tailNode(excludeId: string, nodes: FlowNode[], edges: Edge[]): FlowNode | null {
+  const open = nodes.filter(
+    (n) => n.id !== excludeId && !edges.some((e) => e.source === n.id),
+  )
+  if (open.length === 0) return null
+  return open.reduce((a, b) => (b.position.x > a.position.x ? b : a))
+}
+
+/**
+ * The blank target row: approval gates start at the org's admins — one
+ * role, never the submitter, who could sign off their own record. Message
+ * recipients keep the submitter (the natural audience for a status email).
+ * `allowEmail=false` is exactly the gate editor, so the flag — not the
+ * caller — decides which default applies.
+ */
+export function defaultTargetRow(
+  profile: FlowSubjectProfile,
+  allowEmail: boolean,
+): RecipientTarget {
+  if (!allowEmail) return { type: 'role', role: defaultGateRole(profile) }
+  return { type: 'submitter' }
 }
 
 export function firstFieldKey(profile: FlowSubjectProfile): string {
