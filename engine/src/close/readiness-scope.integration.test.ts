@@ -56,8 +56,11 @@ test('scoped close ignores another entity drafts and assets but retains its own 
     const foreignDraft = await journal(org,actor,other,'10','USD',false);
     await db.execute(sql`update journal_entries set subsidiary_id=${org.subsidiaryId} where id=${foreignDraft}`);
     const doc = randomUUID();
+    // Approved so the document belongs to the assignable population: the
+    // scope claim below must not depend on the old over-broad count that
+    // swept drafts into the assignment backlog.
     await db.execute(sql`insert into documents (id,org_id,subsidiary_id,kind,status,document_number,document_date,currency,subtotal,tax_total,total)
-      values (${doc},${org.orgId},${other},'vendor_bill','draft',${doc},${org.date},'USD',10,0,10)`);
+      values (${doc},${org.orgId},${other},'vendor_bill','approved',${doc},${org.date},'USD',10,0,10)`);
     const category=randomUUID(), asset=randomUUID(), schedule=randomUUID();
     await db.execute(sql`insert into asset_categories (id,org_id,name,asset_account_id,accumulated_depreciation_account_id,depreciation_expense_account_id)
       values (${category},${org.orgId},'Readiness asset',${org.accounts.bank},${org.accounts.clearing},${org.accounts.cogs})`);
@@ -101,11 +104,36 @@ test('posting-period-missing ignores period-less documents dated outside the run
   const {org,actor}=await setup();
   try {
     const outside = randomUUID(), inside = randomUUID();
+    // The inside document is approved so the date bound is what excludes
+    // the outside one: drafts never belong to the assignment row set.
     await db.execute(sql`insert into documents (id,org_id,subsidiary_id,kind,status,document_number,document_date,currency,subtotal,tax_total,total)
       values (${outside},${org.orgId},${org.subsidiaryId},'vendor_bill','approved',${outside},'2026-01-15','CAD',10,0,10),
-             (${inside},${org.orgId},${org.subsidiaryId},'vendor_bill','draft',${inside},${org.date},'CAD',10,0,10)`);
+             (${inside},${org.orgId},${org.subsidiaryId},'vendor_bill','approved',${inside},${org.date},'CAD',10,0,10)`);
     const runId=await run(org,actor);
     assert.equal((await counts(org.orgId,runId))['posting-period-missing'],1);
+  } finally {await dropScratchOrg(org.orgId);}
+});
+
+test('posting-period-missing counts the assignment row set while drafts-open keeps unapproved work', {skip:!enabled}, async () => {
+  const {org,actor}=await setup();
+  try {
+    // Only the approved unassigned bill can ever take a period on the
+    // assignment page, so only it may count as missing. The draft and the
+    // pending bill stay open-draft work, and the approved bill that already
+    // holds this period stays open-draft work too until it posts. (A posted
+    // bill always carries its period by storage constraint, so posting
+    // derives the period and assignment is moot — there is no posted row
+    // left for either population.)
+    const ids = [randomUUID(), randomUUID(), randomUUID(), randomUUID()];
+    await db.execute(sql`insert into documents (id,org_id,subsidiary_id,kind,status,document_number,document_date,posting_period_id,currency,subtotal,tax_total,total)
+      values (${ids[0]},${org.orgId},${org.subsidiaryId},'vendor_bill','draft',${ids[0]},${org.date},null,'CAD',10,0,10),
+             (${ids[1]},${org.orgId},${org.subsidiaryId},'vendor_bill','pending_approval',${ids[1]},${org.date},null,'CAD',10,0,10),
+             (${ids[2]},${org.orgId},${org.subsidiaryId},'vendor_bill','approved',${ids[2]},${org.date},null,'CAD',10,0,10),
+             (${ids[3]},${org.orgId},${org.subsidiaryId},'vendor_bill','approved',${ids[3]},${org.date},${org.periodId},'CAD',10,0,10)`);
+    const runId=await run(org,actor);
+    const got=await counts(org.orgId,runId);
+    assert.equal(got['posting-period-missing'],1,'only the approved unassigned bill matches the assignment row set');
+    assert.equal(got['drafts-open'],3,'unapproved and assigned-but-unposted bills stay open-draft work');
   } finally {await dropScratchOrg(org.orgId);}
 });
 

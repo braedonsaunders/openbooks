@@ -116,8 +116,11 @@ export const NON_POSTING_DOCUMENT_KINDS: readonly string[] = ["quote", "sales_or
 export function closeModuleForDocument(kind: string): CloseModule {
   const decided = (DOCUMENT_CLOSE_MODULES as Record<string, CloseModule>)[kind];
   if (!decided) {
+    // Operator copy at the source: this refusal escapes through posting,
+    // void, replay and sync-deletion toasts, so the registry name must never
+    // reach the screen on any of those paths.
     throw new CloseError(
-      `document kind "${kind}" has no period-close module decision; add it to DOCUMENT_CLOSE_MODULES and web/lib/document-kinds.ts`,
+      `document kind "${kind}" is not configured for period close; your system administrator must add a period-close decision for this kind`,
     );
   }
   return decided;

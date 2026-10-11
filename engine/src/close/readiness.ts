@@ -245,13 +245,23 @@ export async function readinessChecks(
         (select count(*) from documents d
           where d.org_id = ${orgId} and d.status in ('draft','pending_approval','approved')
             and d.kind not in (${nonPostingKindList()})
-            and d.posting_period_id = ${ctx.period_id} and ${documentScope}) as count`),
+            -- Drafts and pending approvals without a period need approval
+            -- before they can ever take one, so they stay open-draft work
+            -- here instead of vanishing from the gate.
+            and (d.posting_period_id = ${ctx.period_id}
+              or (d.posting_period_id is null and d.status in ('draft','pending_approval')))
+            and ${documentScope}) as count`),
       db.execute(sql`
       select count(*) as count
         from documents d
        where d.org_id = ${orgId}
          -- Live entries only: a voided document dated in the period needs no posting period assigned.
-         and d.status in ('draft','pending_approval','approved','posted')
+         -- Approved only, matching the assignment preview row set exactly:
+         -- drafts and pending approvals cannot take a period yet (they stay
+         -- in drafts-open above), and posted documents derived theirs at
+         -- post time, so counting them here names a backlog the assignment
+         -- page can never clear.
+         and d.status = 'approved'
          and d.kind not in (${nonPostingKindList()})
          and d.posting_period_id is null
          and d.document_date between ${ctx.starts_on} and ${ctx.ends_on}

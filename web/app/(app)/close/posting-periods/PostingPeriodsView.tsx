@@ -39,10 +39,10 @@ export function PostingPeriodsView({
 }) {
   const t = useTranslations("close");
   const tc = useTranslations("common");
-  // Every document kind the assignment preview can return (each decided
-  // kind in DOCUMENT_CLOSE_MODULES outside NON_POSTING_DOCUMENT_KINDS, plus
-  // the non-posting kinds kept for defense): an unmapped kind falls back to
-  // the shared "Unknown value" label instead of a raw kind string.
+  // Every decided document kind, so a preview row never renders the
+  // "Unknown value" fallback for a kind the close model already knows. Only
+  // a kind no registry decided — which the preview blocks with operator
+  // copy — can still fall back.
   const transactionKindLabels = {
     vendor_bill: tc("transactionTypes.vendorBill"),
     vendor_credit: tc("transactionTypes.vendorCredit"),
@@ -67,6 +67,9 @@ export function PostingPeriodsView({
     sales_order: tc("transactionTypes.salesOrder"),
     purchase_order: tc("transactionTypes.purchaseOrder"),
     quote: tc("transactionTypes.estimate"),
+    pick_list: tc("transactionTypes.pickList"),
+    shipment: tc("transactionTypes.shipment"),
+    field_ticket: tc("transactionTypes.fieldTicket"),
     rma: tc("transactionTypes.returnAuthorization"),
   } satisfies Record<string, string>;
   const [rows, setRows] = useState<Candidate[] | null>(null);
@@ -91,7 +94,10 @@ export function PostingPeriodsView({
             ),
           );
         }
-        const preview = (await response.json()) as { rows: Candidate[] };
+        const preview = (await response.json()) as { rows?: Candidate[] };
+        // A body without rows is a failed preview, not an empty table: fail
+        // loudly instead of crashing the table on undefined rows.
+        if (!Array.isArray(preview.rows)) throw new Error(t("postingPeriods.previewFailed"));
         setRows(preview.rows);
         setPreviewFailed(false);
         setPreviewError(null);
