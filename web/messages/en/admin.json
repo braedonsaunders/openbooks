@@ -1264,7 +1264,8 @@
       "purchasing": "Purchasing",
       "parties": "People & companies",
       "banking": "Banking",
-      "expenses": "Expense reports"
+      "expenses": "Expense reports",
+      "amortization": "Expense amortization"
     },
     "gl_read": "View journals and balances",
     "gl_manage": "Manage the chart of accounts",
@@ -1453,7 +1454,9 @@
     "purchase_orders_read": "View purchase orders and receipts",
     "purchase_orders_create": "Create, change and void purchase orders",
     "goods_receipts_create": "Receive goods against purchase orders",
-    "time_self": "Enter and submit own time"
+    "time_self": "Enter and submit own time",
+    "amortization_read": "View amortization schedules and reports",
+    "amortization_manage": "Run amortization and change schedules"
   },
   "ai": {
     "metaTitle": "AI providers",
@@ -3740,6 +3743,10 @@
         "title": "Job descriptions",
         "singularTitle": "Job description",
         "description": "Reusable posting content a new requisition starts from: title, employment type, pay range and description."
+      },
+      "expense-amortization-templates": {
+        "title": "Amortization Templates",
+        "description": "How prepaid and deferred expenses release to expense: method, term, deferral account and default destination. Effective-dated by code."
       }
     },
     "fields": {
@@ -4367,7 +4374,16 @@
       "compensationMin": "Pay minimum",
       "compensationMax": "Pay maximum",
       "compensationCurrency": "Pay currency",
-      "compensationBasis": "Pay basis"
+      "compensationBasis": "Pay basis",
+      "amortizationMethod": "Amortization method",
+      "amortizationTermSource": "Term from",
+      "amortizationPeriodCount": "Number of periods",
+      "amortizationPercentages": "Percentage table",
+      "amortizationPeriodRow": "Period {number}",
+      "amortizationAddPeriod": "Add period",
+      "amortizationPercent": "Percentage of the amount",
+      "amortizationDeferralAccount": "Deferral (prepaid) account",
+      "amortizationDestinationAccount": "Default destination account"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Days between the newest usable rate and the period end beyond which revaluation and consolidation refuse the rate. Closing rates count from the date of the period-end spot rate; average rates from the newest quote averaged. Default when no policy is set: 31 days.",
@@ -4546,7 +4562,15 @@
       "hrmJobDescriptionTitle": "The job title applicants see on the posting.",
       "hrmJobDescriptionKind": "For example full-time, part-time, seasonal or contract.",
       "hrmJobDescriptionPay": "Optional. Enter minimum, maximum, currency and basis together, or leave all four empty.",
-      "hrmJobDescriptionBody": "The posting text. New requisitions copy it, so editing it here never changes an existing opening."
+      "hrmJobDescriptionBody": "The posting text. New requisitions copy it, so editing it here never changes an existing opening.",
+      "amortizationTemplateCode": "Versions of a template share its code; the version in effect on a transaction’s posting date governs it.",
+      "amortizationEffectiveFrom": "Transactions posted on or after this date use this version. A version that is in use keeps its policy; add a later version to change it.",
+      "amortizationMethod": "Straight-line splits evenly by period; prorated gives partial first and last months a share of their days; exact days weighs each month by its service days; variable follows a percentage table.",
+      "amortizationTermSource": "Template periods amortize over the number of periods below from the line’s service start; service dates use the line’s own start and end.",
+      "amortizationPercentages": "One percentage per period, in order, summing to exactly 100.",
+      "amortizationPeriodOffset": "Periods to wait after the start before amortization begins; 0 starts in the first period.",
+      "amortizationDeferralAccount": "The current or other asset account the cost is held in until it amortizes.",
+      "amortizationDestinationAccount": "Blank amortizes each line into its own expense account."
     },
     "options": {
       "withholdingCondominiumPayer": "Condominium payer",
@@ -5356,6 +5380,16 @@
       "schedulePdfColorTreatment": {
         "subtle": "Subtle accents",
         "strong": "Strong fills"
+      },
+      "amortizationMethod": {
+        "straight_line": "Straight-line by period",
+        "prorated_first_last": "Prorated first and last period",
+        "exact_days": "Exact days",
+        "variable": "Variable percentages"
+      },
+      "amortizationTermSource": {
+        "template": "Template periods",
+        "service_dates": "Line service dates"
       }
     },
     "payroll": {
@@ -8055,6 +8089,14 @@
     "manufacturingSubcontract": {
       "title": "External manufacturing",
       "description": "Send components to a vendor, record processing services and return production onto the work order."
+    },
+    "expenseAmortization": {
+      "title": "Expense amortization",
+      "description": "Prepaid and deferred expenses from bill, journal and expense report lines amortized by period through schedules, with a close step and a reconciliation to the general ledger."
+    },
+    "expenseAmortizationAutoRun": {
+      "title": "Automatic amortization",
+      "description": "Posts due amortization periods on the scheduler as they end, without an operator run."
     }
   },
   "backupsManager": {

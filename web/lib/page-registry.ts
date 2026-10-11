@@ -76,6 +76,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/accounting/amortization': {
+    route: '/accounting/amortization',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/accounting/amortization/view')
+      return {
+        load: (input) => m.loadAmortization(input.searchParams ?? {}),
+        spec: (data) => m.amortizationSpec(data as never),
+      }
+    },
+  },
   '/accounts': {
     route: '/accounts',
     segments: [],

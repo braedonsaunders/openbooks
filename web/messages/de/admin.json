@@ -1275,7 +1275,8 @@
       "purchasing": "Einkauf",
       "parties": "Personen & Unternehmen",
       "banking": "Bankwesen",
-      "expenses": "Spesenabrechnungen"
+      "expenses": "Spesenabrechnungen",
+      "amortization": "Aufwandsabgrenzung"
     },
     "gl_read": "Journale und Salden anzeigen",
     "gl_manage": "Kontenplan verwalten",
@@ -1453,7 +1454,9 @@
     "purchase_orders_read": "Bestellungen und Wareneingänge anzeigen",
     "purchase_orders_create": "Bestellungen erstellen, ändern und stornieren",
     "goods_receipts_create": "Wareneingänge zu Bestellungen buchen",
-    "time_self": "Eigene Zeit erfassen und einreichen"
+    "time_self": "Eigene Zeit erfassen und einreichen",
+    "amortization_read": "Abgrenzungspläne und Berichte anzeigen",
+    "amortization_manage": "Auflösung ausführen und Pläne ändern"
   },
   "ai": {
     "metaTitle": "KI-Einstellungen",
@@ -3793,6 +3796,10 @@
         "title": "Stellenbeschreibungen",
         "singularTitle": "Stellenbeschreibung",
         "description": "Wiederverwendbare Ausschreibungsinhalte für neue Stellenanforderungen: Titel, Beschäftigungsart, Gehaltsspanne und Beschreibung."
+      },
+      "expense-amortization-templates": {
+        "title": "Abgrenzungsvorlagen",
+        "description": "Wie vorausbezahlte und abgegrenzte Aufwendungen aufgelöst werden: Methode, Laufzeit, Abgrenzungskonto und Standardzielkonto. Je Code mit Gültigkeitsdatum."
       }
     },
     "fields": {
@@ -4420,7 +4427,16 @@
       "compensationMin": "Gehalt Minimum",
       "compensationMax": "Gehalt Maximum",
       "compensationCurrency": "Gehaltswährung",
-      "compensationBasis": "Gehaltsbasis"
+      "compensationBasis": "Gehaltsbasis",
+      "amortizationMethod": "Auflösungsmethode",
+      "amortizationTermSource": "Laufzeit aus",
+      "amortizationPeriodCount": "Anzahl Perioden",
+      "amortizationPercentages": "Prozenttabelle",
+      "amortizationPeriodRow": "Periode {number}",
+      "amortizationAddPeriod": "Periode hinzufügen",
+      "amortizationPercent": "Anteil am Betrag in Prozent",
+      "amortizationDeferralAccount": "Abgrenzungskonto (aktive Rechnungsabgrenzung)",
+      "amortizationDestinationAccount": "Standard-Zielkonto"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Tage zwischen dem neuesten verwendbaren Kurs und dem Periodenende, ab denen Bewertung und Konsolidierung den Kurs ablehnen. Stichtagskurse zählen ab dem Datum des Kassakurses zum Periodenende, Durchschnittskurse ab der neuesten einbezogenen Notierung. Standard ohne Richtlinie: 31 Tage.",
@@ -4599,7 +4615,15 @@
       "hrmJobDescriptionTitle": "Der Stellentitel, den Bewerbende in der Ausschreibung sehen.",
       "hrmJobDescriptionKind": "Zum Beispiel Vollzeit, Teilzeit, saisonal oder befristet.",
       "hrmJobDescriptionPay": "Optional. Minimum, Maximum, Währung und Basis gemeinsam angeben oder alle vier leer lassen.",
-      "hrmJobDescriptionBody": "Der Ausschreibungstext. Neue Stellenanforderungen übernehmen eine Kopie; Änderungen hier wirken nicht auf bestehende Stellen."
+      "hrmJobDescriptionBody": "Der Ausschreibungstext. Neue Stellenanforderungen übernehmen eine Kopie; Änderungen hier wirken nicht auf bestehende Stellen.",
+      "amortizationTemplateCode": "Versionen einer Vorlage teilen ihren Code; maßgeblich ist die am Buchungsdatum gültige Version.",
+      "amortizationEffectiveFrom": "Ab diesem Datum gebuchte Vorgänge verwenden diese Version. Eine verwendete Version behält ihre Regeln; für Änderungen legen Sie eine spätere Version an.",
+      "amortizationMethod": "Linear verteilt gleichmäßig je Periode; anteilig gewichtet angebrochene erste und letzte Monate nach Tagen; taggenau gewichtet jeden Monat nach seinen Leistungstagen; variabel folgt einer Prozenttabelle.",
+      "amortizationTermSource": "Vorlagenperioden lösen über die unten angegebene Periodenzahl ab Leistungsbeginn der Position auf; Leistungsdaten nutzen Beginn und Ende der Position.",
+      "amortizationPercentages": "Ein Prozentsatz je Periode in Reihenfolge, zusammen genau 100.",
+      "amortizationPeriodOffset": "Perioden zwischen Beginn und erster Auflösung; 0 beginnt in der ersten Periode.",
+      "amortizationDeferralAccount": "Das Umlauf- oder sonstige Vermögenskonto, auf dem der Aufwand bis zur Auflösung steht.",
+      "amortizationDestinationAccount": "Leer lässt jede Position auf ihr eigenes Aufwandskonto auflösen."
     },
     "options": {
       "withholdingCondominiumPayer": "Wohnungseigentümergemeinschaft als Zahler",
@@ -5409,6 +5433,16 @@
       "schedulePdfColorTreatment": {
         "subtle": "Dezente Akzente",
         "strong": "Kräftige Flächen"
+      },
+      "amortizationMethod": {
+        "straight_line": "Linear je Periode",
+        "prorated_first_last": "Erste und letzte Periode anteilig",
+        "exact_days": "Taggenau",
+        "variable": "Variable Prozentsätze"
+      },
+      "amortizationTermSource": {
+        "template": "Vorlagenperioden",
+        "service_dates": "Leistungsdaten der Position"
       }
     },
     "bankFeeds": {
@@ -8055,6 +8089,14 @@
     "manufacturingSubcontract": {
       "title": "Externe Fertigung",
       "description": "Komponenten an Lieferanten senden, Bearbeitungsleistungen erfassen und Produktion auf den Fertigungsauftrag zurücknehmen."
+    },
+    "expenseAmortization": {
+      "title": "Aufwandsabgrenzung",
+      "description": "Vorausbezahlte und abgegrenzte Aufwendungen aus Eingangsrechnungen, Buchungssätzen und Spesenabrechnungen werden über Pläne periodenweise aufgelöst, mit Abschlussschritt und Abstimmung zum Hauptbuch."
+    },
+    "expenseAmortizationAutoRun": {
+      "title": "Automatische Auflösung",
+      "description": "Bucht fällige Auflösungsperioden über den Planer, sobald sie enden, ohne manuellen Lauf."
     }
   },
   "extensions": {

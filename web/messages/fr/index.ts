@@ -7,6 +7,7 @@ import accounts from './accounts.json'
 import admin from './admin.json'
 import agents from './agents.json'
 import allocations from './allocations.json'
+import amortization from './amortization.json'
 import analytics from './analytics.json'
 import ap from './ap.json'
 import apiDocs from './apiDocs.json'
@@ -88,6 +89,7 @@ export default {
   admin,
   agents,
   allocations,
+  amortization,
   analytics,
   ap,
   apiDocs,

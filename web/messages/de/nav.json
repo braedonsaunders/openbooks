@@ -165,7 +165,8 @@
     "manufacturing-mrp": "MRP-Läufe",
     "manufacturing-time": "Produktionszeiten",
     "manufacturing-quality": "Qualität",
-    "close-reopen-requests": "Wiedereröffnungsanträge"
+    "close-reopen-requests": "Wiedereröffnungsanträge",
+    "amortization": "Abgrenzungen"
   },
   "groups": {
     "manufacturing": "Fertigung",

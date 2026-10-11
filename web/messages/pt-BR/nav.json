@@ -165,7 +165,8 @@
     "manufacturing-mrp": "Execuções de MRP",
     "manufacturing-time": "Tempo de produção",
     "manufacturing-quality": "Qualidade",
-    "close-reopen-requests": "Solicitações de reabertura"
+    "close-reopen-requests": "Solicitações de reabertura",
+    "amortization": "Apropriação de despesas"
   },
   "groups": {
     "manufacturing": "Manufatura",

@@ -1140,6 +1140,14 @@
       "managed_property_portfolio": {
         "label": "Inmuebles gestionados",
         "description": "Ciclo de vida actual de la cartera, limitado a las entidades jurídicas autorizadas para el usuario."
+      },
+      "prepaid_amortization_plan": {
+        "label": "Plan de amortización de gastos anticipados",
+        "description": "Cada período previsto y amortizado de los calendarios, por mes, cuenta y calendario."
+      },
+      "prepaid_amortization_reconciliation": {
+        "label": "Conciliación de gastos anticipados",
+        "description": "Movimientos de las cuentas de diferimiento en el libro mayor junto a los calendarios que los explican; sumados hasta una fecha, la diferencia es cero cuando coinciden."
       }
     },
     "columns": {
@@ -2750,6 +2758,34 @@
         "code": "Código del inmueble",
         "name": "Inmueble",
         "status": "Estado"
+      },
+      "prepaid_amortization_plan": {
+        "month": "Mes",
+        "schedule_number": "Calendario",
+        "schedule_status": "Estado del calendario",
+        "line_status": "Estado del período",
+        "deferral_account": "Cuenta de diferimiento",
+        "destination_account": "Cuenta de gasto",
+        "subsidiary": "Subsidiaria",
+        "currency": "Moneda",
+        "amortized": "Amortizado",
+        "scheduled": "Previsto",
+        "schedule_id": "Calendario (ID)",
+        "journal_entry_id": "Asiento (ID)",
+        "book_id": "ID del libro"
+      },
+      "prepaid_amortization_reconciliation": {
+        "moved_on": "Fecha",
+        "deferral_account": "Cuenta de diferimiento",
+        "subsidiary": "Subsidiaria",
+        "book": "Libro",
+        "currency": "Moneda",
+        "source": "Origen",
+        "ledger": "Libro mayor",
+        "subledger": "Calendarios",
+        "difference": "Diferencia",
+        "account_id": "ID de la cuenta",
+        "book_id": "ID del libro"
       }
     },
     "enumValues": {
@@ -3110,6 +3146,14 @@
     "analytics-workforce-capacity": {
       "name": "Capacidad de la plantilla",
       "description": "Estructura actual de la plantilla: equivalentes a tiempo completo previstos, financiados, cubiertos y vacantes."
+    },
+    "prepaid-expense-waterfall": {
+      "name": "Cascada de gastos anticipados",
+      "description": "Gastos anticipados y diferidos amortizados y previstos por mes, cuenta de diferimiento y moneda."
+    },
+    "prepaid-expense-reconciliation": {
+      "name": "Conciliación de gastos anticipados",
+      "description": "Saldos de las cuentas de diferimiento en el libro mayor frente al saldo pendiente de sus calendarios, por cuenta, subsidiaria, libro y moneda."
     }
   },
   "generalLedger": {
@@ -3153,7 +3197,8 @@
       "gift": "Donación",
       "grant": "Subvención",
       "release": "Liberación de restricciones",
-      "manufacturing": "Fabricación"
+      "manufacturing": "Fabricación",
+      "expense_amortization": "Amortización de gastos"
     },
     "columns": {
       "detail": "Tercero / nota"

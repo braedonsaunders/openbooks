@@ -218,6 +218,10 @@
     "commerce-exceptions-open": {
       "title": "Hay excepciones del canal en espera",
       "message": "{count, plural, one {Queda # pedido o evento en espera sin solución.} other {Quedan # pedidos o eventos en espera sin solución.}}"
+    },
+    "prepaid-amortization-unposted": {
+      "title": "La amortización de gastos anticipados no está contabilizada",
+      "message": "{count, plural, one {# período de amortización vencido no está contabilizado.} other {# períodos de amortización vencidos no están contabilizados.}}"
     }
   },
   "severity": {
@@ -430,6 +434,10 @@
     "commerce-complete": {
       "title": "Probar la integridad del comercio",
       "description": "Cada venta de la tienda está en el mayor: los pedidos coinciden con la tienda, los pagos están contabilizados, la compensación queda en cero y los pasivos cuadran."
+    },
+    "prepaid-amortized": {
+      "title": "Amortizar gastos anticipados",
+      "description": "Contabilizar cada período de amortización de los calendarios activos que termina antes del cierre del período."
     }
   },
   "setup": {

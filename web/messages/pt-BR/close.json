@@ -218,6 +218,10 @@
     "commerce-exceptions-open": {
       "title": "Há exceções do canal aguardando",
       "message": "{count, plural, one {Resta # pedido ou evento aguardando solução.} other {Restam # pedidos ou eventos aguardando solução.}}"
+    },
+    "prepaid-amortization-unposted": {
+      "title": "A apropriação de despesas antecipadas não foi lançada",
+      "message": "{count, plural, one {# período de apropriação vencido não foi lançado.} other {# períodos de apropriação vencidos não foram lançados.}}"
     }
   },
   "severity": {
@@ -430,6 +434,10 @@
     "commerce-complete": {
       "title": "Provar a integridade do commerce",
       "description": "Cada venda da loja está no razão: os pedidos conferem com a loja, os pagamentos estão lançados, a compensação zera e os passivos conferem."
+    },
+    "prepaid-amortized": {
+      "title": "Apropriar despesas antecipadas",
+      "description": "Lançar cada período de apropriação dos cronogramas ativos que termina até o fim do período."
     }
   },
   "setup": {

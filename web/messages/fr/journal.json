@@ -25,7 +25,8 @@
     "fxSettlement": "Règlement de change",
     "translation": "Conversion",
     "migration": "Migration",
-    "manufacturing": "Fabrication"
+    "manufacturing": "Fabrication",
+    "expenseAmortization": "Étalement des charges"
   },
   "detail": {
     "notFound": "Écriture introuvable",

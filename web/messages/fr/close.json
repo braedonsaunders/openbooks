@@ -218,6 +218,10 @@
     "commerce-exceptions-open": {
       "title": "Des exceptions du canal sont en attente",
       "message": "{count, plural, one {# commande ou événement en attente attend encore sa solution.} other {# commandes ou événements en attente attendent encore leur solution.}}"
+    },
+    "prepaid-amortization-unposted": {
+      "title": "L’étalement des charges constatées d’avance n’est pas comptabilisé",
+      "message": "{count, plural, one {# période d’étalement échue n’est pas comptabilisée.} other {# périodes d’étalement échues ne sont pas comptabilisées.}}"
     }
   },
   "severity": {
@@ -430,6 +434,10 @@
     "commerce-complete": {
       "title": "Prouver l’exhaustivité du commerce",
       "description": "Chaque vente de la boutique est au grand livre : les commandes correspondent à la boutique, les versements sont comptabilisés, les comptes d’attente sont à zéro et les passifs concordent."
+    },
+    "prepaid-amortized": {
+      "title": "Étaler les charges constatées d’avance",
+      "description": "Comptabiliser chaque période d’étalement des échéanciers actifs qui se termine avant la fin de la période."
     }
   },
   "setup": {

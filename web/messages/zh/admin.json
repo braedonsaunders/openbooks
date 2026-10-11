@@ -1275,7 +1275,8 @@
       "purchasing": "采购",
       "parties": "人员和公司",
       "banking": "银行业务",
-      "expenses": "费用报告"
+      "expenses": "费用报告",
+      "amortization": "费用摊销"
     },
     "gl_read": "查看日记账和余额",
     "gl_manage": "管理会计科目表",
@@ -1453,7 +1454,9 @@
     "purchase_orders_read": "查看采购订单和收货单",
     "purchase_orders_create": "创建、修改和作废采购订单",
     "goods_receipts_create": "按采购订单收货",
-    "time_self": "录入并提交本人工时"
+    "time_self": "录入并提交本人工时",
+    "amortization_read": "查看摊销计划和报表",
+    "amortization_manage": "运行摊销并变更摊销计划"
   },
   "ai": {
     "metaTitle": "AI 设置",
@@ -3740,6 +3743,10 @@
         "title": "职位描述",
         "singularTitle": "职位描述",
         "description": "新招聘申请可复用的发布内容：职位名称、雇用类型、薪酬范围和说明。"
+      },
+      "expense-amortization-templates": {
+        "title": "摊销模板",
+        "description": "预付及递延费用转入费用的方式：方法、期限、递延科目和默认转入科目。按代码设定生效日期。"
       }
     },
     "fields": {
@@ -4367,7 +4374,16 @@
       "compensationMin": "薪酬下限",
       "compensationMax": "薪酬上限",
       "compensationCurrency": "薪酬币种",
-      "compensationBasis": "薪酬基准"
+      "compensationBasis": "薪酬基准",
+      "amortizationMethod": "摊销方法",
+      "amortizationTermSource": "期限依据",
+      "amortizationPeriodCount": "期间数",
+      "amortizationPercentages": "比例表",
+      "amortizationPeriodRow": "期间 {number}",
+      "amortizationAddPeriod": "添加期间",
+      "amortizationPercent": "占金额的百分比",
+      "amortizationDeferralAccount": "递延科目（预付费用）",
+      "amortizationDestinationAccount": "默认转入科目"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "最新可用汇率距期末的天数超过此值时，重估和合并将拒绝该汇率。期末汇率从期末即期汇率的日期起算；平均汇率从计入平均的最新报价日期起算。未设置政策时的默认值：31 天。",
@@ -4546,7 +4562,15 @@
       "hrmJobDescriptionTitle": "求职者在职位发布中看到的职位名称。",
       "hrmJobDescriptionKind": "例如：全职、兼职、季节性或合同制。",
       "hrmJobDescriptionPay": "可选。请同时填写下限、上限、币种和基准，或四项全部留空。",
-      "hrmJobDescriptionBody": "职位发布文本。新招聘申请会复制该文本，因此在此编辑不会更改已有职位。"
+      "hrmJobDescriptionBody": "职位发布文本。新招聘申请会复制该文本，因此在此编辑不会更改已有职位。",
+      "amortizationTemplateCode": "同一模板的各版本共用代码；以交易过账日期生效的版本为准。",
+      "amortizationEffectiveFrom": "在此日期或之后过账的交易使用此版本。已使用的版本保持其规则不变；如需变更，请添加较晚生效的版本。",
+      "amortizationMethod": "直线法按期间平均分摊；按比例法按天数分摊首末不完整月份；按实际天数法以各月服务天数加权；可变比例法按比例表分摊。",
+      "amortizationTermSource": "模板期间自行的服务开始日起按下方期间数摊销；服务日期使用行自身的开始和结束日期。",
+      "amortizationPercentages": "按顺序每个期间一个百分比，合计恰好为 100。",
+      "amortizationPeriodOffset": "开始后等待多少个期间再开始摊销；0 表示自第一个期间开始。",
+      "amortizationDeferralAccount": "费用在摊销前所记入的流动资产或其他资产科目。",
+      "amortizationDestinationAccount": "留空时，每行摊销至其自身的费用科目。"
     },
     "options": {
       "withholdingCondominiumPayer": "公寓业主共同体付款人",
@@ -5356,6 +5380,16 @@
       "schedulePdfColorTreatment": {
         "subtle": "柔和强调",
         "strong": "浓色填充"
+      },
+      "amortizationMethod": {
+        "straight_line": "按期间直线法",
+        "prorated_first_last": "首末期间按比例",
+        "exact_days": "按实际天数",
+        "variable": "可变比例"
+      },
+      "amortizationTermSource": {
+        "template": "模板期间",
+        "service_dates": "行服务日期"
       }
     },
     "payroll": {
@@ -8055,6 +8089,14 @@
     "manufacturingSubcontract": {
       "title": "外协制造",
       "description": "向供应商发送组件，记录加工服务，并将生产数量返回生产订单。"
+    },
+    "expenseAmortization": {
+      "title": "费用摊销",
+      "description": "账单、日记账和费用报销单中的预付及递延费用按摊销计划逐期摊销，并提供结账步骤及与总账的对账。"
+    },
+    "expenseAmortizationAutoRun": {
+      "title": "自动摊销",
+      "description": "由调度程序在期间结束时过账到期的摊销期间，无需手动运行。"
     }
   },
   "backupsManager": {

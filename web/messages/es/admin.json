@@ -1275,7 +1275,8 @@
       "purchasing": "Compras",
       "parties": "Personas y empresas",
       "banking": "Bancos",
-      "expenses": "Informes de gastos"
+      "expenses": "Informes de gastos",
+      "amortization": "Amortización de gastos"
     },
     "gl_read": "Ver asientos y saldos",
     "gl_manage": "Gestionar el plan de cuentas",
@@ -1453,7 +1454,9 @@
     "purchase_orders_read": "Ver órdenes de compra y recepciones",
     "purchase_orders_create": "Crear, modificar y anular órdenes de compra",
     "goods_receipts_create": "Recibir mercancía contra órdenes de compra",
-    "time_self": "Registrar y enviar el propio tiempo"
+    "time_self": "Registrar y enviar el propio tiempo",
+    "amortization_read": "Ver calendarios de amortización e informes",
+    "amortization_manage": "Ejecutar la amortización y modificar calendarios"
   },
   "ai": {
     "metaTitle": "Proveedores de IA",
@@ -3665,6 +3668,10 @@
         "title": "Descripciones de puesto",
         "singularTitle": "Descripción de puesto",
         "description": "Contenido de publicación reutilizable para nuevas solicitudes: título, tipo de empleo, rango salarial y descripción."
+      },
+      "expense-amortization-templates": {
+        "title": "Plantillas de amortización",
+        "description": "Cómo los gastos anticipados y diferidos pasan a gasto: método, plazo, cuenta de diferimiento y destino predeterminado. Con fecha de vigencia por código."
       }
     },
     "fields": {
@@ -4292,7 +4299,16 @@
       "compensationMin": "Salario mínimo",
       "compensationMax": "Salario máximo",
       "compensationCurrency": "Moneda del salario",
-      "compensationBasis": "Base salarial"
+      "compensationBasis": "Base salarial",
+      "amortizationMethod": "Método de amortización",
+      "amortizationTermSource": "Plazo según",
+      "amortizationPeriodCount": "Número de períodos",
+      "amortizationPercentages": "Tabla de porcentajes",
+      "amortizationPeriodRow": "Período {number}",
+      "amortizationAddPeriod": "Agregar período",
+      "amortizationPercent": "Porcentaje del importe",
+      "amortizationDeferralAccount": "Cuenta de diferimiento (gastos anticipados)",
+      "amortizationDestinationAccount": "Cuenta de destino predeterminada"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Días entre el tipo utilizable más reciente y el cierre del período a partir de los cuales la revaluación y la consolidación rechazan el tipo. Los tipos de cierre se cuentan desde la fecha del tipo al contado de cierre; los promedio, desde la cotización más reciente promediada. Valor predeterminado sin política: 31 días.",
@@ -4471,7 +4487,15 @@
       "hrmJobDescriptionTitle": "El título del puesto que ven los candidatos en la publicación.",
       "hrmJobDescriptionKind": "Por ejemplo jornada completa, media jornada, temporal o por contrato.",
       "hrmJobDescriptionPay": "Opcional. Indique mínimo, máximo, moneda y base juntos, o deje los cuatro vacíos.",
-      "hrmJobDescriptionBody": "El texto de la publicación. Las nuevas solicitudes lo copian, así que editarlo aquí no cambia una vacante existente."
+      "hrmJobDescriptionBody": "El texto de la publicación. Las nuevas solicitudes lo copian, así que editarlo aquí no cambia una vacante existente.",
+      "amortizationTemplateCode": "Las versiones de una plantilla comparten su código; rige la versión vigente en la fecha contable de la transacción.",
+      "amortizationEffectiveFrom": "Las transacciones contabilizadas desde esta fecha usan esta versión. Una versión en uso conserva sus reglas; agregue una versión posterior para cambiarlas.",
+      "amortizationMethod": "Lineal reparte por igual en cada período; prorrateado da a los meses parciales primero y último una parte según sus días; días exactos pondera cada mes por sus días de servicio; variable sigue una tabla de porcentajes.",
+      "amortizationTermSource": "Los períodos de la plantilla amortizan durante el número de períodos indicado desde el inicio del servicio de la línea; las fechas de servicio usan el inicio y fin de la línea.",
+      "amortizationPercentages": "Un porcentaje por período, en orden, que sume exactamente 100.",
+      "amortizationPeriodOffset": "Períodos de espera entre el inicio y la primera amortización; 0 empieza en el primer período.",
+      "amortizationDeferralAccount": "La cuenta de activo corriente u otro activo donde se mantiene el gasto hasta amortizarse.",
+      "amortizationDestinationAccount": "En blanco, cada línea se amortiza en su propia cuenta de gasto."
     },
     "options": {
       "withholdingCondominiumPayer": "Pagador: comunidad de propietarios",
@@ -5281,6 +5305,16 @@
       "schedulePdfColorTreatment": {
         "subtle": "Acentos sutiles",
         "strong": "Rellenos intensos"
+      },
+      "amortizationMethod": {
+        "straight_line": "Lineal por período",
+        "prorated_first_last": "Primer y último período prorrateados",
+        "exact_days": "Días exactos",
+        "variable": "Porcentajes variables"
+      },
+      "amortizationTermSource": {
+        "template": "Períodos de la plantilla",
+        "service_dates": "Fechas de servicio de la línea"
       }
     },
     "laborCosting": {
@@ -8055,6 +8089,14 @@
     "manufacturingSubcontract": {
       "title": "Fabricación externa",
       "description": "Envíe componentes a un proveedor, registre servicios y devuelva la producción a la orden."
+    },
+    "expenseAmortization": {
+      "title": "Amortización de gastos",
+      "description": "Los gastos anticipados y diferidos de facturas, asientos e informes de gastos se amortizan por período mediante calendarios, con un paso de cierre y una conciliación con el libro mayor."
+    },
+    "expenseAmortizationAutoRun": {
+      "title": "Amortización automática",
+      "description": "Contabiliza los períodos de amortización vencidos en cuanto terminan mediante el programador, sin ejecución manual."
     }
   },
   "backupsManager": {

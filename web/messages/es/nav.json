@@ -165,7 +165,8 @@
     "manufacturing-mrp": "Ejecuciones de MRP",
     "manufacturing-time": "Tiempo de producción",
     "manufacturing-quality": "Calidad",
-    "close-reopen-requests": "Solicitudes de reapertura"
+    "close-reopen-requests": "Solicitudes de reapertura",
+    "amortization": "Amortización de gastos"
   },
   "modulesShort": {
     "hrm-performance-cycles": "Gestionar evaluaciones",

@@ -165,7 +165,8 @@
     "manufacturing-mrp": "Calculs MRP",
     "manufacturing-time": "Temps de production",
     "manufacturing-quality": "Qualité",
-    "close-reopen-requests": "Demandes de réouverture"
+    "close-reopen-requests": "Demandes de réouverture",
+    "amortization": "Étalement des charges"
   },
   "modulesShort": {
     "hrm-performance-cycles": "Gérer les évaluations",

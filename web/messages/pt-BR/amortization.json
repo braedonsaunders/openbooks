@@ -1,0 +1,185 @@
+{
+  "workspace": {
+    "title": "Apropriação de despesas",
+    "description": "Despesas antecipadas e diferidas mantidas em contas de despesas antecipadas e apropriadas ao resultado período a período."
+  },
+  "views": {
+    "schedules": "Cronogramas",
+    "run": "Execução",
+    "reconciliation": "Conciliação"
+  },
+  "statusFilter": {
+    "open": "Em aberto",
+    "draft": "Rascunho",
+    "active": "Ativo",
+    "on_hold": "Suspenso",
+    "completed": "Concluído",
+    "cancelled": "Cancelado"
+  },
+  "status": {
+    "draft": "Rascunho",
+    "active": "Ativo",
+    "on_hold": "Suspenso",
+    "completed": "Concluído",
+    "cancelled": "Cancelado"
+  },
+  "sourceKind": {
+    "vendor_bill": "Fatura de fornecedor",
+    "journal": "Lançamento de diário",
+    "expense_report": "Relatório de despesas",
+    "manual": "Registro manual"
+  },
+  "method": {
+    "straight_line": "Linear por período",
+    "prorated_first_last": "Primeiro e último período proporcionais",
+    "exact_days": "Dias exatos",
+    "variable": "Percentuais variáveis"
+  },
+  "event": {
+    "created": "Criado",
+    "activated": "Ativado",
+    "held": "Suspenso",
+    "resumed": "Retomado",
+    "term_changed": "Prazo alterado",
+    "destination_changed": "Conta de destino alterada",
+    "reduced": "Reduzido por um crédito",
+    "cancelled": "Cancelado",
+    "source_voided": "Documento de origem anulado",
+    "completed": "Totalmente apropriado"
+  },
+  "list": {
+    "statusFilter": "Filtrar cronogramas por situação",
+    "templates": "Modelos de apropriação",
+    "waterfall": "Cascata de despesas antecipadas",
+    "empty": "Nenhum cronograma corresponde. Difira uma linha de fatura com um modelo de apropriação ou registre um cronograma manual.",
+    "columns": {
+      "number": "Cronograma",
+      "status": "Situação",
+      "source": "Origem",
+      "template": "Modelo",
+      "subsidiary": "Subsidiária",
+      "total": "Diferido",
+      "remaining": "A apropriar",
+      "nextPeriod": "Próximo período"
+    }
+  },
+  "drawer": {
+    "total": "Diferido",
+    "amortized": "Apropriado",
+    "remaining": "A apropriar",
+    "nextPeriod": "Próximo período",
+    "source": "Origem",
+    "line": "linha {line}",
+    "serviceWindow": "Período de serviço",
+    "method": "Método",
+    "deferralAccount": "Conta de diferimento",
+    "destinationAccount": "Conta de destino",
+    "subsidiary": "Subsidiária",
+    "currency": "Moeda",
+    "openingAmortized": "Apropriado antes deste cronograma",
+    "holdReason": "Motivo da suspensão",
+    "planTab": "Planejamento",
+    "historyTab": "Histórico",
+    "changesTab": "Alterações",
+    "period": "Período",
+    "account": "Conta",
+    "planned": "Previsto",
+    "posted": "Lançado",
+    "noPlan": "Nenhum período permanece previsto.",
+    "balanceChange": "Variação do saldo: {amount}",
+    "viewEntry": "Ver lançamento"
+  },
+  "changes": {
+    "action": "Alteração",
+    "failed": "A alteração não foi salva.",
+    "saved": "Cronograma atualizado",
+    "effectivePeriod": "Vigente a partir do período",
+    "newLastPeriod": "Novo último período",
+    "destinationAccount": "Nova conta de destino",
+    "amount": "Valor do crédito",
+    "cancelMode": "Liquidar o saldo por",
+    "effectiveDate": "Data de vigência",
+    "reason": "Motivo",
+    "actions": {
+      "activate": "Ativar",
+      "hold": "Suspender",
+      "resume": "Retomar",
+      "change_term": "Alterar prazo",
+      "change_destination": "Alterar conta de destino",
+      "reduce": "Reduzir por um crédito",
+      "cancel": "Cancelar cronograma"
+    },
+    "hints": {
+      "activate": "Inicia a apropriação de um cronograma manual. Seu saldo já deve constar na conta de diferimento.",
+      "hold": "As execuções ignoram o cronograma até que seja retomado.",
+      "resume": "Os períodos vencidos são lançados na próxima execução.",
+      "change_term": "Distribui igualmente o valor previsto a partir do período escolhido até o novo último período.",
+      "change_destination": "Apropria para a nova conta a partir do período escolhido.",
+      "reduce": "Registra um crédito contra o cronograma; a apropriação em excesso volta para a conta de diferimento.",
+      "cancel": "Baixar leva o saldo a apropriar para despesa; estornar devolve a apropriação lançada de uma origem creditada integralmente."
+    },
+    "modes": {
+      "write_off": "Baixa do saldo a apropriar",
+      "reverse": "Estorno da apropriação lançada"
+    }
+  },
+  "run": {
+    "period": "Apropriar até o período",
+    "submit": "{count, plural, =0 {Nada vencido} one {Lançar # período} other {Lançar # períodos}}",
+    "description": "Lança cada período previsto dos cronogramas ativos que termina até o fim do período. Um período lançado nunca é lançado de novo.",
+    "failed": "A apropriação não foi executada.",
+    "saved": "{posted, plural, =0 {Nada lançado} one {# período lançado} other {# períodos lançados}}",
+    "empty": "Nada vence até este período.",
+    "columns": {
+      "schedule": "Cronograma",
+      "period": "Período",
+      "account": "Conta de despesa",
+      "amount": "Valor"
+    }
+  },
+  "reconciliation": {
+    "asOf": "Em",
+    "report": "Abrir o relatório de conciliação",
+    "tied": "Cada conta de diferimento confere com seus cronogramas.",
+    "untied": "Uma conta de diferimento diverge de seus cronogramas: um lançamento nela não é explicado por nenhum cronograma.",
+    "empty": "Ainda não há contas de diferimento a conciliar.",
+    "columns": {
+      "account": "Conta de diferimento",
+      "subsidiary": "Subsidiária",
+      "book": "Livro",
+      "ledger": "Razão geral",
+      "subledger": "Cronogramas",
+      "difference": "Diferença",
+      "openSchedules": "Cronogramas em aberto"
+    }
+  },
+  "newSchedule": {
+    "open": "Novo cronograma",
+    "title": "Novo cronograma manual",
+    "description": "Acompanha um saldo antecipado que já consta em uma conta de diferimento. É salvo como rascunho e não lança nada até ser ativado.",
+    "noTemplates": "Crie primeiro um modelo de apropriação:",
+    "template": "Modelo",
+    "subsidiary": "Subsidiária",
+    "totalAmount": "Valor diferido",
+    "openingAmortized": "Já apropriado",
+    "serviceStart": "Início do serviço",
+    "serviceEnd": "Fim do serviço",
+    "amortizeFrom": "Primeiro período a apropriar",
+    "destinationAccount": "Conta de destino",
+    "memo": "Observação",
+    "reason": "Motivo",
+    "submit": "Salvar rascunho",
+    "saved": "Cronograma {number} salvo como rascunho",
+    "failed": "O cronograma não foi salvo."
+  },
+  "billLine": {
+    "lineTemplate": "Apropriação",
+    "lineTemplateHelp": "Difere esta linha para a conta de despesas antecipadas do modelo e a apropria por período.",
+    "lineNoTemplate": "Despesa imediata",
+    "lineServiceStart": "Início do serviço",
+    "lineServiceEnd": "Fim do serviço"
+  },
+  "common": {
+    "cancel": "Cancelar"
+  }
+}

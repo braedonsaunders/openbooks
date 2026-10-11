@@ -218,6 +218,10 @@
     "commerce-exceptions-open": {
       "title": "有渠道异常待处理",
       "message": "{count, plural, one {有 # 个挂起的订单或事件待处理。} other {有 # 个挂起的订单或事件待处理。}}"
+    },
+    "prepaid-amortization-unposted": {
+      "title": "预付费用摊销尚未过账",
+      "message": "{count, plural, one {有 # 个到期摊销期间尚未过账。} other {有 # 个到期摊销期间尚未过账。}}"
     }
   },
   "severity": {
@@ -430,6 +434,10 @@
     "commerce-complete": {
       "title": "证明商务完整性",
       "description": "每一笔网店销售都已入账：订单与网店一致，结算已过账，清算为零，负债结转相符。"
+    },
+    "prepaid-amortized": {
+      "title": "摊销预付费用",
+      "description": "过账生效摊销计划中在期间末日前结束的每个摊销期间。"
     }
   },
   "setup": {

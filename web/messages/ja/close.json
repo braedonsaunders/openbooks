@@ -218,6 +218,10 @@
     "commerce-exceptions-open": {
       "title": "チャネル例外が保留中です",
       "message": "{count, plural, one {# 件の保留中の注文またはイベントが対応を待っています。} other {# 件の保留中の注文またはイベントが対応を待っています。}}"
+    },
+    "prepaid-amortization-unposted": {
+      "title": "前払費用の配分が未記帳です",
+      "message": "{count, plural, one {期日到来の配分期間 # 件が未記帳です。} other {期日到来の配分期間 # 件が未記帳です。}}"
     }
   },
   "severity": {
@@ -430,6 +434,10 @@
     "commerce-complete": {
       "title": "コマースの完全性を証明する",
       "description": "すべての店舗売上は元帳にあります。注文は店舗と一致し、精算は転記済み、クリアリングはゼロ、負債の繰越は一致しています。"
+    },
+    "prepaid-amortized": {
+      "title": "前払費用を配分",
+      "description": "期間末日までに終わる有効な配分スケジュールの期間をすべて記帳します。"
     }
   },
   "setup": {

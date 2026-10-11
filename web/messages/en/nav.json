@@ -165,7 +165,8 @@
     "manufacturing-mrp": "MRP runs",
     "manufacturing-time": "Production time",
     "manufacturing-quality": "Quality",
-    "close-reopen-requests": "Reopen Requests"
+    "close-reopen-requests": "Reopen Requests",
+    "amortization": "Amortization"
   },
   "modulesShort": {
     "hrm-performance-cycles": "Manage reviews",

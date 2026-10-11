@@ -12,6 +12,7 @@
 
 export const WIDGET_FAMILIES = [
   'agents',
+  'amortization',
   'assets-tax',
   'banking',
   'commerce',
@@ -75,6 +76,11 @@ export const WIDGET_FAMILY: Readonly<Record<string, WidgetFamily>> = {
   'allocations-rules-tab': 'setup',
   'allocations-runs-tab': 'setup',
   'allocations-setup-header': 'setup',
+  'amortization-new-schedule': 'amortization',
+  'amortization-reconciliation': 'amortization',
+  'amortization-run': 'amortization',
+  'amortization-schedule-drawer': 'amortization',
+  'amortization-schedules': 'amortization',
   'analytics-hub': 'reporting',
   'ap-capture-link': 'controls',
   'ap-cockpit': 'commerce',

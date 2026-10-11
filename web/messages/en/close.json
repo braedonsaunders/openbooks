@@ -218,6 +218,10 @@
     "commerce-exceptions-open": {
       "title": "Channel exceptions are parked",
       "message": "{count, plural, one {# parked order or event still needs a remedy.} other {# parked orders or events still need a remedy.}}"
+    },
+    "prepaid-amortization-unposted": {
+      "title": "Prepaid amortization remains unposted",
+      "message": "{count, plural, one {# amortization period is due and unposted.} other {# amortization periods are due and unposted.}}"
     }
   },
   "severity": {
@@ -430,6 +434,10 @@
     "commerce-complete": {
       "title": "Prove commerce complete",
       "description": "Every storefront sale is in the ledger: orders match the storefront, payouts are posted, clearing is zero, and liability roll-forwards tie."
+    },
+    "prepaid-amortized": {
+      "title": "Amortize prepaid expenses",
+      "description": "Post every amortization period of active prepaid and deferred expense schedules that ends by period end."
     }
   },
   "setup": {

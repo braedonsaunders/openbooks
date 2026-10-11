@@ -13,6 +13,7 @@ import { PORTFOLIO_SUMMARY_REPORTS } from './portfolio-summaries'
 import { SALES_REPORT_ENTITIES } from './sales-entities'
 import { BANKING_REPORT_ENTITIES } from './banking-entities'
 import { CONTRACT_COST_REPORT_ENTITIES } from './contract-cost-entities'
+import { AMORTIZATION_REPORT_ENTITIES } from './amortization-entities'
 import { BILLING_IMPORT_REPORT_ENTITIES } from './billing-import-entities'
 import { DEMAND_REPORT_ENTITIES } from './demand-entities'
 import { defaultRowsQuery } from './custom-query'
@@ -328,6 +329,45 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
   ...SALES_REPORT_ENTITIES.map(entity => ({ slug: entity.key.replaceAll('_','-'), name: entity.label, description: entity.description, query: defaultRowsQuery(entity) })),
   ...BANKING_REPORT_ENTITIES.map(entity => ({ slug: entity.key.replaceAll('_','-'), name: entity.label, description: entity.description, query: defaultRowsQuery(entity) })),
   ...CONTRACT_COST_REPORT_ENTITIES.map(entity => ({ slug: entity.key.replaceAll('_','-'), name: entity.label, description: entity.description, query: defaultRowsQuery(entity) })),
+  ...AMORTIZATION_REPORT_ENTITIES.map(entity => ({ slug: entity.key.replaceAll('_','-'), name: entity.label, description: entity.description, query: defaultRowsQuery(entity) })),
+  {
+    slug: 'prepaid-expense-waterfall',
+    name: 'Prepaid expense waterfall',
+    description: 'Amortized and scheduled prepaid and deferred expense by month, deferral account and currency.',
+    query: {
+      entity: 'prepaid_amortization_plan', mode: 'summarize', columns: [],
+      breakouts: [
+        { column: 'month', bin: 'month' },
+        { column: 'deferral_account' },
+        { column: 'currency' },
+      ],
+      measures: [
+        { fn: 'sum', column: 'amortized', label: 'Amortized' },
+        { fn: 'sum', column: 'scheduled', label: 'Scheduled' },
+      ],
+      filters: null, groupBy: null, limit: 1000,
+    },
+  },
+  {
+    slug: 'prepaid-expense-reconciliation',
+    name: 'Prepaid expense reconciliation',
+    description: 'Deferral account balances in the general ledger against the unamortized balance of their schedules, by account, subsidiary, book and currency.',
+    query: {
+      entity: 'prepaid_amortization_reconciliation', mode: 'summarize', columns: [],
+      breakouts: [
+        { column: 'deferral_account' },
+        { column: 'subsidiary' },
+        { column: 'book' },
+        { column: 'currency' },
+      ],
+      measures: [
+        { fn: 'sum', column: 'ledger', label: 'General ledger' },
+        { fn: 'sum', column: 'subledger', label: 'Schedules' },
+        { fn: 'sum', column: 'difference', label: 'Difference' },
+      ],
+      filters: null, groupBy: null, limit: 1000,
+    },
+  },
   ...BILLING_IMPORT_REPORT_ENTITIES.map(entity => ({ slug: entity.key.replaceAll('_','-'), name: entity.label, description: entity.description, query: defaultRowsQuery(entity) })),
   ...RECOVERY_REPORT_ENTITIES.map(entity => ({ slug: entity.key.replaceAll('_','-'), name: entity.label, description: entity.description, query: defaultRowsQuery(entity) })),
   {

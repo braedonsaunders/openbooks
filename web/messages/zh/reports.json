@@ -1140,6 +1140,14 @@
       "managed_property_portfolio": {
         "label": "管理物业",
         "description": "当前物业组合的生命周期，仅涵盖用户获准访问的法律实体。"
+      },
+      "prepaid_amortization_plan": {
+        "label": "预付费用摊销计划",
+        "description": "按月份、科目和摊销计划列示每个计划及已摊销期间。"
+      },
+      "prepaid_amortization_reconciliation": {
+        "label": "预付费用对账",
+        "description": "将总账中递延科目的变动与解释这些变动的摊销计划并列；累计至某日时二者一致则差额为零。"
       }
     },
     "columns": {
@@ -2750,6 +2758,34 @@
         "code": "物业代码",
         "name": "物业",
         "status": "状态"
+      },
+      "prepaid_amortization_plan": {
+        "month": "月份",
+        "schedule_number": "摊销计划",
+        "schedule_status": "摊销计划状态",
+        "line_status": "期间状态",
+        "deferral_account": "递延科目",
+        "destination_account": "费用科目",
+        "subsidiary": "子公司",
+        "currency": "币种",
+        "amortized": "已摊销",
+        "scheduled": "计划摊销",
+        "schedule_id": "摊销计划（ID）",
+        "journal_entry_id": "日记账分录（ID）",
+        "book_id": "账簿ID"
+      },
+      "prepaid_amortization_reconciliation": {
+        "moved_on": "日期",
+        "deferral_account": "递延科目",
+        "subsidiary": "子公司",
+        "book": "账簿",
+        "currency": "币种",
+        "source": "来源",
+        "ledger": "总账",
+        "subledger": "摊销计划",
+        "difference": "差额",
+        "account_id": "科目ID",
+        "book_id": "账簿ID"
       }
     },
     "enumValues": {
@@ -3130,6 +3166,14 @@
     "analytics-workforce-capacity": {
       "name": "人员编制容量",
       "description": "当前人员编制：计划、已落实经费、已配备和空缺的全职当量。"
+    },
+    "prepaid-expense-waterfall": {
+      "name": "预付费用瀑布表",
+      "description": "按月份、递延科目和币种列示的已摊销及计划摊销的预付和递延费用。"
+    },
+    "prepaid-expense-reconciliation": {
+      "name": "预付费用对账",
+      "description": "按科目、子公司、账簿和币种比较总账中递延科目余额与其摊销计划的未摊销余额。"
     }
   },
   "generalLedger": {
@@ -3173,7 +3217,8 @@
       "gift": "捐赠",
       "grant": "资助",
       "release": "解除用途限制",
-      "manufacturing": "生产制造"
+      "manufacturing": "生产制造",
+      "expense_amortization": "费用摊销"
     },
     "columns": {
       "detail": "往来方 / 备注"

@@ -25,7 +25,8 @@
     "fxSettlement": "FX settlement",
     "translation": "Translation",
     "migration": "Migration",
-    "manufacturing": "Manufacturing"
+    "manufacturing": "Manufacturing",
+    "expenseAmortization": "Expense amortization"
   },
   "detail": {
     "notFound": "Entry not found",

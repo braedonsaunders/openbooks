@@ -1140,6 +1140,14 @@
       "managed_property_portfolio": {
         "label": "Imóveis administrados",
         "description": "Ciclo de vida atual da carteira, limitado às entidades jurídicas autorizadas para o usuário."
+      },
+      "prepaid_amortization_plan": {
+        "label": "Plano de apropriação de despesas antecipadas",
+        "description": "Cada período previsto e apropriado dos cronogramas, por mês, conta e cronograma."
+      },
+      "prepaid_amortization_reconciliation": {
+        "label": "Conciliação de despesas antecipadas",
+        "description": "Movimentos das contas de diferimento no razão geral ao lado dos cronogramas que os explicam; somados até uma data, a diferença é zero quando conferem."
       }
     },
     "columns": {
@@ -2750,6 +2758,34 @@
         "code": "Código do imóvel",
         "name": "Imóvel",
         "status": "Situação"
+      },
+      "prepaid_amortization_plan": {
+        "month": "Mês",
+        "schedule_number": "Cronograma",
+        "schedule_status": "Situação do cronograma",
+        "line_status": "Situação do período",
+        "deferral_account": "Conta de diferimento",
+        "destination_account": "Conta de despesa",
+        "subsidiary": "Subsidiária",
+        "currency": "Moeda",
+        "amortized": "Apropriado",
+        "scheduled": "Previsto",
+        "schedule_id": "Cronograma (ID)",
+        "journal_entry_id": "Lançamento (ID)",
+        "book_id": "ID do livro"
+      },
+      "prepaid_amortization_reconciliation": {
+        "moved_on": "Data",
+        "deferral_account": "Conta de diferimento",
+        "subsidiary": "Subsidiária",
+        "book": "Livro",
+        "currency": "Moeda",
+        "source": "Origem",
+        "ledger": "Razão geral",
+        "subledger": "Cronogramas",
+        "difference": "Diferença",
+        "account_id": "ID da conta",
+        "book_id": "ID do livro"
       }
     },
     "enumValues": {
@@ -3130,6 +3166,14 @@
     "analytics-workforce-capacity": {
       "name": "Capacidade do quadro de pessoal",
       "description": "Estrutura atual do quadro de pessoal: equivalentes em tempo integral planejados, financiados, preenchidos e vagos."
+    },
+    "prepaid-expense-waterfall": {
+      "name": "Cascata de despesas antecipadas",
+      "description": "Despesas antecipadas e diferidas apropriadas e previstas por mês, conta de diferimento e moeda."
+    },
+    "prepaid-expense-reconciliation": {
+      "name": "Conciliação de despesas antecipadas",
+      "description": "Saldos das contas de diferimento no razão geral frente ao saldo a apropriar dos cronogramas, por conta, subsidiária, livro e moeda."
     }
   },
   "generalLedger": {
@@ -3173,7 +3217,8 @@
       "gift": "Doação",
       "grant": "Subvenção",
       "release": "Liberação de restrições",
-      "manufacturing": "Manufatura"
+      "manufacturing": "Manufatura",
+      "expense_amortization": "Apropriação de despesas"
     },
     "columns": {
       "detail": "Parte / memorando"

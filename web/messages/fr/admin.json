@@ -1275,7 +1275,8 @@
       "purchasing": "Achats",
       "parties": "Personnes et entreprises",
       "banking": "Banque",
-      "expenses": "Notes de frais"
+      "expenses": "Notes de frais",
+      "amortization": "Étalement des charges"
     },
     "gl_read": "Consulter les journaux et les soldes",
     "gl_manage": "Gérer le plan comptable",
@@ -1453,7 +1454,9 @@
     "purchase_orders_read": "Consulter les bons de commande et les réceptions",
     "purchase_orders_create": "Créer, modifier et annuler des bons de commande",
     "goods_receipts_create": "Réceptionner des marchandises sur bons de commande",
-    "time_self": "Saisir et soumettre son propre temps"
+    "time_self": "Saisir et soumettre son propre temps",
+    "amortization_read": "Voir les échéanciers d’étalement et les rapports",
+    "amortization_manage": "Exécuter l’étalement et modifier les échéanciers"
   },
   "ai": {
     "metaTitle": "Fournisseurs d'IA",
@@ -3665,6 +3668,10 @@
         "title": "Descriptions de poste",
         "singularTitle": "Description de poste",
         "description": "Contenu d'annonce réutilisable pour les nouvelles demandes : intitulé, type d'emploi, fourchette de rémunération et description."
+      },
+      "expense-amortization-templates": {
+        "title": "Modèles d’étalement",
+        "description": "Comment les charges payées d’avance et différées passent en charge : méthode, durée, compte de régularisation et destination par défaut. Datés par code."
       }
     },
     "fields": {
@@ -4292,7 +4299,16 @@
       "compensationMin": "Rémunération minimale",
       "compensationMax": "Rémunération maximale",
       "compensationCurrency": "Devise de rémunération",
-      "compensationBasis": "Base de rémunération"
+      "compensationBasis": "Base de rémunération",
+      "amortizationMethod": "Méthode d’étalement",
+      "amortizationTermSource": "Durée issue de",
+      "amortizationPeriodCount": "Nombre de périodes",
+      "amortizationPercentages": "Table des pourcentages",
+      "amortizationPeriodRow": "Période {number}",
+      "amortizationAddPeriod": "Ajouter une période",
+      "amortizationPercent": "Pourcentage du montant",
+      "amortizationDeferralAccount": "Compte de régularisation (charges constatées d’avance)",
+      "amortizationDestinationAccount": "Compte de destination par défaut"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Nombre de jours entre le taux utilisable le plus récent et la fin de période au-delà duquel la réévaluation et la consolidation refusent le taux. Les taux de clôture se comptent depuis la date du taux comptant de fin de période ; les taux moyens depuis la cotation la plus récente incluse dans la moyenne. Valeur par défaut sans politique : 31 jours.",
@@ -4471,7 +4487,15 @@
       "hrmJobDescriptionTitle": "L'intitulé de poste affiché aux candidats dans l'annonce.",
       "hrmJobDescriptionKind": "Par exemple temps plein, temps partiel, saisonnier ou contractuel.",
       "hrmJobDescriptionPay": "Facultatif. Saisissez ensemble le minimum, le maximum, la devise et la base, ou laissez les quatre vides.",
-      "hrmJobDescriptionBody": "Le texte de l'annonce. Les nouvelles demandes le copient : le modifier ici ne change jamais un poste existant."
+      "hrmJobDescriptionBody": "Le texte de l'annonce. Les nouvelles demandes le copient : le modifier ici ne change jamais un poste existant.",
+      "amortizationTemplateCode": "Les versions d’un modèle partagent son code ; la version en vigueur à la date comptable de l’opération s’applique.",
+      "amortizationEffectiveFrom": "Les opérations comptabilisées à partir de cette date utilisent cette version. Une version utilisée conserve ses règles ; ajoutez une version ultérieure pour les modifier.",
+      "amortizationMethod": "Le linéaire répartit à parts égales par période ; le prorata attribue aux premier et dernier mois partiels une part selon leurs jours ; au jour près pondère chaque mois par ses jours de service ; le variable suit une table de pourcentages.",
+      "amortizationTermSource": "Les périodes du modèle étalent sur le nombre de périodes ci-dessous à partir du début de service de la ligne ; les dates de service utilisent le début et la fin de la ligne.",
+      "amortizationPercentages": "Un pourcentage par période, dans l’ordre, totalisant exactement 100.",
+      "amortizationPeriodOffset": "Périodes d’attente entre le début et le premier étalement ; 0 commence dès la première période.",
+      "amortizationDeferralAccount": "Le compte d’actif circulant ou autre où la charge est portée jusqu’à son étalement.",
+      "amortizationDestinationAccount": "Vide : chaque ligne s’étale sur son propre compte de charge."
     },
     "options": {
       "withholdingCondominiumPayer": "Payeur : copropriété",
@@ -5281,6 +5305,16 @@
       "schedulePdfColorTreatment": {
         "subtle": "Accents discrets",
         "strong": "Aplats soutenus"
+      },
+      "amortizationMethod": {
+        "straight_line": "Linéaire par période",
+        "prorated_first_last": "Première et dernière période au prorata",
+        "exact_days": "Au jour près",
+        "variable": "Pourcentages variables"
+      },
+      "amortizationTermSource": {
+        "template": "Périodes du modèle",
+        "service_dates": "Dates de service de la ligne"
       }
     },
     "laborCosting": {
@@ -8055,6 +8089,14 @@
     "manufacturingSubcontract": {
       "title": "Fabrication externe",
       "description": "Envoyez des composants à un fournisseur, enregistrez les services et retournez la production sur l’ordre."
+    },
+    "expenseAmortization": {
+      "title": "Étalement des charges",
+      "description": "Les charges payées d’avance et différées des factures, écritures et notes de frais sont étalées par période au moyen d’échéanciers, avec une étape de clôture et un rapprochement avec le grand livre."
+    },
+    "expenseAmortizationAutoRun": {
+      "title": "Étalement automatique",
+      "description": "Comptabilise les périodes d’étalement échues dès leur fin via le planificateur, sans traitement manuel."
     }
   },
   "backupsManager": {

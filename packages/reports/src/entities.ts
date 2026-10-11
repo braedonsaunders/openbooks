@@ -15,6 +15,7 @@ import { OPERATIONAL_REPORT_ENTITIES } from './operational-entities'
 import type { ReportFilterOperator, ReportRuleGroup } from './types'
 import { HRM_REPORT_ENTITIES } from './hrm-entities'
 import { CONTRACT_COST_REPORT_ENTITIES } from './contract-cost-entities'
+import { AMORTIZATION_REPORT_ENTITIES } from './amortization-entities'
 import { SALES_REPORT_ENTITIES } from './sales-entities'
 import { BILLING_IMPORT_REPORT_ENTITIES } from './billing-import-entities'
 import { DEMAND_REPORT_ENTITIES } from './demand-entities'
@@ -28,6 +29,7 @@ import { BANKING_REPORT_ENTITIES } from './banking-entities'
 export { BANKING_REPORT_ENTITIES } from './banking-entities'
 export { HRM_REPORT_ENTITIES } from './hrm-entities'
 export { CONTRACT_COST_REPORT_ENTITIES } from './contract-cost-entities'
+export { AMORTIZATION_REPORT_ENTITIES } from './amortization-entities'
 export { STORED_VALUE_REPORT_ENTITIES } from './stored-value-entities'
 export { RECOVERY_REPORT_ENTITIES } from './recovery-entities'
 
@@ -1610,6 +1612,9 @@ export const REPORT_ENTITIES: ReportEntity[] = [
   // period postings disclosure, beside the core catalog like the other
   // domain entity files.
   ...CONTRACT_COST_REPORT_ENTITIES,
+  // Expense amortization: the schedule plan and the deferral account
+  // reconciliation, beside the core catalog.
+  ...AMORTIZATION_REPORT_ENTITIES,
   ...BILLING_IMPORT_REPORT_ENTITIES,
   // Carrier hub (0504). Label cost and billing corrections read beside the
   // orders they shipped, without growing this file.

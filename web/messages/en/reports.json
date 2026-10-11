@@ -1140,6 +1140,14 @@
       "managed_property_portfolio": {
         "label": "Managed properties",
         "description": "Current portfolio lifecycle, scoped to the reader’s legal entities."
+      },
+      "prepaid_amortization_plan": {
+        "label": "Prepaid expense amortization plan",
+        "description": "Every scheduled and amortized period of prepaid and deferred expense schedules, by month, account and schedule."
+      },
+      "prepaid_amortization_reconciliation": {
+        "label": "Prepaid expense reconciliation",
+        "description": "Deferral account movements in the general ledger beside the schedules that account for them; summed through a date, the difference is zero when they agree."
       }
     },
     "columns": {
@@ -2750,6 +2758,34 @@
         "code": "Property code",
         "name": "Property",
         "status": "Status"
+      },
+      "prepaid_amortization_plan": {
+        "month": "Month",
+        "schedule_number": "Schedule",
+        "schedule_status": "Schedule status",
+        "line_status": "Period status",
+        "deferral_account": "Deferral account",
+        "destination_account": "Expense account",
+        "subsidiary": "Subsidiary",
+        "currency": "Currency",
+        "amortized": "Amortized",
+        "scheduled": "Scheduled",
+        "schedule_id": "Schedule (id)",
+        "journal_entry_id": "Journal entry (id)",
+        "book_id": "Book (id)"
+      },
+      "prepaid_amortization_reconciliation": {
+        "moved_on": "Date",
+        "deferral_account": "Deferral account",
+        "subsidiary": "Subsidiary",
+        "book": "Book",
+        "currency": "Currency",
+        "source": "Source",
+        "ledger": "General ledger",
+        "subledger": "Schedules",
+        "difference": "Difference",
+        "account_id": "Account (id)",
+        "book_id": "Book (id)"
       }
     },
     "enumValues": {
@@ -3130,6 +3166,14 @@
     "analytics-workforce-capacity": {
       "name": "Workforce capacity",
       "description": "Current workforce establishment: planned, funded, filled and vacant full-time equivalents."
+    },
+    "prepaid-expense-waterfall": {
+      "name": "Prepaid expense waterfall",
+      "description": "Amortized and scheduled prepaid and deferred expense by month, deferral account and currency."
+    },
+    "prepaid-expense-reconciliation": {
+      "name": "Prepaid expense reconciliation",
+      "description": "Deferral account balances in the general ledger against the unamortized balance of their schedules, by account, subsidiary, book and currency."
     }
   },
   "generalLedger": {
@@ -3173,7 +3217,8 @@
       "gift": "Gift",
       "grant": "Grant",
       "release": "Restriction release",
-      "manufacturing": "Manufacturing"
+      "manufacturing": "Manufacturing",
+      "expense_amortization": "Expense amortization"
     },
     "columns": {
       "detail": "Party / memo"

@@ -218,6 +218,10 @@
     "commerce-exceptions-open": {
       "title": "Kanalausnahmen warten",
       "message": "{count, plural, one {# geparkte Bestellung oder geparktes Ereignis braucht noch eine Lösung.} other {# geparkte Bestellungen oder Ereignisse brauchen noch eine Lösung.}}"
+    },
+    "prepaid-amortization-unposted": {
+      "title": "Auflösung der Rechnungsabgrenzung ist nicht gebucht",
+      "message": "{count, plural, one {# fällige Auflösungsperiode ist nicht gebucht.} other {# fällige Auflösungsperioden sind nicht gebucht.}}"
     }
   },
   "severity": {
@@ -430,6 +434,10 @@
     "commerce-complete": {
       "title": "Commerce-Vollständigkeit nachweisen",
       "description": "Jeder Shopverkauf steht im Hauptbuch: Bestellungen stimmen mit dem Shop überein, Auszahlungen sind gebucht, Verrechnungskonten sind null, und Schuldabstimmungen stimmen."
+    },
+    "prepaid-amortized": {
+      "title": "Aktive Rechnungsabgrenzung auflösen",
+      "description": "Jede bis zum Periodenende fällige Auflösungsperiode aktiver Abgrenzungspläne buchen."
     }
   },
   "setup": {

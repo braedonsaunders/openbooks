@@ -165,7 +165,8 @@
     "manufacturing-mrp": "MRP実行",
     "manufacturing-time": "製造工数",
     "manufacturing-quality": "品質",
-    "close-reopen-requests": "再オープン申請"
+    "close-reopen-requests": "再オープン申請",
+    "amortization": "費用の期間配分"
   },
   "groups": {
     "manufacturing": "製造",

@@ -1,0 +1,185 @@
+{
+  "workspace": {
+    "title": "Amortización de gastos",
+    "description": "Gastos anticipados y diferidos registrados en cuentas de gastos pagados por anticipado y llevados a gasto período a período."
+  },
+  "views": {
+    "schedules": "Calendarios",
+    "run": "Ejecución",
+    "reconciliation": "Conciliación"
+  },
+  "statusFilter": {
+    "open": "Abiertos",
+    "draft": "Borrador",
+    "active": "Activo",
+    "on_hold": "En pausa",
+    "completed": "Completado",
+    "cancelled": "Cancelado"
+  },
+  "status": {
+    "draft": "Borrador",
+    "active": "Activo",
+    "on_hold": "En pausa",
+    "completed": "Completado",
+    "cancelled": "Cancelado"
+  },
+  "sourceKind": {
+    "vendor_bill": "Factura de proveedor",
+    "journal": "Asiento de diario",
+    "expense_report": "Informe de gastos",
+    "manual": "Registro manual"
+  },
+  "method": {
+    "straight_line": "Lineal por período",
+    "prorated_first_last": "Primer y último período prorrateados",
+    "exact_days": "Días exactos",
+    "variable": "Porcentajes variables"
+  },
+  "event": {
+    "created": "Creado",
+    "activated": "Activado",
+    "held": "Pausado",
+    "resumed": "Reanudado",
+    "term_changed": "Plazo modificado",
+    "destination_changed": "Cuenta de destino modificada",
+    "reduced": "Reducido por un crédito",
+    "cancelled": "Cancelado",
+    "source_voided": "Documento de origen anulado",
+    "completed": "Amortizado por completo"
+  },
+  "list": {
+    "statusFilter": "Filtrar calendarios por estado",
+    "templates": "Plantillas de amortización",
+    "waterfall": "Cascada de gastos anticipados",
+    "empty": "Ningún calendario coincide. Difiera una línea de factura con una plantilla de amortización o registre un calendario manual.",
+    "columns": {
+      "number": "Calendario",
+      "status": "Estado",
+      "source": "Origen",
+      "template": "Plantilla",
+      "subsidiary": "Subsidiaria",
+      "total": "Diferido",
+      "remaining": "Pendiente de amortizar",
+      "nextPeriod": "Próximo período"
+    }
+  },
+  "drawer": {
+    "total": "Diferido",
+    "amortized": "Amortizado",
+    "remaining": "Pendiente de amortizar",
+    "nextPeriod": "Próximo período",
+    "source": "Origen",
+    "line": "línea {line}",
+    "serviceWindow": "Período de servicio",
+    "method": "Método",
+    "deferralAccount": "Cuenta de diferimiento",
+    "destinationAccount": "Cuenta de destino",
+    "subsidiary": "Subsidiaria",
+    "currency": "Moneda",
+    "openingAmortized": "Amortizado antes de este calendario",
+    "holdReason": "Motivo de la pausa",
+    "planTab": "Planificación",
+    "historyTab": "Historial",
+    "changesTab": "Cambios",
+    "period": "Período",
+    "account": "Cuenta",
+    "planned": "Previsto",
+    "posted": "Contabilizado",
+    "noPlan": "No quedan períodos previstos.",
+    "balanceChange": "Cambio de saldo: {amount}",
+    "viewEntry": "Ver asiento"
+  },
+  "changes": {
+    "action": "Cambio",
+    "failed": "El cambio no se guardó.",
+    "saved": "Calendario actualizado",
+    "effectivePeriod": "Vigente desde el período",
+    "newLastPeriod": "Nuevo último período",
+    "destinationAccount": "Nueva cuenta de destino",
+    "amount": "Importe del crédito",
+    "cancelMode": "Liquidar el saldo mediante",
+    "effectiveDate": "Fecha efectiva",
+    "reason": "Motivo",
+    "actions": {
+      "activate": "Activar",
+      "hold": "Pausar",
+      "resume": "Reanudar",
+      "change_term": "Cambiar plazo",
+      "change_destination": "Cambiar cuenta de destino",
+      "reduce": "Reducir por un crédito",
+      "cancel": "Cancelar calendario"
+    },
+    "hints": {
+      "activate": "Inicia la amortización de un calendario manual. Su saldo ya debe figurar en la cuenta de diferimiento.",
+      "hold": "Las ejecuciones omiten el calendario hasta que se reanude.",
+      "resume": "Los períodos vencidos se contabilizan en la siguiente ejecución.",
+      "change_term": "Reparte por igual el importe previsto desde el período elegido hasta el nuevo último período.",
+      "change_destination": "Amortiza hacia la nueva cuenta desde el período elegido.",
+      "reduce": "Registra un crédito contra el calendario; la amortización en exceso vuelve a la cuenta de diferimiento.",
+      "cancel": "Dar de baja lleva a gasto el saldo pendiente; revertir devuelve la amortización contabilizada de un origen acreditado en su totalidad."
+    },
+    "modes": {
+      "write_off": "Dar de baja el saldo pendiente",
+      "reverse": "Revertir la amortización contabilizada"
+    }
+  },
+  "run": {
+    "period": "Amortizar hasta el período",
+    "submit": "{count, plural, =0 {Nada vencido} one {Contabilizar # período} other {Contabilizar # períodos}}",
+    "description": "Contabiliza cada período previsto de los calendarios activos que termina en o antes del cierre del período. Un período contabilizado nunca se vuelve a contabilizar.",
+    "failed": "La amortización no se ejecutó.",
+    "saved": "{posted, plural, =0 {Nada contabilizado} one {# período contabilizado} other {# períodos contabilizados}}",
+    "empty": "No vence nada hasta este período.",
+    "columns": {
+      "schedule": "Calendario",
+      "period": "Período",
+      "account": "Cuenta de gasto",
+      "amount": "Importe"
+    }
+  },
+  "reconciliation": {
+    "asOf": "Al",
+    "report": "Abrir el informe de conciliación",
+    "tied": "Cada cuenta de diferimiento coincide con sus calendarios.",
+    "untied": "Una cuenta de diferimiento difiere de sus calendarios: un asiento en ella no está explicado por ningún calendario.",
+    "empty": "Aún no hay cuentas de diferimiento que conciliar.",
+    "columns": {
+      "account": "Cuenta de diferimiento",
+      "subsidiary": "Subsidiaria",
+      "book": "Libro",
+      "ledger": "Libro mayor",
+      "subledger": "Calendarios",
+      "difference": "Diferencia",
+      "openSchedules": "Calendarios abiertos"
+    }
+  },
+  "newSchedule": {
+    "open": "Nuevo calendario",
+    "title": "Nuevo calendario manual",
+    "description": "Controla un saldo anticipado que ya figura en una cuenta de diferimiento. Se guarda como borrador y no contabiliza nada hasta activarlo.",
+    "noTemplates": "Cree primero una plantilla de amortización:",
+    "template": "Plantilla",
+    "subsidiary": "Subsidiaria",
+    "totalAmount": "Importe diferido",
+    "openingAmortized": "Ya amortizado",
+    "serviceStart": "Inicio del servicio",
+    "serviceEnd": "Fin del servicio",
+    "amortizeFrom": "Primer período a amortizar",
+    "destinationAccount": "Cuenta de destino",
+    "memo": "Nota",
+    "reason": "Motivo",
+    "submit": "Guardar borrador",
+    "saved": "Calendario {number} guardado como borrador",
+    "failed": "El calendario no se guardó."
+  },
+  "billLine": {
+    "lineTemplate": "Amortización",
+    "lineTemplateHelp": "Difiere esta línea a la cuenta de gastos anticipados de la plantilla y la amortiza por período.",
+    "lineNoTemplate": "Gasto inmediato",
+    "lineServiceStart": "Inicio del servicio",
+    "lineServiceEnd": "Fin del servicio"
+  },
+  "common": {
+    "cancel": "Cancelar"
+  }
+}

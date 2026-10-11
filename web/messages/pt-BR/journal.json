@@ -25,7 +25,8 @@
     "fxSettlement": "Liquidação cambial",
     "migration": "Migração",
     "translation": "Conversão",
-    "manufacturing": "Manufatura"
+    "manufacturing": "Manufatura",
+    "expenseAmortization": "Apropriação de despesas"
   },
   "detail": {
     "notFound": "Lançamento não encontrado",
