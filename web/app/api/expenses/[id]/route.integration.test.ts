@@ -387,3 +387,32 @@ test('expense PATCH refuses a malformed document date with a domain error instea
 
 
 test.after(async () => { await pool.end() })
+
+
+test('expense deferral survives native save and refuses personal lines without changing the draft', async () => {
+  await fixture(async (org, id) => {
+    const templateId = randomUUID()
+    const prepaidId = randomUUID()
+    await withBypassContext(async () => {
+      await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"expenseAmortization":true}'::jsonb) where id=${org.orgId}`)
+      await db.execute(sql`insert into accounts (id, org_id, number, name, type) values (${prepaidId}, ${org.orgId}, '1350', 'Prepaid costs', 'asset_current_other')`)
+      await db.execute(sql`insert into expense_amortization_templates
+        (id, org_id, code, name, effective_from, method, term_source, period_count, deferral_account_id)
+        values (${templateId}, ${org.orgId}, 'SERVICE', 'Service period', ${org.date}, 'straight_line', 'service_dates', null, ${prepaidId})`)
+    })
+    const line = { accountId: org.accounts.cogs, amount: '120', settlementType: 'out_of_pocket', amortizationTemplateId: templateId, amortizationStartOn: '2026-07-01', amortizationEndOn: '2026-09-30' }
+    const saved = await patch(id, { expectedUpdatedAt: await revision(id), lines: [line] })
+    assert.equal(saved.status, 200, await saved.clone().text())
+    const loaded = await (await get(id)).json()
+    assert.equal(loaded.lines[0].amortization_template_id, templateId)
+    assert.equal(loaded.lines[0].amortization_start_on, '2026-07-01')
+    assert.equal(loaded.lines[0].amortization_end_on, '2026-09-30')
+    const before = await revision(id)
+    const refused = await patch(id, { expectedUpdatedAt: before, lines: [{ ...line, settlementType: 'personal' }] })
+    assert.equal(refused.status, 422, await refused.clone().text())
+    assert.equal(await revision(id), before)
+    const unchanged = await (await get(id)).json()
+    assert.equal(unchanged.lines[0].settlement_type, 'out_of_pocket')
+    assert.equal(unchanged.lines[0].amortization_template_id, templateId)
+  })
+})

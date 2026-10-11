@@ -21,7 +21,7 @@ import { loadFieldDefs } from '../../../../lib/custom-fields'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isMultiSubsidiary, subsidiaryOptions, subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { contractorWithholdingScheme } from '@openbooks/engine/country-tax-packs'
-import { listCurrentTemplates } from '@openbooks/engine/amortization'
+import { sourceAmortizationOptions } from '@/lib/amortization-options'
 import { businessToday } from '@openbooks/engine/platform/business-date'
 import { returnableBillLines } from '@openbooks/engine/inventory/vendor-credit-prefill'
 import { isUuid, pickString } from '../../../../lib/list-params'
@@ -308,12 +308,8 @@ export async function loadApBills(
       .map((code) => ({ code }))
     : []
 
-  // Retain saved template choices while offering policy versions for the bill date.
-  const retainedTemplateIds = drawerPayload?.lines.flatMap(line => typeof line.amortization_template_id === 'string' ? [line.amortization_template_id] : []) ?? []
-  const amortizationTemplates = drawerOpen && drawerKind === 'vendor_bill'
-    && (retainedTemplateIds.length > 0 || await isFeatureEnabled(authz.user.orgId, 'expenseAmortization'))
-    ? (await listCurrentTemplates(db, authz.user.orgId, String(drawerPayload?.doc.document_date ?? await businessToday(authz.user.orgId)), retainedTemplateIds))
-        .map((template) => ({ id: template.id, label: `${template.code} · ${template.name}` }))
+  const amortizationTemplates = drawerPayload && drawerKind === 'vendor_bill'
+    ? await sourceAmortizationOptions(authz.user.orgId, drawerPayload)
     : undefined
 
   const dimensions = pickers?.[4] as

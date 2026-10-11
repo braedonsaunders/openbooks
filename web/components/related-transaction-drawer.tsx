@@ -1,3 +1,4 @@
+import { sourceAmortizationOptions } from "@/lib/amortization-options";
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
@@ -293,6 +294,7 @@ export async function loadRelatedTransactionDrawerData({
       type: 'expense',
       props: {
         report: (report),
+        amortizationTemplates: await sourceAmortizationOptions(authz.user.orgId, report),
         employees: employees.rows,
         accounts: accounts.rows,
         taxCodes: (taxCodes),
@@ -336,6 +338,7 @@ export async function loadRelatedTransactionDrawerData({
       type: 'journal',
       props: {
         journal: (journal),
+        amortizationTemplates: await sourceAmortizationOptions(authz.user.orgId, journal),
         parties: parties.rows,
         accounts: accounts.rows,
         departments: (dimensions.departments),

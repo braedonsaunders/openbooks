@@ -1,4 +1,4 @@
-import { listCurrentTemplates } from "@openbooks/engine/amortization";
+import { sourceAmortizationOptions } from "@/lib/amortization-options";
 import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
@@ -177,10 +177,7 @@ export async function loadJournal(
     ? await journalBookOptions(authz.user.orgId)
     : []
   const selectedJournal = newJournalPayload ?? openJournal
-  const hasStoredAmortization = selectedJournal?.lines.some(line => typeof line.amortization_template_id === 'string') ?? false
-  const amortizationTemplates = selectedJournal && (hasStoredAmortization || await isFeatureEnabled(authz.user.orgId, 'expenseAmortization'))
-    ? (await listCurrentTemplates(db, authz.user.orgId, String(selectedJournal.doc.document_date), selectedJournal.lines.flatMap(line => typeof line.amortization_template_id === 'string' ? [line.amortization_template_id] : []))).map(template => ({ id: template.id, label: `${template.code} · ${template.name}` }))
-    : undefined
+  const amortizationTemplates = selectedJournal ? await sourceAmortizationOptions(authz.user.orgId, selectedJournal) : undefined
   const drawer: JournalDrawerProps | null =
     (openJournal || newJournalPayload) && pickers
       ? {

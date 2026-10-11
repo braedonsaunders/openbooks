@@ -321,7 +321,7 @@ export async function validateSavedAmortizationLines(runner: SqlExecutor, orgId:
   const lines = (await runner.execute<AmortizationSourceLine>(sql`
     select id, line_number as "lineNumber", account_id as "accountId", amount::text as amount,
            amortization_template_id as "amortizationTemplateId", amortization_start_on::text as "amortizationStartOn",
-           amortization_end_on::text as "amortizationEndOn"
+           amortization_end_on::text as "amortizationEndOn", settlement_type as "settlementType"
     from document_lines where org_id = ${orgId} and document_id = ${documentId} order by line_number`)).rows;
   for (const line of lines) {
     const refusal = amortizationLineRefusal(document.kind, line);

@@ -1,4 +1,5 @@
 import 'server-only'
+import { sourceAmortizationOptions } from '@/lib/amortization-options'
 
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
@@ -68,6 +69,7 @@ export interface ExpenseReportsDrawer {
   canRecall: boolean
   layout: unknown
   closeHref: string
+  amortizationTemplates?: { id: string; label: string }[]
 }
 
 export interface ExpenseReportsData {
@@ -162,6 +164,7 @@ export async function loadExpenseReports(
       ? {
           remountKey: String((openReport.doc as Record<string, unknown>).id),
           report: openReport as unknown as ExpenseDrawerProps['report'],
+          amortizationTemplates: await sourceAmortizationOptions(authz.user.orgId, openReport),
           initialMode: pickString(sp.mode) === 'edit' ? 'edit' : 'view',
           employees: (pickers[0] as { rows: unknown }).rows,
           accounts: (pickers[1] as { rows: unknown }).rows,
