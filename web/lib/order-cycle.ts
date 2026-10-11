@@ -28,6 +28,7 @@ import { overReceiptAllowanceUnits, resolveOverReceiptTolerance } from './purcha
 import { isFeatureEnabled } from './features'
 import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { applyPurchaseReceiptInventory } from "@openbooks/engine/src/inventory/documents-purchasing.ts";
+import { linkedBillReceivedCover } from "@openbooks/engine/src/inventory/bill-matchable-lines.ts";
 import { applySalesFulfillmentInventoryIssues } from "@openbooks/engine/src/inventory/documents-sales.ts";
 import { assertStockLocationAdmitsSubsidiary } from "@openbooks/engine/src/inventory/profile-policy.ts";
 import { InventoryError, InventoryOwnershipError, UnitConversionError } from "@openbooks/engine/src/inventory/contracts.ts";
@@ -1347,9 +1348,44 @@ export async function receivePurchaseOrderInTx(
           { lineNumber: line.line_number, itemId: line.item_id, itemName: line.item_name },
         )
       }
-      const remaining = toQuantityUnits(String(line.quantity)) - toQuantityUnits(String(line.quantity_fulfilled))
+      // Stock a linked vendor bill already received through the bill drain
+      // counts as received here: the shared cover reports it floored into
+      // this line's unit with the bills behind it, so the receipt can only
+      // bring what the bills have not. Unlinked bill-direct stock names no
+      // order line and stays invisible — that receipt stays permissive.
+      const billCover = await linkedBillReceivedCover(tx, orgId, {
+        purchaseOrderLineId: line.id,
+        itemId: line.item_id,
+        unit: line.unit,
+      })
+      const billReceived = toQuantityUnits(billCover.quantity)
+      const billNumbers = billCover.bills.map((bill) => bill.billNumber)
+      const billLabel =
+        billNumbers.length > 1
+          ? `vendor bills ${billNumbers.join(", ")}`
+          : `vendor bill ${billNumbers[0]}`
+      const billRefusal = (rest: bigint) =>
+        new ConversionError(
+          rest > 0n
+            ? `Purchase-order line ${line.line_number} was already received on ${billLabel} (${fromQuantityUnits(billReceived)} ${line.unit}): the stock is on hand through the bill. Receive at most ${fromQuantityUnits(rest)} ${line.unit} now, or void ${billLabel} to unwind its receipt and receive again`
+            : `Purchase-order line ${line.line_number} was already received on ${billLabel} (${fromQuantityUnits(billReceived)} ${line.unit}): the stock is on hand through the bill. Void ${billLabel} to unwind its receipt and receive again, or do not receive`,
+          422,
+          'BILL_ALREADY_RECEIVED',
+          {
+            lineNumber: line.line_number,
+            billNumbers,
+            remedy:
+              rest > 0n
+                ? `Receive at most ${fromQuantityUnits(rest)} ${line.unit} on this line, or void ${billLabel} first`
+                : `Void ${billLabel} to unwind its receipt, then receive again`,
+          },
+        )
+      const remaining = toQuantityUnits(String(line.quantity)) - toQuantityUnits(String(line.quantity_fulfilled)) - billReceived
       const receiving = toQuantityUnits(request.quantity)
-      if (remaining <= 0n) throw new ConversionError(`Purchase-order line ${line.line_number} is already fully received`)
+      if (remaining <= 0n) {
+        if (billNumbers.length > 0) throw billRefusal(remaining)
+        throw new ConversionError(`Purchase-order line ${line.line_number} is already fully received`)
+      }
       let allowanceUnits = 0n
       let overReceipt: { excess: string; tolerancePercent: string; toleranceQuantity: string } | null = null
       if (receiving > remaining) {
@@ -1360,6 +1396,7 @@ export async function receivePurchaseOrderInTx(
         const tolerance = await resolveOverReceiptTolerance(tx, orgId, line.item_category, input.receiptDate)
         allowanceUnits = overReceiptAllowanceUnits(toQuantityUnits(String(line.quantity)), tolerance)
         if (receiving - remaining > allowanceUnits) {
+          if (billNumbers.length > 0) throw billRefusal(remaining)
           throw new ConversionError(
             `Purchase-order line ${line.line_number} has only ${fromQuantityUnits(remaining)} remaining to receive`,
           )

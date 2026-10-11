@@ -209,6 +209,82 @@ export function billableRemainderUnits(input: {
   return cover < remaining ? cover : remaining;
 }
 
+export interface LinkedBillReceipt {
+  billId: string;
+  billNumber: string;
+  /** Live received quantity on that bill for the order line, base units. */
+  quantity: string;
+  /** Live received value on that bill for the order line. */
+  value: string;
+}
+
+/**
+ * Stock vendor bills already received for a purchase-order line through
+ * the bill drain: posted receipt movements on vendor-bill lines whose
+ * immutable link names that order line, each net of its posted reversals
+ * through the shared live-receipt helper. Linked bills never receive
+ * through the drain anymore, so cover here is legacy data — but the
+ * receiving side must still count it, or the goods receipt brings the
+ * same units a third time. Unlinked bill-direct stock is deliberately
+ * invisible here: with no order line named, no receipt line can attribute
+ * it, and the receipt stays permissive.
+ */
+export async function liveLinkedBillReceipts(
+  runner: SqlExecutor,
+  orgId: string,
+  purchaseOrderLineId: string,
+): Promise<LinkedBillReceipt[]> {
+  const movements = (await runner.execute<{ id: string; bill_id: string; bill_number: string }>(sql`
+    select m.id, bill.id as bill_id, bill.document_number as bill_number
+      from inventory_movements m
+      join document_lines bl on bl.id = m.document_line_id and bl.org_id = m.org_id
+      join documents bill on bill.id = bl.document_id and bill.org_id = bl.org_id
+     where m.org_id = ${orgId} and m.kind = 'receipt' and m.status = 'posted'
+       and bill.kind = 'vendor_bill'
+       and (bl.custom->>'purchaseOrderLineId' = ${purchaseOrderLineId}
+            or bl.custom->'convertedFrom'->>'lineId' = ${purchaseOrderLineId})
+     order by bill.document_number, m.id
+  `)).rows;
+  const byBill = new Map<string, LinkedBillReceipt>();
+  for (const movement of movements) {
+    const live = await liveReceiptQuantity(runner, orgId, movement.id);
+    if (toQuantityUnits(live.quantity) <= 0n) continue;
+    const entry = byBill.get(movement.bill_id) ?? {
+      billId: movement.bill_id,
+      billNumber: movement.bill_number,
+      quantity: "0",
+      value: "0",
+    };
+    entry.quantity = fromQuantityUnits(toQuantityUnits(entry.quantity) + toQuantityUnits(live.quantity));
+    entry.value = add(entry.value, live.value);
+    byBill.set(movement.bill_id, entry);
+  }
+  return [...byBill.values()];
+}
+
+/**
+ * Linked bill-received cover floored into a purchase-order line's own
+ * unit, for the receiving side: a goods receipt may only bring what the
+ * linked bills have not already brought. Without a costing profile there
+ * is no base pivot, so any linked receipt presence reports zero cover and
+ * the caller refuses fail-closed naming the bills.
+ */
+export async function linkedBillReceivedCover(
+  runner: SqlExecutor,
+  orgId: string,
+  line: { purchaseOrderLineId: string; itemId: string; unit: string | null },
+): Promise<{ quantity: string; bills: { billId: string; billNumber: string }[] }> {
+  const linked = await liveLinkedBillReceipts(runner, orgId, line.purchaseOrderLineId);
+  const bills = linked.map(({ billId, billNumber }) => ({ billId, billNumber }));
+  if (linked.length === 0) return { quantity: "0", bills };
+  const profile = await itemProfile(runner, orgId, line.itemId);
+  if (!profile) return { quantity: "0", bills };
+  const factor = baseFactor(profile, line.unit, "purchase-order line");
+  let base = 0n;
+  for (const entry of linked) base += toQuantityUnits(entry.quantity);
+  return { quantity: fromQuantityUnits((base * QUANTITY_SCALE) / factor), bills };
+}
+
 export interface UnifiedUnbilledCover {
   /** Unified received-and-unbilled cover in the order line's own unit (floored). */
   billableQuantity: string;
