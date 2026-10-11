@@ -481,10 +481,22 @@ export class WithdrawSubmissionError extends Error {
   constructor(
     message: string,
     readonly status: number = 422,
-    readonly code: "invalid_status" | "forbidden" | "stale-revision" | "not-found" = "invalid_status",
+    readonly code: "invalid_status" | "invalid_reason" | "forbidden" | "stale-revision" | "not-found" = "invalid_status",
   ) {
     super(message);
   }
+}
+
+function requireWithdrawReason(reason: unknown): string {
+  const value = typeof reason === "string" ? reason.trim() : "";
+  if (value.length < 5 || value.length > 500) {
+    throw new WithdrawSubmissionError(
+      "a withdrawal reason between 5 and 500 characters is required",
+      422,
+      "invalid_reason",
+    );
+  }
+  return value;
 }
 
 export interface WithdrawSubmissionInput {
@@ -517,7 +529,7 @@ export interface WithdrawSubmissionResult {
 export async function withdrawDocumentSubmission(
   input: WithdrawSubmissionInput,
 ): Promise<WithdrawSubmissionResult> {
-  const reason = requireReturnReason(input.reason);
+  const reason = requireWithdrawReason(input.reason);
   return withOrgTransaction(input.orgId, async () => {
     const locked = (await db.execute<{
       id: string;

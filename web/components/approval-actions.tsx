@@ -338,7 +338,7 @@ export function ApprovalActions({
   }
   if (
     !state ||
-    (!state.approvalState.myActions && state.approvalState.pendingWith.length === 0 && !showRetry && !showSubmit)
+    (!state.approvalState.myActions && state.approvalState.pendingWith.length === 0 && !showRetry && !showSubmit && !showWithdraw)
   ) return null
 
   // A failed run strands the record with no live gate: offer a
@@ -415,6 +415,7 @@ export function ApprovalActions({
   // remaining button is the never-submitted submit, if this surface owns one.
   return (
     <>
+      {withdrawButton}
       {retryButton}
       {showSubmit ? (
         <Button variant="outline" disabled={busy} onClick={submitForApproval}>

@@ -15,6 +15,7 @@ interface RouteState {
   lockChecks: Array<string | null>;
   statusCalls: string[];
   runRows: Array<Record<string, unknown>>;
+  gateRows: Array<Record<string, unknown>>;
   canRetry: boolean;
   canRead: boolean;
   readChecks: string[];
@@ -33,6 +34,7 @@ const routeState: RouteState = {
   lockChecks: [],
   statusCalls: [],
   runRows: [],
+  gateRows: [],
   canRetry: false,
   canRead: true,
   readChecks: [],
@@ -50,6 +52,7 @@ const mockSources = new Map<string, string>([
       const state = globalThis[Symbol.for('openbooks.flow-record-state-route-test')]
       export const db = { execute: async (query) => {
         state.flowQueries += 1
+        if (JSON.stringify(query).includes('flow_gates')) return { rows: state.gateRows ?? [] }
         if (JSON.stringify(query).includes('flow_runs')) return { rows: state.runRows ?? [] }
         return { rows: [] }
       } }
@@ -149,6 +152,7 @@ function reset(allowedSubsidiaryIds: Set<string> | null): void {
   routeState.lockChecks = [];
   routeState.statusCalls = [];
   routeState.runRows = [];
+  routeState.gateRows = [];
   routeState.canRetry = false;
   routeState.canRead = true;
   routeState.readChecks = [];
@@ -290,6 +294,7 @@ test("with Flows off a visible record answers an empty approval state", async ()
     failedRun: null,
     neverSubmitted: false,
     canRetry: false,
+    canWithdraw: false,
   });
   assert.deepEqual(routeState.statusCalls, [SUBJECT_ID]);
   assert.equal(routeState.flowQueries, 0, "no gate, run or role read may run");
@@ -310,6 +315,7 @@ test("with Flows off a customer payment answers an empty approval state, draft o
       failedRun: null,
       neverSubmitted: false,
       canRetry: false,
+      canWithdraw: false,
     });
     assert.deepEqual(routeState.readChecks, ["customer_payment"], "the receipt's own read grant is enforced");
     assert.deepEqual(routeState.statusCalls, [SUBJECT_ID], "the empty state carries the record's own status");
@@ -331,6 +337,7 @@ test("with Flows off a vendor payment answers an empty approval state", async ()
     failedRun: null,
     neverSubmitted: false,
     canRetry: false,
+    canWithdraw: false,
   });
   assert.deepEqual(routeState.readChecks, ["vendor_payment"], "the payment's own read grant is enforced");
   assert.equal(routeState.flowQueries, 0, "no gate, run or role read may run");
@@ -396,8 +403,92 @@ test("a kind no flow can govern answers an empty approval state without reading 
     failedRun: null,
     neverSubmitted: false,
     canRetry: false,
+    canWithdraw: false,
   });
   assert.deepEqual(routeState.lockChecks, [], "nothing about the named record is resolved");
   assert.deepEqual(routeState.statusCalls, []);
   assert.equal(routeState.flowQueries, 0);
+});
+
+const SUBMISSION_RUN = {
+  id: "run-submission",
+  status: "waiting",
+  error: null,
+  finishedAt: null,
+  startedAt: new Date("2026-10-01T12:00:00.000Z"),
+  submitterId: "user-1",
+  submitterName: "Preparer",
+};
+const LATER_SCHEDULED_RUN = {
+  id: "run-reminder",
+  status: "completed",
+  error: null,
+  finishedAt: new Date("2026-10-02T06:00:00.000Z"),
+  startedAt: new Date("2026-10-02T06:00:00.000Z"),
+  submitterId: null,
+  submitterName: null,
+};
+const PENDING_GATE = {
+  id: "gate-1",
+  status: "pending",
+  title: "Approval",
+  comment: null,
+  runId: "run-submission",
+  assigneeUserId: "approver-1",
+  assigneeRole: null,
+  decidedBy: null,
+  decidedAt: null,
+  createdAt: new Date("2026-10-01T12:00:00.000Z"),
+  updatedAt: new Date("2026-10-01T12:00:00.000Z"),
+  delegatedFromUserId: null,
+  onBehalfOfUserId: null,
+  assigneeName: "Approver One",
+  deciderName: null,
+  delegatedFromName: null,
+  onBehalfOfName: null,
+};
+
+/**
+ * The recall belongs to the submission that owns the live gate. A scheduled
+ * reminder that completed later on the same bill must not hide it from the
+ * preparer, and must not grant it to a stranger.
+ */
+test("the submitter may withdraw while a later unrelated run exists on the record", async () => {
+  reset(new Set(["sub-hidden"]));
+  routeState.runRows = [SUBMISSION_RUN, LATER_SCHEDULED_RUN];
+  routeState.gateRows = [PENDING_GATE];
+
+  const response = await GET(request());
+
+  assert.equal(response.status, 200);
+  const body = (await response.json()) as { canWithdraw: boolean; approvalState: { pendingWith: unknown[] } };
+  assert.equal(body.approvalState.pendingWith.length, 1);
+  assert.equal(body.canWithdraw, true);
+});
+
+test("a viewer who neither submitted nor may decide cannot withdraw, even with a later run", async () => {
+  reset(new Set(["sub-hidden"]));
+  routeState.authz.user.id = "stranger-1";
+  try {
+    routeState.runRows = [SUBMISSION_RUN, LATER_SCHEDULED_RUN];
+    routeState.gateRows = [PENDING_GATE];
+
+    const response = await GET(request());
+
+    assert.equal(response.status, 200);
+    assert.equal(((await response.json()) as { canWithdraw: boolean }).canWithdraw, false);
+  } finally {
+    routeState.authz.user.id = "user-1";
+  }
+});
+
+test("a decided submission offers no recall", async () => {
+  reset(new Set(["sub-hidden"]));
+  routeState.runRows = [{ ...SUBMISSION_RUN, status: "completed" }];
+  routeState.gateRows = [{ ...PENDING_GATE, status: "approved" }];
+
+  const response = await GET(request());
+
+  assert.equal(response.status, 200);
+  assert.equal(((await response.json()) as { canWithdraw: boolean }).canWithdraw, false);
 });

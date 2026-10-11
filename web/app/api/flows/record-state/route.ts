@@ -185,7 +185,7 @@ async function legacyGET(req: Request) {
 
     const [gates, runs, roleRows] = await Promise.all([
       db.execute<Record<string, unknown>>(sql`
-      select g.id, g.status, g.title, g.comment,
+      select g.id, g.status, g.title, g.comment, g.run_id as "runId",
              g.assignee_user_id as "assigneeUserId", g.assignee_role as "assigneeRole",
              g.decided_by as "decidedBy", g.decided_at as "decidedAt",
              g.created_at as "createdAt", g.updated_at as "updatedAt",
@@ -312,17 +312,24 @@ async function legacyGET(req: Request) {
     const latestRun =
       runs.rows.length > 0 ? runs.rows[runs.rows.length - 1]! : null;
     // Withdraw is the submitter's own recall (or a live approver's) of a
-    // submission still awaiting decision: an open run with a live gate,
-    // viewed by its submitter or by someone who may decide a gate. Anyone
-    // else never sees the button; the action route enforces the same rule.
+    // submission still awaiting decision. The submission is the run that owns
+    // the live gates: other runs on the same record (a scheduled reminder, an
+    // automation that completed later) are not the submission and must not
+    // hide the recall. Anyone else never sees the button; the action route
+    // enforces the same rule.
+    const openGateRunIds = new Set(
+      gates.rows
+        .filter((g) => g.status === "pending" || g.status === "escalated")
+        .map((g) => String(g.runId)),
+    );
     const openRun =
-      latestRun && (latestRun.status === "running" || latestRun.status === "waiting")
-        ? latestRun
-        : null;
+      runs.rows.find(
+        (r) =>
+          openGateRunIds.has(String(r.id)) &&
+          (r.status === "running" || r.status === "waiting"),
+      ) ?? null;
     const canWithdraw =
-      !!openRun &&
-      pendingWith.length > 0 &&
-      (openRun.submitterId === authz.user.id || !!myActions.gateId);
+      !!openRun && (openRun.submitterId === authz.user.id || !!myActions.gateId);
     const body: RecordApprovalState = {
       approvalState: {
         status,
