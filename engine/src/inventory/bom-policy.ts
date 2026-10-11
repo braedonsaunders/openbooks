@@ -176,7 +176,7 @@ async function assertBackdateWindowClear(tx: SqlExecutor, orgId: string, assembl
   if (rollup) throw new BomPolicyError(`A back-dated recipe revision is refused: an applied standard-cost roll-up for this assembly already freezes the recipe effective on ${rollup.onDate}. Propose the revision with an effective start of today or later.`,409,"bom_backdated_revision");
 }
 
-async function replace(tx: SqlExecutor, orgId: string, actorId: string, input: BomPolicyInput, before: Awaited<ReturnType<typeof snapshot>>, lines: BomPolicyLine[], approvalChangeId?: string) {
+async function replace(tx: SqlExecutor, orgId: string, actorId: string, input: BomPolicyInput, before: Awaited<ReturnType<typeof readBomRecipe>>, lines: BomPolicyLine[], approvalChangeId?: string) {
   if(approvalChangeId)await tx.execute(sql`select set_config('openbooks.production_bom_changes',
     (coalesce(nullif(current_setting('openbooks.production_bom_changes',true),''),'{}')::jsonb||jsonb_build_object(${orgId+':'+input.assemblyItemId}::text,${approvalChangeId}::text))::text,true)`);
   const deleted = await tx.execute(sql`delete from bom_components where org_id=${orgId} and assembly_item_id=${input.assemblyItemId} returning id`);
