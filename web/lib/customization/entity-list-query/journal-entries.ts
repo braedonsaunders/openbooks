@@ -14,6 +14,7 @@ export const JOURNAL_ENTRY_BUILT_IN_EXPR: Record<string, SQL> = {
   entry_number: sql`e.entry_number`,
   memo: sql`e.memo`,
   origin: sql`e.origin`,
+  book: sql`(select book.code from accounting_books book where book.org_id = e.org_id and book.id = e.book_id)`,
   line_count: sql`entry_totals.line_count`,
   total_debits: sql`entry_totals.total_debits`,
   status: sql`e.status`,
@@ -23,6 +24,7 @@ export const JOURNAL_ENTRY_SORTS: Record<string, SQL> = {
   date: sql`e.posting_date`,
   number: sql`e.entry_number`,
   origin: sql`e.origin`,
+  book: sql`(select book.code from accounting_books book where book.org_id = e.org_id and book.id = e.book_id)`,
   lines: sql`entry_totals.line_count`,
   debits: sql`entry_totals.total_debits`,
   status: sql`e.status`,
@@ -66,6 +68,8 @@ export const JOURNAL_GL_NATIVE_ORIGINS = [
   // source document: without this they post to the GL yet stay
   // invisible in the list and its counts even with Origin=All.
   "migration",
+  // Opening balances a secondary book receives when full replication starts.
+  "book_opening",
 ];
 
 /**
@@ -175,6 +179,11 @@ function journalEntryFilterPredicate(clause: FilterClause): SQL | null {
   }
   if (clause.key === 'origin') return select(sql`e.origin`)
   if (clause.key === 'status') return select(sql`e.status`)
+  if (clause.key === 'book') {
+    const code = sql`(select book.code from accounting_books book where book.org_id = e.org_id and book.id = e.book_id)`
+    if (clause.operator === 'contains') return sql`${code} ilike ${`%${value}%`}`
+    return select(code)
+  }
   if (clause.key === 'posting_date') {
     const refusedDay = dateOrFalse(value)
     if (refusedDay) return refusedDay
@@ -211,6 +220,7 @@ export function journalEntryWhere(
   }
   if (adhoc.filters?.origin) parts.push(sql`and e.origin = ${adhoc.filters.origin}`)
   if (adhoc.filters?.status) parts.push(sql`and e.status = ${adhoc.filters.status}`)
+  if (adhoc.filters?.book) parts.push(sql`and e.book_id in (select book.id from accounting_books book where book.org_id = e.org_id and book.code = ${adhoc.filters.book})`)
   if (adhoc.q) {
     const query = `%${adhoc.q}%`
     parts.push(sql`and (e.entry_number ilike ${query} or e.memo ilike ${query})`)

@@ -223,7 +223,10 @@ export async function readEntityListPage(query: RegisteredEntityListQuery): Prom
   };
   let view: ListViewConfig;
   try {
-    const defaults = defaultListView(query.recordType, { multiSubsidiary: await subsidiaryFeatureEnabled(query.orgId) });
+    const defaults = defaultListView(query.recordType, {
+      multiSubsidiary: await subsidiaryFeatureEnabled(query.orgId),
+      multiBook: await isFeatureEnabled(query.orgId, 'multiBookAccounting'),
+    });
     view = { ...defaults, filters: [...defaults.filters, ...(query.filters ?? [])] };
   } catch {
     return refuse(

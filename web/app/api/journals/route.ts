@@ -1,4 +1,5 @@
 import { defineRoute } from "@/lib/api/route";
+import { can } from "@/lib/authz";
 import { NextResponse } from "next/server";
 
 
@@ -45,6 +46,7 @@ export const POST = defineRoute({
         allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
         idempotencyKey: requestId,
         body: body,
+        canPostBookSpecific: can(gate, "gl.post_book_specific"),
       });
       return NextResponse.json(result.journal, { status: result.created ? 201 : 200 });
     } catch (error) {

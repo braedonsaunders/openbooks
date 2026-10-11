@@ -59,6 +59,12 @@ export const STANDARD_STATEMENT_DEFINITIONS: StandardStatementDefinition[] = [
     statementKind: 'trial-balance',
   },
   {
+    slug: 'book-differences',
+    name: 'Book Differences',
+    description: 'Each account\'s balance in the primary book and a secondary accounting book as of a date, with the difference.',
+    statementKind: 'book-differences',
+  },
+  {
     slug: 'general-ledger',
     name: 'General Ledger',
     description: 'Per-account posted activity with opening/closing balances and a running balance.',
