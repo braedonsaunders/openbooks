@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
 import { lockLedgerSetupFence } from '@openbooks/engine/organization/ledger-setup'
 import { provisionFeatureDefaults } from '@openbooks/engine/provisioning/organization-provisioning'
+import { withDataDependentDefaults } from '@openbooks/engine/organization/feature-state'
 import {
   FEATURES,
   FEATURE_BY_KEY,
@@ -79,10 +80,14 @@ export async function applyFeatureChanges(
         return { ok: false, error: 'feature-blocked', key }
       }
     }
+    // Requirements on a data-dependent feature (Multi-subsidiary) resolve
+    // from the org's data when the flag was never stored, like the page.
+    const enabling = Object.entries(clean).filter(([, value]) => value).map(([key]) => key)
+    const resolvedAfter = await withDataDependentDefaults(db, orgId, after, enabling)
     for (const [key, value] of Object.entries(clean)) {
       if (!value) continue
       const missing = featureRequirements(FEATURE_BY_KEY.get(key)!)
-        .filter((requiredKey) => !featureEnabled(after, requiredKey))
+        .filter((requiredKey) => !featureEnabled(resolvedAfter, requiredKey))
       if (missing.length > 0) return { ok: false, error: 'feature-dependency', key, requiredKeys: missing }
     }
     // Do not leave a stored-on child silently suppressed by switching off one

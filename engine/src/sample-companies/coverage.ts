@@ -63,6 +63,8 @@ export const DEMO_FEATURE_EVIDENCE: Record<string, DemoFeatureEvidence> = {
   manufacturing: workflow("bom_components", "mfg_routings", "mfg_work_orders"), manufacturingMrp: configuration("mfg_item_policies", "mfg_mrp_runs"),
   equipment: workflow("equipment_units"), expenses: workflow("documents"),
   multiSubsidiary: configuration("subsidiaries"), multiCurrency: configuration("fx_rates"),
+  intercompanyTransactions: { ...workspace("subsidiaries"), limitation: "The demonstration company operates one legal entity; designate representing customers and vendors once a second subsidiary and its intercompany pair exist." },
+  intercompanyNetting: { ...workspace("subsidiaries"), limitation: "No intercompany balances exist in the demonstration company, so the netting workspace starts empty." },
   banking: executed("bank_statements", "bank_statement_lines", "reconciliations"),
   bankFeeds: { ...configuration("bank_feed_connections"), limitation: "Disconnected synthetic feed; bank authentication requires configuration." },
   fixedAssets: workflow("asset_categories", "fixed_assets"), budgets: workflow("budget_scenarios", "budget_lines"),

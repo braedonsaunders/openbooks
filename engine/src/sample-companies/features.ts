@@ -1,11 +1,11 @@
 import { FEATURES, featureRequirements } from "../organization/feature-registry.ts";
 
 /** Capabilities awaiting a released schema/scenario contract remain visibly upcoming. */
-export const UPCOMING_DEMO_FEATURES = ["manufacturingSubcontract"] as const;
+export const UPCOMING_DEMO_FEATURES = ["manufacturingSubcontract", "crossSubsidiaryFulfillment"] as const;
 
 /** The industry demos collectively expose the complete product switchboard. */
 export const DEMO_FEATURES_BY_INDUSTRY: Record<string, readonly string[]> = {
-  general_business: ["einvoicing", "internalBilling", "salesManagement", "geographicTerritories", "promotions", "cashSales", "storedValue", "outboundWebhooks", "crm", "orders", "onlinePayments", "banking", "bankFeeds", "fixedAssets", "budgets", "continuousClose", "advancedClose", "multiSubsidiary", "multiCurrency", "allocations", "allocationsAtEntry", "allocationsAtPosting", "expenses", "equipment", "flows", "automations", "automationDateTriggers", "automationFieldTriggers", "automationWebhooks", "automationSimulator", "homeAnnouncements", "apps", "scripts", "apiAccess", "mcpAccess", "queryConsole", "aiGovernanceLedger"],
+  general_business: ["einvoicing", "internalBilling", "salesManagement", "geographicTerritories", "promotions", "cashSales", "storedValue", "outboundWebhooks", "crm", "orders", "onlinePayments", "banking", "bankFeeds", "fixedAssets", "budgets", "continuousClose", "advancedClose", "multiSubsidiary", "intercompanyTransactions", "intercompanyNetting", "multiCurrency", "allocations", "allocationsAtEntry", "allocationsAtPosting", "expenses", "equipment", "flows", "automations", "automationDateTriggers", "automationFieldTriggers", "automationWebhooks", "automationSimulator", "homeAnnouncements", "apps", "scripts", "apiAccess", "mcpAccess", "queryConsole", "aiGovernanceLedger"],
   construction_contractor: ["contractorWithholding", "projectProgress", "unbilledRevenueAccrual", "projects", "timeTracking", "fieldTime", "fieldTickets", "projectScheduling", "subcontracts", "preBilling", "subcontractorCompliance", "informationReturns", "equipment", "payroll", "hrm", "hrmConstructionCompliance", "hrmCertifications", "flows"],
   professional_services: ["projects", "timeTracking", "resourcing", "resourceRequests", "retainerBilling", "revenueRecognition", "preBilling", "hrm", "hrmCompensation", "hrmPerformance", "hrmDocuments", "hrmSurveys", "hrmRecruiting", "flows"],
   engineering_architecture: ["projects", "timeTracking", "resourcing", "projectScheduling", "subcontracts", "preBilling", "fixedAssets"],

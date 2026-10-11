@@ -110,6 +110,15 @@ export const PERMISSION_CATALOGUE = [
   "allocations.manage",
   "allocations.run",
   "allocations.approve",
+  // Intercompany: read sees pairing, reconciliation, netting runs and
+  // transfers; manage pairs and generates counterpart documents and proposes
+  // netting runs; settle posts and reverses netting runs and posts transfers
+  // between entities' bank accounts; approve decides a netting run's Flows
+  // approval gate when one is configured.
+  "intercompany.read",
+  "intercompany.manage",
+  "intercompany.settle",
+  "intercompany.approve",
   // Nonprofit accounting: run fund, grant, and functional-expense reports.
   "nonprofit.report",
   // Fund accounting: read fund surfaces; manage authors framework, fund
@@ -575,6 +584,16 @@ export const PERMISSION_GROUPS: {
       { key: "allocations.manage", labelKey: permissionLabelKey("allocations.manage") },
       { key: "allocations.run", labelKey: permissionLabelKey("allocations.run") },
       { key: "allocations.approve", labelKey: permissionLabelKey("allocations.approve") },
+    ],
+  },
+  {
+    key: "intercompany",
+    labelKey: "permissions.groups.intercompany",
+    permissions: [
+      { key: "intercompany.read", labelKey: permissionLabelKey("intercompany.read") },
+      { key: "intercompany.manage", labelKey: permissionLabelKey("intercompany.manage") },
+      { key: "intercompany.settle", labelKey: permissionLabelKey("intercompany.settle") },
+      { key: "intercompany.approve", labelKey: permissionLabelKey("intercompany.approve") },
     ],
   },
   {
@@ -1115,6 +1134,10 @@ export const BUILT_IN_ROLES: Record<
       "allocations.manage",
       "allocations.run",
       "allocations.approve",
+      "intercompany.read",
+      "intercompany.manage",
+      "intercompany.settle",
+      "intercompany.approve",
       "nonprofit.report",
       "funds.read",
       "funds.manage",
@@ -1243,6 +1266,8 @@ export const BUILT_IN_ROLES: Record<
       "allocations.read",
       "allocations.manage",
       "allocations.run",
+      "intercompany.read",
+      "intercompany.manage",
       "nonprofit.report",
       "funds.read",
       "grants.read",
@@ -1333,6 +1358,8 @@ export const BUILT_IN_ROLES: Record<
       "budgets.approve",
       "allocations.read",
       "allocations.approve",
+      "intercompany.read",
+      "intercompany.approve",
       // The approver reviews impairment (read + approve) without the
       // day-to-day capitalization duty.
       "contract_costs.read",
@@ -1366,7 +1393,7 @@ export const BUILT_IN_ROLES: Record<
     name: "Viewer",
     description:
       "Read-only access to the ledger, subledgers, reports and insights. Cannot create, change, post or pay transactions.",
-    permissions: ["gl.read", "close.read", "ap.read", "purchase_orders.read", "ar.read", "estimates.read", "usage.read", "payment_methods.read", "contract_costs.read", "resourcing.read", "retainers.read", "reports.read", "budgets.read", "allocations.read", "nonprofit.report", "funds.read", "grants.read", "encumbrances.read", "insights.read", "records.read", "items.read", "assets.read", "time.read", "time.clock", "compliance.read", "assistant.use", "documents.read", "feedback.use", "data.export", "apps.use", "hrm.self.read", "hrm.self.request", "hrm.leave.request", "cash_sales.read"],
+    permissions: ["gl.read", "close.read", "ap.read", "purchase_orders.read", "ar.read", "estimates.read", "usage.read", "payment_methods.read", "contract_costs.read", "resourcing.read", "retainers.read", "reports.read", "budgets.read", "allocations.read", "intercompany.read", "nonprofit.report", "funds.read", "grants.read", "encumbrances.read", "insights.read", "records.read", "items.read", "assets.read", "time.read", "time.clock", "compliance.read", "assistant.use", "documents.read", "feedback.use", "data.export", "apps.use", "hrm.self.read", "hrm.self.request", "hrm.leave.request", "cash_sales.read"],
   },
   sales_manager: {
     name: "Sales Manager",

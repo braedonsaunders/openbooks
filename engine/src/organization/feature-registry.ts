@@ -62,6 +62,21 @@ export const FEATURES: FeatureDef[] = [
   // currencies/books. Data-dependent default — resolved by subsidiaryFeatureEnabled,
   // NOT the static defaultEnabled below (which only applies to brand-new orgs).
   { key: 'multiSubsidiary', defaultEnabled: false, category: 'finance', group: 'structure' },
+  // Intercompany framework, all subordinate to Multi-subsidiary. Each is off
+  // by default because it changes how documents post (representing parties
+  // post to intercompany receivable/payable accounts) or adds a governed
+  // settlement path; data is kept when any of them is switched off.
+  // - Intercompany transactions: representing customers/vendors, paired
+  //   intercompany orders, invoices and credits, transfer pricing policies,
+  //   the pairing workspace and the reconciliation report.
+  // - Intercompany netting: governed netting and settlement runs over open
+  //   intercompany balances, and bank transfers between entities.
+  // - Cross-subsidiary fulfillment: one entity fulfills another entity's sales
+  //   order from its own stock at a transfer price; needs transfer pricing,
+  //   inventory and order entry.
+  { key: 'intercompanyTransactions', defaultEnabled: false, category: 'finance', group: 'structure', parentKey: 'multiSubsidiary', navModules: ['intercompany'] },
+  { key: 'intercompanyNetting', defaultEnabled: false, category: 'finance', group: 'structure', parentKey: 'multiSubsidiary', navModules: ['intercompany-netting'] },
+  { key: 'crossSubsidiaryFulfillment', defaultEnabled: false, category: 'finance', group: 'structure', parentKey: 'multiSubsidiary', requiresAll: ['intercompanyTransactions', 'inventory', 'orders'] },
   // Multi-currency: transact in currencies other than the base, with FX rates,
   // revaluation, and realized/unrealized gain-loss. Data-dependent default (see
   // resolveMultiCurrency), NOT the static flag below.

@@ -1,7 +1,9 @@
 import { sql } from 'drizzle-orm'
 import { db, type SqlExecutor } from '../platform/db.ts'
 import { featureEnabled, type FeatureState } from './feature-registry.ts'
-import { dataDependentFeatureDefault } from './feature-defaults.ts'
+import { dataDependentFeatureDefault, withDataDependentDefaults } from './feature-defaults.ts'
+
+export { withDataDependentDefaults }
 import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature } from './org-feature-lock.ts'
 
 /** Load the org's feature state (raw overrides; combine with featureEnabled). */
@@ -27,7 +29,9 @@ export async function featureEnabledFromState(
 ): Promise<boolean> {
   if (key === 'multiSubsidiary') return resolveMultiSubsidiary(orgId, state, executor)
   if (key === 'multiCurrency') return resolveMultiCurrency(orgId, state, executor)
-  return featureEnabled(state, key)
+  // A child of a data-dependent feature resolves its parent from the org's
+  // data first, exactly as the Features page does.
+  return featureEnabled(await withDataDependentDefaults(executor, orgId, state, [key]), key)
 }
 
 /**
