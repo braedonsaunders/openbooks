@@ -87,3 +87,84 @@ test('record actions still open on click', async (t: TestContext) => {
   assert.equal(trigger.getAttribute('aria-expanded'), 'true', 'keyboard-equivalent click must open the menu')
   assert.ok(document.querySelector('[data-ui-overlay]'), 'the menu panel renders')
 })
+
+function menu(): HTMLElement | undefined {
+  return document.querySelector('[role="menu"]') as HTMLElement | undefined
+}
+
+function menuItems(): HTMLElement[] {
+  return [...document.querySelectorAll('[role="menuitem"]')] as HTMLElement[]
+}
+
+async function openTwoItemMenu(t: TestContext, selected: { value: string | null }) {
+  const item = (label: string) => React.createElement('button', {
+    type: 'button',
+    onClick: () => { selected.value = label },
+  }, label)
+  await renderDrawer(t, React.createElement(React.Fragment, null, item('Post bill'), item('View statement')))
+  const trigger = actionsTrigger()
+  assert.ok(trigger, 'the Actions button renders when entries are visible')
+  assert.equal(trigger.getAttribute('aria-haspopup'), 'menu', 'the trigger announces a menu')
+  await click(trigger)
+  assert.ok(menu(), 'the Actions panel exposes a menu')
+}
+
+async function key(target: Element, keyName: string) {
+  await act(async () => {
+    target.dispatchEvent(new window.KeyboardEvent('keydown', { key: keyName, bubbles: true, cancelable: true }))
+    await tick()
+  })
+}
+
+// The shared Actions menu carries the same menu contract as the ViewsMenu
+// and filter-chip menus: a named role="menu" whose entries are menuitems
+// with arrow-key travel, native Enter activation and Escape to close.
+test('record actions menu exposes menu roles', async (t: TestContext) => {
+  await openTwoItemMenu(t, { value: null })
+  const panel = menu()
+  assert.equal(panel?.getAttribute('aria-label'), actionsLabel, 'the menu is named for assistive technology')
+  const items = menuItems()
+  assert.equal(items.length, 2, 'every entry exposes a menuitem')
+  for (const entry of items) {
+    assert.ok(entry.tagName === 'BUTTON' || entry.tagName === 'A', 'a menuitem stays natively keyboard-activatable')
+  }
+})
+
+test('record actions menu supports arrow-key travel', async (t: TestContext) => {
+  await openTwoItemMenu(t, { value: null })
+  const [first, second] = menuItems()
+  assert.ok(first && second, 'two menuitems render')
+  await act(async () => { first.focus() })
+  await key(first, 'ArrowDown')
+  assert.equal(document.activeElement, second, 'ArrowDown moves to the next entry')
+  await key(second, 'ArrowDown')
+  assert.equal(document.activeElement, first, 'ArrowDown wraps past the last entry')
+  await key(first, 'ArrowUp')
+  assert.equal(document.activeElement, second, 'ArrowUp wraps past the first entry')
+  await key(second, 'Home')
+  assert.equal(document.activeElement, first, 'Home jumps to the first entry')
+  await key(first, 'End')
+  assert.equal(document.activeElement, second, 'End jumps to the last entry')
+})
+
+test('record actions menu entry activates on click', async (t: TestContext) => {
+  const selected: { value: string | null } = { value: null }
+  await openTwoItemMenu(t, selected)
+  const [, second] = menuItems()
+  assert.ok(second, 'a second entry renders')
+  await click(second)
+  assert.equal(selected.value, 'View statement', 'the focused entry activates like a native control')
+})
+
+test('record actions menu closes on Escape', async (t: TestContext) => {
+  await openTwoItemMenu(t, { value: null })
+  const trigger = actionsTrigger()
+  assert.ok(trigger, 'the Actions button renders')
+  await act(async () => {
+    document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    await tick()
+    await tick()
+  })
+  assert.equal(trigger.getAttribute('aria-expanded'), 'false', 'Escape closes the menu')
+  assert.equal(document.querySelector('[data-ui-overlay]'), null, 'the closed menu unmounts')
+})

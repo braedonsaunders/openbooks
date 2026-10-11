@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useCallback, useContext, useLayoutEffect, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { ChevronDown } from 'lucide-react'
@@ -8,6 +8,7 @@ import { Button, Popover, UrlDrawer, useMenuTrigger } from '@openbooks/ui'
 import { AttachmentPanel } from './attachment-panel'
 import { AuditTrailPanel } from './audit-trail-panel'
 import { DrawerTabStrip } from './drawer-tab-strip'
+import { menuArrowKeys } from './menu-a11y'
 
 export interface TransactionDrawerProps {
   stacked?: boolean
@@ -170,6 +171,19 @@ function TransactionDrawerFrame({
   // release never becomes a click still opens the menu.
   const hasActions = actions != null || actionsMenuHeader != null
   const actionsTrigger = useMenuTrigger(() => setActionsOpen(true))
+  // Entries are per-record buttons and links (fragments, conditionals and
+  // composed controls included), so the shared shell exposes them as
+  // menuitems centrally: every record inherits the menu contract without
+  // repeating it. Nodes that already declare a role keep their own. The
+  // panel measures its trigger after opening, so it mounts a commit after
+  // the menu opens — the callback ref re-runs the pass once it exists.
+  const [actionsMenuNode, setActionsMenuNode] = useState<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (!actionsOpen || !actionsMenuNode) return
+    for (const entry of actionsMenuNode.querySelectorAll('a[href],button:not([disabled])')) {
+      if (!entry.hasAttribute('role')) entry.setAttribute('role', 'menuitem')
+    }
+  }, [actionsOpen, actions, actionsMenuNode])
   const requestedReturn = searchParams.get('drawerReturn')
   const nestedReturn = requestedReturn?.startsWith('/') && !requestedReturn.startsWith('//')
     ? requestedReturn
@@ -212,6 +226,7 @@ function TransactionDrawerFrame({
                   className="h-8 gap-1.5 px-2.5 text-xs"
                   {...actionsTrigger}
                   aria-expanded={actionsOpen}
+                  aria-haspopup="menu"
                 >
                   {t('labels.actions')}
                   <ChevronDown
@@ -223,7 +238,13 @@ function TransactionDrawerFrame({
               className="w-64 p-1.5"
             >
               {actionsMenuHeader}
-              <div className="space-y-0.5 [&_a]:!h-8 [&_a]:w-full [&_a]:!justify-start [&_a]:!rounded [&_a]:!border-0 [&_a]:!bg-transparent [&_a]:!px-2 [&_a]:!text-xs [&_a]:!text-slate-700 [&_a]:!shadow-none [&_a:hover]:!bg-slate-100 dark:[&_a]:!text-slate-200 dark:[&_a:hover]:!bg-slate-800 [&_button]:!h-8 [&_button]:w-full [&_button]:!justify-start [&_button]:!rounded [&_button]:!border-0 [&_button]:!bg-transparent [&_button]:!px-2 [&_button]:!text-xs [&_button]:!text-slate-700 [&_button]:!shadow-none [&_button:hover]:!bg-slate-100 [&_button:disabled]:!text-slate-300 dark:[&_button]:!text-slate-200 dark:[&_button:hover]:!bg-slate-800 dark:[&_button:disabled]:!text-slate-600 [&_button.text-red-600]:!text-red-600 dark:[&_button.text-red-600]:!text-red-400">
+              <div
+                ref={setActionsMenuNode}
+                role="menu"
+                aria-label={t('labels.actions')}
+                onKeyDown={menuArrowKeys}
+                className="space-y-0.5 [&_a]:!h-8 [&_a]:w-full [&_a]:!justify-start [&_a]:!rounded [&_a]:!border-0 [&_a]:!bg-transparent [&_a]:!px-2 [&_a]:!text-xs [&_a]:!text-slate-700 [&_a]:!shadow-none [&_a:hover]:!bg-slate-100 dark:[&_a]:!text-slate-200 dark:[&_a:hover]:!bg-slate-800 [&_button]:!h-8 [&_button]:w-full [&_button]:!justify-start [&_button]:!rounded [&_button]:!border-0 [&_button]:!bg-transparent [&_button]:!px-2 [&_button]:!text-xs [&_button]:!text-slate-700 [&_button]:!shadow-none [&_button:hover]:!bg-slate-100 [&_button:disabled]:!text-slate-300 dark:[&_button]:!text-slate-200 dark:[&_button:hover]:!bg-slate-800 dark:[&_button:disabled]:!text-slate-600 [&_button.text-red-600]:!text-red-600 dark:[&_button.text-red-600]:!text-red-400"
+              >
                 {actions}
               </div>
             </Popover>
