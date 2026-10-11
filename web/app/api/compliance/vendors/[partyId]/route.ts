@@ -26,8 +26,8 @@ const requestBodySchema = z.object({
     'tin must contain exactly 9 digits; remove other characters and correct the number',
   ).nullable().optional(),
   tinType: z.string().refine((value) => TIN_TYPES.has(value), 'tinType must be an installed TIN type').nullable().optional(),
-  backupWithholding: z.boolean().nullable().optional(),
-  reportable: z.boolean().nullable().optional(),
+  backupWithholding: z.boolean({ error: 'backupWithholding must be a boolean' }).nullable().optional(),
+  reportable: z.boolean({ error: 'reportable must be a boolean' }).nullable().optional(),
   reason: z.string().trim().min(1, 'reason is required for a vendor compliance change').max(2000).optional(),
 })
 
