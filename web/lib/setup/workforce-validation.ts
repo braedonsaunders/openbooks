@@ -122,15 +122,15 @@ export const validateDepartmentExpenseWrite: SetupEntityValidationHook = async (
     )).rows[0]
     : null
   if (rowId && !current) return 'Department expense mapping no longer exists; reopen pay-component setup'
-  const componentId = body.payComponentId === undefined || body.payComponentId === null
-    ? current?.pay_component_id : String(body.payComponentId)
-  const departmentId = body.departmentId === undefined || body.departmentId === null
-    ? current?.department_id : String(body.departmentId)
-  const from = body.effectiveFrom === undefined || body.effectiveFrom === null
-    ? current?.effective_from : String(body.effectiveFrom)
-  const through = body.effectiveTo === undefined
-    ? current?.effective_to ?? null
-    : body.effectiveTo === null ? null : String(body.effectiveTo)
+  // The drawer posts an untouched date input as an empty string, which is
+  // "no date" here, never a date literal: an open-ended window (blank end)
+  // must not reach the ::date casts below as ''.
+  const text = (value: unknown): string | null =>
+    value === undefined || value === null || String(value).trim() === '' ? null : String(value)
+  const componentId = text(body.payComponentId) ?? current?.pay_component_id ?? null
+  const departmentId = text(body.departmentId) ?? current?.department_id ?? null
+  const from = text(body.effectiveFrom) ?? current?.effective_from ?? null
+  const through = body.effectiveTo === undefined ? current?.effective_to ?? null : text(body.effectiveTo)
   if (!componentId || !departmentId || !from) return null
   const clashes = (await executor.execute<{ id: string }>(sql`
     select id from pay_component_department_expenses

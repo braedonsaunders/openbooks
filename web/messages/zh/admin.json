@@ -2341,8 +2341,9 @@
       "invalidUrl": "请输入有效的 http:// 或 https:// 政府申报 URL。",
       "invalidDepreciationFormula": "请使用文档中的变量和运算符输入有效的折旧公式。",
       "invalidRecoverablePercent": "请为可抵扣 %输入0到100之间的数字。",
-      "overlap": "此期间该司法管辖区已存在有效税率。",
-      "saveTimedOut": "保存超时。重试前请先检查表格，该记录可能已存在。"
+      "overlap": "此期间与已有记录重叠。请先设置该记录的结束日期或停用它，然后再保存。",
+      "saveTimedOut": "保存超时。重试前请先检查表格，该记录可能已存在。",
+      "noReason": "服务器未返回此次失败的原因（HTTP {status}）。请检查各字段后重试。"
     },
     "groups": {
       "company": "公司",

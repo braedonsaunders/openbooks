@@ -2266,8 +2266,9 @@
       "invalidUrl": "Saisissez une URL gouvernementale valide commençant par http:// ou https://.",
       "invalidDepreciationFormula": "Saisissez une formule d’amortissement valide avec les variables et opérateurs documentés.",
       "invalidRecoverablePercent": "Saisissez un nombre entre 0 et 100 pour Recoverable %.",
-      "overlap": "Un taux actif couvre déjà cette juridiction pour cette période.",
-      "saveTimedOut": "L’enregistrement a expiré. Vérifiez le tableau avant de réessayer — l’enregistrement existe peut-être déjà."
+      "overlap": "Cette période chevauche un enregistrement existant. Clôturez sa période (date de fin) ou désactivez-le, puis enregistrez à nouveau.",
+      "saveTimedOut": "L’enregistrement a expiré. Vérifiez le tableau avant de réessayer — l’enregistrement existe peut-être déjà.",
+      "noReason": "Le serveur n’a pas indiqué la raison de cet échec (HTTP {status}). Vérifiez les champs et réessayez."
     },
     "groups": {
       "company": "Entreprise",

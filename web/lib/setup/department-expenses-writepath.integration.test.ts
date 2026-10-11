@@ -57,7 +57,7 @@ test('department expense mappings create, audit, and refuse overlaps', { skip: !
       effectiveFrom: '2026-06-01',
       isActive: true,
     }))
-    assert.ok(overlapping.status !== 200, 'an overlapping window refuses')
+    assert.equal(overlapping.status, 400, 'an overlapping window refuses as a typed validation failure')
     assert.match(String((overlapping.body as { error?: string }).error ?? ''), /overlap|already have an active/i)
 
     // The remedy works: close the existing window, then the successor saves.
@@ -79,6 +79,62 @@ test('department expense mappings create, audit, and refuse overlaps', { skip: !
       isActive: true,
     }))
     assert.equal(successor.status, 200, `successor refused: ${JSON.stringify(successor.body)}`)
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId))
+  }
+})
+
+/**
+ * The drawer posts an untouched end date as an empty string. A blank end is an
+ * open-ended window: it saves, stores no end date, and a second window that
+ * starts after it still refuses as an overlap.
+ */
+test('a department expense mapping saved with a blank end date is open-ended', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypass(() => createScratchOrg())
+  const actor = await withBypass(() => createScratchUser(org.orgId, 'Setup Admin', 'admin'))
+  await withBypass(() => db.execute(sql`update app_roles set permissions = '["*"]'::jsonb where org_id = ${org.orgId} and key = 'admin'`))
+  await withBypass(() => db.execute(sql`update orgs set settings = settings || '{"features":{"payroll":true}}'::jsonb where id = ${org.orgId}`))
+  try {
+    const expense = (await withBypass(() => db.execute<{ id: string }>(sql`
+      insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
+                            reconcilable, required_dimensions, custom, subsidiary_include_children)
+      values (gen_random_uuid(), ${org.orgId}, '6000', 'Office Salaries', 'expense', false, true, false, false,
+              '[]'::jsonb, '{}'::jsonb, true) returning id`))).rows[0]!.id
+    const componentId = (await withBypass(() => db.execute<{ id: string }>(sql`
+      insert into pay_components (id, org_id, code, name, kind, country, basis, value, taxable,
+                                  pensionable, insurable, vacationable, payment_kind, sequence,
+                                  created_by, updated_by)
+      values (gen_random_uuid(), ${org.orgId}, 'BASE', 'Base pay', 'earning', null, 'fixed_amount', '100',
+              true, true, true, false, 'cash', 10, ${actor}, ${actor}) returning id`))).rows[0]!.id
+    const departmentId = (await withBypass(() => db.execute<{ id: string }>(sql`
+      insert into departments (id, org_id, code, name, is_active)
+      values (gen_random_uuid(), ${org.orgId}, 'OFFICE', 'Office', true) returning id`))).rows[0]!.id
+    const act = { orgId: org.orgId, id: actor } as never
+
+    const created = await withBypass(() => createSetupRecord(act, 'pay-component-department-expenses', {
+      payComponentId: componentId,
+      departmentId,
+      expenseAccountId: expense,
+      effectiveFrom: '2025-09-30',
+      effectiveTo: '',
+      isActive: true,
+    }))
+    assert.equal(created.status, 200, `blank end date refused: ${JSON.stringify(created.body)}`)
+    const createdId = (created.body as { id: string }).id
+    const stored = await withBypass(() => db.execute<{ effective_to: string | null }>(sql`
+      select effective_to::text as effective_to from pay_component_department_expenses where id = ${createdId}`))
+    assert.equal(stored.rows[0]?.effective_to ?? null, null, 'the blank end stores as open-ended')
+
+    const later = await withBypass(() => createSetupRecord(act, 'pay-component-department-expenses', {
+      payComponentId: componentId,
+      departmentId,
+      expenseAccountId: expense,
+      effectiveFrom: '2026-03-01',
+      effectiveTo: '',
+      isActive: true,
+    }))
+    assert.equal(later.status, 400, 'a window inside the open-ended mapping refuses')
+    assert.match(String((later.body as { error?: string }).error ?? ''), /already have an active expense mapping/)
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId))
   }

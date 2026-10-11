@@ -2266,8 +2266,9 @@
       "invalidUrl": "Introduzca una URL gubernamental válida que comience por http:// o https://.",
       "invalidDepreciationFormula": "Introduzca una fórmula de depreciación válida con las variables y los operadores documentados.",
       "invalidRecoverablePercent": "Introduzca un número entre 0 y 100 para el % recuperable.",
-      "overlap": "Una tarifa activa ya cubre esta jurisdicción para este período.",
-      "saveTimedOut": "Se agotó el tiempo de guardado. Revise la tabla antes de reintentar — es posible que el registro ya exista."
+      "overlap": "Este período se superpone con un registro existente. Cierre su vigencia (fecha de fin) o desactívelo y guarde de nuevo.",
+      "saveTimedOut": "Se agotó el tiempo de guardado. Revise la tabla antes de reintentar — es posible que el registro ya exista.",
+      "noReason": "El servidor no indicó el motivo del error (HTTP {status}). Revise los campos e inténtelo de nuevo."
     },
     "groups": {
       "company": "Empresa",

@@ -80,3 +80,18 @@ test('editing a deleted row refuses by name', async () => {
   })
   assert.match(problem ?? '', /no longer exists/)
 })
+
+test('a blank end date from the drawer is an open-ended window, not an empty date literal', async () => {
+  const executor = executorFor([{ rows: [] }])
+  const problem = await validateDepartmentExpenseWrite({
+    entity: { key: 'pay-component-department-expenses' } as never,
+    body: { ...MAPPING, effectiveTo: '' },
+    orgId: 'org',
+    rowId: undefined,
+    executor: executor as never,
+  })
+  assert.equal(problem, null)
+  const clash = executor.calls[0] as { queryChunks: unknown[] }
+  assert.equal(clash.queryChunks.includes(''), false, 'the blank end never binds as a date')
+  assert.ok(clash.queryChunks.includes(null), 'the open end binds as null')
+})

@@ -235,6 +235,18 @@ test('a failed transport releases the button with an inline error', async (t) =>
   )
 })
 
+test('a refusal with no body names its HTTP status instead of a bare save failure', async (t) => {
+  await mountDrawer(t, null, () => new Response('Internal Server Error', { status: 500 }))
+  await fillValidCreate()
+  await clickSave(true)
+  assert.equal(
+    alertText(),
+    String(adminCatalog.errors?.noReason).replace('{status}', '500'),
+    'a non-JSON failure reports its status rather than the generic save failure',
+  )
+  assert.notEqual(alertText(), String(commonCatalog.feedback?.saveFailed))
+})
+
 for (const [name, body, status, expected, message] of [
   [
     'typed server conflicts resolve through their code, never the raw message',

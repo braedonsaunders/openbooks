@@ -159,6 +159,15 @@ function setupDomainRefusal(error: unknown): SetupWriteResult | null {
   const refusal = typedSetupRefusal(error)
   return refusal ? setupRefusalResult(refusal) : null
 }
+/**
+ * A database failure raised while a write is being checked (a value the
+ * check casts that the column cannot hold, a lock or constraint the check
+ * reads) answers 400 with the Postgres cause. Left to escape it becomes an
+ * empty 500 that the drawer can only report as "Save failed".
+ */
+function integrityDatabaseRefusal(error: unknown): SetupWriteResult | null {
+  return pgErrorCode(error) ? { status: 400, body: { error: describeDbError(error) } } : null
+}
 type SetupTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 function setupScopeRefusal(actor: SetupActor, entity: SetupEntity): SetupWriteResult | null {
@@ -2314,7 +2323,7 @@ export async function createSetupRecord(
   try {
     integrityError = await validateEntityIntegrity(entity, body, orgId)
   } catch (error) {
-    const refusal = setupDomainRefusal(error)
+    const refusal = setupDomainRefusal(error) ?? integrityDatabaseRefusal(error)
     if (refusal) return refusal
     throw error
   }
@@ -2787,7 +2796,7 @@ export async function updateSetupRecord(
   try {
     integrityError = await validateEntityIntegrity(entity, body, orgId, id)
   } catch (error) {
-    const refusal = setupDomainRefusal(error)
+    const refusal = setupDomainRefusal(error) ?? integrityDatabaseRefusal(error)
     if (refusal) return refusal
     throw error
   }

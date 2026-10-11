@@ -456,8 +456,9 @@ export function SetupDrawer({
       })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
-        setFieldError(errorMessage(data))
-        toast.error(errorMessage(data))
+        const message = errorMessage(data, res.status)
+        setFieldError(message)
+        toast.error(message)
         return
       }
       let destination = closeHref
@@ -501,7 +502,7 @@ export function SetupDrawer({
       })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
-        toast.error(errorMessage(data))
+        toast.error(errorMessage(data, res.status))
         return
       }
       toast.success(t(entity.archiveOnDelete ? 'archived' : 'deleted'))
@@ -516,7 +517,10 @@ export function SetupDrawer({
     }
   }
 
-  function errorMessage(body: unknown): string {
+  // `status` is the HTTP status of the refusal. A body that names no reason
+  // (an unhandled server failure answers with a non-JSON 500) reports that
+  // status, so the operator sees the save was refused, not a bare failure.
+  function errorMessage(body: unknown, status?: number): string {
     // Typed server bodies: the code maps stably to
     // localized copy while a user-language message renders verbatim, so an
     // 'invalid' 400 names its fix instead of echoing a code. A nested error
@@ -548,6 +552,7 @@ export function SetupDrawer({
     if (missingField) return t('validation.required', { field: t(entity.fields.find((field) => field.key === missingField)?.labelKey ?? `fields.${missingField}`) })
     if (typeof message === 'string' && message) return remedy ? `${message} — ${remedy}` : message
     if (typeof code === 'string' && code) return code
+    if (status !== undefined) return t('errors.noReason', { status })
     return tCommon('feedback.saveFailed')
   }
 
