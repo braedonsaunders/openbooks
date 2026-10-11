@@ -6,7 +6,8 @@ import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts
 import { orgFeatureEnabled, lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { sql } from "drizzle-orm";
 import type { FlowSubjectProfile } from "@openbooks/forms-core";
-import { db, withOrg, withTransactionSavepoint } from "../platform/db.ts";
+import { db, withOrg, withOrgTransaction, withTransactionSavepoint } from "../platform/db.ts";
+import { canonicalJson } from "../platform/canonical-json.ts";
 import {
   ADJUDICATED_HOLIDAY_HOURS_OPERATION,
   MANUFACTURING_SCRAP_RESTATEMENT_OPERATION,
@@ -15,10 +16,13 @@ import {
   MANUFACTURING_ROUTING_APPROVAL_OPERATION,
   MANUFACTURING_BOM_APPROVAL_OPERATION,
   FinancialChangeFeatureError,
+  financialChangeFlowConfigured,
   financialChangeInboxLabel,
   loadFinancialChange,
   loadFinancialChangeSubjectLabel,
 } from "../platform/financial-changes.ts";
+import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
+import { BomPolicyError, applyApprovedBomRevision, assertBomRevisionAuthority, readBomRecipe } from "../inventory/bom-policy.ts";
 import {
   EVENT_SOURCE_OPTIONS,
 } from "./subject-profiles.ts";
@@ -327,4 +331,40 @@ export async function submitFinancialChange(
         throw new Error("accounting event could not be submitted");
     }),
   );
+}
+
+/** Submit a BOM revision through native Flows. Approval is an optional
+ * Flow: with no enabled Accounting-event flow governing the change, the
+ * proposer's own submit applies the revision directly through the
+ * governed admission — the proposal carries the automatic no-flow
+ * decision evidence, the same canonical writer every approval uses
+ * replaces the lines per their effectivity, audited with the actor
+ * recorded. A configured Flow still governs through its gates. This lives
+ * with the policy engine rather than the recipe: routing a revision
+ * through approval gates is orchestration, and subledgers never import
+ * orchestration back. */
+export async function submitBomRevision(orgId: string, actorId: string, changeId: string): Promise<void> {
+  return withOrgTransaction(orgId,async()=>{
+    const tx = db;
+    await tx.execute(sql`lock table bom_components in row exclusive mode`);
+    if (!await lockAndCheckOrgFeature(tx,orgId,"manufacturing")) throw new ScopeNotFoundError();
+    await assertBomRevisionAuthority(tx,orgId,actorId,true);
+    const change = await loadFinancialChange(tx,orgId,changeId);
+    if (change.domain!=="manufacturing" || change.operation!==MANUFACTURING_BOM_APPROVAL_OPERATION) throw new ScopeNotFoundError();
+    if (change.submitted_by !== actorId) throw new BomPolicyError("Only the proposer can submit this recipe revision.");
+    if (change.status !== "draft") return;
+    if (await financialChangeFlowConfigured(tx,orgId)) return submitFinancialChange(orgId,changeId,actorId);
+    const decision = change.payload.decision as { mode?: unknown; policy?: { flowConfigured?: unknown } } | undefined;
+    if (decision?.mode !== "automatic" || decision?.policy?.flowConfigured !== false) throw new BomPolicyError("This proposal predates direct approval; propose the revision again to record its approval evidence.",422,"bom_direct_evidence_missing");
+    const pending = await tx.execute(sql`update financial_changes set status='pending',updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${changeId} and status='draft' returning id`);
+    if (pending.rows.length !== 1) throw new BomPolicyError("The recipe revision was not submitted; reload it and try again.",409);
+    const approved = await tx.execute(sql`update financial_changes set status='approved',approved_by=${actorId},approved_at=now(),updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${changeId} and status='pending' returning id`);
+    if (approved.rows.length !== 1) throw new BomPolicyError("The recipe approval was not recorded; reload it and try again.",409);
+    if (await financialChangeFlowConfigured(tx,orgId)) throw new BomPolicyError("An enabled approval flow now governs recipe revisions; propose the revision for approval through the configured flow.",409,"bom_flow_governed");
+    const direct = await loadFinancialChange(tx,orgId,changeId);
+    if (direct.status !== "approved" || direct.approved_by !== direct.submitted_by || direct.approved_by !== actorId) throw new BomPolicyError("This recipe revision has no permitted approval decision; submit it for approval.",409);
+    const before = await readBomRecipe(tx,orgId,change.subject_id);
+    if (canonicalJson(change.before_state) !== canonicalJson(before)) throw new BomPolicyError("This recipe changed after you opened it; reopen it and use its current revision.",409,"bom_revision_changed");
+    await applyApprovedBomRevision(tx,orgId,actorId,direct,before);
+  });
 }

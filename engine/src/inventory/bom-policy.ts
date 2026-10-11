@@ -72,13 +72,15 @@ function normalize(input: BomPolicyInput): BomPolicyLine[] {
   return lines;
 }
 
-async function authority(tx: SqlExecutor, orgId: string, actorId: string, manufacturing: boolean) {
+/** Recipe revisions require setup management, manufacturing revisions manufacturing management too. */
+export async function assertBomRevisionAuthority(tx: SqlExecutor, orgId: string, actorId: string, manufacturing: boolean) {
   if (!(await tx.execute(sql`select id from users where id=${actorId} and is_active and (org_id=${orgId} or is_super_admin) for share`)).rows.length) throw new ScopeNotFoundError();
   if (await lockActorCommandAuthority(tx, orgId, actorId, null, "admin.setup.manage") !== null) throw new ScopeNotFoundError();
   if (manufacturing && await lockActorCommandAuthority(tx, orgId, actorId, null, "manufacturing.manage") !== null) throw new ScopeNotFoundError();
 }
 
-async function snapshot(tx: SqlExecutor, orgId: string, assemblyItemId: string) {
+/** The recipe state a revision proposes from: parent kind, concurrency version and stored lines. */
+export async function readBomRecipe(tx: SqlExecutor, orgId: string, assemblyItemId: string) {
   const parent = (await tx.execute<{ kind: string }>(sql`select kind from items where org_id=${orgId} and id=${assemblyItemId} for no key update`)).rows[0];
   if (!parent) throw new ScopeNotFoundError();
   const lines = (await tx.execute<StoredLine>(sql`select id,component_item_id as "componentItemId",quantity_per::text as "quantityPer",sort_order as "sortOrder",
@@ -195,17 +197,17 @@ export async function saveBomPolicy(tx: SqlExecutor, orgId: string, actorId: str
   await tx.execute(sql`lock table bom_components in row exclusive mode`);
   if (!await lockAndCheckOrgFeature(tx,orgId,"inventory")) throw new ScopeNotFoundError();
   const manufacturingEnabled = await lockAndCheckOrgFeature(tx,orgId,"manufacturing");
-  await authority(tx,orgId,actorId,false);
+  await assertBomRevisionAuthority(tx,orgId,actorId,false);
   // Request-key lock precedes subject locks, matching the approval apply order.
   if (input.requestKey) await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`financial-change:${orgId}:${input.requestKey}`}))`);
-  const before = await snapshot(tx,orgId,input.assemblyItemId);
+  const before = await readBomRecipe(tx,orgId,input.assemblyItemId);
   if (!manufacturingEnabled && before.kind !== "kit" && (await tx.execute(sql`select 1 from financial_changes where org_id=${orgId} and subject_id=${input.assemblyItemId} and domain='manufacturing' and operation=${MANUFACTURING_BOM_APPROVAL_OPERATION}
     union all select 1 from mfg_work_orders where org_id=${orgId} and produced_item_id=${input.assemblyItemId} and released_at is not null limit 1`)).rows.length) throw new ScopeNotFoundError();
   const manufacturing = manufacturingEnabled && before.kind !== "kit";
   if (!manufacturingEnabled && [...before.lines,...lines].some(line=>line.operationSeq!==null || line.isByproduct || (line.quantityBasis??'per_unit')!=='per_unit')) throw new ScopeNotFoundError();
   if (before.kind === "kit" && lines.some(line=>line.operationSeq!==null || line.isByproduct || compareDecimal(line.scrapPct ?? "0","0")!==0 || line.quantityBasis!=='per_unit')) throw new BomPolicyError("A kit ships the quantities named; remove operation, by-product and scrap settings.");
   if (manufacturing) {
-    await authority(tx,orgId,actorId,true);
+    await assertBomRevisionAuthority(tx,orgId,actorId,true);
     if (!input.subsidiaryId || !isUuid(input.subsidiaryId) || !input.requestKey || input.requestKey.length>120 || input.reason.trim().length<8 || input.reason.trim().length>1000) throw new BomPolicyError("Choose a booking entity, provide a request key and enter an approval reason between 8 and 1,000 characters.");
     if (!(await tx.execute(sql`select id from subsidiaries where org_id=${orgId} and id=${input.subsidiaryId} and is_active and not is_elimination for share`)).rows.length) throw new ScopeNotFoundError();
     const retained = (await tx.execute<{effective_on:string}>(sql`select effective_on::text from financial_changes where org_id=${orgId} and idempotency_key=${input.requestKey}`)).rows[0];
@@ -233,20 +235,21 @@ export async function applyBomRevision(orgId: string, actorId: string, changeId:
   return withOrgTransaction(orgId,async()=>{
     await db.execute(sql`lock table bom_components in row exclusive mode`);
     if (!await lockAndCheckOrgFeature(db,orgId,"manufacturing")) throw new ScopeNotFoundError();
-    await authority(db,orgId,actorId,true);
+    await assertBomRevisionAuthority(db,orgId,actorId,true);
     const change = await loadFinancialChange(db,orgId,changeId);
     if (change.domain!=="manufacturing" || change.operation!==MANUFACTURING_BOM_APPROVAL_OPERATION) throw new ScopeNotFoundError();
     if (change.status==="applied") {
       if (!change.result) throw new BomPolicyError("The applied revision has no retained result; contact an administrator.",409);
       return change.result;
     }
-    const before = await snapshot(db,orgId,change.subject_id);
+    const before = await readBomRecipe(db,orgId,change.subject_id);
     assertFinancialChangeApproved(change,{domain:"manufacturing",subjectId:change.subject_id,beforeState:before});
     return applyApprovedBomRevision(db,orgId,actorId,change,before);
   });
 }
 
-async function applyApprovedBomRevision(tx: SqlExecutor, orgId: string, actorId: string, change: FinancialChange, before: Awaited<ReturnType<typeof snapshot>>) {
+/** Replace the stored lines with an approved revision's frozen payload, audited with the applying actor recorded. */
+export async function applyApprovedBomRevision(tx: SqlExecutor, orgId: string, actorId: string, change: FinancialChange, before: Awaited<ReturnType<typeof readBomRecipe>>) {
   const input = {assemblyItemId:change.subject_id,expectedVersion:change.payload.expectedVersion as string|null,reason:change.reason,components:change.payload.components as BomPolicyLine[]};
   const today = await businessTodayInTx(tx,orgId);
   const lines = await defaultOperationSequences(tx,orgId,change.subject_id,normalize(input),today);
@@ -258,38 +261,7 @@ async function applyApprovedBomRevision(tx: SqlExecutor, orgId: string, actorId:
   return result;
 }
 
-/** Submit a BOM revision through native Flows. Approval is an optional
- * Flow: with no enabled Accounting-event flow governing the change, the
- * proposer's own submit applies the revision directly through the
- * governed admission — the proposal carries the automatic no-flow
- * decision evidence, the same canonical writer every approval uses
- * replaces the lines per their effectivity, audited with the actor
- * recorded. A configured Flow still governs through its gates. */
-export async function submitBomRevision(orgId: string, actorId: string, changeId: string): Promise<void> {
-  return withOrgTransaction(orgId,async()=>{
-    const tx = db;
-    await tx.execute(sql`lock table bom_components in row exclusive mode`);
-    if (!await lockAndCheckOrgFeature(tx,orgId,"manufacturing")) throw new ScopeNotFoundError();
-    await authority(tx,orgId,actorId,true);
-    const change = await loadFinancialChange(tx,orgId,changeId);
-    if (change.domain!=="manufacturing" || change.operation!==MANUFACTURING_BOM_APPROVAL_OPERATION) throw new ScopeNotFoundError();
-    if (change.submitted_by !== actorId) throw new BomPolicyError("Only the proposer can submit this recipe revision.");
-    if (change.status !== "draft") return;
-    if (await financialChangeFlowConfigured(tx,orgId)) {
-      const { submitFinancialChange } = await import("../flows/financial-changes-adapter.ts");
-      return submitFinancialChange(orgId,changeId,actorId);
-    }
-    const decision = change.payload.decision as { mode?: unknown; policy?: { flowConfigured?: unknown } } | undefined;
-    if (decision?.mode !== "automatic" || decision?.policy?.flowConfigured !== false) throw new BomPolicyError("This proposal predates direct approval; propose the revision again to record its approval evidence.",422,"bom_direct_evidence_missing");
-    const pending = await tx.execute(sql`update financial_changes set status='pending',updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${changeId} and status='draft' returning id`);
-    if (pending.rows.length !== 1) throw new BomPolicyError("The recipe revision was not submitted; reload it and try again.",409);
-    const approved = await tx.execute(sql`update financial_changes set status='approved',approved_by=${actorId},approved_at=now(),updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${changeId} and status='pending' returning id`);
-    if (approved.rows.length !== 1) throw new BomPolicyError("The recipe approval was not recorded; reload it and try again.",409);
-    if (await financialChangeFlowConfigured(tx,orgId)) throw new BomPolicyError("An enabled approval flow now governs recipe revisions; propose the revision for approval through the configured flow.",409,"bom_flow_governed");
-    const direct = await loadFinancialChange(tx,orgId,changeId);
-    if (direct.status !== "approved" || direct.approved_by !== direct.submitted_by || direct.approved_by !== actorId) throw new BomPolicyError("This recipe revision has no permitted approval decision; submit it for approval.",409);
-    const before = await snapshot(tx,orgId,change.subject_id);
-    if (canonicalJson(change.before_state) !== canonicalJson(before)) throw new BomPolicyError("This recipe changed after you opened it; reopen it and use its current revision.",409,"bom_revision_changed");
-    await applyApprovedBomRevision(tx,orgId,actorId,direct,before);
-  });
-}
+/** BOM revision submission lives with the Flows policy engine (see
+ * submitBomRevision in the financial-changes adapter): routing a revision
+ * through approval gates is orchestration, and subledgers never import
+ * orchestration back. */

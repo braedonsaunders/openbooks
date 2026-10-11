@@ -269,6 +269,7 @@
       "description": "Approvals and workflow engine: gates, registry, subject adapters, record flows, the approvals worklist.",
       "dependsOn": [
         "delivery",
+        "inventory",
         "organization",
         "payments-core",
         "periods",
