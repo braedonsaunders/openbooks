@@ -2,6 +2,7 @@
 
 import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
 import { useMoney } from '@/components/money-provider'
+import { readApiErrorMessage } from '@/lib/api-error'
 import { useId, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -298,12 +299,11 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
     })
     // The error body may not be JSON (proxy 5xx pages): never let the read
     // itself throw, or the failure surfaces a SyntaxError instead of the
-    // typed reason.
-    const data = (await res.json().catch(() => null)) as (ImportResponse & { error?: unknown }) | null
+    // typed reason. The body parses from a clone so the refusal can read
+    // through the shared helper while the success path keeps the response.
+    const data = (await res.clone().json().catch(() => null)) as (ImportResponse & { error?: unknown }) | null
     if (!res.ok) {
-      throw new Error(
-        typeof data?.error === 'string' && data.error ? data.error : tBanking('errors.requestFailed'),
-      )
+      throw new Error(await readApiErrorMessage(res, tBanking('errors.requestFailed')))
     }
     return data ?? {}
   }

@@ -16,6 +16,7 @@ import {
 import { Badge, Button, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from '@openbooks/ui'
 import { promptDialog } from '../../../../../lib/prompt'
 import { dateTime } from '../../../../../lib/format'
+import { readApiErrorMessage } from '../../../../../lib/api-error'
 
 /**
  * Direct deposit — the operator's view of a control, not a download button.
@@ -142,13 +143,10 @@ export function BankFilePanel({
         if (activeRequest.current !== requestId) return
         // The status is checked before the body is parsed: a non-JSON error
         // body must surface the failure, never a SyntaxError from res.json().
+        // The refusal reads through the shared helper so message, remedy and
+        // code render instead of a bare status string.
         if (!res.ok) {
-          const body = await res.json().catch(() => null)
-          const message =
-            body && typeof body === 'object' && 'error' in body && typeof body.error === 'string'
-              ? body.error
-              : `request failed (${res.status})`
-          setLoadError({ documentId, message })
+          setLoadError({ documentId, message: await readApiErrorMessage(res, `request failed (${res.status})`) })
           return
         }
         return (res.json() as Promise<PanelState>).then((data) => {
@@ -244,8 +242,10 @@ export function BankFilePanel({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ paymentBankProfileId: profileId, supersedeReason }),
       })
-      const body = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(body.error ?? 'failed')
+      // The body parses from a clone so the refusal can read through the
+      // shared helper while the success toast keeps the file number.
+      const body = await res.clone().json().catch(() => ({})) as { artifact: { fileNumber: string } }
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed'))
       toast.success(
         tx('wizard.bankFile.generated', 'Direct-deposit file generated') +
           ` — ${body.artifact.fileNumber}`,
@@ -266,9 +266,10 @@ export function BankFilePanel({
       const res = await fetch(`/api/payroll/runs/${documentId}/bank-file/${artifact.id}`, {
         method: 'POST',
       })
+      // The refusal reads through the shared helper so the server's reason
+      // renders instead of a bare string.
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}))
-        throw new Error(body.error ?? 'failed')
+        throw new Error(await readApiErrorMessage(res, 'failed'))
       }
       const url = URL.createObjectURL(await res.blob())
       const link = document.createElement('a')

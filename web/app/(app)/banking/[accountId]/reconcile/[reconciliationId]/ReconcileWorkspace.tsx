@@ -3,6 +3,7 @@
 import { sum } from '@openbooks/engine/src/money/money.ts'
 import { useMoney } from '@/components/money-provider'
 import type { MoneyValue } from '@/lib/money-format'
+import { readApiErrorMessage } from '@/lib/api-error'
 import type { Dispatch, SetStateAction } from 'react'
 import { useId, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -251,19 +252,18 @@ function ReconcileWorkspaceForId({
         headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
         body: body !== undefined ? JSON.stringify(body) : undefined,
       })
-      // The error body may not be JSON (empty body, proxy 5xx page): never
-      // let the read itself throw, or the failure goes silent with an
-      // unhandled rejection.
-      const data = await res.json().catch(() => null) as ReconciliationActionResult | null
+      // Refusals read through the shared helper so message, remedy and code
+      // render instead of a bare fallback; the success body parses after the
+      // ok check and never lets the read itself throw.
       if (!res.ok) {
-        const message = data?.error ?? tBanking('errors.requestFailed')
+        const message = await readApiErrorMessage(res, tBanking('errors.requestFailed'))
         if (onError) onError(message); else toast.error(message)
         return null
       }
       // A success moves the session: any persisted refusal is stale.
       setSignOffError(null)
       setBlockers(null)
-      return data
+      return await res.json().catch(() => null) as ReconciliationActionResult | null
     } catch {
       const message = tBanking('errors.requestFailed')
       if (onError) onError(message); else toast.error(message)

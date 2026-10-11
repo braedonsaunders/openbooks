@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Button, Input, Label } from '@openbooks/ui'
+import { readApiErrorMessage } from '@/lib/api-error'
 
 /**
  * Opening/closing balances on an imported statement. A CSV carries no
@@ -54,9 +55,10 @@ export function StatementBalanceForm({
           closingBalance: closingBalance.trim() === '' ? null : closingBalance.trim(),
         }),
       })
-      const data = (await res.json().catch(() => null)) as { error?: unknown } | null
+      // The refusal reads through the shared helper so message, remedy and
+      // code render instead of a bare fallback.
       if (!res.ok) {
-        toast.error(typeof data?.error === 'string' && data.error ? data.error : tBanking('errors.requestFailed'))
+        toast.error(await readApiErrorMessage(res, tBanking('errors.requestFailed')))
         return
       }
       toast.success(t('balancesSaved'))

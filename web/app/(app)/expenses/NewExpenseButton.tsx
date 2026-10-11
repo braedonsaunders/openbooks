@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@openbooks/ui'
+import { readApiErrorMessage } from '@/lib/api-error'
 
 /** Instant-into-draft: creates the draft expense report server-side, opens its flyout. */
 export function NewExpenseButton() {
@@ -18,8 +19,10 @@ export function NewExpenseButton() {
     setBusy(true)
     try {
       const res = await fetch('/api/expenses/draft', { method: 'POST' })
+      // The refusal reads through the shared helper so message, remedy and
+      // code render instead of a bare fallback.
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, t('toasts.draftFailed')))
       const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error ?? t('toasts.draftFailed'))
       if (!data.id) throw new Error(t('toasts.draftFailed'))
       router.push(`/expenses/reports?expense=${data.id}&mode=edit`)
       router.refresh()

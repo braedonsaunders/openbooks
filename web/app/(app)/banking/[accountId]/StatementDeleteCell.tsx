@@ -7,6 +7,7 @@ import { Trash2, Undo2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@openbooks/ui'
 import { confirmDialog } from '@/lib/confirm'
+import { readApiErrorMessage } from '@/lib/api-error'
 
 /**
  * Delete one statement import from the account's import history. The engine
@@ -46,9 +47,11 @@ export function StatementDeleteCell({
     setBusy(true)
     try {
       const res = await fetch(`/api/banking/statements/${statementId}/unmatch-all`, { method: 'POST' })
-      const data = (await res.json().catch(() => null)) as { error?: unknown; unmatchedLines?: unknown } | null
+      // The body parses from a clone so the refusal can read through the
+      // shared helper while the success toast keeps its counts.
+      const data = (await res.clone().json().catch(() => null)) as { error?: unknown; unmatchedLines?: unknown } | null
       if (!res.ok) {
-        toast.error(typeof data?.error === 'string' && data.error ? data.error : tBanking('errors.requestFailed'))
+        toast.error(await readApiErrorMessage(res, tBanking('errors.requestFailed')))
         return
       }
       toast.success(t('unmatchedToast', { count: typeof data?.unmatchedLines === 'number' ? data.unmatchedLines : matchedCount ?? 0 }))
@@ -82,9 +85,11 @@ export function StatementDeleteCell({
     setBusy(true)
     try {
       const res = await fetch(`/api/banking/statements/${statementId}`, { method: 'DELETE' })
-      const data = (await res.json().catch(() => null)) as { error?: unknown; deletedLines?: unknown } | null
+      // The body parses from a clone so the refusal can read through the
+      // shared helper while the success toast keeps its counts.
+      const data = (await res.clone().json().catch(() => null)) as { error?: unknown; deletedLines?: unknown } | null
       if (!res.ok) {
-        toast.error(typeof data?.error === 'string' && data.error ? data.error : tBanking('errors.requestFailed'))
+        toast.error(await readApiErrorMessage(res, tBanking('errors.requestFailed')))
         return
       }
       toast.success(t('importDeleted', { count: typeof data?.deletedLines === 'number' ? data.deletedLines : lineCount }))

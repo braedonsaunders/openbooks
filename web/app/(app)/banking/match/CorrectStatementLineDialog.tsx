@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Button, Drawer, Input, Label } from '@openbooks/ui'
+import { readApiErrorMessage } from '@/lib/api-error'
 
 /**
  * Correct one unmatched statement line's amount, sign, date or description.
@@ -50,9 +51,10 @@ export function CorrectStatementLineDialog({
           description: cleanDescription,
         }),
       })
-      const data = (await res.json().catch(() => null)) as { error?: unknown } | null
+      // The refusal reads through the shared helper so message, remedy and
+      // code render instead of a bare fallback.
       if (!res.ok) {
-        setError(typeof data?.error === 'string' && data.error ? data.error : tBanking('errors.requestFailed'))
+        setError(await readApiErrorMessage(res, tBanking('errors.requestFailed')))
         return
       }
       onSaved()

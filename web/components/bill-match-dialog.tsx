@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useTranslations } from 'next-intl'
 import { Button, FieldLabel, Select } from '@openbooks/ui'
-import { fetchAction } from '@braedonsaunders/appkit-errors'
+import { fetchAppAction } from '../lib/api-error'
 
 interface ReceiptReference {
   id: string
@@ -113,7 +113,9 @@ export function BillMatchDialog({
   React.useEffect(() => {
     let cancelled = false
     async function load() {
-      const result = await fetchAction(`/api/documents/${billId}/bill-match`)
+      // The refusal reads through the shared helper so message, remedy and
+      // code render instead of a bare fallback.
+      const result = await fetchAppAction(`/api/documents/${billId}/bill-match`, undefined, { fallback: t('match.loadFailed') })
       if (cancelled) return
       if (!result.ok) {
         setLoadError(result.error.displayMessage(t('match.loadFailed')))
@@ -156,11 +158,11 @@ export function BillMatchDialog({
     setBusy(true)
     setPostError(null)
     try {
-      const result = await fetchAction(`/api/documents/${billId}/bill-match`, {
+      const result = await fetchAppAction(`/api/documents/${billId}/bill-match`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ matches }),
-      })
+      }, { fallback: t('match.matchFailed') })
       if (result.ok) {
         onMatched()
         return

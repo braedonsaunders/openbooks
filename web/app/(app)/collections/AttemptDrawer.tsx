@@ -6,6 +6,7 @@ import { useLocale, useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Badge, Button, DisclosureSection, UrlDrawer } from '@openbooks/ui'
 import { confirmDialog } from '@/lib/confirm'
+import { readApiErrorMessage } from '@/lib/api-error'
 import { createMoneyFormatter } from '@/lib/money-format'
 
 export interface AttemptPayload {
@@ -91,9 +92,10 @@ export function AttemptDrawer({
     setError(null)
     try {
       const res = await fetch(`/api/autopay/attempts/${attempt.id}/retry`, { method: 'POST' })
+      // The refusal reads through the shared helper so message, remedy and
+      // code render instead of a bare fallback.
       if (!res.ok) {
-        const body = await res.json().catch(() => null)
-        setError((body?.error as string | undefined) ?? t('retryFailed'))
+        setError(await readApiErrorMessage(res, t('retryFailed')))
         return
       }
       toast.success(t('retryStarted'))

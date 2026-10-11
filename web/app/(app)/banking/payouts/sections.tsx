@@ -27,6 +27,7 @@ import { ListDrawerLink } from '../../../../components/list-drawer-link'
 import { RecordTabs } from '../../../../components/module-home/record-tabs'
 import { useMoney } from '../../../../components/money-provider'
 import { confirmDialog } from '../../../../lib/confirm'
+import { readApiErrorMessage } from '../../../../lib/api-error'
 import type {
   PayoutBatchRow,
   PayoutQueueRow,
@@ -120,25 +121,17 @@ interface MatchVerdict {
   documentNumber?: string | null
 }
 
-async function postSettlements(body: Record<string, unknown>): Promise<{ ok: boolean; status: number; data: unknown; error?: string; remedy?: string }> {
+async function postSettlements(body: Record<string, unknown>, fallback: string): Promise<{ ok: boolean; status: number; data: unknown; error?: string }> {
   const res = await fetch('/api/psp/settlements', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
   })
-  // The refusal is read before it is parsed: an error body never reaches
-  // res.json(), so the operator always sees the message, never a parse error.
+  // The refusal reads through the shared helper: message, nested error,
+  // remedy and code render as one operator sentence instead of a bare
+  // fallback, and a non-JSON body still refuses by status.
   if (!res.ok) {
-    let error = `Request failed (${res.status})`
-    let remedy: string | undefined
-    try {
-      const data = await res.json()
-      if (typeof data?.error === 'string') error = data.error
-      if (typeof data?.remedy === 'string') remedy = data.remedy
-    } catch {
-      // A non-JSON error body still refuses by status, never by parse error.
-    }
-    return { ok: false, status: res.status, data: null, error, remedy }
+    return { ok: false, status: res.status, data: null, error: await readApiErrorMessage(res, fallback) }
   }
   return { ok: true, status: res.status, data: await res.json() }
 }
@@ -185,16 +178,9 @@ function PayoutsDrawer({
   // workspace detail loader.
   const fetchDetail = useCallback(async (signal?: AbortSignal): Promise<BatchDetail> => {
     const res = await fetch(`/api/psp/settlements?batchId=${encodeURIComponent(batchId)}`, { signal })
-    if (!res.ok) {
-      let message = strings.loadFailedLabel
-      try {
-        const data = await res.json()
-        if (typeof data?.error === 'string') message = data.error
-      } catch {
-        // Keep the fallback message when the error body is not JSON.
-      }
-      throw new Error(message)
-    }
+    // The refusal reads through the shared helper so message, remedy and
+    // code render instead of a bare fallback.
+    if (!res.ok) throw new Error(await readApiErrorMessage(res, strings.loadFailedLabel))
     return (await res.json()) as BatchDetail
   }, [batchId, strings.loadFailedLabel])
 
@@ -235,10 +221,10 @@ function PayoutsDrawer({
 
   const runMatch = useCallback(async () => {
     setActing('match')
-    const result = await postSettlements({ action: 'match', batchId })
+    const result = await postSettlements({ action: 'match', batchId }, strings.loadFailedLabel)
     setActing(null)
     if (!result.ok) {
-      toast.error(result.remedy ? `${result.error} — ${result.remedy}` : (result.error ?? strings.loadFailedLabel))
+      toast.error(result.error ?? strings.loadFailedLabel)
       return
     }
     setVerdicts((result.data as { lines: MatchVerdict[] }).lines)
@@ -249,10 +235,10 @@ function PayoutsDrawer({
 
   const linkLine = useCallback(async (lineId: string, documentId: string) => {
     setActing(`link:${lineId}`)
-    const result = await postSettlements({ action: 'link', batchId, lineId, documentId })
+    const result = await postSettlements({ action: 'link', batchId, lineId, documentId }, strings.loadFailedLabel)
     setActing(null)
     if (!result.ok) {
-      toast.error(result.remedy ? `${result.error} — ${result.remedy}` : (result.error ?? strings.loadFailedLabel))
+      toast.error(result.error ?? strings.loadFailedLabel)
       return
     }
     setLinkLineId(null)
@@ -263,7 +249,7 @@ function PayoutsDrawer({
 
   const unlinkLine = useCallback(async (lineId: string) => {
     setActing(`unlink:${lineId}`)
-    const result = await postSettlements({ action: 'unlink', batchId, lineId })
+    const result = await postSettlements({ action: 'unlink', batchId, lineId }, strings.loadFailedLabel)
     setActing(null)
     if (!result.ok) {
       toast.error(result.error ?? strings.loadFailedLabel)
@@ -290,10 +276,10 @@ function PayoutsDrawer({
     })
     if (!confirmed) return
     setActing(`adjust:${lineId}`)
-    const result = await postSettlements({ action: 'markAdjustment', batchId, lineId })
+    const result = await postSettlements({ action: 'markAdjustment', batchId, lineId }, strings.loadFailedLabel)
     setActing(null)
     if (!result.ok) {
-      toast.error(result.remedy ? `${result.error} — ${result.remedy}` : (result.error ?? strings.loadFailedLabel))
+      toast.error(result.error ?? strings.loadFailedLabel)
       return
     }
     toast.success(strings.adjustedToast)
@@ -528,10 +514,10 @@ export function PayoutsWorkspace(props: PayoutsWorkspaceProps) {
     })
     if (!confirmed) return
     setAccruing(true)
-    const result = await postSettlements({ action: 'accrue', accrualDate: accrualDate.trim() })
+    const result = await postSettlements({ action: 'accrue', accrualDate: accrualDate.trim() }, strings.loadFailedLabel)
     setAccruing(false)
     if (!result.ok) {
-      toast.error(result.remedy ? `${result.error} — ${result.remedy}` : (result.error ?? strings.loadFailedLabel))
+      toast.error(result.error ?? strings.loadFailedLabel)
       return
     }
     const run = result.data as { accrued: unknown[]; reversed: unknown[]; skipped: unknown[] }

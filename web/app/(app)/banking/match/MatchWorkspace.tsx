@@ -3,6 +3,7 @@
 import { sum } from '@openbooks/engine/src/money/money.ts'
 import { useMoney } from '@/components/money-provider'
 import type { MoneyValue } from '@/lib/money-format'
+import { readApiErrorMessage } from '@/lib/api-error'
 import { useEffect, useId, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -225,15 +226,15 @@ export function MatchWorkspace({
         headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
         body: body !== undefined ? JSON.stringify(body) : undefined,
       })
-      // Never let the read itself throw: an unreadable error body would
-      // otherwise go silent with an unhandled rejection.
-      const d = await res.json().catch(() => null) as MatchActionResult | null
+      // Refusals read through the shared helper so message, remedy and code
+      // render instead of a bare fallback; the success body parses after the
+      // ok check and never lets the read itself throw.
       if (!res.ok) {
-        const message = typeof d?.error === 'string' && d.error ? d.error : tBanking('errors.requestFailed')
+        const message = await readApiErrorMessage(res, tBanking('errors.requestFailed'))
         if (onError) onError(message); else toast.error(message)
         return null
       }
-      return d
+      return await res.json().catch(() => null) as MatchActionResult | null
     } catch {
       const message = tBanking('errors.requestFailed')
       if (onError) onError(message); else toast.error(message)
