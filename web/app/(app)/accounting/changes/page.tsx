@@ -18,6 +18,9 @@ import { financialChangeSubjectExpr,manufacturingChangeResourcesVisible } from "
 import { ChangeEvidence, ChangeFacts } from "./ChangeEvidence";
 import { ReverseAssetChange } from "./ReverseAssetChange";
 import { ChangeActions } from "./ChangeActions";
+import { ChangeGateDecision } from "./ChangeGateDecision";
+import type { DelegateOption } from "../../inbox/GateActions";
+import { gateDecisionCapability } from "@openbooks/engine/src/flows/index.ts";
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata() {
@@ -101,6 +104,46 @@ export default async function AccountingEvents({
       : row?.domain === "consolidation"
         ? "close.run"
         : "assets.manage";
+  // The pending decision for this change, for the current approver: every
+  // pending gate on the change with the native capability resolved, so the
+  // drawer offers Approve/Reject through the same decision path as the
+  // Inbox — or names that another approver must act (SoD), never an action
+  // that refuses on click.
+  const pendingGates =
+    row?.status === "pending" && id
+      ? (
+          await db.execute<{
+            id: string;
+            assigneeUserId: string | null;
+            signatureRequired: boolean;
+          }>(sql`
+        select g.id::text as id, g.assignee_user_id::text as "assigneeUserId",
+               g.signature_required as "signatureRequired"
+          from flow_gates g
+         where g.org_id = ${orgId} and g.subject_kind = 'financial_change'
+           and g.subject_id = ${id} and g.status = 'pending'
+         order by g.created_at, g.id`)
+        ).rows
+      : [];
+  const gateDecisions = await Promise.all(
+    pendingGates.map(async (gate) => ({
+      ...gate,
+      ...(await gateDecisionCapability(gate.id, auth.user.id)),
+    })),
+  );
+  const actionableGate = gateDecisions.find((gate) => gate.canAct) ?? null;
+  const awaitingGate =
+    actionableGate == null ? gateDecisions.find((gate) => gate.sodBlocked) ?? null : null;
+  const decisionGate = actionableGate ?? awaitingGate;
+  const delegateUsers: DelegateOption[] =
+    decisionGate && (can(auth, "flows.manage") || decisionGate.assigneeUserId === auth.user.id)
+      ? (
+          await db.execute<DelegateOption>(sql`
+        select id::text as id, name from users
+         where org_id = ${orgId} and is_active and id <> ${auth.user.id}
+         order by name limit 500`)
+        ).rows
+      : [];
   const tabs = await groupTabs("accounting", "/accounting/changes", { orgId });
   const eventTitle = row
     ? t.has(`lifecycle.operations.${row.operation}`)
@@ -254,6 +297,16 @@ export default async function AccountingEvents({
                   >
                     {t("lifecycle.openOwnership")}
                   </Link>
+                ) : null}
+                {decisionGate ? (
+                  <ChangeGateDecision
+                    gateId={decisionGate.id}
+                    canAct={decisionGate.canAct}
+                    awaitingAnother={decisionGate.sodBlocked}
+                    signatureRequired={decisionGate.signatureRequired}
+                    canDelegate={delegateUsers.length > 0}
+                    users={delegateUsers}
+                  />
                 ) : null}
                 <ChangeActions
                   id={row.id}
