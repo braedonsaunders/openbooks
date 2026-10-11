@@ -17,6 +17,10 @@ const documentLineSchema = z.object({
   projectId: z.string().uuid().nullable().optional(), locationId: z.string().uuid().nullable().optional(),
   classId: z.string().uuid().nullable().optional(), stockLocationId: z.string().uuid().nullable().optional(),
   workFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), workTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  // Amortization: template and service window; the engine validates the calendar dates.
+  amortizationTemplateId: z.string().uuid().nullable().optional(),
+  amortizationStartOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  amortizationEndOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   inventoryReturnSource: z.object({ movementId: z.string().uuid(), lotId: z.string().uuid().nullable().optional(), serialId: z.string().uuid().nullable().optional() }).nullable().optional(),
   inventoryAllowance: z.boolean().nullable().optional(),
   extraDims: z.record(z.string(), z.string().nullable()).optional(), custom: jsonObjectSchema.optional(),
