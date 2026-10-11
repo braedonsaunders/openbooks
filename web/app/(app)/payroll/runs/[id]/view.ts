@@ -6,6 +6,7 @@ import {
   lockAndCheckPayrollRunPopulation,
   payrollSubsidiaryScopeFilter,
 } from '@openbooks/engine/src/payroll/scope.ts'
+import { loadWageTimeEntries, sumWageHoursByEmployee } from '@openbooks/engine/src/payroll/wage-hours.ts'
 import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
@@ -210,12 +211,13 @@ export async function loadPayRunWizard(
           left join departments dep on dep.id = l.department_id and dep.org_id = l.org_id
          where l.org_id = ${orgId} and st.pay_run_document_id = ${id}
          order by l.stub_id, l.sequence`),
-      // Step 1 roster: everyone the schedule would include, with approved hours
-      // in the period and a wage-configured flag (one-table doctrine —
-      // labor_cost_rates, employee scope, effective at the pay date).
-      db.execute<RosterRow>(sql`
+      // Step 1 roster: everyone the schedule would include, with a
+      // wage-configured flag (one-table doctrine — labor_cost_rates,
+      // employee scope, effective at the pay date). Approved hours are merged
+      // below from the wage-hours read Calculate prices, so the Scope tab can
+      // never preview hours Calculate will not pick up.
+      db.execute<Omit<RosterRow, 'approved_hours'>>(sql`
         select p.id as employee_party_id, p.display_name as name, prof.pay_basis,
-               coalesce(te.hours, 0)::text as approved_hours,
                -- Every dimension the roster carries, so the scope filters are a
                -- real filter set rather than "department, when there is one".
                dep.name as department, tr.name as trade, er.job_title,
@@ -252,11 +254,6 @@ export async function loadPayRunWizard(
           left join departments dep on dep.id = er.department_id and dep.org_id = er.org_id
           left join trades tr on tr.id = er.trade_id and tr.org_id = er.org_id
           left join subsidiaries sub on sub.id = p.subsidiary_id and sub.org_id = p.org_id
-          left join lateral (
-            select sum(te.hours) as hours from time_entries te
-             where te.org_id = prof.org_id and te.employee_party_id = prof.employee_party_id
-               and te.status = 'approved'
-               and te.worked_on between ${run.period_start} and ${run.period_end}) te on true
          where prof.org_id = ${orgId} and prof.pay_schedule_id = ${run.pay_schedule_id} and prof.is_active
            ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds)}
          order by p.display_name`),
@@ -292,6 +289,20 @@ export async function loadPayRunWizard(
       else linesByStub.set(line.stub_id, [line])
     }
     const stubs = stubsRes.rows.map((stub) => ({ ...stub, lines: linesByStub.get(stub.id) ?? [] }))
+
+    // Scope approved hours come from the wage-hours read Calculate prices —
+    // the same rows, never a parallel summary that can disagree with them.
+    const wageHours = sumWageHoursByEmployee(await loadWageTimeEntries(db, {
+      orgId,
+      employeePartyIds: rosterRes.rows.map((row) => String(row.employee_party_id)),
+      periodStart: run.period_start,
+      periodEnd: run.period_end,
+      documentId: id,
+    }))
+    const roster: RosterRow[] = rosterRes.rows.map((row) => ({
+      ...row,
+      approved_hours: wageHours.get(String(row.employee_party_id)) ?? '0',
+    }))
 
     // Register buckets: the review grid and stub header columns
     // come from the installed packs' declared statutory components — labels
@@ -468,7 +479,7 @@ export async function loadPayRunWizard(
       viewTabs: moduleTabs,
       run,
       stubs,
-      roster: rosterRes.rows,
+      roster,
       previousNet,
       adjustments: adjustmentRows,
       adjustableComponents: componentRows,

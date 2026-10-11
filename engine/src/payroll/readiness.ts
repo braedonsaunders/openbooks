@@ -13,6 +13,7 @@ import {
   type ResolvedPaymentMethod,
 } from "./payment-method.ts";
 import { hasUsablePayRateSql } from "./rate.ts";
+import { loadWageTimeEntries, sumWageHoursByEmployee } from "./wage-hours.ts";
 import { assignmentOverlapsPeriod } from "./assignment-windows.ts";
 import { parsePayRunCalculationSource, payRunCalculationSource, payRunCalculationSourceChanges, payRunCalculationSourceDigest } from "./run-calculation-evidence.ts";
 import { payrollSettings } from "./run-setup.ts";
@@ -232,11 +233,10 @@ async function scope(
     periodStart: sql`${run.period_start}`, periodEnd: sql`${run.period_end}`,
     runType: sql`${run.run_type}`, document: sql`${documentId}`,
   };
-  const rows = (await db.execute<ScopeRow>(sql`
+  const rows = (await db.execute<Omit<ScopeRow, "approved_hours">>(sql`
     select p.id as employee_party_id, p.display_name as name, prof.pay_basis, prof.country,
            prof.province, prof.residence_region, prof.labour_jurisdiction,
            ${effectiveFilingAccountSql("prof")} as filing_account_id,
-           coalesce(te.hours, 0)::text as approved_hours,
            (${payrollEpisodeDate(rosterColumns, sql`er.hired_on`)})::text as hired_on,
            (${payrollEpisodeDate(rosterColumns, sql`er.terminated_on`)})::text as terminated_on,
            prof.sin_encrypted is not null as has_sin,
@@ -269,11 +269,6 @@ async function scope(
       from employee_payroll_profiles prof
       join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
       left join employee_roles er on er.party_id = p.id and er.org_id = prof.org_id
-      left join lateral (
-        select sum(t.hours) as hours from time_entries t
-         where t.org_id = prof.org_id and t.employee_party_id = prof.employee_party_id
-           and t.status = 'approved'
-           and t.worked_on between ${run.period_start} and ${run.period_end}) te on true
      where prof.org_id = ${orgId} and prof.pay_schedule_id = ${run.pay_schedule_id} and prof.is_active
        -- Shared eligibility also admits documented earlier employment episodes.
        and ${payrollEmploymentOverlapsPeriod(rosterColumns)}
@@ -285,7 +280,20 @@ async function scope(
             and a.adjustment_type = 'exclude' and a.employee_party_id = p.id)
      order by p.display_name
   `));
-  return rows.rows;
+  // Approved hours preview exactly what Calculate prices (wage-hours read),
+  // so readiness can never warn about time the run will pay — or stay quiet
+  // about time it will not.
+  const wageHours = sumWageHoursByEmployee(await loadWageTimeEntries(db, {
+    orgId,
+    employeePartyIds: rows.rows.map((row) => String(row.employee_party_id)),
+    periodStart: run.period_start,
+    periodEnd: run.period_end,
+    documentId,
+  }));
+  return rows.rows.map((row) => ({
+    ...row,
+    approved_hours: wageHours.get(String(row.employee_party_id)) ?? "0",
+  }));
 }
 
 /**

@@ -20,6 +20,7 @@ import { entitlementMoneyValue, planMovementsForStub, type EntitlementPlan, type
 import { applyBasisCaps } from "./limits.ts";
 import { allocateProportionally } from "./run-allocation.ts";
 import { priceDatedWageEntries } from "./wage-rounding.ts";
+import { loadWageTimeEntries } from "./wage-hours.ts";
 import { type Line, programApplicabilityFromExclusions, statutoryHolidayLinesForStub, earningsBase, totalHours, earningJobBuckets, cappableHourLines, resolveEarningExpenseAccount } from "./run-stub-records.ts";
 import { resolvePayRate } from "./run-calculation-support.ts";
 import { payrollHourlyWage, salaryPeriodPay } from "./rate.ts";
@@ -65,35 +66,23 @@ export async function appendPeriodicEarnings(
     // Exact annual amount ÷ annual hours (see payrollHourlyWage): the
     // quotient is multiplied by every hour on every stub.
     const hourlyWage = payrollHourlyWage(payRate!);
-    const time = (await tx.execute<{
-        id: string; hours: string; worked_on: string; project_id: string | null; department_id: string | null;
-        time_type_id: string | null; item_id: string | null;
-        classification: string; multiplier: string; type_name: string;
-        item_name: string | null; item_account_id: string | null;
-        item_account_number: string | null; item_account_name: string | null;
-      }>(sql`
-      select te.id, te.hours, te.worked_on, te.project_id, te.department_id, te.time_type_id, te.item_id,
-             coalesce(tt.classification, 'regular') as classification,
-             coalesce(tt.cost_multiplier, 1) as multiplier, coalesce(tt.name, 'Regular') as type_name,
-             i.name as item_name, i.payroll_expense_account_id as item_account_id,
-             a.number as item_account_number, a.name as item_account_name
-        from time_entries te
-        left join time_types tt on tt.id = te.time_type_id and tt.org_id = te.org_id
-        left join items i on i.id = te.item_id and i.org_id = te.org_id
-        left join accounts a on a.id = i.payroll_expense_account_id and a.org_id = i.org_id
-       where te.org_id = ${orgId} and te.employee_party_id = ${employeePartyId}
-         and te.status = 'approved'
-         and te.worked_on between ${run.period_start} and ${run.period_end}
-         and (te.payroll_batch_ref is null or te.payroll_batch_ref = ${documentId})
-         and coalesce(tt.exclude_from_wages, false) = false
-    `));
+    // The Scope tab previews exactly this read, so the previewed hours are
+    // the hours Calculate prices — never claimed-by-another-run or
+    // non-wage time this run will not pay.
+    const time = await loadWageTimeEntries(tx, {
+      orgId,
+      employeePartyIds: [employeePartyId],
+      periodStart: run.period_start!,
+      periodEnd: run.period_end!,
+      documentId,
+    });
     const otComponent = need("overtime", "earning");
     const groups = new Map<string, {
-      row: (typeof time.rows)[0]; entries: { workedOn: string; hours: string }[];
+      row: (typeof time)[number]; entries: { workedOn: string; hours: string }[];
     }>();
-    for (const t of time.rows) {
-      const key = [t.time_type_id ?? "", t.project_id ?? "", t.department_id ?? "", t.item_id ?? ""].join("|");
-      const entry = { workedOn: t.worked_on, hours: t.hours };
+    for (const t of time) {
+      const key = [t.timeTypeId ?? "", t.projectId ?? "", t.departmentId ?? "", t.itemId ?? ""].join("|");
+      const entry = { workedOn: t.workedOn, hours: t.hours };
       const existing = groups.get(key);
       if (existing) existing.entries.push(entry);
       else groups.set(key, { row: t, entries: [entry] });
@@ -103,12 +92,12 @@ export async function appendPeriodicEarnings(
       const isOt = group.row.classification === "overtime" || group.row.classification === "double_time";
       const componentRow = isOt ? otComponent : baseComponent;
       const stamp = resolveEarningExpenseAccount({
-        item: group.row.item_id == null ? null : {
-          id: group.row.item_id,
-          name: group.row.item_name ?? group.row.item_id,
-          accountId: group.row.item_account_id,
-          accountNumber: group.row.item_account_number,
-          accountName: group.row.item_account_name,
+        item: group.row.itemId == null ? null : {
+          id: group.row.itemId,
+          name: group.row.itemName ?? group.row.itemId,
+          accountId: group.row.itemAccountId,
+          accountNumber: group.row.itemAccountNumber,
+          accountName: group.row.itemAccountName,
         },
         component: {
           id: String(componentRow.id),
@@ -122,12 +111,12 @@ export async function appendPeriodicEarnings(
       for (const part of priced.days) lines.push({
         componentId: String(componentRow.id),
         kind: "earning",
-        description: group.row.type_name,
+        description: group.row.typeName,
         hours: part.hours, rate: priced.rate,
         earnedFrom: part.workedOn, earnedTo: part.workedOn,
         amount: parseMoney(part.amount),
-        projectId: group.row.project_id, departmentId: group.row.department_id,
-        timeTypeId: group.row.time_type_id, itemId: group.row.item_id,
+        projectId: group.row.projectId, departmentId: group.row.departmentId,
+        timeTypeId: group.row.timeTypeId, itemId: group.row.itemId,
         expenseAccountId: stamp?.accountId ?? null,
         expenseAccountSource: stamp?.source ?? null,
         expenseAccountEvidence: stamp?.evidence ?? null,
