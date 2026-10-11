@@ -199,6 +199,10 @@ export function CashTendersSection({
   // With a close-out the till collects total + tips − fees ± over/short, so
   // the expected side restates explicitly instead of pretending exact match.
   const closeout = useMemo(() => parseCloseoutDraft(closeoutValue), [closeoutValue])
+  // A recorded close-out shows its over/short and server read-only even when
+  // the drawer is not editable, so a posted or viewed sale states what the
+  // till counted and who the tips belong to.
+  const closeoutRecorded = closeout.overShort !== '' || closeout.serverPartyId !== undefined
   const tendered = useMemo(() => {
     let sum = '0'
     for (const tender of tenders) {
@@ -474,7 +478,7 @@ export function CashTendersSection({
           ) : null}
         </div>
       ) : null}
-      {onCloseoutChange ? (
+      {onCloseoutChange || closeoutRecorded ? (
         <div className="space-y-1 border-t border-slate-200 pt-2 dark:border-slate-700">
           <FieldLabel fieldName={t('tenders.overShort')}>{t('tenders.overShort')}</FieldLabel>
           <div className="grid grid-cols-[130px_1fr] items-end gap-2">
@@ -514,8 +518,8 @@ export function CashTendersSection({
               )}
             </div>
           </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400">{t('tenders.overShortHint')}</p>
-          {tillSuggestion && !isZeroDecimal(tillSuggestion.difference) ? (
+          {editable ? <p className="text-xs text-slate-500 dark:text-slate-400">{t('tenders.overShortHint')}</p> : null}
+          {editable && tillSuggestion && !isZeroDecimal(tillSuggestion.difference) ? (
             <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50/70 px-2 py-1.5 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200">
               <span>
                 {t(tillSuggestion.after ? 'tenders.tillDifference' : 'tenders.tillDifferenceFirst', {
@@ -546,7 +550,7 @@ export function CashTendersSection({
               ) : null}
             </div>
           ) : null}
-          <p className="text-xs text-slate-500 dark:text-slate-400">{t('tenders.closeoutHint')}</p>
+          {editable ? <p className="text-xs text-slate-500 dark:text-slate-400">{t('tenders.closeoutHint')}</p> : null}
         </div>
       ) : null}
     </div>

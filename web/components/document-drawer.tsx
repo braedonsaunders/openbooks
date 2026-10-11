@@ -1466,7 +1466,9 @@ export function DocumentDrawer({
     payload,
   })
   const [rehydrationEpoch, setRehydrationEpoch] = useState(0)
-  const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
+  // 'error' is a refusal of the entered values; 'unavailable' is a server or
+  // connection failure, which leaves the values exactly as entered.
+  const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error' | 'unavailable'>('saved')
   // A refused submit/post that only fires a transient toast reads as
   // "nothing happened" once it dismisses: the
   // typed refusal also persists as a record-level alert, cleared on the
@@ -2513,6 +2515,9 @@ export function DocumentDrawer({
   }
 
   const save = runExclusive(async () => {
+    // Copy for a save the server failed to answer; a reason the server named
+    // still pins verbatim, and only this exact copy marks the footer state.
+    const unavailableCopy = t('drawer.saveState.unavailableDetail')
     let prepared: Awaited<ReturnType<typeof prepareSaveRequest>>
     try {
       prepared = await prepareSaveRequest()
@@ -2535,7 +2540,7 @@ export function DocumentDrawer({
             method: create.method,
             headers: create.headers,
             body: JSON.stringify(create.body),
-          }, { fallback: t('toasts.actionFailed') }),
+          }, { fallback: t('toasts.actionFailed'), unavailable: unavailableCopy }),
         {
           fallbackMessage: t('toasts.actionFailed'),
           onOk: (payload) => {
@@ -2547,8 +2552,8 @@ export function DocumentDrawer({
             router.push(`${basePath}?doc=${String(saved.id)}`)
             router.refresh()
           },
-          onRefused: () => {
-            setSaveState('error')
+          onRefused: (error) => {
+            setSaveState(error.serverMessage === unavailableCopy ? 'unavailable' : 'error')
           },
         },
       )
@@ -2561,7 +2566,7 @@ export function DocumentDrawer({
           method: request.method,
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(request.body),
-        }, { fallback: t('toasts.actionFailed') }),
+        }, { fallback: t('toasts.actionFailed'), unavailable: unavailableCopy }),
       {
         // A fresh attempt clears the previous refusal: the alert pins until
         // the next action, not past a successful save.
@@ -2608,10 +2613,12 @@ export function DocumentDrawer({
           router.push(hrefForDocument(String(data.doc.id), searchParams.get('form') ?? undefined))
           router.refresh()
         },
-        onRefused: () => {
+        onRefused: (error) => {
           // A save refusal stays on the record, not only in a toast:
           // the typed reason pins as an alert until the next action or edit.
-          setSaveState('error')
+          // A server or connection failure with no named reason keeps the
+          // entered values and says so, so the footer must not call it a refusal.
+          setSaveState(error.serverMessage === unavailableCopy ? 'unavailable' : 'error')
         },
       },
     )
@@ -3740,7 +3747,7 @@ export function DocumentDrawer({
           <span
             className={
               'text-xs ' +
-              (saveState === 'error' ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400')
+              (saveState === 'error' || saveState === 'unavailable' ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400')
             }
           >
             {mode === 'edit'
@@ -3748,9 +3755,11 @@ export function DocumentDrawer({
                 ? tCommon('actions.saving')
                 : saveState === 'error'
                   ? t('drawer.saveState.error')
-                  : dirty
-                    ? t('drawer.saveState.dirty')
-                    : null
+                  : saveState === 'unavailable'
+                    ? t('drawer.saveState.unavailable')
+                    : dirty
+                      ? t('drawer.saveState.dirty')
+                      : null
               : null}
           </span>
           <span className="flex-1" />

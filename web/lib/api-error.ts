@@ -219,6 +219,14 @@ export async function apiJson<T>(url: string, init?: RequestInit, fallbackMessag
 export type RefusalCopy = {
   fallback: string
   codeMessage?: (code: string) => string | undefined
+  /**
+   * Copy for a server failure that named no reason: a 5xx without a usable
+   * body (a gateway page, an empty 500) and a request that never got an
+   * answer. Those say nothing about the operator's entries, so this copy
+   * names the failure instead of a refusal. A reason the server did name
+   * always wins, and omitting this keeps the status-stamped fallback.
+   */
+  unavailable?: string
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -332,7 +340,9 @@ export async function readAppActionResult<T = unknown>(
     issues: readRefusalIssues(body),
     serverMessage:
       refusalMessageFromBody(body, copy) ??
-      (code ? `${safeFallback} (HTTP ${res.status}, ${code})` : `${safeFallback} (HTTP ${res.status})`),
+      (res.status >= 500 && copy.unavailable
+        ? copy.unavailable
+        : code ? `${safeFallback} (HTTP ${res.status}, ${code})` : `${safeFallback} (HTTP ${res.status})`),
   })
   // Structured machine evidence rides beside the refusal (never rendered by
   // the alert itself): renderers that know a details kind — a closed
@@ -370,9 +380,14 @@ export async function fetchAppAction<T = unknown>(
     res = await fetch(url, init)
   } catch (thrown) {
     const detail = thrown instanceof Error ? `${thrown.name}: ${thrown.message}` : String(thrown)
+    const aborted = thrown instanceof DOMException && thrown.name === 'AbortError'
+    const error = transportError(detail, aborted)
+    if (!copy.unavailable) return { ok: false, error }
+    // Same classification as a transport refusal, with the connection copy
+    // as its message; the transport detail stays on the error for the log.
     return {
       ok: false,
-      error: transportError(detail, thrown instanceof DOMException && thrown.name === 'AbortError'),
+      error: new ActionError({ kind: error.kind, aborted, detail, serverMessage: copy.unavailable }),
     }
   }
   return readAppActionResult<T>(res, copy)

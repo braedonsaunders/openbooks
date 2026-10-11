@@ -45,6 +45,20 @@ test("a full close-out parses with sorted parts", () => {
   });
 });
 
+test("an explicit null server pools the tips instead of keeping a named server", () => {
+  const parsed = parseCashCloseout(
+    {
+      tipsTotal: "5.0000",
+      feeTotal: "0.0000",
+      overShort: "0",
+      serverPartyId: null,
+      parts: [{ position: 1, tip: "5.0000", fee: "0.0000" }],
+    },
+    tenders,
+  );
+  assert.equal(parsed?.serverPartyId, null);
+});
+
 test("an unknown close-out field refuses instead of parking silently", () => {
   assert.throws(
     () => parseCashCloseout({ tipsTotal: "1", typoTotla: "2" }, tenders),

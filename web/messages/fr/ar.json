@@ -128,6 +128,8 @@
     "saveState": {
       "saved": "Toutes les modifications sont enregistrées",
       "error": "Échec de l’enregistrement — corrigez et réessayez",
+      "unavailable": "Échec du serveur ou de la connexion — saisie conservée, réessayez",
+      "unavailableDetail": "Le serveur ou la connexion a échoué avant la confirmation de l’enregistrement. Vos saisies sont conservées — réessayez l’enregistrement.",
       "dirty": "Modifications non enregistrées…"
     },
     "deleteTitle": "Supprimer ce document ?",

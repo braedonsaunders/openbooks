@@ -128,6 +128,8 @@
     "saveState": {
       "saved": "All changes saved",
       "error": "Save failed — fix and retry",
+      "unavailable": "Server or connection failed — entries kept, retry",
+      "unavailableDetail": "The server or connection failed before the save was confirmed. Your entries are still here — retry the save.",
       "dirty": "Unsaved changes…"
     },
     "deleteTitle": "Delete this document?",

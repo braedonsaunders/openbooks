@@ -315,6 +315,38 @@ test('readAppActionResult never renders blank: fallback carries status and code'
   assert.equal(empty.error.displayMessage(COPY.fallback), 'Action failed (HTTP 500)')
 })
 
+test('a server failure with no named reason pins the unavailable copy, and a named reason still wins', async () => {
+  const copy = { fallback: 'Action failed', unavailable: 'The server or connection failed.' }
+  const proxy = await readAppActionResult(
+    new Response('<html>Bad Gateway</html>', { status: 502, headers: { 'content-type': 'text/html' } }),
+    copy,
+  )
+  assert.equal(proxy.ok, false)
+  if (proxy.ok) throw new Error('unreachable')
+  assert.equal(proxy.error.kind, 'unexpected')
+  assert.equal(proxy.error.status, 502)
+  assert.equal(proxy.error.displayMessage(copy.fallback), 'The server or connection failed.')
+  const named = await readAppActionResult(refusalResponse({ error: 'Revenue account is inactive' }, 500), copy)
+  assert.equal(named.ok, false)
+  if (named.ok) throw new Error('unreachable')
+  assert.equal(named.error.displayMessage(copy.fallback), 'Revenue account is inactive')
+})
+
+test('a rejected fetch with unavailable copy carries that copy and keeps the transport detail', async () => {
+  const prior = globalThis.fetch
+  globalThis.fetch = (async () => { throw new TypeError('Failed to fetch') }) as typeof fetch
+  try {
+    const result = await fetchAppAction('/api/documents/1', { method: 'PATCH' }, { fallback: 'Action failed', unavailable: 'The server or connection failed.' })
+    assert.equal(result.ok, false)
+    if (result.ok) throw new Error('unreachable')
+    assert.equal(result.error.kind, 'transport')
+    assert.equal(result.error.displayMessage('Action failed'), 'The server or connection failed.')
+    assert.match(result.error.detail ?? '', /Failed to fetch/)
+  } finally {
+    globalThis.fetch = prior
+  }
+})
+
 test('readAppActionResult trusts the status, never the body', async () => {
   const result = await readAppActionResult<{ id: string }>(refusalResponse({ error: 'stale' }, 200), COPY)
   assert.equal(result.ok, true)

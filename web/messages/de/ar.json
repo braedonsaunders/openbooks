@@ -128,6 +128,8 @@
     "saveState": {
       "saved": "Alle Änderungen gespeichert",
       "error": "Speichern fehlgeschlagen — korrigieren und erneut versuchen",
+      "unavailable": "Server oder Verbindung fehlgeschlagen — Eingaben bleiben, erneut versuchen",
+      "unavailableDetail": "Der Server oder die Verbindung ist ausgefallen, bevor das Speichern bestätigt wurde. Ihre Eingaben bleiben erhalten — versuchen Sie das Speichern erneut.",
       "dirty": "Nicht gespeicherte Änderungen…"
     },
     "deleteTitle": "Dieses Dokument löschen?",

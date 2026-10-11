@@ -128,6 +128,8 @@
     "saveState": {
       "saved": "Todos los cambios guardados",
       "error": "Error al guardar — corrija y reintente",
+      "unavailable": "Falló el servidor o la conexión — datos conservados, reintente",
+      "unavailableDetail": "El servidor o la conexión falló antes de confirmar el guardado. Sus datos siguen aquí — reintente el guardado.",
       "dirty": "Cambios sin guardar…"
     },
     "deleteTitle": "¿Eliminar este documento?",

@@ -109,3 +109,70 @@ test('a stored close-out reseeds its tender tips, balance and pooled server', as
     assert.ok(options.includes(messages.ar.tenders.serverPooled), 'pooled must be a selectable server entry')
   } finally { await act(async () => root.unmount()); host.remove(); globalThis.fetch = prior }
 })
+
+// A $24.47 tip attributed to Sam Server, with a $2.50 short count on the till.
+const STORED_CLOSEOUT = { tipsTotal: '24.4700', feeTotal: '0.0000', overShort: '-2.5000', serverPartyId: 'server-1', parts: [{ position: 1, tip: '24.4700', fee: '0.0000' }] }
+
+async function mountStoredCashSale(mode: 'edit' | 'view') {
+  const host = document.createElement('div')
+  document.body.append(host)
+  const root = createRoot(host)
+  await act(async () => {
+    root.render(<NextIntlClientProvider locale="en" messages={messages} timeZone="UTC"><MoneyProvider currency="USD"><DocumentDrawer
+      payload={{ doc: { id: 'sale-1', kind: 'cash_sale', status: 'draft', currency: 'USD', document_date: '2026-10-05', document_number: 'CASH-103', subtotal: '244.71', tax_total: '0.00', total: '244.71', updated_at: '3', custom: { closeout: STORED_CLOSEOUT } }, lines: [{ id: 'line-1', account_id: 'clearing', description: 'Till sale', quantity: '1', unit_price: '244.71', amount: '244.71', tax_input_amount: '244.71', tax_amount: '0' }], tenders: [{ position: 1, kind: 'card', methodLabel: 'card', accountId: 'clearing', amount: '266.68', currency: 'USD', reference: null, externalRef: null }] }}
+      config={DOC_KINDS.cash_sale!} basePath="/cash-sales" accounts={[]} departments={[]} projects={[]} headerDefs={[]} lineDefs={[]} canCreate canPost
+      initialMode={mode}
+      layout={defaultFormLayout('cash_sale')} tenderAccounts={[{ id: 'clearing', number: '1100', name: 'Clearing' }]}
+      serverOptions={[{ value: 'server-1', label: 'Sam Server' }]}
+    /></MoneyProvider></NextIntlClientProvider>)
+    await tick()
+  })
+  const dialog = document.querySelector('[role="dialog"]')
+  assert.ok(dialog, 'the cash-sale record must own one dialog')
+  const tabButton = [...dialog.querySelectorAll('button')].find(node => node.hasAttribute('aria-pressed') && node.textContent?.trim() === messages.ar.tenders.title)
+  assert.ok(tabButton, 'expected a reachable Tenders tab')
+  await act(async () => { tabButton.click(); await tick() })
+  return { dialog, unmount: async () => { await act(async () => root.unmount()); host.remove() } }
+}
+
+test('clearing the server to Pooled saves an explicit null and keeps the tip', async () => {
+  const prior = globalThis.fetch
+  const patches: Record<string, unknown>[] = []
+  globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
+    if (init?.method === 'PATCH') {
+      patches.push(JSON.parse(String(init.body)) as Record<string, unknown>)
+      return Response.json({ error: 'capture only' }, { status: 422 })
+    }
+    return Response.json({ scripts: [], rows: [], attachments: [] })
+  }) as typeof fetch
+  const { dialog, unmount } = await mountStoredCashSale('edit')
+  try {
+    const serverTrigger = [...dialog.querySelectorAll('button')].find(node => (node.textContent ?? '').includes('Sam Server'))
+    assert.ok(serverTrigger, 'expected a server picker showing the stored server')
+    await act(async () => { serverTrigger.click(); await tick() })
+    const pooled = [...document.querySelectorAll('[role="option"]')].find(node => node.textContent?.trim() === messages.ar.tenders.serverPooled) as HTMLElement | undefined
+    assert.ok(pooled, 'Pooled must be offered as a choice in the server listbox')
+    await act(async () => { pooled.click(); await tick() })
+    const save = [...dialog.querySelectorAll('button')].find(node => node.textContent?.trim() === messages.common.actions.save)
+    assert.ok(save, 'edit mode must offer Save')
+    await act(async () => { save.click(); await tick() })
+    await tick()
+    assert.equal(patches.length, 1, 'Save must send exactly one document write')
+    const custom = patches[0]!.custom as { closeout: Record<string, unknown>; tenders: Record<string, unknown>[] }
+    assert.equal(custom.closeout.serverPartyId, null, 'clearing to Pooled must send an explicit null so the stored server is dropped')
+    assert.equal(custom.tenders[0]!.tipAmount, '24.4700', 'clearing the server must not drop the tip on the tender')
+  } finally { await unmount(); globalThis.fetch = prior }
+})
+
+test('view mode shows the stored cash over/short and server read-only', async () => {
+  const prior = globalThis.fetch
+  globalThis.fetch = (async () => Response.json({ scripts: [], rows: [], attachments: [] })) as typeof fetch
+  const { dialog, unmount } = await mountStoredCashSale('view')
+  try {
+    const body = dialog.textContent ?? ''
+    assert.ok(body.includes(messages.ar.tenders.overShort), 'a recorded over/short must show in view mode')
+    assert.match(body, /2\.50/, 'the recorded short amount must read back in view mode')
+    assert.ok(body.includes('Sam Server'), 'the recorded server must show in view mode')
+    assert.equal(dialog.querySelector('input[placeholder="0.00"]'), null, 'view mode must not expose editable close-out fields')
+  } finally { await unmount(); globalThis.fetch = prior }
+})

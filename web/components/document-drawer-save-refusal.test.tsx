@@ -15,7 +15,9 @@ declare global {
 // save 422 once toasted and moved on). A refused save pins the typed reason
 // as a record-level alert until the next action AND toasts; a dead network
 // used to throw past the busy reset (wedged Save, unhandled rejection) and
-// now pins the localized fallback the same way, always releasing busy.
+// now pins the connection-failure copy the same way, always releasing busy.
+// A 5xx without a named reason says the server failed, never that the entries
+// were refused, and the entries stay in the drawer for the retry.
 // (The Post-refusal pin, , is covered by
 // document-drawer-post-refusal.test.tsx and must keep passing unchanged.)
 
@@ -269,7 +271,7 @@ test("a refused save pins the typed reason, not only a toast", async (t) => {
   assert.equal(save.disabled, false, "busy must release after the refusal");
 });
 
-test("a dead network on save pins the fallback and releases Save", async (t) => {
+test("a dead network on save pins the connection-failure copy and releases Save", async (t) => {
   freshGlobals();
   const restoreFetch = scriptFetch((url, init) => {
     if (url.startsWith("/api/documents/") && init?.method && init.method !== "GET") {
@@ -283,13 +285,47 @@ test("a dead network on save pins the fallback and releases Save", async (t) => 
   const save = await enterEditAndSave();
   const alert = document.querySelector('[role="alert"]');
   assert.ok(alert, "a transport failure must still pin an alert — it cannot throw past the UI");
-  assert.match(alert.textContent ?? "", /Action failed/, "with no server reason the alert falls back to localized copy");
+  assert.match(alert.textContent ?? "", /server or connection failed/i, "a dead connection must not read as a refusal of the entries");
+  assert.doesNotMatch(alert.textContent ?? "", /fix and retry/, "a dead connection must not carry the refusal copy");
   const toasts = globalThis.__drawerToasts ?? [];
   assert.ok(
-    toasts.some((toast) => toast.kind === "error"),
-    "the transport failure must toast as an error",
+    toasts.some((toast) => toast.kind === "error" && /server or connection failed/i.test(toast.message)),
+    "the transport failure must toast as an error with the connection copy",
   );
   assert.equal(save.disabled, false, "busy must release after a transport failure so the user can retry");
+});
+
+test("a gateway 502 on save says the server failed and keeps the entries as typed", async (t) => {
+  freshGlobals();
+  const restoreFetch = scriptFetch((url, init) => {
+    if (url.startsWith("/api/documents/") && init?.method && init.method !== "GET") {
+      return new Response("<html><body>502 Bad Gateway</body></html>", {
+        status: 502,
+        headers: { "content-type": "text/html" },
+      });
+    }
+    return null;
+  });
+  t.after(restoreFetch);
+  const { unmount } = await mountDraftInvoice();
+  t.after(unmount);
+  const save = await enterEditAndSave();
+  const alert = document.querySelector('[role="alert"]');
+  assert.ok(alert, "a 502 must pin an alert");
+  assert.match(alert.textContent ?? "", /server or connection failed/i, "a 502 must name the server failure");
+  assert.doesNotMatch(alert.textContent ?? "", /fix and retry|HTTP 502/, "a 502 must not read as a refusal or leak the status");
+  const body = document.body.textContent ?? "";
+  assert.ok(body.includes(messages.ar.drawer.saveState.unavailable), "the footer must name the server failure");
+  assert.ok(!body.includes(messages.ar.drawer.saveState.error), "the footer must not read as a validation refusal");
+  assert.ok(body.includes("INV-00057"), "the document must stay on the record with its number");
+  assert.ok(body.includes(messages.ar.drawer.editingHint), "the drawer must stay in edit mode, not reseed from the server");
+  assert.ok(buttonsNamed("Save")[0], "the drawer must stay in edit mode so the entries can be retried");
+  const toasts = globalThis.__drawerToasts ?? [];
+  assert.ok(
+    toasts.some((toast) => toast.kind === "error" && /server or connection failed/i.test(toast.message)),
+    "the 502 must toast the connection copy",
+  );
+  assert.equal(save.disabled, false, "busy must release after a 502 so the user can retry");
 });
 
 test("saving with a contentful account-less line refuses by line name and keeps the row", async (t) => {
