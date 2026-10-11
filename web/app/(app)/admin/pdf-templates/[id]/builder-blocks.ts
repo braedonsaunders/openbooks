@@ -22,10 +22,10 @@ export function safeTemplateKey(value: string): string | null {
 export function serializeTemplateEditor(editor: {
   getHtml: () => string
   getCss?: () => string | undefined
-}): string {
+}, assetStyle = ''): string {
   const css = editor.getCss?.() ?? ''
   const html = editor.getHtml()
-  return css ? `<style>${css}</style>${html}` : html
+  return (css ? `<style>${css}</style>` : '') + html + assetStyle
 }
 
 function escapeHtml(value: string): string {

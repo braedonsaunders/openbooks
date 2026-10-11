@@ -2877,7 +2877,11 @@
         "clientNumber": "RBC-Kundennummer",
         "serviceCurrency": "Servicewährung",
         "transmission": "Übertragungsformat",
-        "environment": "Dateiumgebung"
+        "environment": "Dateiumgebung",
+        "bankName": "Name der ausstellenden Bank",
+        "branchAddress": "Filialadresse",
+        "accountEncoding": "MICR-Kontokodierung laut Bank",
+        "effectiveFrom": "Gültig ab"
       },
       "originator": {
         "title": "Auftraggeber-Anmeldedaten",

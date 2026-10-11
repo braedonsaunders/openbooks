@@ -936,6 +936,10 @@ const SANITIZE_TEMPLATE_OPTIONS = {
     // The row-repeat / conditional-row markers (see expandRepeatMarkers).
     'data-each',
     'data-if',
+    'data-cheque-region',
+    'data-cheque-stock',
+    'data-cheque-offset-x',
+    'data-cheque-offset-y', 'data-cheque-bank-profile', 'data-cheque-micr', 'data-cheque-micr-encoding',
   ],
   FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'input', 'button', 'textarea'],
   ALLOW_DATA_ATTR: false,

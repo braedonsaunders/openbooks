@@ -2790,7 +2790,11 @@
         "clientNumber": "Número do cliente RBC",
         "serviceCurrency": "Moeda do serviço",
         "transmission": "Formato de transmissão",
-        "environment": "Ambiente do arquivo"
+        "environment": "Ambiente do arquivo",
+        "bankName": "Banco emissor",
+        "branchAddress": "Endereço da agência",
+        "accountEncoding": "Codificação MICR da conta fornecida pelo banco",
+        "effectiveFrom": "Vigente a partir de"
       },
       "originator": {
         "title": "Credenciais do originador",

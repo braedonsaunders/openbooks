@@ -2715,7 +2715,11 @@
         "clientNumber": "Número de cliente RBC",
         "serviceCurrency": "Moneda del servicio",
         "transmission": "Formato de transmisión",
-        "environment": "Entorno del archivo"
+        "environment": "Entorno del archivo",
+        "bankName": "Banco emisor",
+        "branchAddress": "Dirección de la sucursal",
+        "accountEncoding": "Codificación MICR de cuenta indicada por el banco",
+        "effectiveFrom": "Vigente desde"
       },
       "originator": {
         "title": "Credenciales del originador",

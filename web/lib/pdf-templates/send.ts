@@ -40,7 +40,7 @@ export interface RecipientInfo {
 // as its voucher. Derive protection from the catalog's payroll boundary so a
 // future alias cannot quietly fall back to the generic plaintext path.
 export function isProtectedPayrollRecordType(recordType: string): boolean {
-  return PDF_RECORD_TYPE_BY_KEY[recordType]?.readPermission === 'payroll.read'
+  return PDF_RECORD_TYPE_BY_KEY[recordType]?.readPermission.startsWith('payroll.') ?? false
 }
 
 async function requireEncryptedPayrollPdf(plaintext: Buffer, candidate: Buffer): Promise<Buffer> {

@@ -8,6 +8,7 @@
 // authors round-trip losslessly.
 
 import Link from 'next/link'
+import { assertMicrFont } from '@openbooks/pdf/micr-font'
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -23,6 +24,9 @@ import { confirmDialog } from '../../../../../lib/confirm'
 import { prettifyTemplateHtml } from '../../../../../lib/pdf-templates/prettify'
 import { useUnsavedNavigationGuard } from '../../../../../lib/use-unsaved-navigation-guard'
 import { type PaletteCollection, type PaletteField } from './builder-blocks'
+import { PDF_RECORD_TYPE_BY_KEY } from '../../../../../lib/pdf-templates/catalog'
+import { starterTemplate } from '../../../../../lib/pdf-templates/starters'
+import { applyChequeStock, chequeStockFromSource, applyChequeBankDesign, type ChequeStockPosition } from '../../../../../lib/pdf-templates/cheque-stock'
 
 const PdfBuilder = dynamic(() => import('./PdfBuilder'), { ssr: false })
 const CodeMirror = dynamic(() => import('@uiw/react-codemirror'), { ssr: false })
@@ -56,10 +60,12 @@ export default function PdfTemplateEditor({
   template,
   mergeFields,
   collections,
+  chequeBankProfiles = [],
 }: {
   template: EditorTemplate
   mergeFields: PaletteField[]
   collections: PaletteCollection[]
+  chequeBankProfiles?: Array<{id:string;name:string}>
 }) {
   const t = useTranslations('pdfTemplates')
   const tCommon = useTranslations('common')
@@ -90,6 +96,12 @@ export default function PdfTemplateEditor({
   const [previewError, setPreviewError] = useState<string | null>(null)
   // Remount the builder whenever we re-enter Design so it reloads sourceHtml.
   const [designEpoch, setDesignEpoch] = useState(0)
+  const [stock, setStock] = useState<ChequeStockPosition>(chequeStockFromSource(template.sourceHtml)?.stock ?? 'top')
+  const [offsetX, setOffsetX] = useState(String(chequeStockFromSource(template.sourceHtml)?.xMm ?? 0))
+  const [bankProfileId,setBankProfileId] = useState(() => template.sourceHtml.match(/data-cheque-bank-profile=["']([^"']*)["']/i)?.[1] ?? '')
+  const [micrEncoding,setMicrEncoding] = useState<'unicode'|'abcd'>(()=>template.sourceHtml.includes('data-cheque-micr-encoding="abcd"') ? 'abcd' : 'unicode')
+  const [printMicr,setPrintMicr] = useState(() => template.sourceHtml.includes('data-cheque-micr="printed"'))
+  const [offsetY, setOffsetY] = useState(String(chequeStockFromSource(template.sourceHtml)?.yMm ?? 0))
 
   const [pw, ph] = PAPER_PX[paperSize] ?? PAPER_PX.letter!
   const pageWidthPx = orientation === 'landscape' ? ph : pw
@@ -124,9 +136,10 @@ export default function PdfTemplateEditor({
     setTab(next)
   }
 
-  async function refreshPreview(source?: string) {
+  async function refreshPreview(source?: string, calibration = false) {
     setPreviewBusy(true)
     setPreviewError(null)
+    setPreviewUrl(old => { if (old) URL.revokeObjectURL(old); return null })
     try {
       const res = await fetch('/api/pdf-templates/preview', {
         method: 'POST',
@@ -139,15 +152,12 @@ export default function PdfTemplateEditor({
           paperSize,
           orientation,
           marginMm,
+          calibration,
         }),
       })
       if (!res.ok) {
         const message = await readApiErrorMessage(res, t('editor.previewFailed'))
-        if (res.status === 503) {
-          setPreviewError(message)
-        } else {
-          toast.error(message)
-        }
+        setPreviewError(message)
         return
       }
       const blob = await res.blob()
@@ -155,9 +165,51 @@ export default function PdfTemplateEditor({
         if (old) URL.revokeObjectURL(old)
         return URL.createObjectURL(blob)
       })
+    } catch {
+      setPreviewError(t('editor.previewFailed'))
     } finally {
       setPreviewBusy(false)
     }
+  }
+
+  function changeStock(replaceBody: boolean) {
+    try {
+      const source = replaceBody ? starterTemplate(PDF_RECORD_TYPE_BY_KEY.payroll_cheque!).sourceHtml : snapshot()
+      if (!offsetX.trim() || !offsetY.trim()) throw new Error(t('editor.chequeOffsetsRequired'))
+      setSourceHtml(applyChequeBankDesign(applyChequeStock(source, stock, Number(offsetX), Number(offsetY)), bankProfileId || null, printMicr, micrEncoding))
+      setPaperSize('letter'); setOrientation('portrait'); setMarginMm(0)
+      setHeaderHtml(''); setFooterHtml('')
+      setDesignEpoch(epoch => epoch + 1)
+      setPreviewUrl(old => { if (old) URL.revokeObjectURL(old); return null })
+      if (tab === 'preview') setTab('design')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('editor.saveFailed'))
+    }
+  }
+
+  function changeBankControls(profileId: string, micr: boolean, encoding: 'unicode'|'abcd') {
+    try {
+      setSourceHtml(applyChequeBankDesign(snapshot(), profileId || null, micr, encoding))
+      setBankProfileId(profileId)
+      setPrintMicr(micr)
+      setMicrEncoding(encoding)
+      setDesignEpoch(epoch=>epoch+1)
+      setPreviewUrl(old=>{if(old)URL.revokeObjectURL(old);return null})
+    } catch (error) { toast.error(error instanceof Error ? error.message : t('editor.saveFailed')) }
+  }
+
+  async function embedMicrFont(file: File | undefined) {
+    if (!file) return
+    try {
+      if (file.size > 262144) throw new Error(t('editor.chequeFontSize'))
+      const bytes = new Uint8Array(await file.arrayBuffer())
+      assertMicrFont(bytes,micrEncoding)
+      let binary = ''; for (const byte of bytes) binary += String.fromCharCode(byte)
+      const font = `<style id="ob-cheque-micr-font">@font-face{font-family:OpenBooksE13B;src:url(data:font/ttf;base64,${btoa(binary)}) format('truetype');font-weight:normal;font-style:normal;}</style>`
+      setSourceHtml(snapshot().replace(/<style[^>]*id=["']ob-cheque-micr-font["'][^>]*>[\s\S]*?<\/style>/gi,'') + font)
+      setDesignEpoch(epoch=>epoch+1)
+      setPreviewUrl(old=>{if(old)URL.revokeObjectURL(old);return null})
+    } catch (error) { toast.error(error instanceof Error ? error.message : t('editor.saveFailed')) }
   }
 
   useEffect(() => () => void (previewUrl && URL.revokeObjectURL(previewUrl)), [previewUrl])
@@ -298,6 +350,25 @@ export default function PdfTemplateEditor({
       </div>
 
       {/* ---- Running header/footer ---- */}
+      {template.recordType === 'payroll_cheque' ? <div className="flex flex-wrap items-end gap-3 rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800">
+        <label>{t('editor.chequeStock')}<select className="ml-2 rounded border p-1 dark:bg-slate-900" value={stock} onChange={event => setStock(event.target.value as ChequeStockPosition)}>
+          {(['top','middle','bottom'] as const).map(position => <option key={position} value={position}>{t(`editor.chequeStock_${position}`)}</option>)}
+        </select></label>
+        <label>{t('editor.chequeOffsetX')}<Input className="mt-1 h-8 w-24" type="number" min="-6" max="6" step="0.1" value={offsetX} onChange={event => setOffsetX(event.target.value)} /></label>
+        <label>{t('editor.chequeOffsetY')}<Input className="mt-1 h-8 w-24" type="number" min="-6" max="6" step="0.1" value={offsetY} onChange={event => setOffsetY(event.target.value)} /></label>
+        <label>{t('editor.chequeBankProfile')}<select className="ml-2 rounded border p-1 dark:bg-slate-900" value={bankProfileId} onChange={event=>changeBankControls(event.target.value, printMicr, micrEncoding)}>
+          <option value="">{t('editor.chequePreprinted')}</option>
+          {bankProfileId && !chequeBankProfiles.some(p=>p.id===bankProfileId) ? <option value={bankProfileId}>{t('editor.chequeSavedProfile')}</option> : null}
+          {chequeBankProfiles.map(profile=><option key={profile.id} value={profile.id}>{profile.name}</option>)}
+        </select></label>
+        <label className="flex items-center gap-2"><input type="checkbox" checked={printMicr} onChange={event=>changeBankControls(bankProfileId,event.target.checked,micrEncoding)} />{t('editor.chequePrintMicr')}</label>
+        {printMicr ? <label>{t('editor.chequeFontEncoding')}<select className="ml-2 rounded border p-1 dark:bg-slate-900" value={micrEncoding} onChange={event=>changeBankControls(bankProfileId,printMicr,event.target.value as 'unicode'|'abcd')}><option value="unicode">Unicode · ⑆ ⑈ ⑉</option><option value="abcd">A / C / D</option></select></label> : null}
+        {printMicr ? <label>{t('editor.chequeFont')}<Input type="file" accept=".ttf,font/ttf" onChange={event=>void embedMicrFont(event.target.files?.[0])} /></label> : null}
+        <Button size="sm" variant="outline" onClick={() => changeStock(false)} disabled={!chequeStockFromSource(sourceHtml)}>{t('editor.chequeAlign')}</Button>
+        <Button size="sm" variant="outline" onClick={() => changeStock(true)}>{t('editor.chequeStartPreset')}</Button>
+        <Button size="sm" variant="outline" disabled={previewBusy} onClick={() => { setTab('preview'); void refreshPreview(undefined, true) }}>{t('editor.chequeCalibration')}</Button>
+        <p className="w-full text-xs text-slate-500">{t('editor.chequeStockHint')} {t('editor.chequeMicrHint')} <Link href="/admin/setup/payment-operations?view=profiles" className="text-teal-700 underline">{t('editor.chequeBankSetup')}</Link></p>
+      </div> : null}
       <div className="grid grid-cols-2 gap-2">
         <Input
           value={headerHtml}
@@ -360,9 +431,9 @@ export default function PdfTemplateEditor({
                   role="alert"
                   className="max-w-lg rounded-lg border border-amber-300/40 bg-amber-950/60 p-5 text-sm text-amber-100"
                 >
-                  <p className="font-semibold text-amber-200">{t('editor.rendererUnavailableTitle')}</p>
+                  <p className="font-semibold text-amber-200">{t('editor.previewFailed')}</p>
                   <p className="mt-2 leading-relaxed">{previewError}</p>
-                  <p className="mt-2 text-amber-200/80">{t('editor.rendererUnavailableHint')}</p>
+                  <p className="mt-2 text-amber-200/80">{t('editor.chequePreviewRemedy')}</p>
                 </div>
               </div>
             ) : (

@@ -454,7 +454,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'payroll-setup-header': { props: ['description', 'launcher', 'showLauncher', 'title'] },
   'payroll-setup-tabs': { props: ['activeGroup', 'groups', 'subTabs', 'tabsAria'] },
   'payroll-work-locations': { props: [] },
-  'pdf-template-editor': { props: ['collections', 'mergeFields', 'template'] },
+  'pdf-template-editor': { props: ['collections', 'mergeFields', 'template', 'chequeBankProfiles'] },
   'pdf-templates-list': { props: ['recordTypes', 'starters', 'templates'] },
   'permission-hint': { props: ['action', 'permission'] },
   'pick-list-drawer': { props: ['drawer'] },

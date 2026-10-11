@@ -195,9 +195,12 @@ export default function PdfBuilder({
             style.id = 'ob-page-css'
             style.innerHTML = pageCss(pageWidthPx, pageHeightPx, marginPx)
             doc.head.appendChild(style)
+            const embedded = initialHtml?.match(/<style[^>]*id=["']ob-cheque-micr-font["'][^>]*>([\s\S]*?)<\/style>/i)?.[1]
+            if (embedded) { const fontStyle=doc.createElement('style');fontStyle.id='ob-cheque-micr-font';fontStyle.textContent=embedded;doc.head.appendChild(fontStyle) }
           })
           try {
-            editor.setComponents(initialHtml?.trim() ? initialHtml : STARTER_HTML)
+            const body = initialHtml?.replace(/<style[^>]*id=["']ob-cheque-micr-font["'][^>]*>[\s\S]*?<\/style>/gi,'')
+            editor.setComponents(body?.trim() ? body : STARTER_HTML)
           } catch {
             try {
               editor.setComponents(STARTER_HTML)
@@ -207,7 +210,7 @@ export default function PdfBuilder({
           }
           editorRef.current = editor
           setEditor(editor)
-          editor.on('update', () => onChange?.(serializeTemplateEditor(editor)))
+          editor.on('update', () => onChange?.(serializeTemplateEditor(editor, initialHtml?.match(/<style[^>]*id=["']ob-cheque-micr-font["'][^>]*>[\s\S]*?<\/style>/i)?.[0] ?? '')))
           onReady(editor)
         }}
       >

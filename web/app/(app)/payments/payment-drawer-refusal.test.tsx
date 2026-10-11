@@ -430,3 +430,51 @@ test("changing the payment date hides prior-date FX evidence while new rates loa
   });
   assert.equal([...evidence.options].some((option) => option.textContent?.includes("2026-09-17")), false);
 });
+
+test('opening another prefilled payment resets the header, applications and failed-request identity', async (t) => {
+  const submitted: { body: Record<string, unknown>; key: string | null }[] = [];
+  const bank = randomUUID(), entity = randomUUID(), firstParty = randomUUID(), nextParty = randomUUID();
+  const restoreFetch = scriptFetch((url, init) => {
+    if (url === '/api/payments' && init?.method === 'POST') {
+      submitted.push({body:JSON.parse(String(init.body)),key:new Headers(init.headers).get('Idempotency-Key')});
+      return Response.json({error:'Payment service temporarily unavailable'}, {status:503});
+    }
+    if (url.includes('/funding-accounts')) return Response.json({accounts:[{id:bank,number:'1000',name:'Bank'}]});
+    if (url.includes('/api/flows/record-state')) return approvalFixture();
+    return null;
+  });
+  t.after(restoreFetch);
+  globalThis.__payToasts = [];
+  globalThis.__payRouter = {push(){},refresh(){}};
+  const host = document.createElement('div'); document.body.appendChild(host);
+  const root = createRoot(host);
+  t.after(async()=>{await act(async()=>root.unmount());host.remove()});
+  const render = async (party: string, line: string, amount: string, date: string, reference: string) => {
+    await act(async()=>{
+      root.render(<NextIntlClientProvider locale="en" messages={messages} timeZone="UTC"><MoneyProvider currency="USD">
+        <PaymentDrawer createMode payment={{doc:{id:'',kind:'vendor_payment',status:'draft',currency:'USD',party_id:party,subsidiary_id:entity,document_date:date,reference_number:reference,updated_at:'',total:'0'},bankAccountId:bank,applied:[],allocations:[{openLineId:line,sourceTransactionAmount:amount,targetTransactionAmount:amount,settlementRate:'1',settlementRateSource:'same_currency',settlementRateReference:'same transaction currency'}]}}
+          initialOpenItems={[{lineId:line,entryNumber:line,postingDate:date,dueDate:null,documentNumber:line,documentKind:'vendor_bill',referenceNumber:null,amount,applied:'0',open:amount,currency:'USD',transactionAmount:amount,transactionApplied:'0',transactionOpen:amount}]}
+          parties={[{id:firstParty,display_name:'Rent vendor'},{id:nextParty,display_name:'Utility vendor'}]} bankAccounts={[{id:bank,number:'1000',name:'Bank'}]} side="ap" basePath="/payments" />
+      </MoneyProvider></NextIntlClientProvider>);
+      await tick();
+    });
+    await tick();
+  };
+  await render(firstParty,'rent-line','4800.00','2026-07-05','RENT-JULY');
+  await click(buttonsNamed('Save')[0]!);
+  await render(nextParty,'utility-line','405.90','2026-07-20','UTILITY-JULY');
+  await click(buttonsNamed('Save')[0]!);
+  assert.equal(submitted.length,2);
+  assert.equal(submitted[0]!.body.partyId,firstParty);
+  assert.equal(submitted[1]!.body.partyId,nextParty);
+  assert.equal(submitted[1]!.body.documentDate,'2026-07-20');
+  assert.equal(submitted[1]!.body.referenceNumber,'UTILITY-JULY');
+  assert.deepEqual((submitted[1]!.body.allocations as {openLineId:string}[]).map(a=>a.openLineId),['utility-line']);
+  assert.ok(submitted[0]!.key && submitted[1]!.key);
+  assert.notEqual(submitted[0]!.key,submitted[1]!.key);
+  await render(nextParty,'august-utility-line','430.00','2026-08-20','UTILITY-AUGUST');
+  await click(buttonsNamed('Save')[0]!);
+  assert.equal(submitted[2]!.body.referenceNumber,'UTILITY-AUGUST');
+  assert.deepEqual((submitted[2]!.body.allocations as {openLineId:string}[]).map(a=>a.openLineId),['august-utility-line']);
+  assert.notEqual(submitted[1]!.key,submitted[2]!.key);
+});

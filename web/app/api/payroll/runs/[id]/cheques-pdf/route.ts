@@ -4,6 +4,8 @@ import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import { PayrollError } from "@openbooks/engine/payroll/error";
+import { ScopeNotFoundError } from '@openbooks/engine/organization/scope';
+import { PdfTemplateValidationError } from '@openbooks/pdf';
 import '../../../../../../lib/feature-gates';
 import { guardSubsidiaryScope } from '../../../../../../lib/authz'
 import { db } from '@openbooks/engine/platform/db'
@@ -49,7 +51,8 @@ export const POST = defineRoute({
       const stamp = await businessToday(gate.user.orgId)
       return pdfResponse(Buffer.from(merged.pdf), safeName(`Pay-cheques-${id.slice(0, 8)}-${stamp}`))
     } catch (error) {
-      if (error instanceof PayrollError) {
+      if (error instanceof ScopeNotFoundError) return notFound('record')
+      if (error instanceof PayrollError || error instanceof PdfTemplateValidationError) {
         return apiErrorResponse(error, { safeStatus: 409 })
       }
       const rendererRefusal = rendererUnavailableResponse(error)

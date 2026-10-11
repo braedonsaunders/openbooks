@@ -1,4 +1,7 @@
 import 'server-only'
+import { sql } from 'drizzle-orm'
+import { db } from '@openbooks/engine/platform/db'
+import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
 
 import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
@@ -35,6 +38,7 @@ export interface PdfTemplateEditorData {
   template: EditorProps['template']
   mergeFields: EditorProps['mergeFields']
   collections: EditorProps['collections']
+  chequeBankProfiles: NonNullable<EditorProps['chequeBankProfiles']>
 }
 
 export async function loadPdfTemplateEditor(id: string): Promise<PdfTemplateEditorData> {
@@ -57,7 +61,16 @@ export async function loadPdfTemplateEditor(id: string): Promise<PdfTemplateEdit
     fields: c.fields.map((f) => ({ key: f.key, label: f.label })),
   }))
 
+  const chequeBankProfiles = row.recordType === 'payroll_cheque' ? (await db.execute<{id:string;name:string}>(sql`
+    select p.id,p.name from payment_bank_profiles p
+    join payment_formats f on f.org_id=p.org_id and f.id=p.payment_format_id and f.is_active and f.rail='cheque'
+    join accounts a on a.org_id=p.org_id and a.id=p.bank_account_id and a.is_active and not a.is_summary and a.type='asset_bank'
+    where p.org_id=${authz.user.orgId} and p.is_active
+      ${subsidiaryVisibleFilter(sql`p.subsidiary_id`,authz.allowedSubsidiaryIds??null)}
+      ${subsidiaryVisibleFilter(sql`a.subsidiary_id`,authz.allowedSubsidiaryIds??null)} order by p.name
+  `)).rows : []
   return {
+    chequeBankProfiles,
     template: {
       id: row.id,
       recordType: row.recordType,
@@ -91,6 +104,7 @@ export function pdfTemplateEditorSpec(data: PdfTemplateEditorData): PageSpec {
           template: data.template,
           mergeFields: data.mergeFields,
           collections: data.collections,
+          chequeBankProfiles: data.chequeBankProfiles,
         }),
       ]),
     ],

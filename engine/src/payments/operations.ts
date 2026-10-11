@@ -1,3 +1,5 @@
+import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
+import { validateChequeBank } from "../payments-core/cheque-bank.ts";
 import { validateRbcStd152Settings, type RbcStd152Settings } from "../payments-core/rail-rbc-std152.ts";
 import { allocateRbcStd152Number, rbcStd152SettingsDigest } from "../payments-core/rail-rbc-identity.ts";
 import { createHash, randomUUID } from "node:crypto";
@@ -159,6 +161,10 @@ async function validatePaymentBankProfileRefs(orgId: string, input: {
     if (checked.settings.serviceCurrency !== input.currency) throw new PaymentError("RBC service currency must match the profile currency");
     if (input.country !== "CA") throw new PaymentError("RBC STD152 Canadian-bank credits require a CA profile");
   }
+  if (row.rail === "cheque" && input.originatorSecrets && ['bankName','branchAddress','accountEncoding','effectiveFrom'].some(key => input.originatorSecrets?.[key] !== undefined)) {
+    validateChequeBank(input.originatorSecrets);
+    if (input.country !== "CA" || input.currency !== "CAD") throw new PaymentError("Printed Canadian MICR requires a CAD Canadian cheque profile; use preprinted bank stock for other formats");
+  }
   const transactionCode = input.originatorSecrets?.transactionCode;
   if (row.rail === "cpa005_credit" && transactionCode !== undefined
       && (typeof transactionCode !== "string" || !/^\d{3}$/.test(transactionCode))) {
@@ -200,11 +206,12 @@ async function auditProfileChange(
   changes: unknown,
   actorId: string,
 ): Promise<void> {
-  await tx.execute(sql`
+  const audit = await tx.execute<{id:string}>(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${orgId}, 'payment_bank_profiles', ${rowId}, ${action},
-            ${JSON.stringify(changes)}::jsonb, ${actorId})
+            ${JSON.stringify(changes)}::jsonb, ${actorId}) returning id
   `);
+  if (audit.rows.length !== 1) throw new PaymentError("Bank profile audit was not recorded");
 }
 
 /**
@@ -237,8 +244,10 @@ export async function createPaymentBankProfile(
   input: PaymentBankProfileInput,
   scope: ReadonlySet<string> | null = null,
 ): Promise<{ id: string }> {
-  await validatePaymentBankProfileRefs(orgId, input);
   return db.transaction(async (tx) => {
+    const actorScope = await lockActorCommandAuthority(tx, orgId, userId, input.subsidiaryId ?? null, "admin.setup.manage");
+    await validatePaymentBankProfileRefs(orgId, input);
+    await requireProfileScope(tx, orgId, input.bankAccountId, input.subsidiaryId, actorScope);
     await requireProfileScope(tx, orgId, input.bankAccountId, input.subsidiaryId, scope);
     const profile = (await tx.insert(schema.paymentBankProfiles).values({
       orgId,
@@ -291,6 +300,9 @@ export async function updatePaymentBankProfile(
     `));
     if (!existing.rows[0]) throw new PaymentError("payment bank profile not found");
     const current = existing.rows[0];
+    const actorScope = await lockActorCommandAuthority(tx, orgId, userId, current.subsidiary_id, "admin.setup.manage");
+    await lockActorCommandAuthority(tx, orgId, userId, input.subsidiaryId === undefined ? current.subsidiary_id : input.subsidiaryId, "admin.setup.manage");
+    await requireProfileScope(tx, orgId, input.bankAccountId ?? current.bank_account_id, input.subsidiaryId === undefined ? current.subsidiary_id : input.subsidiaryId, actorScope);
     const rotating = input.originatorSecrets !== undefined;
     const storedOriginatorSecrets =
       current.originator_secrets_encrypted == null

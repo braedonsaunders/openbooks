@@ -249,13 +249,14 @@ function payStubStarter(): StarterTemplate {
  */
 function chequeStarter(meta: PdfRecordTypeMeta, accent: string): StarterTemplate {
   const sourceHtml =
-    `<div style="${FONT}color:${INK};">` +
+    `<div id="ob-cheque-sheet" data-cheque-stock="top" data-cheque-offset-x="0" data-cheque-offset-y="0" style="${FONT}color:${INK};position:relative;width:215.9mm;height:278mm;">` +
+    `<section id="ob-cheque-instrument" data-cheque-region="true" style="position:absolute;left:12.5mm;top:4mm;width:190.9mm;height:85mm;overflow:visible;">` +
     // ---- cheque body -----------------------------------------------------
     `<table style="width:100%;border-collapse:collapse;margin:0 0 4px;"><tbody><tr>` +
-    `<td style="vertical-align:top;"><div style="font-size:17px;font-weight:800;color:${accent};">{{org_name}}</div></td>` +
+    `<td style="vertical-align:top;"><div style="font-size:17px;font-weight:800;color:${accent};">{{org_name}}</div><div style="font-size:9px;">{{bank_name}}<div>{{bank_branch_address}}</div></div></td>` +
     `<td style="vertical-align:top;text-align:right;">` +
     `<div style="font-size:15px;font-weight:800;color:${INK};">{{cheque_number}}</div>` +
-    `<div style="font-size:11px;color:${MUTED};padding-top:2px;">{{pay_date}}</div>` +
+    `<div style="font-size:11px;color:${MUTED};padding-top:2px;">{{pay_date_iso}}<div style="font-size:8px;">YYYY-MM-DD</div></div>` +
     `</td>` +
     `</tr></tbody></table>` +
     `<table style="width:100%;border-collapse:collapse;margin:14px 0 6px;"><tbody><tr>` +
@@ -274,14 +275,21 @@ function chequeStarter(meta: PdfRecordTypeMeta, accent: string): StarterTemplate
     `<div style="border-top:1px solid ${INK};margin-top:26px;padding-top:4px;font-size:9.5px;color:${MUTED};text-align:center;">Authorized signature</div>` +
     `</td>` +
     `</tr></tbody></table>` +
-    `<div style="height:3px;background:${accent};margin:26px 0 4px;"></div>` +
+    // The content has a 12.5 mm right inset and ends 4.1333 mm above the
+    // perforation. Bank-field anchors use the physical cheque edge.
+    `<div data-if="print_micr" id="ob-cheque-micr" style="position:absolute;left:0;bottom:.6667mm;width:100%;height:6.4mm;font:12pt OpenBooksE13B;line-height:6.4mm;color:#000;white-space:pre;">` +
+    `<span style="position:absolute;right:133.6mm;">{{micr_serial}}</span><span style="position:absolute;right:95.5mm;">{{micr_transit}}</span><span style="position:absolute;right:35.1mm;">{{micr_account}}</span></div>` +
+    `</section><section id="ob-cheque-voucher" data-cheque-region="true" style="position:absolute;left:12.5mm;top:97.13mm;width:190.9mm;height:176.27mm;overflow:visible;">` +
     // ---- voucher ---------------------------------------------------------
+    `<div id="ob-cheque-voucher-earnings">` +
+    `<div style="height:3px;background:${accent};margin:0 0 4px;"></div>` +
     `<div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:${FAINT};padding:0 0 12px;">` +
     `Statement of earnings · {{document_number}} · {{period_start}} – {{period_end}}</div>` +
     `<table style="width:100%;border-collapse:collapse;margin:0 0 14px;"><tbody>` +
     `<tr>${th('Earnings')}${th('Hours', 'right', '70px')}${th('Rate', 'right', '80px')}${th('Amount', 'right', '92px')}</tr>` +
     `<tr data-each="earnings">${td('description').replace('</td>', '<span data-if="non_cash" style="font-size:9px;color:#64748b;"> · Non-cash</span></td>')}${td('hours', 'right')}${td('rate', 'right')}${td('amount', 'right')}</tr>` +
     `</tbody></table>` +
+    `</div><div id="ob-cheque-voucher-deductions">` +
     `<table style="width:100%;border-collapse:collapse;margin:0 0 14px;"><tbody>` +
     `<tr>${th('Deductions')}${th('Amount', 'right', '92px')}</tr>` +
     `<tr data-each="deductions">${td('description')}${td('amount', 'right')}</tr>` +
@@ -294,12 +302,15 @@ function chequeStarter(meta: PdfRecordTypeMeta, accent: string): StarterTemplate
     totalsRow('Net pay', 'net_pay', { strong: true, accent }) +
     `</tbody></table>` +
     `<div style="border-top:1px solid ${RULE};margin-top:18px;padding-top:10px;font-size:9.5px;color:${FAINT};">Printed {{printed_date}} · {{org_name}} · Confidential</div>` +
-    `</div>`
+    `</div></section></div>`
 
   return {
     sourceHtml,
     headerHtml: '',
-    footerHtml: `{{org_name}} · ${meta.docTitle} {{cheque_number}} · Page {{page}} of {{pages}}`,
+    footerHtml: '',
+    paperSize: 'letter',
+    orientation: 'portrait',
+    marginMm: 0,
   }
 }
 

@@ -2877,7 +2877,11 @@
         "clientNumber": "RBC顧客番号",
         "serviceCurrency": "サービス通貨",
         "transmission": "送信形式",
-        "environment": "ファイル環境"
+        "environment": "ファイル環境",
+        "bankName": "発行銀行名",
+        "branchAddress": "支店住所",
+        "accountEncoding": "銀行指定のMICR口座符号化",
+        "effectiveFrom": "適用開始日"
       },
       "originator": {
         "title": "オリジネーター認証情報",

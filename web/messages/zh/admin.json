@@ -2790,7 +2790,11 @@
         "clientNumber": "RBC客户编号",
         "serviceCurrency": "服务货币",
         "transmission": "传输格式",
-        "environment": "文件环境"
+        "environment": "文件环境",
+        "bankName": "签发银行名称",
+        "branchAddress": "分行地址",
+        "accountEncoding": "银行指定的MICR账户编码",
+        "effectiveFrom": "生效日期"
       },
       "originator": {
         "title": "发起方凭据",

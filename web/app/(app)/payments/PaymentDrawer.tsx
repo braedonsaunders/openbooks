@@ -248,7 +248,17 @@ const STATUS_LABEL_KEY: Record<string, string> = {
   cancelled: 'cancelled',
 }
 
-export function PaymentDrawer({
+/** A new prefilled subject owns fresh draft state and a fresh idempotency key. */
+export function PaymentDrawer(props: Parameters<typeof PaymentDrawerBody>[0]) {
+  const doc = asPaymentDoc(props.payment.doc)
+  const identity = props.createMode
+    ? JSON.stringify([props.side, props.basePath, doc.party_id, doc.subsidiary_id, doc.currency,
+        props.payment.allocations.map(allocation=>allocation.openLineId).sort()])
+    : String(doc.id)
+  return <PaymentDrawerBody key={identity} {...props} />
+}
+
+function PaymentDrawerBody({
   payment,
   initialMode = 'view',
   initialOpenItems,

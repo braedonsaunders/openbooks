@@ -2790,7 +2790,11 @@
         "clientNumber": "RBC client number",
         "serviceCurrency": "Service currency",
         "transmission": "Transmission format",
-        "environment": "File environment"
+        "environment": "File environment",
+        "bankName": "Issuing bank name",
+        "branchAddress": "Issuing branch address",
+        "accountEncoding": "Bank-specified MICR account encoding",
+        "effectiveFrom": "Effective from"
       },
       "originator": {
         "title": "Originator credentials",

@@ -1,3 +1,8 @@
+import { printIssuedCheque } from '@/lib/pdf-templates/cheque-print'
+import { PayrollError } from '@openbooks/engine/payroll/error'
+import { ScopeNotFoundError } from '@openbooks/engine/organization/scope'
+import { PdfTemplateValidationError } from '@openbooks/pdf'
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from "next/server";
 import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import { guardPermission, guardSubsidiaryScope } from "../../../../../lib/authz";
@@ -67,7 +72,9 @@ async function renderRecordPdf(
   if (!record) return NextResponse.json({ error: "record not found" }, { status: 404 });
 
   try {
-    const pdf = await mergeAndPrintPdf(tpl, record.values);
+    const pdf = recordType === 'payroll_cheque'
+      ? await printIssuedCheque(user.orgId,id,user.id,gate.allowedSubsidiaryIds??null,tpl,record.values)
+      : await mergeAndPrintPdf(tpl, record.values);
     const stamp = await businessToday(user.orgId);
     // The issued bytes carry their own provenance: which template design
     // produced this PDF, so a disputed print resolves to an exact design
@@ -78,6 +85,8 @@ async function renderRecordPdf(
     response.headers.set('x-pdf-template-hash', tpl.provenance.contentHash);
     return response;
   } catch (e) {
+    if (e instanceof ScopeNotFoundError) return notFound('record');
+    if (e instanceof PayrollError || e instanceof PdfTemplateValidationError) return apiErrorResponse(e,{safeStatus:409});
     const rendererRefusal = rendererUnavailableResponse(e);
     if (rendererRefusal) return rendererRefusal;
     return unexpectedServerError('record-pdf', e);

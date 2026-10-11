@@ -5,7 +5,8 @@ import { documentBalanceDueLateral } from '@openbooks/engine/records/balance-due
 import { db } from '@openbooks/engine/platform/db'
 import { orgFeatureEnabled } from '@openbooks/engine/organization/org-feature-lock'
 import { add, cmp, formatMoney, isZero, mul, neg, sum } from '@openbooks/engine/money/money'
-import { amountInWords } from '@openbooks/engine/payroll/cheques'
+import { chequeMicrFields } from '@openbooks/engine/payments-core/cheque-bank'
+import { issuedChequeBank, amountInWords } from '@openbooks/engine/payroll/cheques'
 import { incomeTaxWithholdingSystemKeys } from '@openbooks/engine/payroll/packs'
 import { createMoneyFormatter, type MoneyFormatter } from '../money-format'
 import { resolveLocale } from '../locale'
@@ -566,7 +567,7 @@ async function loadPayrollChequeValues(
          order by is_default_billing desc, created_at limit 1
       ) a on true
      where s.id = ${id} and s.org_id = ${orgId} and s.payment_method = 'cheque'
-       and s.cheque_number is not null${subsidiaryVisibleFilter(sql`d.subsidiary_id`, scope)}
+       and s.cheque_number is not null and r.run_status='committed'${subsidiaryVisibleFilter(sql`d.subsidiary_id`, scope)}
   `))
   const stub = r.rows[0]
   if (!stub) return null
@@ -608,12 +609,14 @@ async function loadPayrollChequeValues(
   const nonCash = sum(lines.rows.filter(l => l.kind === 'earning' && l.payment_kind === 'non_cash').map(l => String(l.amount)))
 
   const values: Record<string, unknown> = {
+    ...await chequeBankMergeValues(orgId, id, String(stub.cheque_number)),
     cheque_number: stub.cheque_number ?? '',
     employee_name: stub.employee_name ?? '',
     party_name: stub.employee_name ?? '',
     employee_address: address,
     party_address: address,
     pay_date: fmtDate(stub.pay_date, locale),
+    pay_date_iso: String(stub.pay_date ?? '').slice(0,10),
     amount: money(net),
     // The legal amount comes from the engine, off the exact decimal — never
     // from the formatted courtesy amount above.
@@ -638,6 +641,14 @@ async function loadPayrollChequeValues(
     values,
     reference: `${stub.cheque_number ?? 'Cheque'} ${stub.employee_name ?? ''}`.trim(),
   }
+}
+
+async function chequeBankMergeValues(orgId: string, stubId: string, number: string) {
+  const basis = await issuedChequeBank(orgId, stubId)
+  if (!basis?.bank) return {cheque_bank_profile:basis?.profileId??'',bank_name:'',bank_branch_address:'',bank_account:'',micr_serial:'',micr_transit:'',micr_account:''}
+  const fields = /^\d{1,11}$/.test(number) ? chequeMicrFields(number,basis.bank) : null
+  return {cheque_bank_profile:basis.profileId, bank_name:basis.bank.bankName, bank_branch_address:basis.bank.branchAddress,
+    bank_account:basis.bank.accountEncoding, micr_serial:fields?.micrSerial??'',micr_transit:fields?.micrTransit??'',micr_account:fields?.micrAccount??''}
 }
 
 /**

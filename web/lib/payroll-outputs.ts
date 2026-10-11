@@ -1,8 +1,11 @@
 import 'server-only'
+import { createHash } from 'node:crypto'
+import { chequeBankDesign } from './pdf-templates/cheque-stock'
 import { sql } from 'drizzle-orm'
 import { PDFDocument } from 'pdf-lib'
 import {
   RendererUnavailableError,
+  PdfTemplateValidationError,
   encryptPdf,
   renderPasswordExpression,
   type PasswordTokenCatalog,
@@ -11,7 +14,7 @@ import { db } from '@openbooks/engine/platform/db'
 import type { Authz } from './authz'
 import { PayrollError } from '@openbooks/engine/payroll/error'
 import { payrollSubsidiaryInScope } from '@openbooks/engine/payroll/scope'
-import { issuePayRunCheques } from '@openbooks/engine/payroll/cheques'
+import { lockIssuedChequePrint, issuePayRunCheques } from '@openbooks/engine/payroll/cheques'
 import { mergeAndPrintPdf } from './pdf-templates/render'
 import { resolvePdfTemplate } from './pdf-templates/store'
 import { loadPdfRecordValues } from './pdf-templates/values'
@@ -186,21 +189,36 @@ export async function mergedRunChequesPdf(
 ): Promise<{ pdf: Uint8Array; count: number; issued: number } | null> {
   const template = await resolvePdfTemplate(orgId, 'payroll_cheque', null)
   if (!template) return null
-  const batch = await issuePayRunCheques({ orgId, documentId, actorId, allowedSubsidiaryIds })
+  let bankDesign
+  try { bankDesign = chequeBankDesign(template.compiledHtml) }
+  catch (error) { throw new PdfTemplateValidationError(error instanceof Error ? error.message : 'Cheque bank configuration is invalid.') }
+  const batch = await issuePayRunCheques({ orgId, documentId, actorId, allowedSubsidiaryIds, bankProfileId:bankDesign.profileId, printMicr:bankDesign.printMicr })
   if (batch.cheques.length === 0) return null
 
   const merged = await PDFDocument.create()
   let count = 0
   for (const cheque of batch.cheques) {
     const record = await loadPdfRecordValues('payroll_cheque', orgId, cheque.stubId, allowedSubsidiaryIds ?? null)
-    if (!record) continue
+    if (!record) throw new PayrollError('A cheque in this batch is no longer printable — reload the committed payroll run before printing')
     const pdf = await mergeAndPrintPdf(template, record.values)
     const doc = await PDFDocument.load(pdf)
+    if (doc.getPageCount() !== 1) throw new PayrollError('Each cheque must fit exactly one stock sheet — adjust its layout in the PDF designer and preview again')
     const pages = await merged.copyPages(doc, doc.getPageIndices())
     for (const page of pages) merged.addPage(page)
     count += 1
   }
-  return { pdf: await merged.save(), count, issued: batch.issued }
+  const bytes = await merged.save()
+  await db.transaction(async tx => {
+    const live = await lockIssuedChequePrint(tx,{orgId,stubId:batch.cheques[0]!.stubId,actorId,allowedSubsidiaryIds})
+    if (live.documentId !== documentId || live.chequeNumber !== batch.cheques[0]!.chequeNumber) throw new PayrollError('Reload the issued cheque batch before printing')
+    const audit = await tx.execute<{id:string}>(sql`
+    insert into audit_log (org_id,table_name,row_id,action,changes,actor_id)
+    values (${orgId},'pay_runs',${documentId},'update',${JSON.stringify({event:'cheque_batch_printed',count,issued:batch.issued,
+      chequeNumbers:batch.cheques.map(cheque=>cheque.chequeNumber),template:template.provenance,contentHash:createHash('sha256').update(bytes).digest('hex')})}::jsonb,${actorId}) returning id
+  `)
+    if (audit.rows.length !== 1) throw new PayrollError('Cheque print audit was not recorded')
+  })
+  return { pdf: bytes, count, issued: batch.issued }
 }
 
 export interface EmailStubsResult {

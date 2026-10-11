@@ -65,3 +65,5 @@ export {
   renderCode128Svg,
   type Code128Encoding,
 } from './barcode'
+
+export { assertMicrFont } from './micr-font'

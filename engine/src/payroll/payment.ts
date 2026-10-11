@@ -1,3 +1,4 @@
+import { assertIssuedChequeFunding } from "./cheques.ts";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
@@ -131,6 +132,8 @@ export async function recordPayRunPayment(input: {
         and type = 'asset_bank' and is_active for share
     `));
     if (!bank.rows[0]) throw new PayrollError("choose an active bank account");
+
+    await assertIssuedChequeFunding(tx,orgId,documentId,input.bankAccountId);
 
     // The run's per-employee net-pay open items (credits on the payable).
     const postedItems = (await tx.execute<{

@@ -5,7 +5,7 @@ import { apiErrorResponse } from '@/lib/api/error-response'
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { rendererUnavailableResponse } from "@/lib/api/pdf-renderer";
-import { assertPrintablePage, compileTemplateHtml, sanitizeTokenizedFragment } from "@openbooks/pdf";
+import { PdfTemplateValidationError, assertPrintablePage, compileTemplateHtml, sanitizeTokenizedFragment } from "@openbooks/pdf";
 import { can } from "../../../../lib/authz";
 import { unexpectedServerError } from "../../../../lib/api/unexpected";
 import { isDocKindEnabled } from "../../../../lib/documents.ts";
@@ -27,6 +27,7 @@ const bodyObjectSchema = z.object({
   paperSize: z.enum(['letter', 'a4', 'legal']).optional(),
   orientation: z.enum(["landscape", "portrait"]).optional(),
   marginMm: z.number().optional(),
+  calibration: z.boolean().optional(),
 }).strict();
 
 /**
@@ -76,7 +77,9 @@ async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injec
   // must read as not found (and fall back to synthetic sample values),
   // never render a legal entity hidden from the designer.
   const real = sampleId ? await loadPdfRecordValues(meta.key, user.orgId, sampleId, scope) : null;
-  const values = real?.values ?? sampleValues(meta);
+  const sourceValues = real?.values ?? sampleValues(meta);
+  const values = meta.key === 'payroll_cheque' ? { ...sourceValues, cheque_number: '000000', cheque_bank_profile:'', bank_name:'Sample bank',bank_branch_address:'Sample branch',bank_account:'0000000',micr_serial:'⑈000000⑈',micr_transit:'⑆00000⑉000⑆',micr_account:'⑈0000000' } : sourceValues;
+  if (body.calibration && meta.key !== 'payroll_cheque') return NextResponse.json({ error: 'Calibration is available for cheque stock.' }, { status: 400 });
 
   // Preview geometry is refused like saved geometry: a misspelled size must
   // not preview as Letter while the saved template would print the same lie.
@@ -108,11 +111,13 @@ async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injec
         footerHtml: footer || null,
       },
       values,
+      { specimen: meta.key === 'payroll_cheque', calibration: body.calibration },
     );
     // Download filename uses the stable record key, never a localized label:
     // Content-Disposition filenames must stay ASCII and stable across locales.
     return pdfResponse(pdf, `${meta.key} preview`);
   } catch (e) {
+    if (e instanceof PdfTemplateValidationError) return apiErrorResponse(e, {safeStatus:400});
     const rendererRefusal = rendererUnavailableResponse(e);
     if (rendererRefusal) return rendererRefusal;
     return unexpectedServerError('pdf-templates/preview', e);

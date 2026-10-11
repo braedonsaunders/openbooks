@@ -321,6 +321,7 @@ export const SETUP_WIDGETS = {
       template={props.template as ComponentProps<typeof PdfTemplateEditor>['template']}
       mergeFields={props.mergeFields as ComponentProps<typeof PdfTemplateEditor>['mergeFields']}
       collections={props.collections as ComponentProps<typeof PdfTemplateEditor>['collections']}
+      chequeBankProfiles={props.chequeBankProfiles as ComponentProps<typeof PdfTemplateEditor>['chequeBankProfiles']}
     />
   ),
 

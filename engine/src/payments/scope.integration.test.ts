@@ -1,3 +1,4 @@
+import { grantScratchPermissions } from "../testing/fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -633,6 +634,7 @@ test(
     const org = await createScratchOrg();
     try {
       const actor = await createScratchUser(org.orgId, "Scope audit", "admin");
+      await grantScratchPermissions(org.orgId, actor, ["admin.setup.manage"]);
       const subB = randomUUID();
       const bankB = randomUUID();
       const format = randomUUID();

@@ -11,7 +11,7 @@ import {
   updatePaymentBankProfile,
 } from "./operations.ts";
 import { PaymentError } from "../payments-core/payment-errors.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg, grantScratchPermissions } from "../testing/fixtures.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
@@ -21,6 +21,7 @@ test("concurrent bank-profile secret rotations preserve both fields and audit th
   const org = await withBypass(() => createScratchOrg());
   try {
     const actorId = await withBypass(() => createScratchUser(org.orgId, "Profile operator", "admin"));
+    await withBypass(() => grantScratchPermissions(org.orgId, actorId, ["admin.setup.manage"]));
     await withOrgContext(org.orgId, () => ensureBuiltInPaymentFormats(org.orgId, actorId));
     const format = (await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
       select id from payment_formats where org_id = ${org.orgId} and code = 'WIRE'
@@ -79,6 +80,7 @@ test("CPA profile creation and secret updates refuse malformed transaction-code 
   const org = await withBypass(() => createScratchOrg());
   try {
     const actorId = await withBypass(() => createScratchUser(org.orgId, "CPA profile operator", "admin"));
+    await withBypass(() => grantScratchPermissions(org.orgId, actorId, ["admin.setup.manage"]));
     await withOrgContext(org.orgId, () => ensureBuiltInPaymentFormats(org.orgId, actorId));
     const format = (await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
       select id from payment_formats where org_id = ${org.orgId} and code = 'CPA005'
@@ -125,6 +127,7 @@ test("NACHA profile saves refuse incomplete originator configuration by field", 
   const org = await withBypass(() => createScratchOrg());
   try {
     const actorId = await withBypass(() => createScratchUser(org.orgId, "NACHA profile operator", "admin"));
+    await withBypass(() => grantScratchPermissions(org.orgId, actorId, ["admin.setup.manage"]));
     await withOrgContext(org.orgId, () => ensureBuiltInPaymentFormats(org.orgId, actorId));
     const format = (await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
       select id from payment_formats where org_id = ${org.orgId} and code = 'NACHA-CREDIT'

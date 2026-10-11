@@ -93,6 +93,7 @@ export function htmlPdfPageDimensions(paperSize: PdfPaperSize, orientation: PdfO
 
 export async function renderHtmlDocumentPdf(input: HtmlDocumentPdfInput): Promise<Buffer> {
   assertPrintablePage(input.paperSize, input.marginMm)
+  if (/data-cheque-stock\s*=/i.test(input.bodyHtml) && (input.paperSize !== 'letter' || input.orientation !== 'portrait' || input.marginMm !== 0 || input.headerHtml || input.footerHtml)) throw new PdfTemplateValidationError('Cheque stock presets require Letter portrait, zero page margins and no running header/footer. Use alignment controls to position the stock content.')
   const pageDimensions = htmlPdfPageDimensions(input.paperSize, input.orientation)
   // Explicit label dimensions already carry their orientation.
   const customSize = input.paperSize === '4x6'
@@ -112,6 +113,53 @@ export async function renderHtmlDocumentPdf(input: HtmlDocumentPdfInput): Promis
     : `<div></div>`
   return sharedPdfPool().withPage(async (page: Page) => {
     await page.setContent(html, { waitUntil: 'load', timeout: 30_000 })
+    await page.evaluate(() => document.fonts.ready)
+    const chequeLayoutRefusal = await page.evaluate(() => {
+      const regions = [...document.querySelectorAll<HTMLElement>('[data-cheque-region]')]
+      if (!regions.length) return null
+      const sheet = document.getElementById('ob-cheque-sheet')?.getBoundingClientRect()
+      if (!sheet) return 'Cheque stock needs its complete sheet layout. Start from a stock preset in the PDF designer.'
+      const micr = document.getElementById('ob-cheque-micr')
+      if (micr) {
+        if (!document.getElementById('ob-cheque-micr-font') || !document.fonts.check('12pt OpenBooksE13B', micr.textContent ?? '')) return 'MICR font did not load. Embed a valid E-13B font in the cheque designer.'
+        const computed = getComputedStyle(micr)
+        if (!computed.fontFamily.includes('OpenBooksE13B') || Math.abs(parseFloat(computed.fontSize)-16)>0.01) return 'MICR must use the embedded E-13B font at 12 points without scaling.'
+        const instrument = document.getElementById('ob-cheque-instrument')?.getBoundingClientRect()
+        if (!instrument) return 'MICR requires the cheque stock instrument area.'
+        if (micr.children.length !== 3) return 'Use the native serial, transit and account fields for the MICR line.'
+        const maxWidths = [sheet.width - 146.1*96/25.4 - 3.2*96/25.4, 38.1*96/25.4, 60.4*96/25.4]
+        const rightAnchors = [146.1,108,47.6]
+        const offsetX = Number(document.getElementById('ob-cheque-sheet')?.getAttribute('data-cheque-offset-x') ?? '0')
+        for (const [index, field] of [...micr.children].entries()) {
+          const style = getComputedStyle(field), bounds = field.getBoundingClientRect()
+          if (!style.fontFamily.includes('OpenBooksE13B') || Math.abs(parseFloat(style.fontSize)-16)>0.01 || (style.letterSpacing !== 'normal' && parseFloat(style.letterSpacing) !== 0) || style.transform !== 'none') return 'Each MICR field must retain the embedded E-13B font, 12-point size and standard spacing without scaling.'
+          if (bounds.width > (maxWidths[index] ?? 0)+1) return 'The MICR field exceeds its bank-specified area. Check numeric cheque length and the bank account encoding.'
+          if (!Number.isFinite(offsetX) || Math.abs(bounds.right-(sheet.right+(offsetX-rightAnchors[index]!)*96/25.4))>1) return 'The MICR fields must use the physical cheque edge. Restore the stock preset and use alignment controls for printer calibration.'
+        }
+      }
+      const instrument = document.getElementById('ob-cheque-instrument')
+      if (instrument) {
+        const box = instrument.getBoundingClientRect(), clearBandTop = box.bottom+(4.1333-15.9)*96/25.4
+        const walker=document.createTreeWalker(instrument,NodeFilter.SHOW_TEXT)
+        while (walker.nextNode()) {
+          const node=walker.currentNode
+          if (!node.textContent?.trim() || (node.parentElement?.closest('#ob-cheque-micr'))) continue
+          const range=document.createRange();range.selectNodeContents(node)
+          if ([...range.getClientRects()].some(rect=>rect.bottom>clearBandTop+1)) return 'Cheque text enters the 15.9 mm MICR clear band. Move the ordinary fields above that band in the designer.'
+        }
+      }
+      const bounds = regions.map(region => ({ box: region.getBoundingClientRect(), region }))
+      for (const { box, region } of bounds) {
+        if (region.scrollHeight > region.clientHeight + 1 || region.scrollWidth > region.clientWidth + 1) return 'Cheque content exceeds its stock area. Adjust the layout or select stock with a larger voucher area.'
+        if (box.left < sheet.left || box.top < sheet.top || box.right > sheet.right + 1 || box.bottom > sheet.bottom + 1) return 'Cheque alignment moves content outside the sheet. Correct the offsets in the PDF designer.'
+      }
+      for (let a = 0; a < bounds.length; a++) for (let b = a + 1; b < bounds.length; b++) {
+        const x = bounds[a]!.box, y = bounds[b]!.box
+        if (x.left < y.right && x.right > y.left && x.top < y.bottom && x.bottom > y.top) return 'Cheque and voucher areas overlap. Adjust the stock layout in the PDF designer.'
+      }
+      return null
+    })
+    if (chequeLayoutRefusal) throw new PdfTemplateValidationError(chequeLayoutRefusal)
     const pdf = await page.pdf({
       ...pageDimensions,
       landscape: customSize ? false : input.orientation === 'landscape',
