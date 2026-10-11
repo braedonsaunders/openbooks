@@ -112,3 +112,35 @@ test('a blocked statement names its reason with no fields', async () => {
     await unmount()
   }
 })
+
+// Stored balances carry numeric(19,4) padding. The fields show the canonical
+// amount, and retyping that same amount in another spelling is not an edit.
+test('stored balances show their canonical amount and an unchanged figure cannot save', async () => {
+  const { unmount } = await mountDashboard(
+    <StatementBalanceForm
+      statementId={STATEMENT_ID}
+      opening="5028.8200"
+      closing="-12.5000"
+      canEdit
+      blockedReason={null}
+    />,
+    messages,
+  )
+  try {
+    const inputs = [...document.querySelectorAll('input')] as HTMLInputElement[]
+    assert.equal(inputs.length, 2, 'both balance fields render')
+    assert.equal(inputs[0]!.value, '5028.82', 'the opening field shows the trimmed amount')
+    assert.equal(inputs[1]!.value, '-12.50', 'the closing field keeps two places')
+    const save = saveButton()
+    assert.ok(save, 'the form offers Save balances')
+    assert.equal(save.disabled, true, 'an unedited statement offers no save')
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
+      setter.call(inputs[0], '5028.8200')
+      inputs[0]!.dispatchEvent(new window.Event('input', { bubbles: true }))
+    })
+    assert.equal(saveButton()!.disabled, true, 'the same amount in another padding is not an edit')
+  } finally {
+    await unmount()
+  }
+})

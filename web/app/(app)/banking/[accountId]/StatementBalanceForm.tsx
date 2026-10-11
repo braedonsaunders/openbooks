@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Button, Input, Label } from '@openbooks/ui'
 import { readApiErrorMessage } from '@/lib/api-error'
+import { editableMoneyDecimal, sameMoneyDecimal } from '@/lib/exact-decimal'
 
 /**
  * Opening/closing balances on an imported statement. A CSV carries no
@@ -31,8 +32,10 @@ export function StatementBalanceForm({
   const t = useTranslations('banking.drawer')
   const tBanking = useTranslations('banking')
   const router = useRouter()
-  const [openingBalance, setOpeningBalance] = useState(opening ?? '')
-  const [closingBalance, setClosingBalance] = useState(closing ?? '')
+  // Stored balances arrive at numeric(19,4) padding; the fields show the
+  // canonical amount so a 4-place zero tail never reads as a figure to edit.
+  const [openingBalance, setOpeningBalance] = useState(editableMoneyDecimal(opening))
+  const [closingBalance, setClosingBalance] = useState(editableMoneyDecimal(closing))
   const [busy, setBusy] = useState(false)
 
   if (!canEdit) {
@@ -40,8 +43,10 @@ export function StatementBalanceForm({
     return <p className="text-xs text-slate-500 dark:text-slate-400">{blockedReason}</p>
   }
 
+  // Compared by exact amount: re-typing the same figure in another padding
+  // is not an edit, so Save stays off until a balance actually moves.
   const unchanged =
-    (openingBalance.trim() || null) === opening && (closingBalance.trim() || null) === closing
+    sameMoneyDecimal(openingBalance, opening) && sameMoneyDecimal(closingBalance, closing)
 
   async function save() {
     if (busy) return

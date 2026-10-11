@@ -3,6 +3,7 @@
 import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
 import { useMoney } from '@/components/money-provider'
 import { readApiErrorMessage } from '@/lib/api-error'
+import { editableMoneyDecimal, sameMoneyDecimal } from '@/lib/exact-decimal'
 import { useId, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -393,8 +394,9 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
     // statement date: the notice below says so and Import stays disabled.
     reviseInputs()
     setActionError(null)
-    if (field === 'openingBalance') setOpeningBalance(amount)
-    else setClosingBalance(amount)
+    const shown = editableMoneyDecimal(amount)
+    if (field === 'openingBalance') setOpeningBalance(shown)
+    else setClosingBalance(shown)
   }
 
   async function detectColumns() {
@@ -467,12 +469,12 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
       })
       const { statementDate: previewStatementDate, closingBalance: previewClosingBalance } = data
       if (previewStatementDate) setStatementDate((current) => current || previewStatementDate)
-      if (previewClosingBalance) setClosingBalance((current) => current || previewClosingBalance)
+      if (previewClosingBalance) setClosingBalance((current) => current || editableMoneyDecimal(previewClosingBalance))
       // Chain the opening from the prior signed-off closing when the
       // operator left it empty — still editable, and a mismatch they typed
       // stays flagged below instead of silently replacing their figure.
       const suggested = (data.suggestedOpening ?? null) as SuggestedOpening | null
-      if (suggested) setOpeningBalance((current) => current || suggested.balance)
+      if (suggested) setOpeningBalance((current) => current || editableMoneyDecimal(suggested.balance))
     } catch (e) {
       if (requestRevision === sourceRevision.current) {
         setPreview(null)
@@ -574,7 +576,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
                 {t('previewSummary', { imported: visiblePreview.imported, duplicates: visiblePreview.duplicates, possibleDuplicates: visiblePreview.possibleDuplicates })}
               </span>
             ) : null}
-            {visiblePreview?.suggestedOpening && openingBalance === visiblePreview.suggestedOpening.balance ? (
+            {visiblePreview?.suggestedOpening && sameMoneyDecimal(openingBalance, visiblePreview.suggestedOpening.balance) ? (
               <span className="text-xs text-slate-500 dark:text-slate-400">
                 {t('suggestedOpeningFrom', { date: visiblePreview.suggestedOpening.sourceStatementDate })}
               </span>
