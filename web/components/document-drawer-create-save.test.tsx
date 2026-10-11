@@ -245,6 +245,97 @@ test("a possible duplicate warns with the existing number and cancelling keeps t
   );
 });
 
+// A failure before the write — here the duplicate dialog itself blows up —
+// must surface exactly like a refused save: a pinned alert plus an error
+// toast with the button released. It used to escape as an unhandled
+// rejection with the form wedged on Saving, no record and no message.
+test("a throwing pre-save dialog pins a visible error and releases Save", async (t) => {
+  const { restore, calls } = (() => {
+    const s = scriptFetch((url) => {
+      if (url.startsWith("/api/documents/duplicates?")) {
+        return Response.json({ duplicates: [{ id: "existing-1", documentNumber: "INV-00001" }] });
+      }
+      return null;
+    });
+    return { restore: s.restore, calls: s.calls };
+  })();
+  t.after(restore);
+  // Handled here so the rejection cannot fire unhandled while the form
+  // mounts; the dialog stub still observes the rejection when Save runs.
+  const dialogFailure = Promise.reject(new Error("dialog unavailable"));
+  dialogFailure.catch(() => {});
+  (globalThis as Record<string, unknown>).__confirmNext = dialogFailure;
+  const { host, root } = await mountCreate();
+  t.after(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  });
+  await act(async () => {
+    saveButton().dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    await tick();
+  });
+  await tick();
+  await tick();
+  assert.ok(
+    !calls.some((call) => call.url === "/api/documents" && call.init?.method === "POST"),
+    "the write must never be attempted after the preamble failed",
+  );
+  const alert = document.querySelector('[role="alert"]');
+  assert.ok(alert, "a preamble failure must pin an alert, not only toast");
+  assert.match(alert.textContent ?? "", /Action failed/, "with no server reason the alert falls back to localized copy");
+  assert.ok(
+    (globalThis.__drawerToasts ?? []).some((toast) => toast.kind === "error"),
+    "a preamble failure must toast as an error",
+  );
+  assert.equal(saveButton().disabled, false, "Save must release so the operator can retry");
+});
+
+// A non-ok create response pins the server reason the same way an edit
+// refusal does — a 500 with no usable body still falls back visibly.
+test("a failed create POST pins the server reason and releases Save", async (t) => {
+  const { restore, calls } = (() => {
+    const s = scriptFetch((url) => {
+      if (url.startsWith("/api/documents/duplicates?")) return Response.json({ duplicates: [] });
+      if (url === "/api/documents") {
+        return Response.json({ error: "Revenue account is inactive" }, { status: 500 });
+      }
+      return null;
+    });
+    return { restore: s.restore, calls: s.calls };
+  })();
+  t.after(restore);
+  const { host, root, pushed } = await mountCreate();
+  t.after(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  });
+  await act(async () => {
+    saveButton().dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    await tick();
+  });
+  await tick();
+  await tick();
+  assert.ok(
+    calls.some((call) => call.url === "/api/documents" && call.init?.method === "POST"),
+    "the create must be attempted once",
+  );
+  assert.deepEqual(pushed, [], "a failed create must not navigate anywhere");
+  const alert = document.querySelector('[role="alert"]');
+  assert.ok(alert, "a failed create must pin an alert");
+  assert.match(alert.textContent ?? "", /Revenue account is inactive/, "the alert must carry the typed reason");
+  assert.ok(
+    (globalThis.__drawerToasts ?? []).some(
+      (toast) => toast.kind === "error" && /Revenue account is inactive/.test(toast.message),
+    ),
+    "a failed create must toast the typed reason",
+  );
+  assert.equal(saveButton().disabled, false, "Save must release so the operator can retry");
+});
+
 test("edit-save of a draft lands in view mode with Submit and a saved toast", async (t) => {
   const docId = randomUUID();
   const restore = scriptFetch((url, init) => {

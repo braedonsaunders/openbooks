@@ -2262,7 +2262,17 @@ export function DocumentDrawer({
   // send two saves with the same revision — the second 409ing after the
   // first succeeded and pinning its error over the success. The guard flips
   // synchronously at click time and covers the whole preamble.
-  const save = runExclusive(async () => {
+  // The save preamble — posted-edit dialogs, client-script and form gates,
+  // the duplicate probe, and both request builders — runs outside the fenced
+  // execute below. A throw in any of them used to escape as an unhandled
+  // rejection: no record, no message, and the form wedged on Saving. The
+  // preamble returns the fenced request to write, or 'aborted' for an
+  // operator cancellation (which stays silent, exactly as today).
+  async function prepareSaveRequest(): Promise<
+    | { outcome: 'create'; request: { path: string; method: 'POST'; headers: Record<string, string>; body: Record<string, unknown> } }
+    | { outcome: 'save'; request: DocumentSaveRequest }
+    | { outcome: 'aborted' }
+  > {
     let amendmentReason: string | undefined
     if (isPosted) {
       const reason = await promptDialog({
@@ -2271,7 +2281,7 @@ export function DocumentDrawer({
         placeholder: tCommon('amendment.placeholder'),
         confirmLabel: tCommon('actions.save'),
       })
-      if (!reason) return
+      if (!reason) return { outcome: 'aborted' as const }
       amendmentReason = reason
       // A posted edit states its consequence before anything writes, using
       // the same engine classification the correct route enforces. A void
@@ -2293,7 +2303,7 @@ export function DocumentDrawer({
         confirmLabel: tCommon('actions.save'),
         ...(consequence === 'void-and-reissue' ? { tone: 'danger' as const } : {}),
       })
-      if (!confirmed) return
+      if (!confirmed) return { outcome: 'aborted' as const }
     }
     setSaveState('saving')
     // Client scripts (sandboxed, opaque-origin evaluator) gate the save: an
@@ -2302,14 +2312,14 @@ export function DocumentDrawer({
     if (!gate.ok) {
       refuse(gate.reason, t('toasts.actionFailed'))
       setSaveState('error')
-      return
+      return { outcome: 'aborted' as const }
     }
     for (const w of gate.warnings) toast.warning(w)
     // A currency-mismatched form can never post (the ledger refuses it), so
     // refuse the save up front with the account named.
     if (blockCurrencyMismatch()) {
       setSaveState('error')
-      return
+      return { outcome: 'aborted' as const }
     }
     // A contentful row without an account can never book either: the
     // server names the line and refuses. Refuse up front with the grid
@@ -2319,7 +2329,7 @@ export function DocumentDrawer({
     if (missingAccount) {
       refuse(t('drawer.lineMissingAccount', { line: missingAccount.lineNumber }), t('toasts.actionFailed'))
       setSaveState('error')
-      return
+      return { outcome: 'aborted' as const }
     }
     // Unsaved create: the single collection write. Same client-script and
     // currency gates as an edit above; the server runs the shared writer, so
@@ -2329,11 +2339,42 @@ export function DocumentDrawer({
       // declining leaves the form exactly as typed for review.
       if (!(await confirmNoDuplicate())) {
         setSaveState('dirty')
-        return
+        return { outcome: 'aborted' as const }
       }
-      const create = config.kind === 'rma'
-        ? buildReturnCreateRequest(payload_ as Record<string, unknown>, idempotencyKey)
-        : buildDocumentCreateRequest(config.kind, payload_ as Record<string, unknown>, idempotencyKey)
+      if (config.kind === 'rma') {
+        return { outcome: 'create' as const, request: buildReturnCreateRequest(payload_ as Record<string, unknown>, idempotencyKey) }
+      }
+      return { outcome: 'create' as const, request: buildDocumentCreateRequest(config.kind, payload_ as Record<string, unknown>, idempotencyKey) }
+    }
+    return {
+      outcome: 'save' as const,
+      request: buildDocumentSaveRequest(
+        String(doc.id),
+        documentRevision,
+        payload_,
+        isPosted,
+        amendmentReason,
+      ),
+    }
+  }
+
+  const save = runExclusive(async () => {
+    let prepared: Awaited<ReturnType<typeof prepareSaveRequest>>
+    try {
+      prepared = await prepareSaveRequest()
+    } catch (error) {
+      // Preamble bugs surface exactly like a refused save — pinned beside
+      // the record and toasted — never a wedged Saving state with no
+      // message. The operator reads the localized fallback (a client
+      // exception is never usable copy); the console keeps the bug text.
+      console.error('[document-drawer] save preamble failed', error)
+      refuse(null, t('toasts.actionFailed'))
+      setSaveState('error')
+      return
+    }
+    if (prepared.outcome === 'aborted') return
+    if (prepared.outcome === 'create') {
+      const create = prepared.request
       await execute(
         () =>
           fetchAction(create.path, {
@@ -2359,13 +2400,7 @@ export function DocumentDrawer({
       )
       return
     }
-    const request = buildDocumentSaveRequest(
-      String(doc.id),
-      documentRevision,
-      payload_,
-      isPosted,
-      amendmentReason,
-    )
+    const request = prepared.request
     await execute(
       () =>
         fetchAction(request.path, {
