@@ -41,9 +41,9 @@ const patchBodySchema = z
   })
   .refine((body) => Object.keys(body).length > 0, "provide at least one account field to update");
 
-function bad(error: string, field?: string) {
+function bad(error: string, field?: string, details?: Record<string, unknown>) {
   return NextResponse.json(
-    { error, ...(field ? { field } : {}) },
+    { error, ...(field ? { field } : {}), ...(details ? { details } : {}) },
     { status: 422 },
   );
 }
@@ -487,8 +487,24 @@ export const PATCH = defineRoute({
       ) {
         return bad("summary_has_transactions", "isSummary");
       }
-      if (message.includes("accounts_org_number"))
-        return bad("number_in_use", "number");
+      if (message.includes("accounts_org_number")) {
+        // Name the account holding the number so the operator can open it
+        // instead of guessing: the refusal carries its id, name and number
+        // for the drawer's existing-account link.
+        const attempted = textOrNull(body.number);
+        const holder = attempted
+          ? (await db.execute<{ id: string; name: string; number: string | null }>(sql`
+              select id, name, number from accounts
+               where org_id = ${gate.user.orgId} and number = ${attempted} and id <> ${id}
+               limit 1
+            `)).rows[0]
+          : undefined;
+        return bad("number_in_use", "number", holder ? {
+          existingAccountId: holder.id,
+          existingAccountName: holder.name,
+          existingAccountNumber: holder.number,
+        } : undefined);
+      }
       if (message.includes("account_changed")) {
         return NextResponse.json({ error: "account_changed" }, { status: 409 });
       }

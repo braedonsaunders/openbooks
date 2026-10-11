@@ -79,6 +79,7 @@
       "invalid_dimensions": "Escolha dimensões obrigatórias válidas.",
       "invalid_custom_fields": "Revise os valores dos campos personalizados.",
       "number_in_use": "Esse número de conta já está em uso.",
+      "numberInUseBy": "Esse número de conta já está em uso por <account>{number} · {name}</account>.",
       "save_failed": "Não foi possível salvar a conta.",
       "parent_type_mismatch": "Pai e filha devem usar o mesmo tipo de conta.",
       "reconcilable_currency_required": "Contas conciliáveis precisam de moeda de liquidação — escolha uma antes de salvar.",

@@ -84,6 +84,7 @@
       "invalid_dimensions": "Choisissez des dimensions obligatoires valides.",
       "invalid_custom_fields": "Vérifiez les valeurs des champs personnalisés.",
       "number_in_use": "Ce numéro de compte est déjà utilisé.",
+      "numberInUseBy": "Ce numéro de compte est déjà utilisé par <account>{number} · {name}</account>.",
       "account_changed": "Ce compte a changé pendant votre modification. Rouvrez-le et réessayez.",
       "invalid_idempotency_key": "La demande de compte n’a pas pu être relancée de façon sécuritaire.",
       "save_failed": "Le compte n’a pas pu être enregistré.",

@@ -84,6 +84,7 @@
       "invalid_dimensions": "Seleccione dimensiones obligatorias válidas.",
       "invalid_custom_fields": "Revise los valores de los campos personalizados.",
       "number_in_use": "Ese número de cuenta ya está en uso.",
+      "numberInUseBy": "Ese número de cuenta ya está en uso por <account>{number} · {name}</account>.",
       "account_changed": "Esta cuenta cambió mientras la editaba. Vuelva a abrirla e inténtelo de nuevo.",
       "invalid_idempotency_key": "No se pudo reintentar la solicitud de cuenta de forma segura.",
       "save_failed": "No se pudo guardar la cuenta.",

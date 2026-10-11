@@ -44,8 +44,11 @@ const createBodySchema = z.strictObject({
   type: z.enum(ACCOUNT_TYPES),
 });
 
-function bad(error: string, field?: string, status = 422) {
-  return NextResponse.json({ error, ...(field ? { field } : {}) }, { status });
+function bad(error: string, field?: string, status = 422, details?: Record<string, unknown>) {
+  return NextResponse.json(
+    { error, ...(field ? { field } : {}), ...(details ? { details } : {}) },
+    { status },
+  );
 }
 
 function textOrNull(value: unknown): string | null {
@@ -331,8 +334,23 @@ export const POST = defineRoute({
         error instanceof Error
           ? `${error.message} ${String((error as { cause?: unknown }).cause ?? "")}`
           : String(error);
-      if (message.includes("accounts_org_number"))
-        return bad("number_in_use", "number");
+      if (message.includes("accounts_org_number")) {
+        // Name the account holding the number so the operator can open it
+        // instead of guessing: the refusal carries its id, name and number
+        // for the drawer's existing-account link.
+        const holder = number
+          ? (await db.execute<{ id: string; name: string; number: string | null }>(sql`
+              select id, name, number from accounts
+               where org_id = ${gate.user.orgId} and number = ${number}
+               limit 1
+            `)).rows[0]
+          : undefined;
+        return bad("number_in_use", "number", 422, holder ? {
+          existingAccountId: holder.id,
+          existingAccountName: holder.name,
+          existingAccountNumber: holder.number,
+        } : undefined);
+      }
       if (message.includes("parent_not_found")) return notFound("record");
       if (message.includes("inactive_parent"))
         return bad("inactive_parent", "parentId");

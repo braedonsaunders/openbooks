@@ -264,3 +264,69 @@ test("closing an account drawer removes its selector from the URL immediately", 
   });
   assert.equal(`${window.location.pathname}${window.location.search}`, "/accounts");
 });
+
+/** : a duplicate number with holder details links the existing account. */
+test("a duplicate account number links the account holding it", async (t) => {
+  const holderId = "019f0000-0000-4000-8000-000000000007";
+  await mountDrawer(t, {
+    response: () => Response.json({
+      error: "number_in_use",
+      field: "number",
+      details: {
+        existingAccountId: holderId,
+        existingAccountName: "Cash Over and Short",
+        existingAccountNumber: "6820",
+      },
+    }, { status: 422 }),
+  });
+  const inputs = [...document.querySelectorAll("input")].filter(
+    (el) => (el as HTMLInputElement).type !== "checkbox",
+  ) as HTMLInputElement[];
+  await act(async () => {
+    setInput(inputs[0]!, "Cash Over and Short");
+    setInput(inputs[1]!, "6820");
+    await tick();
+  });
+  await act(async () => {
+    createButton().dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  });
+  await tick();
+  await tick();
+  await tick();
+  const alert = document.querySelector('[role="alert"]');
+  assert.ok(alert, "the duplicate must persist as a form-level alert");
+  assert.match(alert.textContent ?? "", /already in use/i);
+  const link = alert.querySelector("a");
+  assert.ok(link, "the alert must link the account holding the number");
+  assert.ok(
+    link.getAttribute("href")?.includes(`account=${holderId}`),
+    `the link must open the holding account, got ${link.getAttribute("href")}`,
+  );
+  assert.match(link.textContent ?? "", /6820/, "the link names the number");
+  assert.match(link.textContent ?? "", /Cash Over and Short/, "the link names the account");
+});
+
+/** : without holder details the duplicate still renders plain copy. */
+test("a duplicate account number without details renders the plain message", async (t) => {
+  await mountDrawer(t, {
+    response: () => Response.json({ error: "number_in_use", field: "number" }, { status: 422 }),
+  });
+  const inputs = [...document.querySelectorAll("input")].filter(
+    (el) => (el as HTMLInputElement).type !== "checkbox",
+  ) as HTMLInputElement[];
+  await act(async () => {
+    setInput(inputs[0]!, "Cash Over and Short");
+    setInput(inputs[1]!, "6820");
+    await tick();
+  });
+  await act(async () => {
+    createButton().dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  });
+  await tick();
+  await tick();
+  await tick();
+  const alert = document.querySelector('[role="alert"]');
+  assert.ok(alert, "the duplicate must persist as a form-level alert");
+  assert.match(alert.textContent ?? "", /already in use/i);
+  assert.equal(alert.querySelector("a"), null, "no holder means no link, but never a blank alert");
+});

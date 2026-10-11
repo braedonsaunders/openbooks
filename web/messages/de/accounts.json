@@ -79,6 +79,7 @@
       "invalid_dimensions": "Wählen Sie gültige erforderliche Dimensionen aus.",
       "invalid_custom_fields": "Überprüfen Sie die Werte der benutzerdefinierten Felder.",
       "number_in_use": "Diese Kontonummer wird bereits verwendet.",
+      "numberInUseBy": "Diese Kontonummer wird bereits von <account>{number} · {name}</account> verwendet.",
       "save_failed": "Das Konto konnte nicht gespeichert werden.",
       "parent_type_mismatch": "Ober- und Unterkonto müssen dieselbe Kontoart verwenden.",
       "reconcilable_currency_required": "Abstimmbare Konten brauchen eine Abrechnungswährung — wählen Sie vor dem Speichern eine.",

@@ -84,6 +84,7 @@
       "invalid_dimensions": "请选择有效的必填维度。",
       "invalid_custom_fields": "请检查自定义字段的值。",
       "number_in_use": "该科目编号已被使用。",
+      "numberInUseBy": "该科目编号已被<account>{number} · {name}</account>使用。",
       "account_changed": "您编辑期间该科目已发生变化。请重新打开后再试。",
       "invalid_idempotency_key": "无法安全地重试该科目请求。",
       "save_failed": "无法保存该科目。",

@@ -84,6 +84,7 @@
       "invalid_dimensions": "有効な必須ディメンションを選択してください。",
       "invalid_custom_fields": "カスタムフィールドの値を確認してください。",
       "number_in_use": "その勘定番号はすでに使用されています。",
+      "numberInUseBy": "その勘定番号は<account>{number} · {name}</account>で既に使用されています。",
       "account_changed": "編集中に勘定が変更されました。開き直して再試行してください。",
       "invalid_idempotency_key": "勘定の作成要求を安全に再試行できませんでした。",
       "save_failed": "勘定を保存できませんでした。",

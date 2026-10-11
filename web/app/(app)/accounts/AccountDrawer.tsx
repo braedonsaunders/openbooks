@@ -1,6 +1,6 @@
 'use client'
 
-import { useId, useMemo, useRef, useState } from 'react'
+import { useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
@@ -163,7 +163,9 @@ export function AccountDrawer({
   // A blocked save that only fires a transient toast reads as "nothing
   // happened" once it dismisses: the
   // failure also persists as a form-level alert, cleared on the next edit.
-  const [fieldError, setFieldError] = useState<string | null>(null)
+  // The alert is a node so a duplicate-number refusal can link the account
+  // already holding the number; the toast keeps the plain string.
+  const [fieldError, setFieldError] = useState<ReactNode>(null)
   const [busy, setBusy] = useState(false)
   const editable = canManage && mode === 'edit' && !busy
   const compatibleParents = parents.filter((option) => option.type === form.type)
@@ -189,6 +191,33 @@ export function AccountDrawer({
       'invalid_custom_fields', 'number_in_use', 'account_changed', 'invalid_idempotency_key', 'save_failed',
     ])
     return t(`drawer.errors.${known.has(key) ? key : 'save_failed'}`)
+  }
+
+  type DuplicateDetails = {
+    existingAccountId?: unknown
+    existingAccountName?: unknown
+    existingAccountNumber?: unknown
+  }
+
+  function duplicateAccountHref(details: DuplicateDetails): string | null {
+    const id = typeof details.existingAccountId === 'string' && details.existingAccountId ? details.existingAccountId : null
+    if (!id) return null
+    const separator = closeHref.includes('?') ? '&' : '?'
+    return `${closeHref}${separator}account=${encodeURIComponent(id)}`
+  }
+
+  function duplicateRefusalAlert(body: { error?: unknown; details?: unknown }): ReactNode {
+    const details = (body.details && typeof body.details === 'object' && !Array.isArray(body.details)
+      ? body.details as DuplicateDetails : null)
+    const href = details ? duplicateAccountHref(details) : null
+    if (!href) return errorMessage(body.error)
+    const number = typeof details!.existingAccountNumber === 'string' && details!.existingAccountNumber.trim()
+      ? details!.existingAccountNumber.trim() : form.number
+    const name = typeof details!.existingAccountName === 'string' && details!.existingAccountName.trim()
+      ? details!.existingAccountName.trim() : ''
+    return t.rich('drawer.errors.numberInUseBy', {
+      number, name, account: (chunks: ReactNode) => <a className="underline" href={href}>{chunks}</a>,
+    })
   }
 
   function closeAfterGuard() {
@@ -240,9 +269,12 @@ export function AccountDrawer({
         }),
       })
       if (!response.ok) {
-        const data = await response.json().catch(() => ({}))
+        const data = await response.json().catch(() => ({})) as { error?: unknown; remedy?: unknown; details?: unknown }
         const message = errorMessage(data.error, data.remedy)
-        setFieldError(message)
+        // A duplicate number names the account holding it: the pinned alert
+        // links it so the operator can open it instead of guessing, while
+        // the toast keeps the plain localized string.
+        setFieldError(data.error === 'number_in_use' ? duplicateRefusalAlert(data) : message)
         toast.error(message)
         return
       }
@@ -294,7 +326,7 @@ export function AccountDrawer({
       : form.requiredDimensions.filter((value) => value !== dimension))
   }
 
-  const value = (content: React.ReactNode) => (
+  const value = (content: ReactNode) => (
     <p className="min-h-5 text-sm">{content === null || content === undefined || content === '' ? tc('labels.notSet') : content}</p>
   )
   return (

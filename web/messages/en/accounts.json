@@ -85,6 +85,7 @@
       "invalid_dimensions": "Choose valid required dimensions.",
       "invalid_custom_fields": "Review the custom field values.",
       "number_in_use": "That account number is already in use.",
+      "numberInUseBy": "That account number is already in use by <account>{number} · {name}</account>.",
       "account_changed": "This account changed while you were editing it. Reopen it and try again.",
       "invalid_idempotency_key": "The account request could not be safely retried.",
       "save_failed": "The account could not be saved."
