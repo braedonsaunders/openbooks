@@ -313,6 +313,7 @@ export const TENANT_TABLE_POLICIES = {
   "hrm_benefit_award_events": "clone:catalog-uuid-rebase",
   "hrm_benefit_awards": "clone:catalog-uuid-rebase",
   "hrm_benefit_program_members": "clone:catalog-uuid-rebase",
+  "hrm_benefit_program_revisions": "clone:catalog-uuid-rebase",
   "hrm_benefit_program_scopes": "clone:catalog-uuid-rebase",
   "hrm_benefit_program_sources": "clone:catalog-uuid-rebase",
   "hrm_benefit_programs": "clone:catalog-uuid-rebase",

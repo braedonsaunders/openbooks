@@ -39,7 +39,8 @@ import {
   type HoursSourceSnapshot,
   type MoneySourceSnapshot,
 } from "./incentives.ts";
-import { getBenefitProgram, listProgramMemberships, listProgramSources } from "./programs.ts";
+import { getBenefitProgram, listProgramMemberships, programPolicyInForce } from "./programs.ts";
+import type { BenefitTransactionPolicy } from "./transaction-policy.ts";
 import {
   assertHrmEnabled,
   db,
@@ -171,6 +172,8 @@ async function currencyMinorUnits(orgId: string, currency: string): Promise<numb
 
 interface SettlementContext {
   program: BenefitProgram;
+  /** Transaction rules from a governing revision; undefined reads the current rules. */
+  transactionPolicy: BenefitTransactionPolicy | null | undefined;
   scope: Set<string> | null;
   basis: IncentivePeriodBasis;
   fiscalCalendarId: string | null;
@@ -190,8 +193,13 @@ async function loadSettlementContext(
   programId: string,
   scope: Set<string> | null,
   forSettle: boolean,
+  periodFrom: string,
+  periodTo: string,
 ): Promise<SettlementContext> {
-  const program = await getBenefitProgram(db, orgId, actorId, programId);
+  // The rules in force for this period: a period starting before an
+  // active-program revision measures under the rules that revision replaced.
+  const inForce = await programPolicyInForce(db, orgId, actorId, programId, requireCivilDate(periodFrom, "periodFrom"), requireCivilDate(periodTo, "periodTo"));
+  const program = inForce.program;
   if (forSettle && program.status !== "active") {
     throw new BenefitsError(
       "BAD_STATE",
@@ -302,7 +310,10 @@ async function loadSettlementContext(
   // costs measure expense. A weight other than full (null or 10000 bps)
   // refuses — the base sums whole accounts and an applied weight would
   // silently scale the base.
-  const sources = await listProgramSources(db, orgId, actorId, programId);
+  if (program.metricScope === "project" && !(await lockAndCheckOrgFeature(db, orgId, "projects"))) {
+    throw new BenefitsError("REFUSED", "project measurement sources are unavailable while Projects is off — enable Projects under Company Settings → Features to use this program");
+  }
+  const sources = inForce.sources;
   if ((metric === "revenue" || metric === "gross_profit" || metric === "net_profit") && sources.length === 0) {
     throw new BenefitsError(
       "REFUSED",
@@ -381,7 +392,7 @@ async function loadSettlementContext(
   const members = await listProgramMemberships({ orgId, actorId, programId });
   const minorUnits = await currencyMinorUnits(orgId, program.currency);
   return {
-    program, scope, basis, fiscalCalendarId, departmentIds, projectIds,
+    program, transactionPolicy: inForce.transactionPolicy, scope, basis, fiscalCalendarId, departmentIds, projectIds,
     revenueAccountIds, expenseAccountIds, incentiveExpenseAccountId, minorUnits, members, projectCompletion,
   };
 }
@@ -405,7 +416,7 @@ async function measureAndCompute(
   const { program } = ctx;
   const metric = program.metric!;
   if (metric === "transactions") {
-    const result=await measureTransactionSettlement({orgId,actorId,program,members:ctx.members,minorUnits:ctx.minorUnits,basis:ctx.basis,periodFrom,periodTo});
+    const result=await measureTransactionSettlement({orgId,actorId,program,policy:ctx.transactionPolicy,members:ctx.members,minorUnits:ctx.minorUnits,basis:ctx.basis,periodFrom,periodTo});
     return {...result,moneySnapshot:null,hoursSnapshot:null};
   }
   if (metric === "project_margin") {
@@ -560,7 +571,7 @@ export async function previewIncentiveSettlement(
   return withOrgTransaction(orgId, async () => {
     const scope = await requireAggregateBenefitsRead(db, orgId, actorId);
     await assertHrmEnabled(db, orgId);
-    const ctx = await loadSettlementContext(orgId, actorId, programId, scope, false);
+    const ctx = await loadSettlementContext(orgId, actorId, programId, scope, false, query.periodFrom, query.periodTo);
     const result = await measureAndCompute(orgId, actorId, ctx, query.periodFrom, query.periodTo, query.asOf === undefined ? undefined : requireCivilDate(query.asOf, "asOf"));
     return buildPreviewResult(orgId, scope, ctx, query, result);
   });
@@ -697,7 +708,7 @@ export async function settleIncentivePeriod(query: SettleIncentivePeriodQuery): 
     await db.execute(sql`
       select pg_advisory_xact_lock(hashtext(${"benefit_settle:" + programId + ":" + query.periodFrom + ":" + query.periodTo}))
     `);
-    const ctx = await loadSettlementContext(orgId, actorId, programId, scope, true);
+    const ctx = await loadSettlementContext(orgId, actorId, programId, scope, true, query.periodFrom, query.periodTo);
     // Closed periods only: settling a future or open span would freeze
     // incomplete sources as obligations. A period ending today is still
     // incomplete — preview it as an estimate until tomorrow.

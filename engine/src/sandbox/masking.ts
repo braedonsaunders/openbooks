@@ -92,6 +92,11 @@ export function maskExpr(
       // retried unmasked. A tombstone removes the identifiers and still
       // satisfies the check. A new named transform would also need the
       // masking_policies enum in schema/src/sandboxes.ts.
+      // A program revision's prior policy governs settlement of earlier
+      // periods in the copy; only its descriptive prose is removed.
+      if (column?.tableName === "hrm_benefit_program_revisions" && col === "prior_policy" && column.udtName === "jsonb") {
+        return `jsonb_set(jsonb_set(${q}, '{program,name}', '"REDACTED"'::jsonb, false), '{program,description}', 'null'::jsonb, false)`;
+      }
       if (col === "payer_snapshot" && (column?.udtName === "jsonb" || column?.udtName === "json")) {
         return `'{"redacted":true}'::${column.udtName}`;
       }
@@ -297,6 +302,8 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   { tableName: "hrm_benefit_transaction_positions", columnName: "position_key", transform: "hash" },
   { tableName: "hrm_benefit_transaction_responsibilities", columnName: "position_key", transform: "hash" },
   { tableName: "hrm_benefit_transaction_policies", columnName: "reason", transform: "redact" },
+  { tableName: "hrm_benefit_program_revisions", columnName: "prior_policy", transform: "null_out" },
+  { tableName: "hrm_benefit_program_revisions", columnName: "reason", transform: "redact" },
   { tableName: "hrm_benefit_transaction_items", columnName: "reason", transform: "redact" },
   { tableName: "hrm_benefit_transaction_positions", columnName: "reason", transform: "redact" },
   { tableName: "hrm_benefit_transaction_responsibilities", columnName: "reason", transform: "redact" },

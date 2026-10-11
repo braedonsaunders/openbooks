@@ -8,6 +8,7 @@ import { requireAggregateBenefitsManage, requireAggregateBenefitsRead, requireHr
 import { BenefitsError } from "./errors.ts";
 import { assertHrmEnabled, db, requireActorId, requireCivilDate, requireId, requireOneRow, requireOrgId, withOrgTransaction, type SqlExecutor } from "./shared.ts";
 import type { TransactionIncentiveSourceQuery } from "./transaction-incentive-sources.ts";
+import { recordProgramRevision } from "./program-revisions.ts";
 
 /** Source configuration is typed; frozen JSON belongs exclusively to award evidence. */
 export type TransactionRecipientSource = "assignment" | "field_ticket_foreman" | "field_ticket_superintendent" | "project_foreman" | "project_manager";
@@ -174,16 +175,22 @@ export async function validateTransactionPolicy(exec: SqlExecutor, orgId: string
   }
 }
 
-export async function saveBenefitTransactionPolicy(query: BenefitTransactionPolicyQuery & { readonly expectedRevision:number; readonly policy:BenefitTransactionPolicy; readonly reason:string }): Promise<BenefitTransactionPolicyRecord> {
+/**
+ * Save a program's transaction rules. Draft rules change in place; an
+ * active program's rules change from a dated revision, so periods starting
+ * before the change date keep the rules being replaced.
+ */
+export async function saveBenefitTransactionPolicy(query: BenefitTransactionPolicyQuery & { readonly expectedRevision:number; readonly policy:BenefitTransactionPolicy; readonly reason:string; readonly changeEffectiveFrom?: string | null }): Promise<BenefitTransactionPolicyRecord> {
   const orgId=requireOrgId(query.orgId),actorId=requireActorId(query.actorId),programId=requireId(query.programId,"programId");
   const reason=typeof query.reason==="string" ? query.reason.trim() : ""; if (!reason || reason.length>2000) throw new BenefitsError("INVALID_INPUT","Saving transaction rules requires a reason of at most 2000 characters for the program audit history.");
   return withOrgTransaction(orgId,async()=>{
     const p=await owner(orgId,actorId,programId,true);
     if (p.metric!=="transactions") throw new BenefitsError("REFUSED","Select the transactions metric in the draft program before configuring its transaction rules.");
-    if (p.status!=="draft") throw new BenefitsError("BAD_STATE","Only draft transaction rules can change — close the active program and create a replacement with new effective dates.");
+    if (p.status==="closed") throw new BenefitsError("BAD_STATE","A closed program keeps its transaction rules as history — create a new program to pay under different rules.");
     if (!Number.isInteger(query.expectedRevision) || p.revision!==query.expectedRevision) throw new BenefitsError("REFUSED","The program changed since you opened it — reload its current rules before saving.");
     await requireTransactionPolicyStorage(db);
     await validateTransactionPolicy(db,orgId,p.legal_entity_id!,query.policy,p.currency);
+    if (p.status==="active") await recordProgramRevision(db,{orgId,actorId,programId,reason,changeEffectiveFrom:query.changeEffectiveFrom,transactionPolicy:await readTransactionPolicy(db,orgId,programId)});
     for (const r of query.policy.responsibilities) await requireHrmBenefitsManageOnEmployment(db,orgId,actorId,r.employmentId);
     // Stamp the actual modifying actor before deletion; replacement audit
     // rows must never attribute the operator's change to an earlier author.

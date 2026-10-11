@@ -99,13 +99,15 @@ async function budgetCeilings(orgId:string,program:BenefitProgram,policy:Benefit
 /** Same measurement and allocation feeds native preview and settlement. */
 export async function measureTransactionSettlement(input: {
   readonly orgId:string;readonly actorId:string;readonly program:BenefitProgram;readonly members:readonly BenefitProgramMember[];
+  /** Rules from the revision governing the period; undefined reads the current rules. */
+  readonly policy?:BenefitTransactionPolicy|null;
   readonly minorUnits:number;readonly basis:IncentivePeriodBasis;readonly periodFrom:string;readonly periodTo:string;
 }): Promise<{ measured:IncentiveMeasured;computation:IncentiveComputation;excluded:string[];transactionSnapshot:TransactionSettlementSnapshot }> {
   const {orgId,actorId,program,periodFrom,periodTo,minorUnits}=input;
   requireCivilDate(periodFrom,"periodFrom");requireCivilDate(periodTo,"periodTo");requirePeriodShape(program.frequency,periodFrom,periodTo,input.basis);
   if (periodFrom<program.effectiveFrom || (program.effectiveTo!==null && periodTo>program.effectiveTo)) throw new BenefitsError("REFUSED","The source period is outside this program's effective dates — choose a covered span or its effective replacement program.");
   if (program.legalEntityId===null || program.allocation!=="responsibility" || !["percent","per_unit"].includes(program.valuation)) throw new BenefitsError("REFUSED","Transaction settlement needs the responsible employer, dated responsibility allocation and a percent or per-unit rate — correct the draft program before activation.");
-  const policy=await readTransactionPolicy(db,orgId,program.id);
+  const policy=input.policy===undefined ? await readTransactionPolicy(db,orgId,program.id) : input.policy;
   if (!policy) throw new BenefitsError("REFUSED","Configure this program's Transaction rules before measuring an incentive.");
   await validateTransactionPolicy(db,orgId,program.legalEntityId,policy,program.currency);
   const rate=program.valuation==="percent" ? program.percentRate : program.fixedAmount;

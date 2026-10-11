@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  bigint,
   boolean,
   check,
   date,
@@ -174,6 +175,30 @@ export const benefitProgramScopes = pgTable(
       "hrm_benefit_program_scopes_one_entity",
       sql`(${t.departmentId} is not null)::int + (${t.projectId} is not null)::int + (${t.customerId} is not null)::int = 1`,
     ),
+  ],
+);
+
+/** Append-only dated revisions of active programs; prior_policy governs periods starting before effective_from (migration 0667). */
+export const benefitProgramRevisions = pgTable(
+  "hrm_benefit_program_revisions",
+  {
+    id: id(),
+    orgId: orgRef(),
+    programId: uuid("program_id").notNull(),
+    effectiveFrom: date("effective_from").notNull(),
+    priorPolicy: jsonb("prior_policy").notNull(),
+    reason: text("reason").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdBy: uuid("created_by").notNull(),
+    createdTxid: bigint("created_txid", { mode: "number" }).notNull().default(sql`txid_current()`),
+  },
+  (t) => [
+    foreignKey({ columns: [t.orgId], foreignColumns: [orgs.id] }),
+    foreignKey({ columns: [t.orgId, t.programId], foreignColumns: [benefitPrograms.orgId, benefitPrograms.id] }),
+    uniqueIndex("hrm_benefit_program_revisions_org_id_id_key").on(t.orgId, t.id),
+    index("hrm_benefit_program_revisions_program").on(t.orgId, t.programId, t.effectiveFrom),
+    check("hrm_benefit_program_revisions_prior_policy_check", sql`jsonb_typeof(${t.priorPolicy}) = 'object'`),
+    check("hrm_benefit_program_revisions_reason_check", sql`length(btrim(${t.reason})) BETWEEN 1 AND 2000`),
   ],
 );
 

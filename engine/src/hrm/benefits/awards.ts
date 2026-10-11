@@ -17,7 +17,7 @@ import { PayrollError } from "../../payroll/error.ts";
 import { mutatePayRunAdjustment } from "../../payroll/run-adjustments.ts";
 import { benefitListWindow } from "./list-window.ts";
 import { BenefitsError, isUniqueViolation } from "./errors.ts";
-import { getBenefitProgram } from "./programs.ts";
+import { getBenefitProgram, programPolicyInForce } from "./programs.ts";
 import {
   assertHrmEnabled,
   requireActorId,
@@ -403,7 +403,10 @@ async function recordAward(
         "benefit program not found in this organization — reload the program list and retry",
       );
     }
-    const program = await getBenefitProgram(db, orgId, actorId, programId);
+    // The rules in force for the award period; a period starting before an
+    // active-program revision records under the rules it replaced.
+    const inForce = await programPolicyInForce(db, orgId, actorId, programId, periodFrom, periodTo ?? periodFrom);
+    const program = inForce.program;
     if (program.status !== "active" && !(adjustsAwardId !== null && program.status === "closed")) {
       throw new BenefitsError(
         "BAD_STATE",
@@ -557,13 +560,7 @@ async function recordAward(
           : "current employment history has no active service covering the full award period — issue awards inside active service; end dates exclude their day",
       );
     }
-    const sources = (
-      await db.execute<{ account_id: string; weight_bps: number | null }>(sql`
-        select account_id, weight_bps from hrm_benefit_program_sources
-         where org_id = ${orgId} and program_id = ${programId}
-         order by account_id
-      `)
-    ).rows;
+    const sources = inForce.sources.map((source) => ({ account_id: source.accountId, weight_bps: source.weightBps }));
     if (adjustsAwardId === null && program.valuation === "fixed" && program.fixedAmount !== null && value !== program.fixedAmount) {
       throw new BenefitsError(
         "REFUSED",

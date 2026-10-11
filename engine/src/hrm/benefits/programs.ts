@@ -1,4 +1,5 @@
-import { readTransactionPolicy, validateTransactionPolicy, requireTransactionPolicyStorage } from "./transaction-policy.ts";
+import { readTransactionPolicy, validateTransactionPolicy, requireTransactionPolicyStorage, type BenefitTransactionPolicy } from "./transaction-policy.ts";
+import { programRevisionInForce, recordProgramRevision } from "./program-revisions.ts";
 import { requireBenefitCurrency } from "./currency-options.ts";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
@@ -207,18 +208,24 @@ interface ProgramScopeRows {
   readonly excludedProjectIds: readonly string[];
 }
 
+type ScopeRow = { department_id: string | null; project_id: string | null; customer_id: string | null; excluded: boolean };
+
 async function loadProgramScopes(
   exec: SqlExecutor,
   orgId: string,
   programId: string,
 ): Promise<ProgramScopeRows> {
   const rows = (
-    await exec.execute<{ department_id: string | null; project_id: string | null; customer_id: string | null; excluded: boolean }>(sql`
+    await exec.execute<ScopeRow>(sql`
       select department_id, project_id, customer_id, excluded from hrm_benefit_program_scopes
        where org_id = ${orgId} and program_id = ${programId}
        order by department_id, project_id, customer_id
     `)
   ).rows;
+  return scopeRowsToScopes(rows);
+}
+
+function scopeRowsToScopes(rows: readonly ScopeRow[]): ProgramScopeRows {
   const pick = (key: "department_id" | "project_id" | "customer_id", excluded = false) =>
     rows.filter((row) => row[key] !== null && row.excluded === excluded).map((row) => String(row[key]));
   return { departmentIds: pick("department_id"), projectIds: pick("project_id"), customerIds: pick("customer_id"), excludedProjectIds: pick("project_id", true) };
@@ -305,6 +312,51 @@ export async function getBenefitProgram(
   }
   const scopes = await loadProgramScopes(exec, orgId, programId);
   return toProgram(row, scopes);
+}
+
+/** Program rules governing one period, with the sources and transaction rules in force for it. */
+export interface ProgramPolicyInForce {
+  readonly program: BenefitProgram;
+  readonly sources: ReadonlyArray<{ accountId: string; weightBps: number | null }>;
+  /** Undefined reads the current transaction rules; a revision supplies its own (null when none). */
+  readonly transactionPolicy: BenefitTransactionPolicy | null | undefined;
+  /** The revision whose prior rules govern the period; null when the current rules do. */
+  readonly revisionId: string | null;
+}
+
+/**
+ * Resolve the rules a period is measured and recorded under. A period that
+ * starts before an active-program revision uses the rules that revision
+ * replaced; lifecycle status stays current.
+ */
+export async function programPolicyInForce(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  programId: string,
+  periodFrom: string,
+  periodTo: string,
+): Promise<ProgramPolicyInForce> {
+  const live = await getBenefitProgram(exec, orgId, actorId, programId);
+  const revision = await programRevisionInForce(exec, orgId, programId, periodFrom, periodTo);
+  if (revision === null) {
+    const sources = (await exec.execute<{ accountId: string; weightBps: number | null }>(sql`
+      select account_id as "accountId", weight_bps as "weightBps" from hrm_benefit_program_sources
+       where org_id = ${orgId} and program_id = ${programId}
+       order by account_id
+    `)).rows;
+    return { program: live, sources, transactionPolicy: undefined, revisionId: null };
+  }
+  const row = requireOneRow((await exec.execute<Record<string, unknown>>(sql`
+    select ${PROGRAM_COLUMNS} from jsonb_populate_record(null::hrm_benefit_programs, ${JSON.stringify(revision.snapshot.program)}::jsonb)
+  `)).rows, "reading the program rules in force for the period");
+  const prior = toProgram(row, scopeRowsToScopes(revision.snapshot.scopes));
+  return {
+    program: { ...prior, status: live.status },
+    sources: revision.snapshot.sources,
+    transactionPolicy: revision.snapshot.transactionPolicy,
+    revisionId: revision.revisionId,
+  };
 }
 
 export async function listBenefitPrograms(query: {
@@ -1058,9 +1110,19 @@ export interface UpdateBenefitProgramQuery {
   readonly paymentDelayDays?: number;
   readonly sourceAccountIds?: readonly string[];
   readonly reason: string;
+  /**
+   * Active programs only: the date the change applies from. Periods that
+   * start earlier keep the rules being replaced.
+   */
+  readonly changeEffectiveFrom?: string | null;
 }
 
-/** Edit a draft program. Close active programs and create replacements with new codes; rules never change in place. */
+/**
+ * Edit a program. Drafts edit in place; an active program records a dated
+ * revision so earlier periods keep the rules they started under. A
+ * program's code, family, employer, currency, start date, measure and
+ * delivery are its identity and never change once active.
+ */
 export async function updateBenefitProgram(query: UpdateBenefitProgramQuery): Promise<BenefitProgram> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
@@ -1087,12 +1149,13 @@ export async function updateBenefitProgram(query: UpdateBenefitProgramQuery): Pr
     }
     const beforeScopes = await loadProgramScopes(db, orgId, programId);
     const before = toProgram(locked, beforeScopes);
-    if (before.status !== "draft") {
+    if (before.status === "closed") {
       throw new BenefitsError(
         "BAD_STATE",
-        `program ${before.code} is ${before.status} — close this program and create a replacement program with a new code; only drafts edit in place`,
+        `program ${before.code} is closed — closed programs keep their history; create a new program to pay from here on`,
       );
     }
+    const revising = before.status === "active";
     const next = {
       name: query.name === undefined ? before.name : cleanCode(query.name, "name"),
       description: query.description === undefined ? before.description : query.description,
@@ -1142,6 +1205,27 @@ export async function updateBenefitProgram(query: UpdateBenefitProgramQuery): Pr
     };
     if (!/^[A-Z]{3}$/.test(next.currency)) {
       throw new BenefitsError("INVALID_INPUT", "currency is a 3-letter ISO code in capitals");
+    }
+    if (revising) {
+      const identity: Array<[string, unknown, unknown]> = [
+        ["employer", before.legalEntityId, next.legalEntityId],
+        ["currency", before.currency, next.currency],
+        ["start date", before.effectiveFrom, next.effectiveFrom],
+        ["measure", before.metric, next.metric],
+        ["delivery", before.deliveryMethod, next.deliveryMethod],
+      ];
+      const changed = identity.filter(([, was, now]) => was !== now).map(([label]) => label);
+      if (changed.length > 0) {
+        throw new BenefitsError(
+          "REFUSED",
+          `program ${before.code} keeps its ${changed.join(", ")} while active — close it and create a new program to change ${changed.length === 1 ? "it" : "them"}`,
+        );
+      }
+      await recordProgramRevision(db, {
+        orgId, actorId, programId, reason,
+        changeEffectiveFrom: query.changeEffectiveFrom,
+        transactionPolicy: before.metric === "transactions" ? await readTransactionPolicy(db, orgId, programId) : null,
+      });
     }
     if (next.effectiveTo !== null && next.effectiveTo < next.effectiveFrom) {
       throw new BenefitsError("INVALID_INPUT", "effectiveTo ends on or after effectiveFrom");

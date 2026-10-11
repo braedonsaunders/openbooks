@@ -11,6 +11,7 @@ const decimal = z.string().trim().min(1).max(64);
 export const transactionPolicyBody = z.object({
   expectedRevision: z.number().int().positive(),
   reason: z.string().trim().min(1).max(2000),
+  changeEffectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   documentKind: z.enum(["sales_order", "customer_invoice", "field_ticket", "quote"]),
   dateBasis: z.enum(["document_date", "work_date"]),
   unassignedShare: z.enum(["refuse", "forfeit"]).default("refuse"),
@@ -52,10 +53,10 @@ export const readTransactionPolicy: PermissionRouteOptions<typeof transactionPol
 
 export const writeTransactionPolicy: PermissionRouteOptions<typeof transactionPolicyParams, typeof transactionPolicyBody>["handler"] = async ({ authz, params, body }) => {
   try {
-    const { expectedRevision, reason, ...policy } = body;
+    const { expectedRevision, reason, changeEffectiveFrom, ...policy } = body;
     return NextResponse.json({ record: await saveBenefitTransactionPolicy({
       orgId: authz.user.orgId, actorId: authz.user.id, programId: params.id,
-      expectedRevision, reason, policy,
+      expectedRevision, reason, policy, changeEffectiveFrom,
     }) });
   } catch (error) {
     return benefitsErrorResponse(error);
