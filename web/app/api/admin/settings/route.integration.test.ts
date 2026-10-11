@@ -268,6 +268,7 @@ test(
           taxFramework: "asc740",
           requireVendorBillApproval: false,
           requireStockCountReview: false,
+          billing: { defaultPaymentTermsId: null },
         },
       });
       assert.deepEqual(routeState.requestedPermissions, ["admin.users.manage", "admin.users.manage"]);
@@ -692,6 +693,41 @@ test(
       const undeclared = await put(fixture, { name: "Scratch Undeclared Field", tillDefaults: { cash: fixture.accounts.bank } });
       assert.equal(undeclared.status, 400);
       assert.deepEqual(await settingsState(fixture.orgId), after, "a refused save changes nothing");
+    } finally {
+      routeState.authz = null;
+      await dropScratchOrg(fixture.orgId);
+    }
+  },
+);
+
+test(
+  "the company default payment terms persist through the route and retire silently",
+  async () => {
+    const fixture = await seed();
+    try {
+      authorize(fixture);
+      const termsId = randomUUID();
+      await withBypass(() =>
+        db.execute(sql`
+          insert into payment_terms (id, org_id, name, net_days)
+          values (${termsId}, ${fixture.orgId}, 'Net 30', 30)`),
+      );
+      const saved = await put(fixture, { billing: { defaultPaymentTermsId: termsId } });
+      assert.equal(saved.status, 200, await saved.clone().text());
+      assert.deepEqual((await settingsState(fixture.orgId)).settings.billing, {
+        defaultPaymentTermsId: termsId,
+      });
+      // A foreign id is refused and changes nothing.
+      const foreign = await put(fixture, { billing: { defaultPaymentTermsId: randomUUID() } });
+      assert.equal(foreign.status, 400);
+      // Clearing the picker stores no default.
+      const cleared = await put(fixture, { billing: { defaultPaymentTermsId: null } });
+      assert.equal(cleared.status, 200, await cleared.clone().text());
+      assert.equal(
+        (await settingsState(fixture.orgId)).settings.billing ?? null,
+        null,
+        "a cleared default leaves no billing settings behind",
+      );
     } finally {
       routeState.authz = null;
       await dropScratchOrg(fixture.orgId);

@@ -69,6 +69,10 @@ type Initial = {
     defaultBankAccountId: string
     depositAccountIds: string[]
   }
+  /** Company default payment terms invoices and bills fall back to. */
+  billing?: {
+    defaultPaymentTermsId: string
+  }
   /** Registered address, legal form, tax classification and identifiers. */
   legalIdentity?: LegalIdentityValue
 }
@@ -108,6 +112,7 @@ export function SettingsForm({
   saasMetricsEnabled = false,
   cashSalesEnabled = false,
   customers = [],
+  paymentTerms = [],
   vendorBillFlowConfigured,
 }: {
   initial: Initial
@@ -135,6 +140,8 @@ export function SettingsForm({
   cashSalesEnabled?: boolean
   /** Active customers for the walk-in default picker. */
   customers?: { id: string; label: string }[]
+  /** Active payment terms for the company default-terms picker. */
+  paymentTerms?: { id: string; label: string }[]
   /** Whether an enabled vendor-bill approval flow exists. The loader always
    *  resolves this; when false the Approvals card warns that bills release
    *  with no approver (or that submits will be refused once required). */
@@ -155,6 +162,7 @@ export function SettingsForm({
       customerCreditsReduceBillings: true,
     },
     cashSales: { ...EMPTY_CASH_SALES, ...(initial.cashSales ?? {}) },
+    billing: { defaultPaymentTermsId: initial.billing?.defaultPaymentTermsId ?? '' },
     legalIdentity: initial.legalIdentity ?? EMPTY_LEGAL_IDENTITY,
   })
   // Identifiers already on file: one recorded under another jurisdiction
@@ -240,7 +248,7 @@ export function SettingsForm({
       toast.error(t('validation.countryRequired'))
       return
     }
-    const { fairValueRangePolicy, contractCreation, saasMetrics, cashSales, legalIdentity, ...rest } = form
+    const { fairValueRangePolicy, contractCreation, saasMetrics, cashSales, billing, legalIdentity, ...rest } = form
     const identity = legalIdentityPayload(legalIdentity, form.country, storedTaxIds)
     if (!identity.ok) {
       setInvalidTaxId(identity.invalidScheme)
@@ -264,6 +272,9 @@ export function SettingsForm({
         ...(revenueContracts ? { contractCreation } : {}),
         ...(saasMetricsEnabled ? { saasMetrics } : {}),
         ...(cashSalesEnabled ? { cashSales } : {}),
+        // The company default payment terms are core billing configuration
+        // with no feature fence — they always travel, blank clearing them.
+        billing: { defaultPaymentTermsId: billing.defaultPaymentTermsId || null },
       }),
     })
     setSaving(false)
@@ -629,6 +640,31 @@ export function SettingsForm({
         </CardContent>
       </Card>
 
+      {/* Billing defaults: core configuration, always visible. */}
+      <Card>
+        <CardHeader>
+          <CardTitle>{t('billing.title')}</CardTitle>
+          <CardDescription>{t('billing.description')}</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <FieldLabel htmlFor="billing-default-terms" help={t('billing.fields.defaultPaymentTerms.hint')}>{t('billing.fields.defaultPaymentTerms.label')}</FieldLabel>
+            <SearchSelect
+              id="billing-default-terms"
+              value={form.billing.defaultPaymentTermsId}
+              onChange={(v) => setForm((f) => ({ ...f, billing: { defaultPaymentTermsId: v ?? '' } }))}
+              options={paymentTerms.map((pt) => ({ value: pt.id, label: pt.label }))}
+              placeholder={t('billing.termsPlaceholder')}
+              searchPlaceholder={t('billing.termsSearchPlaceholder')}
+              sheetTitle={t('billing.fields.defaultPaymentTerms.label')}
+              clearable
+              emptyLabel={tCommon('labels.notSet')}
+              ariaLabel={t('billing.fields.defaultPaymentTerms.label')}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
       {cashSalesEnabled ? <Card>
         <CardHeader>
           <CardTitle>{t('cashSales.title')}</CardTitle>
@@ -779,6 +815,7 @@ export function SettingsForm({
             customerCreditsReduceBillings: true,
           },
           cashSales: { ...EMPTY_CASH_SALES, ...(initial.cashSales ?? {}) },
+          billing: { defaultPaymentTermsId: initial.billing?.defaultPaymentTermsId ?? '' },
           legalIdentity: initial.legalIdentity ?? EMPTY_LEGAL_IDENTITY,
         })}>
           {tCommon('actions.reset')}

@@ -819,6 +819,18 @@
         }
       }
     },
+    "billing": {
+      "title": "Valores de facturación por defecto",
+      "description": "Las condiciones de pago que usan las facturas cuando el cliente o el proveedor no indica ninguna.",
+      "termsPlaceholder": "Condiciones por defecto…",
+      "termsSearchPlaceholder": "Buscar condiciones…",
+      "fields": {
+        "defaultPaymentTerms": {
+          "label": "Condiciones de pago por defecto",
+          "hint": "Los clientes nuevos heredan estas condiciones, y los documentos de terceros sin condiciones las usan para el vencimiento."
+        }
+      }
+    },
     "controlAccounts": {
       "title": "Cuentas de control",
       "description": "Las cuentas del libro mayor a través de las cuales contabilizan los auxiliares y los impuestos. Solo aparecen las cuentas imputables (no de resumen).",

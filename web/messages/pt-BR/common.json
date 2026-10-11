@@ -376,6 +376,8 @@
   },
   "documentDefaults": {
     "failed": "Não foi possível carregar a conta e o código de imposto do item nem a data de vencimento pelas condições de pagamento. Informe-os manualmente ou tente novamente.",
-    "postingDateFallback": "Lança em {date} quando vazio"
+    "postingDateFallback": "Lança em {date} quando vazio",
+    "noPaymentTerms": "Sem condições de pagamento para {name} — defina-as no cliente ou como padrão da empresa",
+    "unnamedParty": "este terceiro"
   }
 }

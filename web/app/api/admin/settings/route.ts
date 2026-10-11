@@ -38,6 +38,11 @@ const requestBodySchema = z.object({
   // Cash-sale till defaults; blank or null clears a default and the settings
   // command validates each one by name.
   cashSales: z.record(z.string(), z.union([z.string(), z.null()])).optional(),
+  // Company default payment terms; null clears and the settings command
+  // validates the referenced terms by name.
+  billing: z.object({
+    defaultPaymentTermsId: z.string().nullable().optional(),
+  }).optional(),
   // Party-less journal/deposit lines on receivable or payable accounts.
   partylessControlPolicy: z.enum(["warn", "refuse"]).optional(),
   // Legal identity. Shapes here; the jurisdiction rules (identifier formats

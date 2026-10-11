@@ -13,7 +13,8 @@ import { loadCompanyReceivedNotBilledAccount } from '../records/control-accounts
  * Due date. A kind that declares `dueDateFromTerms` (invoices and bills)
  * derives its due date from the party's active payment terms: document date
  * plus the terms' net days ("Due on receipt" is 0, "Net 15" is 15). A party
- * without terms derives nothing; the due date simply stays unset.
+ * without terms falls back to the company default terms; with neither, the
+ * due date simply stays unset and the drawer names the missing terms.
  *
  * Line account. Sales lines take the item's income account. Purchase lines
  * take the account the bill actually debits for the item: for a stocked item
@@ -45,6 +46,8 @@ export interface TermsDueDate {
   termsName: string
   netDays: number
   dueDate: string
+  /** `party` when the party's own terms apply, `company` when the organization's default does. */
+  source: 'party' | 'company'
 }
 
 export type LineAccountSource = 'item_income' | 'inventory_clearing' | 'inventory_asset' | 'item_expense' | 'vendor_expense'
@@ -73,7 +76,9 @@ function partyRoleOf(cfg: DocKindConfig): 'customer' | 'vendor' | null {
 
 /**
  * The due date the party's payment terms imply, or null when the kind does
- * not derive one, no party is named, or the party has no active terms.
+ * not derive one or no party is named. A party without active terms falls
+ * back to the organization's default payment terms (Company Settings →
+ * Billing defaults); only when neither names usable terms is null returned.
  */
 export async function resolveTermsDueDate(
   exec: SqlExecutor,
@@ -90,9 +95,37 @@ export async function resolveTermsDueDate(
       from ${roleTable} r
       join payment_terms pt on pt.id = r.payment_terms_id and pt.org_id = r.org_id and pt.is_active
      where r.org_id = ${orgId} and r.party_id = ${input.partyId}`)).rows[0]
+  if (terms) {
+    const netDays = Number(terms.net_days)
+    return { termsId: terms.id, termsName: terms.name, netDays, dueDate: dueDateFromNetDays(input.documentDate, netDays), source: 'party' }
+  }
+  return resolveCompanyTermsDueDate(exec, orgId, input.documentDate)
+}
+
+/**
+ * The due date the organization's default payment terms imply, or null when
+ * no default is configured or the default names no active terms. A stored
+ * default pointing at retired terms is ignored rather than refused: terms
+ * can be deactivated after the default is saved, and the drawer simply shows
+ * the field blank with the no-terms hint.
+ */
+export async function resolveCompanyTermsDueDate(
+  exec: SqlExecutor,
+  orgId: string,
+  documentDate: string,
+): Promise<TermsDueDate | null> {
+  const billing = (await exec.execute<{ billing: { defaultPaymentTermsId?: unknown } | null }>(sql`
+    select coalesce(settings->'billing', '{}'::jsonb) as billing from orgs where id = ${orgId}`)).rows[0]?.billing
+  const defaultId = typeof billing?.defaultPaymentTermsId === 'string' && isUuid(billing.defaultPaymentTermsId)
+    ? billing.defaultPaymentTermsId
+    : null
+  if (!defaultId) return null
+  const terms = (await exec.execute<{ id: string; name: string; net_days: number }>(sql`
+    select id, name, net_days from payment_terms
+     where org_id = ${orgId} and id = ${defaultId} and is_active`)).rows[0]
   if (!terms) return null
   const netDays = Number(terms.net_days)
-  return { termsId: terms.id, termsName: terms.name, netDays, dueDate: dueDateFromNetDays(input.documentDate, netDays) }
+  return { termsId: terms.id, termsName: terms.name, netDays, dueDate: dueDateFromNetDays(documentDate, netDays), source: 'company' }
 }
 
 interface ItemDefaultsRow {

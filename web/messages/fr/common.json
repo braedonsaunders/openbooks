@@ -376,6 +376,8 @@
   },
   "documentDefaults": {
     "failed": "Le compte et le code de taxe de l’article ainsi que la date d’échéance selon les conditions de paiement n’ont pas pu être chargés. Saisissez-les vous-même ou réessayez.",
-    "postingDateFallback": "Comptabilisé le {date} si vide"
+    "postingDateFallback": "Comptabilisé le {date} si vide",
+    "noPaymentTerms": "Aucunes conditions de paiement pour {name} — définissez-les sur le client ou par défaut dans la société",
+    "unnamedParty": "ce tiers"
   }
 }

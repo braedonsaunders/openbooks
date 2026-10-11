@@ -819,6 +819,18 @@
         }
       }
     },
+    "billing": {
+      "title": "开票默认值",
+      "description": "客户或供应商未指定付款条件时，发票使用的付款条件。",
+      "termsPlaceholder": "公司默认条件…",
+      "termsSearchPlaceholder": "搜索付款条件…",
+      "fields": {
+        "defaultPaymentTerms": {
+          "label": "默认付款条件",
+          "hint": "新客户沿用此条件，无条件往来方的单据以此计算到期日。"
+        }
+      }
+    },
     "controlAccounts": {
       "title": "控制科目",
       "description": "各子分类账和税务过账所经过的总账科目。仅显示可过账（非汇总）科目。",

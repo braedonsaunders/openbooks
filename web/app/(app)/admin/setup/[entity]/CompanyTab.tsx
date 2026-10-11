@@ -14,7 +14,7 @@ import {
   readCompanyAddress,
   readTaxIds,
 } from '@openbooks/engine/src/organization/company-identity.ts'
-import { readCashSalesSettings } from '../../../../../lib/company-settings'
+import { readBillingSettings, readCashSalesSettings } from '../../../../../lib/company-settings'
 import { SampleCompanyPicker } from '../../../../../components/sample-company-picker'
 import { parsePartylessControlPolicy } from '@openbooks/engine/src/ledger/partyless-control-policy.ts'
 
@@ -27,7 +27,7 @@ import { parsePartylessControlPolicy } from '@openbooks/engine/src/ledger/partyl
 export async function CompanyTab({ orgId }: { orgId: string }) {
   const t = await getTranslations('admin.setup')
 
-  const [org, accounts, currencies, multiSubsidiary, revenueRecognition, revenueContracts, saasMetricsEnabled, cashSalesEnabled, vendorBillFlowConfigured, customers] = ((await Promise.all([
+  const [org, accounts, currencies, multiSubsidiary, revenueRecognition, revenueContracts, saasMetricsEnabled, cashSalesEnabled, vendorBillFlowConfigured, customers, paymentTerms] = ((await Promise.all([
     db.execute(sql`
       select name, legal_name, base_currency, country, tax_ids, settings
         from orgs where id = ${orgId}`),
@@ -50,6 +50,10 @@ export async function CompanyTab({ orgId }: { orgId: string }) {
             where cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active
          )
        order by p.display_name limit 2000`),
+    db.execute(sql`
+      select id, name, net_days from payment_terms
+       where org_id = ${orgId} and is_active
+       order by name`),
   ])))
 
   const row = org.rows[0]
@@ -119,6 +123,10 @@ export async function CompanyTab({ orgId }: { orgId: string }) {
             taxClassification: isTaxClassification(settings.taxClassification) ? settings.taxClassification : '',
             taxIds: readTaxIds(row?.tax_ids),
           },
+          billing: (() => {
+            const stored = readBillingSettings(settings.billing)
+            return { defaultPaymentTermsId: stored.defaultPaymentTermsId ?? '' }
+          })(),
           cashSales: (() => {
             const stored = readCashSalesSettings(
               (settings.cashSales ?? {}) as Record<string, unknown>,
@@ -145,6 +153,10 @@ export async function CompanyTab({ orgId }: { orgId: string }) {
         customers={(customers.rows as { id: string; display_name: string }[]).map((c) => ({
           id: c.id,
           label: c.display_name,
+        }))}
+        paymentTerms={(paymentTerms.rows as { id: string; name: string }[]).map((pt) => ({
+          id: pt.id,
+          label: pt.name,
         }))}
         vendorBillFlowConfigured={vendorBillFlowConfigured}
       />

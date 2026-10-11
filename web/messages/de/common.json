@@ -376,6 +376,8 @@
   },
   "documentDefaults": {
     "failed": "Konto und Steuerschlüssel des Artikels sowie das Fälligkeitsdatum aus den Zahlungsbedingungen konnten nicht geladen werden. Geben Sie sie selbst ein oder versuchen Sie es erneut.",
-    "postingDateFallback": "Bucht {date}, wenn leer"
+    "postingDateFallback": "Bucht {date}, wenn leer",
+    "noPaymentTerms": "Keine Zahlungsbedingungen für {name} — hinterlegen Sie sie beim Kunden oder als Firmenstandard",
+    "unnamedParty": "diesen Geschäftspartner"
   }
 }

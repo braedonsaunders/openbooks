@@ -819,6 +819,18 @@
         }
       }
     },
+    "billing": {
+      "title": "Réglages de facturation par défaut",
+      "description": "Les conditions de paiement utilisées par les factures lorsque le client ou le fournisseur n’en indique aucune.",
+      "termsPlaceholder": "Conditions par défaut…",
+      "termsSearchPlaceholder": "Rechercher des conditions…",
+      "fields": {
+        "defaultPaymentTerms": {
+          "label": "Conditions de paiement par défaut",
+          "hint": "Les nouveaux clients héritent de ces conditions, et les documents des tiers sans conditions les utilisent pour l’échéance."
+        }
+      }
+    },
     "controlAccounts": {
       "title": "Comptes de contrôle",
       "description": "Les comptes du grand livre par lesquels les grands livres auxiliaires et les taxes sont comptabilisés. Seuls les comptes imputables (non sommaires) apparaissent.",

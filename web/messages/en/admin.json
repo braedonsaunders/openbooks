@@ -819,6 +819,18 @@
         }
       }
     },
+    "billing": {
+      "title": "Billing defaults",
+      "description": "The payment terms invoices and bills fall back to when the customer or vendor names none.",
+      "termsPlaceholder": "Company default terms…",
+      "termsSearchPlaceholder": "Search payment terms…",
+      "fields": {
+        "defaultPaymentTerms": {
+          "label": "Default payment terms",
+          "hint": "New customers start with these terms, and documents for counterparties without terms use them for the due date."
+        }
+      }
+    },
     "controlAccounts": {
       "title": "Control accounts",
       "description": "The general-ledger accounts subledgers and tax post through. Only postable (non-summary) accounts appear.",

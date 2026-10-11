@@ -376,6 +376,8 @@
   },
   "documentDefaults": {
     "failed": "品目の勘定科目と税コード、支払条件による支払期日を読み込めませんでした。手動で入力するか、もう一度お試しください。",
-    "postingDateFallback": "空欄の場合は{date}に計上"
+    "postingDateFallback": "空欄の場合は{date}に計上",
+    "noPaymentTerms": "{name}に支払条件がありません — 顧客か会社の既定値に設定してください",
+    "unnamedParty": "この取引先"
   }
 }

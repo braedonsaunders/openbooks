@@ -83,6 +83,26 @@ export type CashSalesSettings = {
   depositAccountIds: string[];
 };
 
+/**
+ * Company default payment terms stored under `orgs.settings.billing`: the
+ * terms invoices and bills fall back to when the counterparty names none.
+ * Null means no company default; unknown keys and non-id values drop.
+ */
+export const BILLING_SETTING_KEYS = ["defaultPaymentTermsId"] as const;
+
+export type BillingSettings = {
+  defaultPaymentTermsId: string | null;
+};
+
+/** Normalize the stored billing defaults: unknown keys and non-id values drop. */
+export function readBillingSettings(raw: unknown): BillingSettings {
+  const bag = (raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>;
+  const id = bag.defaultPaymentTermsId;
+  return {
+    defaultPaymentTermsId: typeof id === "string" && isUuid(id) ? id : null,
+  };
+}
+
 /** Normalize the stored till defaults: unknown keys and non-id values drop. */
 export function readCashSalesSettings(raw: unknown): CashSalesSettings {
   const bag = (raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>;
@@ -147,6 +167,9 @@ export async function readCompanySettings(orgId: string): Promise<CompanySetting
       requireStockCountReview:
         (settings.approvals as Record<string, unknown> | undefined)
           ?.requireStockCountReview === true,
+      // The company default payment terms are core billing configuration,
+      // always visible; only the till defaults below are feature-gated.
+      billing: readBillingSettings(settings.billing),
       // A gated feature's settings stay hidden while the gate is off; the
       // stored values are kept and reappear with the switch.
       ...((await isFeatureEnabled(orgId, "cashSales"))
@@ -179,6 +202,7 @@ export async function updateCompanySettings(
     taxFramework?: unknown;
     controlAccounts?: unknown;
     cashSales?: unknown;
+    billing?: unknown;
     defaultLocale?: unknown;
     timeZone?: unknown;
     reportPdfStyle?: unknown;
@@ -690,6 +714,53 @@ export async function updateCompanySettings(
         nextSettings.cashSales = nextCashSales;
         changes.cashSales = [curCashSales, nextCashSales];
         settingsChanged = true;
+      }
+    }
+    // --- company default payment terms (invoices and bills fall back to
+    // these when the counterparty names none) ---
+    if (body.billing !== undefined) {
+      if (typeof body.billing !== "object" || body.billing === null || Array.isArray(body.billing)) {
+        return { status: 400, body: { error: "billing must be an object" } };
+      }
+      const billingInput = body.billing as Record<string, unknown>;
+      const unknownBilling = Object.keys(billingInput).filter(
+        (key) => !(BILLING_SETTING_KEYS as readonly string[]).includes(key),
+      );
+      if (unknownBilling.length > 0) {
+        return { status: 400, body: { error: `unknown billing setting: ${unknownBilling.join(", ")}` } };
+      }
+      let nextBilling: BillingSettings | undefined;
+      if (billingInput.defaultPaymentTermsId !== undefined) {
+        const rawTerms = billingInput.defaultPaymentTermsId;
+        if (rawTerms !== null) {
+          if (typeof rawTerms !== "string" || !isUuid(rawTerms)) {
+            return { status: 400, body: { error: "billing.defaultPaymentTermsId must be a payment-terms id or null" } };
+          }
+          const terms = (await tx.execute<{ name: string; isActive: boolean }>(sql`
+            select name, is_active as "isActive" from payment_terms
+             where org_id = ${orgId} and id = ${rawTerms}`)).rows[0];
+          if (!terms) {
+            return { status: 400, body: { error: `billing.defaultPaymentTermsId ${rawTerms} does not exist in this organization — choose terms from Setup → Payment terms` } };
+          }
+          if (!terms.isActive) {
+            return { status: 422, body: { error: `payment terms "${terms.name}" is inactive — activate it in Setup → Payment terms or choose active terms` } };
+          }
+        }
+        nextBilling = { defaultPaymentTermsId: rawTerms };
+      }
+      if (nextBilling !== undefined) {
+        const curBilling = readBillingSettings(settings.billing);
+        // Clearing the default removes the key rather than storing an
+        // explicit null, so readers see "no default" either way. An absent
+        // id and an explicit null are the same state: no change recorded.
+        const curId = curBilling.defaultPaymentTermsId;
+        const nextId = nextBilling.defaultPaymentTermsId;
+        if (curId !== nextId) {
+          if (nextId === null) delete nextSettings.billing;
+          else nextSettings.billing = nextBilling;
+          changes.billing = [curBilling, nextId === null ? null : nextBilling];
+          settingsChanged = true;
+        }
       }
     }
     const curDefaultLocale = isLocale(settings.defaultLocale)

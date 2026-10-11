@@ -376,6 +376,8 @@
   },
   "documentDefaults": {
     "failed": "无法加载物料的科目和税码以及按付款条件计算的到期日。请手动输入或重试。",
-    "postingDateFallback": "为空时按 {date} 入账"
+    "postingDateFallback": "为空时按 {date} 入账",
+    "noPaymentTerms": "{name}没有付款条件 — 请在客户或公司默认值中设置",
+    "unnamedParty": "此往来方"
   }
 }

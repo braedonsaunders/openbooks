@@ -222,6 +222,45 @@ test(
   },
 );
 
+test(
+  "a new customer without terms starts on the company default; explicit terms win",
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const { adminId } = await seedFlowActors(org.orgId);
+      routeState.authz = { user: { orgId: org.orgId, id: adminId }, allowedSubsidiaryIds: null };
+      const net30 = randomUUID();
+      const net15 = randomUUID();
+      await db.execute(sql`
+        insert into payment_terms (id, org_id, name, net_days)
+        values (${net30}, ${org.orgId}, 'Net 30', 30), (${net15}, ${org.orgId}, 'Net 15', 15)`);
+      await db.execute(sql`
+        update orgs set settings = coalesce(settings, '{}'::jsonb)
+          || jsonb_build_object('billing', jsonb_build_object('defaultPaymentTermsId', ${net30}::text))
+         where id = ${org.orgId}`);
+      const termsOf = async (key: string) => (await db.execute<{ payment_terms_id: string | null }>(sql`
+        select payment_terms_id from customer_roles where party_id = ${key} and org_id = ${org.orgId}`)).rows[0]?.payment_terms_id ?? null;
+
+      const defaultedKey = randomUUID();
+      const defaulted = await POST(postRequest(defaultedKey, {
+        displayName: "Default Terms Co", kind: "company", roles: { customer: { enabled: true } },
+      }));
+      assert.equal(defaulted.status, 201, JSON.stringify(await defaulted.clone().json().catch(() => null)));
+      assert.equal(await termsOf(defaultedKey), net30, "no explicit terms take the company default");
+
+      const explicitKey = randomUUID();
+      const explicit = await POST(postRequest(explicitKey, {
+        displayName: "Explicit Terms Co", kind: "company",
+        roles: { customer: { enabled: true, paymentTermsId: net15 } },
+      }));
+      assert.equal(explicit.status, 201, JSON.stringify(await explicit.clone().json().catch(() => null)));
+      assert.equal(await termsOf(explicitKey), net15, "explicit terms win over the company default");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
 // Release the route doubles after every test in this file has run.
 // The factory's lazy session-gate import runs on every request, so the hook
 // must stay registered until the file's tests finish.

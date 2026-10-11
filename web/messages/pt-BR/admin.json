@@ -819,6 +819,18 @@
         }
       }
     },
+    "billing": {
+      "title": "Padrões de faturamento",
+      "description": "As condições de pagamento usadas pelas faturas quando o cliente ou fornecedor não indica nenhuma.",
+      "termsPlaceholder": "Condições padrão…",
+      "termsSearchPlaceholder": "Pesquisar condições…",
+      "fields": {
+        "defaultPaymentTerms": {
+          "label": "Condições de pagamento padrão",
+          "hint": "Novos clientes herdam estas condições, e os documentos de terceiros sem condições as usam para o vencimento."
+        }
+      }
+    },
     "controlAccounts": {
       "title": "Contas de controle",
       "description": "As contas do livro-razão pelas quais os subrazões e impostos lançam. Apenas contas lançáveis (não sintéticas) aparecem.",

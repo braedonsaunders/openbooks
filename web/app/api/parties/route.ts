@@ -111,6 +111,19 @@ function uuidOrNull(v: unknown): string | null | 'invalid' {
   return isUuid(s) ? s : 'invalid'
 }
 
+/**
+ * The company default payment terms (Company Settings → Billing defaults),
+ * or null when none is configured or the stored default names no active
+ * terms. New customers without explicit terms start on these.
+ */
+async function companyDefaultPaymentTermsId(orgId: string): Promise<string | null> {
+  const billing = (await db.execute<{ billing: unknown }>(sql`
+    select coalesce(settings->'billing', '{}'::jsonb) as billing from orgs where id = ${orgId}`)).rows[0]?.billing
+  const id = (billing as { defaultPaymentTermsId?: unknown } | null)?.defaultPaymentTermsId
+  if (typeof id !== 'string' || !isUuid(id)) return null
+  return (await orgRefExists('terms', id, orgId)) ? id : null
+}
+
 async function orgRefExists(
   kind: 'terms' | 'receivable' | 'payable' | 'expense' | 'tax' | 'salesRep' | 'department' | 'trade' | 'workerComp',
   id: string | null,
@@ -258,8 +271,11 @@ export const POST = defineRoute({
   // -- roles ---------------------------------------------------------------
   let customer: Record<string, unknown> | null = null
   if (customerInput.enabled === true) {
-    const paymentTermsId = uuidOrNull(customerInput.paymentTermsId)
-    if (paymentTermsId === 'invalid') return bad('Invalid customer payment terms', 'roles')
+    const requestedTermsId = uuidOrNull(customerInput.paymentTermsId)
+    if (requestedTermsId === 'invalid') return bad('Invalid customer payment terms', 'roles')
+    // A new customer without explicit terms starts on the company default
+    // (Company Settings → Billing defaults) when it names active terms.
+    const paymentTermsId = requestedTermsId ?? (await companyDefaultPaymentTermsId(user.orgId))
     const arAccountId = uuidOrNull(customerInput.arAccountId)
     if (arAccountId === 'invalid') return bad('Invalid receivable account', 'roles')
     const salesRepId = uuidOrNull(customerInput.salesRepId)

@@ -819,6 +819,18 @@
         }
       }
     },
+    "billing": {
+      "title": "Standardwerte für die Abrechnung",
+      "description": "Die Zahlungsbedingungen, die Rechnungen verwenden, wenn Kunde oder Lieferant keine nennt.",
+      "termsPlaceholder": "Standardbedingungen…",
+      "termsSearchPlaceholder": "Zahlungsbedingungen suchen…",
+      "fields": {
+        "defaultPaymentTerms": {
+          "label": "Standardzahlungsbedingungen",
+          "hint": "Neue Kunden erhalten diese Bedingungen, und Belege für Geschäftspartner ohne Bedingungen nutzen sie für das Fälligkeitsdatum."
+        }
+      }
+    },
     "controlAccounts": {
       "title": "Kontrollkonten",
       "description": "Die Hauptbuchkonten, über die Nebenbücher und Steuer buchen. Es werden nur bebuchbare (Nicht-Sammel-)Konten angezeigt.",

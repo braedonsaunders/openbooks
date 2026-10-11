@@ -1313,6 +1313,9 @@ export function DocumentDrawer({
   // date; a blank one follows the party's payment terms.
   const [dueOverridden, setDueOverridden] = useState<boolean>(Boolean(doc.due_date))
   const lastDerivedDue = useRef<string | null>(null)
+  // Display name shown beside the due date when neither the party nor the
+  // company default names payment terms (null hides the hint).
+  const [noTermsHint, setNoTermsHint] = useState<string | null>(null)
   const [referenceNumber, setReferenceNumber] = useState<string>(doc.reference_number ?? '')
   const [memo, setMemo] = useState<string>(doc.memo ?? '')
   // Full-schema header built-ins (off by default; shown when a form enables them).
@@ -1505,7 +1508,7 @@ export function DocumentDrawer({
     partyId: string
     documentDate?: string
     itemIds?: string[]
-  }): Promise<{ terms: { dueDate: string } | null; lines: ResolvedLineDefault[] } | null> => {
+  }): Promise<{ terms: { dueDate: string; source: string | null } | null; lines: ResolvedLineDefault[] } | null> => {
     const query = new URLSearchParams({ kind: config.kind })
     if (request.partyId) query.set('partyId', request.partyId)
     if (request.documentDate) query.set('documentDate', request.documentDate)
@@ -1523,9 +1526,12 @@ export function DocumentDrawer({
       toast.error(await readApiErrorMessage(response, tCommon('documentDefaults.failed')))
       return null
     }
-    const body = (await response.json().catch(() => null)) as { terms?: { dueDate?: unknown } | null; lines?: unknown } | null
+    const body = (await response.json().catch(() => null)) as { terms?: { dueDate?: unknown; source?: unknown } | null; lines?: unknown } | null
+    const termsDueDate = typeof body?.terms?.dueDate === 'string' ? body.terms.dueDate : null
     return {
-      terms: typeof body?.terms?.dueDate === 'string' ? { dueDate: body.terms.dueDate } : null,
+      terms: termsDueDate === null
+        ? null
+        : { dueDate: termsDueDate, source: typeof body?.terms?.source === 'string' ? body.terms.source : null },
       lines: Array.isArray(body?.lines) ? (body.lines as ResolvedLineDefault[]) : [],
     }
   }, [config.kind, tCommon])
@@ -1602,8 +1608,20 @@ export function DocumentDrawer({
       }
       lastDerivedDue.current = derived
     }
-    if (!partyId) settle(null)
-    else void fetchDocumentDefaults({ partyId, documentDate }).then((result) => { if (result) settle(result.terms?.dueDate ?? null) })
+    if (!partyId) {
+      setNoTermsHint(null)
+      settle(null)
+    } else void fetchDocumentDefaults({ partyId, documentDate }).then((result) => {
+      if (!result) return
+      // A resolved answer with no terms means neither the party nor the
+      // company default names usable terms: name the counterparty so the
+      // operator knows where to set them. A failed fetch shows no hint.
+      if (result.terms === null) {
+        const name = (parties ?? []).find((p) => p.id === partyId)?.display_name?.trim()
+        setNoTermsHint(name ? name : tCommon('documentDefaults.unnamedParty'))
+      } else setNoTermsHint(null)
+      settle(result.terms?.dueDate ?? null)
+    })
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [partyId, documentDate, editable, config.dueDateFromTerms])
@@ -3215,7 +3233,14 @@ export function DocumentDrawer({
           <>
             <FieldLabel fieldName={label}>{label}</FieldLabel>
             {isEditable ? (
-              <Input type="date" value={dueDate} onChange={(e) => editDueDate(e.target.value)} />
+              <>
+                <Input type="date" value={dueDate} onChange={(e) => editDueDate(e.target.value)} />
+                {noTermsHint ? (
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    {tCommon('documentDefaults.noPaymentTerms', { name: noTermsHint })}
+                  </p>
+                ) : null}
+              </>
             ) : (<p className="text-sm">{doc.due_date ?? '—'}</p>)}
           </>
         )
@@ -3845,7 +3870,14 @@ export function DocumentDrawer({
                 <div className={field}>
                   <FieldLabel fieldName={t('drawer.dueDate')}>{t('drawer.dueDate')}</FieldLabel>
                   {editable ? (
-                    <Input type="date" value={dueDate} onChange={(e) => editDueDate(e.target.value)} />
+                    <>
+                      <Input type="date" value={dueDate} onChange={(e) => editDueDate(e.target.value)} />
+                      {noTermsHint ? (
+                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                          {tCommon('documentDefaults.noPaymentTerms', { name: noTermsHint })}
+                        </p>
+                      ) : null}
+                    </>
                   ) : (
                     <p className="text-sm">{doc.due_date ?? '—'}</p>
                   )}
