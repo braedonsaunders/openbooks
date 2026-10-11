@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import {
-  BankingError,
   createGlClearingGroup,
   createMatch,
   importStatement,
@@ -258,7 +257,7 @@ test(
 );
 
 test(
-  "sign-off cross-foots a clearing group that stopped summing to zero",
+  "sign-off refuses a clearing group whose member entry was reversed",
   { skip: !DB },
   async () => {
     const { org, actor, ctx } = await setup();
@@ -291,12 +290,33 @@ test(
         { reconciliationId: recon.id, journalLineIds: [voided!, correction!] },
         ctx,
       );
-      // A later cent sneaks onto the correction: the group no longer foots.
+      // Posted lines are immutable, so no cent can sneak onto the
+      // correction — but its entry can be reversed, and then the group no
+      // longer cross-foots at sign-off. Reversal needs a posted same-book
+      // mirror of the corrected entry.
+      const correctionEntryId = (await db.execute<{ id: string }>(sql`
+        select entry_id as id from journal_lines where id = ${correction!} and org_id = ${org.orgId}
+      `)).rows[0]!.id;
+      const mirrorId = randomUUID();
       await db.execute(sql`
-        update journal_lines set txn_amount = '-271.19' where id = ${correction!} and org_id = ${org.orgId}
+        insert into journal_entries
+          (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, reverses_entry_id, created_by, updated_by)
+        values (${mirrorId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${`GLC-mirror-${mirrorId.slice(0, 8)}`},
+                ${org.date}, ${org.periodId}, 'mirror', 'draft', 'manual', ${correctionEntryId}, ${actor}, ${actor})`);
+      await db.execute(sql`
+        insert into journal_lines
+          (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate, memo)
+        select ${org.orgId}, ${mirrorId}, line_number, account_id, subsidiary_id, -amount, currency, -txn_amount, fx_rate, memo
+          from journal_lines where entry_id = ${correctionEntryId} and org_id = ${org.orgId} order by line_number`);
+      await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${mirrorId}`);
+      await db.execute(sql`
+        update journal_entries set status = 'reversed'
+         where id = ${correctionEntryId} and org_id = ${org.orgId}
       `);
-      await assert.rejects(markReconciled(recon.id, ctx), BankingError);
-      await assert.rejects(markReconciled(recon.id, ctx), /does not foot/);
+      await assert.rejects(
+        markReconciled(recon.id, ctx),
+        /one or more matches fail book, account, currency, cutoff, or availability/,
+      );
     } finally {
       await dropScratchOrg(org.orgId);
     }
