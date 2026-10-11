@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, check, foreignKey, index, integer, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, date, foreignKey, index, integer, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { auditColumns, id, orgRef } from "./helpers";
 
 /** Values for custom segment definitions. Built-in values stay authoritative
@@ -69,5 +69,52 @@ export const segmentDefinitions = pgTable(
       foreignColumns: [segmentValues.orgId, segmentValues.id],
     }),
     index("segment_definitions_org_order").on(t.orgId, t.sortOrder, t.name),
+  ],
+);
+
+/**
+ * Segment value dependencies ("filtered by"): the dependent value of
+ * `segment_id` is allowed only together with the `controlling_segment_id`
+ * values its active rows list, one allowed value per row. Either side may be
+ * a custom segment or a built-in dimension; the storage guard keeps every
+ * value inside its own segment. Optional effective dates bound when a row
+ * applies, and one pairing cannot overlap itself in time. A value with no
+ * effective rows is unrestricted. Enforced where documents are saved and
+ * journals are posted.
+ */
+export const segmentValueDependencies = pgTable(
+  "segment_value_dependencies",
+  {
+    id: id(),
+    orgId: orgRef(),
+    segmentId: uuid("segment_id").notNull(),
+    valueId: uuid("value_id").notNull(),
+    controllingSegmentId: uuid("controlling_segment_id").notNull(),
+    /** One allowed controlling value per row; a value's effective rows form its allowed set. */
+    allowedValueId: uuid("allowed_value_id").notNull(),
+    effectiveFrom: date("effective_from"),
+    effectiveTo: date("effective_to"),
+    isActive: boolean("is_active").notNull().default(true),
+    description: text("description"),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("segment_value_dependencies_org_id_id_unique").on(t.orgId, t.id),
+    index("segment_value_dependencies_segment").on(t.orgId, t.segmentId, t.valueId),
+    check("segment_value_dependencies_distinct_segments", sql`${t.segmentId} <> ${t.controllingSegmentId}`),
+    check(
+      "segment_value_dependencies_window",
+      sql`${t.effectiveFrom} is null or ${t.effectiveTo} is null or ${t.effectiveTo} >= ${t.effectiveFrom}`,
+    ),
+    foreignKey({
+      name: "segment_value_dependencies_segment_fkey",
+      columns: [t.orgId, t.segmentId],
+      foreignColumns: [segmentDefinitions.orgId, segmentDefinitions.id],
+    }),
+    foreignKey({
+      name: "segment_value_dependencies_controlling_fkey",
+      columns: [t.orgId, t.controllingSegmentId],
+      foreignColumns: [segmentDefinitions.orgId, segmentDefinitions.id],
+    }),
   ],
 );

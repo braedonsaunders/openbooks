@@ -3781,6 +3781,22 @@
       "expense-amortization-templates": {
         "title": "摊销模板",
         "description": "预付及递延费用转入费用的方式：方法、期限、递延科目和默认转入科目。按代码设定生效日期。"
+      },
+      "accounting-contexts": {
+        "title": "会计上下文",
+        "description": "命名的上下文（例如当地法定科目表），报表可按其本地化科目编号和名称运行。"
+      },
+      "accounting-context-defaults": {
+        "title": "默认设置",
+        "description": "除非报表指定其他上下文，否则按此上下文报告的子公司（或某国家的所有子公司）。"
+      },
+      "account-localizations": {
+        "title": "本地化科目",
+        "description": "按科目设置带生效日期的本地化编号和名称，可选限定某子公司。每个范围和期间内，一个本地化编号只能属于一个科目。"
+      },
+      "segment-value-dependencies": {
+        "title": "依赖关系",
+        "description": "此段的值仅允许与控制段的指定值组合。每行允许一个控制值；没有任何行的值不受限制。"
       }
     },
     "fields": {
@@ -4438,7 +4454,13 @@
       "amortizationAddPeriod": "添加期间",
       "amortizationPercent": "占金额的百分比",
       "amortizationDeferralAccount": "递延科目（预付费用）",
-      "amortizationDestinationAccount": "默认转入科目"
+      "amortizationDestinationAccount": "默认转入科目",
+      "contextId": "会计上下文",
+      "localizedNumber": "本地化编号",
+      "localizedName": "本地化名称",
+      "valueId": "值",
+      "controllingSegmentId": "控制段",
+      "allowedValueId": "允许搭配"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "最新可用汇率距期末的天数超过此值时，重估和合并将拒绝该汇率。期末汇率从期末即期汇率的日期起算；平均汇率从计入平均的最新报价日期起算。未设置政策时的默认值：31 天。",
@@ -4639,7 +4661,10 @@
       "amortizationPercentages": "按顺序每个期间一个百分比，合计恰好为 100。",
       "amortizationPeriodOffset": "开始后等待多少个期间再开始摊销；0 表示自第一个期间开始。",
       "amortizationDeferralAccount": "费用在摊销前所记入的流动资产或其他资产科目。",
-      "amortizationDestinationAccount": "留空时，每行摊销至其自身的费用科目。"
+      "amortizationDestinationAccount": "留空时，每行摊销至其自身的费用科目。",
+      "contextDefaultScope": "选择一个子公司，或留空并选择国家以涵盖该国所有子公司。",
+      "localizationSubsidiary": "留空则适用于所有子公司；特定子公司的本地化在该子公司的报表中优先。",
+      "allowedValue": "每行一个允许值。为此值可搭配使用的每个控制段值各添加一行。"
     },
     "options": {
       "withholdingCondominiumPayer": "公寓业主共同体付款人",
@@ -7507,6 +7532,19 @@
         "adjustment_only": "仅调整",
         "full": "完整"
       }
+    },
+    "segmentDependencies": {
+      "navTitle": "依赖关系例外",
+      "title": "段依赖关系例外",
+      "description": "{count, plural, =0 {没有未过账单据违反依赖规则。} other {# 条未过账单据行违反其日期有效的依赖规则。}}",
+      "empty": "没有未过账单据违反依赖规则。",
+      "columns": {
+        "document": "单据",
+        "date": "日期",
+        "status": "状态",
+        "line": "行",
+        "problem": "问题"
+      }
     }
   },
   "flows": {
@@ -8258,6 +8296,18 @@
     "expenseAmortizationAutoRun": {
       "title": "自动摊销",
       "description": "由调度程序在期间结束时过账到期的摊销期间，无需手动运行。"
+    },
+    "accountMerges": {
+      "title": "科目合并",
+      "description": "将重复科目合并到保留科目：预览所有拒绝原因和影响，通过重分类凭证转移余额并一同转移配置，同时保持已过账历史不变。"
+    },
+    "accountingContexts": {
+      "title": "会计上下文",
+      "description": "按上下文（可选按子公司或国家）以本地化的科目编号和名称展示报表，例如当地法定科目表。"
+    },
+    "segmentDependencies": {
+      "title": "段依赖关系",
+      "description": "仅允许某段值与另一段的指定值组合使用，例如某类别仅限特定部门；在保存和过账单据时强制执行。"
     }
   },
   "backupsManager": {

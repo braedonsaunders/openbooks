@@ -3224,7 +3224,8 @@
       "manufacturing": "製造",
       "opening": "期首",
       "book_opening": "帳簿の期首残高",
-      "expense_amortization": "費用の期間配分"
+      "expense_amortization": "費用の期間配分",
+      "account_merge": "勘定の統合"
     },
     "columns": {
       "detail": "取引先／摘要"
@@ -3400,5 +3401,12 @@
       "compare": "{book}残高（{currency}）",
       "difference": "差異"
     }
+  },
+  "accountingContext": {
+    "label": "会計コンテキスト",
+    "default": "子会社の既定",
+    "base": "基本勘定科目表",
+    "legend": "会計コンテキスト：{context}。{marker} は基本勘定科目表の番号と名称で表示された勘定を示します",
+    "blockedTitle": "この会計コンテキストでは勘定を表示できません"
   }
 }

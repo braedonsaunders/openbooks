@@ -19,6 +19,7 @@ import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report
 import { getAuthz } from '@/lib/authz'
 import { dimensionOptionsScope } from '../../../../lib/reports/filters'
 import { statementReportSpec, stringReportParams } from '@/lib/reports/statement-report-spec'
+import { AccountingContextError, accountingContextFilter, accountingContextLegend, reportAccountingContext, type ReportAccountingContext } from '../../../../lib/reports/accounting-context'
 
 /**
  * The profit-and-loss statement, split into a loader and a spec.
@@ -68,8 +69,10 @@ export interface PnlData {
   }
   dimensions: DimensionOptions
   subsidiaries: SubsidiaryPicker
-  /** Only rendered when the org has more than one book. */
-  primaryFilter: { paramKey: string; label: string; value: string; options: { value: string; label: string }[] } | null
+  /** Book (more than one book) and accounting context (when contexts exist). */
+  primaryFilter: { paramKey: string; label: string; value: string; options: { value: string; label: string }[] }[] | null
+  /** Set when the requested accounting context cannot label the accounts. */
+  contextBlocked: { title: string; description: string } | null
   scheduleDefId: string | null
   scheduleParams: Record<string, string>
   exportParams: Record<string, string>
@@ -97,9 +100,18 @@ export async function loadPnl(sp: Record<string, string | undefined>): Promise<P
   let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined
   let view: StatementView | null = null
   let ratesBlocked: RatesBlockedNotice | null = null
+  let accountingContext: ReportAccountingContext | null = null
+  let contextBlocked: PnlData['contextBlocked'] = null
+  try {
+    accountingContext = await reportAccountingContext(orgId, sp.ctx, { asOf: period.to, subsidiaryId: q.subsidiaryId ?? null })
+  } catch (e) {
+    if (!(e instanceof AccountingContextError)) throw e
+    contextBlocked = { title: t('accountingContext.blockedTitle'), description: `${e.message} ${e.remedy}` }
+  }
   try {
     subView = await reportSubsidiaryView(q.subsidiaryId, period.to, selectedBook.id)
-    view = await profitAndLossView({ from: period.from, to: period.to }, period.label, labels, {
+    if (!contextBlocked) view = await profitAndLossView({ from: period.from, to: period.to }, period.label, labels, {
+      accountLabels: accountingContext?.labels ?? null,
       breakout: q.breakout,
       compare: q.compare,
       basis: q.basis,
@@ -138,13 +150,14 @@ export async function loadPnl(sp: Record<string, string | undefined>): Promise<P
     backLabel: t('hub.title'),
     hubLabel: t('hub.title'),
     company: org?.name ?? '',
-    periodPhrase: `${selectedBook.name} · ${t('pnl.dateRange', { from: period.from, to: period.to })}`,
+    periodPhrase: [selectedBook.name, t('pnl.dateRange', { from: period.from, to: period.to }), accountingContext ? accountingContextLegend(accountingContext, t) : null].filter(Boolean).join(' · '),
     note: scale.note || '',
     wide: view ? view.columns.length > 4 : false,
     truncated: view?.truncated ?? false,
     truncatedLabel: t('filterBar.truncated'),
     ratesBlocked,
-    ratesReady: ratesBlocked === null,
+    ratesReady: ratesBlocked === null && contextBlocked === null,
+    contextBlocked,
     view,
     scale: q.scale,
     currency: subView?.currency ?? org?.base_currency,
@@ -158,15 +171,20 @@ export async function loadPnl(sp: Record<string, string | undefined>): Promise<P
     },
     dimensions: opts,
     subsidiaries: subView?.picker ?? [],
-    primaryFilter:
-      books.length > 1
-        ? {
-            paramKey: 'book',
-            label: tb('list.bookFilter'),
-            value: selectedBook?.id ?? '',
-            options: books.map((b) => ({ value: b.id, label: b.name })),
-          }
-        : null,
+    primaryFilter: (() => {
+      const filters = [
+        books.length > 1
+          ? {
+              paramKey: 'book',
+              label: tb('list.bookFilter'),
+              value: selectedBook?.id ?? '',
+              options: books.map((b) => ({ value: b.id, label: b.name })),
+            }
+          : null,
+        accountingContext ? accountingContextFilter(accountingContext, t) : null,
+      ].filter((filter) => filter !== null)
+      return filters.length > 0 ? filters : null
+    })(),
     scheduleDefId: scheduleDefId ?? null,
     scheduleParams: scheduleParamsFrom(sp),
     exportParams: stringReportParams(sp),
@@ -226,6 +244,15 @@ export function pnlSpec(data: PnlData): PageSpec {
         }),
         when: f('ratesBlocked'),
       },
+      ...(data.contextBlocked
+        ? [{
+            ...widgetBlock('empty-state', {
+              title: data.contextBlocked.title,
+              description: data.contextBlocked.description,
+            }),
+            when: f('contextBlocked'),
+          }]
+        : []),
     ],
     paper: {
         company: f('company'),

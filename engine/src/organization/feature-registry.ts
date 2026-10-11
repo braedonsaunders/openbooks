@@ -88,6 +88,16 @@ export const FEATURES: FeatureDef[] = [
   // depreciation, recognition, allocation and revaluation entries either
   // way. It cannot be switched off while a book replicates in full.
   { key: 'multiBookAccounting', defaultEnabled: false, category: 'finance', group: 'structure' },
+  // Chart of accounts governance. Account merges fold a duplicate account
+  // into a surviving one through a previewed, audited reclass; accounting
+  // contexts present reports under localized account numbers and names
+  // (for example a local statutory chart); segment dependencies restrict a
+  // segment value to listed values of another segment. Each is a deliberate
+  // adoption decision, so all three default off; turning one off keeps its
+  // records and history.
+  { key: 'accountMerges', defaultEnabled: false, category: 'finance', group: 'structure' },
+  { key: 'accountingContexts', defaultEnabled: false, category: 'finance', group: 'structure' },
+  { key: 'segmentDependencies', defaultEnabled: false, category: 'finance', group: 'structure' },
   { key: 'banking', defaultEnabled: true, category: 'finance', group: 'cash', navModules: ['banking', 'banking-cash', 'banking-transactions', 'banking-psp-settlements', 'banking-payouts', 'banking-match', 'banking-recons', 'banking-rules', 'banking-imports'] },
   // Automated bank connectivity (SFTP file drops + Plaid/GoCardless/TrueLayer
   // live feeds). Off by default — manual OFX/CSV import always works without it.

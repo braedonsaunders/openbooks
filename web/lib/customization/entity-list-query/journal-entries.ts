@@ -72,6 +72,8 @@ export const JOURNAL_GL_NATIVE_ORIGINS = [
   "migration",
   // Opening balances a secondary book receives when full replication starts.
   "book_opening",
+  // Account merge reclasses move a merged account's balance to its survivor.
+  "account_merge",
 ];
 
 /**

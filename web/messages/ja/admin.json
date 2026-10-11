@@ -3834,6 +3834,22 @@
       "expense-amortization-templates": {
         "title": "配分テンプレート",
         "description": "前払費用・繰延費用を費用に振り替える方法、期間、繰延勘定、既定の振替先。コードごとに適用日で管理します。"
+      },
+      "accounting-contexts": {
+        "title": "会計コンテキスト",
+        "description": "現地の法定勘定科目表などの名前付きコンテキスト。レポートはそのローカライズされた勘定番号と名称で実行できます。"
+      },
+      "accounting-context-defaults": {
+        "title": "既定",
+        "description": "レポートで別のコンテキストを指定しない限り、このコンテキストで報告する子会社（または国のすべての子会社）。"
+      },
+      "account-localizations": {
+        "title": "ローカライズ勘定",
+        "description": "勘定ごとの発効日付きのローカライズ番号と名称（必要に応じて子会社単位）。ローカライズ番号は範囲と期間ごとに1つの勘定にのみ属します。"
+      },
+      "segment-value-dependencies": {
+        "title": "依存関係",
+        "description": "制御セグメントの指定値とのみ使用できるこのセグメントの値。各行で1つの制御値を許可し、行のない値は制限されません。"
       }
     },
     "fields": {
@@ -4491,7 +4507,13 @@
       "amortizationAddPeriod": "期間を追加",
       "amortizationPercent": "金額に対する割合",
       "amortizationDeferralAccount": "繰延勘定（前払費用）",
-      "amortizationDestinationAccount": "既定の振替先勘定"
+      "amortizationDestinationAccount": "既定の振替先勘定",
+      "contextId": "会計コンテキスト",
+      "localizedNumber": "ローカライズ番号",
+      "localizedName": "ローカライズ名称",
+      "valueId": "値",
+      "controllingSegmentId": "制御セグメント",
+      "allowedValueId": "許可する組み合わせ"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "使用可能な最新レートから期末までの日数がこれを超えると、再評価と連結はそのレートを拒否します。期末レートは期末スポットレートの日付から、平均レートは平均に含まれる最新の相場の日付から数えます。ポリシー未設定時の既定値: 31日。",
@@ -4692,7 +4714,10 @@
       "amortizationPercentages": "期間ごとに1つの割合を順に入力し、合計をちょうど100にします。",
       "amortizationPeriodOffset": "開始から配分開始までに待つ期間数。0の場合は最初の期間から開始します。",
       "amortizationDeferralAccount": "配分されるまで費用を計上しておく流動資産またはその他資産の勘定。",
-      "amortizationDestinationAccount": "空欄の場合、各明細は自身の費用勘定へ配分されます。"
+      "amortizationDestinationAccount": "空欄の場合、各明細は自身の費用勘定へ配分されます。",
+      "contextDefaultScope": "子会社を選択するか、空欄のまま国を選択してその国のすべての子会社を対象にします。",
+      "localizationSubsidiary": "空欄にするとすべての子会社に適用されます。子会社固有のローカライズは、その子会社のレポートで優先されます。",
+      "allowedValue": "1 行に 1 つの許可値です。この値と併用できる制御セグメントの値ごとに行を追加します。"
     },
     "options": {
       "withholdingCondominiumPayer": "集合住宅管理組合の支払者",
@@ -7507,6 +7532,19 @@
         "adjustment_only": "調整のみ",
         "full": "完全"
       }
+    },
+    "segmentDependencies": {
+      "navTitle": "依存関係の例外",
+      "title": "セグメント依存関係の例外",
+      "description": "{count, plural, =0 {依存関係ルールに違反する未転記伝票はありません。} other {# 件の未転記伝票明細が、伝票日付に有効なルールに違反しています。}}",
+      "empty": "依存関係ルールに違反する未転記伝票はありません。",
+      "columns": {
+        "document": "伝票",
+        "date": "日付",
+        "status": "ステータス",
+        "line": "行",
+        "problem": "問題"
+      }
     }
   },
   "flows": {
@@ -8258,6 +8296,18 @@
     "expenseAmortizationAutoRun": {
       "title": "自動配分",
       "description": "スケジューラーが期間の終了時に期日到来の配分を記帳し、手動の実行は不要です。"
+    },
+    "accountMerges": {
+      "title": "勘定の統合",
+      "description": "重複した勘定を存続勘定に統合します。すべての拒否理由と影響をプレビューし、残高を振替仕訳で、設定も一緒に移し、転記済みの履歴はそのまま保持します。"
+    },
+    "accountingContexts": {
+      "title": "会計コンテキスト",
+      "description": "法定の現地勘定科目表など、ローカライズした勘定番号と名称でレポートを表示します。コンテキストごと、必要に応じて子会社や国ごとに設定できます。"
+    },
+    "segmentDependencies": {
+      "title": "セグメントの依存関係",
+      "description": "あるセグメント値を別のセグメントの指定値とのみ組み合わせられるようにします（例：特定の部門でのみ使えるクラス）。伝票の保存時と転記時に適用されます。"
     }
   },
   "extensions": {

@@ -3204,7 +3204,8 @@
       "manufacturing": "Fabricación",
       "opening": "Apertura",
       "book_opening": "Saldos de apertura del libro",
-      "expense_amortization": "Amortización de gastos"
+      "expense_amortization": "Amortización de gastos",
+      "account_merge": "Fusión de cuentas"
     },
     "columns": {
       "detail": "Tercero / nota"
@@ -3400,5 +3401,12 @@
       "compare": "Saldo {book} ({currency})",
       "difference": "Diferencia"
     }
+  },
+  "accountingContext": {
+    "label": "Contexto contable",
+    "default": "Predeterminado de la filial",
+    "base": "Plan de cuentas base",
+    "legend": "Contexto contable: {context}; {marker} indica una cuenta mostrada con el número y nombre del plan base",
+    "blockedTitle": "Este contexto contable no puede rotular las cuentas"
   }
 }

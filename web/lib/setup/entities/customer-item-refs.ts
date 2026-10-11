@@ -14,6 +14,7 @@ import { PAYROLL_SERVICE_CREDITS_ENTITY } from '../payroll-service-credits'
 import { PAYROLL_VACATION_TERMS_ENTITY } from '../payroll-vacation-terms'
 import { validatePromotionWrite, validateRestockingFeeWrite } from '../sales-validation'
 import { validateAgingBucketPolicyWrite, validateBusinessCalendarWrite } from '../calendar-validation'
+import { validateAccountLocalizationWrite, validateSegmentDependencyWrite } from '../chart-validation'
 import { validateContributionWrite, validateDepartmentExpenseWrite, validateEntitlementPlan, validateServiceCredit, validateServiceTier, validateVacationTerm } from '../workforce-validation'
 import { validatePeriodEndPolicyWrite } from '../period-end-journal-validation'
 
@@ -92,6 +93,8 @@ const SETUP_ENTITY_VALIDATION_HOOKS: Record<string, SetupEntityValidationHook> =
   'business-calendars': validateBusinessCalendarWrite,
   'aging-bucket-policies': validateAgingBucketPolicyWrite,
   'period-end-journal-policies': validatePeriodEndPolicyWrite,
+  'account-localizations': validateAccountLocalizationWrite,
+  'segment-value-dependencies': validateSegmentDependencyWrite,
 }
 
 /** Attach entity-owned validation to the shared setup write pipeline. */

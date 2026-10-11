@@ -139,6 +139,31 @@ const REFUSAL_FAMILIES: RefusalFamily[] = [
 
 const CONFLICT_RE = /conflict/i;
 
+/** Storage guards name a merged account and its survivor; nothing else matches. */
+const MERGED_ACCOUNT_RE = /(?:^|\s)(?:[a-z_]+\.[a-z_]+ names )?account [0-9a-f-]{36},? (?:which )?was merged into account [0-9a-f-]{36}[^\n]*/i;
+
+/**
+ * Every write path meets the storage refusal for a new reference to (or
+ * posting on) a merged account. It is a check violation carrying operator
+ * copy; answer it as a 422 with that copy and the remedy, never a 500, and
+ * never the wrapping query text.
+ */
+function mergedAccountStorageRefusal(error: Error): NextResponse | null {
+  const candidates: unknown[] = [error, (error as { cause?: unknown }).cause];
+  for (const candidate of candidates) {
+    if (!(candidate instanceof Error)) continue;
+    const code = (candidate as { code?: unknown }).code;
+    if (code !== undefined && code !== "23514") continue;
+    const match = candidate.message.match(MERGED_ACCOUNT_RE);
+    if (!match) continue;
+    return NextResponse.json(
+      { error: match[0].trim(), code: "account_merged", remedy: "Choose the surviving account; a merged account accepts no new postings or references." },
+      { status: 422 },
+    );
+  }
+  return null;
+}
+
 function refusalConflicts(error: Error): boolean {
   const record = error as unknown as Record<string, unknown>;
   if (record["status"] === 409 || record["statusCode"] === 409) return true;
@@ -155,6 +180,8 @@ function refusalConflicts(error: Error): boolean {
  */
 export function postingRefusal(error: unknown): NextResponse | null {
   if (!(error instanceof Error)) return null;
+  const merged = mergedAccountStorageRefusal(error);
+  if (merged) return merged;
   const family = REFUSAL_FAMILIES.find((entry) => entry.match(error));
   if (!family) return null;
   const record = error as unknown as Record<string, unknown>;

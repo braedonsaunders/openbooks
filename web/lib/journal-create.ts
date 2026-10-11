@@ -12,6 +12,7 @@ import { loadJournalDoc } from "./journals";
 import { isUuid } from "./list-params";
 import { segmentRegistry, validateExtraDims } from "./segments";
 import { JournalBookError, resolveJournalBookTarget } from "./journal-book";
+import { assertDocumentSegmentDependencies } from "@openbooks/engine/organization/segment-dependencies";
 
 /**
  * The only first-party writer for a new manual journal with lines.
@@ -354,6 +355,8 @@ export async function createManualJournal(input: {
                   '1', ${line.amount}, ${line.amount}, ${line.partyId}, ${line.departmentId}, ${line.projectId},
                   ${line.subsidiaryId}, ${JSON.stringify(line.extraDims)}::jsonb, ${JSON.stringify(line.custom)}::jsonb)`);
       }
+      // Segment value dependencies on the saved lines, as posting will read them.
+      await assertDocumentSegmentDependencies(tx, orgId, requestId);
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
         values (${orgId}, 'documents', ${requestId}, 'insert',

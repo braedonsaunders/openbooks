@@ -526,6 +526,7 @@ const JOURNAL: RecordTypeMeta = {
         // Standalone migration true-ups remain visible in the journal list.
         ["migration", "migration"],
         ["book_opening", "bookOpening"],
+        ["account_merge", "accountMerge"],
       ].map(([value, key]) => ({ value: value!, labelKey: `journal.origins.${key}` })),
     },
     {

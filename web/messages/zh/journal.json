@@ -29,7 +29,8 @@
     "manufacturing": "生产制造",
     "opening": "期初",
     "bookOpening": "账簿期初",
-    "expenseAmortization": "费用摊销"
+    "expenseAmortization": "费用摊销",
+    "accountMerge": "科目合并"
   },
   "detail": {
     "notFound": "未找到分录",

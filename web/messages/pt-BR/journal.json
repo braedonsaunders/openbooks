@@ -29,7 +29,8 @@
     "manufacturing": "Manufatura",
     "opening": "Abertura",
     "bookOpening": "Abertura de livro",
-    "expenseAmortization": "Apropriação de despesas"
+    "expenseAmortization": "Apropriação de despesas",
+    "accountMerge": "Mesclagem de contas"
   },
   "detail": {
     "notFound": "Lançamento não encontrado",

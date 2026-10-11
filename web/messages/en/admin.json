@@ -3781,6 +3781,22 @@
       "expense-amortization-templates": {
         "title": "Amortization Templates",
         "description": "How prepaid and deferred expenses release to expense: method, term, deferral account and default destination. Effective-dated by code."
+      },
+      "accounting-contexts": {
+        "title": "Accounting contexts",
+        "description": "Named contexts, such as a local statutory chart, whose localized account numbers and names reports can be run under."
+      },
+      "accounting-context-defaults": {
+        "title": "Defaults",
+        "description": "Subsidiaries, or every subsidiary of a country, that report under this context unless a report names another."
+      },
+      "account-localizations": {
+        "title": "Localized accounts",
+        "description": "Effective-dated localized number and name per account, optionally for one subsidiary. A localized number belongs to one account per scope and period."
+      },
+      "segment-value-dependencies": {
+        "title": "Dependencies",
+        "description": "Values of this segment allowed only with listed values of a controlling segment. Each row allows one controlling value; a value without rows stays unrestricted."
       }
     },
     "fields": {
@@ -4438,7 +4454,13 @@
       "amortizationAddPeriod": "Add period",
       "amortizationPercent": "Percentage of the amount",
       "amortizationDeferralAccount": "Deferral (prepaid) account",
-      "amortizationDestinationAccount": "Default destination account"
+      "amortizationDestinationAccount": "Default destination account",
+      "contextId": "Accounting context",
+      "localizedNumber": "Localized number",
+      "localizedName": "Localized name",
+      "valueId": "Value",
+      "controllingSegmentId": "Controlling segment",
+      "allowedValueId": "Allowed with"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Days between the newest usable rate and the period end beyond which revaluation and consolidation refuse the rate. Closing rates count from the date of the period-end spot rate; average rates from the newest quote averaged. Default when no policy is set: 31 days.",
@@ -4639,7 +4661,10 @@
       "amortizationPercentages": "One percentage per period, in order, summing to exactly 100.",
       "amortizationPeriodOffset": "Periods to wait after the start before amortization begins; 0 starts in the first period.",
       "amortizationDeferralAccount": "The current or other asset account the cost is held in until it amortizes.",
-      "amortizationDestinationAccount": "Blank amortizes each line into its own expense account."
+      "amortizationDestinationAccount": "Blank amortizes each line into its own expense account.",
+      "contextDefaultScope": "Choose a subsidiary, or leave it empty and choose a country to cover every subsidiary there.",
+      "localizationSubsidiary": "Leave empty to apply to every subsidiary; a subsidiary-specific localization takes precedence in that subsidiary's reports.",
+      "allowedValue": "One allowed value per row. Add a row for each value of the controlling segment this value may be used with."
     },
     "options": {
       "withholdingCondominiumPayer": "Condominium payer",
@@ -7507,6 +7532,19 @@
         "adjustment_only": "Adjustment only",
         "full": "Full"
       }
+    },
+    "segmentDependencies": {
+      "navTitle": "Dependency exceptions",
+      "title": "Segment dependency exceptions",
+      "description": "{count, plural, =0 {No open document breaks a dependency rule.} one {# open document line breaks a dependency rule effective on its date.} other {# open document lines break a dependency rule effective on their date.}}",
+      "empty": "No open document breaks a dependency rule.",
+      "columns": {
+        "document": "Document",
+        "date": "Date",
+        "status": "Status",
+        "line": "Line",
+        "problem": "Problem"
+      }
     }
   },
   "flows": {
@@ -8258,6 +8296,18 @@
     "expenseAmortizationAutoRun": {
       "title": "Automatic amortization",
       "description": "Posts due amortization periods on the scheduler as they end, without an operator run."
+    },
+    "accountMerges": {
+      "title": "Account merges",
+      "description": "Merge a duplicate account into a surviving account: preview every refusal and consequence, move the balance with a reclass entry and the configuration with it, and keep posted history intact."
+    },
+    "accountingContexts": {
+      "title": "Accounting contexts",
+      "description": "Present reports under localized account numbers and names, such as a local statutory chart, per context and optionally per subsidiary or country."
+    },
+    "segmentDependencies": {
+      "title": "Segment dependencies",
+      "description": "Allow a segment value only with listed values of another segment, such as a class only with certain departments, enforced when documents are saved and posted."
     }
   },
   "backupsManager": {

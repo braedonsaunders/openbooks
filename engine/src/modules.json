@@ -148,10 +148,23 @@
         "records"
       ]
     },
+    "chart": {
+      "description": "Chart of accounts governance: account merges with their reference catalog and reclass, accounting contexts and localized account labels, and the chart's posting policies.",
+      "dependsOn": [
+        "flows",
+        "journal",
+        "money",
+        "organization",
+        "periods",
+        "platform",
+        "records"
+      ]
+    },
     "composition": {
       "description": "Composition root: installs the runtime seams (script journal writer first) that lower modules cannot import without cycling.",
       "dependsOn": [
         "allocations",
+        "chart",
         "close",
         "flows",
         "hrm",

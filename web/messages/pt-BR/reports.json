@@ -3224,7 +3224,8 @@
       "manufacturing": "Manufatura",
       "opening": "Abertura",
       "book_opening": "Saldos de abertura do livro",
-      "expense_amortization": "Apropriação de despesas"
+      "expense_amortization": "Apropriação de despesas",
+      "account_merge": "Mesclagem de contas"
     },
     "columns": {
       "detail": "Parte / memorando"
@@ -3400,5 +3401,12 @@
       "compare": "Saldo {book} ({currency})",
       "difference": "Diferença"
     }
+  },
+  "accountingContext": {
+    "label": "Contexto contábil",
+    "default": "Padrão da subsidiária",
+    "base": "Plano de contas base",
+    "legend": "Contexto contábil: {context}; {marker} indica uma conta exibida com o número e nome do plano base",
+    "blockedTitle": "Este contexto contábil não pode rotular as contas"
   }
 }

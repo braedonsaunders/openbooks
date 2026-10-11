@@ -3204,7 +3204,8 @@
       "manufacturing": "Fabrication",
       "opening": "Ouverture",
       "book_opening": "Soldes d’ouverture du livre",
-      "expense_amortization": "Étalement des charges"
+      "expense_amortization": "Étalement des charges",
+      "account_merge": "Fusion de comptes"
     },
     "columns": {
       "detail": "Tiers / mémo"
@@ -3400,5 +3401,12 @@
       "compare": "Solde {book} ({currency})",
       "difference": "Écart"
     }
+  },
+  "accountingContext": {
+    "label": "Contexte comptable",
+    "default": "Par défaut de la filiale",
+    "base": "Plan comptable de base",
+    "legend": "Contexte comptable : {context} ; {marker} signale un compte affiché avec le numéro et le nom du plan de base",
+    "blockedTitle": "Ce contexte comptable ne peut pas libeller les comptes"
   }
 }

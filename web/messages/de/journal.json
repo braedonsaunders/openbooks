@@ -29,7 +29,8 @@
     "manufacturing": "Fertigung",
     "opening": "Eröffnung",
     "bookOpening": "Buch-Eröffnung",
-    "expenseAmortization": "Aufwandsabgrenzung"
+    "expenseAmortization": "Aufwandsabgrenzung",
+    "accountMerge": "Kontenzusammenführung"
   },
   "detail": {
     "notFound": "Buchung nicht gefunden",

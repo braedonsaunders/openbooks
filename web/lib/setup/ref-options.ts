@@ -262,6 +262,43 @@ export async function loadEntityOptions(
        order by sv.code nulls last, sv.name`);
     return funds.rows as RefOption[]
   }
+  if (source === 'chart-accounts') {
+    // Every account of the chart — summary and inactive accounts included —
+    // because presentation (localized labels) covers the whole chart.
+    const accounts = await db.execute<RefOption>(sql`
+      select id::text as value, concat_ws(' · ', number, name) as label, type as "accountType"
+        from accounts where org_id = ${orgId}
+       order by number nulls last, name, id`)
+    return accounts.rows
+  }
+  if (source === 'all-segment-definitions') {
+    return (await db.execute<RefOption>(sql`
+      select id::text as value, name as label from segment_definitions
+       where org_id = ${orgId} and is_active order by sort_order, name, id`)).rows
+  }
+  if (source === 'segment-dimension-values') {
+    // Values of every active segment, built-in and custom alike, scoped to
+    // their segment definition so a picker offers only that segment's values.
+    return (await db.execute<RefOption>(sql`
+      select v.id::text as value, concat_ws(' · ', v.code, v.name) as label, sd.id::text as "scopeValue"
+        from segment_definitions sd
+        join lateral (
+          select sv.id, sv.code, sv.name from segment_values sv
+           where sd.source_kind = 'custom' and sv.org_id = sd.org_id and sv.segment_id = sd.id
+          union all select d.id, d.code, d.name from departments d
+           where sd.storage_column = 'department_id' and d.org_id = sd.org_id
+          union all select c.id, c.code, c.name from classes c
+           where sd.storage_column = 'class_id' and c.org_id = sd.org_id
+          union all select l.id, l.code, l.name from locations l
+           where sd.storage_column = 'location_id' and l.org_id = sd.org_id
+          union all select p.id, p.code, p.name from projects p
+           where sd.storage_column = 'project_id' and p.org_id = sd.org_id
+          union all select s.id, null::text, s.name from subsidiaries s
+           where sd.storage_column = 'subsidiary_id' and s.org_id = sd.org_id
+        ) v on true
+       where sd.org_id = ${orgId} and sd.is_active
+       order by sd.sort_order, v.code nulls last, v.name, v.id`)).rows
+  }
   const target = SETUP_ENTITY_BY_KEY.get(source)
   if (!target) return []
   const orgFilter = target.orgScoped ? sql` where org_id = ${orgId}` : sql``

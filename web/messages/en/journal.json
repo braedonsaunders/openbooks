@@ -29,7 +29,8 @@
     "manufacturing": "Manufacturing",
     "opening": "Opening",
     "bookOpening": "Book opening",
-    "expenseAmortization": "Expense amortization"
+    "expenseAmortization": "Expense amortization",
+    "accountMerge": "Account merge"
   },
   "detail": {
     "notFound": "Entry not found",

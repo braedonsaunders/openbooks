@@ -29,7 +29,8 @@
     "manufacturing": "Fabricación",
     "opening": "Apertura",
     "bookOpening": "Apertura de libro",
-    "expenseAmortization": "Amortización de gastos"
+    "expenseAmortization": "Amortización de gastos",
+    "accountMerge": "Fusión de cuentas"
   },
   "detail": {
     "notFound": "Asiento no encontrado",

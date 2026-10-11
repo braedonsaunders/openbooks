@@ -3781,6 +3781,22 @@
       "expense-amortization-templates": {
         "title": "Modelos de apropriação",
         "description": "Como despesas antecipadas e diferidas são apropriadas: método, prazo, conta de diferimento e destino padrão. Com vigência por código."
+      },
+      "accounting-contexts": {
+        "title": "Contextos contábeis",
+        "description": "Contextos nomeados, como um plano de contas estatutário local, sob cujos números e nomes de contas localizados os relatórios podem ser executados."
+      },
+      "accounting-context-defaults": {
+        "title": "Padrões",
+        "description": "Subsidiárias, ou todas as subsidiárias de um país, que usam este contexto, salvo se um relatório indicar outro."
+      },
+      "account-localizations": {
+        "title": "Contas localizadas",
+        "description": "Número e nome localizados por conta, com data de vigência e opcionalmente para uma subsidiária. Um número localizado pertence a uma única conta por escopo e período."
+      },
+      "segment-value-dependencies": {
+        "title": "Dependências",
+        "description": "Valores deste segmento permitidos apenas com valores listados de um segmento de controle. Cada linha permite um valor de controle; um valor sem linhas permanece irrestrito."
       }
     },
     "fields": {
@@ -4438,7 +4454,13 @@
       "amortizationAddPeriod": "Adicionar período",
       "amortizationPercent": "Percentual do valor",
       "amortizationDeferralAccount": "Conta de diferimento (despesas antecipadas)",
-      "amortizationDestinationAccount": "Conta de destino padrão"
+      "amortizationDestinationAccount": "Conta de destino padrão",
+      "contextId": "Contexto contábil",
+      "localizedNumber": "Número localizado",
+      "localizedName": "Nome localizado",
+      "valueId": "Valor",
+      "controllingSegmentId": "Segmento de controle",
+      "allowedValueId": "Permitido com"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Dias entre a taxa utilizável mais recente e o fim do período a partir dos quais a reavaliação e a consolidação recusam a taxa. Taxas de fechamento contam a partir da data da taxa à vista de fim de período; taxas médias, a partir da cotação mais recente incluída na média. Padrão sem política: 31 dias.",
@@ -4639,7 +4661,10 @@
       "amortizationPercentages": "Um percentual por período, em ordem, somando exatamente 100.",
       "amortizationPeriodOffset": "Períodos de espera entre o início e a primeira apropriação; 0 começa no primeiro período.",
       "amortizationDeferralAccount": "A conta de ativo circulante ou outro ativo em que a despesa fica até ser apropriada.",
-      "amortizationDestinationAccount": "Em branco, cada linha é apropriada na sua própria conta de despesa."
+      "amortizationDestinationAccount": "Em branco, cada linha é apropriada na sua própria conta de despesa.",
+      "contextDefaultScope": "Escolha uma subsidiária, ou deixe em branco e escolha um país para abranger todas as suas subsidiárias.",
+      "localizationSubsidiary": "Deixe em branco para aplicar a todas as subsidiárias; uma localização específica de subsidiária prevalece nos relatórios dela.",
+      "allowedValue": "Um valor permitido por linha. Adicione uma linha para cada valor do segmento de controle com o qual este valor pode ser usado."
     },
     "options": {
       "withholdingCondominiumPayer": "Pagador: condomínio",
@@ -7507,6 +7532,19 @@
         "adjustment_only": "Somente ajustes",
         "full": "Completo"
       }
+    },
+    "segmentDependencies": {
+      "navTitle": "Exceções de dependências",
+      "title": "Exceções de dependências de segmentos",
+      "description": "{count, plural, =0 {Nenhum documento em aberto viola uma regra de dependência.} one {# linha de documento em aberto viola uma regra vigente na sua data.} other {# linhas de documentos em aberto violam uma regra vigente na sua data.}}",
+      "empty": "Nenhum documento em aberto viola uma regra de dependência.",
+      "columns": {
+        "document": "Documento",
+        "date": "Data",
+        "status": "Situação",
+        "line": "Linha",
+        "problem": "Problema"
+      }
     }
   },
   "flows": {
@@ -8258,6 +8296,18 @@
     "expenseAmortizationAutoRun": {
       "title": "Apropriação automática",
       "description": "Lança os períodos de apropriação vencidos assim que terminam, pelo agendador, sem execução manual."
+    },
+    "accountMerges": {
+      "title": "Mesclagem de contas",
+      "description": "Mescle uma conta duplicada em uma conta remanescente: visualize cada recusa e consequência, transfira o saldo com um lançamento de reclassificação e as configurações junto, mantendo o histórico lançado intacto."
+    },
+    "accountingContexts": {
+      "title": "Contextos contábeis",
+      "description": "Apresente relatórios com números e nomes de contas localizados, como um plano de contas estatutário local, por contexto e, opcionalmente, por subsidiária ou país."
+    },
+    "segmentDependencies": {
+      "title": "Dependências de segmentos",
+      "description": "Permita um valor de segmento apenas com valores listados de outro segmento, como uma classe somente com determinados departamentos; aplicado ao salvar e lançar documentos."
     }
   },
   "backupsManager": {

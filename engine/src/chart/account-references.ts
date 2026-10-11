@@ -1,0 +1,295 @@
+import { sql, type SQL } from "drizzle-orm";
+import type { SqlExecutor } from "../platform/db.ts";
+
+/**
+ * How each reference to an account behaves when the account is merged.
+ *
+ * - `redirect`: configuration that drives future postings (item and
+ *   category defaults, tax codes, party roles, open subledger records).
+ *   It moves to the surviving account, audited before/after.
+ * - `history`: recorded facts (posted lines, imported statements, issued
+ *   pay stubs). They keep the merged account; the merge never rewrites them.
+ *
+ * A rule may narrow a redirect to rows that are still open (`redirectWhere`)
+ * — every other row is history — and may name rows that block the merge
+ * (`blockWhere`) because they are in flight and can neither move nor stay.
+ *
+ * Every foreign key to `accounts` is discovered from the live catalog at
+ * merge time. A referencing column with no rule here refuses the merge when
+ * it actually references the source, so a newly added table can never be
+ * silently skipped (and a catalog test names any unclassified column).
+ */
+export interface AccountReferenceRule {
+  label: string;
+  disposition: "redirect" | "history";
+  /** Only rows matching this predicate (row alias `r`) move; the rest stay as history. */
+  redirectWhere?: SQL;
+  /** Rows matching this predicate (row alias `r`) block the merge with this remedy. */
+  blockWhere?: { predicate: SQL; remedy: string };
+}
+
+const documentStatus = (statuses: string[], via: "document_id" | "document_line_id") =>
+  via === "document_id"
+    ? sql`exists (select 1 from documents d where d.org_id = r.org_id and d.id = r.document_id and d.status in ${statuses})`
+    : sql`exists (select 1 from document_lines dl join documents d on d.org_id = dl.org_id and d.id = dl.document_id
+                   where dl.org_id = r.org_id and dl.id = r.document_line_id and d.status in ${statuses})`;
+
+const DOCUMENT_IN_FLIGHT_REMEDY =
+  "Post these documents, or return them to draft, before merging the account; drafts move to the surviving account automatically.";
+
+const draftDocumentRule = (label: string, via: "document_id" | "document_line_id"): AccountReferenceRule => ({
+  label,
+  disposition: "redirect",
+  redirectWhere: documentStatus(["draft"], via),
+  blockWhere: { predicate: documentStatus(["pending_approval", "approved"], via), remedy: DOCUMENT_IN_FLIGHT_REMEDY },
+});
+
+const config = (label: string): AccountReferenceRule => ({ label, disposition: "redirect" });
+const history = (label: string): AccountReferenceRule => ({ label, disposition: "history" });
+
+const allocationVersionStatus = (statuses: string[], direct: boolean) =>
+  direct
+    ? sql`r.status in ${statuses}`
+    : sql`exists (select 1 from allocation_rule_versions v where v.org_id = r.org_id and v.id = r.version_id and v.status in ${statuses})`;
+
+const ALLOCATION_PUBLISHED_REMEDY =
+  "Draft a new version of the allocation rule that uses the surviving account, publish it, and retire the current version before merging.";
+
+/** Rules for every known `table.column` foreign key to accounts. */
+export const ACCOUNT_REFERENCE_RULES: Readonly<Record<string, AccountReferenceRule>> = {
+  // Documents: drafts move; in-flight approvals block; posted and voided documents are history.
+  "document_lines.account_id": draftDocumentRule("Document lines", "document_id"),
+  "document_lines.recovery_account_id": draftDocumentRule("Document line recovery accounts", "document_id"),
+  "document_line_tax_components.collected_account_id": draftDocumentRule("Document tax components (collected)", "document_line_id"),
+  "document_line_tax_components.paid_account_id": draftDocumentRule("Document tax components (paid)", "document_line_id"),
+  "document_line_tax_components.withholding_account_id": draftDocumentRule("Document tax components (withholding)", "document_line_id"),
+  "document_tenders.account_id": draftDocumentRule("Cash sale tenders", "document_id"),
+
+  // Allocation rules: draft versions move; a published version blocks; retired versions are history.
+  "allocation_rule_versions.offset_account_id": {
+    label: "Allocation rule offsets",
+    disposition: "redirect",
+    redirectWhere: allocationVersionStatus(["draft"], true),
+    blockWhere: { predicate: allocationVersionStatus(["published"], true), remedy: ALLOCATION_PUBLISHED_REMEDY },
+  },
+  "allocation_rule_targets.target_account_id": {
+    label: "Allocation rule targets",
+    disposition: "redirect",
+    redirectWhere: allocationVersionStatus(["draft"], false),
+    blockWhere: { predicate: allocationVersionStatus(["published"], false), remedy: ALLOCATION_PUBLISHED_REMEDY },
+  },
+
+  // Open subledger records move; settled ones are history.
+  "encumbrances.account_id": { label: "Encumbrances", disposition: "redirect", redirectWhere: sql`r.status = 'open'` },
+  "fixed_assets.asset_account_id": { label: "Fixed assets (asset)", disposition: "redirect", redirectWhere: sql`r.status in ('draft', 'in_service', 'fully_depreciated')` },
+  "fixed_assets.accumulated_depreciation_account_id": { label: "Fixed assets (accumulated depreciation)", disposition: "redirect", redirectWhere: sql`r.status in ('draft', 'in_service', 'fully_depreciated')` },
+  "fixed_assets.depreciation_expense_account_id": { label: "Fixed assets (depreciation expense)", disposition: "redirect", redirectWhere: sql`r.status in ('draft', 'in_service', 'fully_depreciated')` },
+  "lease_agreements.cost_clearing_account_id": { label: "Lease agreements", disposition: "redirect", redirectWhere: sql`r.status in ('draft', 'active')` },
+  "change_orders.income_account_id": { label: "Change orders", disposition: "redirect", redirectWhere: sql`r.status in ('draft', 'approved')` },
+  "fund_releases.release_account_id": {
+    label: "Fund releases",
+    disposition: "redirect",
+    redirectWhere: sql`r.status = 'draft'`,
+    blockWhere: { predicate: sql`r.status = 'pending_approval'`, remedy: "Decide the pending fund releases before merging the account." },
+  },
+  "payment_runs.bank_account_id": {
+    label: "Payment runs",
+    disposition: "redirect",
+    redirectWhere: sql`r.status = 'draft'`,
+    blockWhere: {
+      predicate: sql`r.status in ('pending_approval', 'approved', 'processing', 'generated', 'delivered', 'partially_failed')`,
+      remedy: "Complete or cancel the payment runs in progress before merging the bank account.",
+    },
+  },
+  "payment_links.bank_account_id": { label: "Payment links", disposition: "redirect", redirectWhere: sql`r.status = 'active'` },
+  "reconciliations.account_id": {
+    label: "Bank reconciliations",
+    disposition: "history",
+    blockWhere: { predicate: sql`r.status <> 'signed_off'`, remedy: "Finish and sign off, or discard, the open reconciliation of the source account before merging." },
+  },
+
+  // Posted and imported facts.
+  "pay_stub_lines.expense_account_id": history("Pay stub lines (expense)"),
+  "pay_stub_lines.liability_account_id": history("Pay stub lines (liability)"),
+  "pay_stub_lines.non_cash_account_id": history("Pay stub lines (non-cash)"),
+  "bank_statements.account_id": history("Bank statements"),
+  "bank_statement_lines.account_id": history("Bank statement lines"),
+  "source_reconciliation_state.account_id": history("Source reconciliation evidence"),
+  "security_deposit_transactions.bank_account_id": history("Security deposit transactions (bank)"),
+  "security_deposit_transactions.offset_account_id": history("Security deposit transactions (offset)"),
+  "psp_settlement_batches.bank_account_id": history("Payment processor settlements (bank)"),
+  "psp_settlement_batches.fee_account_id": history("Payment processor settlements (fees)"),
+  "psp_settlement_batches.dispute_account_id": history("Payment processor settlements (disputes)"),
+  "psp_settlement_batches.fx_account_id": history("Payment processor settlements (FX)"),
+  "psp_settlement_batches.clearing_account_id": history("Payment processor settlements (clearing)"),
+  "mfg_subcontract_service_bills.wip_account_id": history("Subcontract service bills"),
+
+  // Configuration that drives future postings.
+  "allocation_rules.offset_account_id": config("Allocation rules (offset)"),
+  "asset_categories.asset_account_id": config("Asset categories (asset)"),
+  "asset_categories.accumulated_depreciation_account_id": config("Asset categories (accumulated depreciation)"),
+  "asset_categories.depreciation_expense_account_id": config("Asset categories (depreciation expense)"),
+  "asset_categories.gain_loss_account_id": config("Asset categories (gain or loss)"),
+  "budget_lines.account_id": config("Budget lines"),
+  "customer_roles.ar_account_id": config("Customer receivable accounts"),
+  "vendor_roles.ap_account_id": config("Vendor payable accounts"),
+  "vendor_roles.default_expense_account_id": config("Vendor default expense accounts"),
+  "employee_roles.expense_account_id": config("Employee expense accounts"),
+  "entitlement_plans.liability_account_id": config("Entitlement plans"),
+  "fund_pairs.due_from_account_id": config("Interfund pairs (due from)"),
+  "fund_pairs.due_to_account_id": config("Interfund pairs (due to)"),
+  "intercompany_pairs.due_from_account_id": config("Intercompany pairs (due from)"),
+  "intercompany_pairs.due_to_account_id": config("Intercompany pairs (due to)"),
+  "hrm_benefit_program_sources.account_id": config("Benefit program source accounts"),
+  "information_return_box_rules.account_id": config("Information return box rules"),
+  "item_inventory_profiles.adjustment_account_id": config("Item inventory profiles (adjustment)"),
+  "item_inventory_profiles.asset_account_id": config("Item inventory profiles (asset)"),
+  "item_inventory_profiles.cogs_account_id": config("Item inventory profiles (cost of goods sold)"),
+  "item_inventory_profiles.received_not_billed_account_id": config("Item inventory profiles (received not billed)"),
+  "item_inventory_profiles.variance_account_id": config("Item inventory profiles (variance)"),
+  "items.cost_recovery_account_id": config("Items (cost recovery)"),
+  "items.deferred_account_id": config("Items (deferred revenue)"),
+  "items.expense_account_id": config("Items (expense)"),
+  "items.income_account_id": config("Items (income)"),
+  "items.payroll_expense_account_id": config("Items (payroll expense)"),
+  "lease_charges.income_account_id": config("Lease charges"),
+  "managed_properties.default_bank_account_id": config("Managed properties (bank)"),
+  "managed_properties.cam_income_account_id": config("Managed properties (CAM income)"),
+  "managed_properties.deposit_liability_account_id": config("Managed properties (deposit liability)"),
+  "managed_properties.rent_income_account_id": config("Managed properties (rent income)"),
+  "pay_components.expense_account_id": config("Pay components (expense)"),
+  "pay_components.liability_account_id": config("Pay components (liability)"),
+  "pay_components.non_cash_account_id": config("Pay components (non-cash)"),
+  "pay_component_department_expenses.expense_account_id": config("Pay component department expense accounts"),
+  "payment_bank_profiles.bank_account_id": config("Payment bank profiles"),
+  "payment_cards.liability_account_id": config("Payment cards"),
+  "payment_surcharge_rules.fee_income_account_id": config("Payment surcharge rules"),
+  "performance_obligations.deferred_account_id": config("Performance obligations (deferred)"),
+  "performance_obligations.recognized_account_id": config("Performance obligations (recognized)"),
+  "provision_obligations.expense_account_id": config("Provisions (expense)"),
+  "provision_obligations.liability_account_id": config("Provisions (liability)"),
+  "psp_provider_configs.default_bank_account_id": config("Payment processor settings (bank)"),
+  "recognition_rules.deferred_account_id": config("Revenue recognition rules (deferred)"),
+  "recognition_rules.recognized_account_id": config("Revenue recognition rules (recognized)"),
+  "sftp_import_schedules.account_id": config("Statement import schedules"),
+  "bank_feed_connections.account_id": config("Bank feed connections"),
+  "subcontract_sov_lines.expense_account_id": config("Subcontract schedule of values"),
+  "subscription_components.income_account_id": config("Subscription components"),
+  "subscription_plan_version_components.income_account_id": config("Subscription plan components"),
+  "subsidiary_ownership_interests.distribution_income_account_id": config("Ownership interests (distribution income)"),
+  "subsidiary_ownership_interests.fair_value_adjustment_account_id": config("Ownership interests (fair value adjustment)"),
+  "subsidiary_ownership_interests.distribution_account_id": config("Ownership interests (distributions)"),
+  "subsidiary_ownership_interests.equity_income_account_id": config("Ownership interests (equity income)"),
+  "subsidiary_ownership_interests.goodwill_account_id": config("Ownership interests (goodwill)"),
+  "subsidiary_ownership_interests.investment_account_id": config("Ownership interests (investment)"),
+  "subsidiary_ownership_interests.nci_equity_account_id": config("Ownership interests (NCI equity)"),
+  "subsidiary_ownership_interests.nci_income_account_id": config("Ownership interests (NCI income)"),
+  "tax_codes.collected_account_id": config("Tax codes (collected)"),
+  "tax_codes.paid_account_id": config("Tax codes (paid)"),
+  "tax_codes.withholding_account_id": config("Tax codes (withholding)"),
+  "wip_prebill_lines.income_account_id": config("Pre-bill lines"),
+  "promotions.discount_account_id": config("Promotions"),
+  "restocking_fee_policies.income_account_id": config("Restocking fee policies"),
+  "sales_channel_account_maps.account_id": config("Sales channel account maps"),
+  "stored_value_programs.liability_account_id": config("Stored value programs (liability)"),
+  "stored_value_programs.breakage_income_account_id": config("Stored value programs (breakage)"),
+  "stored_value_accounts.liability_account_id": config("Stored value accounts"),
+  "contract_cost_policies.asset_account_id": config("Contract cost policies (asset)"),
+  "contract_cost_policies.amortization_expense_account_id": config("Contract cost policies (amortization)"),
+  "shipping_settings.shipping_expense_account_id": config("Shipping settings (expense)"),
+  "shipping_settings.carrier_payable_account_id": config("Shipping settings (carrier payable)"),
+  "marketplace_facilitators.clearing_account_id": config("Marketplace facilitators"),
+  "internal_billing_rules.debit_account_id": config("Internal billing rules (debit)"),
+  "internal_billing_rules.credit_account_id": config("Internal billing rules (credit)"),
+  "project_revenue_accruals.unbilled_account_id": config("Project revenue accruals (unbilled)"),
+  "project_revenue_accruals.revenue_account_id": config("Project revenue accruals (revenue)"),
+  "withholding_enrollments.liability_account_id": config("Contractor withholding enrollments"),
+  "mfg_subcontract_service.wip_account_id": config("Subcontract service work in process"),
+};
+
+/**
+ * Columns the merge owns itself rather than through a rule: the chart's own
+ * hierarchy and merge links, the merge record, localizations kept for the
+ * source's historical presentation, and journal lines (balances move by
+ * reclass; drafts move explicitly).
+ */
+export const ACCOUNT_REFERENCE_OWNED: ReadonlySet<string> = new Set([
+  "accounts.parent_id",
+  "accounts.merged_into_id",
+  "account_merges.source_account_id",
+  "account_merges.target_account_id",
+  "account_localizations.account_id",
+  "journal_lines.account_id",
+]);
+
+/**
+ * JSON configuration that names accounts by id: control-account roles,
+ * saved report and list filters, bank and capture rules. A match is an exact
+ * JSON string value equal to the account id, so only genuine references move.
+ * `scope` restricts the rows considered (alias `r`).
+ */
+export interface AccountJsonReference {
+  key: string;
+  label: string;
+  table: string;
+  column: string;
+  /** Row filter beyond the organization (alias `r`). */
+  scope?: SQL;
+  /** Column holding the organization id; `id` for the organization row itself. */
+  orgColumn: "org_id" | "id";
+  /** Nested key holding the references; the whole column when omitted. */
+  path?: string;
+  /** Rows matching this predicate block the merge with this remedy. */
+  blockWhere?: { predicate: SQL; remedy: string };
+}
+
+export const ACCOUNT_JSON_REFERENCES: readonly AccountJsonReference[] = [
+  { key: "orgs.settings.controlAccounts", label: "Company control accounts", table: "orgs", column: "settings", orgColumn: "id", path: "controlAccounts" },
+  { key: "subsidiaries.control_accounts", label: "Subsidiary control accounts", table: "subsidiaries", column: "control_accounts", orgColumn: "org_id" },
+  { key: "saved_reports.params", label: "Saved report filters", table: "saved_reports", column: "params", orgColumn: "org_id" },
+  { key: "saved_views.query", label: "Saved list views", table: "saved_views", column: "query", orgColumn: "org_id" },
+  { key: "bank_match_rules.outcome", label: "Bank matching rules", table: "bank_match_rules", column: "outcome", orgColumn: "org_id" },
+  { key: "ap_capture_rules.output", label: "Bill capture rules", table: "ap_capture_rules", column: "output", orgColumn: "org_id" },
+  { key: "cam_pools.expense_account_ids", label: "CAM expense pools", table: "cam_pools", column: "expense_account_ids", orgColumn: "org_id" },
+  {
+    key: "allocation_rule_versions.account_scope",
+    label: "Allocation rule account scopes",
+    table: "allocation_rule_versions",
+    column: "account_scope",
+    orgColumn: "org_id",
+    scope: sql`r.status in ('draft', 'published')`,
+    blockWhere: { predicate: sql`r.status = 'published'`, remedy: ALLOCATION_PUBLISHED_REMEDY },
+  },
+];
+
+/** One foreign-key column referencing accounts, as found in the live catalog. */
+export interface AccountReferenceColumn {
+  table: string;
+  column: string;
+}
+
+/**
+ * Every single-account foreign key column into `accounts` in the public
+ * schema, excluding the organization half of composite keys.
+ */
+export async function discoverAccountReferenceColumns(executor: SqlExecutor): Promise<AccountReferenceColumn[]> {
+  const rows = (await executor.execute<{ table_name: string; column_name: string }>(sql`
+    select distinct cls.relname::text as table_name, a.attname::text as column_name
+      from pg_constraint c
+      join pg_class cls on cls.oid = c.conrelid
+      join pg_namespace n on n.oid = cls.relnamespace and n.nspname = 'public'
+      join lateral unnest(c.conkey) as k(attnum) on true
+      join pg_attribute a on a.attrelid = c.conrelid and a.attnum = k.attnum
+     where c.contype = 'f'
+       and c.confrelid = 'public.accounts'::regclass
+       and a.attname <> 'org_id'
+     order by 1, 2`)).rows;
+  return rows.map((row) => ({ table: row.table_name, column: row.column_name }));
+}
+
+/** The classification of a discovered column: a rule, merge-owned, or unclassified. */
+export function classifyAccountReference(column: AccountReferenceColumn): AccountReferenceRule | "owned" | null {
+  const key = `${column.table}.${column.column}`;
+  if (ACCOUNT_REFERENCE_OWNED.has(key)) return "owned";
+  return ACCOUNT_REFERENCE_RULES[key] ?? null;
+}

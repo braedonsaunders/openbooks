@@ -6,6 +6,7 @@ import type { DocArticle, DocCategory, DocSection } from './types'
 import { allocations } from './articles/allocations'
 import { intercompany } from './articles/intercompany'
 import { multiBookAccounting } from './articles/multi-book-accounting'
+import { chartOfAccountsGovernance } from './articles/chart-of-accounts-governance'
 import { welcome } from './articles/welcome'
 import { projectTypes } from './articles/project-types'
 import { overheadCosting } from './articles/overhead-costing'
@@ -263,6 +264,7 @@ const ARTICLE_SECTION_BY_SLUG: Record<string, string> = {
   'fixed-assets-depreciation': 'accounting-advanced',
   'allocations': 'accounting-advanced',
   intercompany: 'accounting-advanced',
+  'chart-of-accounts-governance': 'accounting-ledger',
   'sales-workflow': 'transactions-daily',
   'electronic-invoicing': 'transactions-daily',
   'purchasing-workflow': 'transactions-daily',
@@ -420,6 +422,7 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   auditLog,
   fileCabinet,
   issueReporting,
+  chartOfAccountsGovernance,
 ]
 
 export const DOC_ARTICLES: DocArticle[] = RAW_DOC_ARTICLES.map((article) => {

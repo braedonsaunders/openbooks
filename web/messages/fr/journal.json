@@ -29,7 +29,8 @@
     "manufacturing": "Fabrication",
     "opening": "Ouverture",
     "bookOpening": "Ouverture de livre",
-    "expenseAmortization": "Étalement des charges"
+    "expenseAmortization": "Étalement des charges",
+    "accountMerge": "Fusion de comptes"
   },
   "detail": {
     "notFound": "Écriture introuvable",

@@ -423,6 +423,8 @@ async function writeEntry(
       bookId: input.bookId,
       sourceDocumentId: input.sourceDocumentId ?? null,
       regeneration: replayAuthorized,
+      origin: input.origin,
+      reversesEntryId: input.reversesEntryId ?? null,
     },
     lines,
   );

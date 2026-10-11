@@ -3224,7 +3224,8 @@
       "manufacturing": "Manufacturing",
       "opening": "Opening",
       "book_opening": "Book opening balances",
-      "expense_amortization": "Expense amortization"
+      "expense_amortization": "Expense amortization",
+      "account_merge": "Account merge"
     },
     "columns": {
       "detail": "Party / memo"
@@ -3400,5 +3401,12 @@
       "compare": "{book} balance ({currency})",
       "difference": "Difference"
     }
+  },
+  "accountingContext": {
+    "label": "Accounting context",
+    "default": "Subsidiary default",
+    "base": "Base chart",
+    "legend": "Accounting context: {context}; {marker} marks an account shown under its base chart number and name",
+    "blockedTitle": "This accounting context cannot label the accounts"
   }
 }

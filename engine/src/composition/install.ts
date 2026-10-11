@@ -53,6 +53,7 @@ import { releaseCloseRunApproval } from "../close/flow-release.ts";
 import { registerBalancingLegProvider } from "../journal/balancing-hooks.ts";
 import { fundBalancingLegProvider } from "../nonprofit/fund-posting.ts";
 import { budgetaryControlProvider } from "../nonprofit/encumbrances.ts";
+import { mergedAccountPostingProvider, segmentDependencyPostingProvider } from "../chart/posting-policies.ts";
 import { form990ReturnInputProvider } from "../nonprofit/form990.ts";
 import { registerReturnInputProvider } from "../tax-returns/return.ts";
 import {
@@ -138,6 +139,8 @@ export function installEngineSeams(): void {
   registerFlowApprovalReleaseHandler(CHECKLIST_STEP_SUBJECT_KIND, releaseChecklistStepApproval);
   registerBalancingLegProvider("fund", fundBalancingLegProvider);
   registerBalancingLegProvider("budgetary-control", budgetaryControlProvider);
+  registerBalancingLegProvider("merged-accounts", mergedAccountPostingProvider);
+  registerBalancingLegProvider("segment-dependencies", segmentDependencyPostingProvider);
   registerReturnInputProvider("form990", form990ReturnInputProvider);
   // Engine-owned approval releases: the adapters delegate through
   // releaseFlowApproval; the handlers run inside decideGate's transaction.

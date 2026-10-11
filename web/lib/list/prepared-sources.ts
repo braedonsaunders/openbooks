@@ -855,6 +855,8 @@ const SOURCES = {
   subcontracts_payment_controls: { route: '/subcontracts', mode: 'loaded' },
   close_posting_periods: { route: '/close/posting-periods', mode: 'loaded' },
   projects_duplicate_candidates: { route: '/projects/duplicates', mode: 'loaded' },
+  accounts_merges: { route: '/accounts/merges', rowsField: 'rows', rowKeyField: 'id', mode: 'loaded' },
+  segment_dependency_violations: { route: '/admin/setup/segment-dependencies', rowsField: 'rows', rowKeyField: 'key', mode: 'loaded' },
   admin_pdf_templates: { route: '/admin/pdf-templates', mode: 'loaded' },
   payroll_work_locations: { route: '/payroll/work-locations', mode: 'loaded' },
   admin_audit: { route: '/admin/audit', mode: 'external' },
