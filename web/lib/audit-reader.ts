@@ -88,10 +88,16 @@ export async function readAuditPage(orgId: string, filters: AuditFilters) {
     ${actor ? (actor === 'system' ? sql`and a.actor_id is null` : sql`and a.actor_id = ${actor}`) : sql``}
     ${from ? sql`and a.at >= ${from}::date` : sql``}
     ${to ? sql`and a.at < (${to}::date + interval '1 day')` : sql``}
-    ${q ? sql`and ((${typeExpression}) ilike ${'%' + q + '%'} or a.row_id::text = ${q}
+    ${q ? sql`and ((${typeExpression}) ilike ${'%' + q + '%'}
+      or replace((${typeExpression}), '_', ' ') ilike ${'%' + q + '%'}
+      or a.action ilike ${'%' + q + '%'}
+      or a.row_id::text = ${q}
+      or (a.changes ->> 'reason') ilike ${'%' + q + '%'}
+      or (a.changes #>> '{before,reason}') ilike ${'%' + q + '%'}
+      or (a.changes #>> '{after,reason}') ilike ${'%' + q + '%'}
       or exists (select 1 from users searched_user
         where searched_user.org_id = ${orgId} and searched_user.id = a.actor_id
-          and searched_user.name ilike ${'%' + q + '%'}))` : sql``}`
+          and (searched_user.name ilike ${'%' + q + '%'} or searched_user.email ilike ${'%' + q + '%'})))` : sql``}`
 
   const [list, facets] = await Promise.all([
     db.execute<AuditListSource>(sql`

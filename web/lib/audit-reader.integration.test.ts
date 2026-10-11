@@ -62,3 +62,45 @@ test('audit windows and exact facets preserve tenant, filter and snapshot semant
     await dropScratchOrg(second.orgId)
   }
 })
+
+test('audit free text matches actor email, action, table label and reason', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypassContext(() => createScratchOrg())
+  const other = await withBypassContext(() => createScratchOrg())
+  try {
+    const actorId = randomUUID()
+    const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Tom Becker', 'audit_search', actorId))
+    const email = `u-${actorId.slice(0, 8)}@scratch.test`
+    const lockRow = randomUUID()
+    const reopenRow = randomUUID()
+    await withBypassContext(async () => {
+      await db.execute(sql`
+        insert into audit_log (id, org_id, table_name, row_id, action, actor_id, at, changes)
+        values (${randomUUID()}, ${org.orgId}, 'period_locks', ${lockRow}, 'update', ${actor},
+          '2026-09-02T12:00:00Z', ${JSON.stringify({ before: { state: 'closed', reason: 'year-end close complete' }, after: { state: 'open', reason: 'correcting a misposted entry' } })}::jsonb),
+               (${randomUUID()}, ${org.orgId}, 'close_reopen_requests', ${reopenRow}, 'approve', ${actor},
+          '2026-09-03T12:00:00Z', ${JSON.stringify({ before: { status: 'requested' }, after: { status: 'approved', reason: 'board approved the restatement' } })}::jsonb)`)
+      await db.execute(sql`insert into audit_log (id, org_id, table_name, row_id, action, at, changes)
+        values (${randomUUID()}, ${other.orgId}, 'period_locks', ${randomUUID()}, 'update', '2026-09-02T12:00:00Z',
+          ${JSON.stringify({ before: { reason: 'correcting a misposted entry' }, after: {} })}::jsonb)`)
+    })
+    await withOrgContext(org.orgId, async () => {
+      const base = { page: 1, perPage: 10 }
+      assert.equal((await readAuditPage(org.orgId, { ...base, q: 'Tom Becker' })).total, 2)
+      assert.equal((await readAuditPage(org.orgId, { ...base, q: email })).total, 2)
+      assert.equal((await readAuditPage(org.orgId, { ...base, q: 'approve' })).total, 1)
+      assert.equal((await readAuditPage(org.orgId, { ...base, q: 'Period Locks' })).total, 1)
+      assert.equal((await readAuditPage(org.orgId, { ...base, q: 'misposted' })).total, 1)
+      assert.equal((await readAuditPage(org.orgId, { ...base, q: 'restatement' })).total, 1)
+      assert.equal((await readAuditPage(org.orgId, { ...base, q: 'reopen' })).total, 1)
+      assert.equal((await readAuditPage(org.orgId, { ...base, q: 'no-such-term' })).total, 0)
+    })
+    // The other tenant's matching reason stays invisible to this org, and
+    // visible to its own readers: free text never crosses the org boundary.
+    await withOrgContext(other.orgId, async () => {
+      assert.equal((await readAuditPage(other.orgId, { page: 1, perPage: 10, q: 'misposted' })).total, 1)
+    })
+  } finally {
+    await dropScratchOrg(org.orgId)
+    await dropScratchOrg(other.orgId)
+  }
+})
