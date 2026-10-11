@@ -95,14 +95,17 @@ async function brPayrollOrg(): Promise<Fixture> {
   await upsertStatutoryRate({
     orgId: org.orgId, actorId, rates: BR_PACK_RATES, rateKey: "br_rat",
     region: "BR", filingAccountId, taxYear: 2025, values: { aliquota: "2" },
+    sourceCitation: "Test rate notice", reason: "test fixture rate",
   });
   await upsertStatutoryRate({
     orgId: org.orgId, actorId, rates: BR_PACK_RATES, rateKey: "br_fap",
     region: "BR", filingAccountId, taxYear: 2025, values: { fator: "1" },
+    sourceCitation: "Test rate notice", reason: "test fixture rate",
   });
   await upsertStatutoryRate({
     orgId: org.orgId, actorId, rates: BR_PACK_RATES, rateKey: "br_terceiros",
     region: "BR", filingAccountId, taxYear: 2025, values: { aliquota: "5.8" },
+    sourceCitation: "Test rate notice", reason: "test fixture rate",
   });
   // General-regime establishment: employer CPP accrues separately (LC
   // 123/2006 art. 18 §5-C). An unclassified establishment refuses by name;

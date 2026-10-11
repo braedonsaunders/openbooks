@@ -37,6 +37,11 @@ const requestBodySchema = z.strictObject({
   filingAccountId: z.union([uuidId, z.literal(''), z.null()]).optional(),
   taxYear: z.union([z.number().int(), z.string().regex(/^\d{4}$/, 'taxYear must be a four-digit year')]),
   values: z.record(z.string(), z.union([z.string(), z.boolean()])),
+  // Traceability (migration 0663): every new or changed row carries the
+  // published source and the reason. The engine re-validates non-blank, so
+  // this boundary only carries them through.
+  sourceCitation: z.string().trim().min(1).max(2000),
+  reason: z.string().trim().min(1).max(2000),
 })
 
 
@@ -70,6 +75,8 @@ interface RatePayload {
   filingAccountId: string | null
   taxYear: number
   values: Record<string, unknown>
+  sourceCitation: string
+  reason: string
 }
 
 function parseBody(body: unknown): RatePayload | string {
@@ -95,9 +102,14 @@ function parseBody(body: unknown): RatePayload | string {
   if (!Number.isInteger(taxYear)) return 'invalid taxYear'
   const values = raw.values
   if (typeof values !== 'object' || values === null || Array.isArray(values)) return 'invalid values'
+  const sourceCitation = typeof raw.sourceCitation === 'string' ? raw.sourceCitation.trim() : ''
+  if (!sourceCitation) return 'sourceCitation is required'
+  const reason = typeof raw.reason === 'string' ? raw.reason.trim() : ''
+  if (!reason) return 'reason is required'
   return {
     country, rateKey, region, subRegion, filingAccountId, taxYear,
     values: values as Record<string, unknown>,
+    sourceCitation, reason,
   }
 }
 
@@ -309,6 +321,8 @@ export const PUT = defineRoute({
         filingAccountId: parsed.filingAccountId,
         taxYear: parsed.taxYear,
         values,
+        sourceCitation: parsed.sourceCitation,
+        reason: parsed.reason,
       })
       return NextResponse.json({ ok: true, ...saved })
     } catch (error) {

@@ -38,6 +38,8 @@ const row = (
   filingAccountId,
   taxYear: 2026,
   values,
+  sourceCitation: "Test rate notice",
+  reason: "test fixture rate",
   supersededOn: null,
 });
 

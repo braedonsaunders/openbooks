@@ -1104,7 +1104,11 @@
         "values": "Values",
         "country": "Country pack"
       },
-      "subRegionHelp": "The taxing jurisdiction inside the region — a Pennsylvania PSD code, an Ohio municipality, a Michigan city. Each one sets its own rate, so each one is entered separately; a jurisdiction with no rate on file refuses the pay run by name rather than withholding nothing."
+      "subRegionHelp": "The taxing jurisdiction inside the region — a Pennsylvania PSD code, an Ohio municipality, a Michigan city. Each one sets its own rate, so each one is entered separately; a jurisdiction with no rate on file refuses the pay run by name rather than withholding nothing.",
+      "sourceCitation": "Source citation",
+      "sourceCitationHelp": "The publication the figures were taken from — the state rate notice, the agency table, the announced premium. Shown on the row ever after.",
+      "reason": "Reason",
+      "reasonHelp": "Why this rate is being recorded — the notice year, the correction, the account it applies to. Shown on the row ever after."
     },
     "workSchedules": {
       "title": "Work schedules",

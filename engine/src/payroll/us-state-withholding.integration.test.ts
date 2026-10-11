@@ -139,10 +139,12 @@ async function usPayrollOrg(): Promise<Fixture> {
     await upsertStatutoryRate({
       orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_sui",
       region: state, filingAccountId, taxYear: 2026, values: { rate: "0.03", wageBase: "7000" },
+      sourceCitation: "Test rate notice", reason: "test fixture rate",
     });
     await upsertStatutoryRate({
       orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_futa",
       region: state, filingAccountId: null, taxYear: 2026, values: { rate: "0.006" },
+      sourceCitation: "Test rate notice", reason: "test fixture rate",
     });
   }
   // CA ETT reserve status: an unconfigured balance refuses by name.

@@ -140,6 +140,7 @@ async function usEmployee(fx: Fixture, subsidiaryId: string, name: string, opts:
   const suiAccountId = await seedUsSuiAccount(fx.orgId, fx.actorId, opts.state);
   await upsertStatutoryRate({ orgId: fx.orgId, actorId: fx.actorId, rates: US_PACK_RATES,
     rateKey: "us_sui", region: opts.state, filingAccountId: suiAccountId, taxYear: 2026,
+    sourceCitation: "Test rate notice", reason: "test fixture rate",
     values: { rate: "0.03", wageBase: "7000" } });
   await db.execute(sql`
     insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
@@ -281,6 +282,7 @@ test(
       await runAndCommit(fx, "2026-07-05", "2026-07-18");
       await upsertStatutoryRate({ orgId: fx.orgId, actorId: fx.actorId, rates: US_PACK_RATES,
         rateKey: "us_sui", region: "CA", filingAccountId: null, taxYear: 2026,
+        sourceCitation: "Test rate notice", reason: "test fixture rate",
         values: { rate: "0.03", wageBase: "7000" } });
       await db.execute(sql`
         update employee_payroll_profiles set province = 'CA', updated_by = ${fx.actorId}

@@ -1104,7 +1104,11 @@
         "values": "Valores",
         "country": "Paquete de país"
       },
-      "subRegionHelp": "La jurisdicción fiscal dentro de la región — un código PSD de Pensilvania, un municipio de Ohio, una ciudad de Míchigan. Cada una fija su propia tasa, así que cada una se ingresa por separado; una jurisdicción sin tasa en archivo rechaza el ciclo por su nombre en vez de no retener nada."
+      "subRegionHelp": "La jurisdicción fiscal dentro de la región — un código PSD de Pensilvania, un municipio de Ohio, una ciudad de Míchigan. Cada una fija su propia tasa, así que cada una se ingresa por separado; una jurisdicción sin tasa en archivo rechaza el ciclo por su nombre en vez de no retener nada.",
+      "sourceCitation": "Fuente",
+      "sourceCitationHelp": "La publicación de la que se tomaron las cifras — el aviso de la tasa, la tabla del organismo, la prima anunciada. Se muestra en la fila de forma permanente.",
+      "reason": "Motivo",
+      "reasonHelp": "Por qué se registra esta tasa — el año del aviso, la corrección, la cuenta a la que aplica. Se muestra en la fila de forma permanente."
     },
     "workSchedules": {
       "title": "Horarios de trabajo",

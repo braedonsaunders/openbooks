@@ -374,6 +374,17 @@ export interface StatutoryRateRow {
   filingAccountId: string | null;
   taxYear: number;
   values: Record<string, string>;
+  /**
+   * The published source the entered figures were taken from. Null for rows
+   * recorded before the traceability change (migration 0663); required on
+   * every new or changed row.
+   */
+  sourceCitation: string | null;
+  /**
+   * Why the row was entered or changed. Null for rows recorded before the
+   * traceability change; required on every new or changed row.
+   */
+  reason: string | null;
   /** Account number, when the row is account-scoped — for labelling. */
   accountNumber?: string | null;
   accountName?: string | null;
@@ -499,7 +510,8 @@ export async function listStatutoryRates(
   const currentOnly = filter.includeSuperseded === true ? null : true;
   const rows = (await db.execute<Record<string, unknown>>(sql`
     select r.id, r.country, r.rate_key, r.region, r.sub_region, r.filing_account_id,
-           r.tax_year, r.rate_values, r.superseded_on::text as superseded_on,
+           r.tax_year, r.rate_values, r.source_citation, r.reason,
+           r.superseded_on::text as superseded_on,
            fa.account_number, fa.name as account_name
       from payroll_statutory_rates r
       left join payroll_filing_accounts fa
@@ -522,6 +534,8 @@ export async function listStatutoryRates(
     filingAccountId: (row.filing_account_id as string | null) ?? null,
     taxYear: Number(row.tax_year),
     values: (row.rate_values ?? {}) as Record<string, string>,
+    sourceCitation: (row.source_citation as string | null) ?? null,
+    reason: (row.reason as string | null) ?? null,
     accountNumber: (row.account_number as string | null) ?? null,
     accountName: (row.account_name as string | null) ?? null,
     supersededOn: (row.superseded_on as string | null) ?? null,
@@ -609,9 +623,32 @@ export async function upsertStatutoryRate(input: {
   filingAccountId: string | null;
   taxYear: number;
   values: Record<string, unknown>;
+  /**
+   * The published source the figures were taken from, and why the row is
+   * being recorded. REQUIRED on every new or changed row (migration 0663):
+   * hand-entered financial policy must be traceable. Both are refused blank
+   * here so every present and future caller gets the refusal, not just the
+   * one surface that validates today.
+   */
+  sourceCitation: string;
+  reason: string;
 }): Promise<{ id: string; values: Record<string, string> }> {
   const slot = statutoryRateSlotIn(input.rates, input.rateKey);
   const country = input.rates.country;
+  const sourceCitation = typeof input.sourceCitation === "string" ? input.sourceCitation.trim() : "";
+  if (!sourceCitation) {
+    throw new PayrollPackError(
+      `${slot.label} cannot be saved without the published source the figures were taken from — `
+      + `enter the source citation in Payroll Setup → Statutory rates`,
+    );
+  }
+  const reason = typeof input.reason === "string" ? input.reason.trim() : "";
+  if (!reason) {
+    throw new PayrollPackError(
+      `${slot.label} cannot be saved without the reason it is being recorded — `
+      + `enter the reason in Payroll Setup → Statutory rates`,
+    );
+  }
   const values = canonicalStatutoryRateValues(slot, input.values);
   const region = input.region === "" ? null : input.region;
   const subRegion = input.subRegion == null || input.subRegion === "" ? null : input.subRegion;
@@ -661,15 +698,16 @@ export async function upsertStatutoryRate(input: {
                   country: country, rateKey: input.rateKey, region, subRegion,
                   filingAccountId, taxYear: input.taxYear,
                   before: before.rate_values, after: values,
+                  sourceCitation, reason,
                 })}::jsonb, ${input.actorId})`);
     }
     await tx.execute(sql`
       insert into payroll_statutory_rates
         (id, org_id, country, rate_key, region, sub_region, filing_account_id, tax_year,
-         rate_values, created_by, updated_by)
+         rate_values, source_citation, reason, created_by, updated_by)
       values (${id}, ${input.orgId}, ${country}, ${input.rateKey}, ${region}, ${subRegion},
               ${filingAccountId}, ${input.taxYear}, ${JSON.stringify(values)}::jsonb,
-              ${input.actorId}, ${input.actorId})`);
+              ${sourceCitation}, ${reason}, ${input.actorId}, ${input.actorId})`);
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${input.orgId}, 'payroll_statutory_rates', ${id}, 'insert',
@@ -677,6 +715,7 @@ export async function upsertStatutoryRate(input: {
                 country: country, rateKey: input.rateKey, region, subRegion,
                 filingAccountId, taxYear: input.taxYear,
                 before: before?.rate_values ?? null, after: values,
+                sourceCitation, reason,
               })}::jsonb, ${input.actorId})`);
     return { id, values };
   });

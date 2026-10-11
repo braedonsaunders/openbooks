@@ -1104,7 +1104,11 @@
         "values": "Valores",
         "country": "Pacote de país"
       },
-      "subRegionHelp": "A jurisdição tributária dentro da região — um código PSD da Pensilvânia, um município de Ohio, uma cidade de Michigan. Cada uma fixa sua alíquota, então cada uma se informa separada; jurisdição sem alíquota registrada recusa a folha nominalmente em vez de reter zero."
+      "subRegionHelp": "A jurisdição tributária dentro da região — um código PSD da Pensilvânia, um município de Ohio, uma cidade de Michigan. Cada uma fixa sua alíquota, então cada uma se informa separada; jurisdição sem alíquota registrada recusa a folha nominalmente em vez de reter zero.",
+      "sourceCitation": "Fonte",
+      "sourceCitationHelp": "A publicação de onde os valores foram extraídos — o aviso da alíquota, a tabela do órgão, o prêmio anunciado. Exibido na linha permanentemente.",
+      "reason": "Motivo",
+      "reasonHelp": "Por que esta alíquota está sendo registrada — o ano do aviso, a correção, a conta à qual se aplica. Exibido na linha permanentemente."
     },
     "workSchedules": {
       "title": "Escalas de trabalho",

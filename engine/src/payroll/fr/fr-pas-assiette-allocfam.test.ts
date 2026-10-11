@@ -281,6 +281,8 @@ test("reduced-rate eligibility resolves only from the employer's account", () =>
     filingAccountId: "siret-eligible",
     taxYear: 2026,
     values: { reduced_rate_eligible: "true" },
+    sourceCitation: "Test rate notice",
+    reason: "test fixture rate",
     supersededOn: null,
   };
   const resolution = buildResolution({

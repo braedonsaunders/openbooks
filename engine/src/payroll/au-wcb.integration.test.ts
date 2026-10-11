@@ -133,14 +133,17 @@ test(
       await upsertStatutoryRate({
         orgId: org.orgId, actorId, rates: AU_PACK_RATES, rateKey: "au_workers_comp",
         region: "NSW", filingAccountId: null, taxYear: 2027, values: { rate: "0.012" },
+        sourceCitation: "Test rate notice", reason: "test fixture rate",
       });
       await upsertStatutoryRate({
         orgId: org.orgId, actorId, rates: AU_PACK_RATES, rateKey: "au_workers_comp",
         region: "VIC", filingAccountId: null, taxYear: 2027, values: { rate: "0.014" },
+        sourceCitation: "Test rate notice", reason: "test fixture rate",
       });
       await upsertStatutoryRate({
         orgId: org.orgId, actorId, rates: AU_PACK_RATES, rateKey: "au_workers_comp",
         region: "QLD", filingAccountId: null, taxYear: 2027, values: { rate: "0.011" },
+        sourceCitation: "Test rate notice", reason: "test fixture rate",
       });
 
       // The warning clears once every touched region resolves — honest only

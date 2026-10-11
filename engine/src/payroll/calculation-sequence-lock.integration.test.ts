@@ -102,10 +102,12 @@ async function calculableOrg(): Promise<Fixture> {
   await upsertStatutoryRate({
     orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_sui",
     region: "CA", filingAccountId, taxYear: 2026, values: { rate: "0.03", wageBase: "7000" },
+    sourceCitation: "Test rate notice", reason: "test fixture rate",
   });
   await upsertStatutoryRate({
     orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_futa",
     region: "CA", filingAccountId: null, taxYear: 2026, values: { rate: "0.006" },
+    sourceCitation: "Test rate notice", reason: "test fixture rate",
   });
   // A deficit UI reserve balance is ETT-exempt: no leg posts, and these
   // tests (numbering contention, never ETT) assert none of it.
@@ -113,6 +115,7 @@ async function calculableOrg(): Promise<Fixture> {
     orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_ca_ett",
     region: "CA", filingAccountId: null, taxYear: 2026,
     values: { reserveBalance: "-100.00" },
+    sourceCitation: "Test rate notice", reason: "test fixture rate",
   });
   const subsidiaryId = randomUUID();
   await db.execute(sql`

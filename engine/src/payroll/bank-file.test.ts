@@ -666,6 +666,7 @@ async function payrollOrg(
     const saveRate = (rateKey: string, filingAccountId: string | null, values: Record<string, unknown>) =>
       upsertStatutoryRate({
         orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey, region, filingAccountId, taxYear: 2026, values,
+        sourceCitation: "Test rate notice", reason: "test fixture rate",
       });
     suiFilingAccountId = await seedUsSuiAccount(org.orgId, actorId, region);
     await saveRate("us_sui", suiFilingAccountId, { rate: "0.03", wageBase: "7000" });

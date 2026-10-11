@@ -89,7 +89,7 @@ stubModules({
       export async function listStatutoryRates() { return [] }
       export function statutoryRateProblem() { return null }
       export async function upsertStatutoryRate(input) {
-        state.upsertAttempts.push(input.values)
+        state.upsertAttempts.push({ values: input.values, sourceCitation: input.sourceCitation, reason: input.reason })
         return { id: 'rate-1', values: {} }
       }
     `,
@@ -183,7 +183,7 @@ test('a decimal-comma rate on PUT is refused with the dotted rewrite before the 
   const refused = await PUT(new Request('http://openbooks.test/api/payroll/settings/rates', {
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ country: 'CA', rateKey: 'eht', taxYear: 2026, values: { rate: '12,34' } }),
+    body: JSON.stringify({ country: 'CA', rateKey: 'eht', taxYear: 2026, values: { rate: '12,34' }, sourceCitation: 'rate notice', reason: 'test filing' }),
   }))
   const refusedJson = (await refused.json()) as { error?: string }
   assert.equal(refused.status, 422)
@@ -194,10 +194,24 @@ test('a decimal-comma rate on PUT is refused with the dotted rewrite before the 
   const filed = await PUT(new Request('http://openbooks.test/api/payroll/settings/rates', {
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ country: 'CA', rateKey: 'eht', taxYear: 2026, values: { rate: '0.027' } }),
+    body: JSON.stringify({ country: 'CA', rateKey: 'eht', taxYear: 2026, values: { rate: '0.027' }, sourceCitation: 'rate notice', reason: 'test filing' }),
   }))
   assert.equal(filed.status, 200)
-  assert.deepEqual(state.upsertAttempts, [{ rate: '0.02700' }])
+  assert.deepEqual(state.upsertAttempts, [{ values: { rate: '0.02700' }, sourceCitation: 'rate notice', reason: 'test filing' }])
+})
+
+test('a PUT without a source citation and reason is refused before the engine', async () => {
+  // Traceability: every new or changed row carries both. The route refuses
+  // the write itself, so the engine upsert is never reached.
+  state.upsertAttempts.length = 0
+
+  const response = await PUT(new Request('http://openbooks.test/api/payroll/settings/rates', {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ country: 'CA', rateKey: 'eht', taxYear: 2026, values: { rate: '0.027' } }),
+  }))
+  assert.equal(response.status, 400)
+  assert.deepEqual(state.upsertAttempts, [])
 })
 
 test('an unknown country on PUT is a 422 naming the implemented countries', async () => {
@@ -207,7 +221,7 @@ test('an unknown country on PUT is a 422 naming the implemented countries', asyn
   const response = await PUT(new Request('http://openbooks.test/api/payroll/settings/rates', {
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ country: 'XX', rateKey: 'eht', taxYear: 2026, values: {} }),
+    body: JSON.stringify({ country: 'XX', rateKey: 'eht', taxYear: 2026, values: {}, sourceCitation: 'rate notice', reason: 'test filing' }),
   }))
 
   assert.equal(response.status, 422)

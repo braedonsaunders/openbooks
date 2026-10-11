@@ -1104,7 +1104,11 @@
         "values": "Valeurs",
         "country": "Pack national"
       },
-      "subRegionHelp": "La juridiction fiscale à l’intérieur de la région — un code PSD de Pennsylvanie, une municipalité de l’Ohio, une ville du Michigan. Chacune fixe son propre taux, donc chacune se saisit séparément; une juridiction sans taux au dossier refuse la paie par son nom plutôt que de ne rien retenir."
+      "subRegionHelp": "La juridiction fiscale à l’intérieur de la région — un code PSD de Pennsylvanie, une municipalité de l’Ohio, une ville du Michigan. Chacune fixe son propre taux, donc chacune se saisit séparément; une juridiction sans taux au dossier refuse la paie par son nom plutôt que de ne rien retenir.",
+      "sourceCitation": "Source",
+      "sourceCitationHelp": "La publication dont les chiffres sont tirés — l’avis de taux, le tableau de l’organisme, la prime annoncée. Affiché sur la ligne de façon permanente.",
+      "reason": "Motif",
+      "reasonHelp": "La raison pour laquelle ce taux est enregistré — l’année de l’avis, la correction, le compte concerné. Affiché sur la ligne de façon permanente."
     },
     "workSchedules": {
       "title": "Horaires de travail",

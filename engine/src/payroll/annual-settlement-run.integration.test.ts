@@ -123,11 +123,13 @@ async function seedHarness(orgId: string, actorId: string): Promise<Harness> {
   await upsertStatutoryRate({
     orgId, actorId, rates: IT_PACK_RATES, rateKey: "it_addizionale_regionale",
     region: "12", filingAccountId: null, taxYear: 2026, values: { rate: "1.23" },
+    sourceCitation: "Test rate notice", reason: "test fixture rate",
   });
   await upsertStatutoryRate({
     orgId, actorId, rates: IT_PACK_RATES, rateKey: "it_addizionale_comunale",
     region: "12", subRegion: "H501", filingAccountId: null, taxYear: 2026,
     values: { rate: "0.8" },
+    sourceCitation: "Test rate notice", reason: "test fixture rate",
   });
 
   const bonus = (await db.execute<{ id: string }>(sql`

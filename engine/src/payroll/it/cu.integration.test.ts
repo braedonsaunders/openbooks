@@ -75,11 +75,13 @@ async function seedOrg(): Promise<{ orgId: string; actorId: string; scheduleId: 
     orgId: org.orgId, actorId, rates: IT_PACK_RATES,
     rateKey: "it_addizionale_regionale", region: REGION, filingAccountId: null,
     taxYear: TAX_YEAR, values: { rate: "1.5" },
+    sourceCitation: "Test rate notice", reason: "test fixture rate",
   });
   await upsertStatutoryRate({
     orgId: org.orgId, actorId, rates: IT_PACK_RATES,
     rateKey: "it_addizionale_comunale", region: REGION, subRegion: COMUNE,
     filingAccountId: null, taxYear: TAX_YEAR, values: { rate: "0.8" },
+    sourceCitation: "Test rate notice", reason: "test fixture rate",
   });
   const scheduleId = randomUUID();
   await db.execute(sql`

@@ -83,6 +83,7 @@ async function seedTwoEntityOrg(options: { scopedSchedule?: boolean } = {}): Pro
   const suiAccountId = await seedUsSuiAccount(org.orgId, actorId, "TX");
   await upsertStatutoryRate({ orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_sui",
     region: "TX", filingAccountId: suiAccountId, taxYear: 2026,
+    sourceCitation: "Test rate notice", reason: "test fixture rate",
     values: { rate: "0.027", wageBase: "9000" } });
   const profile = await db.execute(sql`update employee_payroll_profiles set filing_account_id=${suiAccountId}
     where org_id=${org.orgId} and employee_party_id=${employeeId} returning employee_party_id`);

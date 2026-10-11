@@ -1104,7 +1104,11 @@
         "values": "Werte",
         "country": "Länderpaket"
       },
-      "subRegionHelp": "Die Steuerjurisdiktion innerhalb der Region — ein Pennsylvania-PSD-Code, eine Ohio-Gemeinde, eine Michigan-Stadt. Jede setzt ihren eigenen Satz, daher wird jede separat eingetragen; eine Jurisdiktion ohne hinterlegten Satz weist den Lohnlauf namentlich ab, statt nichts einzubehalten."
+      "subRegionHelp": "Die Steuerjurisdiktion innerhalb der Region — ein Pennsylvania-PSD-Code, eine Ohio-Gemeinde, eine Michigan-Stadt. Jede setzt ihren eigenen Satz, daher wird jede separat eingetragen; eine Jurisdiktion ohne hinterlegten Satz weist den Lohnlauf namentlich ab, statt nichts einzubehalten.",
+      "sourceCitation": "Quellenangabe",
+      "sourceCitationHelp": "Die Veröffentlichung, aus der die Zahlen stammen — der Beitragsbescheid, die Behördentabelle, die bekanntgegebene Prämie. Wird dauerhaft in der Zeile angezeigt.",
+      "reason": "Grund",
+      "reasonHelp": "Warum dieser Satz erfasst wird — das Bescheidjahr, die Korrektur, das Konto, für das er gilt. Wird dauerhaft in der Zeile angezeigt."
     },
     "workSchedules": {
       "title": "Arbeitszeitpläne",

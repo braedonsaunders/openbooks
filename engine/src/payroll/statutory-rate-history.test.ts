@@ -38,6 +38,7 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 const row = (over: Partial<StatutoryRateRow>): StatutoryRateRow => ({
   id: randomUUID(), country: "US", rateKey: "us_futa", region: "MI",
   filingAccountId: null, taxYear: 2026, values: { rate: "0.0060" },
+  sourceCitation: "Test rate notice", reason: "test fixture rate",
   supersededOn: null,
   ...over,
 });
@@ -122,14 +123,17 @@ test(
       const v1 = await upsertStatutoryRate({
         orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_futa",
         region: "MI", filingAccountId: null, taxYear: 2026, values: { rate: "0.006" },
+        sourceCitation: "Test rate notice", reason: "test fixture rate",
       });
       const v2 = await upsertStatutoryRate({
         orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_futa",
         region: "MI", filingAccountId: null, taxYear: 2026, values: { rate: "0.009" },
+        sourceCitation: "Test rate notice", reason: "test fixture rate",
       });
       const v3 = await upsertStatutoryRate({
         orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_futa",
         region: "MI", filingAccountId: null, taxYear: 2026, values: { rate: "0.012" },
+        sourceCitation: "Test rate notice", reason: "test fixture rate",
       });
       // Three distinct ids: no row was ever rewritten.
       assert.equal(new Set([v1.id, v2.id, v3.id]).size, 3);
@@ -213,6 +217,7 @@ async function seedCommittedRun(): Promise<CommittedFixture> {
     orgId: org.orgId, actorId, rates: CA_PACK_RATES, rateKey: "ca_eht",
     region: "ON", filingAccountId: null, taxYear: 2026,
     values: { rate: "1.95", annualExemption: "1000" },
+    sourceCitation: "Test rate notice", reason: "test fixture rate",
   });
 
   const payDate = "2026-07-21";
@@ -259,6 +264,7 @@ test(
         orgId: fx.orgId, actorId: fx.actorId, rates: CA_PACK_RATES, rateKey: "ca_eht",
         region: "ON", filingAccountId: null, taxYear: 2026,
         values: { rate: "2.95", annualExemption: "1000" },
+        sourceCitation: "Test rate notice", reason: "test fixture rate",
       });
       await db.execute(sql`
         update payroll_statutory_rates set superseded_on = '2026-07-25'

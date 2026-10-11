@@ -101,10 +101,12 @@ async function waPayrollOrg(year = 2026): Promise<Fixture> {
     await upsertStatutoryRate({
       orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_sui",
       region: state, filingAccountId, taxYear: year, values: { rate: "0.03", wageBase: "7000" },
+      sourceCitation: "Test rate notice", reason: "test fixture rate",
     });
     await upsertStatutoryRate({
       orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_futa",
       region: state, filingAccountId: null, taxYear: year, values: { rate: "0.006" },
+      sourceCitation: "Test rate notice", reason: "test fixture rate",
     });
   }
   const subsidiaryId = randomUUID();
@@ -378,6 +380,7 @@ describe("washington-obligation-derived-mappings", { skip: !DB }, () => {
           totalRate: "0.01", employeeShare: "0.70", employerShare: "0.30",
           wageBase: "180000", caresRate: "0.0058",
         },
+        sourceCitation: "Test rate notice", reason: "test fixture rate",
       });
       const config = await usPayrollConfig(fx.orgId, 2027, "2027-03-15");
       const entered = config.waBackfill("WA");

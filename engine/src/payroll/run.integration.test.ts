@@ -35,6 +35,7 @@ async function seedUsSui(orgId: string, actorId: string, employeeId: string, sta
   rate: string, wageBase: string): Promise<string> {
   const filingAccountId = await seedUsSuiAccount(orgId, actorId, state);
   await upsertStatutoryRate({ orgId, actorId, rates: US_PACK_RATES, rateKey: "us_sui",
+    sourceCitation: "Test rate notice", reason: "test fixture rate",
     region: state, filingAccountId, taxYear: 2026, values: { rate, wageBase } });
   const profile = await db.execute(sql`update employee_payroll_profiles set filing_account_id=${filingAccountId}
     where org_id=${orgId} and employee_party_id=${employeeId} returning employee_party_id`);
@@ -531,6 +532,7 @@ test(
         orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_ca_ett",
         region: "CA", filingAccountId: null, taxYear: 2026,
         values: { reserveBalance: "-100.00" },
+        sourceCitation: "Test rate notice", reason: "test fixture rate",
       });
 
       const usSubId = randomUUID();

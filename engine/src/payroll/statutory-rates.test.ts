@@ -256,6 +256,7 @@ test("scope is enforced at the write boundary the pack declaration owns", () => 
 const row = (over: Partial<StatutoryRateRow>): StatutoryRateRow => ({
   id: randomUUID(), country: "US", rateKey: "us_sui", region: "MI",
   filingAccountId: null, taxYear: 2026, values: { rate: "0.0270", wageBase: "9500.00" },
+  sourceCitation: "Test rate notice", reason: "test fixture rate",
   supersededOn: null,
   ...over,
 });
@@ -371,17 +372,20 @@ test(
         orgId: fixture.orgId, actorId: fixture.actorId, rates: US_PACK_RATES, rateKey: "us_sui",
         region: "MI", filingAccountId: fixture.ein1, taxYear: 2026,
         values: { rate: "0.0106", wageBase: "9500" },
+        sourceCitation: "Test rate notice", reason: "test fixture rate",
       });
       await upsertStatutoryRate({
         orgId: fixture.orgId, actorId: fixture.actorId, rates: US_PACK_RATES, rateKey: "us_sui",
         region: "MI", filingAccountId: fixture.ein2, taxYear: 2026,
         values: { rate: "0.0630", wageBase: "9500" },
+        sourceCitation: "Test rate notice", reason: "test fixture rate",
       });
       // FUTA on the same employer, differing by state in the same payroll.
       for (const [state, rate] of [["MI", "0.009"], ["TX", "0.006"]] as const) {
         await upsertStatutoryRate({
           orgId: fixture.orgId, actorId: fixture.actorId, rates: US_PACK_RATES, rateKey: "us_futa",
           region: state, filingAccountId: null, taxYear: 2026, values: { rate },
+          sourceCitation: "Test rate notice", reason: "test fixture rate",
         });
       }
 
@@ -405,6 +409,7 @@ test(
         orgId: fixture.orgId, actorId: fixture.actorId, rates: US_PACK_RATES, rateKey: "us_sui",
         region: "MI", filingAccountId: fixture.ein1, taxYear: 2026,
         values: { rate: "0.0115", wageBase: "9500" },
+        sourceCitation: "Test rate notice", reason: "test fixture rate",
       });
       const rows = await listStatutoryRates(fixture.orgId, { country: "US", taxYear: 2026 });
       assert.equal(rows.filter((r) => r.rateKey === "us_sui").length, 2);
@@ -474,6 +479,7 @@ test(
           () => upsertStatutoryRate({
             orgId: fixture.orgId, actorId: fixture.actorId, rates: US_PACK_RATES, rateKey: "us_futa",
             region: "MI", filingAccountId: null, taxYear: 2026, values: { rate: "0.009" },
+            sourceCitation: "Test rate notice", reason: "test fixture rate",
           }),
           (error: unknown) => errorChainMatches(error, /injected statutory-rate audit failure/),
         );
@@ -488,6 +494,7 @@ test(
       const saved = await upsertStatutoryRate({
         orgId: fixture.orgId, actorId: fixture.actorId, rates: US_PACK_RATES, rateKey: "us_futa",
         region: "MI", filingAccountId: null, taxYear: 2026, values: { rate: "0.009" },
+        sourceCitation: "Test rate notice", reason: "test fixture rate",
       });
       // A Remove request retires the open row — it stamps superseded_on and
       // writes no successor — rather than deleting anything. The row and its
@@ -527,6 +534,7 @@ test(
       const first = await upsertStatutoryRate({
         orgId: org.orgId, actorId, rates: GB_PACK_RATES, rateKey: "gb_employment_allowance",
         region: null, filingAccountId: null, taxYear: 2026, values: { amount: "10500" },
+        sourceCitation: "Test rate notice", reason: "test fixture rate",
       });
       assert.deepEqual(first.values, { amount: "10500.00" });
       const listed = await listStatutoryRates(org.orgId, { country: "GB", taxYear: 2026 });
@@ -540,6 +548,7 @@ test(
       const second = await upsertStatutoryRate({
         orgId: org.orgId, actorId, rates: GB_PACK_RATES, rateKey: "gb_employment_allowance",
         region: null, filingAccountId: null, taxYear: 2026, values: { amount: "8000" },
+        sourceCitation: "Test rate notice", reason: "test fixture rate",
       });
       assert.notEqual(second.id, first.id);
       const relisted = await listStatutoryRates(org.orgId, { country: "GB", taxYear: 2026 });
@@ -558,6 +567,50 @@ test(
       // And the engine prices from what was saved — never from a stale zero.
       const resolution = await resolveStatutoryRates(org.orgId, GB_PACK_RATES, 2026);
       assert.deepEqual(resolution.values("gb_employment_allowance"), { amount: "8000.00" });
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
+
+test(
+  "a rate without a source citation and reason is refused, and a saved one carries both",
+  { skip: !DB },
+  async () => {
+    // Hand-entered financial policy must be traceable: every new or changed
+    // row carries the published source and the reason, the write boundary
+    // refuses either blank, and the audit entry carries both.
+    const org = await createScratchOrg();
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const base = {
+      orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_futa",
+      region: "MI", filingAccountId: null, taxYear: 2026, values: { rate: "0.006" },
+    };
+    await assert.rejects(
+      upsertStatutoryRate({ ...base, sourceCitation: "  ", reason: "credit-reduction state" }),
+      /without the published source.*Statutory rates/,
+    );
+    await assert.rejects(
+      upsertStatutoryRate({ ...base, sourceCitation: "USDOL credit-reduction table", reason: "" }),
+      /without the reason.*Statutory rates/,
+    );
+    try {
+      const saved = await upsertStatutoryRate({
+        ...base,
+        sourceCitation: "USDOL credit-reduction table",
+        reason: "credit-reduction state",
+      });
+      const [listed] = await listStatutoryRates(org.orgId, { country: "US", taxYear: 2026 });
+      assert.equal(listed!.id, saved.id);
+      assert.equal(listed!.sourceCitation, "USDOL credit-reduction table");
+      assert.equal(listed!.reason, "credit-reduction state");
+      const audit = (await db.execute<{ action: string; changes: Record<string, unknown> }>(sql`
+        select action, changes from audit_log
+         where org_id = ${org.orgId} and table_name = 'payroll_statutory_rates'
+           and row_id = ${saved.id} and action = 'insert'`));
+      assert.equal(audit.rows.length, 1);
+      assert.equal(audit.rows[0]!.changes.sourceCitation, "USDOL credit-reduction table");
+      assert.equal(audit.rows[0]!.changes.reason, "credit-reduction state");
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }
@@ -603,6 +656,7 @@ test(
         () => upsertStatutoryRate({
           orgId: org.orgId, actorId, rates: GB_PACK_RATES, rateKey: "gb_employment_allowance",
           region: "ENG", filingAccountId: null, taxYear: 2026, values: { amount: "10500" },
+          sourceCitation: "Test rate notice", reason: "test fixture rate",
         }),
         /org-wide/,
       );
@@ -610,6 +664,7 @@ test(
         () => upsertStatutoryRate({
           orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_futa",
           region: null, filingAccountId: null, taxYear: 2026, values: { rate: "0.006" },
+          sourceCitation: "Test rate notice", reason: "test fixture rate",
         }),
         /name the region/,
       );
@@ -618,6 +673,7 @@ test(
           orgId: org.orgId, actorId, rates: CA_PACK_RATES, rateKey: "ca_eht",
           region: "ON", subRegion: "TORONTO", filingAccountId: null, taxYear: 2026,
           values: { rate: "1.95", annualExemption: "1000000" },
+          sourceCitation: "Test rate notice", reason: "test fixture rate",
         }),
         /sub-jurisdiction/,
       );
@@ -626,6 +682,7 @@ test(
           orgId: org.orgId, actorId, rates: CA_PACK_RATES, rateKey: "ca_eht",
           region: "ON", filingAccountId: accountId, taxYear: 2026,
           values: { rate: "1.95", annualExemption: "1000000" },
+          sourceCitation: "Test rate notice", reason: "test fixture rate",
         }),
         /per filing account/,
       );
@@ -652,6 +709,7 @@ test(
       await upsertStatutoryRate({
         orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_futa",
         region: "MI", filingAccountId: null, taxYear: 2026, values: { rate: "0.006" },
+        sourceCitation: "Test rate notice", reason: "test fixture rate",
       });
       try {
         // A BEFORE UPDATE trigger that returns NULL skips the update while
@@ -669,6 +727,7 @@ test(
           () => upsertStatutoryRate({
             orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_futa",
             region: "MI", filingAccountId: null, taxYear: 2026, values: { rate: "0.009" },
+            sourceCitation: "Test rate notice", reason: "test fixture rate",
           }),
           /matched no row/,
         );
@@ -686,6 +745,7 @@ test(
       await upsertStatutoryRate({
         orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_futa",
         region: "MI", filingAccountId: null, taxYear: 2026, values: { rate: "0.009" },
+        sourceCitation: "Test rate notice", reason: "test fixture rate",
       });
       assert.equal(
         (await resolveStatutoryRates(org.orgId, US_PACK_RATES, 2026)).values("us_futa", { region: "MI" })?.rate,
@@ -726,6 +786,7 @@ test(
         orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_sui",
         region: "MI", filingAccountId: null, taxYear: 2026,
         values: { rate: "0.031", wageBase: "9500" },
+        sourceCitation: "Test rate notice", reason: "test fixture rate",
       });
       const configured = await resolveStatutoryRates(org.orgId, US_PACK_RATES, 2026);
       assert.deepEqual(configured.values("us_sui", { region: "MI", filingAccountId: null }), saved.values);

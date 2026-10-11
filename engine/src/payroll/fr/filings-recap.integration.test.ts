@@ -93,6 +93,7 @@ async function frPayrollOrg(): Promise<Fixture> {
   // The declared ten-person establishment is below the eleven-person
   // mobility threshold; record its explicit zero on its own SIRET account.
   await upsertStatutoryRate({ orgId: org.orgId, actorId, rates: FR_PACK_RATES,
+    sourceCitation: "Test rate notice", reason: "test fixture rate",
     rateKey: 'fr_versement_mobilite', region: 'FR', filingAccountId, taxYear: 2026, values: { taux: '0' } });
   // AGIRC-ARRCO/CEG/CET are declared `external`: the org names its own
   // caisse on the components (the QC/Revenu-Québec precedent).

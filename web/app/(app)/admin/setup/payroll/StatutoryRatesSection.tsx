@@ -81,6 +81,8 @@ interface RateRow {
   accountName: string | null
   taxYear: number
   values: Record<string, string>
+  sourceCitation: string | null
+  reason: string | null
 }
 
 interface RateGap {
@@ -119,6 +121,8 @@ interface DraftRate {
   filingAccountId: string
   taxYear: number
   values: Record<string, string>
+  sourceCitation: string
+  reason: string
   existingId: string | null
 }
 
@@ -211,6 +215,8 @@ export function StatutoryRatesSection({ initialYear }: { initialYear?: number })
         filingAccountId: draft.filingAccountId || null,
         taxYear: draft.taxYear,
         values: draft.values,
+        sourceCitation: draft.sourceCitation,
+        reason: draft.reason,
       }),
     }), {
       fallbackMessage,
@@ -362,6 +368,8 @@ export function StatutoryRatesSection({ initialYear }: { initialYear?: number })
               filingAccountId: '',
               taxYear: year,
               values: {},
+              sourceCitation: '',
+              reason: '',
               existingId: null,
             })
           }}
@@ -402,6 +410,8 @@ export function StatutoryRatesSection({ initialYear }: { initialYear?: number })
           filingAccountId: row.filingAccountId ?? '',
           taxYear: row.taxYear,
           values: { ...row.values },
+          sourceCitation: row.sourceCitation ?? '',
+          reason: row.reason ?? '',
           existingId: row.id,
         })}
         columns={[
@@ -662,6 +672,42 @@ function RateDrawer({
               )}
             </div>
           ))}
+
+          {/* Traceability: every new or changed row carries the published
+              source and the reason. Editing an older row without either
+              fills them in here — the save is refused until both are set. */}
+          <div>
+            <Label
+              htmlFor="rate-source-citation"
+              help={label(
+                'rates.sourceCitationHelp',
+                'The publication the figures were taken from — the state rate notice, the agency table, the announced premium. Shown on the row ever after.',
+              )}
+            >
+              {label('rates.sourceCitation', 'Source citation')}
+            </Label>
+            <Input
+              id="rate-source-citation"
+              value={draft.sourceCitation}
+              onChange={(e) => onChange({ ...draft, sourceCitation: e.target.value })}
+            />
+          </div>
+          <div>
+            <Label
+              htmlFor="rate-reason"
+              help={label(
+                'rates.reasonHelp',
+                'Why this rate is being recorded — the notice year, the correction, the account it applies to. Shown on the row ever after.',
+              )}
+            >
+              {label('rates.reason', 'Reason')}
+            </Label>
+            <Input
+              id="rate-reason"
+              value={draft.reason}
+              onChange={(e) => onChange({ ...draft, reason: e.target.value })}
+            />
+          </div>
 
           {slot ? (
             <p className="text-xs text-slate-500 dark:text-slate-400">{slot.citation}</p>
