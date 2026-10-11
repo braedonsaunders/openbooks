@@ -75,7 +75,9 @@ export function NewDocumentButton({
       <div className="p-1">
         {navigable.map((item) => (
           <button
-            key={item.kind}
+            // Href entries share their kind with the plain create entry — key
+            // on the destination so the menu keeps every fast path.
+            key={item.href ?? item.kind}
             type="button"
             onClick={() => create(item)}
             className="flex w-full items-center rounded px-2.5 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:text-slate-200 dark:hover:bg-slate-800"

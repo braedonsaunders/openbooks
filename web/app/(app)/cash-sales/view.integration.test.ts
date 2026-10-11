@@ -70,8 +70,18 @@ test('a cash sale draft is editable for its create grant and postable only with 
     assert.equal(asCashier.drawer.canPost, false, 'posting stays behind cash_sales.post')
     assert.deepEqual(
       asCashier.newButton.items.map((item) => item.kind),
-      ['cash_sale', 'cash_refund'],
-      'the list New control offers both cash kinds',
+      ['cash_sale', 'cash_refund', 'cash_sale', 'cash_sale'],
+      'the list New control offers both cash kinds plus the fast paths',
+    )
+    assert.equal(
+      asCashier.newButton.items[2]?.href,
+      `/cash-sales?doc=new&kind=cash_sale&duplicateFrom=${draftId}`,
+      'the prior batch joins the menu as a duplicate source',
+    )
+    assert.equal(
+      asCashier.newButton.items[3]?.href,
+      '/cash-sales/daily-summary',
+      'the daily summary entry navigates to its form',
     )
 
     const asSupervisor = await load(supervisor, { doc: draftId })
@@ -130,6 +140,61 @@ test('refund prefill loads returnable lines for a sale with an issued stock line
       (lines[0]?.custom as { inventoryReturn?: { sourceIssueMovementId?: unknown } } | undefined)?.inventoryReturn,
       { sourceIssueMovementId: movementId },
       'the prefill carries the issue movement as return evidence',
+    )
+  } finally {
+    state.user = null
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
+
+test('duplicate yesterday copies the prior batch as today\'s draft', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  // The fast path copies lines and tender shape with today's date while
+  // close-out facts stay behind: yesterday's tips never seed today's draft.
+  const org = await withBypassContext(() => createScratchOrg())
+  try {
+    await withBypassContext(() => db.execute(sql`
+      update orgs set settings = jsonb_set(settings, '{features}',
+        coalesce(settings->'features', '{}'::jsonb) || '{"cashSales":true}'::jsonb, true)
+       where id = ${org.orgId}`))
+    const cashier = await role(org.orgId, 'cashier', ['cash_sales.read', 'cash_sales.create'])
+    const saleId = crypto.randomUUID()
+    const tillId = crypto.randomUUID()
+    await withBypassContext(() => db.execute(sql`
+      insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, currency_restriction, required_dimensions, custom, subsidiary_include_children)
+      values (${tillId}, ${org.orgId}, '1015', 'Till Cash', 'asset_current_other', false, true, false, false, null, '[]'::jsonb, '{}'::jsonb, true)`))
+    await withBypassContext(() => db.execute(sql`
+      insert into documents (id, org_id, kind, document_number, document_date, currency, subsidiary_id, created_by, status, custom)
+      values (${saleId}, ${org.orgId}, 'cash_sale', 'CS-PRIOR', '2020-01-01', 'USD', ${org.subsidiaryId}, ${cashier}, 'draft',
+        '{"closeout": {"tipsTotal": "5.0000", "feeTotal": "0", "overShort": "0", "serverPartyId": null, "parts": []}}'::jsonb)`))
+    await withBypassContext(() => db.execute(sql`
+      insert into document_lines (id, org_id, document_id, line_number, account_id, description, quantity, unit_price, amount)
+      values (${crypto.randomUUID()}, ${org.orgId}, ${saleId}, 1, ${org.accounts.revenue}, 'Day sales', 1, 100, 100)`))
+    await withBypassContext(() => db.execute(sql`
+      insert into document_tenders (org_id, document_id, position, kind, method_label, account_id,
+           stored_value_account_id, amount_minor, currency, reference)
+      values (${org.orgId}, ${saleId}, 1, 'cash', 'cash', ${tillId}, null, '1000000', 'USD', null)`))
+
+    const load = (user: string, sp: Record<string, string>) => {
+      state.user = sessionFor(org.orgId, user)
+      return withOrgContext(org.orgId, () => loadCashSales(sp))
+    }
+    const list = await load(cashier, {})
+    const duplicate = list.newButton.items.find((item) => (item.href ?? '').includes('duplicateFrom='))
+    assert.equal(
+      duplicate?.href,
+      `/cash-sales?doc=new&kind=cash_sale&duplicateFrom=${saleId}`,
+      'yesterday\'s batch joins the New menu as a duplicate source',
+    )
+    const create = await load(cashier, { doc: 'new', kind: 'cash_sale', duplicateFrom: saleId })
+    assert.equal(create.drawer?.createMode, true, 'the duplicate opens the unsaved-create drawer')
+    const payload = create.drawer?.payload as { doc: Record<string, unknown>; lines: Record<string, unknown>[] }
+    assert.equal(payload.lines.length, 1, 'yesterday\'s lines seed today\'s draft')
+    assert.equal(payload.lines[0]?.account_id, org.accounts.revenue)
+    const tenders = (payload.doc.custom as { tenders?: unknown[] } | undefined)?.tenders ?? []
+    assert.equal(tenders.length, 1, 'yesterday\'s tender shape seeds today\'s draft')
+    assert.ok(
+      !('closeout' in ((payload.doc.custom ?? {}) as Record<string, unknown>)),
+      'yesterday\'s close-out never seeds today\'s draft',
     )
   } finally {
     state.user = null

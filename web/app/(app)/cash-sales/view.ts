@@ -17,6 +17,8 @@ import { isMultiSubsidiary, subsidiaryOptions } from '../../../lib/subsidiaries'
 import { resolveFormLayout } from '../../../lib/customization/resolve'
 import { featureEnabled, isFeatureEnabled, resolvedFeatureState } from '../../../lib/features'
 import { readCashSalesSettings } from '../../../lib/company-settings'
+import { buildDuplicateSeed } from '../../../lib/cash-sales-duplicate'
+import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import type { DocumentDrawer } from '../../../components/document-drawer'
 import { readProviderTransactionsForDocument } from '@openbooks/engine/tax'
 import type { TaxProviderChipRow } from '../../../components/tax-provider-chip'
@@ -81,7 +83,7 @@ export interface CashSalesData {
   canCreate: boolean
   canPost: boolean
   currentParams: Record<string, string | string[] | undefined>
-  newButton: { items: Array<{ kind: string; label: string }>; basePath: string; triggerLabel: string }
+  newButton: { items: Array<{ kind: string; label: string; href?: string }>; basePath: string; triggerLabel: string }
   drawerOpen: boolean
   drawer: CashSalesDrawer | null
 }
@@ -157,13 +159,14 @@ export async function loadCashSales(
   const equipmentEnabled = await isFeatureEnabled(authz.user.orgId, 'fixedAssets')
   const featureState = await resolvedFeatureState(authz.user.orgId)
   const docId = pickString(sp.doc)
+  const newItems: Array<{ kind: string; label: string; href?: string }> = [
+    { kind: 'cash_sale', label: tAr('actions.newCashSale') },
+    { kind: 'cash_refund', label: tAr('actions.newCashRefund') },
+  ]
   const newDocument = {
     widget: 'new-document',
     props: {
-      items: [
-        { kind: 'cash_sale', label: tAr('actions.newCashSale') },
-        { kind: 'cash_refund', label: tAr('actions.newCashRefund') },
-      ],
+      items: newItems,
       basePath: BASE_PATH,
       triggerLabel: tAr('actions.new'),
     },
@@ -235,6 +238,79 @@ export async function loadCashSales(
          limit 1`)).rows[0] ?? null
     : null
   const refundLines = refundSource ? await returnableSaleLines(authz.user.orgId, refundSource.id) : []
+  // Duplicate prefill: `?doc=new&kind=cash_sale&duplicateFrom=<sale>` copies
+  // yesterday's batch as today's draft template — same lines and tender
+  // shape with today's date. Close-out facts never copy: yesterday's tips,
+  // fees, over/short and server belong to yesterday. Nothing is written;
+  // Save creates the draft through the native path.
+  const duplicateFromId = isCreate && createKind === 'cash_sale' && typeof sp.duplicateFrom === 'string' && isUuid(sp.duplicateFrom)
+    ? sp.duplicateFrom
+    : null
+  const duplicateSource = duplicateFromId
+    ? (await db.execute<{ id: string; party_id: string | null; lines: unknown; tenders: unknown }>(sql`
+        select d.id, d.party_id,
+               coalesce((
+                 select jsonb_agg(row_to_json(l) order by l.line_number)
+                   from (
+                     select l.line_number, l.account_id, l.item_id,
+                            l.quantity::text as quantity, l.unit_price::text as unit_price,
+                            l.amount::text as amount, l.description,
+                            l.tax_code_id, l.tax_group_id
+                       from document_lines l
+                      where l.org_id = d.org_id and l.document_id = d.id
+                   ) l
+               ), '[]'::jsonb) as lines,
+               coalesce((
+                 select jsonb_agg(row_to_json(t) order by t.position)
+                   from (
+                     select t.position, t.kind, t.method_label, t.account_id,
+                            t.stored_value_account_id,
+                            ((t.amount_minor / 10000)::text || '.' || lpad((t.amount_minor % 10000)::text, 4, '0')) as amount,
+                            t.reference
+                       from document_tenders t
+                      where t.org_id = d.org_id and t.document_id = d.id
+                   ) t
+               ), '[]'::jsonb) as tenders
+          from documents d
+         where d.org_id = ${authz.user.orgId} and d.id = ${duplicateFromId} and d.kind = 'cash_sale' and d.status <> 'voided'
+         ${authz.allowedSubsidiaryIds ? sql`and d.subsidiary_id = any(${[...authz.allowedSubsidiaryIds]}::uuid[])` : sql``}
+         limit 1`)).rows[0] ?? null
+    : null
+  const duplicateSeed = duplicateSource
+    ? buildDuplicateSeed({
+        partyId: duplicateSource.party_id,
+        lines: (duplicateSource.lines ?? []) as Parameters<typeof buildDuplicateSeed>[0]['lines'],
+        tenders: (duplicateSource.tenders ?? []) as Parameters<typeof buildDuplicateSeed>[0]['tenders'],
+      })
+    : null
+  // "Duplicate yesterday" source: the latest non-voided cash sale dated
+  // before the org's business today — usually yesterday's batch. The
+  // button copies its lines and tender shape as today's draft.
+  const yesterdaySaleId = canCreate
+    ? (await db.execute<{ id: string }>(sql`
+        select d.id from documents d
+         where d.org_id = ${authz.user.orgId} and d.kind = 'cash_sale' and d.status <> 'voided'
+           and d.document_date < (${await businessToday(authz.user.orgId)})::date
+           ${authz.allowedSubsidiaryIds ? sql`and d.subsidiary_id = any(${[...authz.allowedSubsidiaryIds]}::uuid[])` : sql``}
+         order by d.document_date desc, d.created_at desc limit 1`)).rows[0]?.id ?? null
+    : null
+  // Fast paths join the New menu only for creators: duplicating yesterday's
+  // batch as today's draft, and one-form daily summary entry. Href items
+  // navigate instead of opening the drawer.
+  if (canCreate) {
+    if (yesterdaySaleId) {
+      newItems.push({
+        kind: 'cash_sale',
+        label: tAr('list.cashDuplicateYesterday'),
+        href: `${BASE_PATH}?doc=new&kind=cash_sale&duplicateFrom=${yesterdaySaleId}`,
+      })
+    }
+    newItems.push({
+      kind: 'cash_sale',
+      label: tAr('list.cashDailySummary'),
+      href: `${BASE_PATH}/daily-summary`,
+    })
+  }
   // The create seed carries no lines, so the keep-existing-items clause
   // matches nothing — the same items list a blank draft would see.
   const existingDocId = openDoc ? docId : null
@@ -311,6 +387,24 @@ export async function loadCashSales(
   if (createSeed && walkInCustomer && !refundSource) {
     (createSeed.doc as Record<string, unknown>).party_id = walkInCustomer.id;
     (createSeed.doc as Record<string, unknown>).party_name = walkInCustomer.display_name
+  }
+  if (createSeed && duplicateSeed) {
+    const seed = createSeed.doc as Record<string, unknown>
+    if (duplicateSeed.partyId) seed.party_id = duplicateSeed.partyId;
+    seed.custom = {
+      ...((seed.custom ?? {}) as Record<string, unknown>),
+      tenders: duplicateSeed.tenders,
+    };
+    (createSeed as { lines: Record<string, unknown>[] }).lines = duplicateSeed.lines.map((line) => ({
+      item_id: line.itemId ?? null,
+      account_id: line.accountId,
+      quantity: line.quantity ?? '1',
+      unit_price: line.unitPrice ?? line.amount,
+      amount: line.amount,
+      description: line.description ?? null,
+      tax_code_id: line.taxCodeId ?? null,
+      tax_group_id: line.taxGroupId ?? null,
+    }))
   }
   if (createSeed && refundSource) {
     const seed = createSeed.doc as Record<string, unknown>

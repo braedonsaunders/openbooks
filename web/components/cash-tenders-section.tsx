@@ -18,9 +18,26 @@ export interface TenderDraft {
   /** Resolved balance in document currency, display only — never saved. */
   svBalance?: string
   amount: string
+  /** Card tip collected inside this tender for staff — posts to the
+   *  tips-payable liability, never revenue. Saved on the sale's close-out. */
+  tipAmount?: string
+  /** Processor fee withheld from this tender's settlement — posts to the
+   *  fee expense so deposits reconcile net. Saved on the sale's close-out. */
+  feeAmount?: string
   reference?: string
   externalRef?: string
 }
+
+/** Daily close-out facts beside the tenders: the counted cash over/short
+ *  (positive over, negative short) and the server the tips belong to (null
+ *  pools them for the house split). Totals derive from the tender tips and
+ *  fees on save, so the two can never drift. */
+export interface CloseoutDraft {
+  overShort: string
+  serverPartyId?: string
+}
+
+const CARD_FAMILY_KINDS = ['card', 'bank_transfer', 'wallet', 'gateway'] as const
 
 export interface TenderAccountOption {
   value: string
@@ -59,9 +76,22 @@ export function parseTenderDrafts(raw: unknown): TenderDraft[] {
       ...(pickString(entry, 'svLast4') ? { svLast4: pickString(entry, 'svLast4') } : {}),
       ...(pickString(entry, 'svBalance') ? { svBalance: pickString(entry, 'svBalance') } : {}),
       amount: pickString(entry, 'amount'),
+      ...(pickString(entry, 'tipAmount', 'tip_amount') ? { tipAmount: pickString(entry, 'tipAmount', 'tip_amount') } : {}),
+      ...(pickString(entry, 'feeAmount', 'fee_amount') ? { feeAmount: pickString(entry, 'feeAmount', 'fee_amount') } : {}),
       ...(pickString(entry, 'reference') ? { reference: pickString(entry, 'reference') } : {}),
       ...(pickString(entry, 'externalRef', 'external_ref') ? { externalRef: pickString(entry, 'externalRef', 'external_ref') } : {}),
     }))
+}
+
+/** Parse the close-out facts beside the tenders. Unknown shapes pool. */
+export function parseCloseoutDraft(raw: unknown): CloseoutDraft {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { overShort: '' }
+  const entry = raw as Record<string, unknown>
+  const overShort = typeof entry.overShort === 'string' ? entry.overShort : ''
+  const serverPartyId = typeof entry.serverPartyId === 'string' && entry.serverPartyId.length > 0
+    ? entry.serverPartyId
+    : undefined
+  return { overShort, ...(serverPartyId ? { serverPartyId } : {}) }
 }
 
 /**
@@ -83,6 +113,9 @@ export function CashTendersSection({
   defaultAccountId,
   storedValueEnabled,
   resolveStoredValueCode,
+  closeoutValue,
+  onCloseoutChange,
+  serverOptions,
 }: {
   value: unknown
   onChange: (next: TenderDraft[]) => void
@@ -93,6 +126,13 @@ export function CashTendersSection({
   defaultAccountId?: string | null
   storedValueEnabled?: boolean
   resolveStoredValueCode?: (code: string) => Promise<StoredValueResolution | null>
+  /** Close-out facts beside the tenders; the editor renders only when
+   *  onCloseoutChange is provided. Totals always derive from tender tips
+   *  and fees on save. */
+  closeoutValue?: unknown
+  onCloseoutChange?: (next: CloseoutDraft) => void
+  /** Staff the tips belong to; empty pools them for the house split. */
+  serverOptions?: TenderAccountOption[]
 }) {
   const t = useTranslations('ar')
   const { money } = useMoney()
@@ -108,6 +148,9 @@ export function CashTendersSection({
 
   // Exact decimal-string cross-foot: entries that are not valid decimals are
   // skipped here and refused by name on save, never coerced or rounded.
+  // With a close-out the till collects total + tips − fees ± over/short, so
+  // the expected side restates explicitly instead of pretending exact match.
+  const closeout = useMemo(() => parseCloseoutDraft(closeoutValue), [closeoutValue])
   const tendered = useMemo(() => {
     let sum = '0'
     for (const tender of tenders) {
@@ -118,14 +161,43 @@ export function CashTendersSection({
     }
     return sum
   }, [tenders])
+  const closeoutTotals = useMemo(() => {
+    let tips = '0'
+    let fees = '0'
+    for (const tender of tenders) {
+      const tip = typeof tender.tipAmount === 'string' && tender.tipAmount !== ''
+        ? canonicalDecimal(tender.tipAmount, 4)
+        : '0'
+      const fee = typeof tender.feeAmount === 'string' && tender.feeAmount !== ''
+        ? canonicalDecimal(tender.feeAmount, 4)
+        : '0'
+      if (tip !== null) tips = add(tips, tip)
+      if (fee !== null) fees = add(fees, fee)
+    }
+    return { tips, fees }
+  }, [tenders])
+  const expected = useMemo(() => {
+    try {
+      let sum = add(total || '0', closeoutTotals.tips)
+      if (!isZeroDecimal(closeoutTotals.fees)) {
+        const negated = canonicalDecimal(`-${closeoutTotals.fees}`, 4)
+        if (negated !== null) sum = add(sum, negated)
+      }
+      const overShort = closeout.overShort !== '' ? canonicalDecimal(closeout.overShort, 4) : '0'
+      if (overShort !== null) sum = add(sum, overShort)
+      return sum
+    } catch {
+      return total || '0'
+    }
+  }, [total, closeoutTotals, closeout])
 
   const comparison = useMemo(() => {
     try {
-      return compareDecimal(tendered, total || '0')
+      return compareDecimal(tendered, expected)
     } catch {
       return 0
     }
-  }, [tendered, total])
+  }, [tendered, expected])
 
   const update = (index: number, patch: Partial<TenderDraft>) => {
     onChange(tenders.map((tender, i) => (i === index ? { ...tender, ...patch } : tender)))
@@ -162,7 +234,7 @@ export function CashTendersSection({
       <div className="flex items-center gap-2">
         <FieldLabel fieldName={t('tenders.title')}>{t('tenders.title')}</FieldLabel>
         <span className="text-xs text-slate-500 dark:text-slate-400">
-          {t('tenders.tenderedOf', { tendered: money(tendered, { currency }), total: money(total || '0', { currency }) })}
+          {t('tenders.tenderedOf', { tendered: money(tendered, { currency }), total: money(expected, { currency }) })}
         </span>
         {tenders.length > 0 ? (
           <Badge variant={comparison === 0 ? 'success' : 'warning'}>
@@ -173,8 +245,10 @@ export function CashTendersSection({
       {editable ? <p className="text-xs text-slate-500 dark:text-slate-400">{t('tenders.help')}</p> : null}
       {tenders.map((tender, index) => {
         const isStoredValue = tender.kind === 'stored_value'
+        const isCardFamily = (CARD_FAMILY_KINDS as readonly string[]).includes(tender.kind)
         return (
-          <div key={index} className="grid grid-cols-[110px_1fr_1fr_130px_1fr_auto] items-end gap-2">
+          <div key={index} className="space-y-1">
+          <div className="grid grid-cols-[110px_1fr_1fr_130px_1fr_auto] items-end gap-2">
             <div>
               <FieldLabel fieldName={t('tenders.method')}>{t('tenders.method')}</FieldLabel>
               {editable ? (
@@ -183,8 +257,15 @@ export function CashTendersSection({
                   onChange={(e) => update(index, {
                     kind: e.target.value,
                     ...(e.target.value === 'stored_value'
-                      ? { accountId: '' }
-                      : { storedValueAccountId: undefined, svLast4: undefined, svBalance: undefined }),
+                      ? { accountId: '', tipAmount: undefined, feeAmount: undefined }
+                      : {
+                          storedValueAccountId: undefined,
+                          svLast4: undefined,
+                          svBalance: undefined,
+                          ...((CARD_FAMILY_KINDS as readonly string[]).includes(e.target.value)
+                            ? {}
+                            : { feeAmount: undefined }),
+                        }),
                   })}
                 >
                   {kindOptions.map((option) => (
@@ -298,6 +379,40 @@ export function CashTendersSection({
               </Button>
             ) : null}
           </div>
+          {!isStoredValue ? (
+            <div className="grid grid-cols-[110px_130px_130px_1fr] items-end gap-2 pl-1">
+              <p className="pb-2 text-xs text-slate-500 dark:text-slate-400">{t('tenders.closeout')}</p>
+              <div>
+                <FieldLabel fieldName={t('tenders.tip')}>{t('tenders.tip')}</FieldLabel>
+                {editable ? (
+                  <Input
+                    inputMode="decimal"
+                    value={tender.tipAmount ?? ''}
+                    onChange={(e) => update(index, { tipAmount: e.target.value })}
+                    placeholder="0.00"
+                  />
+                ) : (
+                  <p className="text-sm tabular-nums">{tender.tipAmount ? money(tender.tipAmount, { currency }) : '—'}</p>
+                )}
+              </div>
+              {isCardFamily ? (
+                <div>
+                  <FieldLabel fieldName={t('tenders.fee')}>{t('tenders.fee')}</FieldLabel>
+                  {editable ? (
+                    <Input
+                      inputMode="decimal"
+                      value={tender.feeAmount ?? ''}
+                      onChange={(e) => update(index, { feeAmount: e.target.value })}
+                      placeholder="0.00"
+                    />
+                  ) : (
+                    <p className="text-sm tabular-nums">{tender.feeAmount ? money(tender.feeAmount, { currency }) : '—'}</p>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+          </div>
         )
       })}
       {editable ? (
@@ -308,6 +423,48 @@ export function CashTendersSection({
           {tenders.length === 0 && !isZeroDecimal(total || '0') ? (
             <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">{t('tenders.emptyHint')}</p>
           ) : null}
+        </div>
+      ) : null}
+      {onCloseoutChange ? (
+        <div className="space-y-1 border-t border-slate-200 pt-2 dark:border-slate-700">
+          <FieldLabel fieldName={t('tenders.overShort')}>{t('tenders.overShort')}</FieldLabel>
+          <div className="grid grid-cols-[130px_1fr] items-end gap-2">
+            <div>
+              {editable ? (
+                <Input
+                  inputMode="decimal"
+                  value={closeout.overShort}
+                  onChange={(e) => onCloseoutChange({ ...closeout, overShort: e.target.value })}
+                  placeholder="0.00"
+                />
+              ) : (
+                <p className="text-sm tabular-nums">{closeout.overShort !== '' ? money(closeout.overShort, { currency }) : '—'}</p>
+              )}
+            </div>
+            <div>
+              <FieldLabel fieldName={t('tenders.server')}>{t('tenders.server')}</FieldLabel>
+              {editable ? (
+                serverOptions && serverOptions.length > 0 ? (
+                  <SearchSelect
+                    options={serverOptions}
+                    value={closeout.serverPartyId ?? ''}
+                    onChange={(v) => onCloseoutChange({ ...closeout, ...(v ? { serverPartyId: v } : { serverPartyId: undefined }) })}
+                    placeholder={t('tenders.serverPooled')}
+                  />
+                ) : (
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{t('tenders.serverPooled')}</p>
+                )
+              ) : (
+                <p className="text-sm">
+                  {closeout.serverPartyId
+                    ? (serverOptions?.find((o) => o.value === closeout.serverPartyId)?.label ?? closeout.serverPartyId)
+                    : t('tenders.serverPooled')}
+                </p>
+              )}
+            </div>
+          </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400">{t('tenders.overShortHint')}</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">{t('tenders.closeoutHint')}</p>
         </div>
       ) : null}
     </div>
