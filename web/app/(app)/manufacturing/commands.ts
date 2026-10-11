@@ -4,7 +4,7 @@ import type {
   ManufacturingRow,
   ManufacturingView,
 } from "@openbooks/engine/manufacturing/workspace";
-import { add,neg,cmp } from "@openbooks/engine/money/money";
+import { add,neg,cmp,mul,div } from "@openbooks/engine/money/money";
 export type Choice = { value: string; label: string; parentId?: string | null };
 export interface Field {
   key: string;
@@ -50,6 +50,16 @@ const select = (
   });
 const decimal = (key: string, initial?: unknown, required = true): Field =>
   field(key, initial, { type: "decimal", required });
+/** Routing run minutes for `done` of `planned` units; null when unknowable. */
+function standardRunMinutes(plannedRun: unknown, done: string, planned: unknown): string | null {
+  if (plannedRun == null || planned == null) return null;
+  try {
+    if (cmp(String(planned), "0") <= 0) return null;
+    return div(mul(String(plannedRun), done), String(planned));
+  } catch {
+    return null;
+  }
+}
 const date = (key: string, initial?: unknown, required = false): Field =>
   field(key, initial, { type: "date", required, nullable: !required });
 const reason = (key = "reason", required = true, minLength = 5): Field =>
@@ -349,7 +359,12 @@ export function childCommands(
       return [{ key: "startOperation", path: base + "/start", fields: [date("startedOn", r.plannedStart ?? null)] }];
     if (row.status === "paused")
       return [{ key: "resumeOperation", path: base + "/resume", fields: [] }];
-    if (row.status === "running")
+    if (row.status === "running") {
+      // Actual minutes open prefilled with the routing standard for the
+      // default quantity, so the operator confirms or overrides the time
+      // that will be costed instead of leaving a blank that costs standard.
+      const defaultDone = add(String(row.quantityPlanned), neg(String(row.quantityScrappedHere ?? "0")));
+      const standardRun = standardRunMinutes(row.plannedRunMinutes, defaultDone, row.quantityPlanned);
       return [
         {
           key: "pauseOperation",
@@ -367,13 +382,14 @@ export function childCommands(
               row.measuredQty,
               row.qualityGate === "measure",
             ),
-            decimal("actualSetupMinutes", row.actualSetupMinutes, false),
-            decimal("actualRunMinutes", row.actualRunMinutes, false),
+            decimal("actualSetupMinutes", row.actualSetupMinutes ?? row.plannedSetupMinutes, false),
+            decimal("actualRunMinutes", row.actualRunMinutes ?? standardRun, false),
             ...(row.laborTimeSource === "approved_time" ? [] : [decimal("actualLaborMinutes", row.actualLaborMinutes, false)]),
             date("completedOn", r.plannedStart ?? null),
           ],
         },
       ];
+    }
   }
   if (
     view === "work-orders" &&

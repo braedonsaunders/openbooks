@@ -221,6 +221,12 @@ async function resolveOperationConversion(tx:SqlExecutor,orgId:string,order:Conv
   const approvedTime=operation.labor_time_source==='approved_time' ? await approvedOperationTime(tx,orgId,order.id,operationId) : null
   const { laborMinutes, machineMinutes } = operationMinutes(operation, doneQty, setupMinutes, runMinutes, approvedTime?.laborMinutes ?? actualLabor);
   const timeBasis = approvedTime ? "approved_time" : actualSetup !== null || actualRun !== null || actualLabor !== null ? "reported" : "standard";
+  // Per-field provenance: a reported run time beside a standard setup time
+  // is recorded as exactly that, never as one blanket "reported" basis.
+  const minuteSources = {
+    setup: actualSetup !== null ? "reported" : "standard",
+    run: actualRun !== null ? "reported" : "standard",
+  } as const;
 
   const date = onDate ?? await businessToday(orgId);
   const labor = laborAmount(operation, order.number, laborMinutes);
@@ -231,20 +237,20 @@ async function resolveOperationConversion(tx:SqlExecutor,orgId:string,order:Conv
   const applied = add(machineCost, overhead);
   const total = add(labor, applied);
   const result = { entryId: null as string | null, setupMinutes, runMinutes, laborMinutes };
-  return {operation,approvedTime,timeBasis,date,labor,machine,machineCost,overhead,applied,total,result,machineMinutes};
+  return {operation,approvedTime,timeBasis,minuteSources,date,labor,machine,machineCost,overhead,applied,total,result,machineMinutes};
 }
 
 /** Governed loss previews reuse the native conversion algorithm and frozen release rates. */
 export async function previewOperationConversion(tx:SqlExecutor,orgId:string,order:ConversionOrder,operationId:string,doneQty:string,input:OperationTimeInput,onDate:string) {
   const cost=await resolveOperationConversion(tx,orgId,order,operationId,doneQty,input,onDate);
-  return {operation:cost.operation,approvedTime:cost.approvedTime,timeBasis:cost.timeBasis,date:cost.date,labor:cost.labor,machine:cost.machine,machineCost:cost.machineCost,overhead:cost.overhead,total:cost.total,setupMinutes:cost.result.setupMinutes,runMinutes:cost.result.runMinutes,laborMinutes:cost.result.laborMinutes};
+  return {operation:cost.operation,approvedTime:cost.approvedTime,timeBasis:cost.timeBasis,minuteSources:cost.minuteSources,date:cost.date,labor:cost.labor,machine:cost.machine,machineCost:cost.machineCost,overhead:cost.overhead,total:cost.total,setupMinutes:cost.result.setupMinutes,runMinutes:cost.result.runMinutes,laborMinutes:cost.result.laborMinutes};
 }
 
 export async function absorbOperationConversion(
   tx: SqlExecutor, orgId: string, actorId: string, order: ConversionOrder, operationId: string,
   doneQty: string, input: OperationTimeInput, options?:{onDate?:string},
 ): Promise<{ entryId: string | null; setupMinutes: string; runMinutes: string; laborMinutes: string }> {
-  const {operation,approvedTime,timeBasis,date,labor,machine,machineCost,overhead,applied,total,result,machineMinutes}=await resolveOperationConversion(tx,orgId,order,operationId,doneQty,input,options?.onDate);
+  const {operation,approvedTime,timeBasis,minuteSources,date,labor,machine,machineCost,overhead,applied,total,result,machineMinutes}=await resolveOperationConversion(tx,orgId,order,operationId,doneQty,input,options?.onDate);
   const {setupMinutes,runMinutes,laborMinutes}=result;
   if (isZero(total)) {
     if(approvedTime) await claimOperationTime(tx,orgId,actorId,operationId,approvedTime.ids,null)
@@ -283,7 +289,8 @@ export async function absorbOperationConversion(
       operation_id: operationId, operation_sequence: String(operation.sequence),
       conversion_labor_amount: labor, conversion_overhead_amount: applied,
       conversion: {
-        timeBasis, timeEntryIds: approvedTime?.ids ?? [], quantity: doneQty, setupMinutes, runMinutes, laborMinutes, machineMinutes,
+        timeBasis, setupMinutesSource: minuteSources.setup, runMinutesSource: minuteSources.run,
+        timeEntryIds: approvedTime?.ids ?? [], quantity: doneQty, setupMinutes, runMinutes, laborMinutes, machineMinutes,
         laborRate: operation.standard_labor_final_rate, laborAmount: labor,
         machineRateId: machine?.id ?? null, machineRate: machine?.rate ?? null, machineAmount: machineCost,
         overheadBasis: operation.absorbs_overhead ? operation.overhead_snapshot?.basis ?? null : null, overheadAmount: overhead,

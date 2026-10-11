@@ -7,7 +7,7 @@ import { manufacturingTransaction } from "../../../../../_transaction";
 import { loadScopedWorkOrder } from "../../../../_scope";
 
 const Params = z.object({ id: z.string().uuid(), opId: z.string().uuid() });
-const Body = z.object({ startedOn: z.string().nullable().optional() }).strict();
+const Body = z.object({ startedOn: z.string().nullable() }).strict();
 
 export const POST = defineRoute({
   permission: "items.post", feature: "manufacturing", params: Params, body: Body,
