@@ -6,7 +6,7 @@ import { extendCost } from "./costing.ts";
 import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
 import { assertPeriodModulesOpen, CloseError } from "../periods/period-policy.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
-import { InventoryError, type Runner } from "./contracts.ts";
+import { DownstreamConsumptionError, InventoryError, type Runner } from "./contracts.ts";
 import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
 import { assertInventoryAccountsPostable } from "./journal.ts";
 import { lockInventoryPosition, assertInventoryDate } from "./position.ts";
@@ -164,8 +164,9 @@ export async function removeInboundLayer(
        ) limit 1
   `));
   if (consumed.rows.length) {
-    throw new InventoryError(
+    throw new DownstreamConsumptionError(
       "inventory from this movement has downstream consumption; reverse those issues/transfers first",
+      movement.id,
     );
   }
   const landed = (await tx.execute(sql`

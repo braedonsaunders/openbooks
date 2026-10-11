@@ -282,6 +282,11 @@ export function readRefusalCode(body: unknown): string | undefined {
   return typeof code === 'string' && code.trim() !== '' ? code.trim() : undefined
 }
 
+/** Structured machine evidence from a refusal body (`details`), defensively decoded. */
+export function readRefusalDetails(body: unknown): Record<string, unknown> | null {
+  return asRecord(asRecord(body)?.details)
+}
+
 /** Field-level failures from a 400 body, defensively decoded: malformed entries are dropped. */
 export function readRefusalIssues(body: unknown): FieldIssue[] {
   const raw = asRecord(body)?.issues

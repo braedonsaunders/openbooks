@@ -311,7 +311,10 @@
     "consequenceMetadata": "この変更は摘要情報のみを修正します。元帳の金額は移動せず、文書は転記済みのままです。",
     "consequenceReclass": "この変更はディメンションを変更し、転記済み明細が対象の場合に均衡する振替仕訳を計上します。文書は転記済みのままです。",
     "consequenceVoid": "この変更は転記済み文書を無効化し、代替の下書きを作成します。元の期間がオープンである必要があります。",
-    "correctionApplied": "転記済み文書を修正しました"
+    "correctionApplied": "転記済み文書を修正しました",
+    "voidWithDependents": "関連伝票とともに取り消す",
+    "adjustRemainder": "残量を調整",
+    "remainderCorrected": "残量を修正しました — 受領書は証跡として残ります"
   },
   "approvalFlow": {
     "pendingWith": "{names}の承認待ち",

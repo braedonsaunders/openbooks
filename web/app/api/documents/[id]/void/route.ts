@@ -9,6 +9,7 @@ import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import {
   DocumentVoidError,
   requestDocumentVoid,
+  requestReceiptVoidWithDependents,
   suggestVoidReversalDate,
 } from '@openbooks/engine/src/ledger/document-void.ts'
 import { can, getAuthz, guardSubsidiaryScope } from '../../../../../lib/authz'
@@ -23,6 +24,7 @@ const POSTBodySchema1 = z.object({
   reason: z.string().optional(),
   reversalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   reversalPeriodId: z.string().uuid().nullable().optional(), expectedUpdatedAt: z.string().min(1),
+  withDependents: z.boolean().optional(),
 });
 
 
@@ -159,6 +161,7 @@ export const POST = defineRoute({
         reversalDate?: string | null
         reversalPeriodId?: string | null
         expectedUpdatedAt?: string
+        withDependents?: boolean
       }
     if (!isDocumentRevisionToken(body.expectedUpdatedAt)) {
         return NextResponse.json(
@@ -166,6 +169,14 @@ export const POST = defineRoute({
           { status: 409 },
         )
       }
+    // Void-with-dependents is a goods-receipt cascade only: any other kind
+    // refuses closed instead of running an undefined combination.
+    if (body.withDependents && gate.doc.kind !== 'purchase_receipt') {
+      return NextResponse.json(
+        { error: 'void with dependents is only offered for goods receipts', code: 'invalid' },
+        { status: 422 },
+      )
+    }
     try {
         // The void and the locked scope recheck commit as one unit: a rehome
         // that landed after the guard above meets the uniform 404 and voids
@@ -178,7 +189,8 @@ export const POST = defineRoute({
         const outcome: VoidOutcome = await withOrgTransaction(authz.user.orgId, async (): Promise<VoidOutcome> => {
           const relocked = await lockedDocumentScopeDenied(authz, id)
           if (relocked) return { denied: relocked }
-          const result = await requestDocumentVoid({
+          const request = body.withDependents ? requestReceiptVoidWithDependents : requestDocumentVoid
+          const result = await request({
             documentId: id,
             orgId: authz.user.orgId,
             actorId: authz.user.id,

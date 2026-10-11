@@ -21,8 +21,9 @@ import { assertBillingReleasable, billedCostSourceRefusal, BillingReleaseRefused
 import { projectRetainageHeldSql } from "../projects/construction-billing.ts";
 import { reverseFieldTicketProgressInTransaction } from "../projects/progress.ts";
 import { add, cmp, neg } from "../money/money.ts";
-import { InventoryError } from "../inventory/contracts.ts";
+import { DownstreamConsumptionError, InventoryError } from "../inventory/contracts.ts";
 import { reverseInventoryMovement } from "../inventory/reversal.ts";
+import { listReceiptVoidBlockers } from "../inventory/receipt-void-dependents.ts";
 import { reverseDropShipConfirmationPair } from "../inventory/drop-ship-reversal.ts";
 import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 import { emitDocumentVoided } from "../webhooks/emit.ts";
@@ -45,13 +46,16 @@ export type DocumentVoidCode =
   | "reversal-period-uncovered"
   | "reversal-period-closed"
   | "retainer-drawdowns-posted"
-  | "billed-on-invoice";
+  | "billed-on-invoice"
+  | "receipt-stock-consumed";
 
 export class DocumentVoidError extends Error {
   constructor(
     message: string,
     readonly status = 422,
     readonly code: DocumentVoidCode = "invalid",
+    /** Machine-readable evidence (never internals): the API boundary renders plain-object details. */
+    readonly details?: unknown,
   ) { super(message); }
 }
 
@@ -570,6 +574,120 @@ export async function requestDocumentVoid(
   });
 }
 
+function dependentKindLabel(kind: string): string {
+  if (kind === "sales_fulfillment") return "sales fulfillment";
+  if (kind === "customer_invoice") return "invoice";
+  if (kind === "purchase_receipt") return "goods receipt";
+  return kind;
+}
+
+/**
+ * The actionable refusal for a receipt whose stock was consumed
+ * downstream: every dependent named with its source document, each with
+ * its native reverse path; the unconsumed remainder named for the
+ * adjustment path; and the cascade offer exactly when every dependent
+ * reverses through its own document void. The machine-readable form
+ * travels in `details` for the void dialog's actions.
+ */
+async function receiptConsumptionRefusal(
+  tx: Pick<typeof db, "execute">,
+  orgId: string,
+  receiptId: string,
+): Promise<DocumentVoidError> {
+  const relief = await listReceiptVoidBlockers(tx, orgId, receiptId);
+  const lines = [
+    `Goods receipt ${relief.receiptNumber} cannot void — its stock has downstream consumption:`,
+  ];
+  for (const blocker of relief.blockers) {
+    const itemLabel = blocker.itemCode ?? blocker.itemName;
+    for (const dependent of blocker.dependents) {
+      const doc = dependent.sourceDocument;
+      const returned =
+        cmp(dependent.returnedQuantity, "0") > 0 ? ` (${dependent.returnedQuantity} already returned)` : "";
+      lines.push(
+        `${dependent.consumedQuantity} of ${itemLabel} consumed by ` +
+          (doc ? `${dependentKindLabel(doc.kind)} ${doc.number}` : "a movement with no source document") +
+          ` on ${dependent.issueDate}${returned}. ${dependent.reverseAction}`,
+      );
+    }
+    for (const other of blocker.otherBlocks) lines.push(other);
+  }
+  if (cmp(relief.remainderQuantity, "0") > 0) {
+    lines.push(
+      `Unconsumed remainder on this receipt: ${relief.remainderQuantity} — ` +
+        `correct a phantom over-delivery with an inventory adjustment (Adjust remainder) instead of voiding.`,
+    );
+  }
+  if (relief.allowVoidWithDependents) {
+    lines.push("Every dependent reverses through its own document void — Void with dependents is available.");
+  }
+  return new DocumentVoidError(lines.join(" "), 422, "receipt-stock-consumed", {
+    receiptNumber: relief.receiptNumber,
+    blockers: relief.blockers,
+    allowVoidWithDependents: relief.allowVoidWithDependents,
+    remainderQuantity: relief.remainderQuantity,
+  });
+}
+
+/**
+ * Void a goods receipt together with the dependents consuming its stock.
+ * Offered only when every dependent reverses through its own native
+ * document void (a voidable sales fulfillment): each dependent voids
+ * first through the same controlled path, then the receipt voids — one
+ * atomic unit, posted history appended never edited. Any other dependent
+ * (a posted invoice's sale, landed cost, custody) refuses with the order
+ * of operations instead of a partial cascade.
+ */
+export async function requestReceiptVoidWithDependents(
+  input: DocumentVoidInput,
+): Promise<DocumentVoidResult> {
+  return withOrgTransaction(input.orgId, async () => {
+    const relief = await listReceiptVoidBlockers(db, input.orgId, input.documentId);
+    if (relief.blockers.length === 0) return requestDocumentVoid(input);
+    if (!relief.allowVoidWithDependents) {
+      const steps = relief.blockers.flatMap((blocker) => blocker.dependents.map((dependent) => dependent.reverseAction));
+      throw new DocumentVoidError(
+        `Void with dependents is unavailable for goods receipt ${relief.receiptNumber}: ` +
+          `at least one dependent does not reverse through its own document void. ${steps.join(" ")}`,
+        422,
+        "receipt-stock-consumed",
+        {
+          receiptNumber: relief.receiptNumber,
+          blockers: relief.blockers,
+          allowVoidWithDependents: false,
+          remainderQuantity: relief.remainderQuantity,
+        },
+      );
+    }
+    const seen = new Set<string>();
+    for (const blocker of relief.blockers) {
+      for (const dependent of blocker.dependents) {
+        const doc = dependent.sourceDocument;
+        if (!doc || seen.has(doc.id)) continue;
+        seen.add(doc.id);
+        const outcome = await requestDocumentVoid({
+          documentId: doc.id,
+          orgId: input.orgId,
+          actorId: input.actorId,
+          reason: input.reason,
+          reversalDate: input.reversalDate,
+          reversalPeriodId: input.reversalPeriodId,
+          source: input.source,
+          allowedSubsidiaryIds: input.allowedSubsidiaryIds,
+        });
+        if (outcome.status !== "voided") {
+          throw new DocumentVoidError(
+            `Void with dependents stopped: ${doc.number} is awaiting approval — approve or reject its void, then retry`,
+            409,
+            "receipt-stock-consumed",
+          );
+        }
+      }
+    }
+    return requestDocumentVoid(input);
+  });
+}
+
 /**
  * Unwind one shipment (sales_fulfillment) or goods receipt
  * (purchase_receipt) inside the caller's void transaction: reverse every
@@ -721,6 +839,9 @@ async function reverseOrderShipment(
           reason: input.reason,
         });
       } catch (error) {
+        if (error instanceof DownstreamConsumptionError && input.voidKind === "purchase_receipt") {
+          throw await receiptConsumptionRefusal(tx, input.orgId, input.voidDocumentId);
+        }
         if (error instanceof InventoryError) {
           throw new DocumentVoidError(
             `this document cannot be voided yet — ${error.message}`,

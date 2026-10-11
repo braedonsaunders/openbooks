@@ -311,7 +311,10 @@
     "consequenceMetadata": "Este cambio solo corrige datos descriptivos. No se mueve ningún importe contable y el documento sigue contabilizado.",
     "consequenceReclass": "Este cambio traslada la dimensión y registra un asiento equilibrado de reclasificación cuando las líneas contabilizadas la contienen. El documento sigue contabilizado.",
     "consequenceVoid": "Este cambio anula el documento contabilizado y crea un borrador de reemplazo. El período original debe estar abierto.",
-    "correctionApplied": "Documento contabilizado corregido"
+    "correctionApplied": "Documento contabilizado corregido",
+    "voidWithDependents": "Anular con dependientes",
+    "adjustRemainder": "Ajustar restante",
+    "remainderCorrected": "Restante corregido — el recibo permanece como evidencia"
   },
   "approvalFlow": {
     "pendingWith": "Pendiente de {names}",

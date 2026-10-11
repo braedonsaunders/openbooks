@@ -311,7 +311,10 @@
     "consequenceMetadata": "This change corrects descriptive details only. No ledger amounts move and the document stays posted.",
     "consequenceReclass": "This change moves the dimension link, posting a balanced reclass entry when posted lines carry it. The document stays posted.",
     "consequenceVoid": "This change voids the posted document and reissues a replacement draft. The original period must be open.",
-    "correctionApplied": "Posted document corrected"
+    "correctionApplied": "Posted document corrected",
+    "voidWithDependents": "Void with dependents",
+    "adjustRemainder": "Adjust remainder",
+    "remainderCorrected": "Remainder corrected — the receipt stands as evidence"
   },
   "approvalFlow": {
     "pendingWith": "Pending with {names}",

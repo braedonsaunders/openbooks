@@ -2364,6 +2364,11 @@ export function OrderDrawer({
             closeVoidDialog()
             router.refresh()
           }}
+          onCorrected={() => {
+            toast.success(tCommon('amendment.remainderCorrected'))
+            closeVoidDialog()
+            router.refresh()
+          }}
         />
       ) : null}
     </TransactionDrawer>

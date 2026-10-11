@@ -311,7 +311,10 @@
     "consequenceMetadata": "Esta alteração corrige apenas dados descritivos. Nenhum valor contábil é movido e o documento permanece lançado.",
     "consequenceReclass": "Esta alteração move a dimensão e lança um ajuste equilibrado de reclassificação quando as linhas lançadas a contêm. O documento permanece lançado.",
     "consequenceVoid": "Esta alteração anula o documento lançado e cria um rascunho de substituição. O período original precisa estar aberto.",
-    "correctionApplied": "Documento lançado corrigido"
+    "correctionApplied": "Documento lançado corrigido",
+    "voidWithDependents": "Estornar com dependências",
+    "adjustRemainder": "Ajustar restante",
+    "remainderCorrected": "Restante corrigido — o recebimento permanece como evidência"
   },
   "approvalFlow": {
     "pendingWith": "Pendente com {names}",

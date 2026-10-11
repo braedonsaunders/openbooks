@@ -311,7 +311,10 @@
     "consequenceMetadata": "Cette modification corrige uniquement des informations descriptives. Aucun montant comptable n’est déplacé et le document reste comptabilisé.",
     "consequenceReclass": "Cette modification transfère la dimension et comptabilise une écriture de reclassement équilibrée lorsque les lignes comptabilisées la portent. Le document reste comptabilisé.",
     "consequenceVoid": "Cette modification annule le document comptabilisé et crée un brouillon de remplacement. La période d’origine doit être ouverte.",
-    "correctionApplied": "Document comptabilisé corrigé"
+    "correctionApplied": "Document comptabilisé corrigé",
+    "voidWithDependents": "Contrepasser avec les dépendances",
+    "adjustRemainder": "Ajuster le reliquat",
+    "remainderCorrected": "Reliquat corrigé — le bon de réception est conservé comme preuve"
   },
   "approvalFlow": {
     "pendingWith": "En attente de {names}",

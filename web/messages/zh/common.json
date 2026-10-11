@@ -311,7 +311,10 @@
     "consequenceMetadata": "此更改仅修正描述性信息。账簿金额不变，单据保持已记账状态。",
     "consequenceReclass": "此更改将转移维度，并在已记账行携带该维度时记入一笔平衡的重分类分录。单据保持已记账状态。",
     "consequenceVoid": "此更改将作废已记账单据并重新签发草稿。原始期间必须处于开放状态。",
-    "correctionApplied": "已记账单据已更正"
+    "correctionApplied": "已记账单据已更正",
+    "voidWithDependents": "连同从属单据作废",
+    "adjustRemainder": "调整余量",
+    "remainderCorrected": "余量已更正 — 收货单保留作为凭证"
   },
   "approvalFlow": {
     "pendingWith": "等待 {names} 处理",

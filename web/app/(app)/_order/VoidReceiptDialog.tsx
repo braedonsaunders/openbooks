@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useTranslations } from 'next-intl'
 import { Button, FieldLabel, Input, Textarea } from '@openbooks/ui'
-import { fetchAppAction } from '@/lib/api-error'
+import { fetchAppAction, readAppActionResult, readRefusalDetails } from '@/lib/api-error'
 import { PermissionHint } from '../../../components/permission-hint'
 import {
   formatReversalSummary,
@@ -18,6 +18,45 @@ type Suggestion = {
   periods: AdjustmentPeriod[]
   suggestion: VoidReversalSuggestion | null
   revision: string | null
+}
+
+type DependentDocument = {
+  id: string
+  number: string
+  kind: string
+  status: string
+}
+
+type ConsumptionDependent = {
+  consumedQuantity: string
+  issueDate: string
+  returnedQuantity: string
+  sourceDocument: DependentDocument | null
+  reversible: boolean
+  reverseAction: string
+}
+
+type ConsumptionBlocker = {
+  itemCode: string | null
+  itemName: string
+  dependents: ConsumptionDependent[]
+  otherBlocks: string[]
+}
+
+type ConsumptionDetails = {
+  receiptNumber?: string
+  blockers?: ConsumptionBlocker[]
+  allowVoidWithDependents?: boolean
+  remainderQuantity?: string
+}
+
+/** Where a dependent source document opens; kinds without a drawer render as text. */
+function dependentHref(kind: string, id: string): string | null {
+  if (kind === 'customer_invoice') return `/ar/invoices?doc=${id}`
+  if (kind === 'vendor_bill') return `/ap/bills?doc=${id}`
+  if (kind === 'sales_order') return `/sales-orders?order=${id}`
+  if (kind === 'purchase_order') return `/purchase-orders?order=${id}`
+  return null
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -37,10 +76,12 @@ export function VoidReceiptDialog({
   receiptId,
   onClose,
   onVoided,
+  onCorrected,
 }: {
   receiptId: string
   onClose: () => void
   onVoided: () => void
+  onCorrected?: () => void
 }) {
   const t = useTranslations('purchaseOrders.shared')
   const tCommon = useTranslations('common')
@@ -50,6 +91,7 @@ export function VoidReceiptDialog({
   const [reversalDate, setReversalDate] = React.useState('')
   const [reversalPeriodId, setReversalPeriodId] = React.useState('')
   const [postError, setPostError] = React.useState<{ message: string; status?: number } | null>(null)
+  const [consumption, setConsumption] = React.useState<ConsumptionDetails | null>(null)
   const [busy, setBusy] = React.useState(false)
 
   React.useEffect(() => {
@@ -111,24 +153,21 @@ export function VoidReceiptDialog({
     }
   }, [busy, onClose])
 
-  async function confirmVoid() {
-    if (!suggestion?.revision || busy) return
-    setBusy(true)
+  /** Read the refusal body alongside the action result so the dialog can offer its actions. */
+  async function postVoid(body: Record<string, unknown>): Promise<boolean> {
     setPostError(null)
+    setConsumption(null)
     try {
-      const result = await fetchAppAction(`/api/documents/${receiptId}/void`, {
+      const res = await fetch(`/api/documents/${receiptId}/void`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          reason: reason.trim(),
-          expectedUpdatedAt: suggestion.revision,
-          ...(reversalDate ? { reversalDate } : {}),
-          ...(reversalPeriodId ? { reversalPeriodId } : {}),
-        }),
-      }, { fallback: t('voidReceiptFailed') })
+        body: JSON.stringify(body),
+      })
+      const copy = await res.clone().json().catch(() => null)
+      const result = await readAppActionResult(res, { fallback: t('voidReceiptFailed') })
       if (result.ok) {
         onVoided()
-        return
+        return true
       }
       // The dialog stays open: the receipt is untouched and Void is still
       // offered, so the refusal must read here — never as a toast the
@@ -137,6 +176,57 @@ export function VoidReceiptDialog({
         message: result.error.displayMessage(t('voidReceiptFailed')),
         status: result.error.status,
       })
+      if (result.error.code === 'receipt-stock-consumed') {
+        const details = readRefusalDetails(copy)
+        if (details) setConsumption(details as ConsumptionDetails)
+      }
+      return false
+    } catch {
+      setPostError({ message: t('voidReceiptFailed') })
+      return false
+    }
+  }
+
+  async function confirmVoid(withDependents = false) {
+    if (!suggestion?.revision || busy) return
+    setBusy(true)
+    try {
+      await postVoid({
+        reason: reason.trim(),
+        expectedUpdatedAt: suggestion.revision,
+        ...(reversalDate ? { reversalDate } : {}),
+        ...(reversalPeriodId ? { reversalPeriodId } : {}),
+        ...(withDependents ? { withDependents: true } : {}),
+      })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /** Correct a phantom remainder through the native adjustment; the receipt stands, so this closes differently. */
+  async function correctRemainder() {
+    if (!suggestion?.revision || busy || reason.trim() === '') return
+    setBusy(true)
+    try {
+      const res = await fetch(`/api/documents/${receiptId}/receipt-remainder`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reason: reason.trim(),
+          ...(reversalDate ? { date: reversalDate } : {}),
+        }),
+      })
+      const result = await readAppActionResult(res, { fallback: t('voidReceiptFailed') })
+      if (result.ok) {
+        ;(onCorrected ?? onVoided)()
+        return
+      }
+      setPostError({
+        message: result.error.displayMessage(t('voidReceiptFailed')),
+        status: result.error.status,
+      })
+    } catch {
+      setPostError({ message: t('voidReceiptFailed') })
     } finally {
       setBusy(false)
     }
@@ -193,6 +283,33 @@ export function VoidReceiptDialog({
                     >
                       {error.message}
                     </p>
+                    {consumption?.blockers && consumption.blockers.length > 0 ? (
+                      <ul className="space-y-1 text-sm text-slate-700 dark:text-slate-200">
+                        {consumption.blockers.flatMap((blocker, blockerIndex) => [
+                          ...blocker.dependents.map((dependent, dependentIndex) => {
+                            const doc = dependent.sourceDocument
+                            const href = doc ? dependentHref(doc.kind, doc.id) : null
+                            const label = doc
+                              ? `${doc.number} — ${dependent.consumedQuantity}`
+                              : `${dependent.consumedQuantity} — no source document`
+                            return (
+                              <li key={`${blockerIndex}-${dependentIndex}`}>
+                                {href ? (
+                                  <a className="underline" href={href}>
+                                    {label}
+                                  </a>
+                                ) : (
+                                  label
+                                )}
+                              </li>
+                            )
+                          }),
+                          ...blocker.otherBlocks.map((block, blockIndex) => (
+                            <li key={`${blockerIndex}-other-${blockIndex}`}>{block}</li>
+                          )),
+                        ])}
+                      </ul>
+                    ) : null}
                     {missingGrant ? (
                       <PermissionHint permission={missingGrant} action={tCommon('actions.void')} />
                     ) : null}
@@ -255,6 +372,20 @@ export function VoidReceiptDialog({
                       <Button variant="secondary" disabled={busy} onClick={onClose}>
                         {tCommon('confirm.cancel')}
                       </Button>
+                      {consumption && Number(consumption.remainderQuantity ?? '0') > 0 ? (
+                        <Button
+                          variant="secondary"
+                          disabled={busy || reason.trim() === ''}
+                          onClick={() => void correctRemainder()}
+                        >
+                          {tCommon('amendment.adjustRemainder')}
+                        </Button>
+                      ) : null}
+                      {consumption?.allowVoidWithDependents ? (
+                        <Button disabled={busy || reason.trim() === ''} onClick={() => void confirmVoid(true)}>
+                          {tCommon('amendment.voidWithDependents')}
+                        </Button>
+                      ) : null}
                       <Button disabled={busy || reason.trim() === ''} onClick={() => void confirmVoid()}>
                         {tCommon('actions.void')}
                       </Button>

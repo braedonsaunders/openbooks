@@ -311,7 +311,10 @@
     "consequenceMetadata": "Diese Änderung korrigiert nur beschreibende Angaben. Es werden keine Beträge umgebucht und der Beleg bleibt gebucht.",
     "consequenceReclass": "Diese Änderung verschiebt die Dimensionszuordnung und bucht eine ausgeglichene Umbuchung, wenn gebuchte Zeilen sie tragen. Der Beleg bleibt gebucht.",
     "consequenceVoid": "Diese Änderung storniert den gebuchten Beleg und erstellt einen Ersatzentwurf. Die ursprüngliche Periode muss offen sein.",
-    "correctionApplied": "Gebuchter Beleg korrigiert"
+    "correctionApplied": "Gebuchter Beleg korrigiert",
+    "voidWithDependents": "Mit Abhängigkeiten stornieren",
+    "adjustRemainder": "Rest anpassen",
+    "remainderCorrected": "Rest korrigiert — der Wareneingang bleibt als Nachweis bestehen"
   },
   "approvalFlow": {
     "pendingWith": "Ausstehend bei {names}",

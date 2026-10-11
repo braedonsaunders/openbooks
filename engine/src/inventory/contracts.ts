@@ -36,6 +36,18 @@ export class InventoryCostBasisError extends InventoryError {
 /** A record is absent or outside the actor's organization/subsidiary scope. */
 export class InventoryNotFoundError extends InventoryError {}
 
+/**
+ * A receipt movement's cost layers carry live downstream consumption. The
+ * void path catches this to name each dependent and its native reverse
+ * path instead of refusing with the kernel sentence alone.
+ */
+export class DownstreamConsumptionError extends InventoryError {
+  constructor(message: string, readonly movementId: string) {
+    super(message);
+    this.name = "DownstreamConsumptionError";
+  }
+}
+
 /** Machine-readable code for a vendor bill refused until its stocked lines are matched to their purchase-order lines. */
 export const BILL_LINES_UNMATCHED = "BILL_LINES_UNMATCHED";
 
