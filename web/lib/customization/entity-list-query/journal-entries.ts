@@ -48,6 +48,7 @@ export const JOURNAL_GL_NATIVE_ORIGINS = [
   "overhead_applied",
   "depreciation",
   "disposal",
+  "asset_capitalization",
   "revenue_recognition",
   "revenue_accrual",
   "fx_settlement",
