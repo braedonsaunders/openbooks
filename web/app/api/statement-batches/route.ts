@@ -26,11 +26,11 @@ export const runtime = 'nodejs'
  */
 
 const batchBody = z.object({
-  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   toDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   overdueOnly: z.boolean().optional(),
-  subsidiaryId: z.string().uuid().optional(),
-  currency: z.string().regex(/^[A-Za-z]{3}$/).optional(),
+  subsidiaryId: z.string().uuid().nullable().optional(),
+  currency: z.string().regex(/^[A-Za-z]{3}$/).nullable().optional(),
 }).strict()
 
 function sendGrants(gate: Authz): NextResponse | null {
@@ -62,9 +62,7 @@ export const POST = defineRoute({
   if (refused) return refused
   const parsedBody = await parseJsonBody(req, batchBody)
   if (!parsedBody.ok) return parsedBody.response
-  const body = parsedBody.data as {
-    from?: string; toDate?: string; overdueOnly?: boolean; subsidiaryId?: string; currency?: string
-  }
+  const body = parsedBody.data
   const delivery = await resolveOrgEmailTransportDetailed(gate.user.orgId)
   if (delivery.state !== 'ready') {
     return NextResponse.json({ error: emailDeliveryBlockedMessage(delivery) }, { status: 422 })

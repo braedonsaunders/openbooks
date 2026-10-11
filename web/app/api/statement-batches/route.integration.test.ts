@@ -20,6 +20,7 @@ const { db, withOrgContext, withBypass} = await import('@openbooks/engine/platfo
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { postDocument } = await import('@openbooks/engine/ledger/posting-document')
 const { randomUUID } = await import('node:crypto')
+const { ensurePartyRoleRow } = await import('../../../lib/party-roles')
 const preview = await import('./preview/route')
 const batches = await import('./route')
 const detail = await import('./[id]/route')
@@ -38,6 +39,7 @@ async function setup(permissions: string[] = ['*']) {
 async function seedOverdueInvoice(org: { orgId: string; customerId: string; subsidiaryId: string; date: string; accounts: { ar: string; ap: string; bank: string; revenue: string } }, email: string | null) {
   await db.execute(sql`update parties set email = ${email} where id = ${org.customerId} and org_id = ${org.orgId}`)
   const userId = await createScratchUser(org.orgId, 'Batch Seeder', 'accountant')
+  await ensurePartyRoleRow(db, { orgId: org.orgId, partyId: org.customerId, kind: 'customer', actorId: userId })
   const invoiceId = randomUUID()
   const due = new Date(`${org.date}T00:00:00Z`)
   due.setUTCDate(due.getUTCDate() - 30)
@@ -122,8 +124,18 @@ test('batch create records the run, detail shows items, retry requeues failures'
       await db.execute(sql`insert into customer_roles (org_id, party_id, currency) values (${org.orgId}, ${silentId}, 'CAD')`)
     })
     enqueued.length = 0
+    for (const subsidiaryId of ['', 'invalid']) {
+      const refused = await withOrgContext(org.orgId, () =>
+        batches.POST(new Request('http://audit.local/api', { method: 'POST', body: JSON.stringify({
+          from: org.date, toDate: org.date, subsidiaryId, currency: null,
+        }) }), undefined as never))
+      assert.equal(refused.status, 400, 'an explicit malformed subsidiary refuses rather than clearing its filter')
+      assert.equal(enqueued.length, 0)
+    }
     const created = await withOrgContext(org.orgId, () =>
-      batches.POST(new Request('http://audit.local/api', { method: 'POST', body: JSON.stringify({}) }), undefined as never))
+      batches.POST(new Request('http://audit.local/api', { method: 'POST', body: JSON.stringify({
+        from: org.date, toDate: org.date, overdueOnly: false, subsidiaryId: null, currency: null,
+      }) }), undefined as never))
     assert.equal(created.status, 200, JSON.stringify(await created.clone().json()))
     const createdBody = await created.json() as { runId: string; queued: number; skipped: number }
     // The silent customer has no balance, so nothing is skipped yet: the
