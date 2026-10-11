@@ -129,7 +129,7 @@ for (const mode of ['restricted', 'empty'] as const) {
       await withBypassContext(async () => {
         await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${hidden},${org.orgId},${org.subsidiaryId},'Other entity','CAD','CA')`)
         const restriction = { mode: 'list', subsidiaryIds: mode === 'empty' ? [] : [org.subsidiaryId] }
-        await db.execute(sql`update app_roles set permissions='["reports.read"]'::jsonb, subsidiary_restriction=${JSON.stringify(restriction)}::jsonb
+        await db.execute(sql`update app_roles set permissions='["reports.read","gl.read","ar.read"]'::jsonb, subsidiary_restriction=${JSON.stringify(restriction)}::jsonb
           where org_id=${org.orgId} and key='review_reader'`)
         await seedEntity(org, org.subsidiaryId, VISIBLE, '123')
         await seedEntity(org, hidden, HIDDEN, '777')
