@@ -615,6 +615,73 @@ test("Alberta's average daily wage is wages over days worked, overtime out", () 
   assert.equal(result.holidayPay, "208.0000");
 });
 
+test("Alberta: a salaried employee who does not work the holiday is paid by the salary", () => {
+  // Alberta.ca ("Employees paid other than hourly: Salaried employees"): a
+  // salaried employee may receive the day off with full salary and no further
+  // pay. Pricing the computed $208 on top of the undiminished salary would
+  // pay the day twice, so the treatment settles it at zero — qualified, with
+  // the salary named as the payment, never a silent zero.
+  const result = computeStatutoryHolidayPay(ruleFor("CA-AB"), payContext({
+    earnings: { regular: "3000.00", overtime: "600.00", vacationPay: "120.00", holidayPay: "0" },
+    daysWorked: 15,
+    salaried: true,
+  }));
+  assert.equal(result.qualified, true);
+  assert.equal(result.holidayPay, "0");
+  assert.equal(result.premiumPay, "0");
+  assert.match(result.basis, /period salary/);
+});
+
+test("Alberta: a salaried employee who works the holiday earns the premium only", () => {
+  // Code Option 1 is hours × wage × 1.5 plus the average daily wage — and the
+  // salary already paid that wage limb. The hours themselves were never paid
+  // a 1.0× base (a salary prices no timesheet), so the premium is the FULL
+  // 1.5× multiple: 8 × 25 × 1.5 = 300. The hourly uplift of 0.5× here would
+  // leave the worked hours nearly unpaid.
+  const result = computeStatutoryHolidayPay(ruleFor("CA-AB"), payContext({
+    earnings: { regular: "3000.00", overtime: "600.00", vacationPay: "120.00", holidayPay: "0" },
+    daysWorked: 15,
+    salaried: true,
+    hoursWorked: "8.00",
+    hourlyRate: "25.00",
+  }));
+  assert.equal(result.qualified, true);
+  assert.equal(result.holidayPay, "0");
+  assert.equal(result.premiumPay, "300.0000");
+});
+
+test("Alberta: an hourly employee prices the day as transcribed", () => {
+  // The treatment is read only for salaried stubs. Hourly timesheets keep the
+  // average day plus the 0.5× uplift the timesheet's own 1.0× leaves unpaid.
+  const result = computeStatutoryHolidayPay(ruleFor("CA-AB"), payContext({
+    earnings: { regular: "3000.00", overtime: "600.00", vacationPay: "120.00", holidayPay: "0" },
+    daysWorked: 15,
+    hoursWorked: "8.00",
+    hourlyRate: "25.00",
+  }));
+  assert.equal(result.holidayPay, "208.0000");
+  assert.equal(result.premiumPay, "100.0000"); // 8 × 25 × 0.5
+});
+
+test("jurisdictions without a salary treatment price the salaried day as transcribed", () => {
+  // The treatment is per-jurisdiction and opt-in: no verified salary
+  // simplification is transcribed for Ontario or British Columbia, so a
+  // salaried stub there prices exactly as an hourly one until such guidance
+  // is transcribed with its own citation. Removing pay without a statutory
+  // basis underpays; keeping it only ever overpays.
+  const ontario = computeStatutoryHolidayPay(ruleFor("CA-ON"), payContext({
+    earnings: { ...emptyLookbackEarnings(), regular: "2400.00" },
+    salaried: true,
+  }));
+  assert.equal(ontario.holidayPay, "120.0000");
+  const bc = computeStatutoryHolidayPay(ruleFor("CA-BC"), payContext({
+    earnings: { ...emptyLookbackEarnings(), regular: "3200.00" },
+    daysWorked: 20, daysWorkedInQualifyingWindow: 20,
+    salaried: true,
+  }));
+  assert.equal(bc.holidayPay, "160.0000");
+});
+
 test("Saskatchewan takes five per cent of four weeks", () => {
   assert.equal(computeStatutoryHolidayPay(ruleFor("CA-SK"), payContext({
       earnings: { ...emptyLookbackEarnings(), regular: "2000.00" },

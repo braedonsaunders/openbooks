@@ -631,6 +631,15 @@ export interface HolidayPayContext {
   commissionEarnings?: HolidayLookbackEarnings;
   /** Hours actually worked ON the holiday. */
   hoursWorked: string;
+  /**
+   * True when the stub pays this employee a full periodic salary rather than
+   * priced timesheet hours. Read only where the rule declares a
+   * `salariedTreatment`; everywhere else it is ignored. The run presents it
+   * straight off the employment's pay basis — never inferred from the rate's
+   * shape, because an annualized hourly-equivalent rate and a salary price
+   * the same hours differently.
+   */
+  salaried?: boolean;
   /** Regular hourly rate, for the premium and for a `normal_day` basis. */
   hourlyRate: string;
   /**
@@ -991,6 +1000,45 @@ export function computeStatutoryHolidayPay(
     if (!premium.plusHolidayPay) holidayPay = "0";
   }
 
+  // --- the salary-satisfied day --------------------------------------------
+  // Where the jurisdiction's own guidance lets a full periodic salary satisfy
+  // the day (see PayrollSalariedHolidayTreatment), a salaried employee's stub
+  // needs no holiday-pay line: the salary already paid the day, so pricing it
+  // again pays it twice. Hours actually worked on the day reprice at the
+  // rule's FULL premium multiple — not the uplift above — because the salary
+  // never paid a 1.0× base for them; the hourly uplift here would leave those
+  // hours nearly unpaid.
+  const treatment = rule.salariedTreatment;
+  if (treatment && context.salaried === true) {
+    if (cmp(context.hoursWorked, "0") > 0 && cmp(context.hourlyRate, "0") > 0) {
+      const { premium } = rule;
+      const cap = premium.overtimeAfterHours;
+      const hoursAtBase = cap !== undefined && cmp(context.hoursWorked, String(cap)) > 0
+        ? String(cap)
+        : context.hoursWorked;
+      const hoursAbove = cap !== undefined && cmp(context.hoursWorked, String(cap)) > 0
+        ? fromUnits(toUnits(context.hoursWorked) - toUnits(String(cap)))
+        : "0";
+      premiumPay = roundMoney(
+        add(
+          mulDecimal(mul(context.hourlyRate, hoursAtBase), premium.multiplier),
+          cmp(hoursAbove, "0") > 0 && premium.overtimeMultiplier
+            ? mulDecimal(mul(context.hourlyRate, hoursAbove), premium.overtimeMultiplier)
+            : "0",
+        ),
+        2,
+      );
+      holidayPay = "0";
+      basis = `${basis}; the period salary satisfies the day's pay, so only the premium is owed — `
+        + `${context.hoursWorked} hours worked at the full ${premium.multiplier}× statutory multiple `
+        + `(no 1.0× base was paid for these hours) (${treatment.citation})`;
+    } else {
+      holidayPay = "0";
+      basis = `${basis}; satisfied by the period salary — no additional general holiday pay is owed `
+        + `to a salaried employee who did not work the holiday (${treatment.citation})`;
+    }
+  }
+
   return { ...shell, qualified: true, holidayPay, premiumPay, basis };
 }
 
@@ -1077,6 +1125,14 @@ export interface StatutoryHolidayPayInput {
   premiumComponentId: string;
   /** The pay run being calculated, excluded from its own lookback. */
   excludeDocumentId: string;
+  /**
+   * True when the stub pays a full periodic salary rather than priced
+   * timesheet hours — presented straight off the employment's pay basis, so
+   * a rule declaring a `salariedTreatment` can settle the day against the
+   * salary instead of pricing it twice. Omitted callers get the hourly
+   * behaviour, exactly as before.
+   */
+  salaried?: boolean;
   hourlyRate: string;
   /**
    * Eligibility facts supplied by the payroll caller. These are deliberately
@@ -1555,6 +1611,7 @@ export async function resolveStatutoryHolidayPay(
       occupationClass: input.occupationClass,
       averagingAgreement: input.averagingAgreement,
       hoursWorked,
+      salaried: input.salaried,
       hourlyRate: input.hourlyRate,
       schedule,
     });

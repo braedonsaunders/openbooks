@@ -1571,6 +1571,32 @@ export interface PayrollHolidayPremium {
   plusHolidayPay: boolean;
 }
 
+/**
+ * How a full periodic salary satisfies the day's statutory pay, where the
+ * jurisdiction's own guidance says it does. Absent everywhere no verified
+ * government source states the simplification — the engine then prices the
+ * day for a salaried employee exactly as for an hourly one, because removing
+ * pay without a statutory basis underpays, while paying it without one only
+ * ever overpays.
+ *
+ * The settled day needs no line: the salary already paid it. Hours a salaried
+ * employee actually works on the holiday price at the rule's FULL premium
+ * multiple — not the uplift the premium arm computes for hourly timesheets —
+ * because no 1.0× base for those hours was ever paid. (Quebec's multiplier of
+ * 1 then correctly pays ordinary wages for the hours, exactly as its statute
+ * requires on top of the indemnity the salary satisfies.)
+ */
+export interface PayrollSalariedHolidayTreatment {
+  /**
+   * The government source stating the simplification — the page or section
+   * that says a salaried employee may receive the day off with undiminished
+   * salary and no further pay. Cited separately from the rule's own citation
+   * because the Code section the formula cites does not state the
+   * simplification itself.
+   */
+  citation: string;
+}
+
 export interface PayrollHolidayPayRule {
   /** The statute and section this rule is a transcription of. */
   citation: string;
@@ -1578,6 +1604,13 @@ export interface PayrollHolidayPayRule {
   include: PayrollHolidayPayInclusions;
   qualifying: PayrollHolidayQualifying;
   premium: PayrollHolidayPremium;
+  /**
+   * Salary-satisfies treatment, declared per jurisdiction per edition — never
+   * a branch on a jurisdiction key in engine code. Alberta sets it (see
+   * AB_HOLIDAY_PAY); every other jurisdiction prices the salaried day as
+   * transcribed until its own guidance is transcribed with its own citation.
+   */
+  salariedTreatment?: PayrollSalariedHolidayTreatment;
   /**
    * Where every lookback this rule uses ENDS — the pay window, and a
    * commission earner's longer window with it. REQUIRED: it was an

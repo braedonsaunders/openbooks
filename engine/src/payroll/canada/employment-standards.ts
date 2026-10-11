@@ -261,6 +261,17 @@ const AB_HOLIDAY_PAY: PayrollHolidayPayRule = {
   include: { overtime: false, vacationPay: true, holidayPay: true },
   qualifying: { lastAndFirstScheduledShift: true },
   premium: { multiplier: "1.5", plusHolidayPay: true },
+  // A full salary satisfies the unworked day: "for salaried employees,
+  // simplified general holiday calculations are permitted. If a general
+  // holiday falls on a regular workday, an employee may receive the day off
+  // work and their full salary for the day" — and where it does not fall on
+  // a regular workday and the employee does not work, "no general holiday
+  // pay is owed". Hours actually worked price at the full 1.5× (Code Option
+  // 1: hours × wage × 1.5 plus the average daily wage the salary already
+  // paid), because the salary never paid a 1.0× base for them.
+  salariedTreatment: {
+    citation: "Employment standards – Alberta general holidays (Alberta.ca), 'Employees paid other than hourly: Salaried employees'; Employment Standards Code, RSA 2000 c E-9, Part 2 Div. 5",
+  },
   // "the 4 weeks immediately preceding the general holiday" — the day, not the
   // week. (The Code's alternative, four weeks ending on the last day of the
   // preceding pay period, is an employer election this shape does not carry.)

@@ -285,6 +285,11 @@ export async function statutoryHolidayLinesForStub(
     return [];
   }
   const holidayRate = payRate ? payrollHourlyWage(payRate) : "0";
+  // The salary-satisfied day follows the stub's pay basis, never the rate's
+  // shape: a salaried employee's undiminished salary already paid an unworked
+  // holiday, so a jurisdiction declaring a salaried treatment settles the day
+  // against it instead of pricing it twice. Hourly stubs price as transcribed.
+  const salaried = emp.pay_basis === "salary";
   return resolveStatutoryHolidayPay(tx, {
     orgId,
     country,
@@ -297,6 +302,7 @@ export async function statutoryHolidayLinesForStub(
     holidayComponentId: need("stat_holiday", "earning").id as string,
     premiumComponentId: need("stat_holiday_premium", "earning").id as string,
     excludeDocumentId: documentId,
+    salaried,
     hourlyRate: holidayRate,
     paidOnCommission: holidayEligibility?.[employeePartyId]?.paidOnCommission,
     absentWithoutConsent: holidayEligibility?.[employeePartyId]?.absentWithoutConsent,
