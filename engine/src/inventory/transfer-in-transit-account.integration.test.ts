@@ -8,6 +8,15 @@ import {
   dropScratchOrg,
   seedFlowActors,
 } from "../testing/fixtures.ts";
+
+// Transfer-order ship/receive is multi-location management: these cases
+// switch Warehousing on. Single-leg movements keep working with it off;
+// only the order workflow asserts the feature here.
+async function scratchWithWarehousing() {
+  const org = await createScratchOrg();
+  await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"warehousing": true}'::jsonb) where id = ${org.orgId}`);
+  return org;
+}
 import { receiveInventory } from "./movements.ts";
 import {
   createTransferOrder,
@@ -49,7 +58,7 @@ async function makeTransit(orgId: string, locationId: string): Promise<string> {
 }
 
 test("transfer orders refuse an unusable in-transit account at creation", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await scratchWithWarehousing();
   try {
     const actor = (await seedFlowActors(org.orgId)).adminId;
     const transitId = await makeTransit(org.orgId, org.locationId);
@@ -179,7 +188,7 @@ test("transfer orders refuse an unusable in-transit account at creation", { skip
 });
 
 test("transfer posting re-validates the in-transit account against its current state", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await scratchWithWarehousing();
   try {
     const actor = (await seedFlowActors(org.orgId)).adminId;
     const transitId = await makeTransit(org.orgId, org.locationId);

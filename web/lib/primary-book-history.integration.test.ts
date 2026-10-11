@@ -37,6 +37,9 @@ async function fixture(run: (org: ScratchOrg, actor: string, nextBook: string) =
       const actor = (await seedFlowActors(org.orgId)).adminId;
       const nextBook = randomUUID();
       await db.execute(sql`insert into accounting_books(id,org_id,code,name,is_primary) values(${nextBook},${org.orgId},'NEXT','Next',false)`);
+      // Transfer-order ship/receive is multi-location management and needs
+      // the Warehousing feature for the transit cases below.
+      await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"warehousing": true}'::jsonb) where id = ${org.orgId}`);
       return { actor, nextBook };
     });
     await run(org, seed.actor, seed.nextBook);

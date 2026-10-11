@@ -4,6 +4,15 @@ import test from 'node:test';
 import { sql } from 'drizzle-orm';
 import { db } from '../platform/db.ts';
 import { createScratchOrg, seedFlowActors, dropScratchOrg } from '../testing/fixtures.ts';
+
+// Transfer-order ship/receive is multi-location management: these cases
+// switch Warehousing on. Single-leg movements keep working with it off;
+// only the order workflow asserts the feature here.
+async function scratchWithWarehousing() {
+  const org = await createScratchOrg();
+  await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"warehousing": true}'::jsonb) where id = ${org.orgId}`);
+  return org;
+}
 import { InventoryError } from "./contracts.ts";
 import { getOnHand } from "./position.ts";
 import { receiveInventory } from "./movements.ts";
@@ -12,7 +21,7 @@ import { addCalendarDays } from '../platform/business-date.ts';
 
 for (const scenario of ['chronology','transit identity','legacy transit identity'] as const) {
   test(`inventory transfer lifecycle: ${scenario}`, {skip:!process.env.OPENBOOKS_DB_URL}, async () => {
-    const org = await createScratchOrg();
+    const org = await scratchWithWarehousing();
     try {
       const actor = (await seedFlowActors(org.orgId)).adminId;
       const transit = randomUUID();

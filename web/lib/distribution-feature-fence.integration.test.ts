@@ -237,7 +237,7 @@ test('warehousing off hides every surface, preserves its rows, and keeps a suspe
         subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: org.date,
       })),
       (error: unknown) => error instanceof warehouses.WarehouseRefusal
-        && error.remedy === 'turn on Warehousing in Company Settings → Features, then reactivate WH-OFF'
+        && error.remedy === 'ask an administrator to turn on Warehousing in Company Settings → Features, then reactivate WH-OFF'
         && /WH-OFF is suspended and refuses inbound movements/.test(error.message),
     )
 

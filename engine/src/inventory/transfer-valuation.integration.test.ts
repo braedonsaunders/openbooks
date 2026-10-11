@@ -6,6 +6,15 @@ import { db } from "../platform/db.ts";
 import { exactCostFragments, extendCost } from "./costing.ts";
 import { sum } from "../money/money.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
+
+// Transfer-order ship/receive is multi-location management: these cases
+// switch Warehousing on. Single-leg movements keep working with it off;
+// only the order workflow asserts the feature here.
+async function scratchWithWarehousing() {
+  const org = await createScratchOrg();
+  await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"warehousing": true}'::jsonb) where id = ${org.orgId}`);
+  return org;
+}
 import { getOnHand } from "./position.ts";
 import { receiveInventory, issueInventory } from "./movements.ts";
 import { transferInventory } from "./transfers.ts";
@@ -13,7 +22,7 @@ import { reverseInventoryMovement } from "./reversal.ts";
 import { createTransferOrder, receiveTransferOrder, shipTransferOrder } from "./transfer-orders.ts";
 
 test("moving-average withdrawal after exhaustion and old issue reversal remains weighted", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
+  const org = await scratchWithWarehousing();
   try {
     const actor = (await seedFlowActors(org.orgId)).adminId;
     const position = { itemId: org.items.movingAvg, stockLocationId: org.stockLocationId,
@@ -40,7 +49,7 @@ test("exact carried-cost fragments preserve quantity and value at fractional and
 
 for (const item of ["fifo", "movingAvg"] as const) {
 test(`inventory audit: a mixed-cost ${item} transfer preserves the exact source value`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
+  const org = await scratchWithWarehousing();
   try {
     const actor = (await seedFlowActors(org.orgId)).adminId;
     for (const [quantity, unitCost] of [["10000", "1"], ["20000", "2"]]) {
@@ -74,7 +83,7 @@ test(`inventory audit: a mixed-cost ${item} transfer preserves the exact source 
 
 for (const [item, legacy] of [["fifo", false], ["movingAvg", false], ["movingAvg", true]] as const) {
 test(`inventory ${item}${legacy ? " legacy" : ""} transfer orders retain their own shipment basis when received out of order`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
+  const org = await scratchWithWarehousing();
   try {
     const actor = (await seedFlowActors(org.orgId)).adminId;
     const transitId = randomUUID();
@@ -156,7 +165,7 @@ test(`inventory ${item}${legacy ? " legacy" : ""} transfer orders retain their o
 
 for (const item of ["fifo", "movingAvg"] as const) {
   test(`inventory ${item}: fractional transfer and reversal preserve the rounded source carrying value`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-    const org = await createScratchOrg();
+    const org = await scratchWithWarehousing();
     try {
       const actor = (await seedFlowActors(org.orgId)).adminId;
       await receiveInventory(org.orgId, actor, {
@@ -197,7 +206,7 @@ async function seedTransitAccount(orgId: string): Promise<string> {
 }
 
 test("transfer receipt refuses a disabled shipment book despite an active alternate and retries cleanly", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
+  const org = await scratchWithWarehousing();
   try {
     const actor = (await seedFlowActors(org.orgId)).adminId;
     const transitId = await seedTransit(org.orgId, org.locationId);
@@ -237,7 +246,7 @@ test("transfer receipt refuses a disabled shipment book despite an active altern
 });
 
 test("transfer receipt refuses replacement transit stock and rolls back earlier lines and retries", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
+  const org = await scratchWithWarehousing();
   try {
     const actor = (await seedFlowActors(org.orgId)).adminId;
     const transitId = await seedTransit(org.orgId, org.locationId);
@@ -284,7 +293,7 @@ test("transfer receipt refuses replacement transit stock and rolls back earlier 
 });
 
 test("fractional issue reversals refuse out-of-order rounding drift and succeed after downstream reversal", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
+  const org = await scratchWithWarehousing();
   try {
     const actor = (await seedFlowActors(org.orgId)).adminId;
     await receiveInventory(org.orgId, actor, {
@@ -308,7 +317,7 @@ test("fractional issue reversals refuse out-of-order rounding drift and succeed 
 });
 
 test("transfer-order shipment cannot be reversed independently of its lifecycle and transit journal", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
+  const org = await scratchWithWarehousing();
   try {
     const actor = (await seedFlowActors(org.orgId)).adminId;
     const transitId = await seedTransit(org.orgId, org.locationId);
@@ -347,7 +356,7 @@ for (const [quantity, expectedCost, remainingValue] of [
 ] as const) {
 for (const operation of ["issue", "transfer"] as const) {
   test(`moving-average ${operation} consumes exact fragments at the weighted pool cost for ${quantity} units`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-    const org = await createScratchOrg();
+    const org = await scratchWithWarehousing();
     try {
       const actor = (await seedFlowActors(org.orgId)).adminId;
       for (const [quantity, unitCost] of [["10000", "1"], ["20000", "2"]]) {
@@ -385,7 +394,7 @@ for (const operation of ["issue", "transfer"] as const) {
 }
 
 test("single-fragment moving average partitions fractional basis exactly and retains reversible consumption through re-pooling", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
+  const org = await scratchWithWarehousing();
   try {
     const actor = (await seedFlowActors(org.orgId)).adminId;
     const receipt = await receiveInventory(org.orgId, actor, {
@@ -434,7 +443,7 @@ test("single-fragment moving average partitions fractional basis exactly and ret
 });
 
 test("fractional moving-average withdrawals remain reversible after a later exact pool partition", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
+  const org = await scratchWithWarehousing();
   try {
     const actor = (await seedFlowActors(org.orgId)).adminId;
     await receiveInventory(org.orgId, actor, {
@@ -466,7 +475,7 @@ test("fractional moving-average withdrawals remain reversible after a later exac
 for (const reverseFirst of [true, false]) {
 for (const exhaustPool of [false, true]) {
   test(`ordinary moving-average receipt re-pooling preserves issue reversal (reverse issue first: ${reverseFirst}, exhaust pool: ${exhaustPool})`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-    const org = await createScratchOrg();
+    const org = await scratchWithWarehousing();
     try {
       const actor = (await seedFlowActors(org.orgId)).adminId;
       const receive = (quantity: string, unitCost: string) => receiveInventory(org.orgId, actor, {

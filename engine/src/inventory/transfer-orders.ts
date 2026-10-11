@@ -12,6 +12,7 @@ import {
 } from "../organization/subsidiaries.ts";
 import { InventoryError, type Runner } from "./contracts.ts";
 import { resolveProfile, assertInventoryFeature, assertStockLocationAdmitsSubsidiary } from "./profile-policy.ts";
+import { assertWarehousingFeature } from "./warehouses.ts";
 import { stockLocationDim, postInventoryEntry, inventoryOffsetAccountProblem, type JournalLineInput } from "./journal.ts";
 import { primaryBookId, periodForDate, subsidiaryCurrency, persistReceiptMoney, assertInventoryDate } from "./position.ts";
 import { nextSequenceNumber } from "./document-numbering.ts";
@@ -433,6 +434,7 @@ export async function shipTransferOrder(
   assertInventoryDate(shipDate, "ship date");
   return await db.transaction(async (tx) => {
     await assertInventoryFeature(tx, orgId);
+    await assertWarehousingFeature(tx, orgId);
     const order = await loadTransferOrderForUpdate(tx, orgId, orderId);
     if (order.status !== "draft")
       throw new InventoryError(
@@ -514,6 +516,7 @@ export async function receiveTransferOrder(
   assertInventoryDate(receiveDate, "receive date");
   return await db.transaction(async (tx) => {
     await assertInventoryFeature(tx, orgId);
+    await assertWarehousingFeature(tx, orgId);
     const order = await loadTransferOrderForUpdate(tx, orgId, orderId);
     if (order.status !== "in_transit")
       throw new InventoryError(

@@ -2,7 +2,27 @@ import { sql } from "drizzle-orm";
 import type { WarehouseStatus } from "@openbooks/schema";
 import { db } from "../platform/db.ts";
 import { InventoryError, type Runner } from "./contracts.ts";
-import { WarehouseRefusal, assertWarehousingFeature, WAREHOUSES_REMEDY } from "./warehouse-admission.ts";
+import { WarehouseRefusal, assertWarehousingFeature, warehousingDisabledRefusal, WAREHOUSES_REMEDY } from "./warehouse-admission.ts";
+import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
+import type { SqlExecutor } from "../platform/db.ts";
+
+/**
+ * Read-level carve-out for the single-warehouse org: measuring inside its
+ * one warehouse is single-location management, so warehouse reads pass
+ * with the feature off. Setup reads (list/get) and all writes keep the
+ * hard gate. A designated default on a multi-warehouse org still refuses
+ * here; the scope entry points admit that case first, so the observable
+ * refusal is identical either way.
+ */
+async function assertWarehouseRead(runner: Runner, orgId: string): Promise<void> {
+  if (await orgFeatureEnabled(orgId, "warehousing", runner as SqlExecutor)) return;
+  const rows = (await runner.execute<{ n: string }>(sql`
+    select count(*)::text as n
+      from warehouses w
+      join stock_locations sl on sl.id = w.stock_location_id and sl.org_id = w.org_id
+     where w.org_id = ${orgId} and sl.is_active`)).rows[0];
+  if (Number(rows?.n ?? "0") > 1) throw warehousingDisabledRefusal();
+}
 export interface WarehouseAddress {
   addressLine1?: string | null;
   addressLine2?: string | null;
@@ -98,7 +118,7 @@ export async function getWarehouse(runner: Runner, orgId: string, warehouseId: s
 
 /** The warehouse enclosing a stock location (itself included), or null. */
 export async function warehouseOf(runner: Runner, orgId: string, stockLocationId: string): Promise<WarehouseRecord | null> {
-  await assertWarehousingFeature(runner, orgId);
+  await assertWarehouseRead(runner, orgId);
   const r = await runner.execute<WarehouseRecord>(sql`
     ${WAREHOUSE_SELECT}
      where w.org_id = ${orgId}
@@ -120,7 +140,7 @@ export async function listWarehouseLocations(
   orgId: string,
   warehouseId: string,
 ): Promise<WarehouseLocationRecord[]> {
-  await assertWarehousingFeature(runner, orgId);
+  await assertWarehouseRead(runner, orgId);
   const r = await runner.execute<WarehouseLocationRecord>(sql`
     with recursive tree as (
       select id, parent_id, code, kind, is_active, 0 as depth, code::text as path

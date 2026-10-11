@@ -8,6 +8,15 @@ import {
   dropScratchOrg,
   seedFlowActors,
 } from "../testing/fixtures.ts";
+
+// Transfer-order ship/receive is multi-location management: these cases
+// switch Warehousing on. Single-leg movements keep working with it off;
+// only the order workflow asserts the feature here.
+async function scratchWithWarehousing() {
+  const org = await createScratchOrg();
+  await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"warehousing": true}'::jsonb) where id = ${org.orgId}`);
+  return org;
+}
 import { getOnHand } from "./position.ts";
 import { receiveInventory } from "./movements.ts";
 import {
@@ -28,7 +37,7 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
  * exactly the transit location's value mid-flight.
  */
 test("transfer-order in-transit legs post each location balance exactly once", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await scratchWithWarehousing();
   try {
     const actor = (await seedFlowActors(org.orgId)).adminId;
 

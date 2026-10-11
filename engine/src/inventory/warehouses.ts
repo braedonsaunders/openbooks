@@ -9,9 +9,14 @@ export {
   warehouseAdmits,
   assertWarehouseAdmitsMovement,
   assertWarehousingFeature,
+  warehousingDisabledRefusal,
   type StockMovementDirection,
   type WarehouseStatus,
 } from "./warehouse-admission.ts";
+export {
+  assertWarehousingForScope,
+  type WarehouseScope,
+} from "./warehouse-scope.ts";
 export {
   listWarehouses,
   getWarehouse,

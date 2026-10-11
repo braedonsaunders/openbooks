@@ -10,7 +10,8 @@ import { isJsonRecord } from "./document-lines.ts";
 import { activePickReservations } from "./pick-reservations.ts";
 import { kitAvailableFromComponents } from "./kits.ts";
 import { getOnHandWith } from "./position.ts";
-import { assertWarehousingFeature, listWarehouseLocations, warehouseOf } from "./warehouses.ts";
+import { listWarehouseLocations, warehouseOf } from "./warehouses.ts";
+import { assertWarehousingForScope } from "./warehouse-scope.ts";
 
 /**
  * Available to promise: what a legal entity holds, less what its issued
@@ -402,7 +403,11 @@ export async function listAvailableToPromise(
   orgId: string,
   query: AvailabilityQuery & { itemIds?: readonly string[] },
 ): Promise<AvailableToPromise[]> {
-  await assertWarehousingFeature(runner, orgId);
+  await assertWarehousingForScope(runner, orgId, {
+    subsidiaryId: query.subsidiaryId,
+    warehouseId: query.warehouseId ?? null,
+    stockLocationIds: query.stockLocationIds ?? null,
+  });
   const entity = await availabilityEntity(runner, orgId, query.subsidiaryId);
   const warehouseId = query.warehouseId ?? null;
   const explicit = query.stockLocationIds ?? null;
@@ -575,7 +580,11 @@ export async function releasableBackorders(
   orgId: string,
   query: AvailabilityQuery,
 ): Promise<ReleasableBackorder[]> {
-  await assertWarehousingFeature(runner, orgId);
+  await assertWarehousingForScope(runner, orgId, {
+    subsidiaryId: query.subsidiaryId,
+    warehouseId: query.warehouseId ?? null,
+    stockLocationIds: query.stockLocationIds ?? null,
+  });
   await assertFulfillmentFeature(runner, orgId);
   const entity = await availabilityEntity(runner, orgId, query.subsidiaryId);
   const warehouseId = query.warehouseId ?? null;

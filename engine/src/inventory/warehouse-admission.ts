@@ -26,7 +26,7 @@ export class WarehouseRefusal extends InventoryError {
   }
 }
 
-const FEATURES_REMEDY = "turn on Warehousing in Company Settings → Features";
+const FEATURES_REMEDY = "ask an administrator to turn on Warehousing in Company Settings → Features";
 export const WAREHOUSES_REMEDY = "Warehouse → Warehouses";
 
 /**
@@ -95,12 +95,25 @@ export async function assertWarehouseAdmitsMovement(
 }
 
 /**
- * Every warehouse function asserts the feature first. Creation holds the
- * feature switchboard row so a concurrent disable serializes against it;
+ * Every warehouse setup function asserts the feature first. Creation holds
+ * the feature switchboard row so a concurrent disable serializes against it;
  * lifecycle transitions read it without a lock because they only ever lock
  * the warehouse row, and a movement already holding that row FOR SHARE may
  * go on to lock the organization row at posting.
+ *
+ * The feature governs multi-location management (warehouse setup, bins,
+ * the transfer-order workflow, warehouse-scoped measurement), never the
+ * org's single/default stock location: single-location receiving, issuing
+ * and production pass through warehouse-scope.ts instead of this gate.
  */
+export function warehousingDisabledRefusal(): WarehouseRefusal {
+  return new WarehouseRefusal(
+    "warehousing is turned off for this organization",
+    "warehousing_disabled",
+    FEATURES_REMEDY,
+  );
+}
+
 export async function assertWarehousingFeature(
   runner: Runner,
   orgId: string,
@@ -110,10 +123,6 @@ export async function assertWarehousingFeature(
     ? await lockAndCheckOrgFeature(runner as SqlExecutor, orgId, "warehousing")
     : await orgFeatureEnabled(orgId, "warehousing", runner as SqlExecutor);
   if (!enabled) {
-    throw new WarehouseRefusal(
-      `warehousing is turned off for this organization; ${FEATURES_REMEDY}`,
-      "warehousing_disabled",
-      FEATURES_REMEDY,
-    );
+    throw warehousingDisabledRefusal();
   }
 }

@@ -9,7 +9,7 @@ import {
   openBaseQuantity,
   stockedItems,
 } from "./availability.ts";
-import { assertWarehousingFeature } from "./warehouses.ts";
+import { assertWarehousingForScope } from "./warehouse-scope.ts";
 
 /**
  * Replenishment proposals from projected supply, one legal entity at a time
@@ -110,7 +110,7 @@ export async function replenishmentProposals(
   orgId: string,
   query: { subsidiaryId: string },
 ): Promise<ReplenishmentLine[]> {
-  await assertWarehousingFeature(runner, orgId);
+  await assertWarehousingForScope(runner, orgId, { subsidiaryId: query.subsidiaryId });
   const entity = await availabilityEntity(runner, orgId, query.subsidiaryId);
   const items = new Map([...(await stockedItems(runner, orgId, null))].filter(([, item]) => item.isActive));
   if (items.size === 0) return [];

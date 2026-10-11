@@ -12,6 +12,15 @@ import {
 import { InventoryError } from "./contracts.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
 
+// Transfer-order ship/receive is multi-location management: these cases
+// switch Warehousing on. Single-leg movements keep working with it off;
+// only the order workflow asserts the feature here.
+async function scratchWithWarehousing() {
+  const org = await createScratchOrg();
+  await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"warehousing": true}'::jsonb) where id = ${org.orgId}`);
+  return org;
+}
+
 /**
  * Transfer-order transit warehouse is a legal-entity decision. The default
  * used to be the org's oldest active transit warehouse regardless of
@@ -68,7 +77,7 @@ async function orderCount(orgId: string): Promise<string> {
 }
 
 test("a B order skips A's older transit warehouse and ships through B's", async () => {
-  const org = await createScratchOrg();
+  const org = await scratchWithWarehousing();
   try {
     const actor = (await seedFlowActors(org.orgId)).adminId;
     const subB = await subsidiary(org.orgId, org.subsidiaryId, "Second Co");
@@ -106,7 +115,7 @@ test("a B order skips A's older transit warehouse and ships through B's", async 
 });
 
 test("selecting another entity's transit warehouse refuses at creation", async () => {
-  const org = await createScratchOrg();
+  const org = await scratchWithWarehousing();
   try {
     const actor = (await seedFlowActors(org.orgId)).adminId;
     const subB = await subsidiary(org.orgId, org.subsidiaryId, "Second Co");
@@ -135,7 +144,7 @@ test("selecting another entity's transit warehouse refuses at creation", async (
 });
 
 test("an order with no eligible transit warehouse refuses at creation, by name", async () => {
-  const org = await createScratchOrg();
+  const org = await scratchWithWarehousing();
   try {
     const actor = (await seedFlowActors(org.orgId)).adminId;
     const subB = await subsidiary(org.orgId, org.subsidiaryId, "Second Co");
@@ -169,7 +178,7 @@ test("an order with no eligible transit warehouse refuses at creation, by name",
 });
 
 test("a caller-selected warehouse that admits the subsidiary persists", async () => {
-  const org = await createScratchOrg();
+  const org = await scratchWithWarehousing();
   try {
     const actor = (await seedFlowActors(org.orgId)).adminId;
     const locA = await businessLocation(org.orgId, org.subsidiaryId, "A site");
