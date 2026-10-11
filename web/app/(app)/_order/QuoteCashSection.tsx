@@ -8,6 +8,7 @@ import { DrawerTabStrip } from '../../../components/drawer-tab-strip'
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
 import { useMoney } from '@/components/money-provider'
 import { confirmDialog } from '../../../lib/confirm'
+import { refusalMessageFromBody } from '../../../lib/api-error'
 
 /**
  * The Subscription tab on a quote drawer (quote-to-cash). Everyday: the
@@ -84,9 +85,13 @@ async function readJson(res: Response): Promise<{ ok: boolean; body: Record<stri
   return { ok: true, body: (await res.json()) as Record<string, unknown> }
 }
 
+/**
+ * A decoded refusal body renders through the shared vocabulary (message,
+ * nested error, remedy, code) instead of only the error field. Callers pass
+ * the already-parsed body; the shared helper never invents locale copy.
+ */
 function errorMessage(body: Record<string, unknown>): string {
-  const error = body.error
-  return typeof error === 'string' && error ? error : 'This action failed.'
+  return refusalMessageFromBody(body, { fallback: 'This action failed.' }) ?? 'This action failed.'
 }
 
 const STATUS_KEYS = ['sent', 'viewed', 'signed', 'declined', 'expired', 'voided'] as const

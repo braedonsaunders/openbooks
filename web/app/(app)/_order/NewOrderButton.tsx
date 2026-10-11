@@ -7,6 +7,7 @@ import { Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@openbooks/ui'
 import { UnsavedCreateButton } from '@/components/unsaved-create-button'
+import { readApiErrorMessage } from '@/lib/api-error'
 
 /**
  * Order creation entry point, two modes:
@@ -52,9 +53,11 @@ export function NewOrderButton({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
       })
+      // The refusal reads through the shared helper so message, remedy and
+      // code render instead of a bare fallback; the success body parses
+      // after the ok check.
       if (!res.ok) {
-        const data = await res.json().catch(() => null)
-        toast.error((data as { error?: string } | null)?.error ?? createFailedMessage)
+        toast.error(await readApiErrorMessage(res, createFailedMessage ?? tCommon('feedback.createFailed')))
         return
       }
       const data = await res.json()

@@ -4,6 +4,7 @@ import { CLEAR_SEGMENT, INHERIT_SEGMENT, segmentCellValue, segmentAssignmentsFro
 
 import { useMoney } from '@/components/money-provider'
 import { initialDrawerMode, type DrawerMode } from '@/lib/drawer-mode'
+import { refusalMessageFromBody } from '@/lib/api-error'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -225,17 +226,12 @@ export async function persistOrderDraft({
   setState('saving')
   try {
     const response = await request()
+    // The refusal reads through the shared helper so message, remedy and
+    // code reach onError instead of only the bare `error` field.
     if (!response.ok) {
       const data: unknown = await response.json().catch(() => null)
-      const message =
-        typeof data === 'object' &&
-        data !== null &&
-        'error' in data &&
-        typeof data.error === 'string'
-          ? data.error
-          : undefined
       setState('error')
-      onError(message)
+      onError(refusalMessageFromBody(data, { fallback: '' }) ?? undefined)
       return null
     }
 
