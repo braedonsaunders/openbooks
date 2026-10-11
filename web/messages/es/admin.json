@@ -3717,6 +3717,7 @@
       "ratePercent": "Tasa",
       "effectiveFrom": "Vigente desde",
       "effectiveTo": "Vigente hasta",
+      "preventSelfApproval": "Impedir la autoaprobación",
       "timePreventSelfApproval": "Impedir la autoaprobación",
       "timeEffectiveToHelp": "Déjelo vacío para mantener la política vigente hasta que comience una posterior.",
       "timePreventSelfApprovalHelp": "Activado: una persona aprobadora no puede aprobar su propia planilla ni un parte con sus propias horas. Desactívelo solo si la misma persona debe aprobar sus propias horas.",

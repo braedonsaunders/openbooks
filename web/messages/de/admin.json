@@ -3845,6 +3845,7 @@
       "ratePercent": "Satz %",
       "effectiveFrom": "Gültig ab",
       "effectiveTo": "Gültig bis",
+      "preventSelfApproval": "Selbstgenehmigung verhindern",
       "timePreventSelfApproval": "Selbstgenehmigung verhindern",
       "timeEffectiveToHelp": "Leer lassen, damit die Richtlinie bis zum Beginn einer späteren gilt.",
       "timePreventSelfApprovalHelp": "Ein: Genehmigende können weder den eigenen Stundenzettel noch einen Feldschein mit eigener Crewzeit genehmigen. Nur ausschalten, wenn dieselbe Person die eigene Zeit genehmigen muss.",

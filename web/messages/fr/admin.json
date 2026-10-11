@@ -3717,6 +3717,7 @@
       "ratePercent": "Taux",
       "effectiveFrom": "En vigueur à partir du",
       "effectiveTo": "En vigueur jusqu'au",
+      "preventSelfApproval": "Empêcher l'auto-approbation",
       "timePreventSelfApproval": "Empêcher l'auto-approbation",
       "timeEffectiveToHelp": "Laisser vide pour maintenir la règle en vigueur jusqu'au début d'une suivante.",
       "timePreventSelfApprovalHelp": "Activé : un approbateur ne peut approuver ni sa propre feuille de temps ni un ticket portant ses propres heures. Désactivez uniquement si la même personne doit approuver ses propres temps.",

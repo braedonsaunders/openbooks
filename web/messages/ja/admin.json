@@ -3845,6 +3845,7 @@
       "ratePercent": "税率 %",
       "effectiveFrom": "発効開始日",
       "effectiveTo": "発効終了日",
+      "preventSelfApproval": "自己承認を防止する",
       "timePreventSelfApproval": "自己承認を防止する",
       "timeEffectiveToHelp": "後のポリシーが開始するまで有効にする場合は空のままにします。",
       "timePreventSelfApprovalHelp": "オン：承認者は自分のタイムシートや自分の作業時間を含むフィールドチケットを承認できません。自分の時間を自分で承認しなければならない組織でのみオフにしてください。",

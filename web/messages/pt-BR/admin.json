@@ -3799,6 +3799,7 @@
       "ratePercent": "% da alíquota",
       "effectiveFrom": "Vigente a partir de",
       "effectiveTo": "Vigente até",
+      "preventSelfApproval": "Impedir autoaprovação",
       "timePreventSelfApproval": "Impedir autoaprovação",
       "timeEffectiveToHelp": "Deixe em branco para manter a política em vigor até o início de uma posterior.",
       "timePreventSelfApprovalHelp": "Ativado: um aprovador não pode aprovar a própria planilha nem um boletim com suas próprias horas. Desative apenas em organizações onde a mesma pessoa precisa aprovar as próprias horas.",

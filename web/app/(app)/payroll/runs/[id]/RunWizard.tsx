@@ -148,6 +148,36 @@ export function RunWizard(props: {
     employerCost: string
     errors: { employee: string; message: string }[]
   } | null>(null)
+  /**
+   * Header vitals, refreshed from each recalculation's own result. The server
+   * props only move on revisit, so without this the strip reads stale after
+   * Save & recalculate until the operator leaves and comes back.
+   */
+  const [vitals, setVitals] = useState({
+    gross: run.gross_total,
+    net: run.net_total,
+    employerCost: run.employer_cost_total,
+    employees: run.employee_count,
+  })
+  // Revisit (or any server refresh) replaces the props: take them, so the
+  // strip never pins an older mutation result over newer server state.
+  useEffect(() => {
+    setVitals({
+      gross: run.gross_total,
+      net: run.net_total,
+      employerCost: run.employer_cost_total,
+      employees: run.employee_count,
+    })
+  }, [run.gross_total, run.net_total, run.employer_cost_total, run.employee_count])
+  /** Fold a calculate response's totals into the header strip. */
+  const applyVitals = (j: { gross?: unknown; net?: unknown; employerCost?: unknown; employees?: unknown }) => {
+    setVitals((prev) => ({
+      gross: typeof j.gross === 'string' ? j.gross : prev.gross,
+      net: typeof j.net === 'string' ? j.net : prev.net,
+      employerCost: typeof j.employerCost === 'string' ? j.employerCost : prev.employerCost,
+      employees: typeof j.employees === 'number' ? j.employees : prev.employees,
+    }))
+  }
   const [gl, setGl] = useState<{
     state: 'idle' | 'loading' | 'ready' | 'setup-error'
     legs: GlLeg[]
@@ -261,6 +291,7 @@ export function RunWizard(props: {
       if (action === 'calculate') {
         const freshErrors: PayRunCalculationError[] = Array.isArray(j.errors) ? j.errors : []
         applyRefusalState(j)
+        applyVitals(j)
         setGl({ state: 'idle', legs: [], debitTotal: '0', error: '' })
         setStep('review')
         // Zero stubs with refusals is not a success ("Calculated £0.00 / 0
@@ -397,6 +428,7 @@ export function RunWizard(props: {
         if (!recalc.ok) throw new Error(await readApiErrorMessage(recalc, 'failed'))
         const rj = await recalc.json()
         applyRefusalState(rj)
+        applyVitals(rj)
         setGl({ state: 'idle', legs: [], debitTotal: '0', error: '' })
       }
       toast.success(t('wizard.period.scopeSaved', { count: includedPartyIds.length }))
@@ -442,6 +474,7 @@ export function RunWizard(props: {
       if (!recalc.ok) throw new Error(await readApiErrorMessage(recalc, 'failed'))
       const rj = await recalc.json()
       applyRefusalState(rj)
+      applyVitals(rj)
       setGl({ state: 'idle', legs: [], debitTotal: '0', error: '' })
       toast.success(t('wizard.adjust.applied'))
       router.refresh()
@@ -629,16 +662,16 @@ export function RunWizard(props: {
           {t('columns.payDate')}: <span className="font-medium tabular-nums">{run.pay_date}</span>
         </span>
         <span>
-          {t('columns.gross')}: <span className="font-medium tabular-nums">{fmt(run.gross_total)}</span>
+          {t('columns.gross')}: <span className="font-medium tabular-nums">{fmt(vitals.gross)}</span>
         </span>
         <span>
-          {t('columns.net')}: <span className="font-medium tabular-nums">{fmt(run.net_total)}</span>
+          {t('columns.net')}: <span className="font-medium tabular-nums">{fmt(vitals.net)}</span>
         </span>
         <span>
-          {t('run.employerCost')}: <span className="font-medium tabular-nums">{fmt(run.employer_cost_total)}</span>
+          {t('run.employerCost')}: <span className="font-medium tabular-nums">{fmt(vitals.employerCost)}</span>
         </span>
         <span>
-          {t('columns.employees')}: <span className="font-medium tabular-nums">{run.employee_count}</span>
+          {t('columns.employees')}: <span className="font-medium tabular-nums">{vitals.employees}</span>
         </span>
         {discardable && (
           <Button size="sm" variant="outline" disabled={busy} onClick={() => void discardDraft()}>

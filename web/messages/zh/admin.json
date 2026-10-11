@@ -3799,6 +3799,7 @@
       "ratePercent": "税率 %",
       "effectiveFrom": "生效自",
       "effectiveTo": "生效至",
+      "preventSelfApproval": "阻止自批",
       "timePreventSelfApproval": "阻止自批",
       "timeEffectiveToHelp": "留空可使该政策持续有效，直到后续政策开始。",
       "timePreventSelfApprovalHelp": "开启：审批人不能审批自己的考勤表，也不能审批包含自己工时的现场票。仅在必须由本人审批自己工时的组织中关闭。",

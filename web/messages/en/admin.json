@@ -3799,6 +3799,7 @@
       "ratePercent": "Rate",
       "effectiveFrom": "Effective from",
       "effectiveTo": "Effective to",
+      "preventSelfApproval": "Prevent self-approval",
       "timePreventSelfApproval": "Prevent self-approval",
       "timeEffectiveToHelp": "Leave empty to keep the policy in effect until a later one starts.",
       "timePreventSelfApprovalHelp": "On: an approver cannot approve their own timesheet or a field ticket carrying their own crew time. Turn off only for organizations where the same person must approve their own time.",
