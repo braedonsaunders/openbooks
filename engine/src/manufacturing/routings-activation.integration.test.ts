@@ -107,6 +107,12 @@ test("routing no-flow activation supersedes the prior revision", { skip: !DB }, 
     await direct(f, String(next.id));
     const rows = await withBypassContext(async () => (await db.execute<{ id: string; status: string; effective_to: string | null }>(sql`select id, status, effective_to::text as effective_to from mfg_routings where org_id=${f.org.orgId} and produced_item_id=${f.org.items.assembly} order by version`)).rows);
     assert.deepEqual(rows.map((row) => [row.status, row.effective_to]), [["active", "2026-06-01"], ["active", null]]);
+    const applied = await withBypassContext(async () => (await db.execute<{ id: string }>(sql`select id from financial_changes where org_id=${f.org.orgId} and subject_id=${String(next.id)} and operation='routing_revision_activation' and status='applied'`)).rows);
+    assert.equal(applied.length, 1);
+    const supersession = await withBypassContext(async () => (await db.execute<{ changes: { before: { effectiveTo: string | null }; after: { effectiveTo: string; approvalChangeId: string } } }>(sql`select changes from audit_log where org_id=${f.org.orgId} and table_name='mfg_routings' and row_id=${first} and action='update' and changes->'after'->>'effectiveTo'='2026-06-01'`)).rows);
+    assert.equal(supersession.length, 1);
+    assert.equal(supersession[0]!.changes.before.effectiveTo, null);
+    assert.equal(supersession[0]!.changes.after.approvalChangeId, applied[0]!.id);
   } finally { await dropScratchOrg(f.org.orgId); }
 });
 
@@ -190,6 +196,6 @@ test("routing direct activation refusals are typed", { skip: !DB }, async () => 
     await direct(f, routingId);
     await rejected(direct(f, routingId), "routing_not_draft", "Only a draft routing", "activation of an active revision");
     const overlapping = await run((tx) => createNextRoutingVersion(tx, f.org.orgId, f.actorId, routingId));
-    await rejected(direct(f, String(overlapping.id)), "routing_version_overlap", "version 1", "overlapping successor window");
+    await rejected(direct(f, String(overlapping.id)), "routing_version_overlap", "effective-from date after 2026-01-01", "successor starting on the predecessor start");
   } finally { await dropScratchOrg(f.org.orgId); }
 });

@@ -274,9 +274,9 @@ async function overlappingActiveRouting(tx: SqlExecutor, orgId: string, itemId: 
        and ${from}::date < coalesce(effective_to, 'infinity'::date) limit 1`);
 }
 
-function routingOverlapRefusal(row?: { code: string; version: number; effective_from: string; effective_to: string | null }): never {
+function routingOverlapRefusal(row?: { code: string; version: number; effective_from: string; effective_to: string | null }, remedy = "Change the draft effective dates so they do not overlap the named version."): never {
   const other = row ? `${row.code} version ${row.version} (${row.effective_from} to ${row.effective_to ?? "open-ended"})` : "another active version";
-  return refused(`This routing overlaps active ${other}.`, "routing_version_overlap", "effectiveFrom", "Change the draft effective dates so they do not overlap the named version.");
+  return refused(`This routing overlaps active ${other}.`, "routing_version_overlap", "effectiveFrom", remedy);
 }
 
 export async function activateRouting(tx: SqlExecutor, orgId: string, actorId: string, id: string, approvalChangeId?: string) {
@@ -415,7 +415,12 @@ async function routingActivationEvidence(tx:SqlExecutor,orgId:string,id:string) 
   if(conflict) {
     const referenced=await routing(tx,orgId,conflict.id);
     if(!referenced) throw new ManufacturingNotFoundError();
-    routingOverlapRefusal({code:String(referenced.code),version:conflict.version,effective_from:conflict.effectiveFrom,effective_to:conflict.effectiveTo});
+    // A predecessor that started before the successor is superseded when the successor
+    // activates (it ends on the successor's effective-from date). A successor that starts on
+    // or before the predecessor's start has nothing to supersede and is refused.
+    const startsNotAfterPredecessor=conflict.effectiveFrom>=String(candidate.effectiveFrom);
+    routingOverlapRefusal({code:String(referenced.code),version:conflict.version,effective_from:conflict.effectiveFrom,effective_to:conflict.effectiveTo},
+      startsNotAfterPredecessor?`Set the draft's effective-from date after ${conflict.effectiveFrom}; activating it then ends ${String(referenced.code)} version ${conflict.version} on that date.`:undefined);
   }
   return {candidate,active,supersedes};
 }
