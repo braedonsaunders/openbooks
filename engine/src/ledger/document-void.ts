@@ -22,7 +22,7 @@ import { projectRetainageHeldSql } from "../projects/construction-billing.ts";
 import { reverseFieldTicketProgressInTransaction } from "../projects/progress.ts";
 import { add, cmp, neg } from "../money/money.ts";
 import { DownstreamConsumptionError, InventoryError } from "../inventory/contracts.ts";
-import { reverseInventoryMovement } from "../inventory/reversal.ts";
+import { reverseInventoryJournal, reverseInventoryMovement } from "../inventory/reversal.ts";
 import { listReceiptVoidBlockers } from "../inventory/receipt-void-dependents.ts";
 import { reverseDropShipConfirmationPair } from "../inventory/drop-ship-reversal.ts";
 import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
@@ -756,11 +756,166 @@ async function assertOrderShipmentReversalPeriodOpen(
 }
 
 /**
+ * Name every live downstream consumption of a bill's receipt movements
+ * for the void refusal, with the native reverse path for each consumer:
+ * a shipment voids through its own document void, a posted invoice's sale
+ * comes back through a customer credit with a goods return, anything else
+ * reverses through its own document first. Every remedy named exists.
+ */
+async function billConsumptionRefusal(
+  tx: Pick<typeof db, "execute">,
+  orgId: string,
+  billId: string,
+  billNumber: string,
+): Promise<DocumentVoidError> {
+  const rows = (await tx.execute<{
+    quantity: string;
+    item_code: string | null;
+    item_name: string;
+    consumed_quantity: string;
+    issue_kind: string;
+    issue_date: string;
+    doc_number: string | null;
+    doc_kind: string | null;
+  }>(sql`
+    select m.quantity::text as quantity, i.code as item_code, i.name as item_name,
+           c.quantity::text as consumed_quantity, im.kind as issue_kind,
+           im.moved_at::date::text as issue_date,
+           d.document_number as doc_number, d.kind as doc_kind
+      from inventory_movements m
+      join document_lines l on l.id = m.document_line_id and l.org_id = m.org_id
+      left join items i on i.id = m.item_id and i.org_id = m.org_id
+      join cost_layers layer on layer.org_id = m.org_id and layer.source_movement_id = m.id
+      join cost_layer_consumptions c on c.org_id = layer.org_id and c.cost_layer_id = layer.id
+      join inventory_movements im on im.id = c.issue_movement_id and im.org_id = c.org_id
+      left join document_lines il on il.id = im.document_line_id and il.org_id = im.org_id
+      left join documents d on d.id = il.document_id and d.org_id = il.org_id
+     where m.org_id = ${orgId} and l.document_id = ${billId}
+       and m.kind = 'receipt' and m.status = 'posted'
+       and not exists (
+         select 1 from inventory_movements reversal
+          where reversal.org_id = m.org_id and reversal.reverses_movement_id = m.id
+       )
+       and not exists (
+         select 1 from inventory_movements reversal
+          where reversal.org_id = im.org_id and reversal.reverses_movement_id = im.id
+       )
+     order by m.id, im.moved_at, im.id`)).rows;
+  const lines = [
+    `Bill ${billNumber} cannot void — stock it received has downstream consumption:`,
+  ];
+  for (const row of rows) {
+    const itemLabel = row.item_code ?? row.item_name;
+    const consumer = row.doc_number ? `${row.doc_kind} ${row.doc_number}` : `a movement with no source document`;
+    const remedy = row.doc_kind === "sales_fulfillment"
+      ? `Void ${row.doc_number} (the sales fulfillment), then void this bill`
+      : row.doc_kind === "customer_invoice"
+        ? `Bring the invoiced units back with a customer credit carrying a goods return against invoice ${row.doc_number}, then void this bill`
+        : `Reverse the consuming ${row.issue_kind} behind ${consumer} first, then void this bill`;
+    lines.push(
+      `${row.consumed_quantity} of ${itemLabel} consumed by ${row.issue_kind} ${consumer} on ${row.issue_date}. ${remedy}`,
+    );
+  }
+  if (rows.length === 0) {
+    lines.push(
+      "its received stock was consumed downstream — reverse the consuming sale, transfer, or adjustment first, then void this bill",
+    );
+  }
+  return new DocumentVoidError(lines.join(" "), 422, "bill-stock-consumed");
+}
+
+/**
+ * Unwind a vendor bill's inventory receipts inside the caller's void
+ * transaction: every still-live receipt movement on the bill's lines
+ * reverses through the inventory kernel with its journal, and every
+ * purchase price variance entry the bill settled reverses with it, so a
+ * bill that brought stock in voids clean instead of stranding phantom
+ * inventory. Matched bills additionally walk their billed cover back
+ * through billing provenance after the journals reverse. Only movements
+ * with no reversal row count as live. Consumed stock refuses naming its
+ * consumers with their native reverse paths; anything else the kernel
+ * cannot unwind keeps the manual two-leg correction the void gate below
+ * names (an account-only vendor credit plus an inventory adjustment).
+ */
+async function reverseBillInventoryReceipts(
+  tx: Pick<typeof db, "execute">,
+  input: {
+    orgId: string;
+    billId: string;
+    billNumber: string;
+    actorId: string;
+    reversalDate: string;
+    reason: string;
+  },
+): Promise<void> {
+  const liveMovements = (await tx.execute<{ id: string }>(sql`
+    select movement.id
+      from inventory_movements movement
+      join document_lines line
+        on line.id = movement.document_line_id and line.org_id = movement.org_id
+     where movement.org_id = ${input.orgId}
+       and line.document_id = ${input.billId}
+       and movement.kind = 'receipt'
+       and movement.status = 'posted'
+       and not exists (
+         select 1 from inventory_movements reversal
+          where reversal.org_id = movement.org_id
+            and reversal.reverses_movement_id = movement.id
+       )
+     order by movement.id
+     for update of movement
+  `));
+  for (const movement of liveMovements.rows) {
+    try {
+      await reverseInventoryMovement(input.orgId, input.actorId, {
+        movementId: movement.id,
+        reversalDate: input.reversalDate,
+        reason: input.reason,
+      });
+    } catch (error) {
+      if (error instanceof DownstreamConsumptionError) {
+        throw await billConsumptionRefusal(tx, input.orgId, input.billId, input.billNumber);
+      }
+      // Anything else the kernel cannot unwind (landed cost, custody,
+      // provisional chain, blended provenance) keeps the governed manual
+      // correction: the void gate below refuses with the account-only
+      // vendor credit plus inventory adjustment remedy.
+      throw error;
+    }
+  }
+  // Purchase price variance the bill settled against its goods receipts
+  // reverses with the bill: without this the variance leg would strand
+  // while the bill and the receipt both unwind.
+  const billLines = (await tx.execute<{ id: string }>(sql`
+    select id from document_lines
+     where org_id = ${input.orgId} and document_id = ${input.billId}
+  `)).rows;
+  for (const line of billLines) {
+    const entryNumber = `INV-PPV-${line.id}`;
+    const ppv = (await tx.execute<{ id: string }>(sql`
+      select id from journal_entries
+       where org_id = ${input.orgId} and entry_number = ${entryNumber} and status = 'posted'
+    `)).rows[0];
+    if (!ppv) continue;
+    try {
+      await reverseInventoryJournal(tx, input.orgId, input.actorId, ppv.id, input.reversalDate, input.reason);
+    } catch (error) {
+      if (error instanceof InventoryError) {
+        throw new DocumentVoidError(
+          `bill ${input.billNumber} cannot void yet — its purchase price variance entry ${entryNumber} cannot reverse: ${error.message}`,
+        );
+      }
+      throw error;
+    }
+  }
+}
+
+/**
  * Unwind one shipment (sales_fulfillment) or goods receipt
  * (purchase_receipt) inside the caller's void transaction: reverse every
  * still-live stock movement through the inventory kernel and restore the
- * source order lines' fulfilled counters, so the quantities can ship or be
- * received again and no stock is stranded.
+ * source order lines' fulfilled counters, so the quantities can ship again
+ * and no stock is stranded.
  *
  * Only movements with no reversal row count as live: the kernel keeps the
  * original movement posted and records the reversal as a separate `return`
@@ -1350,6 +1505,22 @@ export async function completeRequestedDocumentVoid(
           reversalDate: String(doc.void_reversal_date),
           reason: String(doc.void_reason),
         });
+      } else if (String(doc.kind) === "vendor_bill") {
+        // Voiding a bill unwinds the stock its lines received first: every
+        // live "Inventory receipt (bill)" movement reverses through the
+        // inventory kernel with its journal, and every purchase price
+        // variance entry the bill settled reverses with it, so a bill that
+        // double-received voids clean instead of stranding phantom stock.
+        // Consumed stock refuses naming its consumers; anything else the
+        // kernel cannot unwind keeps the manual two-leg correction below.
+        await reverseBillInventoryReceipts(tx, {
+          orgId,
+          billId: documentId,
+          billNumber: String(doc.document_number),
+          actorId: String(doc.void_requested_by),
+          reversalDate: String(doc.void_reversal_date),
+          reason: String(doc.void_reason),
+        });
       }
 
       if (kind === "field_ticket") {
@@ -1421,6 +1592,11 @@ export async function completeRequestedDocumentVoid(
             "this transaction has live payments or credits applied to it — unapply them before voiding",
           );
         }
+        // A voided bill unwinds its own receipt movements above, so the
+        // gate below must not trip on the unwound originals: movement rows
+        // survive a kernel reversal, and only the reversal row proves the
+        // stock went back. Other documents keep the existence rule.
+        const billUnwindsInventory = String(doc.kind) === "vendor_bill";
         const dependentSubledger = (await tx.execute<{ inventory: boolean; revenue: boolean }>(sql`
           select
             exists (
@@ -1430,6 +1606,11 @@ export async function completeRequestedDocumentVoid(
                  and movement.document_line_id in (
                  select id from document_lines where document_id = ${documentId} and org_id = ${orgId}
                )
+                 and (${billUnwindsInventory}::boolean = false or not exists (
+                   select 1 from inventory_movements reversal
+                    where reversal.org_id = movement.org_id
+                      and reversal.reverses_movement_id = movement.id
+                 ))
             ) as inventory,
             exists (
               select 1
