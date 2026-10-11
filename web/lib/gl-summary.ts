@@ -1,6 +1,7 @@
 import 'server-only'
 import { sql, type SQL } from 'drizzle-orm'
 import { civilDateFromParts, endOfMonth } from '@openbooks/engine/platform/business-date/module'
+import { excludePeriodEndJournals, statementMonthActivity } from '@openbooks/engine/records/period-end-origins'
 
 /**
  * Read-side of the gl_month_activity summary (maintained by the
@@ -29,6 +30,11 @@ import { civilDateFromParts, endOfMonth } from '@openbooks/engine/platform/busin
  * boundary is a split month and therefore not represented by a summary row.
  *
  * Amount math stays in Postgres numeric — nothing is summed in JS.
+ *
+ * Both legs are on the statement basis: period-end closing and opening
+ * journals are left out (statementMonthActivity / excludePeriodEndJournals),
+ * so statements compute retained earnings identically whether or not a year
+ * has been closed by journal.
  */
 
 export interface ActivityBoundary {
@@ -97,7 +103,7 @@ export function glActivityBuckets(
     return sql`(
       select g.account_id, g.subsidiary_id, g.month as d,
              (g.debit_total - g.credit_total) as amount, g.debit_total, g.credit_total
-        from gl_month_activity g
+        from ${statementMonthActivity(orgId)} g
        where g.org_id = ${orgId} ${book} ${summaryCaps}
     )`
   }
@@ -109,7 +115,7 @@ export function glActivityBuckets(
   return sql`(
     select g.account_id, g.subsidiary_id, g.month as d,
            (g.debit_total - g.credit_total) as amount, g.debit_total, g.credit_total
-      from gl_month_activity g
+      from ${statementMonthActivity(orgId)} g
      where g.org_id = ${orgId} ${book} ${summaryCaps} ${splitFilter}
     union all
     select l.account_id, l.subsidiary_id, e.posting_date as d,
@@ -117,6 +123,7 @@ export function glActivityBuckets(
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = ${orgId}
        and e.status in ('posted', 'reversed')
+       and ${excludePeriodEndJournals(sql`e.origin`)}
        and e.posting_date <= ${opts.maxDate}
        ${opts.minDate ? sql`and e.posting_date >= ${opts.minDate}` : sql``}
        and (${ranges})

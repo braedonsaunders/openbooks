@@ -241,6 +241,7 @@ export async function loadRegisters(sp: Record<string, string | undefined>): Pro
           to: openingDate,
           mode: 'balance',
           dims,
+          includePeriodEndJournals: true,
         },
         closing: m(pt.closing),
         closingDrill: {
@@ -252,6 +253,7 @@ export async function loadRegisters(sp: Record<string, string | undefined>): Pro
           to: period.to,
           mode: 'balance',
           dims,
+          includePeriodEndJournals: true,
         },
         lines: pt.lines.map((l, i) => ({
           key: `${l.entryId}-${i}`,

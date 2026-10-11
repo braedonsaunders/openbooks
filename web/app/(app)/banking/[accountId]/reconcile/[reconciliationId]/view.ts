@@ -6,6 +6,7 @@ import { getLocale, getTranslations } from 'next-intl/server'
 import { formatCivilDate } from '@/lib/format'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
+import { excludePeriodEndJournals } from '@openbooks/engine/records/period-end-origins'
 import { reconciliationBookId, reconciliationTotals, reconciliationStaleness, priorPeriodLateEffect, openingPosition, type OpeningPosition } from '@openbooks/engine/banking/banking'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission, subsidiaryScopeAllows } from '../../../../../../lib/authz'
@@ -264,6 +265,7 @@ export async function loadReconciliation(
        where jl.org_id = ${ctx.orgId} and jl.account_id = ${accountId}
          and je.book_id = ${bookId} and je.status in ('posted', 'reversed')
          and jl.currency = ${recon.currency} and jl.posting_date <= ${recon.through_date}
+         and ${excludePeriodEndJournals(sql`je.origin`)}
     `)
     clearedLines = Number(evidenceCounts.rows[0]?.cleared ?? 0)
     unclearedLines = Number(evidenceCounts.rows[0]?.uncleared ?? 0)
@@ -300,6 +302,7 @@ export async function loadReconciliation(
   const glWhere = sql`jl.account_id = ${accountId} and jl.org_id = ${ctx.orgId}
     and je.book_id = ${bookId} and jl.currency = ${recon.currency}
     and je.status in ('posted', 'reversed') and je.posting_date <= ${recon.through_date}
+    and ${excludePeriodEndJournals(sql`je.origin`)}
     ${carryStart ? sql`and je.posting_date >= ${carryStart}` : sql``}
     and jl.reconciled_at is null
     and not exists (select 1 from reconciliation_matches m where m.journal_line_id = jl.id and m.org_id = jl.org_id)

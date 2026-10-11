@@ -8,6 +8,7 @@ import { canonicalDecimal, compareDecimal } from "@openbooks/engine/money/decima
 import { flowRates } from "../fx-presentation";
 import { defaultFiscalCalendarPeriods } from "../fiscal";
 import type { FiscalPeriod } from "@openbooks/reports";
+import { excludePeriodEndJournals, statementMonthActivity } from "@openbooks/engine/records/period-end-origins";
 import { statementBookExpr } from "../gl-summary";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { financialHealth, priorFiscalWindow, type FinancialHealth, type HealthFigures, type HealthPnlFigures } from "./financial-health";
@@ -367,7 +368,7 @@ async function monthlySeries(
              sub.base_currency as func,
              (g.debit_total - g.credit_total) as amt,
              (g.month + interval '1 month' - interval '1 day')::date::text as late
-        from gl_month_activity g
+        from ${statementMonthActivity(orgId)} g
         left join subsidiaries sub on sub.id = g.subsidiary_id and sub.org_id = g.org_id
        where g.org_id = ${orgId}
          and g.book_id = ${statementBookExpr(orgId)}
@@ -381,6 +382,7 @@ async function monthlySeries(
         join journal_entries e on e.id = l.entry_id and e.org_id = ${orgId}
          and e.status in ('posted', 'reversed')
          and e.book_id = ${statementBookExpr(orgId)}
+         and ${excludePeriodEndJournals(sql`e.origin`)}
          and e.posting_date >= date_trunc('month', ${to}::date)::date
          and e.posting_date <= ${to}
         left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
@@ -498,6 +500,7 @@ async function fiscalPeriodSeries(
     from journal_lines l
     join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       and e.status in ('posted', 'reversed') and e.book_id = ${statementBookExpr(orgId)}
+      and ${excludePeriodEndJournals(sql`e.origin`)}
     join accounts a on a.id = l.account_id and a.org_id = l.org_id
     left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
     where l.org_id = ${orgId}
@@ -607,6 +610,7 @@ async function segmentsBy(
     from journal_lines l
     join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       and e.status in ('posted', 'reversed') and e.book_id = ${statementBookExpr(orgId)}
+      and ${excludePeriodEndJournals(sql`e.origin`)}
     join accounts a on a.id = l.account_id and a.org_id = l.org_id
     left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
     left join ${tbl} d on d.id = ${col} and d.org_id = l.org_id
@@ -698,6 +702,7 @@ async function drivers(orgId: string, from: string, to: string, allowed: Readonl
     from journal_lines l
     join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       and e.status in ('posted', 'reversed') and e.book_id = ${statementBookExpr(orgId)}
+      and ${excludePeriodEndJournals(sql`e.origin`)}
     join accounts a on a.id = l.account_id and a.org_id = l.org_id
     left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
     where l.org_id = ${orgId}
@@ -773,6 +778,7 @@ async function itemAnalysis(orgId: string, from: string, to: string, allowed: Re
     from journal_lines l
     join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       and e.status in ('posted', 'reversed') and e.book_id = ${statementBookExpr(orgId)}
+      and ${excludePeriodEndJournals(sql`e.origin`)}
     join accounts a on a.id = l.account_id and a.org_id = l.org_id
     left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
     where l.org_id = ${orgId}
@@ -1263,6 +1269,7 @@ export async function budgetVariance(
       join accounts acc on acc.id = l.account_id and acc.org_id = l.org_id
       left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
       where l.org_id = ${orgId} and e.book_id = ${s.book_id}
+        and ${excludePeriodEndJournals(sql`e.origin`)}
         ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
         and acc.type in (${PNL_TYPES_SQL})
         and l.posting_date >= ${from} and l.posting_date <= ${to}

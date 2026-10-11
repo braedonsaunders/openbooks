@@ -2,6 +2,7 @@ import "server-only";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
+import { excludePeriodEndJournals } from "@openbooks/engine/records/period-end-origins";
 import { isFeatureEnabled } from "../features";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import type { AssistantToolDef, ToolResult } from "./types";
@@ -66,6 +67,7 @@ const retainageBalances: AssistantToolDef = {
        and e.book_id = (select b.id from accounting_books b
                           where b.org_id = ${orgId} and b.is_primary and b.is_active and b.posts_gl limit 1)
        and e.posting_date <= ${asOf}
+       and ${excludePeriodEndJournals(sql`e.origin`)}
        ${lineScope}
     `;
     const total = (await db.execute<{ total: string; lines: number }>(sql`

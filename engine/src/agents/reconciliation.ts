@@ -3,6 +3,7 @@ import { reconciliationTotals, SYSTEM_ACTOR_ID } from "../banking/banking.ts";
 import { addCalendarDays, businessToday, calendarDaysBetween } from "../platform/business-date.ts";
 import { db } from "../platform/db.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
+import { excludePeriodEndJournals } from "../records/period-end-origins.ts";
 import {
   effectiveDetectorMateriality,
   type ContinuousCloseDetectorPolicy,
@@ -190,6 +191,7 @@ async function loadCandidateAccounts(orgId: string, today: string, windowDays: n
          where jl.account_id = ${account.account_id} and jl.org_id = ${orgId}
            and je.posting_date <= ${cutoff}
            and jl.reconciled_at is null
+           and ${excludePeriodEndJournals(sql`je.origin`)}
            and not exists (select 1 from reconciliation_matches m where m.journal_line_id = jl.id and m.org_id = jl.org_id)
          limit 500
       `),

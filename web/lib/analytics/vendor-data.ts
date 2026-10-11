@@ -2,6 +2,7 @@ import "server-only";
 import { analyticsQuery } from "./query";
 import { analyticsSection } from "./read-context";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
+import { excludePeriodEndJournals } from "@openbooks/engine/records/period-end-origins";
 import { statementBookExpr } from "../gl-summary";
 import { flowRates } from "../fx-presentation";
 import { add, cmp, div, mulDecimal, neg } from "@openbooks/engine/money/money";
@@ -182,6 +183,7 @@ export async function vendorData(
         select id, org_id, posting_date from journal_entries
          where org_id = ${orgId} and posting_date >= ${pFrom} and posting_date <= ${to}
            and status in ('posted', 'reversed') and book_id = ${statementBookExpr(orgId)}
+           and ${excludePeriodEndJournals(sql`origin`)}
       ), spend as materialized (
         select l.party_id as id, sub.base_currency as func,
           sum(case when e.posting_date >= ${from} and e.posting_date <= ${to} then l.amount else 0 end) as spend,
@@ -231,6 +233,7 @@ export async function vendorData(
         select id, org_id, posting_date from journal_entries
          where org_id = ${orgId} and posting_date >= ${startIso} and posting_date <= ${to}
            and status in ('posted', 'reversed') and book_id = ${statementBookExpr(orgId)}
+           and ${excludePeriodEndJournals(sql`origin`)}
       )
       select ${fiscalBucketKey(sql`e.posting_date`, buckets.useFiscal)} as bucket,
         ${fiscalBucketLabel(sql`e.posting_date`, buckets.useFiscal)} as bucket_label,

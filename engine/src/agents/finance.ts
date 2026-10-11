@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { businessToday } from "../platform/business-date.ts";
 import { db } from "../platform/db.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
+import { excludePeriodEndJournals } from "../records/period-end-origins.ts";
 import {
   effectiveDetectorMateriality,
   type ContinuousCloseDetectorPolicy,
@@ -94,6 +95,7 @@ export async function financeFindings(
           join accounts a on a.id = l.account_id and a.org_id = l.org_id
          where l.org_id = ${orgId} and e.book_id = ${budget.book_id}
            and e.period_id in (select id from selected_periods)
+           and ${excludePeriodEndJournals(sql`e.origin`)}
          group by l.account_id
       )
       select a.id, a.number, a.name, a.type,
@@ -181,6 +183,7 @@ export async function financeFindings(
           join accounting_books b on b.id = e.book_id and b.org_id = e.org_id and b.is_primary and b.is_active and b.posts_gl
           join accounts a on a.id = l.account_id and a.org_id = l.org_id
          where l.org_id = ${orgId} and e.period_id = ${period.id}
+           and ${excludePeriodEndJournals(sql`e.origin`)}
         `));
         return result.rows[0] ?? { revenue: "0", cogs: "0", opex: "0" };
       };

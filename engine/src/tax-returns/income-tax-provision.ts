@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withOrg } from "../platform/db.ts";
 import { canonicalJson } from "../platform/canonical-json.ts";
+import { excludePeriodEndJournals } from "../records/period-end-origins.ts";
 import {
   add,
   cmp,
@@ -596,6 +597,7 @@ async function pretaxBookIncomeBySubsidiary(
        and a.type in ('income', 'income_other', 'cogs', 'expense', 'expense_other', 'expense_deferred')
        and e.posting_date >= ${from} and e.posting_date <= ${to}
        and e.origin <> 'tax_provision'
+       and ${excludePeriodEndJournals(sql`e.origin`)}
      group by l.subsidiary_id
      order by l.subsidiary_id
   `));

@@ -14,6 +14,7 @@ import { agingBasisDate, agingBucketIndex } from "../aging-basis";
 import { monthYearLabel } from "../format";
 import { getMoneyFormatter } from '../money-server'
 import { resolveOrgId } from '../org-scope'
+import { excludePeriodEndJournals, statementMonthActivity } from '@openbooks/engine/records/period-end-origins'
 import { statementBookExpr } from '../gl-summary'
 import { flowRates, lineFunctional, MissingExchangeRateError, presentationCurrency, presentationRates } from '../fx-presentation'
 
@@ -1269,6 +1270,7 @@ export async function categoryWeekly(
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
         and e.status in ('posted', 'reversed') and e.book_id = ${statementBookExpr(orgId)}
+        and ${excludePeriodEndJournals(sql`e.origin`)}
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       join subsidiaries sub on sub.id = l.subsidiary_id
       where l.org_id = ${orgId} and l.account_id in (${ids})
@@ -1313,6 +1315,7 @@ export async function categoryWeekly(
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
           and e.status in ('posted', 'reversed') and e.book_id = ${statementBookExpr(orgId)}
+          and ${excludePeriodEndJournals(sql`e.origin`)}
         join accounts a on a.id = l.account_id and a.org_id = l.org_id
         join subsidiaries sub on sub.id = l.subsidiary_id
        where l.org_id = ${orgId} and l.account_id in (${ids})${subScope(sql`l.subsidiary_id`, context.subIds)}
@@ -1459,6 +1462,7 @@ export async function categoryWeekly(
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
         and e.book_id = ${statementBookExpr(orgId)}
+        and ${excludePeriodEndJournals(sql`e.origin`)}
       join subsidiaries sub on sub.id = l.subsidiary_id
       where l.org_id = ${orgId} and l.account_id in (${ids})
         and e.posting_date >= ${toISO(historyStart)} and e.posting_date <= ${asOfIso}${subScope(sql`l.subsidiary_id`, context.subIds)}
@@ -1477,6 +1481,7 @@ export async function categoryWeekly(
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
         and e.book_id = ${statementBookExpr(orgId)}
+        and ${excludePeriodEndJournals(sql`e.origin`)}
       join subsidiaries sub on sub.id = l.subsidiary_id
       where l.org_id = ${orgId} and l.account_id in (${ids}) and e.posting_date <= ${asOfIso}${subScope(sql`l.subsidiary_id`, context.subIds)}
       group by 1
@@ -1811,6 +1816,7 @@ export async function categoryWeekly(
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
         and e.book_id = ${statementBookExpr(orgId)}
+        and ${excludePeriodEndJournals(sql`e.origin`)}
       left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
       left join parties p on p.id = d.party_id and p.org_id = d.org_id
       join subsidiaries sub on sub.id = l.subsidiary_id
@@ -1971,6 +1977,7 @@ export async function bankBalances(asOf: string, subIds?: string[], explicitOrgI
       select id from journal_entries
        where org_id = ${orgId} and status in ('posted', 'reversed')
          and book_id = ${statementBookExpr(orgId)}
+         and ${excludePeriodEndJournals(sql`origin`)}
          and posting_date >= date_trunc('month', ${asOf}::date)::date
          and posting_date <= ${asOf}
     ),
@@ -1979,7 +1986,7 @@ export async function bankBalances(asOf: string, subIds?: string[], explicitOrgI
       -- branches (the summary keeps subsidiary id), so each leg carries its
       -- functional out for presentation translation below.
       select g.account_id, (g.debit_total - g.credit_total) as amt, sub.base_currency as func
-        from gl_month_activity g
+        from ${statementMonthActivity(orgId)} g
         left join subsidiaries sub on sub.id = g.subsidiary_id and sub.org_id = ${orgId}
        where g.org_id = ${orgId}
          and g.book_id = ${statementBookExpr(orgId)}

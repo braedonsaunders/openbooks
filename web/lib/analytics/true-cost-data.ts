@@ -3,6 +3,7 @@ import { db } from "@openbooks/engine/platform/database";
 import { analyticsQuery } from "./query";
 import { analyticsSection } from "./read-context";
 import { toChartNumber } from "../chart-number";
+import { excludePeriodEndJournals } from "@openbooks/engine/records/period-end-origins";
 import { statementBookExpr } from "../gl-summary";
 import { isFeatureEnabled } from "../features";
 import { getMoneyFormatter } from '../money-server'
@@ -398,6 +399,7 @@ export async function trueCostData(
   const ids = allowedSubsidiaryIds === null ? null : [...allowedSubsidiaryIds]
   const allowed = ids?.length ? sql.join(ids.map((id) => sql`${id}::uuid`), sql`, `) : sql`null`
   const ledgerScope = sql`and e.status in ('posted', 'reversed') and e.book_id = ${statementBookExpr(orgId)}
+    and ${excludePeriodEndJournals(sql`e.origin`)}
     ${ids === null ? sql`` : sql`and l.subsidiary_id in (${allowed})`}`
   // Approved time only, on every labour leg: draft, submitted and rejected
   // hours are not worked reality — the same approved-only rule as

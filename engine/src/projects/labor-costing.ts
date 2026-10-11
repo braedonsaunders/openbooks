@@ -18,6 +18,7 @@ import {
 } from "../money/money.ts";
 import { canonicalDecimal, compareDecimal } from "../money/exact-decimal.ts";
 import { decimalNullRefusal } from "../money/decimal-refusal.ts";
+import { excludePeriodEndJournals } from "../records/period-end-origins.ts";
 import type { Money } from "../money/brands.ts";
 import {
   postProjectGlEntryWithinTransaction,
@@ -973,6 +974,7 @@ async function laborClearingReconciliationFrom(
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
      where l.org_id = ${orgId} and l.account_id = ${laborClearingAccountId}
        and e.book_id = ${bookId}
+       and ${excludePeriodEndJournals(sql`e.origin`)}
        and l.subsidiary_id = ${subsidiaryId}
        and e.posting_date >= ${periodStart} and e.posting_date <= ${periodEnd}`));
   const open = (await executor.execute<{ balance: string }>(sql`

@@ -19,6 +19,7 @@ import {
   acquireOrgFeatureGateLock,
 } from "../../organization/org-feature-lock.ts";
 import { arePeriodModulesOpen } from "../../periods/period-policy.ts";
+import { excludePeriodEndJournals } from "../../records/period-end-origins.ts";
 import {
   db,
   withBypassContext,
@@ -654,6 +655,7 @@ async function readSources(
       join accounts a on a.org_id = l.org_id and a.id = l.account_id
       join subsidiaries sub on sub.org_id = e.org_id and sub.id = l.subsidiary_id
      where e.org_id = ${orgId} and e.status in ('posted', 'reversed')
+       and ${excludePeriodEndJournals(sql`e.origin`)}
        and e.posting_date >= ${month}::date and e.posting_date < (${month}::date + interval '1 month')
      group by l.subsidiary_id, sub.base_currency
      order by l.subsidiary_id
@@ -2370,6 +2372,7 @@ async function legacyReadSources(
       join journal_lines l on l.org_id = e.org_id and l.entry_id = e.id
       join accounts a on a.org_id = l.org_id and a.id = l.account_id
      where e.org_id = ${orgId} and e.status in ('posted', 'reversed')
+       and ${excludePeriodEndJournals(sql`e.origin`)}
        and e.posting_date >= ${month}::date and e.posting_date < (${month}::date + interval '1 month')
      group by l.subsidiary_id
   `)).rows;

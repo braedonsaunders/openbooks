@@ -3,6 +3,7 @@ import { analyticsQuery } from "./query";
 import { sql } from "drizzle-orm";
 import { add, mulDecimal, roundDiv, toUnits } from "@openbooks/engine/money/money";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
+import { excludePeriodEndJournals } from "@openbooks/engine/records/period-end-origins";
 import { statementBookExpr } from "../gl-summary";
 import { flowRates } from "../fx-presentation";
 
@@ -71,6 +72,7 @@ export async function periodOperatingExpenses(
     where l.org_id = ${orgId}
       ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
       and e.status in ('posted', 'reversed') and e.book_id = ${statementBookExpr(orgId)}
+      and ${excludePeriodEndJournals(sql`e.origin`)}
       and e.posting_date >= ${from} and e.posting_date <= ${to}
     group by sub.base_currency
   `);
