@@ -18,7 +18,7 @@ import {
 import { getTeamView, type TeamView } from '@openbooks/engine/src/hrm/self-service/team-read.ts'
 import { listOwnBankAccounts } from '@openbooks/engine/src/hrm/self-service/bank-changes.ts'
 import { HrmAuthorizationError } from '@openbooks/engine/src/hrm/authorization.ts'
-import { employmentChangeFlowsEnabled } from '@openbooks/engine/src/hrm/change-requests.ts'
+import { employmentChangeFlowsEnabled } from '@openbooks/engine/hrm/change-requests'
 import { SelfServiceError } from '@openbooks/engine/src/hrm/self-service/actor.ts'
 import { can, type Authz } from '../authz'
 import type { DirectoryItem } from '../../components/module-home/ui'

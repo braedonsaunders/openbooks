@@ -108,7 +108,7 @@ export {
   type ReturnableSourceQuery,
 } from './returnable-sources.ts'
 /** Return pricing reads which shipments posted return evidence already covers. */
-export { postedReturnEvidenceScope } from './return-quantities.ts'
+export { postedReturnEvidenceScope, postedReturnQuantity } from './return-quantities.ts'
 export { SALES_FULFILLMENT_DOCUMENT_KIND } from './documents-customer-credits.ts'
 
 /** Physical stock controls and custody recognition share native inventory commands. */
