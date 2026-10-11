@@ -239,6 +239,8 @@ function blockSignature(blocks: TypedBlock[]): string[] {
  * Everything else that ships English verbatim is an untranslated string.
  */
 const COGNATES = new Set<string>([
+  // French uses the same spelling for the journal measurement date heading.
+  'fr:reports.journalMeasurements.date|Date',
   // Spanish uses the same negative response as English.
   'es:manufacturing.no|No',
   // Per-area reviewed exemptions: country names spelled identically (Canada); genuine loanwords (Pack/Status/Manual/Scripts in de/es/pt-BR);
@@ -3710,7 +3712,6 @@ const COGNATES = new Set<string>([
   'es:sync.drawer.entityMappings.no|No',
   'fr:admin.setup.entities.training-participants.title|Participants',
   'fr:admin.setup.entities.training-sessions.title|Sessions',
-  'fr:admin.setup.fields.partyId|Contact',
   'fr:admin.setup.fields.schedulePdfOrientation|Orientation',
   'fr:admin.setup.inspectionPlans.audit|Audit',
   'fr:admin.setup.inspectionPlans.maximum|Maximum',

@@ -1190,6 +1190,22 @@
       "asset_cip_costs": {
         "label": "Costos de obras en curso",
         "description": "Todas las líneas del libro mayor vinculadas a un registro de obras en curso —facturas, asientos y costos de proyecto— con su registro, cuenta, proyecto e importe, para cuadrar el libro auxiliar con las cuentas de obras en curso."
+      },
+      "customer_rebate_accruals": {
+        "label": "Descuentos devengados de clientes",
+        "description": "Descuentos devengados, ajustes retroactivos de tramos y origen de los asientos, conservados sin modificación."
+      },
+      "customer_rebate_claims": {
+        "label": "Solicitudes de descuentos de clientes",
+        "description": "Derechos adquiridos, aprobaciones independientes e instrumentos de liquidación nativos."
+      },
+      "vendor_rebate_accruals": {
+        "label": "Descuentos devengados de proveedores",
+        "description": "Descuentos devengados, ajustes retroactivos de tramos y origen de los asientos, conservados sin modificación."
+      },
+      "vendor_rebate_claims": {
+        "label": "Solicitudes de descuentos de proveedores",
+        "description": "Derechos adquiridos, aprobaciones independientes e instrumentos de liquidación nativos."
       }
     },
     "columns": {
@@ -2941,6 +2957,50 @@
         "base_currency": "Moneda funcional",
         "amount": "Importe",
         "id": "Clave de costo"
+      },
+      "customer_rebate_accruals": {
+        "id": "Devengo",
+        "agreement": "Acuerdo",
+        "counterparty": "Contraparte",
+        "source_document": "Transacción de origen",
+        "accrued_on": "Fecha de devengo",
+        "currency": "Moneda",
+        "earned": "Ajuste devengado",
+        "revision": "Versión de la evaluación",
+        "journal_entry_id": "Asiento contable"
+      },
+      "customer_rebate_claims": {
+        "id": "Solicitud",
+        "agreement": "Acuerdo",
+        "counterparty": "Contraparte",
+        "cutoff_on": "Devengado hasta",
+        "status": "Estado",
+        "currency": "Moneda",
+        "amount": "Importe solicitado",
+        "settlement_on": "Fecha de liquidación",
+        "document_id": "Documento de liquidación"
+      },
+      "vendor_rebate_accruals": {
+        "id": "Devengo",
+        "agreement": "Acuerdo",
+        "counterparty": "Contraparte",
+        "source_document": "Transacción de origen",
+        "accrued_on": "Fecha de devengo",
+        "currency": "Moneda",
+        "earned": "Ajuste devengado",
+        "revision": "Versión de la evaluación",
+        "journal_entry_id": "Asiento contable"
+      },
+      "vendor_rebate_claims": {
+        "id": "Solicitud",
+        "agreement": "Acuerdo",
+        "counterparty": "Contraparte",
+        "cutoff_on": "Devengado hasta",
+        "status": "Estado",
+        "currency": "Moneda",
+        "amount": "Importe solicitado",
+        "settlement_on": "Fecha de liquidación",
+        "document_id": "Documento de liquidación"
       }
     },
     "enumValues": {

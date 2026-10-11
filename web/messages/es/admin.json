@@ -3779,6 +3779,14 @@
       "gl-audit-number-policies": {
         "title": "Políticas de numeración de auditoría",
         "description": "Políticas de numeración de auditoría"
+      },
+      "rebate-agreements": {
+        "title": "Acuerdos de descuentos",
+        "description": "Condiciones con fecha de vigencia, aprobación nativa y evidencia de auditoría."
+      },
+      "subscription-renewal-policies": {
+        "title": "Políticas de renovación de suscripciones",
+        "description": "Condiciones de renovación con fecha de vigencia, responsable y recordatorios antes del vencimiento."
       }
     },
     "fields": {
@@ -4365,7 +4373,7 @@
       "autonomy": "Nivel de revisión declarado",
       "boardId": "Tablero de planificación",
       "resourceLocationId": "Ubicación del recurso",
-      "partyId": "Contacto",
+      "partyId": "Cliente o proveedor",
       "automaticDeliveryPolicy": "Envío automático del horario",
       "scheduleDeliveryOperator": "Operador autorizado",
       "scheduleDeliveryTimeZone": "Zona horaria del informe",
@@ -4456,7 +4464,31 @@
       "defaultJournalFormId": "Formulario de asiento predeterminado",
       "priority": "Prioridad",
       "resetRule": "Regla de reinicio",
-      "segmentKey": "Clave de segmento"
+      "segmentKey": "Clave de segmento",
+      "calculationMethod": "Cálculo del valor razonable",
+      "formulaPercent": "Porcentaje de la fórmula",
+      "listPrice": "Precio de lista fechado",
+      "unitCost": "Coste unitario fechado",
+      "side": "Parte del acuerdo",
+      "activity": "Actividad elegible",
+      "tierBasis": "Base acumulada de los tramos",
+      "tiers": "Tramos retroactivos",
+      "threshold": "Base acumulada mínima",
+      "targetUnitCost": "Coste unitario garantizado",
+      "marginPercent": "Porcentaje de margen garantizado",
+      "stacking": "Combinación de acuerdos",
+      "selectionGroup": "Grupo de mejor oferta",
+      "accrualAccountId": "Pasivo o cuenta por cobrar del descuento",
+      "offsetAccountId": "Ingreso o gasto del descuento",
+      "fxAccountId": "Cuenta de diferencias de cambio de la liquidación",
+      "subscriptionId": "Suscripción",
+      "ownerId": "Operador responsable",
+      "reminderDays": "Antelación del recordatorio en días",
+      "days": "Días antes del vencimiento",
+      "generationLeadDays": "Días antes del vencimiento para generar el documento",
+      "upliftPercent": "Porcentaje de incremento en la renovación",
+      "termMonths": "Plazo de renovación en meses",
+      "settlementTaxCodeId": "Código fiscal de la liquidación"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Días entre el tipo utilizable más reciente y el cierre del período a partir de los cuales la revaluación y la consolidación rechazan el tipo. Los tipos de cierre se cuentan desde la fecha del tipo al contado de cierre; los promedio, desde la cotización más reciente promediada. Valor predeterminado sin política: 31 días.",
@@ -8450,6 +8482,10 @@
     "assetInsurance": {
       "title": "Seguros de activos",
       "description": "Registre las pólizas de seguro que cubren los activos, reciba recordatorios de renovación y compare el valor asegurado con el valor en libros neto."
+    },
+    "rebateManagement": {
+      "title": "Gestión de descuentos",
+      "description": "Gestionar acuerdos de clientes y proveedores, devengos retroactivos, solicitudes y liquidaciones."
     }
   },
   "backupsManager": {

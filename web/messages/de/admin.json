@@ -3941,6 +3941,14 @@
       "gl-audit-number-policies": {
         "title": "Hauptbuch-Prüfnummernrichtlinien",
         "description": "Hauptbuch-Prüfnummernrichtlinien"
+      },
+      "rebate-agreements": {
+        "title": "Bonusvereinbarungen",
+        "description": "Zeitlich gültige Bedingungen mit systemeigener Genehmigung und Prüfungsnachweisen."
+      },
+      "subscription-renewal-policies": {
+        "title": "Richtlinien für Abonnementverlängerungen",
+        "description": "Zeitlich gültige Verlängerungsbedingungen, Verantwortliche und Erinnerungen vor Ablauf."
       }
     },
     "fields": {
@@ -4527,7 +4535,7 @@
       "autonomy": "Deklarierte Prüfstufe",
       "boardId": "Planungstafel",
       "resourceLocationId": "Ressourcenstandort",
-      "partyId": "Kontakt",
+      "partyId": "Kunde oder Lieferant",
       "automaticDeliveryPolicy": "Automatischer Planversand",
       "scheduleDeliveryOperator": "Berechtigter Bediener",
       "scheduleDeliveryTimeZone": "Zeitzone des Berichts",
@@ -4618,7 +4626,31 @@
       "defaultJournalFormId": "Standardjournalformular",
       "priority": "Priorität",
       "resetRule": "Rücksetzungsregel",
-      "segmentKey": "Segmentschlüssel"
+      "segmentKey": "Segmentschlüssel",
+      "calculationMethod": "Berechnung des beizulegenden Zeitwerts",
+      "formulaPercent": "Prozentsatz der Formel",
+      "listPrice": "Datierter Listenpreis",
+      "unitCost": "Datierte Stückkosten",
+      "side": "Vertragsseite",
+      "activity": "Berechtigte Geschäftsvorgänge",
+      "tierBasis": "Kumulative Staffelbasis",
+      "tiers": "Rückwirkende Staffeln",
+      "threshold": "Minimale kumulative Basis",
+      "targetUnitCost": "Garantierte Stückkosten",
+      "marginPercent": "Garantierter Margenprozentsatz",
+      "stacking": "Vertragskombination",
+      "selectionGroup": "Gruppe für das beste Angebot",
+      "accrualAccountId": "Bonusverbindlichkeit oder Bonusforderung",
+      "offsetAccountId": "Bonusertrag oder Bonusaufwand",
+      "fxAccountId": "Wechselkurskonto für die Abrechnung",
+      "subscriptionId": "Abonnement",
+      "ownerId": "Verantwortlicher Bearbeiter",
+      "reminderDays": "Vorlauf der Erinnerung in Tagen",
+      "days": "Tage vor Ablauf",
+      "generationLeadDays": "Dokumenterstellung: Tage vor Ablauf",
+      "upliftPercent": "Preiserhöhung bei Verlängerung in Prozent",
+      "termMonths": "Verlängerungsdauer in Monaten",
+      "settlementTaxCodeId": "Steuerschlüssel für die Abrechnung"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Tage zwischen dem neuesten verwendbaren Kurs und dem Periodenende, ab denen Bewertung und Konsolidierung den Kurs ablehnen. Stichtagskurse zählen ab dem Datum des Kassakurses zum Periodenende, Durchschnittskurse ab der neuesten einbezogenen Notierung. Standard ohne Richtlinie: 31 Tage.",
@@ -8450,6 +8482,10 @@
     "assetInsurance": {
       "title": "Anlagenversicherung",
       "description": "Erfassen Sie Versicherungspolicen für Anlagen, erhalten Sie Verlängerungserinnerungen und vergleichen Sie die Versicherungssumme mit dem Nettobuchwert."
+    },
+    "rebateManagement": {
+      "title": "Bonusverwaltung",
+      "description": "Kunden- und Lieferantenvereinbarungen, rückwirkende Bonusabgrenzungen, Ansprüche und Abrechnungen verwalten."
     }
   },
   "extensions": {

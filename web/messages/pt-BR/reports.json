@@ -1190,6 +1190,22 @@
       "asset_cip_costs": {
         "label": "Custos de imobilizado em andamento",
         "description": "Todas as linhas do razão geral vinculadas a um registro de imobilizado em andamento — contas a pagar, lançamentos e custos de projeto — com registro, conta, projeto e valor, para conciliar o razão auxiliar com as contas de imobilizado em andamento."
+      },
+      "customer_rebate_accruals": {
+        "label": "Bonificações apropriadas de clientes",
+        "description": "Bonificações adquiridas, ajustes retroativos de faixas e origem dos lançamentos, preservados sem alteração."
+      },
+      "customer_rebate_claims": {
+        "label": "Solicitações de bonificação de clientes",
+        "description": "Direitos adquiridos, aprovações independentes e instrumentos nativos de liquidação."
+      },
+      "vendor_rebate_accruals": {
+        "label": "Bonificações apropriadas de fornecedores",
+        "description": "Bonificações adquiridas, ajustes retroativos de faixas e origem dos lançamentos, preservados sem alteração."
+      },
+      "vendor_rebate_claims": {
+        "label": "Solicitações de bonificação de fornecedores",
+        "description": "Direitos adquiridos, aprovações independentes e instrumentos nativos de liquidação."
       }
     },
     "columns": {
@@ -2941,6 +2957,50 @@
         "base_currency": "Moeda funcional",
         "amount": "Valor",
         "id": "ID do custo"
+      },
+      "customer_rebate_accruals": {
+        "id": "Apropriação",
+        "agreement": "Acordo",
+        "counterparty": "Contraparte",
+        "source_document": "Transação de origem",
+        "accrued_on": "Data de apropriação",
+        "currency": "Moeda",
+        "earned": "Ajuste adquirido",
+        "revision": "Versão da avaliação",
+        "journal_entry_id": "Lançamento contábil"
+      },
+      "customer_rebate_claims": {
+        "id": "Solicitação",
+        "agreement": "Acordo",
+        "counterparty": "Contraparte",
+        "cutoff_on": "Adquirido até",
+        "status": "Situação",
+        "currency": "Moeda",
+        "amount": "Valor solicitado",
+        "settlement_on": "Data de liquidação",
+        "document_id": "Documento de liquidação"
+      },
+      "vendor_rebate_accruals": {
+        "id": "Apropriação",
+        "agreement": "Acordo",
+        "counterparty": "Contraparte",
+        "source_document": "Transação de origem",
+        "accrued_on": "Data de apropriação",
+        "currency": "Moeda",
+        "earned": "Ajuste adquirido",
+        "revision": "Versão da avaliação",
+        "journal_entry_id": "Lançamento contábil"
+      },
+      "vendor_rebate_claims": {
+        "id": "Solicitação",
+        "agreement": "Acordo",
+        "counterparty": "Contraparte",
+        "cutoff_on": "Adquirido até",
+        "status": "Situação",
+        "currency": "Moeda",
+        "amount": "Valor solicitado",
+        "settlement_on": "Data de liquidação",
+        "document_id": "Documento de liquidação"
       }
     },
     "enumValues": {

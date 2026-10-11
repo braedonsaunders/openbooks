@@ -3779,6 +3779,14 @@
       "gl-audit-number-policies": {
         "title": "Politiques de numérotation d’audit du grand livre",
         "description": "Politiques de numérotation d’audit du grand livre"
+      },
+      "rebate-agreements": {
+        "title": "Accords de ristourne",
+        "description": "Conditions datées avec approbation native et preuves d’audit."
+      },
+      "subscription-renewal-policies": {
+        "title": "Politiques de renouvellement des abonnements",
+        "description": "Conditions de renouvellement datées, responsable et rappels avant l’expiration."
       }
     },
     "fields": {
@@ -4365,7 +4373,7 @@
       "autonomy": "Niveau de révision déclaré",
       "boardId": "Tableau de planification",
       "resourceLocationId": "Emplacement de la ressource",
-      "partyId": "Contact",
+      "partyId": "Client ou fournisseur",
       "automaticDeliveryPolicy": "Envoi automatique du planning",
       "scheduleDeliveryOperator": "Opérateur autorisé",
       "scheduleDeliveryTimeZone": "Fuseau du rapport",
@@ -4456,7 +4464,31 @@
       "defaultJournalFormId": "Formulaire de journal par défaut",
       "priority": "Priorité",
       "resetRule": "Règle de réinitialisation",
-      "segmentKey": "Clé du segment"
+      "segmentKey": "Clé du segment",
+      "calculationMethod": "Calcul de la juste valeur",
+      "formulaPercent": "Pourcentage de la formule",
+      "listPrice": "Prix catalogue daté",
+      "unitCost": "Coût unitaire daté",
+      "side": "Partie à l’accord",
+      "activity": "Activité admissible",
+      "tierBasis": "Base cumulative des paliers",
+      "tiers": "Paliers rétroactifs",
+      "threshold": "Base cumulative minimale",
+      "targetUnitCost": "Coût unitaire garanti",
+      "marginPercent": "Pourcentage de marge garanti",
+      "stacking": "Combinaison des accords",
+      "selectionGroup": "Groupe de meilleure offre",
+      "accrualAccountId": "Dette ou créance de ristourne",
+      "offsetAccountId": "Produit ou charge de ristourne",
+      "fxAccountId": "Compte de change du règlement",
+      "subscriptionId": "Abonnement",
+      "ownerId": "Opérateur responsable",
+      "reminderDays": "Délai de rappel en jours",
+      "days": "Jours avant l’expiration",
+      "generationLeadDays": "Jours avant l’expiration pour créer le document",
+      "upliftPercent": "Pourcentage de majoration au renouvellement",
+      "termMonths": "Durée du renouvellement en mois",
+      "settlementTaxCodeId": "Code fiscal du règlement"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Nombre de jours entre le taux utilisable le plus récent et la fin de période au-delà duquel la réévaluation et la consolidation refusent le taux. Les taux de clôture se comptent depuis la date du taux comptant de fin de période ; les taux moyens depuis la cotation la plus récente incluse dans la moyenne. Valeur par défaut sans politique : 31 jours.",
@@ -8450,6 +8482,10 @@
     "assetInsurance": {
       "title": "Assurance des immobilisations",
       "description": "Enregistrez les polices d’assurance couvrant les immobilisations, recevez des rappels de renouvellement et comparez la valeur assurée à la valeur nette comptable."
+    },
+    "rebateManagement": {
+      "title": "Gestion des ristournes",
+      "description": "Gérer les accords clients et fournisseurs, les droits acquis rétroactifs, les demandes et les règlements."
     }
   },
   "backupsManager": {

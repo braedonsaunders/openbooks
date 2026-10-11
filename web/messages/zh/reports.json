@@ -1190,6 +1190,22 @@
       "asset_cip_costs": {
         "label": "在建工程成本",
         "description": "关联到在建工程记录的每条总账明细行（账单、日记账和项目成本），列示其记录、科目、项目和金额，用于核对明细账与在建工程科目。"
+      },
+      "customer_rebate_accruals": {
+        "label": "客户返利计提",
+        "description": "以追加方式保留已获得返利、追溯分档调整和分录来源。"
+      },
+      "customer_rebate_claims": {
+        "label": "客户返利申领",
+        "description": "已获得申领、独立审批和系统原生结算工具。"
+      },
+      "vendor_rebate_accruals": {
+        "label": "供应商返利计提",
+        "description": "以追加方式保留已获得返利、追溯分档调整和分录来源。"
+      },
+      "vendor_rebate_claims": {
+        "label": "供应商返利申领",
+        "description": "已获得申领、独立审批和系统原生结算工具。"
       }
     },
     "columns": {
@@ -2941,6 +2957,50 @@
         "base_currency": "本位币",
         "amount": "金额",
         "id": "成本键"
+      },
+      "customer_rebate_accruals": {
+        "id": "计提记录",
+        "agreement": "协议",
+        "counterparty": "交易对手",
+        "source_document": "来源交易",
+        "accrued_on": "计提日期",
+        "currency": "币种",
+        "earned": "已获得调整额",
+        "revision": "评估版本",
+        "journal_entry_id": "会计分录"
+      },
+      "customer_rebate_claims": {
+        "id": "申领记录",
+        "agreement": "协议",
+        "counterparty": "交易对手",
+        "cutoff_on": "累计截止日期",
+        "status": "状态",
+        "currency": "币种",
+        "amount": "申领金额",
+        "settlement_on": "结算日期",
+        "document_id": "结算单据"
+      },
+      "vendor_rebate_accruals": {
+        "id": "计提记录",
+        "agreement": "协议",
+        "counterparty": "交易对手",
+        "source_document": "来源交易",
+        "accrued_on": "计提日期",
+        "currency": "币种",
+        "earned": "已获得调整额",
+        "revision": "评估版本",
+        "journal_entry_id": "会计分录"
+      },
+      "vendor_rebate_claims": {
+        "id": "申领记录",
+        "agreement": "协议",
+        "counterparty": "交易对手",
+        "cutoff_on": "累计截止日期",
+        "status": "状态",
+        "currency": "币种",
+        "amount": "申领金额",
+        "settlement_on": "结算日期",
+        "document_id": "结算单据"
       }
     },
     "enumValues": {

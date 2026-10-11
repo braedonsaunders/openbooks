@@ -1190,6 +1190,22 @@
       "asset_cip_costs": {
         "label": "Coûts des immobilisations en cours",
         "description": "Toutes les lignes du grand livre liées à un dossier d’immobilisation en cours — factures, écritures et coûts de projet — avec leur dossier, compte, projet et montant, pour rapprocher le registre auxiliaire des comptes d’immobilisations en cours."
+      },
+      "customer_rebate_accruals": {
+        "label": "Ristournes clients acquises",
+        "description": "Ristournes acquises, ajustements rétroactifs des paliers et écritures d’origine, conservés sans modification."
+      },
+      "customer_rebate_claims": {
+        "label": "Demandes de ristournes clients",
+        "description": "Demandes acquises, approbations indépendantes et moyens de règlement natifs."
+      },
+      "vendor_rebate_accruals": {
+        "label": "Ristournes fournisseurs acquises",
+        "description": "Ristournes acquises, ajustements rétroactifs des paliers et écritures d’origine, conservés sans modification."
+      },
+      "vendor_rebate_claims": {
+        "label": "Demandes de ristournes fournisseurs",
+        "description": "Demandes acquises, approbations indépendantes et moyens de règlement natifs."
       }
     },
     "columns": {
@@ -2941,6 +2957,50 @@
         "base_currency": "Monnaie fonctionnelle",
         "amount": "Montant",
         "id": "Clé du coût"
+      },
+      "customer_rebate_accruals": {
+        "id": "Droit acquis",
+        "agreement": "Accord",
+        "counterparty": "Contrepartie",
+        "source_document": "Transaction source",
+        "accrued_on": "Date d’acquisition",
+        "currency": "Devise",
+        "earned": "Ajustement acquis",
+        "revision": "Version de l’évaluation",
+        "journal_entry_id": "Écriture comptable"
+      },
+      "customer_rebate_claims": {
+        "id": "Demande",
+        "agreement": "Accord",
+        "counterparty": "Contrepartie",
+        "cutoff_on": "Acquis jusqu’au",
+        "status": "État",
+        "currency": "Devise",
+        "amount": "Montant demandé",
+        "settlement_on": "Date de règlement",
+        "document_id": "Document de règlement"
+      },
+      "vendor_rebate_accruals": {
+        "id": "Droit acquis",
+        "agreement": "Accord",
+        "counterparty": "Contrepartie",
+        "source_document": "Transaction source",
+        "accrued_on": "Date d’acquisition",
+        "currency": "Devise",
+        "earned": "Ajustement acquis",
+        "revision": "Version de l’évaluation",
+        "journal_entry_id": "Écriture comptable"
+      },
+      "vendor_rebate_claims": {
+        "id": "Demande",
+        "agreement": "Accord",
+        "counterparty": "Contrepartie",
+        "cutoff_on": "Acquis jusqu’au",
+        "status": "État",
+        "currency": "Devise",
+        "amount": "Montant demandé",
+        "settlement_on": "Date de règlement",
+        "document_id": "Document de règlement"
       }
     },
     "enumValues": {

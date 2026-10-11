@@ -1190,6 +1190,22 @@
       "asset_cip_costs": {
         "label": "Construction-in-progress costs",
         "description": "Every GL line linked to a construction-in-progress record — bills, journals and project costs — with its record, account, project and amount, for tying the subledger to the CIP accounts."
+      },
+      "customer_rebate_accruals": {
+        "label": "Customer rebate accruals",
+        "description": "Append-only earned rebates, retrospective tier adjustments and journal provenance."
+      },
+      "customer_rebate_claims": {
+        "label": "Customer rebate claims",
+        "description": "Earned claims, independent approvals and native settlement instruments."
+      },
+      "vendor_rebate_accruals": {
+        "label": "Vendor rebate accruals",
+        "description": "Append-only earned rebates, retrospective tier adjustments and journal provenance."
+      },
+      "vendor_rebate_claims": {
+        "label": "Vendor rebate claims",
+        "description": "Earned claims, independent approvals and native settlement instruments."
       }
     },
     "columns": {
@@ -2941,6 +2957,50 @@
         "base_currency": "Base currency",
         "amount": "Amount",
         "id": "Cost key"
+      },
+      "customer_rebate_accruals": {
+        "id": "Accrual",
+        "agreement": "Agreement",
+        "counterparty": "Counterparty",
+        "source_document": "Source transaction",
+        "accrued_on": "Accrued on",
+        "currency": "Currency",
+        "earned": "Earned adjustment",
+        "revision": "Assessment revision",
+        "journal_entry_id": "Journal entry"
+      },
+      "customer_rebate_claims": {
+        "id": "Claim",
+        "agreement": "Agreement",
+        "counterparty": "Counterparty",
+        "cutoff_on": "Earned through",
+        "status": "Status",
+        "currency": "Currency",
+        "amount": "Claim amount",
+        "settlement_on": "Settled on",
+        "document_id": "Settlement document"
+      },
+      "vendor_rebate_accruals": {
+        "id": "Accrual",
+        "agreement": "Agreement",
+        "counterparty": "Counterparty",
+        "source_document": "Source transaction",
+        "accrued_on": "Accrued on",
+        "currency": "Currency",
+        "earned": "Earned adjustment",
+        "revision": "Assessment revision",
+        "journal_entry_id": "Journal entry"
+      },
+      "vendor_rebate_claims": {
+        "id": "Claim",
+        "agreement": "Agreement",
+        "counterparty": "Counterparty",
+        "cutoff_on": "Earned through",
+        "status": "Status",
+        "currency": "Currency",
+        "amount": "Claim amount",
+        "settlement_on": "Settled on",
+        "document_id": "Settlement document"
       }
     },
     "enumValues": {

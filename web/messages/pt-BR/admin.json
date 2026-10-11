@@ -3854,6 +3854,14 @@
       "gl-audit-number-policies": {
         "title": "Políticas de numeração de auditoria",
         "description": "Políticas de numeração de auditoria"
+      },
+      "rebate-agreements": {
+        "title": "Acordos de bonificação",
+        "description": "Condições com vigência, aprovação nativa e evidências de auditoria."
+      },
+      "subscription-renewal-policies": {
+        "title": "Políticas de renovação de assinaturas",
+        "description": "Condições de renovação com vigência, responsável e lembretes antes do vencimento."
       }
     },
     "fields": {
@@ -4440,7 +4448,7 @@
       "autonomy": "Nível de revisão declarado",
       "boardId": "Quadro de planejamento",
       "resourceLocationId": "Local do recurso",
-      "partyId": "Contato",
+      "partyId": "Cliente ou fornecedor",
       "automaticDeliveryPolicy": "Envio automático da escala",
       "scheduleDeliveryOperator": "Operador autorizado",
       "scheduleDeliveryTimeZone": "Fuso horário do relatório",
@@ -4531,7 +4539,31 @@
       "defaultJournalFormId": "Formulário padrão de lançamento",
       "priority": "Prioridade",
       "resetRule": "Regra de reinício",
-      "segmentKey": "Chave do segmento"
+      "segmentKey": "Chave do segmento",
+      "calculationMethod": "Cálculo do valor justo",
+      "formulaPercent": "Percentual da fórmula",
+      "listPrice": "Preço de tabela com data de vigência",
+      "unitCost": "Custo unitário com data de vigência",
+      "side": "Parte do acordo",
+      "activity": "Atividade elegível",
+      "tierBasis": "Base acumulada das faixas",
+      "tiers": "Faixas retroativas",
+      "threshold": "Base acumulada mínima",
+      "targetUnitCost": "Custo unitário garantido",
+      "marginPercent": "Percentual de margem garantida",
+      "stacking": "Combinação de acordos",
+      "selectionGroup": "Grupo da melhor oferta",
+      "accrualAccountId": "Obrigação ou recebível de bonificação",
+      "offsetAccountId": "Receita ou despesa de bonificação",
+      "fxAccountId": "Conta de variação cambial da liquidação",
+      "subscriptionId": "Assinatura",
+      "ownerId": "Operador responsável",
+      "reminderDays": "Antecedência do lembrete em dias",
+      "days": "Dias antes do vencimento",
+      "generationLeadDays": "Dias antes do vencimento para gerar o documento",
+      "upliftPercent": "Percentual de reajuste na renovação",
+      "termMonths": "Prazo de renovação em meses",
+      "settlementTaxCodeId": "Código tributário da liquidação"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Dias entre a taxa utilizável mais recente e o fim do período a partir dos quais a reavaliação e a consolidação recusam a taxa. Taxas de fechamento contam a partir da data da taxa à vista de fim de período; taxas médias, a partir da cotação mais recente incluída na média. Padrão sem política: 31 dias.",
@@ -8450,6 +8482,10 @@
     "assetInsurance": {
       "title": "Seguro de ativos",
       "description": "Registre apólices de seguro que cobrem ativos, receba lembretes de renovação e compare o valor segurado com o valor contábil líquido."
+    },
+    "rebateManagement": {
+      "title": "Gestão de bonificações",
+      "description": "Gerenciar acordos de clientes e fornecedores, apropriações retroativas, solicitações e liquidações."
     }
   },
   "backupsManager": {

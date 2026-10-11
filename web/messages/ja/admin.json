@@ -3941,6 +3941,14 @@
       "gl-audit-number-policies": {
         "title": "総勘定元帳監査番号方針",
         "description": "総勘定元帳監査番号方針"
+      },
+      "rebate-agreements": {
+        "title": "リベート契約",
+        "description": "有効日付きの条件、標準承認手続き、および監査証跡。"
+      },
+      "subscription-renewal-policies": {
+        "title": "サブスクリプション更新方針",
+        "description": "有効日付きの更新条件、担当者、および期限前のリマインダー。"
       }
     },
     "fields": {
@@ -4527,7 +4535,7 @@
       "autonomy": "宣言されたレビューレベル",
       "boardId": "スケジュールボード",
       "resourceLocationId": "リソースの場所",
-      "partyId": "連絡先",
+      "partyId": "顧客または仕入先",
       "automaticDeliveryPolicy": "予定の自動配信",
       "scheduleDeliveryOperator": "権限のある担当者",
       "scheduleDeliveryTimeZone": "レポートのタイムゾーン",
@@ -4618,7 +4626,31 @@
       "defaultJournalFormId": "既定の仕訳フォーム",
       "priority": "優先順位",
       "resetRule": "番号リセット規則",
-      "segmentKey": "セグメントキー"
+      "segmentKey": "セグメントキー",
+      "calculationMethod": "公正価値の計算方法",
+      "formulaPercent": "計算式の割合",
+      "listPrice": "適用日付き定価",
+      "unitCost": "適用日付き単位原価",
+      "side": "契約の相手方区分",
+      "activity": "対象取引",
+      "tierBasis": "累計段階の基準",
+      "tiers": "遡及適用する段階",
+      "threshold": "最低累計基準",
+      "targetUnitCost": "保証単位原価",
+      "marginPercent": "保証利益率",
+      "stacking": "契約の組み合わせ",
+      "selectionGroup": "最良条件のグループ",
+      "accrualAccountId": "リベート債務または債権",
+      "offsetAccountId": "リベート収益または費用",
+      "fxAccountId": "決済時の為替差損益勘定",
+      "subscriptionId": "サブスクリプション",
+      "ownerId": "担当者",
+      "reminderDays": "リマインダーの先行日数",
+      "days": "期限までの日数",
+      "generationLeadDays": "期限の何日前に書類を作成するか",
+      "upliftPercent": "更新時の値上げ率",
+      "termMonths": "更新期間（月）",
+      "settlementTaxCodeId": "決済の税コード"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "使用可能な最新レートから期末までの日数がこれを超えると、再評価と連結はそのレートを拒否します。期末レートは期末スポットレートの日付から、平均レートは平均に含まれる最新の相場の日付から数えます。ポリシー未設定時の既定値: 31日。",
@@ -8450,6 +8482,10 @@
     "assetInsurance": {
       "title": "資産保険",
       "description": "資産を対象とする保険契約を記録し、更新リマインダーを受け取り、保険価額と正味帳簿価額を比較します。"
+    },
+    "rebateManagement": {
+      "title": "リベート管理",
+      "description": "顧客・仕入先の契約、遡及計上、請求、および決済を管理します。"
     }
   },
   "extensions": {

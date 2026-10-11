@@ -1190,6 +1190,22 @@
       "asset_cip_costs": {
         "label": "Kosten für Anlagen im Bau",
         "description": "Jede Hauptbuchzeile, die mit einem Datensatz für Anlagen im Bau verknüpft ist — Eingangsrechnungen, Journale und Projektkosten — mit Datensatz, Konto, Projekt und Betrag, zur Abstimmung des Nebenbuchs mit den Konten für Anlagen im Bau."
+      },
+      "customer_rebate_accruals": {
+        "label": "Abgegrenzte Kundenboni",
+        "description": "Unveränderliche verdiente Boni, rückwirkende Staffelanpassungen und Herkunft der Journalbuchungen."
+      },
+      "customer_rebate_claims": {
+        "label": "Kundenbonusansprüche",
+        "description": "Verdiente Ansprüche, unabhängige Genehmigungen und systemeigene Abrechnungsbelege."
+      },
+      "vendor_rebate_accruals": {
+        "label": "Abgegrenzte Lieferantenboni",
+        "description": "Unveränderliche verdiente Boni, rückwirkende Staffelanpassungen und Herkunft der Journalbuchungen."
+      },
+      "vendor_rebate_claims": {
+        "label": "Lieferantenbonusansprüche",
+        "description": "Verdiente Ansprüche, unabhängige Genehmigungen und systemeigene Abrechnungsbelege."
       }
     },
     "columns": {
@@ -2941,6 +2957,50 @@
         "base_currency": "Basiswährung",
         "amount": "Betrag",
         "id": "Kostenschlüssel"
+      },
+      "customer_rebate_accruals": {
+        "id": "Abgrenzung",
+        "agreement": "Vereinbarung",
+        "counterparty": "Gegenpartei",
+        "source_document": "Quelltransaktion",
+        "accrued_on": "Abgrenzungsdatum",
+        "currency": "Währung",
+        "earned": "Verdiente Anpassung",
+        "revision": "Bewertungsversion",
+        "journal_entry_id": "Journalbuchung"
+      },
+      "customer_rebate_claims": {
+        "id": "Anspruch",
+        "agreement": "Vereinbarung",
+        "counterparty": "Gegenpartei",
+        "cutoff_on": "Verdient bis",
+        "status": "Bearbeitungsstatus",
+        "currency": "Währung",
+        "amount": "Anspruchsbetrag",
+        "settlement_on": "Abrechnungsdatum",
+        "document_id": "Abrechnungsbeleg"
+      },
+      "vendor_rebate_accruals": {
+        "id": "Abgrenzung",
+        "agreement": "Vereinbarung",
+        "counterparty": "Gegenpartei",
+        "source_document": "Quelltransaktion",
+        "accrued_on": "Abgrenzungsdatum",
+        "currency": "Währung",
+        "earned": "Verdiente Anpassung",
+        "revision": "Bewertungsversion",
+        "journal_entry_id": "Journalbuchung"
+      },
+      "vendor_rebate_claims": {
+        "id": "Anspruch",
+        "agreement": "Vereinbarung",
+        "counterparty": "Gegenpartei",
+        "cutoff_on": "Verdient bis",
+        "status": "Bearbeitungsstatus",
+        "currency": "Währung",
+        "amount": "Anspruchsbetrag",
+        "settlement_on": "Abrechnungsdatum",
+        "document_id": "Abrechnungsbeleg"
       }
     },
     "enumValues": {

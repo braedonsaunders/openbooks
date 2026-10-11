@@ -1190,6 +1190,22 @@
       "asset_cip_costs": {
         "label": "建設仮勘定の原価",
         "description": "建設仮勘定レコードに紐付けられたすべての総勘定元帳明細（請求書、仕訳、プロジェクト原価）と、そのレコード、勘定、プロジェクト、金額です。補助元帳と建設仮勘定の照合に使用します。"
+      },
+      "customer_rebate_accruals": {
+        "label": "顧客リベート計上",
+        "description": "獲得済みリベート、遡及的な段階調整、および元仕訳を追記のみで保持します。"
+      },
+      "customer_rebate_claims": {
+        "label": "顧客リベート請求",
+        "description": "獲得済み請求、独立した承認、および標準の決済手段。"
+      },
+      "vendor_rebate_accruals": {
+        "label": "仕入先リベート計上",
+        "description": "獲得済みリベート、遡及的な段階調整、および元仕訳を追記のみで保持します。"
+      },
+      "vendor_rebate_claims": {
+        "label": "仕入先リベート請求",
+        "description": "獲得済み請求、独立した承認、および標準の決済手段。"
       }
     },
     "columns": {
@@ -2941,6 +2957,50 @@
         "base_currency": "基準通貨",
         "amount": "金額",
         "id": "原価キー"
+      },
+      "customer_rebate_accruals": {
+        "id": "計上",
+        "agreement": "契約",
+        "counterparty": "取引相手",
+        "source_document": "元取引",
+        "accrued_on": "計上日",
+        "currency": "通貨",
+        "earned": "獲得済み調整額",
+        "revision": "評価版",
+        "journal_entry_id": "仕訳"
+      },
+      "customer_rebate_claims": {
+        "id": "請求",
+        "agreement": "契約",
+        "counterparty": "取引相手",
+        "cutoff_on": "獲得済み基準日",
+        "status": "状態",
+        "currency": "通貨",
+        "amount": "請求額",
+        "settlement_on": "決済日",
+        "document_id": "決済書類"
+      },
+      "vendor_rebate_accruals": {
+        "id": "計上",
+        "agreement": "契約",
+        "counterparty": "取引相手",
+        "source_document": "元取引",
+        "accrued_on": "計上日",
+        "currency": "通貨",
+        "earned": "獲得済み調整額",
+        "revision": "評価版",
+        "journal_entry_id": "仕訳"
+      },
+      "vendor_rebate_claims": {
+        "id": "請求",
+        "agreement": "契約",
+        "counterparty": "取引相手",
+        "cutoff_on": "獲得済み基準日",
+        "status": "状態",
+        "currency": "通貨",
+        "amount": "請求額",
+        "settlement_on": "決済日",
+        "document_id": "決済書類"
       }
     },
     "enumValues": {
