@@ -20,6 +20,7 @@ import {
 } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
+import { isFeatureEnabled } from '../../../../lib/features'
 import {
   complianceSubsidiaryFilter,
   isLienWaiverLegacyUnverified,
@@ -101,7 +102,7 @@ export async function loadLienWaiversPage(
   const status = pickString(sp.status) ?? null
   const openId = pickString(sp.waiver) ?? null
 
-  const [waivers, projects, vendors, tabs] = await Promise.all([
+  const [waivers, projects, vendors, informationReturnsEnabled] = await Promise.all([
     loadLienWaivers({
       orgId,
       allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
@@ -127,8 +128,9 @@ export async function loadLienWaiversPage(
        where p.org_id = ${orgId} and p.is_active
          ${complianceSubsidiaryFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
        order by p.display_name limit 2000`),
-    complianceTabs('/compliance/lien-waivers', { projectsEnabled: true }),
+    isFeatureEnabled(orgId, 'informationReturns'),
   ])
+  const tabs = await complianceTabs('/compliance/lien-waivers', { projectsEnabled: true, informationReturnsEnabled })
 
   // The open record loads independently of the list filters: a waiver the
   // direction/status filter excludes must still open from a deep link. The

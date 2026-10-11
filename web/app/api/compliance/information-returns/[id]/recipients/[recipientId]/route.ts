@@ -8,7 +8,7 @@ import {
   updateFilingRecipient,
 } from '@openbooks/engine/src/compliance/information-returns.ts'
 import { guardSubsidiaryScope } from '@/lib/authz';
-import { guardComplianceFeature, loadInformationReturnFilingScope } from '@/lib/compliance'
+import { guardInformationReturnsFeature, loadInformationReturnFilingScope } from '@/lib/compliance'
 import { complianceWriteFailure } from '@/lib/compliance-errors'
 import { isUuid } from '@/lib/list-params'
 import { canonicalDecimal } from '@/lib/exact-decimal'
@@ -52,7 +52,7 @@ export const PATCH = defineRoute({
   params: z.object({ "id": z.string(), "recipientId": z.string() }),
   handler: async ({ request: req, authz: gate, params: routeParams }) => {
     const params = Promise.resolve(routeParams);
-    const blocked = await guardComplianceFeature(gate.user.orgId)
+    const blocked = await guardInformationReturnsFeature(gate.user.orgId)
     if (blocked) return blocked
     const { orgId, id: actorId } = gate.user
     const { id, recipientId } = await params

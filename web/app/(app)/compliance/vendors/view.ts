@@ -67,7 +67,7 @@ export async function loadComplianceVendors(
   const stateFilter = pickString(sp.state) ?? null
   const openVendor = pickString(sp.vendor) ?? null
 
-  const [matrix, projectsEnabled] = await Promise.all([
+  const [matrix, projectsEnabled, informationReturnsEnabled] = await Promise.all([
     loadComplianceMatrix({
       orgId,
       classId,
@@ -80,8 +80,9 @@ export async function loadComplianceVendors(
       allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
     }),
     isFeatureEnabled(orgId, 'projects'),
+    isFeatureEnabled(orgId, 'informationReturns'),
   ])
-  const tabs = await complianceTabs('/compliance/vendors', { projectsEnabled })
+  const tabs = await complianceTabs('/compliance/vendors', { projectsEnabled, informationReturnsEnabled })
 
   // The drawer's data loads only when a vendor is actually open.
   const drawerData = openVendor

@@ -6,7 +6,7 @@ import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { filedBoxAmounts, formDefinition } from '@openbooks/engine/src/compliance/information-returns.ts'
 import { guardSubsidiaryScope } from '@/lib/authz';
-import { guardComplianceFeature, loadInformationReturnFilingScope } from '@/lib/compliance'
+import { guardInformationReturnsFeature, loadInformationReturnFilingScope } from '@/lib/compliance'
 import { isUuid } from '@/lib/list-params'
 import { notFound } from "@/lib/api/responses";
 
@@ -49,7 +49,7 @@ export const GET = defineRoute({
   params: z.object({ "id": z.string() }),
   handler: async ({ request: _req, authz: gate, params: routeParams }) => {
     const params = Promise.resolve(routeParams);
-    const blocked = await guardComplianceFeature(gate.user.orgId)
+    const blocked = await guardInformationReturnsFeature(gate.user.orgId)
     if (blocked) return blocked
     const { orgId } = gate.user
     const { id } = await params

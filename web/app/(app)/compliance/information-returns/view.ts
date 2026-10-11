@@ -27,7 +27,7 @@ import { isFeatureEnabled } from '../../../../lib/features'
 import {
   loadFilings,
   loadInformationReturnReadiness,
-  requireComplianceFeature,
+  requireInformationReturnsFeature,
 } from '../../../../lib/compliance'
 import { getMoneyFormatter } from '@/lib/money-server'
 import { complianceTabs } from '../tabs'
@@ -110,17 +110,18 @@ export interface InformationReturnsData {
 export async function loadInformationReturns(): Promise<InformationReturnsData> {
   const authz = await requirePermission('compliance.read')
   const orgId = authz.user.orgId
-  await requireComplianceFeature(orgId)
+  await requireInformationReturnsFeature(orgId)
   const t = await getTranslations('compliance')
   const { money } = await getMoneyFormatter()
   const lastYear = Number((await businessToday(orgId)).slice(0, 4)) - 1
 
-  const [filings, readiness, projectsEnabled] = await Promise.all([
+  const [filings, readiness, projectsEnabled, complianceEnabled] = await Promise.all([
     loadFilings(orgId, authz.allowedSubsidiaryIds),
     loadInformationReturnReadiness(orgId, lastYear, authz.allowedSubsidiaryIds),
     isFeatureEnabled(orgId, 'projects'),
+    isFeatureEnabled(orgId, 'subcontractorCompliance'),
   ])
-  const tabs = await complianceTabs('/compliance/information-returns', { projectsEnabled })
+  const tabs = await complianceTabs('/compliance/information-returns', { projectsEnabled, complianceEnabled })
 
   return {
     title: t('informationReturns.title'),
@@ -172,7 +173,10 @@ export async function loadInformationReturns(): Promise<InformationReturnsData> 
     readiness: readiness.map((row) => ({
       partyId: row.partyId,
       vendorName: row.vendorName,
-      href: `/compliance/vendors?vendor=${row.partyId}`,
+      // The vendor (payee) record carries TIN capture behind the
+      // informationReturns switch itself, so a missing TIN never strands
+      // an information-returns-only org on a compliance-gated drawer.
+      href: `/parties?party=${row.partyId}&partyTab=compliance`,
       issueLabel: !row.reportable
         ? t('readiness.unflagged')
         : !row.hasTin

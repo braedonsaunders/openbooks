@@ -13,7 +13,7 @@ import {
 } from '@openbooks/engine/src/compliance/information-returns.ts'
 import { rendererUnavailableResponse } from '@/lib/api/pdf-renderer'
 import { guardSubsidiaryScope } from '@/lib/authz';
-import { guardComplianceFeature, loadInformationReturnFilingScope } from '@/lib/compliance'
+import { guardInformationReturnsFeature, loadInformationReturnFilingScope } from '@/lib/compliance'
 import { maskTin, type RecipientFormData } from '@/lib/information-return-form'
 import { payerTaxIdentifier } from '@openbooks/engine/src/organization/company-identity.ts'
 import { renderInformationReturnBatchPdf, renderInformationReturnPdf } from '@/lib/information-return-pdf'
@@ -55,7 +55,7 @@ export const GET = defineRoute({
   params: z.object({ "id": z.string() }),
   handler: async ({ request: req, authz: gate, params: routeParams }) => {
     const params = Promise.resolve(routeParams);
-    const blocked = await guardComplianceFeature(gate.user.orgId)
+    const blocked = await guardInformationReturnsFeature(gate.user.orgId)
     if (blocked) return blocked
     const { orgId } = gate.user
     const { id } = await params
@@ -186,7 +186,7 @@ export const POST = defineRoute({
   params: z.object({ "id": z.string() }),
   handler: async ({ request: req, authz: gate, params: routeParams }) => {
     const params = Promise.resolve(routeParams);
-    const blocked = await guardComplianceFeature(gate.user.orgId)
+    const blocked = await guardInformationReturnsFeature(gate.user.orgId)
     if (blocked) return blocked
     const { orgId, id: actorId } = gate.user
     const { id } = await params

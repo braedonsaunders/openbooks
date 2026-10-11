@@ -5,7 +5,7 @@ import { getTranslations } from 'next-intl/server'
 import { formDefinition } from '@openbooks/engine/src/compliance/information-returns.ts'
 import { page, pageHeader, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../../../lib/authz'
-import { loadFiling, requireComplianceFeature } from '../../../../../lib/compliance'
+import { loadFiling, requireInformationReturnsFeature } from '../../../../../lib/compliance'
 import { isUuid } from '../../../../../lib/list-params'
 import type { FilingWorksheet } from './FilingWorksheet'
 
@@ -39,7 +39,7 @@ export interface FilingDetailData {
 export async function loadFilingDetail(id: string): Promise<FilingDetailData> {
   const authz = await requirePermission('compliance.read')
   const orgId = authz.user.orgId
-  await requireComplianceFeature(orgId)
+  await requireInformationReturnsFeature(orgId)
   if (!isUuid(id)) notFound()
   const filing = await loadFiling(orgId, id, authz.allowedSubsidiaryIds)
   if (!filing) notFound()

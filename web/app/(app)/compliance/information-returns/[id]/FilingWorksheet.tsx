@@ -259,7 +259,7 @@ export function FilingWorksheet({
               {filing.recipients.map((recipient) => (
                 <TableRow key={recipient.id} className={recipient.status !== 'included' ? 'opacity-60' : undefined}>
                   <TableCell className="font-medium">
-                    <Link href={`/compliance/vendors?vendor=${recipient.partyId}`} className="hover:underline">
+                    <Link href={`/parties?party=${recipient.partyId}&partyTab=compliance`} className="hover:underline">
                       {recipient.legalName ?? recipient.vendorName}
                     </Link>
                     {recipient.adjustmentReason ? (

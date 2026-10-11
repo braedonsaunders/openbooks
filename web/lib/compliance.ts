@@ -86,8 +86,26 @@ export async function guardComplianceFeature(orgId: string): Promise<NextRespons
 }
 
 /**
+ * Page-boundary gate for year-end information returns (1099-NEC/MISC, T4A).
+ * A separate tax switch from subcontractor compliance, so a services org
+ * that pays 1099 contractors without tracking COIs still reaches its
+ * filings. Names its own switch on the feature-required page.
+ */
+export async function requireInformationReturnsFeature(orgId: string): Promise<void> {
+  if (!(await isFeatureEnabled(orgId, 'informationReturns')))
+    redirect(featureRequiredHref('informationReturns'))
+}
+
+/** API-boundary gate — a disabled module is indistinguishable from no API. */
+export async function guardInformationReturnsFeature(orgId: string): Promise<NextResponse | null> {
+  if (await isFeatureEnabled(orgId, 'informationReturns')) return null
+  return NextResponse.json({ error: 'information returns feature is disabled' }, { status: 404 })
+}
+
+/**
  * Lien waivers are the one compliance surface that needs a project, so they
- * require BOTH gates. Insurance tracking and 1099 filing deliberately do not.
+ * require BOTH gates. Insurance tracking deliberately does not; 1099 filing
+ * rides its own tax switch (requireInformationReturnsFeature above).
  */
 export async function guardLienWaiverFeature(orgId: string): Promise<NextResponse | null> {
   const gate = await guardComplianceFeature(orgId)
@@ -142,6 +160,43 @@ export interface ComplianceMatrix {
   policies: RequirementPolicy[]
   classes: ComplianceClassRow[]
   rows: MatrixRow[]
+}
+
+/** Masked taxpayer identity for the vendor record's tax-identity section.
+ * Ciphertext never leaves the database — only the last four travel. */
+export interface VendorTaxIdentity {
+  tinLast4: string | null
+  tinType: string | null
+  taxClassification: string | null
+  informationReturnForm: string | null
+  informationReturnBox: string | null
+  backupWithholding: boolean
+  reportable: boolean
+}
+
+function textOrNull(value: unknown): string | null {
+  return typeof value === 'string' && value !== '' ? value : null
+}
+
+/**
+ * Project an already-loaded vendor_roles row (the party payload carries it
+ * with tin_encrypted stripped) onto the masked tax identity. Null when there
+ * is no active vendor row — without one the TIN route has nothing to write
+ * through either.
+ */
+export function vendorTaxIdentityFromRole(
+  row: Record<string, unknown> | null | undefined,
+): VendorTaxIdentity | null {
+  if (!row) return null
+  return {
+    tinLast4: textOrNull(row.tin_last4),
+    tinType: textOrNull(row.tin_type),
+    taxClassification: textOrNull(row.tax_classification),
+    informationReturnForm: textOrNull(row.information_return_form),
+    informationReturnBox: textOrNull(row.information_return_box),
+    backupWithholding: row.backup_withholding === true,
+    reportable: row.is_t4a === true,
+  }
 }
 
 /**

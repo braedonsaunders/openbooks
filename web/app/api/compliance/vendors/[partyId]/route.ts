@@ -7,7 +7,8 @@ import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { sealSecret } from '@openbooks/engine/src/platform/secrets.ts'
 import { FORM_TYPES, type FormType } from '@openbooks/engine/src/compliance/information-returns.ts'
 import { guardSubsidiaryScope } from '@/lib/authz';
-import { guardComplianceFeature } from '@/lib/compliance'
+import { guardInformationReturnsFeature } from '@/lib/compliance'
+import { isFeatureEnabled } from '@/lib/features'
 import { complianceWriteFailure } from '@/lib/compliance-errors'
 import { isUuid } from '@/lib/list-params'
 import { notFound } from "@/lib/api/responses";
@@ -87,9 +88,20 @@ export const PATCH = defineRoute({
   params: z.object({ "partyId": z.string() }),
   handler: async ({ request: req, authz: gate, params: routeParams }) => {
     const params = Promise.resolve(routeParams);
-    const blocked = await guardComplianceFeature(gate.user.orgId)
-    if (blocked) return blocked
     const { orgId, id: actorId } = gate.user
+    // This route serves two switches: the compliance class is COI tracking
+    // (subcontractorCompliance) while the taxpayer identity — TIN, filing
+    // form/box, withholding — is year-end tax (informationReturns). Each
+    // field enforces its own switch below; reaching neither switch at all is
+    // indistinguishable from no API.
+    const [returnsOn, complianceOn] = await Promise.all([
+      isFeatureEnabled(orgId, 'informationReturns'),
+      isFeatureEnabled(orgId, 'subcontractorCompliance'),
+    ])
+    if (!returnsOn && !complianceOn) {
+      const blocked = await guardInformationReturnsFeature(orgId)
+      if (blocked) return blocked
+    }
     const { partyId } = await params
     if (!isUuid(partyId)) return notFound("record")
     // The vendor is the record boundary: a restricted caller may only touch
@@ -106,6 +118,24 @@ export const PATCH = defineRoute({
     const parsedBody = await parseJsonBody(req, requestBodySchema);
     if (!parsedBody.ok) return parsedBody.response;
     const body = parsedBody.data
+
+    // Per-field switches: taxpayer identity needs the tax switch, the
+    // tracking class needs the compliance switch. Each names the switch
+    // that is actually off, so the operator knows where to turn it on.
+    const touchesReturns = body.informationReturnForm !== undefined
+      || body.informationReturnBox !== undefined
+      || body.taxClassification !== undefined
+      || body.tin !== undefined
+      || body.tinType !== undefined
+      || body.backupWithholding !== undefined
+      || body.reportable !== undefined
+    if (touchesReturns && !returnsOn) {
+      const blocked = await guardInformationReturnsFeature(orgId)
+      if (blocked) return blocked
+    }
+    if (body.complianceClassId !== undefined && !complianceOn) {
+      return NextResponse.json({ error: 'subcontractor compliance feature is disabled' }, { status: 404 })
+    }
 
     if (body.complianceClassId && !isUuid(body.complianceClassId)) {
       return NextResponse.json({ error: 'invalid compliance class' }, { status: 400 })

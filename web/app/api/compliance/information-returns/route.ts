@@ -13,7 +13,7 @@ import {
   type FormType,
 } from '@openbooks/engine/src/compliance/information-returns.ts'
 import { guardSubsidiaryScope } from '@/lib/authz';
-import { guardComplianceFeature, loadFilings } from '@/lib/compliance'
+import { guardInformationReturnsFeature, loadFilings } from '@/lib/compliance'
 import { complianceWriteFailure } from '@/lib/compliance-errors'
 import { canonicalDecimal } from '@/lib/exact-decimal'
 import { moneyRefusal } from '@/lib/payroll-decimal-refusal'
@@ -38,7 +38,7 @@ export const GET = defineRoute({
   permission: 'compliance.read',
   feature: { none: 'No optional feature applies to this permission-governed endpoint.' },
   handler: async ({ authz: gate }) => {
-    const blocked = await guardComplianceFeature(gate.user.orgId)
+    const blocked = await guardInformationReturnsFeature(gate.user.orgId)
     if (blocked) return blocked
     return NextResponse.json({ filings: await loadFilings(gate.user.orgId, gate.allowedSubsidiaryIds) })
 
@@ -55,7 +55,7 @@ export const POST = defineRoute({
   permission: 'compliance.manage',
   feature: { none: 'No optional feature applies to this permission-governed endpoint.' },
   handler: async ({ request: req, authz: gate }) => {
-    const blocked = await guardComplianceFeature(gate.user.orgId)
+    const blocked = await guardInformationReturnsFeature(gate.user.orgId)
     if (blocked) return blocked
     const { orgId, id: actorId } = gate.user
 

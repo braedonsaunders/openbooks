@@ -70,6 +70,7 @@ export interface ComplianceData {
   waiversAction: { href: string; label: string }
   outstandingWaivers: OutstandingWaiverItem[]
   waiversEmpty: string
+  showReadiness: boolean
   readinessTitle: string
   readinessHint: string
   readinessAction: { href: string; label: string }
@@ -92,11 +93,12 @@ export async function loadCompliance(
   // 1099s are prepared for the year that just ended, so that is the default.
   const taxYear = Number.isInteger(yearParam) ? yearParam : Number((await businessToday(orgId)).slice(0, 4)) - 1
 
-  const [overview, projectsEnabled] = await Promise.all([
+  const [overview, projectsEnabled, informationReturnsEnabled] = await Promise.all([
     loadComplianceOverview(orgId, taxYear, authz.allowedSubsidiaryIds),
     isFeatureEnabled(orgId, 'projects'),
+    isFeatureEnabled(orgId, 'informationReturns'),
   ])
-  const tabs = await complianceTabs('/compliance', { projectsEnabled })
+  const tabs = await complianceTabs('/compliance', { projectsEnabled, informationReturnsEnabled })
 
   const blockedCount = overview.blockedBills.filter((b) => b.decision === 'blocked').length
 
@@ -161,6 +163,9 @@ export async function loadCompliance(
       throughDate: waiver.throughDate,
     })),
     waiversEmpty: t('panels.waiversEmpty'),
+    // The readiness queue files information returns, so it renders only
+    // behind the tax switch — its action leads to a gated filing surface.
+    showReadiness: informationReturnsEnabled,
     readinessTitle: t('panels.readiness', { year: taxYear }),
     readinessHint: t('panels.readinessHint'),
     readinessAction: { href: '/compliance/information-returns', label: t('panels.readinessAction') },
@@ -254,14 +259,17 @@ export function complianceSpec(data: ComplianceData): PageSpec {
           }),
           when: f('showWaivers'),
         },
-        widgetBlock('readiness-panel', {
-          title: data.readinessTitle,
-          hint: data.readinessHint,
-          actionHref: data.readinessAction.href,
-          actionLabel: data.readinessAction.label,
-          rows: data.readiness,
-          empty: data.readinessEmpty,
-        }),
+        {
+          ...widgetBlock('readiness-panel', {
+            title: data.readinessTitle,
+            hint: data.readinessHint,
+            actionHref: data.readinessAction.href,
+            actionLabel: data.readinessAction.label,
+            rows: data.readiness,
+            empty: data.readinessEmpty,
+          }),
+          when: f('showReadiness'),
+        },
       ]),
       {
         ...grid('mt-4', [
