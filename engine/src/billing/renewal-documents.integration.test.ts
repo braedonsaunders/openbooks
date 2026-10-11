@@ -6,6 +6,7 @@ import {sql} from 'drizzle-orm';
 import {db,withOrg,withBypassContext} from '../platform/db.ts';
 import {createScratchOrg,dropScratchOrg,seedFlowActors} from '../testing/fixtures.ts';
 import {createPlanVersion,publishPlanVersion,activateLifecycle,advanceLifecycleDate,prepareAdvancedSubscriptionBilling} from './advanced-subscriptions.ts';
+import {activateQuote} from './quote-to-cash.ts';
 import {billSubscriptionNow} from './subscription-billing.ts';
 import {measureLinkedOrderRelief} from '../receivables/credit-policy.ts';
 import {generateRenewalDocument,acceptRenewalDocument,runRenewalScan} from './renewals.ts';
@@ -41,6 +42,10 @@ for (const documentKind of ['quote','sales_order'] as const) test(`${documentKin
   assert.equal(await withOrg(org.orgId,()=>prepareAdvancedSubscriptionBilling(org.orgId,subscriptionId,termEnd)),false,'commercial acceptance cannot be bypassed by automatic renewal');
   await assert.rejects(()=>acceptRenewalDocument(org.orgId,actors.adminId,docs[0]!.documentId,'Accepted commercial terms'),/Approve/);
   await withBypassContext(()=>db.execute(sql`update documents set status='approved' where org_id=${org.orgId} and id=${docs[0]!.documentId}`));
+  if(documentKind==='quote') {
+   await withBypassContext(()=>db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,quoteToCash}','true'::jsonb,true) where id=${org.orgId}`));
+   await assert.rejects(()=>activateQuote(org.orgId,actors.adminId,docs[0]!.documentId),/accept the approved renewal in Collections/);
+  }
   await acceptRenewalDocument(org.orgId,actors.adminId,docs[0]!.documentId,'Accepted approved renewal with customer');
   await acceptRenewalDocument(org.orgId,actors.adminId,docs[0]!.documentId,'Accepted approved renewal with customer');
   const prices=(await withOrg(org.orgId,()=>db.execute<{effective_from:string;unit_price:string}>(sql`select effective_from::text,unit_price::text from subscription_components where org_id=${org.orgId} and subscription_id=${subscriptionId} order by effective_from`))).rows;

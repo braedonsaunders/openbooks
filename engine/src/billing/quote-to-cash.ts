@@ -1537,6 +1537,10 @@ async function activateQuoteLocked(
   // for a switched-off surface.
   await assertQuoteToCashEnabled(runner, orgId);
   const quote = await loadQuote(runner, orgId, quoteId);
+  if ((await runner.execute(sql`select id from subscription_renewal_occurrences
+    where org_id=${orgId} and document_id=${quoteId} and occurrence='document' limit 1`)).rows[0]) {
+    throw new QuoteToCashError("This quote renews an existing subscription; accept the approved renewal in Collections to retain its billing history instead of creating another subscription");
+  }
   if (quote.status === "voided" || quote.status === "posted") {
     throw new QuoteToCashError(`This quote is ${quote.status} and can no longer be activated`);
   }
