@@ -1475,6 +1475,36 @@ export function OrderDrawer({
     await setStatus('voided', reason)
   }
 
+  async function returnToDraft() {
+    // A mis-approved purchase order that never moved stock corrects through
+    // edit and re-approval, never through a void. The server owns the
+    // approved-only gate, the approve-level permission, and the
+    // received/billed refusal; refusals pin beside the record.
+    const reason = await promptDialog({
+      title: tCommon('actions.returnToDraft'),
+      label: tCommon('amendment.reason'),
+      placeholder: tCommon('amendment.returnToDraftPlaceholder'),
+      confirmLabel: tCommon('actions.returnToDraft'),
+    })
+    if (reason === null) return
+    if (reason.trim().length < 5 || reason.trim().length > 500) {
+      refuse(tCommon('amendment.returnToDraftPlaceholder'), t('actionFailed'))
+      return
+    }
+    await execute(
+      () => fetchAppAction(`${apiBase}/${doc.id}/return-to-draft`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason, expectedUpdatedAt: revisionRef.current }),
+      }, { fallback: t('actionFailed') }),
+      {
+        fallbackMessage: t('actionFailed'),
+        successMessage: tCommon('status.draft'),
+        onOk: () => router.refresh(),
+      },
+    )
+  }
+
   async function setDropShipRoute(salesOrderLineId: string, routed: boolean) {
     await execute(
       () => fetchAppAction(`/api/sales-orders/${doc.id}/drop-ship`, {
@@ -2058,6 +2088,11 @@ export function OrderDrawer({
             {canManage && isApproved ? (
               <Button variant="outline" disabled={busy} onClick={voidOrder}>
                 {tCommon('actions.void')}
+              </Button>
+            ) : null}
+            {canManage && isApproved && kind === 'purchase_order' ? (
+              <Button variant="outline" disabled={busy} onClick={returnToDraft}>
+                {tCommon('actions.returnToDraft')}
               </Button>
             ) : null}
             {canManage && doc.status === 'draft' ? (

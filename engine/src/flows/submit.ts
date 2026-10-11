@@ -401,6 +401,24 @@ export async function returnDocumentToDraft(
         "applied",
       );
     }
+    // A purchase order with received or billed lines already moved stock or
+    // money against its details: returning the whole order to draft would
+    // strand that evidence. Amend the remaining quantities instead, or void
+    // the receipt first.
+    if (locked.kind === "purchase_order") {
+      const consumed = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from document_lines
+         where org_id = ${input.orgId} and document_id = ${input.documentId}
+           and (quantity_fulfilled > 0 or quantity_billed > 0)
+      `)).rows[0]?.n ?? 0;
+      if (consumed > 0) {
+        throw new ReturnToDraftError(
+          `${name} already has received or billed lines — amend the order for the remaining quantities, or void the receipt before returning to draft`,
+          422,
+          "applied",
+        );
+      }
+    }
     // In-flight runs and pending gates cancel natively; completed runs
     // stay as history (superseded, never deleted), so a resubmission starts
     // a new run and the returned document must be re-approved.
