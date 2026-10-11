@@ -429,3 +429,274 @@ test('an approved reopen offers an end action that posts its reason', async () =
     }])
   } finally { await unmount(); globalThis.fetch = prior }
 })
+
+/** Module rows stay keyed by module in fixed order with closed modules in
+ * place: closing one module must never reseat the Close buttons underneath
+ * the operator's cursor. */
+test('period module rows keep fixed order with closed modules in place', async () => {
+  const props = {
+    ...baseProps({ tab: 'periods', period: 'p1' }),
+    periods: [partiallyClosedPeriod()],
+  } as unknown as WorkspaceProps
+  const { unmount } = await mountWorkspace(props)
+  try {
+    const dialog = document.querySelector('[role="dialog"]')
+    assert.ok(dialog, 'the period drawer opens')
+    const grid = dialog.querySelector('div.grid.gap-2')
+    assert.ok(grid, 'the module rows render')
+    const rows = [...grid.children].map((child) => {
+      const el = child as HTMLElement
+      return {
+        module: el.querySelector('span.font-medium')?.textContent?.trim() ?? '',
+        state: (el.textContent ?? '').includes('Closed') ? 'closed' : 'open',
+      }
+    })
+    assert.deepEqual(rows, [
+      { module: 'AR', state: 'closed' },
+      { module: 'AP', state: 'closed' },
+      { module: 'Banking', state: 'open' },
+      { module: 'Assets', state: 'closed' },
+      { module: 'Tax', state: 'closed' },
+      { module: 'GL', state: 'open' },
+    ])
+  } finally {
+    await unmount()
+  }
+})
+
+function moduleRowCloseButton(module: string): HTMLButtonElement {
+  const dialog = document.querySelector('[role="dialog"]')
+  assert.ok(dialog, 'the period drawer opens')
+  const grid = dialog.querySelector('div.grid.gap-2')
+  assert.ok(grid, 'the module rows render')
+  const row = [...grid.children].find(
+    (child) => (child as HTMLElement).querySelector('span.font-medium')?.textContent?.trim() === module,
+  ) as HTMLElement | undefined
+  assert.ok(row, `the ${module} row renders`)
+  const close = [...row.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === 'Close')
+  assert.ok(close, `the ${module} row offers Close`)
+  return close as HTMLButtonElement
+}
+
+/** The first Confirm click arms a summary naming the module and its
+ * consequences instead of posting: a tap on the wrong row still cancels. */
+test('closing a module arms a named confirm before anything posts', async () => {
+  const bodies: unknown[] = []
+  const prior = globalThis.fetch
+  globalThis.fetch = (async (_input: unknown, init?: { body?: string }) => {
+    bodies.push(JSON.parse(String(init?.body ?? '{}')))
+    return Response.json({ ok: true })
+  }) as typeof fetch
+  const props = {
+    ...baseProps({ tab: 'periods', period: 'p1' }),
+    periods: [partiallyClosedPeriod()],
+  } as unknown as WorkspaceProps
+  const { unmount } = await mountWorkspace(props)
+  try {
+    await act(async () => {
+      moduleRowCloseButton('GL').click()
+      await tick()
+    })
+    const reasonBox = document.querySelector('[role="dialog"] textarea')
+    assert.ok(reasonBox, 'the close panel asks for a reason')
+    await act(async () => {
+      setNativeValue(reasonBox as HTMLTextAreaElement, 'December books reviewed and ready')
+      await tick()
+    })
+    await act(async () => {
+      clickButton(String(closeSetup.actions?.confirmClose)).click()
+      await tick()
+    })
+    assert.deepEqual(bodies, [], 'the first confirm arms instead of posting')
+    const summary = document.querySelector('div[role="alertdialog"]')
+    assert.ok(summary, 'an armed confirm names the module and its consequences')
+    assert.ok(
+      (summary.textContent ?? '').includes('Close GL for Dec 2025?'),
+      'the confirm names the module and the period',
+    )
+    assert.ok(
+      (summary.textContent ?? '').includes('New postings to GL will be rejected'),
+      'the confirm states the posting consequence',
+    )
+    await act(async () => {
+      clickButton(String(closeSetup.actions?.confirmClose)).click()
+      await tick()
+      await tick()
+    })
+    assert.deepEqual(bodies, [{
+      action: 'set-lock',
+      periodId: 'p1',
+      bookId: 'b1',
+      module: 'gl',
+      state: 'closed',
+      reason: 'December books reviewed and ready',
+    }])
+  } finally {
+    await unmount()
+    globalThis.fetch = prior
+  }
+})
+
+/** Closing Banking while reconciliations are in progress or statement lines
+ * are unmatched shows those counts from the close readiness data. */
+test('closing banking surfaces in-progress and unmatched counts in the confirm', async () => {
+  const bodies: unknown[] = []
+  const prior = globalThis.fetch
+  globalThis.fetch = (async (_input: unknown, init?: { body?: string }) => {
+    const body = JSON.parse(String(init?.body ?? '{}')) as { action?: string }
+    bodies.push(body)
+    if (body.action === 'banking-close-status') {
+      return Response.json({
+        ok: true,
+        accounts: [
+          { accountId: 'a1', number: '1010', name: 'Operating', status: 'in_progress', throughDate: '2025-12-20', difference: '12.50', stale: false, staleSince: null, clearedEffect: null },
+          { accountId: 'a2', number: '1020', name: 'Savings', status: 'signed_off', throughDate: '2025-12-31', difference: null, stale: false, staleSince: null, clearedEffect: null },
+        ],
+        issues: [],
+        unmatchedStatementLines: 3,
+      })
+    }
+    return Response.json({ ok: true })
+  }) as typeof fetch
+  const props = {
+    ...baseProps({ tab: 'periods', period: 'p1' }),
+    periods: [partiallyClosedPeriod()],
+  } as unknown as WorkspaceProps
+  const { unmount } = await mountWorkspace(props)
+  try {
+    await act(async () => {
+      moduleRowCloseButton('Banking').click()
+      await tick()
+      await tick()
+    })
+    const reasonBox = document.querySelector('[role="dialog"] textarea')
+    assert.ok(reasonBox, 'the banking close panel asks for a reason')
+    await act(async () => {
+      setNativeValue(reasonBox as HTMLTextAreaElement, 'Bank activity reviewed; proceeding with open items noted')
+      await tick()
+    })
+    await act(async () => {
+      clickButton(String(closeSetup.actions?.confirmClose)).click()
+      await tick()
+    })
+    const summary = document.querySelector('div[role="alertdialog"]')
+    assert.ok(summary, 'the banking close arms a confirm')
+    assert.ok(
+      (summary.textContent ?? '').includes('Close Banking for Dec 2025?'),
+      'the confirm names Banking, not a shifted row',
+    )
+    assert.ok(
+      (summary.textContent ?? '').includes('Reconciliations in progress: 1. Unmatched statement lines: 3.'),
+      'the confirm shows the readiness counts',
+    )
+    assert.ok(
+      bodies.some((body) => (body as { action?: string }).action === 'banking-close-status'),
+      'the counts come from the close readiness check',
+    )
+    assert.ok(
+      !bodies.some((body) => (body as { action?: string }).action === 'set-lock'),
+      'nothing posts while the confirm is armed',
+    )
+  } finally {
+    await unmount()
+    globalThis.fetch = prior
+  }
+})
+
+/** A conflict the engine will refuse disables Approve with the reason
+ * instead of rendering enabled and refusing on click. */
+test('conflicted reopen disables approve with the conflict reason', async () => {
+  const bodies: unknown[] = []
+  const prior = globalThis.fetch
+  globalThis.fetch = (async (_input: unknown, init?: { body?: string }) => {
+    const body = JSON.parse(String(init?.body ?? '{}')) as { action?: string }
+    if (body.action === 'reopen-conflicts') {
+      return Response.json({
+        ok: true,
+        conflicts: [{ kind: 'authored_documents', count: 56, examples: ['INV-1', 'INV-2', 'INV-3'] }],
+        ownRequest: false,
+        independenceRequired: true,
+        selfApprovalAllowed: false,
+      })
+    }
+    bodies.push(body)
+    return Response.json({ ok: true })
+  }) as typeof fetch
+  const props = baseProps({ tab: 'periods', reopen: 'r1' })
+  props.reopenRequests = [{ id: 'r1', period_id: 'p1', book_id: 'b1', status: 'requested', reason: 'correct the closing entry', modules: ['gl'], period_name: 'January', book_name: 'Main', requester_name: 'Rae', approver_name: null }] as WorkspaceProps['reopenRequests']
+  const { unmount } = await mountWorkspace(props)
+  try {
+    await act(async () => {
+      await tick()
+      await tick()
+    })
+    const approve = clickButton(String(closeSetup.actions?.approve))
+    assert.equal(approve.disabled, true, 'approve stays disabled while the engine would refuse it')
+    assert.ok(
+      (document.body.textContent ?? '').includes('56 record(s)'),
+      'the drawer names the conflict count with the reason',
+    )
+    await act(async () => {
+      approve.click()
+      await tick()
+    })
+    assert.deepEqual(bodies, [], 'a disabled approve posts nothing')
+  } finally { await unmount(); globalThis.fetch = prior }
+})
+
+/** A sole eligible approver deciding their own request attests instead of
+ * meeting a refusal: the decision posts the attestation. */
+test('sole-approver self-approval posts the attestation', async () => {
+  const bodies: unknown[] = []
+  const prior = globalThis.fetch
+  globalThis.fetch = (async (_input: unknown, init?: { body?: string }) => {
+    const body = JSON.parse(String(init?.body ?? '{}')) as { action?: string }
+    if (body.action === 'reopen-conflicts') {
+      return Response.json({
+        ok: true,
+        conflicts: [],
+        ownRequest: true,
+        independenceRequired: false,
+        selfApprovalAllowed: true,
+      })
+    }
+    bodies.push(body)
+    return Response.json({ ok: true })
+  }) as typeof fetch
+  const props = baseProps({ tab: 'periods', reopen: 'r1' })
+  props.reopenRequests = [{ id: 'r1', period_id: 'p1', book_id: 'b1', status: 'requested', reason: 'correct the closing entry', modules: ['gl'], period_name: 'January', book_name: 'Main', requester_name: 'Rae', approver_name: null }] as WorkspaceProps['reopenRequests']
+  const { unmount } = await mountWorkspace(props)
+  try {
+    await act(async () => {
+      await tick()
+      await tick()
+    })
+    const dialog = document.querySelector('[role="dialog"]')
+    assert.ok(dialog, 'the reopen drawer opens')
+    const attestationBox = dialog.querySelector('textarea')
+    assert.ok(attestationBox, 'the sole approver gets the attestation form')
+    const approve = clickButton(String(closeSetup.actions?.approve))
+    assert.equal(approve.disabled, true, 'approve waits for the attestation and checkbox')
+    await act(async () => {
+      setNativeValue(attestationBox as HTMLTextAreaElement, 'Only administrator available; this correction is necessary')
+      await tick()
+    })
+    const checkbox = dialog.querySelector('input[type="checkbox"]') as HTMLInputElement | null
+    assert.ok(checkbox, 'the attestation checkbox renders')
+    await act(async () => {
+      checkbox.click()
+      await tick()
+    })
+    await act(async () => {
+      clickButton(String(closeSetup.actions?.approve)).click()
+      await tick()
+      await tick()
+    })
+    assert.deepEqual(bodies, [{
+      action: 'decide-reopen',
+      requestId: 'r1',
+      approve: true,
+      attestation: 'Only administrator available; this correction is necessary',
+    }])
+  } finally { await unmount(); globalThis.fetch = prior }
+})

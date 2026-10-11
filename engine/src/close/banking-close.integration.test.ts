@@ -6,6 +6,7 @@ import { db } from "../platform/db.ts";
 import { CloseError } from "../periods/period-policy.ts";
 import {
   createMatch,
+  excludeStatementLine,
   importStatement,
   markReconciled,
   startReconciliation,
@@ -19,6 +20,7 @@ import {
 import {
   auditBankingModuleClose,
   bankingCloseStatus,
+  bankingUnmatchedStatementLines,
   evaluateBankingModuleClose,
 } from "./banking-close.ts";
 
@@ -351,6 +353,56 @@ test(
         acknowledgement: "First banking close before statement feeds; reconciliation starts next period.",
       });
       assert.equal(evaluation.issues.length, 1);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "unmatched statement lines count the period's open lines on governed accounts",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actor = (await seedFlowActors(org.orgId)).adminId;
+      const ctx = { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null };
+      await makeReconcilable(org);
+      await postBankJournal(org, actor, ["100"], "opening", org.date);
+      await importStatement(
+        {
+          accountId: org.accounts.bank,
+          source: "manual",
+          currency: "CAD",
+          statementDate: org.date,
+          openingBalance: "0",
+          closingBalance: "80",
+          lines: [
+            {
+              postedOn: org.date,
+              amount: "30",
+              description: "Period receipt",
+              bankTransactionId: `m41-open-one-${org.orgId}`,
+            },
+            {
+              postedOn: org.date,
+              amount: "50",
+              description: "Duplicate already booked elsewhere",
+              bankTransactionId: `m41-open-two-${org.orgId}`,
+            },
+          ],
+        },
+        ctx,
+      );
+      const scope = { periodId: org.periodId, bookId: org.bookId };
+      assert.equal(await bankingUnmatchedStatementLines(org.orgId, scope), 2);
+      // Excluded lines leave the count: they need no match.
+      const excludedId = (await db.execute<{ id: string }>(sql`
+        select id from bank_statement_lines
+         where org_id = ${org.orgId} and bank_transaction_id = ${`m41-open-two-${org.orgId}`}
+      `)).rows[0]!.id;
+      await excludeStatementLine(excludedId, "duplicate of an earlier import", ctx);
+      assert.equal(await bankingUnmatchedStatementLines(org.orgId, scope), 1);
     } finally {
       await dropScratchOrg(org.orgId);
     }

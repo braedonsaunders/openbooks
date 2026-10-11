@@ -60,22 +60,24 @@ function accountLabel(account: BankingCloseAccountStatus): string {
  * unless the ledger moved underneath it — staleness is read from the
  * ledger every time, exactly like the reconciliation workspace.
  */
-export async function bankingCloseStatus(
+/**
+ * The accounts one Banking close governs: reconcilable, active,
+ * non-summary accounts with statements, posted lines, or a nonzero balance
+ * in the period. Shared by the status check and the unmatched-line count
+ * so both read the same population — never two checkers.
+ */
+async function bankingClosePopulation(
   orgId: string,
-  args: { periodId: string; bookId: string; subsidiaryId?: string; actorId: string },
-): Promise<BankingCloseAccountStatus[]> {
-  const period = (await db.execute<{ ends_on: string }>(sql`
-    select ends_on::text as ends_on from accounting_periods
-     where id = ${args.periodId} and org_id = ${orgId}
-  `)).rows[0];
-  if (!period) throw new CloseError("period not found");
+  args: { periodId: string; bookId: string; subsidiaryId?: string },
+  periodEndsOn: string,
+): Promise<{ id: string; number: string | null; name: string }[]> {
   const accountScope = args.subsidiaryId
     ? sql`(a.subsidiary_id is null or a.subsidiary_id = ${args.subsidiaryId}::uuid)`
     : sql`true`;
   const lineScope = args.subsidiaryId
     ? sql`jl.subsidiary_id = ${args.subsidiaryId}::uuid`
     : sql`true`;
-  const accounts = (await db.execute<{ id: string; number: string | null; name: string }>(sql`
+  return (await db.execute<{ id: string; number: string | null; name: string }>(sql`
     select a.id, a.number, a.name
       from accounts a
      where a.org_id = ${orgId} and a.reconcilable and a.is_active and not a.is_summary
@@ -86,7 +88,7 @@ export async function bankingCloseStatus(
             where bsl.org_id = ${orgId} and bsl.account_id = a.id
               and bsl.posted_on between
                 (select starts_on from accounting_periods where id = ${args.periodId} and org_id = ${orgId})
-                and ${period.ends_on}::date
+                and ${periodEndsOn}::date
          )
          or exists (
            select 1 from journal_lines jl join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
@@ -98,13 +100,25 @@ export async function bankingCloseStatus(
            join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
            join accounting_periods jp on jp.id = je.period_id and jp.org_id = je.org_id
             where jl.org_id = ${orgId} and jl.account_id = a.id and je.book_id = ${args.bookId}
-              and je.status in ('posted','reversed') and jp.ends_on <= ${period.ends_on}
+              and je.status in ('posted','reversed') and jp.ends_on <= ${periodEndsOn}
               and (${lineScope})
             group by jl.subsidiary_id having sum(jl.amount) <> 0
          )
        )
      order by a.number nulls last, a.name
   `)).rows;
+}
+
+export async function bankingCloseStatus(
+  orgId: string,
+  args: { periodId: string; bookId: string; subsidiaryId?: string; actorId: string },
+): Promise<BankingCloseAccountStatus[]> {
+  const period = (await db.execute<{ ends_on: string }>(sql`
+    select ends_on::text as ends_on from accounting_periods
+     where id = ${args.periodId} and org_id = ${orgId}
+  `)).rows[0];
+  if (!period) throw new CloseError("period not found");
+  const accounts = await bankingClosePopulation(orgId, args, period.ends_on);
   // The route already enforced the operator's subsidiary scope; the session
   // readers below run unrestricted so shared (null-subsidiary) accounts —
   // visible only to unrestricted callers — resolve instead of refusing.
@@ -170,6 +184,32 @@ export async function bankingCloseStatus(
     });
   }
   return statuses;
+}
+
+/**
+ * Statement lines still needing a match on the close population: posted in
+ * the period, on a governed account, never matched or excluded. Read over
+ * the same population as the status check so the close confirm names one
+ * consistent set of books.
+ */
+export async function bankingUnmatchedStatementLines(
+  orgId: string,
+  args: { periodId: string; bookId: string; subsidiaryId?: string },
+): Promise<number> {
+  const period = (await db.execute<{ starts_on: string; ends_on: string }>(sql`
+    select starts_on::text as starts_on, ends_on::text as ends_on from accounting_periods
+     where id = ${args.periodId} and org_id = ${orgId}
+  `)).rows[0];
+  if (!period) throw new CloseError("period not found");
+  const population = await bankingClosePopulation(orgId, args, period.ends_on);
+  if (population.length === 0) return 0;
+  const ids = population.map((account) => account.id);
+  const unmatched = (await db.execute<{ n: string }>(sql`
+    select count(*)::text as n from bank_statement_lines
+     where org_id = ${orgId} and account_id = any(${`{${ids.join(",")}}`}::uuid[])
+       and match_status = 'unmatched'
+       and posted_on between ${period.starts_on}::date and ${period.ends_on}::date`));
+  return Number(unmatched.rows[0]?.n ?? 0);
 }
 
 async function bankingStrictPolicy(orgId: string): Promise<boolean> {
