@@ -827,6 +827,41 @@ async function resolveOperationOverhead(
   };
 }
 
+/**
+ * Release-time department default. Labor rates and overhead cards resolve
+ * per department, so release genuinely needs one — but an org with exactly
+ * one active department has already answered which: the release resolves it
+ * instead of refusing. Zero or several departments is not answerable here,
+ * so release refuses naming the work-center drawer field where the
+ * assignment lives. The default passes the same legal-entity admission as
+ * an assigned department, and the frozen wage-rate and overhead-card
+ * evidence in the release snapshot identifies which department costed the
+ * operation.
+ */
+async function defaultReleaseDepartmentId(
+  tx: SqlExecutor,
+  orgId: string,
+  order: Pick<WorkOrderRow, "number" | "subsidiaryId">,
+  entityContext: SubsidiaryContext,
+  centerCode: string,
+  opLabel: string,
+): Promise<{ id: string; subsidiaryId: string | null; includeChildren: boolean }> {
+  const rows = (await tx.execute<{ id: string; subsidiaryId: string | null; includeChildren: boolean }>(sql`
+    select id, subsidiary_id as "subsidiaryId", subsidiary_include_children as "includeChildren"
+      from departments where org_id = ${orgId} and is_active order by id for share`)).rows;
+  if (rows.length === 1) {
+    const only = rows[0]!;
+    if (!restrictionAdmits(entityContext, only.subsidiaryId, only.includeChildren, order.subsidiaryId)) {
+      refuse(`The department of work center ${centerCode} for ${opLabel} does not admit this legal entity.`, "work_center_department_entity_mismatch", `Choose an admitted department on work center ${centerCode} in Manufacturing → Work centers.`);
+    }
+    return only;
+  }
+  if (rows.length === 0) {
+    refuse(`Work center ${centerCode} for ${opLabel} has no department.`, "work_center_department_required", `Create a department in Company Settings → Departments, then assign it to work center ${centerCode} in Manufacturing → Work centers.`);
+  }
+  refuse(`Work center ${centerCode} for ${opLabel} has no department.`, "work_center_department_required", `Assign a department to work center ${centerCode} in Manufacturing → Work centers.`);
+}
+
 // Freeze every operation's complete labor/FX/overhead snapshot before the
 // release status mutation. Any refusal throws before the status write, so
 // the whole release transaction rolls back and no operation is ever
@@ -882,10 +917,15 @@ export async function resolveOperationReleaseSnapshots(
     if (!center.is_active) {
       refuse(`Work center ${centerCode} for ${opLabel} is inactive.`, "work_center_inactive", `Reactivate work center ${centerCode} or point ${opLabel} at an active work center.`);
     }
-    if (!center.department_id) {
-      refuse(`Work center ${centerCode} for ${opLabel} has no department.`, "work_center_department_required", `Choose an active department in Company Settings → Departments, then assign it to work center ${centerCode}.`);
+    let departmentId = center.department_id;
+    if (!departmentId) {
+      const resolved = await defaultReleaseDepartmentId(tx, orgId, order, entityContext, centerCode, opLabel);
+      departmentId = resolved.id;
+      if (!departmentById.has(departmentId)) {
+        departmentById.set(departmentId, { id: resolved.id, active: true, subsidiaryId: resolved.subsidiaryId, includeChildren: resolved.includeChildren });
+      }
     }
-    const department=departmentById.get(center.department_id);
+    const department=departmentById.get(departmentId);
     if (!department) {
       refuse(`Work center ${centerCode} for ${opLabel} names a department outside this organization.`, "work_center_department_invalid", `Assign an active department from this organization to work center ${centerCode} in Company Settings → Departments.`);
     }
@@ -898,7 +938,6 @@ export async function resolveOperationReleaseSnapshots(
     if (!restrictionAdmits(entityContext,department.subsidiaryId,department.includeChildren,order.subsidiaryId)) {
       refuse(`The department of work center ${centerCode} does not admit this legal entity.`,"work_center_department_entity_mismatch","Choose an admitted department on the work center or review its legal-entity scope in Company Setup → Departments.");
     }
-    const departmentId = center.department_id;
     const labor = await resolveOperationLabor(tx, orgId, order, opLabel, departmentId, releaseDate, functionalCurrency, settings, caches);
     const overhead = await resolveOperationOverhead(tx, orgId, opLabel, departmentId, basis, releaseDate, caches);
     snapshots.push({
