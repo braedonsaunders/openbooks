@@ -6,7 +6,7 @@ import { documentRevisionCounterSql, isDocumentRevisionToken } from "../records/
 import { lineRequiresReceipt } from "../records/stock-receipt.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { fromQuantityUnits, toQuantityUnits } from "../money/quantity.ts";
-import { normalizeInventoryUnit } from "../inventory/costing.ts";
+import { sameInventoryUnit } from "../inventory/costing.ts";
 import {
   matchablePurchaseOrderLines,
   resolveEntityScope,
@@ -285,12 +285,14 @@ export async function matchVendorBillLines(input: {
         item_name: string | null;
         quantity: string;
         unit: string | null;
+        base_unit: string | null;
         custom: unknown;
       }>(sql`
         select dl.id, dl.line_number, dl.item_id, i.kind as item_kind, i.code as item_code, i.name as item_name,
-               dl.quantity::text as quantity, dl.unit, dl.custom
+               dl.quantity::text as quantity, dl.unit, profile.base_unit, dl.custom
           from document_lines dl
           left join items i on i.id = dl.item_id and i.org_id = dl.org_id
+          left join item_inventory_profiles profile on profile.org_id = dl.org_id and profile.item_id = dl.item_id
          where dl.org_id = ${orgId} and dl.document_id = ${billId}
          order by dl.line_number
          for update of dl`)).rows;
@@ -376,7 +378,7 @@ export async function matchVendorBillLines(input: {
             `bill line ${billLine.line_number} (${billLine.item_code ?? billLine.item_name}) is not the item on purchase order ${poLine.document_number} line ${poLine.line_number}`,
           );
         }
-        if (normalizeInventoryUnit(billLine.unit) !== normalizeInventoryUnit(poLine.unit)) {
+        if (!sameInventoryUnit(billLine.unit, poLine.unit, billLine.base_unit)) {
           throw new BillMatchError(
             `bill line ${billLine.line_number} is billed in ${billLine.unit ?? "no unit"} but purchase order ${poLine.document_number} line ${poLine.line_number} orders in ${poLine.unit ?? "no unit"} — match lines share one unit`,
           );

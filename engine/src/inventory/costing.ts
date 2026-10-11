@@ -135,6 +135,20 @@ export function normalizeInventoryUnit(unit: string | null | undefined): string 
   return INVENTORY_UNIT_ALIASES[folded] ?? folded;
 }
 
+/**
+ * Whether two document units name the same unit of an item. A blank unit is
+ * the item's base unit — the same reading the stock conversion applies — so a
+ * bill line left blank and an order line in the base unit are one unit.
+ */
+export function sameInventoryUnit(
+  left: string | null | undefined,
+  right: string | null | undefined,
+  baseUnit: string | null | undefined,
+): boolean {
+  const fold = (unit: string | null | undefined) => normalizeInventoryUnit(unit) || normalizeInventoryUnit(baseUnit);
+  return fold(left) === fold(right);
+}
+
 export function toBaseQuantity(
   quantity: string,
   unit: string | null | undefined,

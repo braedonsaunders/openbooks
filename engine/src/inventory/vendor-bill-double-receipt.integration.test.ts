@@ -109,7 +109,7 @@ async function seedApprovedPo(seed: Seed, quantity: string): Promise<{ orderId: 
 async function seedDrawerBill(
   seed: Seed,
   quantity: string,
-  opts: { subsidiaryId?: string | null; price?: string } = {},
+  opts: { subsidiaryId?: string | null; price?: string; unit?: string | null } = {},
 ): Promise<{ billId: string; lineId: string }> {
   const billId = randomUUID();
   const price = opts.price ?? "6";
@@ -129,7 +129,7 @@ async function seedDrawerBill(
       (id, org_id, document_id, line_number, item_id, account_id, description, quantity,
        unit, unit_price, amount, tax_amount, stock_location_id, custom)
     values (${lineId}, ${seed.orgId}, ${billId}, 1, ${seed.fifo}, ${seed.clearing},
-            'Grain', ${quantity}, 'lb', ${price}, ${amount}, '0',
+            'Grain', ${quantity}, ${opts.unit === undefined ? "lb" : opts.unit}, ${price}, ${amount}, '0',
             ${seed.location}, '{}'::jsonb)
   `);
   await db.execute(sql`update documents set status = 'approved' where id = ${billId} and org_id = ${seed.orgId}`);
@@ -191,6 +191,32 @@ test("an unmatched bill for received stock posts through received-not-billed wit
     const billed = (await db.execute(sql`
       select quantity_billed::text as b from document_lines where id = ${po.lineId}`)).rows[0].b;
     assert.equal(toUnits(billed), toUnits("100"));
+  } finally {
+    await dropScratchOrg(seed.orgId);
+  }
+});
+
+/**
+ * A bill line typed with no unit is in the item's base unit, the same
+ * reading the stock conversion applies, so it matches an order line in the
+ * base unit instead of slipping past matching and receiving the stock again.
+ */
+test("a blank-unit bill line matches its order line in the base unit", { skip: !DB }, async () => {
+  const seed = await seedOrg();
+  try {
+    await db.execute(sql`update item_inventory_profiles set base_unit = 'lb', unit_conversions = '{}'::jsonb
+                          where org_id = ${seed.orgId} and item_id = ${seed.fifo}`);
+    const po = await seedApprovedPo(seed, "100");
+    await receivePurchaseOrder(seed.orgId, seed.actorId, po.orderId, {
+      receiptDate: seed.date,
+      idempotencyKey: randomUUID(),
+      lines: [{ sourceLineId: po.lineId, quantity: "100" }],
+    });
+    const bill = await seedDrawerBill(seed, "100", { unit: null });
+    await postDocument(bill.billId, control(seed));
+    assert.equal(await billReceiptMovements(seed, bill.billId), 0, "the bill brings no second receipt movement");
+    assert.equal(toUnits(await onHand(seed)), toUnits("100"));
+    assert.equal(toUnits(await balanceOf(seed, seed.clearing)), toUnits("0"), "the bill clears received-not-billed");
   } finally {
     await dropScratchOrg(seed.orgId);
   }

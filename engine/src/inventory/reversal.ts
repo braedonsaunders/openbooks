@@ -150,7 +150,7 @@ export async function removeInboundLayer(
   `)).rows;
   if (!layers.length) {
     throw new InventoryError(
-      "the inbound movement was blended into another cost layer; exact receipt reversal is unavailable for blended provenance and requires a controlled inventory correction",
+      "the inbound movement was blended into another cost layer, so its exact receipt cannot be reversed. Correct the stock instead: post a negative inventory adjustment for the received quantity (Inventory → Adjust), then reclass the adjustment amount with a journal entry to the account this document should have cleared",
     );
   }
   const layerIds = uuidArray(layers.map((layer) => layer.id));

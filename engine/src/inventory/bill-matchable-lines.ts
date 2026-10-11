@@ -3,7 +3,7 @@ import { add } from "../money/money.ts";
 import { fromQuantityUnits, toQuantityUnits } from "../money/quantity.ts";
 import type { SqlExecutor } from "../platform/db.ts";
 import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
-import { normalizeInventoryUnit, toBaseQuantity } from "./costing.ts";
+import { sameInventoryUnit, toBaseQuantity } from "./costing.ts";
 import { isJsonRecord } from "./document-lines.ts";
 import { liveReceiptQuantity } from "./return-quantities.ts";
 
@@ -410,10 +410,10 @@ export async function matchablePurchaseOrderLines(
        and (d.party_id is not distinct from ${scope.partyId})
        and coalesce(d.subsidiary_id, ${rootId}) = ${entityId}
      order by d.document_number, dl.line_number`)).rows;
-  const wanted = normalizeInventoryUnit(scope.unit);
+  const baseUnit = (await itemProfile(runner, orgId, scope.itemId))?.baseUnit ?? null;
   const result: MatchablePurchaseOrderLine[] = [];
   for (const row of rows) {
-    if (normalizeInventoryUnit(row.unit) !== wanted) continue;
+    if (!sameInventoryUnit(row.unit, scope.unit, baseUnit)) continue;
     const cover = await unifiedUnbilledCover(runner, orgId, {
       purchaseOrderLineId: row.purchase_order_line_id,
       itemId: scope.itemId,
