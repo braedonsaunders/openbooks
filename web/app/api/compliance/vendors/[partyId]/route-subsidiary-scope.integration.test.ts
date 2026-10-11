@@ -38,7 +38,7 @@ async function seed(): Promise<Fixture> {
     const actorId = await createScratchUser(org.orgId, "Compliance Manager", "compliance_manager");
     const feature = await db.execute<{ id: string }>(sql`
       update orgs set settings = jsonb_set(settings, '{features}',
-        coalesce(settings->'features', '{}'::jsonb) || '{"subcontractorCompliance":true}'::jsonb)
+        coalesce(settings->'features', '{}'::jsonb) || '{"subcontractorCompliance":true,"informationReturns":true}'::jsonb)
        where id = ${org.orgId} returning id`);
     assert.equal(feature.rows.length, 1, "the native compliance feature must be enabled for this fixture");
     const branchId = randomUUID();

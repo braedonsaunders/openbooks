@@ -25,6 +25,7 @@ const routeState: RouteState = { authz: null };
 
 const mockCompliance = `
   export async function guardComplianceFeature(_orgId) { return null }
+  export async function guardInformationReturnsFeature(_orgId) { return null }
 `;
 
 stubModules({ navigation: false, intl: false, authz: false, features: false, extra: {
@@ -87,6 +88,12 @@ async function seed(): Promise<Fixture> {
       values
         (${org.orgId}, ${org.vendorId}, '1099-MISC', '1', 'individual',
          'old-ciphertext', '1111', 'ssn', false, false, ${actorId}, ${actorId})`);
+    // The route enforces both switches for real (class = compliance, TIN =
+    // tax), so the fixture enables both.
+    await db.execute(sql`
+      update orgs set settings = jsonb_set(settings, '{features}',
+        coalesce(settings->'features', '{}'::jsonb) || '{"subcontractorCompliance":true,"informationReturns":true}'::jsonb)
+       where id = ${org.orgId}`);
     return {
       orgId: org.orgId,
       partyId: org.vendorId,

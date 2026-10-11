@@ -41,7 +41,7 @@ stubModules({
       }
     `,
     "@/lib/compliance": `
-      export async function guardComplianceFeature() { return null }
+      export async function guardInformationReturnsFeature() { return null }
       export async function loadInformationReturnFilingScope() { return { subsidiaryId: null } }
     `,
     "@openbooks/engine/src/platform/business-date.ts": `

@@ -173,7 +173,7 @@ async function seedFinalizedFiling(
   return withBypassContext(async () => {
     await db.execute(sql`
       update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb),
-        '{features,subcontractorCompliance}', 'true'::jsonb, true)
+        '{features,informationReturns}', 'true'::jsonb, true)
        where id = ${org.orgId}`);
     const filing = await ensureFiling({ orgId: org.orgId, taxYear, formType: "1099-NEC", currency: "USD", actorId });
     for (let i = 0; i < 2; i++) {

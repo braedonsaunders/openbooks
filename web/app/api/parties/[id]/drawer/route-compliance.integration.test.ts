@@ -47,7 +47,7 @@ async function fixture(featureOn: boolean): Promise<{ orgId: string; partyId: st
     values (${org.orgId}, ${partyId}, true, ${actorId}, ${actorId})`));
   if (featureOn) {
     await withBypassContext(() => db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
-      coalesce(settings->'features','{}'::jsonb)||'{"subcontractorCompliance":true}'::jsonb) where id=${org.orgId}`));
+      coalesce(settings->'features','{}'::jsonb)||'{"subcontractorCompliance":true,"informationReturns":true}'::jsonb) where id=${org.orgId}`));
   }
   return { orgId: org.orgId, partyId };
 }
@@ -69,12 +69,16 @@ test("the overlay drawer payload carries the Compliance tab inputs", async () =>
       complianceEnabled: unknown;
       canManageCompliance: unknown;
       compliance: { classId: unknown; classes: unknown } | null;
+      informationReturnsEnabled: unknown;
+      taxIdentity: Record<string, unknown> | null;
     };
     assert.equal(body.complianceEnabled, true);
     assert.equal(body.canManageCompliance, true);
     assert.ok(body.compliance, "a feature-on vendor must get the compliance payload");
     assert.equal(body.compliance.classId, null);
     assert.ok(Array.isArray(body.compliance.classes), "the class list must ride along");
+    assert.equal(body.informationReturnsEnabled, true);
+    assert.ok(body.taxIdentity, "a tax-switch-on vendor must get the masked tax identity");
   } finally {
     await withBypassContext(() => dropScratchOrg(orgId));
   }
@@ -85,9 +89,11 @@ test("the overlay drawer payload omits compliance when the feature is off", asyn
   try {
     const res = await get(partyId, "vendor");
     assert.equal(res.status, 200);
-    const body = (await res.json()) as { complianceEnabled: unknown; compliance: unknown };
+    const body = (await res.json()) as { complianceEnabled: unknown; compliance: unknown; informationReturnsEnabled: unknown; taxIdentity: unknown };
     assert.equal(body.complianceEnabled, false);
     assert.equal(body.compliance, null);
+    assert.equal(body.informationReturnsEnabled, false);
+    assert.equal(body.taxIdentity, null);
   } finally {
     await withBypassContext(() => dropScratchOrg(orgId));
   }

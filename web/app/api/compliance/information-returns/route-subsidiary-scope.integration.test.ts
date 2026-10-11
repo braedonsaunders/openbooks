@@ -108,7 +108,7 @@ async function filingCount(orgId: string): Promise<number> {
 }
 
 async function enableCompliance(orgId: string): Promise<void> {
-  await withBypassContext(() => (db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,subcontractorCompliance}', 'true') where id = ${orgId}`)));
+  await withBypassContext(() => (db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,informationReturns}', 'true') where id = ${orgId}`)));
 }
 
 test("a malformed subsidiary id is a 400, never an org-wide filing", async () => {

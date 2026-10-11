@@ -74,7 +74,7 @@ test('information-return by-id routes fail closed on another entity\'s filing', 
     const taxYear = Number(org.date.slice(0, 4)) - 1
     await withBypassContext(async () => {
       await db.execute(sql`
-        update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,subcontractorCompliance}', 'true'::jsonb, true)
+        update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,informationReturns}', 'true'::jsonb, true)
          where id = ${org.orgId}`)
       await db.execute(sql`
         update app_roles set permissions='["compliance.read","compliance.manage","compliance.file"]'::jsonb

@@ -207,12 +207,20 @@ test('compliance setup entities are gated and reachable from the rail', () => {
     'compliance-requirements',
     'information-return-box-rules',
   ])
-  for (const key of ['compliance-classes', 'compliance-requirements', 'information-return-box-rules']) {
+  for (const key of ['compliance-classes', 'compliance-requirements']) {
     const entity = SETUP_ENTITY_BY_KEY.get(key)
     assert.ok(entity, key)
     // Hiding the tab is presentation; the API re-checks this same key.
     assert.equal(entity.featureKey, 'subcontractorCompliance', key)
     assert.equal(entity.docSlug, 'subcontractor-compliance', key)
+  }
+  {
+    // Box rules are year-end tax configuration, not COI tracking: they ride
+    // the informationReturns switch so a 1099 filer reaches them.
+    const entity = SETUP_ENTITY_BY_KEY.get('information-return-box-rules')
+    assert.ok(entity, 'information-return-box-rules')
+    assert.equal(entity.featureKey, 'informationReturns')
+    assert.equal(entity.docSlug, 'subcontractor-compliance')
   }
 })
 

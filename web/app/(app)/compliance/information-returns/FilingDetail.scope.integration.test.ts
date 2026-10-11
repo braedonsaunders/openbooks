@@ -27,7 +27,7 @@ async function seedFilings() {
   const actor = await withBypassContext(() => createScratchUser(org.orgId, 'IR reader', 'admin'))
   await withBypassContext(async () => {
     await db.execute(sql`
-      update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,subcontractorCompliance}', 'true'::jsonb, true)
+      update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,informationReturns}', 'true'::jsonb, true)
        where id = ${org.orgId}`)
     await db.execute(sql`
       insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)

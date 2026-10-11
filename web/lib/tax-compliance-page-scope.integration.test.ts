@@ -101,7 +101,7 @@ async function fixture() {
   const empty = randomUUID()
   await withBypassContext(async () => {
     await db.execute(sql`
-      update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,subcontractorCompliance}', 'true'::jsonb, true)
+      update orgs set settings = jsonb_set(jsonb_set(coalesce(settings, '{}'::jsonb), '{features,subcontractorCompliance}', 'true'::jsonb, true), '{features,informationReturns}', 'true'::jsonb, true)
        where id = ${org.orgId}`)
     await db.execute(sql`
       update app_roles set permissions='["reports.read","reports.create","gl.post","compliance.read","compliance.manage"]'::jsonb

@@ -95,7 +95,7 @@ const { featureRequiredHref, parseFeatureRequiredParam, accessDeniedHref } =
 const { requirePermission } = await import("./authz.ts");
 const { requireSuperAdmin } = await import("./super-admin.ts");
 const { requireFeatureEnabled } = await import("./feature-gates.ts");
-const { requireComplianceFeature, requireLienWaiverFeature } = await import("./compliance.ts");
+const { requireComplianceFeature, requireInformationReturnsFeature, requireLienWaiverFeature } = await import("./compliance.ts");
 test.after(() => hooks.deregister());
 
 function fakeUser(isSuperAdmin: boolean): NonNullable<typeof globalThis.__gateUser> {
@@ -210,6 +210,16 @@ test("Compliance gates name the feature that is actually off", async () => {
   globalThis.__gateFeatures = { subcontractorCompliance: true, projects: true };
   assert.equal(await requireComplianceFeature("org"), undefined);
   assert.equal(await requireLienWaiverFeature("org"), undefined);
+});
+
+test("Information-returns gates name their own tax switch", async () => {
+  globalThis.__gateFeatures = { informationReturns: false, subcontractorCompliance: true };
+  assert.equal(
+    await redirectUrl(() => requireInformationReturnsFeature("org")),
+    "/feature-required?feature=informationReturns",
+  );
+  globalThis.__gateFeatures = { informationReturns: true, subcontractorCompliance: false };
+  assert.equal(await requireInformationReturnsFeature("org"), undefined);
 });
 
 // --- the named routes funnel through the shared gates ------------------------

@@ -24,7 +24,7 @@ const APP_SEGMENT = 'app/(app)'
 // before being listed here.
 // A factory route (`defineRoute`) names its feature key and the factory
 // answers 404 while that feature is off.
-const GATE = /defineRoute\(\{[\s\S]*?\bfeature:\s*(['"])[A-Za-z]+\1|requireFeatureEnabled\(|guardFeaturePermission\(|isFeatureEnabled\(|requireFlowsSession\(|requireFlowsRecordReader\(|authorizeTimeWorkspace\(|requireProjectsFeature\(|guardProjectsFeature\(|requireProjectSchedulingFeature\(|guardProjectSchedulingFeature\(|guardPreBillingFeature\(|guardPropertyManagementFeature\(|guardSubcontractsFeature\(|guardComplianceFeature\(|guardLienWaiverFeature\(|gateDocuments\(|gateSurveys\(|gateExports\(|meritCycleGate\(/
+const GATE = /defineRoute\(\{[\s\S]*?\bfeature:\s*(['"])[A-Za-z]+\1|requireFeatureEnabled\(|guardFeaturePermission\(|isFeatureEnabled\(|requireFlowsSession\(|requireFlowsRecordReader\(|authorizeTimeWorkspace\(|requireProjectsFeature\(|guardProjectsFeature\(|requireProjectSchedulingFeature\(|guardProjectSchedulingFeature\(|guardPreBillingFeature\(|guardPropertyManagementFeature\(|guardSubcontractsFeature\(|guardComplianceFeature\(|guardLienWaiverFeature\(|guardInformationReturnsFeature\(|requireInformationReturnsFeature\(|gateDocuments\(|gateSurveys\(|gateExports\(|meritCycleGate\(/
 
 const read = readingPagePairs((path: string) => readFileSync(new URL(path, WEB), 'utf8'))
 const exists = (path: string) => existsSync(new URL(path, WEB))
@@ -108,6 +108,7 @@ const FEATURE_API_DIRS: Record<string, string[]> = {
   crm: ['app/api/crm', 'app/api/parties/[id]/activities'],
   hrm: ['app/api/hrm'],
   subcontractorCompliance: ['app/api/compliance'],
+  informationReturns: ['app/api/compliance/information-returns'],
   scripts: ['app/api/scripts'],
   onlinePayments: ['app/api/payments/links', 'app/api/admin/setup/payment-providers', 'app/api/pay'],
   queryConsole: ['app/api/query'],

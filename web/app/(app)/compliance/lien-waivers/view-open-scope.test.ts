@@ -100,6 +100,7 @@ const mockSources = new Map<string, string>([
     `export async function getMoneyFormatter() { return { money: (value) => String(value) } }`,
   ],
   ['mock:tabs', `export async function complianceTabs() { return [] }`],
+  ['mock:features', `export async function isFeatureEnabled() { return true }`],
   [
     'mock:viewspec',
     `
@@ -124,6 +125,7 @@ const mockUrls = new Map<string, string>([
   ['next-intl/server', 'mock:intl'],
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
   ['../../../../lib/feature-gates', 'mock:gates'],
+  ['../../../../lib/features', 'mock:features'],
   ['../../../../lib/compliance', 'mock:compliance'],
   ['@/lib/money-server', 'mock:money'],
   ['../tabs', 'mock:tabs'],

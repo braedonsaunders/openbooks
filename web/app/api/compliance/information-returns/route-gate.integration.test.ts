@@ -1,0 +1,202 @@
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { randomUUID } from 'node:crypto'
+import { registerHooks } from 'node:module'
+import test from 'node:test'
+
+// The informationReturns split: the 1099 worksheet/filings, vendor TIN
+// capture and box rules ride their own tax switch, not subcontractor
+// compliance. These cases invoke the real routes behind the real gates: with
+// informationReturns on and subcontractorCompliance off every 1099 surface
+// works, and with the tax switch off each API refuses while naming it.
+
+const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
+Object.assign(globalThis, { __infoReturnsGateState: state })
+const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
+registerHooks({
+  resolve(specifier, context, next) {
+    if (specifier === 'next/navigation') return virtual('export function redirect() {}')
+    if (specifier === '@/lib/authz') return virtual(`
+      export async function guardPermission() {
+        const s = globalThis.__infoReturnsGateState;
+        return { user: { orgId: s.orgId, id: s.actorId }, permissions: new Set(['*']), allowedSubsidiaryIds: null };
+      }
+      export function guardSubsidiaryScope() { return null }
+    `)
+    return next(specifier, context)
+  },
+})
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { sql } = await import('drizzle-orm')
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { GET: listFilings } = await import('./route.ts')
+const { PATCH: patchVendor } = await import('../vendors/[partyId]/route.ts')
+const { preflightSetupWrite } = await import('@/lib/setup/write.ts')
+
+async function fixture(features: Record<string, boolean>) {
+  const org = await withBypassContext(() => createScratchOrg())
+  state.orgId = org.orgId
+  state.actorId = randomUUID()
+  await withBypassContext(() => db.execute(sql`
+    update orgs set settings = jsonb_set(settings, '{features}',
+      coalesce(settings->'features', '{}'::jsonb) || ${JSON.stringify(features)}::jsonb)
+     where id = ${org.orgId}`))
+  const partyId = randomUUID()
+  await withBypassContext(() => db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom)
+    values (${partyId},${org.orgId},'company','Gate vendor',${org.subsidiaryId},true,'{}'::jsonb)`))
+  await withBypassContext(() => db.execute(sql`
+    insert into vendor_roles (org_id, party_id, is_active, created_by, updated_by)
+    values (${org.orgId}, ${partyId}, true, ${state.actorId}, ${state.actorId})`))
+  return { org, partyId }
+}
+
+const get = () =>
+  withOrgContext(state.orgId, () => listFilings(
+    new Request('http://gate.test/api/compliance/information-returns'),
+  ))
+
+const patch = (partyId: string, body: unknown) =>
+  withOrgContext(state.orgId, () => patchVendor(
+    new Request(`http://gate.test/api/compliance/vendors/${partyId}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+    { params: Promise.resolve({ partyId }) },
+  ))
+
+const actor = () => ({ orgId: state.orgId, id: state.actorId, permissions: new Set(['*']), allowedSubsidiaryIds: null })
+
+test('worksheet lists with the tax switch on and subcontractor compliance off', async () => {
+  const { org } = await fixture({ informationReturns: true })
+  try {
+    const res = await get()
+    assert.equal(res.status, 200, JSON.stringify(await res.json()))
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
+
+test('worksheet refuses with the tax switch off, naming the feature', async () => {
+  const { org } = await fixture({})
+  try {
+    const res = await get()
+    assert.equal(res.status, 404)
+    assert.equal((await res.json() as { error: string }).error, 'information returns feature is disabled')
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
+
+test('worksheet refuses on subcontractor compliance alone', async () => {
+  const { org } = await fixture({ subcontractorCompliance: true })
+  try {
+    const res = await get()
+    assert.equal(res.status, 404)
+    assert.equal((await res.json() as { error: string }).error, 'information returns feature is disabled')
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
+
+test('TIN capture works with the tax switch on and subcontractor compliance off', async () => {
+  const { org, partyId } = await fixture({ informationReturns: true })
+  try {
+    const res = await patch(partyId, { tin: '222-33-4444', tinType: 'ein', reportable: true })
+    assert.equal(res.status, 200, JSON.stringify(await res.json()))
+    const row = (await withOrgContext(state.orgId, () => db.execute<{ last4: string | null }>(sql`
+      select tin_last4 as "last4" from vendor_roles where org_id = ${state.orgId} and party_id = ${partyId}`))).rows[0]
+    assert.equal(row?.last4, '4444')
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
+
+test('TIN capture refuses with the tax switch off, naming the feature, writing nothing', async () => {
+  const { org, partyId } = await fixture({})
+  try {
+    const res = await patch(partyId, { tin: '222-33-4444', tinType: 'ein' })
+    assert.equal(res.status, 404)
+    assert.equal((await res.json() as { error: string }).error, 'information returns feature is disabled')
+    const row = (await withOrgContext(state.orgId, () => db.execute<{ last4: string | null }>(sql`
+      select tin_last4 as "last4" from vendor_roles where org_id = ${state.orgId} and party_id = ${partyId}`))).rows[0]
+    assert.equal(row?.last4, null)
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
+
+test('TIN capture refuses on subcontractor compliance alone', async () => {
+  const { org, partyId } = await fixture({ subcontractorCompliance: true })
+  try {
+    const res = await patch(partyId, { tin: '222-33-4444', tinType: 'ein' })
+    assert.equal(res.status, 404)
+    assert.equal((await res.json() as { error: string }).error, 'information returns feature is disabled')
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
+
+test('class assignment still needs subcontractor compliance, naming it', async () => {
+  const { org, partyId } = await fixture({ informationReturns: true })
+  try {
+    const res = await patch(partyId, { complianceClassId: randomUUID() })
+    assert.equal(res.status, 404)
+    assert.equal((await res.json() as { error: string }).error, 'subcontractor compliance feature is disabled')
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
+
+test('box rules ride the tax switch at the setup fence', async () => {
+  const { org } = await fixture({ informationReturns: true })
+  try {
+    const allowed = await withOrgContext(state.orgId, () =>
+      preflightSetupWrite(actor(), 'information-return-box-rules', 'create'))
+    assert.equal(allowed, null)
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
+
+test('box rules refuse on subcontractor compliance alone at the setup fence', async () => {
+  const { org } = await fixture({ subcontractorCompliance: true })
+  try {
+    const refused = await withOrgContext(state.orgId, () =>
+      preflightSetupWrite(actor(), 'information-return-box-rules', 'create'))
+    assert.equal(refused?.status, 404)
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
+
+test('existing subcontractor-compliance orgs keep 1099 surfaces through the 0661 backfill', async () => {
+  const { org } = await fixture({ subcontractorCompliance: true })
+  try {
+    const before = await get()
+    assert.equal(before.status, 404)
+    // The published migration bytes, executed as the runner would: only the
+    // data statement (header SETs aside) against this org's database.
+    const migration = readFileSync(new URL('../../../../../schema/migrations/generated/0661_information_returns_feature_split.sql', import.meta.url), 'utf8')
+    const dataStatement = migration.slice(migration.indexOf('WITH candidates'))
+    await withBypassContext(() => db.execute(sql.raw(dataStatement)))
+    const after = await get()
+    assert.equal(after.status, 200, JSON.stringify(await after.json()))
+    const stored = (await withBypassContext(() => db.execute<{ features: Record<string, boolean> }>(sql`
+      select settings->'features' as features from orgs where id = ${org.orgId}`))).rows[0]?.features
+    assert.equal(stored?.informationReturns, true)
+    assert.equal(stored?.subcontractorCompliance, true)
+    const trail = (await withBypassContext(() => db.execute<{ n: number }>(sql`
+      select count(*)::int as n from audit_log
+       where org_id = ${org.orgId} and table_name = 'orgs' and action = 'update'`))).rows[0]?.n
+    assert.equal(trail, 1)
+    // Re-running the backfill is a no-op.
+    await withBypassContext(() => db.execute(sql.raw(dataStatement)))
+    const trailAfter = (await withBypassContext(() => db.execute<{ n: number }>(sql`
+      select count(*)::int as n from audit_log
+       where org_id = ${org.orgId} and table_name = 'orgs' and action = 'update'`))).rows[0]?.n
+    assert.equal(trailAfter, 1)
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})

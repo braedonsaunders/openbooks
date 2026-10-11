@@ -27,7 +27,8 @@ registerHooks({
           return new Response(JSON.stringify({ error: 'not_found' }), { status: 404 });
         }
       `);
-    if (specifier.endsWith("/lib/compliance")) return virtual("export async function guardComplianceFeature() { return null }");
+    if (specifier.endsWith("/lib/compliance")) return virtual("export async function guardComplianceFeature() { return null }; export async function guardInformationReturnsFeature() { return null }");
+    if (specifier.endsWith("/lib/features")) return virtual("export async function isFeatureEnabled() { return true }");
     return next(specifier, context);
   },
 });

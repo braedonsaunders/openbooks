@@ -35,7 +35,7 @@ async function fixture() {
   state.actorId = randomUUID()
   await withBypassContext(() => db.execute(sql`
     update orgs set settings = jsonb_set(settings, '{features}',
-      coalesce(settings->'features','{}'::jsonb) || '{"subcontractorCompliance": true}'::jsonb)
+      coalesce(settings->'features','{}'::jsonb) || '{"informationReturns": true}'::jsonb)
      where id = ${org.orgId}`))
   return { org }
 }
