@@ -324,7 +324,12 @@ export const POST = defineRoute({
           } catch (e) {
             if (e instanceof PostingEffectsReplayError) {
               const missing = /was not found/.test(e.message)
-              return missing ? notFound('record') : postingRefusal(e)!
+              if (missing) return notFound('record')
+              // An unmapped replay error rethrows into the route backstop
+              // (named 4xx), never an empty body that pins as a bare
+              // fallback beside the record.
+              const refusal = postingRefusal(e)
+              if (refusal) return refusal
             }
             throw e
           }

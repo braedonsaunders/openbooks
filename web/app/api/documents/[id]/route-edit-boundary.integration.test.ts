@@ -203,4 +203,25 @@ test('documents PATCH refuses foreign reference custom values on header and line
   }
 })
 
+test('documents PATCH accepts an empty due date and names the field when malformed', async () => {
+  const org = await withBypassContext(() => createScratchOrg())
+  try {
+    state.orgId = org.orgId
+    state.actorId = randomUUID()
+    const id = await makeDraftBill(org)
+    // An empty due date is legal: clearing it saves cleanly.
+    const cleared = await patchDoc(org.orgId, id, { expectedUpdatedAt: await revision(org.orgId, id), dueDate: null })
+    assert.equal(cleared.status, 200, `an empty due date must save, got ${cleared.status}: ${JSON.stringify(cleared.json)}`)
+    const stored = (await withOrgContext(org.orgId, () => db.execute<{ d: string | null }>(sql`select due_date::text as d from documents where id=${id} and org_id=${org.orgId}`))).rows[0]!.d
+    assert.equal(stored, null, 'a cleared due date stores null')
+    // A malformed due date refuses with the field named through the shared reader.
+    const malformed = await patchDoc(org.orgId, id, { expectedUpdatedAt: await revision(org.orgId, id), dueDate: '' })
+    assert.equal(malformed.status, 422, `expected 422, got ${malformed.status}: ${JSON.stringify(malformed.json)}`)
+    const issues = (malformed.json as { issues?: { path?: unknown }[] } | null)?.issues
+    assert.equal(issues?.[0]?.path, 'dueDate', 'the refusal names the due date field')
+  } finally {
+    await dropScratchOrg(org.orgId)
+  }
+})
+
 
