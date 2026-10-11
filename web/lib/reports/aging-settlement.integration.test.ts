@@ -24,7 +24,8 @@ import { randomUUID } from 'node:crypto'
 const root = pathToFileURL(process.cwd() + '/').href
 const { db, withBypassContext, withOrgContext } = (await import('@openbooks/engine/platform/db')) as typeof import('@openbooks/engine/platform/db')
 const { sql } = await import(root + 'node_modules/drizzle-orm/index.js')
-const { createScratchOrg, dropScratchOrg } = (await import('@openbooks/engine/testing/fixtures')) as typeof import('@openbooks/engine/testing/fixtures')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = (await import('@openbooks/engine/testing/fixtures')) as typeof import('@openbooks/engine/testing/fixtures')
+const { requestDocumentVoid } = (await import('@openbooks/engine/ledger/document-void')) as typeof import('@openbooks/engine/ledger/document-void')
 type ScratchOrg = Awaited<ReturnType<typeof createScratchOrg>>
 const { agingByParty, agingDetail } = (await import(root + 'web/lib/reports/aging.ts')) as typeof import('./aging')
 const { partyRegister, partnerStatement } = (await import(root + 'web/lib/reports/registers.ts')) as typeof import('./registers')
@@ -80,9 +81,9 @@ async function applyPayment(org: ScratchOrg, paymentDocId: string, billDocId: st
       ${amount}, ${amount}, ${appliedOn}, ${amount}, 'CAD', ${amount}, 'CAD', 1, 'same_currency', 'SETTLEMENT-PROBE')`)
 }
 
-async function glControl(org: ScratchOrg): Promise<string> {
+async function glControl(org: ScratchOrg, asOf: string = AS_OF): Promise<string> {
   const r = await db.execute<{ bal: string }>(sql`select coalesce(sum(l.amount), 0)::text as bal from journal_lines l
-    join journal_entries e on e.id = l.entry_id and e.status in ('posted', 'reversed') and e.posting_date <= ${AS_OF} and e.book_id = ${org.bookId}
+    join journal_entries e on e.id = l.entry_id and e.status in ('posted', 'reversed') and e.posting_date <= ${asOf} and e.book_id = ${org.bookId}
     where l.org_id = ${org.orgId} and l.account_id = ${org.accounts.ap}`)
   return r.rows[0]!.bal
 }
@@ -191,6 +192,72 @@ test('AP aging ignores an application dated after the as-of date', { skip: !proc
         [['BILL-LATE', 'b1', '900.0000'], ['PAY-LATE', 'b1', '-900.0000']],
         'bill still fully open as of the date, payment shown as unapplied credit',
       )
+    })
+  } finally {
+    await dropScratchOrg(org.orgId)
+  }
+})
+
+test('AP aging clears a bill settled by a payment posted months later, as of the settlement date', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypassContext(() => createScratchOrg())
+  try {
+    await withBypassContext(async () => {
+      await addPeriod(org, 2026, 1, '2026-01-01', '2026-01-31')
+      await addPeriod(org, 2026, 5, '2026-05-01', '2026-05-31')
+      const bill = await postBill(org, 'BILL-SETTLED-LATE', '2026-01-25', '2026-02-24', '900')
+      const pay = await postPayment(org, 'PAY-SETTLED-LATE', '2026-05-25', '900')
+      await applyPayment(org, pay, bill, '900.0000', '2026-05-25')
+    })
+    await withOrgContext(org.orgId, async () => {
+      // The application and both AP legs settle on the payment date, so every
+      // view as of 2026-05-31 reads the vendor at zero in every bucket.
+      assert.equal(await glControl(org, '2026-05-31'), '0.0000', 'control nets the bill and the payment')
+      const summary = await agingByParty('ap', '2026-05-31', undefined, org.orgId)
+      assert.deepEqual(summary.rows, [], 'a settled bill and its payment leave no vendor row')
+      assert.deepEqual(
+        [summary.totals.current, summary.totals.b1, summary.totals.b2, summary.totals.b3, summary.totals.b4, summary.totals.total],
+        ['0.0000', '0.0000', '0.0000', '0.0000', '0.0000', '0.0000'],
+      )
+      const detail = await agingDetail('ap', '2026-05-31', undefined, org.orgId)
+      assert.deepEqual(detail.rows, [], 'neither the bill nor the payment appears as an open item')
+    })
+  } finally {
+    await dropScratchOrg(org.orgId)
+  }
+})
+
+test('AP aging drops a bill voided with a reversal dated back to its posting, and ties the control', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypassContext(() => createScratchOrg())
+  try {
+    const actorId = await withBypassContext(() => createScratchUser(org.orgId, 'AP aging void tester', 'admin'))
+    const voidedId = await withBypassContext(async () => {
+      await addPeriod(org, 2026, 1, '2026-01-01', '2026-01-31')
+      await addPeriod(org, 2026, 2, '2026-02-01', '2026-02-28')
+      const voided = await postBill(org, 'BILL-VOIDED-BACKDATED', '2026-01-25', '2026-02-24', '900')
+      await postBill(org, 'BILL-STILL-OPEN', '2026-02-01', '2026-02-15', '300')
+      return voided
+    })
+    // The void is recorded now (after the as-of date) but its reversal is
+    // dated to the bill's posting. The ledger therefore carries the bill as
+    // reversed as of 2026-05-31, and the aging must agree with that control.
+    const voidResult = await withBypassContext(() => requestDocumentVoid({
+      documentId: voidedId, orgId: org.orgId, actorId,
+      reason: 'Duplicate bill entered in error', reversalDate: '2026-01-25', source: 'api',
+    }))
+    assert.equal(voidResult.status, 'voided')
+    await withOrgContext(org.orgId, async () => {
+      assert.equal(await glControl(org, '2026-05-31'), '-300.0000', 'control carries only the open bill')
+      const summary = await agingByParty('ap', '2026-05-31', undefined, org.orgId)
+      assert.equal(summary.rows.length, 1)
+      const row = summary.rows[0]!
+      assert.deepEqual(
+        [row.current, row.b1, row.b2, row.b3, row.b4, row.total],
+        ['0.0000', '0.0000', '0.0000', '0.0000', '300.0000', '300.0000'],
+        'the voided bill ages nowhere; the summary carries no residual against the control',
+      )
+      const detail = await agingDetail('ap', '2026-05-31', undefined, org.orgId)
+      assert.deepEqual(detail.totals, summary.totals, 'detail ties the summary')
+      assert.deepEqual(detail.rows.map((r) => r.reference), ['BILL-STILL-OPEN'])
     })
   } finally {
     await dropScratchOrg(org.orgId)

@@ -8,6 +8,7 @@ import { mulDecimal } from "@openbooks/engine/money/money";
 // resolve until merge; a relative import binds this checkout everywhere.
 import { AP_OPEN_ITEM_KINDS, AR_OPEN_ITEM_KINDS } from "@openbooks/engine/records/open-item-kinds";
 import { appliedLegAmountExpr } from "@openbooks/engine/records/balance-due";
+import { asOfPostedEntryLateral } from "@openbooks/engine/records/open-item-scopes";
 import { resolveOrgId } from "../org-scope";
 import { presentationCurrency, presentationRates, presentationSpotRatesSql, presentationAmountSql } from "../fx-presentation";
 import { decimalAdd, decimalCmp, decimalNeg, type ExactDecimal } from "../statement-format";
@@ -247,7 +248,13 @@ function openDocumentsSql(
              jl.currency as txn_ccy,
              coalesce(sub.base_currency, ${orgBase}) as func_ccy
         from documents d
-        join journal_lines jl on jl.entry_id = d.posted_entry_id and jl.is_open_item
+        -- The entry that carried the document on the report date, not the live
+        -- posted entry: a reversal dated on or before the date removes it
+        -- (including a void recorded later but dated back), the same rule the
+        -- control residual and the cash open items read, so the document rows
+        -- and the control account always describe the same ledger.
+        ${asOfPostedEntryLateral(orgId, asOf)}
+        join journal_lines jl on jl.entry_id = je.id and jl.is_open_item
         join journal_entries e on e.id = jl.entry_id and e.org_id = jl.org_id
         join accounts a on a.id = jl.account_id and a.org_id = ${orgId}
         left join subsidiaries sub on sub.id = jl.subsidiary_id and sub.org_id = ${orgId}

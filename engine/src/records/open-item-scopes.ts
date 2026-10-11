@@ -59,7 +59,10 @@ export function asOfPostedEntryLateral(orgId: string, asOf: string, docAlias = "
       select je.id, je.org_id, je.posting_date
         from journal_entries je
        where je.org_id = ${orgId}
-         and je.source_document_id = ${d}.id
+         -- The live posted entry is always a candidate: a project-attribution
+         -- move re-posts it without a source document, and that replacement
+         -- must keep the document in every as-of read.
+         and (je.source_document_id = ${d}.id or je.id = ${d}.posted_entry_id)
          and je.status in ('posted', 'reversed')
          and je.reverses_entry_id is null
          and je.posting_date <= ${asOf}
