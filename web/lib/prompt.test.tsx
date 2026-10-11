@@ -119,6 +119,66 @@ test('a programmatic fill enables Void on focus and submits its text', async () 
   }
 })
 
+test('a text prompt marks its field required and enables submit as you type', async () => {
+  const unmount = await mountRoot()
+  try {
+    const { act } = await import('react')
+    // The timesheet Declare-no-hours shape: a labelled single-line reason.
+    const pending = promptDialog({ title: 'Declare no hours', label: 'Reason' })
+    await act(async () => {
+      await tick()
+    })
+    const input = document.querySelector('#prompt-input') as HTMLInputElement | null
+    assert.ok(input, 'the reason field renders')
+    assert.equal(input.required, true, 'the reason field is marked required')
+    assert.equal(input.getAttribute('aria-required'), 'true', 'the requirement is exposed to assistive tech')
+    const label = document.querySelector('label[for="prompt-input"]')
+    assert.ok(label?.textContent?.includes('*'), 'the label carries the required mark')
+    const submit = [...document.querySelectorAll('button')].find((b) => b.type === 'submit') as HTMLButtonElement
+    assert.equal(submit.disabled, true, 'submit starts disabled on an empty reason')
+    await act(async () => {
+      const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
+      nativeSetter.call(input, 'Statutory holiday — site closed')
+      input.dispatchEvent(new window.Event('input', { bubbles: true }))
+      // No blur: enablement follows the controlled value as the user types.
+      await tick()
+    })
+    assert.equal(submit.disabled, false, 'typing a reason enables submit without leaving the field')
+    await act(async () => {
+      submit.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+      await tick()
+    })
+    assert.equal(await pending, 'Statutory holiday — site closed')
+  } finally {
+    await unmount()
+  }
+})
+
+test('an option prompt leaves its select unmarked', async () => {
+  const unmount = await mountRoot()
+  try {
+    const { act } = await import('react')
+    promptDialog({
+      title: 'Choose',
+      label: 'Choice',
+      options: [
+        { value: '', label: 'Keep current' },
+        { value: 'a', label: 'Option A' },
+      ],
+    })
+    await act(async () => {
+      await tick()
+    })
+    const select = document.querySelector('#prompt-input') as HTMLSelectElement | null
+    assert.ok(select, 'the option select renders')
+    assert.equal(select.required, false, 'an explicit default choice is valid, so the select stays unmarked')
+    const label = document.querySelector('label[for="prompt-input"]')
+    assert.ok(!label?.textContent?.includes('*'), 'no required mark on an optional choice')
+  } finally {
+    await unmount()
+  }
+})
+
 test('submitting a programmatically filled field resolves its text, never a silent cancel', async () => {
   const unmount = await mountRoot()
   try {

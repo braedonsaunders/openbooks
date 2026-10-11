@@ -173,6 +173,12 @@ export function PromptRoot() {
                 {req.label ? (
                   <Label htmlFor="prompt-input" className="text-xs text-slate-500 dark:text-slate-400">
                     {req.label}
+                    {req.options ? null : (
+                      <span className="text-red-500" aria-hidden="true">
+                        {' '}
+                        *
+                      </span>
+                    )}
                   </Label>
                 ) : null}
                 {req.options ? (
@@ -189,13 +195,15 @@ export function PromptRoot() {
                     ))}
                   </select>
                 ) : req.multiline ? (
-                  <Textarea id="prompt-input" rows={8} ref={inputRef as React.Ref<HTMLTextAreaElement>} value={value} placeholder={req.placeholder} onChange={(e) => setValue(e.target.value)} onFocus={syncFromElement} onBlur={syncFromElement} onKeyDown={(e) => { if (e.key === 'Escape') settle(null) }} />
+                  <Textarea id="prompt-input" rows={8} ref={inputRef as React.Ref<HTMLTextAreaElement>} value={value} placeholder={req.placeholder} required aria-required="true" onChange={(e) => setValue(e.target.value)} onFocus={syncFromElement} onBlur={syncFromElement} onKeyDown={(e) => { if (e.key === 'Escape') settle(null) }} />
                 ) : (
                   <Input
                     id="prompt-input"
                     ref={inputRef as React.Ref<HTMLInputElement>}
                     value={value}
                     placeholder={req.placeholder}
+                    required
+                    aria-required="true"
                     onChange={(e) => setValue(e.target.value)}
                     onFocus={syncFromElement}
                     onBlur={syncFromElement}
