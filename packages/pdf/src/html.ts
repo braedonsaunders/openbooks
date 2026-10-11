@@ -61,7 +61,7 @@ export function preparePdfChromeHtml(html: string): string {
  * enforce the same set and range, so a refusal here means a stored row went
  * stale — never a silent misprint.
  */
-export function assertPrintablePage(paperSize: unknown, marginMm: unknown): asserts paperSize is PdfPaperSize {
+export function assertPrintablePage(paperSize: unknown, marginMm: unknown, options: { allowZeroMargin?: boolean } = {}): asserts paperSize is PdfPaperSize {
   if (!PDF_PAPER_SIZES.includes(paperSize as never)) {
     throw new PdfTemplateValidationError(
       `Unknown paper size "${String(paperSize)}" — use one of ${PDF_PAPER_SIZES.join(', ')}.`,
@@ -72,7 +72,7 @@ export function assertPrintablePage(paperSize: unknown, marginMm: unknown): asse
       `Margin must be a number of millimetres from ${PDF_MARGIN_MM_MIN} to ${PDF_MARGIN_MM_MAX} — got ${String(marginMm)}.`,
     )
   }
-  if (marginMm < PDF_MARGIN_MM_MIN || marginMm > PDF_MARGIN_MM_MAX) {
+  if (!(options.allowZeroMargin && marginMm === 0) && (marginMm < PDF_MARGIN_MM_MIN || marginMm > PDF_MARGIN_MM_MAX)) {
     throw new PdfTemplateValidationError(
       `Margin ${String(marginMm)} mm is outside the printable ${PDF_MARGIN_MM_MIN}–${PDF_MARGIN_MM_MAX} mm range.`,
     )
@@ -92,7 +92,8 @@ export function htmlPdfPageDimensions(paperSize: PdfPaperSize, orientation: PdfO
 }
 
 export async function renderHtmlDocumentPdf(input: HtmlDocumentPdfInput): Promise<Buffer> {
-  assertPrintablePage(input.paperSize, input.marginMm)
+  // Physical stock carries its own content insets rather than page margins.
+  assertPrintablePage(input.paperSize, input.marginMm, { allowZeroMargin: input.marginMm === 0 })
   if (/data-cheque-stock\s*=/i.test(input.bodyHtml) && (input.paperSize !== 'letter' || input.orientation !== 'portrait' || input.marginMm !== 0 || input.headerHtml || input.footerHtml)) throw new PdfTemplateValidationError('Cheque stock presets require Letter portrait, zero page margins and no running header/footer. Use alignment controls to position the stock content.')
   const pageDimensions = htmlPdfPageDimensions(input.paperSize, input.orientation)
   // Explicit label dimensions already carry their orientation.

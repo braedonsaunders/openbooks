@@ -85,7 +85,7 @@ async function legacyPATCH(req: Request, { params }: Params, injectedGate?: Auth
   const paperSizeInput = body.paperSize ?? existing.paperSize;
   const marginMmInput = body.marginMm ?? existing.marginMm;
   try {
-    assertPrintablePage(paperSizeInput, marginMmInput);
+    assertPrintablePage(paperSizeInput, marginMmInput, { allowZeroMargin: existing.recordType === 'payroll_cheque' });
   } catch (e) {
     return apiErrorResponse(e, { safeStatus: 400 });
   }

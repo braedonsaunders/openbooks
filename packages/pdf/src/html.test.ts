@@ -14,6 +14,14 @@ test('an unknown paper size or out-of-range margin is refused by name', () => {
   assert.doesNotThrow(() => assertPrintablePage('legal', 30))
 })
 
+test('physical stock may use zero margins without admitting undersized ordinary margins', () => {
+  assert.doesNotThrow(() => assertPrintablePage('letter', 0, { allowZeroMargin: true }))
+  assert.throws(() => assertPrintablePage('letter', 0), /outside the printable/)
+  for (const margin of [-1, 1, 4, 31]) {
+    assert.throws(() => assertPrintablePage('letter', margin, { allowZeroMargin: true }), /outside the printable/)
+  }
+})
+
 test('allows the print document and inline visual resources only', () => {
   assert.equal(isAllowedPdfRequest('document', 'about:blank'), true)
   assert.equal(isAllowedPdfRequest('image', 'data:image/png;base64,AAAA'), true)

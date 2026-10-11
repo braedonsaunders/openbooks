@@ -1,4 +1,4 @@
-import { isUuid } from '@openbooks/engine/platform/uuid'
+import { isUuid } from '@openbooks/engine/platform/identifiers'
 
 export type ChequeStockPosition = 'top' | 'middle' | 'bottom'
 

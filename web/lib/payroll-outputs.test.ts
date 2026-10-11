@@ -143,6 +143,7 @@ const mockSources = new Map<string, string>([
     'mock:payroll-cheques',
     `
       const harness = globalThis[Symbol.for('openbooks.payroll-outputs-test')]
+      export async function lockIssuedChequePrint() { throw new Error('unexpected cheque print in delivery boundary test') }
       export async function issuePayRunCheques() {
         harness.state.chequeIssueCalls += 1
         return {

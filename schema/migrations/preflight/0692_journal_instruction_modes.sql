@@ -43,7 +43,8 @@ begin
       using errcode = '23514';
   end if;
   return null;
-end $expected$;
+end $expected$
+UNION ALL
 SELECT '0692.guard_definition' AS code,'refuse' AS severity,'public.journal_lines_check_fx_residual_entries' AS subject,
  'The native ledger guard differs from its published definition.' AS detail,
  'Preserve the function and obtain owner-approved reconciliation before retrying the native upgrade.' AS remedy
@@ -74,7 +75,8 @@ begin
       v_bad_entry, v_bad_org, v_bad_subsidiary, v_bad_deviation, v_bad_lines, v_bad_bound
       using errcode = '23514';
   end if;
-end $expected$;
+end $expected$
+UNION ALL
 SELECT '0692.fx_constraint_definition' AS code,'refuse' AS severity,'journal_lines.jl_fx_consistent' AS subject,
  'The native FX consistency constraint differs from its published definition.' AS detail,
  'Preserve the constraint and reconcile it with the published baseline before retrying.' AS remedy

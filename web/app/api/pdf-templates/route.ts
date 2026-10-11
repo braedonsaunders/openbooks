@@ -104,7 +104,7 @@ async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injec
   const paperSizeInput = body.paperSize ?? starter.paperSize ?? "letter";
   const marginMmInput = body.marginMm ?? starter.marginMm ?? 14;
   try {
-    assertPrintablePage(paperSizeInput, marginMmInput);
+    assertPrintablePage(paperSizeInput, marginMmInput, { allowZeroMargin: meta.key === 'payroll_cheque' });
   } catch (e) {
     return apiErrorResponse(e, { safeStatus: 400 });
   }

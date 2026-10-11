@@ -28,7 +28,8 @@ BEGIN
    RAISE EXCEPTION 'An entity preference cannot reinterpret posted activity. Start after the latest posting for this entity.' USING ERRCODE='23514'; END IF;
  END IF;
  RETURN NEW;
-END $expected$;
+END $expected$
+UNION ALL
 SELECT '0699.guard_definition' AS code,'refuse' AS severity,'public.segment_balancing_policy_guard' AS subject,
  'The financial guard differs from its published definition.' AS detail,
  'Preserve the existing guard and reconcile the native published source before retrying.' AS remedy
@@ -43,7 +44,8 @@ BEGIN
  IF EXISTS(SELECT 1 FROM journal_entries WHERE org_id=NEW.org_id AND status IN('posted','reversed') AND posting_date>=NEW.effective_from) THEN
   RAISE EXCEPTION 'Start the balancing policy after the latest posting date; posted entries retain their original balancing policy.' USING ERRCODE='23514'; END IF;
  RETURN NEW;
-END $expected$;
+END $expected$
+UNION ALL
 SELECT '0699.guard_definition' AS code,'refuse' AS severity,'public.gl_audit_number_policy_guard' AS subject,
  'The financial guard differs from its published definition.' AS detail,
  'Preserve the existing guard and reconcile the native published source before retrying.' AS remedy
@@ -54,7 +56,8 @@ BEGIN
    WHERE n.org_id=NEW.org_id AND n.subsidiary_id=NEW.subsidiary_id AND p.ends_on>=NEW.effective_from) THEN
   RAISE EXCEPTION 'Audit numbering policy changes start after the latest numbered period.' USING ERRCODE='23514'; END IF;
  RETURN NEW;
-END $expected$;
+END $expected$
+UNION ALL
 SELECT '0699.guard_definition' AS code,'refuse' AS severity,'public.gl_audit_number_assignment_guard' AS subject,
  'The financial guard differs from its published definition.' AS detail,
  'Preserve the existing guard and reconcile the native published source before retrying.' AS remedy
@@ -81,7 +84,8 @@ BEGIN
    AND subsidiary_id=NEW.subsidiary_id AND scope_key=NEW.scope_key) THEN
   RAISE EXCEPTION 'GL audit numbers are allocated without gaps in their native sequence.' USING ERRCODE='23514'; END IF;
  RETURN NEW;
-END $expected$;
+END $expected$
+UNION ALL
 SELECT '0699.guard_definition' AS code,'refuse' AS severity,'public.journal_instruction_line_guard' AS subject,
  'The financial guard differs from its published definition.' AS detail,
  'Preserve the existing guard and reconcile the native published source before retrying.' AS remedy
@@ -131,7 +135,8 @@ BEGIN
   END IF;
  END IF;
  RETURN NEW;
-END $expected$;
+END $expected$
+UNION ALL
 SELECT '0699.guard_definition' AS code,'refuse' AS severity,'public.rebate_agreement_guard' AS subject,
  'The financial guard differs from its published definition.' AS detail,
  'Preserve the existing guard and reconcile the native published source before retrying.' AS remedy
