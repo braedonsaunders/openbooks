@@ -10,6 +10,9 @@ interface CloseReopenRequestRow extends Record<string, unknown> {
   book_id: string;
   subsidiary_id: string | null;
   requested_by: string;
+  approved_by: string | null;
+  approved_at: Date | string | null;
+  expires_at: Date | string | null;
   modules: CloseModule[];
   reason: string;
 }
@@ -199,6 +202,153 @@ export async function reopenRequestConflicts(
   return reopenApprovalConflicts(db, orgId, scoped, actorId);
 }
 
+/** The governing lock for one module at a request's scope: exact row, else org-wide. */
+async function governingLockState(
+  tx: SqlExecutor,
+  args: { orgId: string; periodId: string; bookId: string; subsidiaryId: string | null; module: CloseModule },
+): Promise<string | null> {
+  const governing = (await tx.execute<{ state: string }>(sql`
+    select state from period_locks
+     where org_id = ${args.orgId} and period_id = ${args.periodId}
+       and book_id = ${args.bookId} and module = ${args.module}
+       and (subsidiary_id is not distinct from ${args.subsidiaryId}::uuid or subsidiary_id is null)
+     order by (subsidiary_id is not null) desc limit 1`));
+  return governing.rows[0]?.state ?? null;
+}
+
+/**
+ * End approved reopen windows whose every module is already re-closed.
+ * A Setup lock (or any close outside the re-close workflow) clears the
+ * window on the lock row but leaves the request approved and unexpired, so
+ * without this the overlap guard blocks new requests until expiry. Each
+ * consumed request is marked reclosed with a close event naming what ended
+ * it; requests still guarding open modules are left active.
+ */
+async function endFullyClosedReopenRequests(
+  tx: SqlExecutor,
+  args: {
+    orgId: string;
+    periodId: string;
+    bookId: string;
+    subsidiaryId: string | null;
+    actorId: string;
+    reason: string;
+    candidateIds?: string[];
+  },
+): Promise<string[]> {
+  const candidates = (await tx.execute<{ id: string; modules: CloseModule[]; subsidiary_id: string | null }>(sql`
+    select id, modules, subsidiary_id
+      from close_reopen_requests
+     where org_id = ${args.orgId}
+       and period_id = ${args.periodId}
+       and book_id = ${args.bookId}
+       and (subsidiary_id is null or ${args.subsidiaryId}::uuid is null
+         or subsidiary_id = ${args.subsidiaryId}::uuid)
+       and status = 'approved'
+       and expires_at > now()
+       ${args.candidateIds?.length ? sql`and id = any(${`{${args.candidateIds.join(",")}}`}::uuid[])` : sql``}
+     for update`));
+  const consumed: string[] = [];
+  for (const candidate of candidates.rows) {
+    const states = [];
+    for (const module of candidate.modules) {
+      states.push(await governingLockState(tx, {
+        orgId: args.orgId,
+        periodId: args.periodId,
+        bookId: args.bookId,
+        subsidiaryId: candidate.subsidiary_id,
+        module,
+      }));
+    }
+    if (states.length === 0 || states.some((state) => state !== "closed" && state !== "soft_closed")) {
+      continue;
+    }
+    await tx.execute(sql`
+      update close_reopen_requests
+         set status = 'reclosed', reclosed_at = now(), updated_at = now(), updated_by = ${args.actorId}
+       where id = ${candidate.id} and org_id = ${args.orgId} and status = 'approved'`);
+    await tx.execute(sql`
+      insert into close_events (org_id, event_type, actor_id, payload)
+      values (${args.orgId}, 'period.reopen_consumed_by_reclose', ${args.actorId},
+              ${JSON.stringify({
+                requestId: candidate.id,
+                periodId: args.periodId,
+                bookId: args.bookId,
+                subsidiaryId: candidate.subsidiary_id,
+                modules: candidate.modules,
+                reason: args.reason,
+              })}::jsonb)`);
+    consumed.push(candidate.id);
+  }
+  return consumed;
+}
+
+/**
+ * Name a blocking reopen request in operator terms — period, modules,
+ * approver and window — never a bare request id.
+ */
+async function describeActiveReopenOverlap(
+  tx: SqlExecutor,
+  orgId: string,
+  requestId: string,
+): Promise<string> {
+  const row = (await tx.execute<{
+    modules: CloseModule[];
+    approved_at: string | null;
+    expires_at: string | null;
+    period_name: string | null;
+    approver_name: string | null;
+  }>(sql`
+    select r.modules, r.approved_at::text as approved_at, r.expires_at::text as expires_at,
+           p.name as period_name, u.name as approver_name
+      from close_reopen_requests r
+      left join accounting_periods p on p.id = r.period_id and p.org_id = r.org_id
+      left join users u on u.id = r.approved_by and u.org_id = r.org_id
+     where r.id = ${requestId} and r.org_id = ${orgId}
+  `)).rows[0];
+  const stamp = (value: string | null) =>
+    value == null ? "(time unknown)" : value.slice(0, 16).replace("T", " ");
+  const what = row
+    ? `${row.period_name ?? "the period"} ${row.modules.map((module) => module.toUpperCase()).join(", ")} reopen`
+    : "another reopen";
+  const by = row?.approver_name ? ` by ${row.approver_name}` : "";
+  return (
+    `reopen request overlaps an active reopen: ${what} approved ${stamp(row?.approved_at ?? null)}${by}, ` +
+    `active until ${stamp(row?.expires_at ?? null)}; ` +
+    `extend that request or widen its modules instead of opening an overlapping one`
+  );
+}
+
+/**
+ * Consume reopen windows ended by re-closing modules outside the re-close
+ * workflow (Setup locks, period closes). Call after the locks commit: every
+ * approved, unexpired request on the scope whose modules are all re-closed
+ * is marked reclosed, audited, and stops counting for overlap. Requests
+ * still guarding open modules stay active.
+ */
+export async function consumeReopenRequestsForClosedModules(args: {
+  orgId: string;
+  periodId: string;
+  bookId: string;
+  subsidiaryId?: string;
+  actorId: string;
+  reason: string;
+}): Promise<{ consumed: string[] }> {
+  let consumed: string[] = [];
+  await db.transaction(async (tx) => {
+    await periodScopeAdvisoryLock(tx, args.orgId, args.periodId, args.bookId);
+    consumed = await endFullyClosedReopenRequests(tx, {
+      orgId: args.orgId,
+      periodId: args.periodId,
+      bookId: args.bookId,
+      subsidiaryId: args.subsidiaryId ?? null,
+      actorId: args.actorId,
+      reason: args.reason,
+    });
+  });
+  return { consumed };
+}
+
 export async function decidePeriodReopen(args: {
   orgId: string;
   requestId: string;
@@ -300,13 +450,25 @@ export async function decidePeriodReopen(args: {
          and status = 'approved'
          and expires_at > now()
        for update`));
-    const overlap = activeRequests.rows.find((request) =>
+    // A request whose modules were all re-closed outside the re-close
+    // workflow (a Setup lock, never consumed) no longer guards live work:
+    // end it here, audited, so it cannot block this decision.
+    const consumed = await endFullyClosedReopenRequests(tx, {
+      orgId: args.orgId,
+      periodId: row.period_id,
+      bookId: row.book_id,
+      subsidiaryId: row.subsidiary_id,
+      actorId: args.actorId,
+      reason: "superseded by a newer reopen decision",
+      candidateIds: activeRequests.rows.map((request) => request.id),
+    });
+    const consumedIds = new Set(consumed);
+    const live = activeRequests.rows.filter((request) => !consumedIds.has(request.id));
+    const overlap = live.find((request) =>
       request.modules.some((module) => modules.includes(module)),
     );
     if (overlap) {
-      throw new CloseError(
-        `reopen request overlaps active request ${overlap.id}`,
-      );
+      throw new CloseError(await describeActiveReopenOverlap(tx, args.orgId, overlap.id));
     }
     if (modules.some((module) => module !== "gl") && !modules.includes("gl")) {
       const gl = (await tx.execute<{ state: string; reopen_expires_at: Date | null }>(sql`
@@ -624,6 +786,12 @@ export async function recloseApprovedReopen(args: {
        for update`));
     const row = request.rows[0];
     if (!row) throw new CloseError("approved reopen request not found");
+    // Ending a window early is the requester's or the approver's call —
+    // never a third party's. The automatic expiry tick carries no actor and
+    // keeps its own path.
+    if (args.actorId !== row.requested_by && args.actorId !== row.approved_by) {
+      throw new CloseError("only the requester or the approver can end this reopen window");
+    }
     await recloseApprovedReopenRow({
       tx,
       row,
@@ -631,6 +799,181 @@ export async function recloseApprovedReopen(args: {
       reason,
       automatic: false,
     });
+  });
+}
+
+/**
+ * Extend an active reopen window, widen it to more modules, or both — the
+ * alternative the overlap refusal offers instead of an overlapping request.
+ * Extending prolongs an independent approval, so the requester cannot extend
+ * their own window; ending early stays the requester's or approver's call
+ * (see recloseApprovedReopen). Added modules must currently need a window
+ * (closed locks), and inherit the window's expiry.
+ */
+export async function extendReopenRequest(args: {
+  orgId: string;
+  requestId: string;
+  actorId: string;
+  reason: string;
+  additionalHours?: number;
+  addModules?: CloseModule[];
+}): Promise<{ expiresAt: string; modules: CloseModule[] }> {
+  const reason = args.reason.trim();
+  if (reason.length < 10 || reason.length > 500) {
+    throw new CloseError("a 10-500 character extension reason is required");
+  }
+  const addModules = [...new Set(args.addModules ?? [])];
+  if (addModules.some((module) => !CLOSE_MODULES.includes(module))) {
+    throw new CloseError("extension contains an invalid module");
+  }
+  const additionalHours = args.additionalHours ?? null;
+  if (additionalHours !== null && (!Number.isInteger(additionalHours) || additionalHours < 1 || additionalHours > 168)) {
+    throw new CloseError("additional hours must be between 1 and 168");
+  }
+  if (additionalHours === null && addModules.length === 0) {
+    throw new CloseError("an extension must add time, modules, or both");
+  }
+  return db.transaction(async (tx) => {
+    const request = (await tx.execute<CloseReopenRequestRow>(sql`
+      select *
+        from close_reopen_requests
+       where id = ${args.requestId}
+         and org_id = ${args.orgId}
+         and status = 'approved'
+         and expires_at > now()
+       for update`));
+    const row = request.rows[0];
+    if (!row) throw new CloseError("only an active approved reopen window can be extended");
+    if (args.actorId === row.requested_by) {
+      throw new CloseError("extending a reopen window requires an independent approver, not the requester");
+    }
+    await tx.execute(sql`
+      select pg_advisory_xact_lock(
+        hashtextextended(
+          ${`close-reopen:${args.orgId}:${row.period_id}:${row.book_id}:${row.subsidiary_id ?? "all"}`},
+          0
+        )
+      )
+    `);
+    const policy = (await tx.execute<{ rules: { defaultHours?: number; maxHours?: number } }>(sql`select rules from close_policies
+      where org_id = ${args.orgId} and code = 'controlled-reopen' and is_active limit 1`));
+    const maxHours = Math.max(
+      1,
+      Number(policy.rows[0]?.rules?.maxHours ?? 168),
+    );
+    const approvedAt = row.approved_at == null ? null : new Date(row.approved_at);
+    const cap = approvedAt == null
+      ? new Date(Date.now() + maxHours * 60 * 60 * 1000)
+      : new Date(approvedAt.getTime() + maxHours * 60 * 60 * 1000);
+    let expiresAt = new Date(row.expires_at!);
+    if (additionalHours !== null) {
+      const wanted = new Date(Math.max(expiresAt.getTime(), Date.now() + additionalHours * 60 * 60 * 1000));
+      expiresAt = wanted > cap ? cap : wanted;
+    }
+    const modules = [...row.modules];
+    const added: CloseModule[] = [];
+    for (const module of addModules) {
+      if (modules.includes(module)) continue;
+      const state = await governingLockState(tx, {
+        orgId: args.orgId,
+        periodId: row.period_id,
+        bookId: row.book_id,
+        subsidiaryId: row.subsidiary_id,
+        module,
+      });
+      // Only a module that currently needs a window can join one; anything
+      // else has nothing to reopen and its window would be pure time bomb.
+      if (!periodLockRequiresApprovedReopen(state == null ? null : { state, reopenExpiresAt: null, reason: null })) {
+        throw new CloseError(
+          `cannot widen to ${module}: no closed lock in the requested scope — nothing to reopen`,
+        );
+      }
+      modules.push(module);
+      added.push(module);
+    }
+    const union = [...new Set(modules)];
+    if (union.some((module) => module !== "gl") && !union.includes("gl")) {
+      const glState = await governingLockState(tx, {
+        orgId: args.orgId,
+        periodId: row.period_id,
+        bookId: row.book_id,
+        subsidiaryId: row.subsidiary_id,
+        module: "gl",
+      });
+      if (periodLockRequiresApprovedReopen(glState == null ? null : { state: glState, reopenExpiresAt: null, reason: null })) {
+        throw new CloseError("GL must be included before a closed subledger can be reopened; widen to GL as well");
+      }
+    }
+    for (const module of added) {
+      await upsertLock({
+        tx,
+        orgId: args.orgId,
+        periodId: row.period_id,
+        bookId: row.book_id,
+        subsidiaryId: row.subsidiary_id ?? undefined,
+        module,
+        state: "open",
+        actorId: args.actorId,
+        reason: row.reason,
+        reopenExpiresAt: expiresAt,
+      });
+    }
+    if (row.subsidiary_id == null) {
+      for (const module of added) {
+        const children = (await tx.execute<{ subsidiary_id: string }>(sql`
+          select subsidiary_id from period_locks
+           where org_id = ${args.orgId} and period_id = ${row.period_id}
+             and book_id = ${row.book_id} and module = ${module}
+             and subsidiary_id is not null
+             and (state = 'closed'
+               or state = 'soft_closed'
+               or (state = 'open' and reopen_expires_at is not null and reopen_expires_at <= now()))
+           for update`));
+        for (const child of children.rows) {
+          await upsertLock({
+            tx,
+            orgId: args.orgId,
+            periodId: row.period_id,
+            bookId: row.book_id,
+            subsidiaryId: child.subsidiary_id,
+            module,
+            state: "open",
+            actorId: args.actorId,
+            reason: row.reason,
+            reopenExpiresAt: expiresAt,
+          });
+        }
+      }
+    }
+    const previousExpiresAt = new Date(row.expires_at!);
+    await tx.execute(sql`
+      update close_reopen_requests
+         set modules = ${JSON.stringify(union)}::jsonb,
+             expires_at = ${expiresAt.toISOString()},
+             updated_at = now(), updated_by = ${args.actorId}
+       where id = ${row.id} and org_id = ${args.orgId} and status = 'approved'`);
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${args.orgId}, 'close_reopen_requests', ${row.id}, 'extend',
+              ${JSON.stringify({
+                before: { expiresAt: previousExpiresAt.toISOString(), modules: row.modules },
+                after: { expiresAt: expiresAt.toISOString(), modules: union },
+                reason,
+              })}::jsonb, ${args.actorId})`);
+    await tx.execute(sql`
+      insert into close_events (org_id, event_type, actor_id, payload)
+      values (${args.orgId}, 'period.reopen_extended', ${args.actorId},
+              ${JSON.stringify({
+                requestId: row.id,
+                periodId: row.period_id,
+                bookId: row.book_id,
+                subsidiaryId: row.subsidiary_id,
+                previousExpiresAt: previousExpiresAt.toISOString(),
+                expiresAt: expiresAt.toISOString(),
+                addedModules: added,
+                reason,
+              })}::jsonb)`);
+    return { expiresAt: expiresAt.toISOString(), modules: union };
   });
 }
 
