@@ -5,7 +5,7 @@
  */
 define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N/task'],
   (file, format, query, record, runtime, search, task) => {
-    const BRIDGE_VERSION = '1.5.1';
+    const BRIDGE_VERSION = '1.6.0';
     const SCHEMA_VERSION = 1;
     const MARKER_PATH = 'SuiteScripts/OpenBooks/Jobs/bridge-marker.json';
     const EXPORT_SCRIPT_ID = 'customscript_openbooks_export_mr';
@@ -169,6 +169,17 @@ define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N
       return { schemaVersion: SCHEMA_VERSION, rows };
     };
 
+    // Record types whose Files subtab the inventory reads, and their searches.
+    const ATTACHMENT_RECORD_TYPES = {
+      transaction: 'TRANSACTION',
+      vendorBill: 'VENDOR_BILL',
+      expenseReport: 'EXPENSE_REPORT',
+      customer: 'CUSTOMER',
+      vendor: 'VENDOR',
+      employee: 'EMPLOYEE',
+      project: 'JOB',
+    };
+
     const attachmentInventory = (input) => {
       assert(Array.isArray(input.records) && input.records.length > 0, 'records are required');
       assert(input.records.length <= MAX_ATTACHMENT_RECORDS,
@@ -176,8 +187,8 @@ define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N
 
       const requested = input.records.map((item) => {
         const recordType = text(item && item.recordType);
-        assert(['transaction', 'vendorBill', 'expenseReport'].includes(recordType),
-          'attachment recordType must be transaction, vendorBill or expenseReport');
+        assert(Object.prototype.hasOwnProperty.call(ATTACHMENT_RECORD_TYPES, recordType),
+          `attachment recordType must be one of ${Object.keys(ATTACHMENT_RECORD_TYPES).join(', ')}`);
         const internalId = text(item && item.internalId);
         assert(/^\d+$/.test(internalId), 'attachment internalId must be numeric');
         return { recordType, internalId };
@@ -191,14 +202,13 @@ define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N
         records[txId].push(id);
       };
 
-      ['transaction', 'vendorBill', 'expenseReport'].forEach((recordType) => {
+      Object.keys(ATTACHMENT_RECORD_TYPES).forEach((recordType) => {
         const ids = requested.filter((item) => item.recordType === recordType).map((item) => item.internalId);
         if (!ids.length) return;
         const transactionId = search.createColumn({ name: 'internalid', summary: search.Summary.GROUP, sort: search.Sort.ASC });
         const fileId = search.createColumn({ name: 'internalid', join: 'file', summary: search.Summary.GROUP, sort: search.Sort.ASC });
         const attachments = search.create({
-          type: recordType === 'transaction' ? search.Type.TRANSACTION
-            : recordType === 'vendorBill' ? search.Type.VENDOR_BILL : search.Type.EXPENSE_REPORT,
+          type: search.Type[ATTACHMENT_RECORD_TYPES[recordType]],
           filters: [['internalid', 'anyof', ids]],
           columns: [transactionId, fileId],
         }).runPaged({ pageSize: 1000 });
@@ -236,17 +246,20 @@ define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N
       return { ok: true, schemaVersion: SCHEMA_VERSION, records };
     };
 
-    // Transactions whose attached files were added or modified on or after a
-    // date. Attaching a file does not change the transaction itself, so an
-    // incremental sync needs this to see files added to older transactions.
+    // Records (transactions by default) whose attached files were added or
+    // modified on or after a date. Attaching a file does not change the record
+    // itself, so an incremental sync needs this to see files added to old records.
     const attachmentChanges = (input) => {
       const since = text(input.since);
       assert(/^\d{4}-\d{2}-\d{2}$/.test(since), 'since must be a calendar date (YYYY-MM-DD)');
+      const recordType = text(input.recordType || 'transaction');
+      assert(Object.prototype.hasOwnProperty.call(ATTACHMENT_RECORD_TYPES, recordType),
+        `attachment recordType must be one of ${Object.keys(ATTACHMENT_RECORD_TYPES).join(', ')}`);
       const parts = since.split('-').map(Number);
       const onOrAfter = format.format({ value: new Date(parts[0], parts[1] - 1, parts[2]), type: format.Type.DATE });
       const transactionId = search.createColumn({ name: 'internalid', summary: search.Summary.GROUP, sort: search.Sort.ASC });
       const changed = search.create({
-        type: search.Type.TRANSACTION,
+        type: search.Type[ATTACHMENT_RECORD_TYPES[recordType]],
         filters: [['file.modified', 'onorafter', onOrAfter]],
         columns: [transactionId],
       }).runPaged({ pageSize: 1000 });
@@ -258,7 +271,7 @@ define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N
           if (/^\d+$/.test(id)) transactions.push(id);
         });
       });
-      return { ok: true, schemaVersion: SCHEMA_VERSION, since, transactions };
+      return { ok: true, schemaVersion: SCHEMA_VERSION, since, recordType, transactions };
     };
 
     const attachmentContent = (input) => {

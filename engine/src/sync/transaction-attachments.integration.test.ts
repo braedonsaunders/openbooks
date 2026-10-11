@@ -67,13 +67,13 @@ test('transaction files backfill old records, reconcile links without downloadin
       await assert.rejects(linkExistingTransactionFiles(org.orgId, 'qbo', actorId, [{ sourceId: id, documentId: foreignId }]), /unavailable in this organization/);
       await assert.rejects(syncTransactionAttachments(provider, { ...options, actorId: randomUUID() }), /active user/);
       const source = { id: `${connectionId}:concurrent`, name: 'receipt.pdf' };
-      const input = { orgId: org.orgId, sourceSystem: 'qbo', actorId, source, targetDocumentIds: [secondId], bytes, contentType: 'application/pdf', sourceModifiedAt: modifiedAt };
+      const input = { orgId: org.orgId, sourceSystem: 'qbo', actorId, source, targetIds: [secondId], bytes, contentType: 'application/pdf', sourceModifiedAt: modifiedAt };
       const simultaneous = await Promise.all([persistTransactionFile(input), persistTransactionFile(input)]);
       assert.equal(simultaneous.filter((result) => result.created).length, 1);
       assert.equal(simultaneous.filter((result) => result.unchanged).length, 1);
       const older = await persistTransactionFile({ ...input, bytes: Buffer.from('older snapshot'), sourceModifiedAt: new Date('2026-10-01T00:00:00Z') });
       assert.equal(older.stale, true); assert.equal(older.versioned, false);
-      await assert.rejects(persistTransactionFile({ ...input, source: { id: 'foreign-target', name: 'bill.pdf' }, targetDocumentIds: [foreignId] }), /not a transaction in this organization/);
+      await assert.rejects(persistTransactionFile({ ...input, source: { id: 'foreign-target', name: 'bill.pdf' }, targetIds: [foreignId] }), /not a transaction in this organization/);
       Object.assign(globalThis, { __transactionFilePutFailure: true });
       try { await assert.rejects(persistTransactionFile({ ...input, source: { id: 'failed-write', name: 'bill.pdf' } }), /Object write response failed/); }
       finally { Object.assign(globalThis, { __transactionFilePutFailure: false }); }

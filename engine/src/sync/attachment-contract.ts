@@ -12,6 +12,10 @@ export interface ImportSummary {
   requestedSourceFileIds: string[];
   sourceDocuments: number;
   sourceDocumentsWithoutId: number;
+  /** Customers, vendors and employees whose Files subtabs were inventoried. */
+  sourceParties?: number;
+  /** Inventoried files the source reports no last-modified marker for. */
+  filesWithoutSourceMarker?: number;
   sourceFiles: number;
   sourceLinks: number;
   createdFiles: number;

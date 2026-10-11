@@ -131,4 +131,7 @@ test("attachment mirrors download new, changed and legacy files but skip verifie
   assert.equal(attachmentNeedsDownload({ sourceModifiedMs, storedModifiedMs: sourceModifiedMs - 1000, currentVersionReady: true }), true);
   assert.equal(attachmentNeedsDownload({ sourceModifiedMs, storedModifiedMs: sourceModifiedMs, currentVersionReady: true }), false);
   assert.equal(attachmentNeedsDownload({ sourceModifiedMs, storedModifiedMs: sourceModifiedMs, currentVersionReady: false }), true);
+  // No source marker: import once, then keep the held version.
+  assert.equal(attachmentNeedsDownload({ sourceModifiedMs: null, storedModifiedMs: null, currentVersionReady: false }), true);
+  assert.equal(attachmentNeedsDownload({ sourceModifiedMs: null, storedModifiedMs: sourceModifiedMs, currentVersionReady: true }), false);
 });

@@ -5,6 +5,7 @@ import { db } from "../platform/db.ts";
 import { deriveFileType } from "../platform/file-names.ts";
 import { fileCabinetObjectKey, getS3Blob, putS3Blob, refuseMaskedStorageKind } from "../platform/file-storage.ts";
 import { enqueueStorageCleanupStandalone } from "../platform/storage-cleanup.ts";
+import { ensureRecordFolder } from "../platform/record-folders.ts";
 
 export interface SourceFile { id: string; name: string }
 
@@ -44,82 +45,24 @@ export function normalizeAttachmentBytes(bytes: Buffer): Buffer {
   return bytes.subarray(pdfHeader);
 }
 
-/** Title-case a snake_case kind ("vendor_bill" -> "Vendor Bill"). Must match
- *  web/lib/file-cabinet.ts titleizeKind and the SQL backfill so the sync and the
- *  cabinet UI resolve attachments to the same kind group folder. */
-function titleizeKind(s: string): string {
-  return s
-    .split("_")
-    .filter(Boolean)
-    .map((w) => w[0]!.toUpperCase() + w.slice(1))
-    .join(" ");
-}
-
-async function ensureRecordFolder(
-  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
-  orgId: string,
-  documentId: string,
-): Promise<string> {
-  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`attachments:${orgId}:${documentId}`}))`);
-  const existing = (await tx.execute<{ id: string }>(sql`
-    select id from folders where org_id = ${orgId} and record_table = 'documents' and record_id = ${documentId}
-      and record_id is not null
-  `));
-  if (existing.rows[0]) return existing.rows[0].id;
-
-  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`attachments-root:${orgId}`}))`);
-  let root = (await tx.execute<{ id: string }>(sql`
-    select id from folders where org_id = ${orgId} and system_kind = 'attachments' limit 1
-  `));
-  if (!root.rows[0]) {
-    root = (await tx.execute<{ id: string }>(sql`
-      insert into folders (org_id, name, is_system, system_kind, created_at, updated_at)
-      values (${orgId}, 'Attachments', true, 'attachments', now(), now()) returning id
-    `));
-  }
-  if (root.rows.length !== 1) throw new Error("File Cabinet attachment folder was not recorded");
-  const rootId = root.rows[0]!.id;
-
-  // Nest the per-record leaf under a kind group folder so the cabinet never
-  // enumerates tens of thousands of flat attachment folders.
-  const kindRow = (await tx.execute<{ kind: string | null }>(sql`
-    select kind from documents where id = ${documentId} and org_id = ${orgId}
-  `));
-  const label = kindRow.rows[0]?.kind ? titleizeKind(kindRow.rows[0].kind) : "Documents";
-  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`attach-group:${orgId}:${label}`}))`);
-  let group = (await tx.execute<{ id: string }>(sql`
-    select id from folders
-     where org_id = ${orgId} and parent_folder_id = ${rootId} and record_id is null and name = ${label}
-  `));
-  if (!group.rows[0]) {
-    group = (await tx.execute<{ id: string }>(sql`
-      insert into folders (org_id, parent_folder_id, name, is_system, record_table, created_at, updated_at)
-      values (${orgId}, ${rootId}, ${label}, true, 'documents', now(), now()) returning id
-    `));
-  }
-
-  if (group.rows.length !== 1) throw new Error("File Cabinet transaction folder was not recorded");
-  const inserted = (await tx.execute<{ id: string }>(sql`
-    insert into folders (org_id, parent_folder_id, name, is_system, record_table, record_id, created_at, updated_at)
-    values (${orgId}, ${group.rows[0]!.id}, ${`documents / ${documentId.slice(0, 8)}`}, true, 'documents', ${documentId}, now(), now())
-    returning id
-  `));
-  if (inserted.rows.length !== 1) throw new Error("File Cabinet record folder was not recorded");
-  return inserted.rows[0]!.id;
-}
+/** Native records a source system's files can attach to. */
+export type SourceFileTarget = "documents" | "parties";
 
 export async function persistTransactionFile(input: {
   orgId: string;
   sourceSystem: string;
   actorId: string | null;
   source: SourceFile;
-  targetDocumentIds: string[];
+  /** Native table the file attaches to; transactions unless stated. */
+  targetTable?: SourceFileTarget;
+  targetIds: string[];
   bytes: Buffer;
   contentType: string;
   sourceModifiedAt: Date | null;
 }): Promise<{ fileId: string; created: boolean; versioned: boolean; unchanged: boolean; stale: boolean; createdLinks: number }> {
   const hash = createHash("sha256").update(input.bytes).digest("hex");
   const filename = safeFilename(input.source.name, input.source.id);
+  const targetTable = input.targetTable ?? "documents";
   const sourceModifiedAtIso = input.sourceModifiedAt?.toISOString() ?? null;
   // The S3 object staged inside the row transaction cannot
   // roll back with it. Track the staged key so a later failure records a
@@ -127,11 +70,11 @@ export async function persistTransactionFile(input: {
   let stagedVersionId: string | null = null;
   let stagedFileId: string | null = null;
   return db.transaction(async (tx) => {
-    if (!input.targetDocumentIds.length) throw new Error("Source file requires content and at least one native transaction");
+    if (!input.targetIds.length) throw new Error("Source file requires content and at least one native record");
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`source-file:${input.orgId}:${input.sourceSystem}:${input.source.id}`}))`);
-    for (const targetId of input.targetDocumentIds) {
-      const target = (await tx.execute<{ id: string }>(sql`select id from documents where org_id=${input.orgId} and id=${targetId} for key share`)).rows[0];
-      if (!target) throw new Error("Source attachment target is not a transaction in this organization");
+    for (const targetId of input.targetIds) {
+      const target = (await tx.execute<{ id: string }>(sql`select id from ${sql.identifier(targetTable)} where org_id=${input.orgId} and id=${targetId} for key share`)).rows[0];
+      if (!target) throw new Error(`Source attachment target is not a ${targetTable === "documents" ? "transaction" : "party"} in this organization`);
     }
     const existing = (await tx.execute<{
       id: string;
@@ -171,7 +114,7 @@ export async function persistTransactionFile(input: {
       && incomingModifiedAt < storedModifiedAt;
     if (!fileId) {
       fileId = randomUUID();
-      const folderId = await ensureRecordFolder(tx, input.orgId, input.targetDocumentIds[0]!);
+      const folderId = await ensureRecordFolder(input.orgId, targetTable, input.targetIds[0]!, tx);
       const inserted = await tx.execute<{ id: string }>(sql`
         insert into files (id, org_id, folder_id, name, extension, file_type, content_type,
                            size_bytes, storage_kind, source_system, source_id, source_modified_at, content_hash,
@@ -223,11 +166,11 @@ export async function persistTransactionFile(input: {
     }
 
     let createdLinks = 0;
-    for (const documentId of input.targetDocumentIds) {
+    for (const targetId of input.targetIds) {
       const linked = (await tx.execute<{ id: string }>(sql`
         insert into file_attachments (org_id, file_id, target_table, target_id, created_by, created_at)
-        values (${input.orgId}, ${fileId}, 'documents', ${documentId}, ${input.actorId}, now())
-        -- An existing attachment already links this file to this document; count only new associations.
+        values (${input.orgId}, ${fileId}, ${targetTable}, ${targetId}, ${input.actorId}, now())
+        -- An existing attachment already links this file to this record; count only new associations.
         on conflict (org_id, file_id, target_table, target_id) do nothing
         returning id
       `));
@@ -238,8 +181,8 @@ export async function persistTransactionFile(input: {
         values (${input.orgId}, 'files', ${fileId}, ${created ? 'insert' : 'update'}, ${JSON.stringify({
           event: 'transaction_file_synced', sourceSystem: input.sourceSystem, sourceId: input.source.id,
           before: existing.rows[0] ? { contentHash: existing.rows[0].contentHash, name: existing.rows[0].name } : null,
-          after: { name: stale ? existing.rows[0]?.name : filename, contentHash: stale ? existing.rows[0]?.contentHash : hash, targetDocumentIds: input.targetDocumentIds },
-          createdLinks, versioned, reason: 'Synchronize source transaction evidence',
+          after: { name: stale ? existing.rows[0]?.name : filename, contentHash: stale ? existing.rows[0]?.contentHash : hash, targetTable, targetIds: input.targetIds },
+          createdLinks, versioned, reason: targetTable === 'documents' ? 'Synchronize source transaction evidence' : 'Synchronize source record files',
         })}::jsonb, ${input.actorId}) returning id`);
       if (audited.rows.length !== 1) throw new Error("Source file change was not audited; retry the sync");
     }
@@ -262,6 +205,7 @@ export async function verifyTransactionFiles(
   sourceSystem: string,
   fileToDocuments: Map<string, Set<string>>,
   verifyStoredBytes: boolean,
+  targetTable: SourceFileTarget = "documents",
 ): Promise<void> {
   const sourceFileIds = Array.from(fileToDocuments.keys());
   if (sourceFileIds.length === 0) return;
@@ -318,7 +262,7 @@ export async function verifyTransactionFiles(
     select f.source_id as "sourceId", fa.target_id as "targetId"
       from files f
       join file_attachments fa
-        on fa.org_id = f.org_id and fa.file_id = f.id and fa.target_table = 'documents'
+        on fa.org_id = f.org_id and fa.file_id = f.id and fa.target_table = ${targetTable}
      where f.org_id = ${orgId} and f.source_system = ${sourceSystem}
        and f.source_id in (${sourceIdsSql})
   `));
@@ -329,7 +273,7 @@ export async function verifyTransactionFiles(
     for (const documentId of documentIds) {
       if (!actualLinks.has(`${sourceFileId}\0${documentId}`)) {
         throw new Error(
-          `verification failed: source file ${sourceFileId} is not linked to document ${documentId}`,
+          `verification failed: source file ${sourceFileId} is not linked to ${targetTable} record ${documentId}`,
         );
       }
     }

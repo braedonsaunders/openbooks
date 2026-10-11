@@ -4,11 +4,12 @@ import { randomUUID } from "node:crypto";
 export const NETSUITE_BRIDGE_SCHEMA_VERSION = 1;
 /**
  * Oldest installed bridge that implements every action this engine calls:
- * isolated export tasks (full pulls), all-transaction attachment inventory that
- * tolerates source-deleted reports, and attachment change detection. Keep in step with BRIDGE_VERSION in
+ * isolated export tasks (full pulls), transaction and customer/vendor/employee
+ * attachment inventory that tolerates source-deleted reports, and attachment
+ * change detection. Keep in step with BRIDGE_VERSION in
  * integrations/netsuite-bridge.
  */
-export const NETSUITE_BRIDGE_MIN_VERSION = "1.5.1";
+export const NETSUITE_BRIDGE_MIN_VERSION = "1.6.0";
 export const DEFAULT_NETSUITE_BRIDGE_SCRIPT_ID = "customscript_openbooks_bridge_rl";
 export const DEFAULT_NETSUITE_BRIDGE_DEPLOYMENT_ID = "customdeploy_openbooks_bridge_rl";
 

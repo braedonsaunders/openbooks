@@ -19,7 +19,7 @@ const creds: NetSuiteCreds = {
   tokenSecret: "secret",
 };
 
-const compatibleHealth = (version = "1.5.1") => ({
+const compatibleHealth = (version = "1.6.0") => ({
   ok: true, schemaVersion: 1, bridgeVersion: version, accountId: "TEST", environment: "SANDBOX",
   role: { id: "3", name: "Administrator" }, serverTime: "2026-10-10 12:00:00", features: {}, remainingUsage: 5000,
 });
@@ -524,7 +524,7 @@ test("attachment change detection lists transactions whose files changed on or a
     define: (_dependencies: string[], factory: (...modules: unknown[]) => typeof restlet) => { restlet = factory({}, format, {}, {}, {}, search, {}); },
   });
   assert.deepEqual(JSON.parse(JSON.stringify(restlet!.post({ action: "attachmentChanges", since: "2026-10-09" }))), {
-    ok: true, schemaVersion: 1, since: "2026-10-09", transactions: ["7", "9"],
+    ok: true, schemaVersion: 1, since: "2026-10-09", recordType: "transaction", transactions: ["7", "9"],
   });
   assert.deepEqual(JSON.parse(JSON.stringify(filters)), [["file.modified", "onorafter", "10/9/2026"]]);
   assert.equal((restlet!.post({ action: "attachmentChanges", since: "yesterday" }) as { ok: boolean }).ok, false);
@@ -538,7 +538,7 @@ test("an outdated installed bridge refuses before any export starts, naming its 
   });
   await assert.rejects(
     () => client.bulkQuery([{ id: "a", sql: "SELECT 1 AS id FROM DUAL" }]),
-    /version 1\.3\.0; this release requires 1\.5\.1 or later\. Deploy the SuiteCloud project in integrations\/netsuite-bridge/,
+    /version 1\.3\.0; this release requires 1\.6\.0 or later\. Deploy the SuiteCloud project in integrations\/netsuite-bridge/,
   );
   assert.deepEqual(actions, ["health"]);
 });

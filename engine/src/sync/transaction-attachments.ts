@@ -3,7 +3,7 @@ import { db } from '../platform/db.ts';
 import { s3Enabled } from '../platform/file-storage.ts';
 import { isUuid } from '../platform/uuid.ts';
 import { AttachmentImportError, type ImportSummary } from './attachment-contract.ts';
-import { detectContentType, persistTransactionFile, verifyTransactionFiles } from './transaction-file-storage.ts';
+import { detectContentType, persistTransactionFile, verifyTransactionFiles, type SourceFileTarget } from './transaction-file-storage.ts';
 
 export interface AttachmentTransaction { id: string; sourceRef: string; kind: string }
 export interface TransactionAttachment {
@@ -22,29 +22,29 @@ export interface TransactionAttachmentProvider {
 export interface AttachmentSyncOptions { orgId: string; connectionId: string; actorId: string | null }
 
 /** Reconcile new relationships even when unchanged bytes need no download. */
-export async function linkExistingTransactionFiles(orgId: string, sourceSystem: string, actorId: string | null, links: { sourceId: string; documentId: string }[]): Promise<number> {
+export async function linkExistingTransactionFiles(orgId: string, sourceSystem: string, actorId: string | null, links: { sourceId: string; documentId: string }[], targetTable: SourceFileTarget = 'documents'): Promise<number> {
   if (!links.length) return 0;
   const unique = [...new Map(links.map((link) => [`${link.sourceId}:${link.documentId}`, link])).values()];
   const values = sql.join(unique.map((link) => sql`(${link.sourceId}, ${link.documentId}::uuid)`), sql`, `);
   return db.transaction(async (tx) => {
     const targets = await tx.execute(sql`select f.id, d.id as document_id from (values ${values}) v(sid, did)
       join files f on f.org_id=${orgId} and f.source_system=${sourceSystem} and f.source_id=v.sid
-      join documents d on d.org_id=f.org_id and d.id=v.did for key share of f, d`);
-    if (targets.rows.length !== unique.length) throw new Error("Source file or transaction is unavailable in this organization; retry after resolving its identity");
+      join ${sql.identifier(targetTable)} d on d.org_id=f.org_id and d.id=v.did for key share of f, d`);
+    if (targets.rows.length !== unique.length) throw new Error("Source file or its native record is unavailable in this organization; retry after resolving its identity");
     const result = await tx.execute<{ count: number; auditedCount: number }>(sql`
       with linked as (
         insert into file_attachments (org_id, file_id, target_table, target_id, created_by, created_at)
-        select ${orgId}, f.id, 'documents', d.id, ${actorId}, now()
+        select ${orgId}, f.id, ${targetTable}, d.id, ${actorId}, now()
           from (values ${values}) v(sid, did)
           join files f on f.org_id=${orgId} and f.source_system=${sourceSystem} and f.source_id=v.sid
-          join documents d on d.org_id=f.org_id and d.id=v.did
+          join ${sql.identifier(targetTable)} d on d.org_id=f.org_id and d.id=v.did
         -- Repeated source relationships intentionally retain the existing link.
         on conflict (org_id, file_id, target_table, target_id) do nothing
         returning id, file_id, target_id
       ), audited as (
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         select ${orgId}, 'file_attachments', id, 'insert', jsonb_build_object(
-          'event','source_file_linked','before',null,'after',jsonb_build_object('fileId',file_id,'targetTable','documents','targetId',target_id),
+          'event','source_file_linked','before',null,'after',jsonb_build_object('fileId',file_id,'targetTable',${targetTable}::text,'targetId',target_id),
           'reason','Synchronize source transaction evidence'), ${actorId} from linked
         returning id
       ) select (select count(*)::int from linked) as count, (select count(*)::int from audited) as "auditedCount"
@@ -116,7 +116,7 @@ export async function syncTransactionAttachments(provider: TransactionAttachment
       const bytes = await provider.download(attachment);
       if (attachment.size != null && bytes.length !== attachment.size) throw new Error('Source attachment size changed or download is incomplete; retry the sync');
       const saved = await persistTransactionFile({ ...options, sourceSystem: provider.source, source: { id: sourceId, name: attachment.name },
-        targetDocumentIds: targets, bytes, contentType: detectContentType(bytes, attachment.name), sourceModifiedAt: attachment.modifiedAt });
+        targetIds: targets, bytes, contentType: detectContentType(bytes, attachment.name), sourceModifiedAt: attachment.modifiedAt });
       if (saved.created) summary.createdFiles++;
       if (saved.versioned) summary.newVersions++;
       if (saved.unchanged) summary.unchangedFiles++;
