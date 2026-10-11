@@ -1,8 +1,8 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { defineRoute } from '@/lib/api/route';
 import { NextResponse } from 'next/server'
-import { subsidiaryScopeAllows } from '../../../../../lib/authz'
-import { listReconcilableBankAccounts } from '../../../../../lib/banking-accounts'
+import { subsidiaryScopeAllows } from '@/lib/authz'
+import { listReconcilableBankAccounts } from '@/lib/banking-accounts'
 
 export const runtime = 'nodejs'
 
