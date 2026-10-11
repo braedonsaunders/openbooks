@@ -3688,6 +3688,12 @@
         "description": "Effective legal-entity intervals and base-unit variance tolerances by ABC class.",
         "title": "Cycle-count policies"
       },
+      "purchase-over-receipt-tolerances": {
+        "singular": "Over-receipt tolerance",
+        "plural": "Over-receipt tolerances",
+        "description": "How much a goods receipt may exceed a purchase-order line's remaining quantity, org-wide or per item category.",
+        "title": "Over-receipt tolerances"
+      },
       "operating-profiles": {
         "title": "Operating profiles",
         "singularTitle": "Operating profiles",
@@ -4324,6 +4330,9 @@
       "abcClass": "ABC class",
       "intervalDays": "Count interval (days)",
       "varianceTolerance": "Variance tolerance",
+      "itemCategory": "Item category",
+      "tolerancePercent": "Over-receipt percent",
+      "toleranceQuantity": "Over-receipt quantity",
       "inventoryOwnership": "Stock ownership",
       "schedulePdfColorTreatment": "Color treatment",
       "schedulePdfColorIntensity": "Color tint (%)",

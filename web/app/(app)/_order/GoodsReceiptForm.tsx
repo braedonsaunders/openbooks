@@ -13,6 +13,8 @@ export interface ReceiptPrefillLine {
   unit: string | null
   unitPrice: string
   remaining: string
+  /** Tolerated ceiling for this line; absent on older prefill payloads. */
+  maxReceivable?: string
   stockLocationId: string | null
 }
 
@@ -114,8 +116,16 @@ export function GoodsReceiptForm({ orderId, apiBase, warehouses, onSubmit, onClo
         setInlineError(t('invalidLineSave', { row: line.lineNumber, field: t('receive.receiveQty') }))
         return
       }
-      if (qty > Number(line.remaining)) {
-        setInlineError(t('receive.overReceive', { line: line.lineNumber, qty: raw, remaining: line.remaining }))
+      // The tolerated ceiling admits an over-receipt within policy; anything
+      // past it refuses naming the ceiling, and the server owns the final
+      // check against the policy effective on the entered receipt date.
+      const ceiling = line.maxReceivable ?? line.remaining
+      if (qty > Number(ceiling)) {
+        setInlineError(
+          line.maxReceivable !== undefined
+            ? t('receive.overTolerance', { line: line.lineNumber, qty: raw, max: line.maxReceivable })
+            : t('receive.overReceive', { line: line.lineNumber, qty: raw, remaining: line.remaining }),
+        )
         return
       }
     }

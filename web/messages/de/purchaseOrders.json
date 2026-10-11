@@ -128,6 +128,7 @@
       "prefillFailed": "Der Wareneingangsentwurf konnte nicht geladen werden.",
       "receiptFailed": "Der Wareneingang konnte nicht gebucht werden.",
       "overReceive": "Zeile {line}: {qty} übersteigt die verbleibenden {remaining}.",
+      "overTolerance": "Zeile {line}: {qty} überschreitet selbst das tolerierte Maximum von {max}.",
       "invalidDate": "Geben Sie das Eingangsdatum als JJJJ-MM-TT ein.",
       "enterQuantity": "Geben Sie in mindestens einer Zeile eine Menge ein."
     },

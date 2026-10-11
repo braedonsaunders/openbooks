@@ -9,6 +9,7 @@ export const TENANT_TABLE_POLICIES = {
   "handling_unit_contents":"clone:catalog-uuid-rebase",
   "handling_unit_moves":"clone:catalog-uuid-rebase",
   "inventory_count_policies": "clone:catalog-uuid-rebase",
+  "purchase_over_receipt_tolerances": "clone:catalog-uuid-rebase",
   "consignment_stock": "clone:catalog-uuid-rebase",
   "consignment_events": "clone:catalog-uuid-rebase",
   "einvoice_settings": "clone:catalog-uuid-rebase",

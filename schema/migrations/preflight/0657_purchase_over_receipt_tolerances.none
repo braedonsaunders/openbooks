@@ -1,0 +1,1 @@
+Additive: a new policy table with no rows; receipts keep exact remaining-quantity enforcement until a tolerance is configured.

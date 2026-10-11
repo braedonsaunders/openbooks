@@ -3688,6 +3688,12 @@
         "description": "按法人实体和ABC分类配置有效盘点间隔及基本单位差异容差。",
         "title": "循环盘点策略"
       },
+      "purchase-over-receipt-tolerances": {
+        "singular": "超收容差",
+        "plural": "超收容差",
+        "description": "收货数量可超过采购订单行剩余数量的幅度，可按公司统一或按物料类别设置。",
+        "title": "超收容差"
+      },
       "operating-profiles": {
         "title": "运营配置",
         "singularTitle": "运营配置",
@@ -4324,6 +4330,9 @@
       "abcClass": "ABC分类",
       "intervalDays": "盘点间隔（天）",
       "varianceTolerance": "差异容差",
+      "itemCategory": "物料类别",
+      "tolerancePercent": "超收比例（%）",
+      "toleranceQuantity": "超收数量",
       "inventoryOwnership": "库存所有权",
       "schedulePdfColorTreatment": "颜色处理",
       "schedulePdfColorIntensity": "色调强度 (%)",

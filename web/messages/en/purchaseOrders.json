@@ -128,6 +128,7 @@
       "prefillFailed": "The receipt draft could not be loaded.",
       "receiptFailed": "The goods receipt could not be recorded.",
       "overReceive": "Line {line}: {qty} exceeds the {remaining} remaining to receive.",
+      "overTolerance": "Line {line}: {qty} exceeds even the tolerated maximum of {max}.",
       "invalidDate": "Enter the receipt date as YYYY-MM-DD.",
       "enterQuantity": "Enter a quantity on at least one line."
     },

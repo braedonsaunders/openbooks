@@ -210,6 +210,44 @@ test('over-receiving is refused in the form without posting', async (t) => {
   assert.deepEqual(globalThis.__dashRouter.pushes, [], 'a refused save never navigates')
 })
 
+test('a tolerated over-receipt posts while past-tolerance refuses naming the ceiling', async (t) => {
+  const posts: unknown[] = []
+  const restoreFetch = scriptFetch((url, init) => {
+    if (url === `/api/purchase-orders/${PO_ID}/receive` && (init?.method ?? 'GET') === 'GET') {
+      return Response.json({
+        receiptDate: '2026-08-01',
+        lines: [{
+          sourceLineId: LINE_ID,
+          lineNumber: 1,
+          description: 'Widget',
+          unit: 'ea',
+          unitPrice: '2.00',
+          remaining: '10',
+          maxReceivable: '11',
+          stockLocationId: WH_ID,
+        }],
+      })
+    }
+    if (url === `/api/purchase-orders/${PO_ID}/receive` && init?.method === 'POST') {
+      posts.push(JSON.parse(init.body as string))
+      return Response.json({ kind: 'purchase_receipt', id: 'rcpt-1', documentNumber: 'RCPT-00001' })
+    }
+    if (url.startsWith('/api/flows/')) return Response.json({ error: 'no flow state' }, { status: 404 })
+    return null
+  })
+  t.after(restoreFetch)
+  const { unmount } = await mountPo()
+  t.after(unmount)
+  await openReceiptForm()
+  await setQty('12')
+  await clickFormSave()
+  assert.equal(posts.length, 0, 'past the tolerated ceiling nothing posts')
+  assert.match(dialog()?.textContent ?? '', /tolerated maximum of 11/, 'the form names the tolerated ceiling')
+  await setQty('11')
+  await clickFormSave()
+  assert.equal(posts.length, 1, 'an over-receipt within tolerance posts')
+})
+
 test('a failed save keeps the form state and retries with the same key', async (t) => {
   const keys: (string | null)[] = []
   let attempts = 0

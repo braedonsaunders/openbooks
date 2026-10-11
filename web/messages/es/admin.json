@@ -3613,6 +3613,12 @@
         "description": "Intervalos vigentes por entidad jurídica y tolerancias en unidades base según la clase ABC.",
         "title": "Políticas de conteo cíclico"
       },
+      "purchase-over-receipt-tolerances": {
+        "singular": "Tolerancia de sobrerecepción",
+        "plural": "Tolerancias de sobrerecepción",
+        "description": "Cuánto puede superar una recepción de mercancía la cantidad pendiente de una línea de orden de compra, global o por categoría de artículo.",
+        "title": "Tolerancias de sobrerecepción"
+      },
       "operating-profiles": {
         "title": "Perfiles operativos",
         "singularTitle": "Perfiles operativos",
@@ -4249,6 +4255,9 @@
       "abcClass": "Clase ABC",
       "intervalDays": "Intervalo de conteo (días)",
       "varianceTolerance": "Tolerancia de diferencia",
+      "itemCategory": "Categoría de artículo",
+      "tolerancePercent": "Sobrerecepción (%)",
+      "toleranceQuantity": "Cantidad de sobrerecepción",
       "inventoryOwnership": "Propiedad de las existencias",
       "schedulePdfColorTreatment": "Tratamiento del color",
       "schedulePdfColorIntensity": "Intensidad del tinte (%)",

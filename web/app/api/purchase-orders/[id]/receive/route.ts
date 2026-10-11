@@ -13,6 +13,7 @@ import { isFeatureEnabled } from '../../../../../lib/features'
 import { unexpectedServerError } from '../../../../../lib/api/unexpected'
 import { ConversionError, receivePurchaseOrder } from '../../../../../lib/order-cycle'
 import { fromQuantityUnits, toQuantityUnits } from '../../../../../lib/order-cycle-math'
+import { formatMaxReceivable, resolveOverReceiptTolerance } from '../../../../../lib/purchase-over-receipt'
 
 export const runtime = 'nodejs'
 
@@ -84,29 +85,36 @@ export const GET = defineRoute({
         quantity_fulfilled: string
         stock_location_id: string | null
         item_kind: string | null
+        item_category: string | null
       }>(sql`
         select line.id, line.line_number, line.item_id, line.description, line.unit, line.unit_price,
-               line.quantity, line.quantity_fulfilled, line.stock_location_id, i.kind as item_kind
+               line.quantity, line.quantity_fulfilled, line.stock_location_id, i.kind as item_kind,
+               i.category as item_category
           from document_lines line
           left join items i on i.id = line.item_id and i.org_id = line.org_id
          where line.org_id = ${gate.user.orgId} and line.document_id = ${id}
          order by line.line_number
       `)).rows
       const defaultWarehouse = await resolveDefaultWarehouse(db, gate.user.orgId, scoped.source.subsidiaryId)
-      const lines = rows.flatMap((line) => {
-        if (line.item_id == null || !lineRequiresReceipt(line.item_kind)) return []
+      // The tolerated maximum rides the prefill so the form admits an
+      // over-receipt within policy; the save path re-resolves the policy
+      // effective on the entered receipt date and owns the final check.
+      const lines = (await Promise.all(rows.map(async (line) => {
+        if (line.item_id == null || !lineRequiresReceipt(line.item_kind)) return null
         const remaining = toQuantityUnits(String(line.quantity)) - toQuantityUnits(String(line.quantity_fulfilled))
-        if (remaining <= 0n) return []
-        return [{
+        if (remaining <= 0n) return null
+        const tolerance = await resolveOverReceiptTolerance(db, gate.user.orgId, line.item_category, receiptDate)
+        return {
           sourceLineId: line.id,
           lineNumber: line.line_number,
           description: line.description,
           unit: line.unit,
           unitPrice: String(line.unit_price),
           remaining: fromQuantityUnits(remaining),
+          maxReceivable: formatMaxReceivable(String(line.quantity), String(line.quantity_fulfilled), tolerance),
           stockLocationId: line.stock_location_id ?? defaultWarehouse,
-        }]
-      })
+        }
+      }))).filter((line): line is NonNullable<typeof line> => line !== null)
       return NextResponse.json({ receiptDate, lines })
     } catch (error) {
       if (error instanceof WarehouseRefusal) {

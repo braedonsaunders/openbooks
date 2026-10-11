@@ -3741,6 +3741,12 @@
         "description": "Gültige Zählintervalle und Abweichungstoleranzen in Basiseinheiten je Rechtseinheit und ABC-Klasse.",
         "title": "Inventurrichtlinien"
       },
+      "purchase-over-receipt-tolerances": {
+        "singular": "Mehrlieferungstoleranz",
+        "plural": "Mehrlieferungstoleranzen",
+        "description": "Um wie viel ein Wareneingang die offene Menge einer Bestellzeile überschreiten darf — unternehmensweit oder je Artikelkategorie.",
+        "title": "Mehrlieferungstoleranzen"
+      },
       "operating-profiles": {
         "title": "Betriebsprofile",
         "singularTitle": "Betriebsprofile",
@@ -4377,6 +4383,9 @@
       "abcClass": "ABC-Klasse",
       "intervalDays": "Zählintervall (Tage)",
       "varianceTolerance": "Abweichungstoleranz",
+      "itemCategory": "Artikelkategorie",
+      "tolerancePercent": "Mehrlieferung (%)",
+      "toleranceQuantity": "Mehrlieferungsmenge",
       "inventoryOwnership": "Bestandseigentum",
       "schedulePdfColorTreatment": "Farbdarstellung",
       "schedulePdfColorIntensity": "Farbtönung (%)",

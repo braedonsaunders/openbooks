@@ -128,6 +128,7 @@
       "prefillFailed": "入荷の下書きを読み込めませんでした。",
       "receiptFailed": "入荷を記録できませんでした。",
       "overReceive": "明細 {line}: {qty} は入荷残数 {remaining} を超えています。",
+      "overTolerance": "明細 {line}：{qty} は許容上限 {max} を超えています。",
       "invalidDate": "入荷日をYYYY-MM-DD形式で入力してください。",
       "enterQuantity": "少なくとも1つの明細に数量を入力してください。"
     },

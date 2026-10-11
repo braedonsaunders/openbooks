@@ -12,6 +12,22 @@ export const INVENTORY_ENTITIES: SetupEntity[] = [
       {key:'intervalDays',kind:'integer',required:true},{key:'varianceTolerance',kind:'decimal',required:true},{key:'effectiveFrom',kind:'date',required:true},{key:'effectiveTo',kind:'date'}],
   },
   {
+    // Over-receipt tolerances: how much a goods receipt may exceed a
+    // purchase-order line's remaining quantity. A blank category is the
+    // org-wide default; a row naming the item's stored category wins for
+    // that category. Both tolerances default to zero (exact enforcement).
+    // Effective-dated: the receipt reads the row effective on its date, and
+    // every write stores its reason for the before/after audit.
+    key:'purchase-over-receipt-tolerances',table:'purchase_over_receipt_tolerances',singularTitleKey:'entities.purchase-over-receipt-tolerances.singular',
+    actorCols:true,groupKey:'inventory',featureKey:'orders',writePermission:'purchase_orders.create',iconKey:'package',orgScoped:true,
+    orderBy:'item_category,effective_from',hasActive:false,
+    columns:[{key:'itemCategory',kind:'text'},{key:'tolerancePercent',kind:'number'},{key:'toleranceQuantity',kind:'number'},{key:'effectiveFrom',kind:'date'},{key:'effectiveTo',kind:'date'}],
+    fields:[{key:'itemCategory',kind:'text'},
+      {key:'tolerancePercent',kind:'decimal',decimalScale:4,required:true,min:0,max:100},{key:'toleranceQuantity',kind:'decimal',decimalScale:8,required:true,min:0},
+      {key:'reason',kind:'textarea',required:true,resetOnEdit:true,fullWidth:true},
+      {key:'effectiveFrom',kind:'date',required:true},{key:'effectiveTo',kind:'date'}],
+  },
+  {
     key: 'item-identifiers',
     parentRecords: [{ entityKey: 'items', fieldKey: 'itemId' }],
     table: 'item_identifiers',

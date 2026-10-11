@@ -3613,6 +3613,12 @@
         "description": "Intervalles effectifs par entité juridique et tolérances en unités de base par classe ABC.",
         "title": "Règles de comptage tournant"
       },
+      "purchase-over-receipt-tolerances": {
+        "singular": "Tolérance de surréception",
+        "plural": "Tolérances de surréception",
+        "description": "De combien une réception peut dépasser la quantité restante d'une ligne de commande, pour la société ou par catégorie d'article.",
+        "title": "Tolérances de surréception"
+      },
       "operating-profiles": {
         "title": "Profils opérationnels",
         "singularTitle": "Profils opérationnels",
@@ -4249,6 +4255,9 @@
       "abcClass": "Classe ABC",
       "intervalDays": "Intervalle de comptage (jours)",
       "varianceTolerance": "Tolérance d'écart",
+      "itemCategory": "Catégorie d'article",
+      "tolerancePercent": "Surréception (%)",
+      "toleranceQuantity": "Quantité en surréception",
       "inventoryOwnership": "Propriété du stock",
       "schedulePdfColorTreatment": "Traitement des couleurs",
       "schedulePdfColorIntensity": "Intensité de la teinte (%)",

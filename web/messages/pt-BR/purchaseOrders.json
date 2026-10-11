@@ -128,6 +128,7 @@
       "prefillFailed": "Não foi possível carregar o rascunho de recebimento.",
       "receiptFailed": "Não foi possível registrar o recebimento de mercadorias.",
       "overReceive": "Linha {line}: {qty} excede os {remaining} restantes para receber.",
+      "overTolerance": "Linha {line}: {qty} supera até o máximo tolerado de {max}.",
       "invalidDate": "Informe a data de recebimento como AAAA-MM-DD.",
       "enterQuantity": "Informe uma quantidade em pelo menos uma linha."
     },

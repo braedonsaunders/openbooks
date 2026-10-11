@@ -128,6 +128,7 @@
       "prefillFailed": "Le brouillon de réception n'a pas pu être chargé.",
       "receiptFailed": "La réception de marchandise n'a pas pu être enregistrée.",
       "overReceive": "Ligne {line} : {qty} dépasse les {remaining} restant à recevoir.",
+      "overTolerance": "Ligne {line} : {qty} dépasse même le maximum toléré de {max}.",
       "invalidDate": "Saisissez la date de réception au format AAAA-MM-JJ.",
       "enterQuantity": "Saisissez une quantité sur au moins une ligne."
     },

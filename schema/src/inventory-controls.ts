@@ -4,6 +4,7 @@ import {
   text,
   date,
   integer,
+  numeric,
   timestamp,
 } from "drizzle-orm/pg-core";
 import { id, orgRef, money, auditColumns } from "./helpers";
@@ -15,6 +16,25 @@ export const inventoryCountPolicies = pgTable("inventory_count_policies", {
   abcClass: text("abc_class", { enum: ["A", "B", "C"] }).notNull(),
   intervalDays: integer("interval_days").notNull(),
   varianceTolerance: money("variance_tolerance").notNull(),
+  effectiveFrom: date("effective_from").notNull(),
+  effectiveTo: date("effective_to"),
+  ...auditColumns,
+});
+/**
+ * Purchase over-receipt tolerances (migration 0657): how much a goods
+ * receipt may exceed a purchase-order line's remaining quantity. NULL
+ * item_category is the org-wide default; a row naming the item's stored
+ * category wins for that category. Both tolerances default to zero,
+ * preserving exact remaining-quantity enforcement until configured.
+ * Effective-dated: receipts read the row effective on the receipt date.
+ */
+export const purchaseOverReceiptTolerances = pgTable("purchase_over_receipt_tolerances", {
+  id: id(),
+  orgId: orgRef(),
+  itemCategory: text("item_category"),
+  tolerancePercent: numeric("tolerance_percent", { precision: 9, scale: 4 }).notNull().default("0"),
+  toleranceQuantity: numeric("tolerance_quantity", { precision: 28, scale: 8 }).notNull().default("0"),
+  reason: text("reason").notNull(),
   effectiveFrom: date("effective_from").notNull(),
   effectiveTo: date("effective_to"),
   ...auditColumns,

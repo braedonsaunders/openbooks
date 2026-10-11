@@ -24,6 +24,7 @@ import {
   remainingOrderLine,
   toQuantityUnits,
 } from './order-cycle-math'
+import { overReceiptAllowanceUnits, resolveOverReceiptTolerance } from './purchase-over-receipt'
 import { isFeatureEnabled } from './features'
 import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { applyPurchaseReceiptInventory } from "@openbooks/engine/src/inventory/documents-purchasing.ts";
@@ -1143,6 +1144,7 @@ type PurchaseReceiptSourceLineRow = Record<string, unknown> & {
   custom: Record<string, unknown> | null
   item_kind: string | null
   item_name: string | null
+  item_category: string | null
   has_inventory_profile: boolean
   received_not_billed_account_id: string | null
 }
@@ -1292,7 +1294,7 @@ export async function receivePurchaseOrderInTx(
       select dl.id, dl.line_number, dl.item_id, dl.account_id, dl.description,
              dl.quantity, dl.unit, dl.unit_price, dl.department_id, dl.project_id, dl.location_id,
              dl.class_id, dl.extra_dims, dl.stock_location_id, dl.quantity_fulfilled,
-             dl.custom, i.kind as item_kind, i.name as item_name,
+             dl.custom, i.kind as item_kind, i.name as item_name, i.category as item_category,
              profile.item_id is not null as has_inventory_profile,
              profile.received_not_billed_account_id
         from document_lines dl
@@ -1313,7 +1315,13 @@ export async function receivePurchaseOrderInTx(
       const resolved = await resolveReceivedNotBilledAccount(tx, orgId, line.item_id)
       if (resolved) rnbByItem.set(line.item_id, resolved.accountId)
     }
-    const selected = requested.map((request) => {
+    const selected: {
+      request: (typeof requested)[number]
+      line: PurchaseReceiptSourceLineRow
+      allowanceUnits: bigint
+      overReceipt: { excess: string; tolerancePercent: string; toleranceQuantity: string } | null
+    }[] = []
+    for (const request of requested) {
       const line = sourceById.get(request.sourceLineId)
       if (!line) throw new ConversionError(`Purchase-order line ${request.sourceLineId} was not found`)
       if (line.item_id == null || !lineRequiresReceipt(line.item_kind)) {
@@ -1342,13 +1350,28 @@ export async function receivePurchaseOrderInTx(
       const remaining = toQuantityUnits(String(line.quantity)) - toQuantityUnits(String(line.quantity_fulfilled))
       const receiving = toQuantityUnits(request.quantity)
       if (remaining <= 0n) throw new ConversionError(`Purchase-order line ${line.line_number} is already fully received`)
+      let allowanceUnits = 0n
+      let overReceipt: { excess: string; tolerancePercent: string; toleranceQuantity: string } | null = null
       if (receiving > remaining) {
-        throw new ConversionError(
-          `Purchase-order line ${line.line_number} has only ${fromQuantityUnits(remaining)} remaining to receive`,
-        )
+        // Over-receipt tolerance: the Setup policy effective on the receipt
+        // date for the item's exact stored category (else the org-wide
+        // default) lets a receipt exceed the remainder within tolerance.
+        // Both tolerances default to zero, keeping the exact refusal below.
+        const tolerance = await resolveOverReceiptTolerance(tx, orgId, line.item_category, input.receiptDate)
+        allowanceUnits = overReceiptAllowanceUnits(toQuantityUnits(String(line.quantity)), tolerance)
+        if (receiving - remaining > allowanceUnits) {
+          throw new ConversionError(
+            `Purchase-order line ${line.line_number} has only ${fromQuantityUnits(remaining)} remaining to receive`,
+          )
+        }
+        overReceipt = {
+          excess: fromQuantityUnits(receiving - remaining),
+          tolerancePercent: tolerance?.percent ?? '0',
+          toleranceQuantity: tolerance?.quantity ?? '0',
+        }
       }
-      return { request, line }
-    })
+      selected.push({ request, line, allowanceUnits, overReceipt })
+    }
 
     if (options.inventory === 'none') {
       const routed = (await tx.execute<{ purchase_order_line_id: string }>(sql`
@@ -1440,13 +1463,16 @@ export async function receivePurchaseOrderInTx(
     if (!reopened) throw new ConversionError('Purchase order changed while it was being received', 409)
 
     let lineNumber = 1
-    for (const { request, line } of selected) {
+    for (const { request, line, allowanceUnits, overReceipt } of selected) {
       // Received at the order price: the amount is the value the receipt
-      // credits to received-not-billed and the bill later clears.
+      // credits to received-not-billed and the bill later clears. A tolerated
+      // over-receipt records its excess and the applied policy on the line,
+      // so the above-ordered quantity stays inspectable evidence.
       const amount = orderLineAmount(request.quantity, String(line.unit_price))
       const lineCustom = {
         ...(line.custom ?? {}),
         receipt: { sourceLineId: line.id, lotId: request.lotId, serialId: request.serialId },
+        ...(overReceipt ? { overReceipt } : {}),
       }
       await tx.execute(sql`
         insert into document_lines
@@ -1466,7 +1492,9 @@ export async function receivePurchaseOrderInTx(
            set quantity_fulfilled = quantity_fulfilled + ${request.quantity},
                updated_by = ${userId}
          where id = ${line.id} and org_id = ${orgId}
-           and quantity_fulfilled + ${request.quantity} <= quantity
+           -- The received quantity may land above ordered within the
+           -- validated tolerance (zero by default: the exact ceiling stands).
+           and quantity_fulfilled + ${request.quantity} <= quantity + ${fromQuantityUnits(allowanceUnits)}
         returning id
       `)).rows[0]
       if (!advanced) {

@@ -3688,6 +3688,12 @@
         "description": "Intervalos vigentes por entidade jurídica e tolerâncias em unidades básicas por classe ABC.",
         "title": "Políticas de contagem cíclica"
       },
+      "purchase-over-receipt-tolerances": {
+        "singular": "Tolerância de sobrerecebimento",
+        "plural": "Tolerâncias de sobrerecebimento",
+        "description": "Quanto um recebimento pode superar a quantidade pendente de uma linha de pedido, global ou por categoria de item.",
+        "title": "Tolerâncias de sobrerecebimento"
+      },
       "operating-profiles": {
         "title": "Perfis operacionais",
         "singularTitle": "Perfis operacionais",
@@ -4324,6 +4330,9 @@
       "abcClass": "Classe ABC",
       "intervalDays": "Intervalo de contagem (dias)",
       "varianceTolerance": "Tolerância de diferença",
+      "itemCategory": "Categoria de item",
+      "tolerancePercent": "Sobrerecebimento (%)",
+      "toleranceQuantity": "Quantidade de sobrerecebimento",
       "inventoryOwnership": "Propriedade do estoque",
       "schedulePdfColorTreatment": "Tratamento das cores",
       "schedulePdfColorIntensity": "Intensidade da tonalidade (%)",

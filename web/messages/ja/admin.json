@@ -3741,6 +3741,12 @@
         "description": "法人およびABC分類ごとの有効な棚卸間隔と基本単位の差異許容値。",
         "title": "循環棚卸方針"
       },
+      "purchase-over-receipt-tolerances": {
+        "singular": "超過受領許容値",
+        "plural": "超過受領許容値",
+        "description": "入庫が発注残数量を超過できる量を、会社全体または品目カテゴリ別に設定します。",
+        "title": "超過受領許容値"
+      },
       "operating-profiles": {
         "title": "運用プロファイル",
         "singularTitle": "運用プロファイル",
@@ -4377,6 +4383,9 @@
       "abcClass": "ABC分類",
       "intervalDays": "棚卸間隔（日）",
       "varianceTolerance": "差異許容値",
+      "itemCategory": "品目カテゴリ",
+      "tolerancePercent": "超過受領率（%）",
+      "toleranceQuantity": "超過受領数量",
       "inventoryOwnership": "在庫所有区分",
       "schedulePdfColorTreatment": "色の表示",
       "schedulePdfColorIntensity": "色の濃度 (%)",
