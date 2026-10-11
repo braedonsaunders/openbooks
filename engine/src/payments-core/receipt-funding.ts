@@ -96,18 +96,28 @@ export async function resolveReceiptFunding(
 export async function assertReceiptFundingPosting(tx: SqlExecutor, document: {
   orgId: string; id: string; kind: string; subsidiaryId: string | null; currency: string; documentDate: string;
   postingDate?: string | null; custom: unknown;
-}, actorId: string | null, fallbackAccountId?: string | null): Promise<void> {
+}, actorId: string | null, actualAccountIds: readonly (string | null)[] = []): Promise<void> {
   if (document.kind !== "customer_payment" && document.kind !== "vendor_payment") return;
   const custom = (document.custom ?? {}) as Record<string, unknown>;
   if (custom.providerReturn !== undefined) { assertProviderReturnPosting(document); return; }
-  const accountId = typeof custom.bankAccountId === "string" ? custom.bankAccountId : fallbackAccountId;
-  if (!accountId) return;
-  const funding = await resolveReceiptFunding(tx, { orgId: document.orgId, accountId, kind: document.kind,
-    subsidiaryId: document.subsidiaryId, currency: document.currency, onDate: document.postingDate ?? document.documentDate,
-    allowedSubsidiaryIds: null, snapshot: custom.processorFunding, lock: true });
-  if (funding) {
-    if (custom.processorFunding == null) throw new PaymentError("Save this processor receipt to bind its funding policy, then complete approval before posting.");
+  let allowed: ReadonlySet<string> | null = null;
+  if (custom.processorFunding != null) {
     if (!actorId) throw new PaymentError("Processor receipt posting requires an authorized receipt actor.");
-    await lockActorCommandAuthority(tx, document.orgId, actorId, document.subsidiaryId, "ar.pay");
+    allowed = await lockActorCommandAuthority(tx, document.orgId, actorId, document.subsidiaryId, "ar.pay");
+  }
+  const tenders = Array.isArray(custom.storedValueTenders) ? custom.storedValueTenders as { liabilityAccountId: string }[] : [];
+  const storedValueAccounts = new Set(tenders.map(tender => tender.liabilityAccountId));
+  const cashAccounts = actualAccountIds.filter((id): id is string => id !== null && !storedValueAccounts.has(id));
+  const selected = typeof custom.bankAccountId === "string" ? custom.bankAccountId : null;
+  const accounts = [...new Set([...(selected ? [selected] : []), ...cashAccounts])];
+  for (const accountId of accounts) {
+    const funding = await resolveReceiptFunding(tx, { orgId: document.orgId, accountId, kind: document.kind,
+      subsidiaryId: document.subsidiaryId, currency: document.currency, onDate: document.postingDate ?? document.documentDate,
+      allowedSubsidiaryIds: allowed, snapshot: accountId === selected ? custom.processorFunding : undefined, lock: true });
+    if (funding) {
+      if (custom.processorFunding == null || accountId !== selected || cashAccounts.some(id => id !== accountId)) {
+        throw new PaymentError("Save this processor receipt with its authorized clearing account, then complete approval before posting.");
+      }
+    }
   }
 }

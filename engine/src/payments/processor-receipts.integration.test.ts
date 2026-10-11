@@ -1,0 +1,113 @@
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import test from "node:test";
+import { sql } from "drizzle-orm";
+import { db } from "../platform/db.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg, grantScratchPermissions, seedApprovalFlow, seedPostingAccount } from "../testing/fixtures.ts";
+import { ScopeNotFoundError, UnrestrictedScopeError } from "../organization/subsidiary-scope.ts";
+import { resolveReceiptFunding } from "../payments-core/receipt-funding.ts";
+import { withOrgTransaction } from "../platform/db.ts";
+import { decideGate } from "../flows/gates.ts";
+import { submitAndReleaseIfUngated } from "../flows/submit.ts";
+import { createPaymentDocument, updateDraftPayment } from "./payment-documents.ts";
+import { postPaymentWithApplications } from "./payment-posting.ts";
+import { openItemsForParty } from "./payment-queries.ts";
+import { sameCurrencyAllocation } from "./settlement-policy.ts";
+import { receiptFundingAccountOptions, saveProcessorReceiptPolicy } from "./processor-receipts.ts";
+import { importSettlementBatch, postSettlementBatch } from "./psp-settlement.ts";
+import { settleHarness, invoiceOpen } from "./refund-test-support.integration.ts";
+
+const DB = !!process.env.OPENBOOKS_DB_URL;
+
+async function fixture(org: Awaited<ReturnType<typeof createScratchOrg>>) {
+  const h = await settleHarness(org, { invoiceTotal: "459.96" });
+  await grantScratchPermissions(org.orgId, h.userId, ["ar.pay", "admin.setup.manage"]);
+  const clearing = await seedPostingAccount(org.orgId, "1040", "Processor clearing", "asset_current_other");
+  await db.execute(sql`update accounts set reconcilable = false where org_id = ${org.orgId} and id = ${clearing}`);
+  const policy = { id: randomUUID(), accountId: clearing, subsidiaryId: org.subsidiaryId, currency: "CAD", effectiveFrom: org.date, effectiveTo: null };
+  await saveProcessorReceiptPolicy(org.orgId, "stripe", policy, h.userId, "Collect card receipts into the provider clearing pool", null);
+  const receipt = await createPaymentDocument({ orgId: org.orgId, kind: "customer_payment", createdBy: h.userId,
+    allowedSubsidiaryIds: null, partyId: org.customerId, bankAccountId: clearing, subsidiaryId: org.subsidiaryId, currency: "CAD", documentDate: org.date });
+  const item = (await withOrgTransaction(org.orgId, () => openItemsForParty(org.customerId, "ar", org.orgId, null))).find(row => row.documentId === h.invoiceId)!;
+  const save = () => updateDraftPayment(receipt.id, { allocations: [sameCurrencyAllocation(item.lineId, "459.96")] }, h.userId, org.orgId, { allowedSubsidiaryIds: null });
+  return { h, clearing, policy, receipt, save };
+}
+
+test("a scoped processor receipt applies the invoice and the native payout clears its exact pool once", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const { h, clearing, receipt, save, policy } = await fixture(org);
+    const options = { orgId: org.orgId, actorId: h.userId, kind: "customer_payment" as const,
+      subsidiaryId: org.subsidiaryId, currency: "CAD", onDate: org.date, allowedSubsidiaryIds: null };
+    assert.ok((await receiptFundingAccountOptions(options)).some(row => row.id === clearing && row.provider === "stripe"));
+    assert.ok(!(await receiptFundingAccountOptions({ ...options, kind: "vendor_payment" })).some(row => row.id === clearing));
+    const saved = await save();
+    assert.equal((saved!.doc.custom as { processorFunding: { id: string } }).processorFunding.id, policy.id);
+    await submitAndReleaseIfUngated("customer_payment", receipt.id, h.userId);
+    await postPaymentWithApplications(receipt.id, undefined, h.userId, "api");
+    assert.equal(await invoiceOpen(org.orgId, h.invoiceId), "0.0000");
+    const batch = await importSettlementBatch(org.orgId, h.userId, { provider: "stripe", externalRef: `processor-${randomUUID()}`,
+      settlementDate: org.date, currency: "CAD", raw: {}, lines: [
+        { kind: "charge", amount: "459.96", currency: "CAD", documentId: receipt.id },
+        { kind: "fee", amount: "18.44", currency: "CAD" },
+      ] }, { bankAccountId: org.accounts.bank, clearingAccountId: clearing, feeAccountId: org.accounts.freight, subsidiaryId: org.subsidiaryId });
+    const posted = await postSettlementBatch(org.orgId, batch.batchId, h.userId, null);
+    assert.deepEqual(await postSettlementBatch(org.orgId, batch.batchId, h.userId, null), posted);
+    const balance = async (accountId: string) => (await db.execute<{ amount: string }>(sql`
+      select coalesce(sum(jl.amount),0)::numeric(19,4)::text as amount from journal_lines jl
+        join journal_entries e on e.id = jl.entry_id and e.org_id = jl.org_id and e.status in ('posted','reversed')
+       where jl.org_id = ${org.orgId} and jl.account_id = ${accountId}`)).rows[0]!.amount;
+    assert.equal(await balance(clearing), "0.0000");
+    assert.equal(await balance(org.accounts.bank), "441.5200");
+    assert.equal(await balance(org.accounts.freight), "18.4400");
+    assert.deepEqual((await db.execute<{ type: string; reconcilable: boolean }>(sql`select type, reconcilable from accounts
+      where org_id = ${org.orgId} and id = ${clearing}`)).rows[0], { type: "asset_current_other", reconcilable: false });
+  } finally { await dropScratchOrg(org.orgId); }
+});
+
+test("processor receipt policy refuses overlap, foreign scope, currency and unauthorized configuration", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const other = await createScratchOrg();
+  try {
+    const { h, clearing, policy } = await fixture(org);
+    await assert.rejects(saveProcessorReceiptPolicy(org.orgId, "stripe", { ...policy, id: randomUUID() }, h.userId, "Duplicate effective policy", null), /overlap/);
+    await assert.rejects(saveProcessorReceiptPolicy(org.orgId, "stripe", policy, h.userId, "Restricted setup authority", new Set()), UnrestrictedScopeError);
+    await assert.rejects(saveProcessorReceiptPolicy(org.orgId, "stripe", { ...policy, subsidiaryId: other.subsidiaryId }, h.userId, "Wrong legal entity", null), ScopeNotFoundError);
+    const resolve = (changes = {}) => withOrgTransaction(org.orgId, () => resolveReceiptFunding(db, { orgId: org.orgId, accountId: clearing,
+      kind: "customer_payment", subsidiaryId: org.subsidiaryId, currency: "CAD", onDate: org.date, allowedSubsidiaryIds: null, ...changes }));
+    await assert.rejects(resolve({ currency: "USD" }), /No unique effective/);
+    await assert.rejects(resolve({ onDate: "2000-01-01" }), /No unique effective/);
+    await assert.rejects(resolve({ allowedSubsidiaryIds: new Set() }), /not available/);
+    await assert.rejects(resolve({ snapshot: { ...policy, id: randomUUID(), provider: "stripe" } }), /funding changed/);
+    await db.execute(sql`update user_permission_overrides set effect = 'deny' where org_id = ${org.orgId} and user_id = ${h.userId} and permission = 'admin.setup.manage'`);
+    await assert.rejects(saveProcessorReceiptPolicy(org.orgId, "stripe", policy, h.userId, "Revoked setup authority", null), ScopeNotFoundError);
+    const count = (await db.execute<{ count: number }>(sql`select count(*)::int as count from audit_log where org_id = ${org.orgId}
+      and changes->>'mode' = 'processor_receipt_policy'`)).rows[0]!.count;
+    assert.equal(count, 1, "refusals and an identical configuration retry cannot write new financial policy");
+  } finally { await dropScratchOrg(org.orgId); await dropScratchOrg(other.orgId); }
+});
+
+test("processor receipts retain native approval gates and refuse revoked funding or actor duty before posting", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const { h, receipt, save } = await fixture(org);
+    await save();
+    const approver = await createScratchUser(org.orgId, "Receipt approver", "receipt_approver");
+    await grantScratchPermissions(org.orgId, approver, ["ar.pay"]);
+    await seedApprovalFlow(org.orgId, { subjectKind: "customer_payment", mode: "any", assignees: [{ type: "user", userId: approver }] });
+    assert.equal((await submitAndReleaseIfUngated("customer_payment", receipt.id, h.userId)).gated, true);
+    await assert.rejects(postPaymentWithApplications(receipt.id, undefined, h.userId), /approval/);
+    const gate = (await db.execute<{ id: string }>(sql`select id from flow_gates where org_id = ${org.orgId} and subject_id = ${receipt.id} and status = 'pending'`)).rows[0]!;
+    await decideGate({ gateId: gate.id, decision: "approved", userId: approver, allowedSubsidiaryIds: null });
+    await db.execute(sql`update psp_provider_configs set is_enabled = false where org_id = ${org.orgId} and provider = 'stripe'`);
+    await assert.rejects(postPaymentWithApplications(receipt.id, undefined, h.userId), /No unique effective/);
+    await db.execute(sql`update psp_provider_configs set is_enabled = true where org_id = ${org.orgId} and provider = 'stripe'`);
+    await db.execute(sql`update user_permission_overrides set effect = 'deny' where org_id = ${org.orgId} and user_id = ${h.userId} and permission = 'ar.pay'`);
+    await assert.rejects(postPaymentWithApplications(receipt.id, undefined, h.userId), ScopeNotFoundError);
+    assert.equal(await invoiceOpen(org.orgId, h.invoiceId), "459.9600");
+    assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count from journal_entries where org_id = ${org.orgId} and source_document_id = ${receipt.id}`)).rows[0]!.count, 0);
+    await grantScratchPermissions(org.orgId, h.userId, ["ar.pay"]);
+    await postPaymentWithApplications(receipt.id, undefined, h.userId);
+    assert.equal(await invoiceOpen(org.orgId, h.invoiceId), "0.0000");
+  } finally { await dropScratchOrg(org.orgId); }
+});

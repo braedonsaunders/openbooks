@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db, withOrgTransaction } from "../platform/db.ts";
+import { db, withOrgTransaction, withTransactionSavepoint } from "../platform/db.ts";
 import { canonicalJson } from "../platform/canonical-json.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { isIso4217CurrencyCode } from "../fx/currencies.ts";
@@ -8,8 +8,18 @@ import { assertUnrestrictedScope, ScopeNotFoundError, subsidiaryScopeAllows, sub
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { PaymentError } from "../payments-core/payment-errors.ts";
 import { PROCESSOR_RECEIPT_POLICY_KEY, processorReceiptPolicies, receiptPolicyWindowsOverlap, resolveReceiptFunding, type ProcessorReceiptPolicy } from "../payments-core/receipt-funding.ts";
+import { PSP_PROVIDERS, isPspProvider } from "./psp-settlement.ts";
 
 export { type ProcessorReceiptPolicy } from "../payments-core/receipt-funding.ts";
+
+export async function receiptFundingSubsidiaryOptions(orgId: string, actorId: string, kind: "customer_payment" | "vendor_payment", requested: ReadonlySet<string> | null) {
+  return withOrgTransaction(orgId, async () => {
+    const live = await lockActorCommandAuthority(db, orgId, actorId, null, kind === "customer_payment" ? "ar.pay" : "ap.pay");
+    return (await db.execute<{ id: string; name: string; currency: string }>(sql`
+      select id, name, base_currency as currency from subsidiaries where org_id = ${orgId} and is_active and not is_elimination order by name`)).rows
+      .filter(row => subsidiaryScopeAllows(live, row.id) && subsidiaryScopeAllows(requested, row.id));
+  });
+}
 
 export async function loadProcessorReceiptConfiguration(orgId: string, actorId: string, requested: ReadonlySet<string> | null) {
   return withOrgTransaction(orgId, async () => {
@@ -27,9 +37,13 @@ export async function loadProcessorReceiptConfiguration(orgId: string, actorId: 
     const subsidiaries = (await db.execute<{ id: string; name: string; currency: string }>(sql`
       select id, name, base_currency as currency from subsidiaries where org_id = ${orgId} and is_active order by name`)).rows.filter(row => visible(row.id));
     return { accounts, subsidiaries, canManage: live === null && requested === null,
-      providers: providers.map(config => ({ provider: config.provider, name: config.display_name, enabled: config.is_enabled,
+      providers: PSP_PROVIDERS.map(provider => {
+        const config = providers.find(row => row.provider === provider);
+        return config ? { provider: config.provider, name: config.display_name, enabled: config.is_enabled, configured: true,
         clearingAccountId: accountIds.has(config.default_clearing_account_id ?? '') ? config.default_clearing_account_id : null,
-        policies: processorReceiptPolicies(config.settings).filter(policy => visible(policy.subsidiaryId) && accountIds.has(policy.accountId)) })) };
+        policies: processorReceiptPolicies(config.settings).filter(policy => visible(policy.subsidiaryId) && accountIds.has(policy.accountId)) }
+          : { provider, name: provider, enabled: false, configured: false, clearingAccountId: null, policies: [] };
+      }) };
   });
 }
 
@@ -65,11 +79,12 @@ export async function receiptFundingAccountOptions(input: {
 export async function saveProcessorReceiptPolicy(orgId: string, provider: string, input: ProcessorReceiptPolicy, actorId: string,
   reason: string, allowedSubsidiaryIds: ReadonlySet<string> | null): Promise<ProcessorReceiptPolicy> {
   assertUnrestrictedScope(allowedSubsidiaryIds);
+  if (!isPspProvider(provider)) throw new PaymentError("Choose a native settlement provider for processor receipts.");
   const [policy] = processorReceiptPolicies({ [PROCESSOR_RECEIPT_POLICY_KEY]: [input] });
   if (!isIso4217CurrencyCode(policy!.currency)) throw new PaymentError("Choose an ISO currency for processor receipts.");
   const explanation = reason.trim();
   if (explanation.length < 5 || explanation.length > 500) throw new PaymentError("A reason between 5 and 500 characters is required for receipt funding policy.");
-  return withOrgTransaction(orgId, async () => {
+  return withOrgTransaction(orgId, () => withTransactionSavepoint(db, async () => {
     const live = await lockActorCommandAuthority(db, orgId, actorId, null, "admin.setup.manage");
     assertUnrestrictedScope(live);
     if (!(await lockAndCheckOrgFeature(db, orgId, "banking"))) throw new PaymentError("Enable Banking in Company Settings → Features before configuring processor receipts.");
@@ -77,7 +92,18 @@ export async function saveProcessorReceiptPolicy(orgId: string, provider: string
     const configs = (await db.execute<{ id: string; provider: string; is_enabled: boolean; default_clearing_account_id: string | null; settings: Record<string, unknown> }>(sql`
       select id, provider, is_enabled, default_clearing_account_id, settings from psp_provider_configs
        where org_id = ${orgId} order by provider for update`)).rows;
-    const config = configs.find(row => row.provider === provider);
+    let config = configs.find(row => row.provider === provider);
+    let creatingProvider = false;
+    if (!config) {
+      // A concurrent native provider create is benign: reuse and revalidate
+      // its locked row without overwriting any of its posting defaults.
+      const created = await db.execute<{ id: string }>(sql`insert into psp_provider_configs (org_id, provider, display_name, is_enabled, created_by, updated_by)
+        values (${orgId}, ${provider}, ${provider}, true, ${actorId}, ${actorId}) on conflict (org_id, provider) do nothing returning id`);
+      creatingProvider = created.rows.length === 1;
+      config = (await db.execute<typeof configs[number]>(sql`select id, provider, is_enabled, default_clearing_account_id, settings
+        from psp_provider_configs where org_id = ${orgId} and provider = ${provider} for update`)).rows[0];
+      if (!config) throw new PaymentError("The processor provider could not be configured.");
+    }
     if (!config?.is_enabled || (config.default_clearing_account_id !== null && config.default_clearing_account_id !== policy!.accountId)) {
       throw new PaymentError("Configure and enable this provider's processor clearing account before adding its receipt funding policy.");
     }
@@ -112,8 +138,8 @@ export async function saveProcessorReceiptPolicy(orgId: string, provider: string
     await db.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
       values (${orgId}, 'psp_provider_configs', ${config.id}, 'update',
         ${JSON.stringify({ mode: "processor_receipt_policy", reason: explanation,
-          before: { policy: prior ?? null, clearingAccountId: config.default_clearing_account_id },
-          after: { policy, clearingAccountId: policy!.accountId } })}::jsonb, ${actorId}, ${policy!.id})`);
+          before: creatingProvider ? null : { policy: prior ?? null, clearingAccountId: config.default_clearing_account_id, isEnabled: config.is_enabled },
+          after: { policy, clearingAccountId: policy!.accountId, isEnabled: true } })}::jsonb, ${actorId}, ${policy!.id})`);
     return policy!;
-  });
+  }));
 }

@@ -328,10 +328,7 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
     .orderBy(asc(schema.documentLines.lineNumber));
 
   if (!deps.migration) {
-    const custom = (doc.custom ?? {}) as { storedValueTenders?: { accountId: string }[] };
-    const storedValueAccounts = new Set((custom.storedValueTenders ?? []).map(tender => tender.accountId));
-    const fundingLine = lines.find(line => line.accountId && !storedValueAccounts.has(line.accountId));
-    try { await assertReceiptFundingPosting(db, doc, options.audit?.actorId ?? null, fundingLine?.accountId); }
+    try { await assertReceiptFundingPosting(db, doc, options.audit?.actorId ?? null, lines.map(line => line.accountId)); }
     catch (error) { if (error instanceof PaymentError) throw new PostingError(error.message); throw error; }
   }
 
@@ -593,6 +590,10 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
   }
 
   // -- build + validate kernel lines --------------------------------------
+  if (!deps.migration) {
+    try { await assertReceiptFundingPosting(db, effectiveDoc, options.audit?.actorId ?? null, postingLines.map(line => line.accountId)); }
+    catch (error) { if (error instanceof PaymentError) throw new PostingError(error.message); throw error; }
+  }
   const kernelLines = rule(effectiveDoc, postingLines, deps).filter(
     (l) => !isZero(l.amount),
   );
