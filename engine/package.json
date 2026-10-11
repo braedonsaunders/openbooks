@@ -168,6 +168,7 @@
     "./einvoice/dates": "./src/einvoice/xml.ts",
     "./einvoice/bank": "./src/einvoice/bank.ts",
     "./manufacturing": "./src/manufacturing/public.ts",
-    "./hrm/change-requests": "./src/hrm/public-change-requests.ts"
+    "./hrm/change-requests": "./src/hrm/public-change-requests.ts",
+    "./ledger/cash-deposits": "./src/ledger/public-cash-deposits.ts"
   }
 }

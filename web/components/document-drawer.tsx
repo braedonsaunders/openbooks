@@ -3573,10 +3573,11 @@ export function DocumentDrawer({
               serverOptions={serverOptions}
             />
             {/* Till drop beside the settled cash: a posted sale's cashier
-                records the bank drop here; drafts hold no till cash yet.
+                records the bank drop against the sale; before posting the
+                drop records against the till and date instead.
                 Without the deposit grant the surface names the permission
                 instead of hiding, so the operator learns the next step. */}
-            {config.kind === 'cash_sale' && isPosted ? (
+            {config.kind === 'cash_sale' && (isPosted || (!isCreate && doc.status !== 'voided' && cashSourceOptions.length > 0)) ? (
               canDeposit ? (
                 <CashDepositSection
                   saleId={String(doc.id)}
@@ -3584,6 +3585,7 @@ export function DocumentDrawer({
                   defaultDate={depositDefaultDate || documentDate || ''}
                   bankOptions={depositAccountOptions}
                   sourceOptions={cashSourceOptions}
+                  mode={isPosted ? 'sale' : 'till'}
                 />
               ) : (
                 <p className="border-t border-slate-200 pt-3 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">

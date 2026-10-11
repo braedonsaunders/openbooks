@@ -317,118 +317,342 @@ export async function recordCashDeposit(
         "Pick the bank account the cash was dropped into.",
       );
     }
-    const key = options.key && isUuid(options.key) ? options.key : randomUUID();
-    // An explicit currency is a currency change the writer refuses without
-    // multi-currency: name the sale's currency only when the feature is on
-    // (the row default is the org base currency either way).
-    const multiCurrency = await isFeatureEnabled(orgId, "multiCurrency");
-    const body: DocumentEditInput = {
-      documentDate: input.date,
-      referenceNumber: slip,
+    return createAndPostDrop(orgId, actorId, {
+      key: options.key,
+      date: input.date,
+      slip,
       memo: `Till drop — cash sale ${sale.documentNumber}, slip ${slip}`,
-      ...(multiCurrency ? { currency: sale.currency } : {}),
+      currency: sale.currency,
       subsidiaryId: sale.subsidiaryId,
       custom: { cashSaleDeposit: { saleId: sale.id, slipNumber: slip } },
-      lines: [
-        { accountId: input.bankAccountId, amount: fromUnits(amountMinor), description: `Till drop — slip ${slip}` },
-        { accountId: sourceAccountId, amount: "0", description: null },
-      ],
-    };
-    const created = await createDocument({
-      orgId,
-      userId: actorId,
-      kind: "transfer",
-      key,
-      body,
-      subsidiaryId: sale.subsidiaryId,
-      requestBody: { kind: "transfer", ...body },
+      bankAccountId: input.bankAccountId,
+      sourceAccountId,
+      amountMinor,
     });
-    if (created.status !== "replayed") {
-      await runRecordFlows({ kind: "on_create", source: "ui" }, "transfer", created.id, { orgId, userId: actorId });
-      if (created.deferredUpdate) {
-        await runRecordFlows(created.deferredUpdate, "transfer", created.id, { orgId, userId: actorId });
-      }
+  });
+}
+
+interface DropTransfer {
+  key?: string;
+  date: string;
+  slip: string;
+  memo: string;
+  currency: string;
+  subsidiaryId: string | null;
+  custom: Record<string, unknown>;
+  bankAccountId: string;
+  sourceAccountId: string;
+  amountMinor: bigint;
+}
+
+/**
+ * Create a till drop's native transfer and post it. The transfer posts in
+ * the same constrained shape the Banking drawer writes (destination carries
+ * the amount, source rides zero), so matching and GL impact are identical.
+ * A refused posting still records the draft drop with its slip — the result
+ * reports it instead of throwing, and the bookkeeper posts it from Banking.
+ */
+async function createAndPostDrop(orgId: string, actorId: string, drop: DropTransfer): Promise<CashDepositResult> {
+  const { slip, amountMinor, sourceAccountId } = drop;
+  const key = drop.key && isUuid(drop.key) ? drop.key : randomUUID();
+  // An explicit currency is a currency change the writer refuses without
+  // multi-currency: name the drop's currency only when the feature is on
+  // (the row default is the org base currency either way).
+  const multiCurrency = await isFeatureEnabled(orgId, "multiCurrency");
+  const body: DocumentEditInput = {
+    documentDate: drop.date,
+    referenceNumber: slip,
+    memo: drop.memo,
+    ...(multiCurrency ? { currency: drop.currency } : {}),
+    subsidiaryId: drop.subsidiaryId,
+    custom: drop.custom,
+    lines: [
+      { accountId: drop.bankAccountId, amount: fromUnits(amountMinor), description: `Till drop — slip ${slip}` },
+      { accountId: sourceAccountId, amount: "0", description: null },
+    ],
+  };
+  const created = await createDocument({
+    orgId,
+    userId: actorId,
+    kind: "transfer",
+    key,
+    body,
+    subsidiaryId: drop.subsidiaryId,
+    requestBody: { kind: "transfer", ...body },
+  });
+  if (created.status !== "replayed") {
+    await runRecordFlows({ kind: "on_create", source: "ui" }, "transfer", created.id, { orgId, userId: actorId });
+    if (created.deferredUpdate) {
+      await runRecordFlows(created.deferredUpdate, "transfer", created.id, { orgId, userId: actorId });
     }
-    if (created.status === "replayed") {
-      const existing = (await db.execute<{ status: string; number: string; entry: string | null }>(sql`
-        select status, document_number as number, posted_entry_id as entry
-          from documents where org_id = ${orgId} and id = ${created.id}`)).rows[0];
-      if (existing?.status === "posted") {
-        return { transferId: created.id, documentNumber: existing.number, posted: true, entryId: existing.entry };
-      }
-      if (existing && existing.status !== "draft" && existing.status !== "approved") {
+  }
+  if (created.status === "replayed") {
+    const existing = (await db.execute<{ status: string; number: string; entry: string | null }>(sql`
+      select status, document_number as number, posted_entry_id as entry
+        from documents where org_id = ${orgId} and id = ${created.id}`)).rows[0];
+    if (existing?.status === "posted") {
+      return { transferId: created.id, documentNumber: existing.number, posted: true, entryId: existing.entry };
+    }
+    if (existing && existing.status !== "draft" && existing.status !== "approved") {
+      throw depositError(
+        `This drop was already recorded as ${existing.number} (${existing.status}).`,
+        409,
+        "Open the existing drop in Banking instead of recording it again.",
+      );
+    }
+  }
+  // Submit (auto-released when ungated) and post in one unit with the
+  // sale lock held: a refused posting rolls back nothing recorded — the
+  // draft drop stands with its slip for the bookkeeper.
+  const outcome = await withOrgTransaction(orgId, async () => {
+    const current = (await db.execute<{ status: string }>(sql`
+      select status from documents where org_id = ${orgId} and id = ${created.id} for update`)).rows[0];
+    if (!current) {
+      throw depositError("The bank drop disappeared while recording.", 409, "Record the drop again.");
+    }
+    if (current.status === "posted") {
+      return { kind: "posted" as const, entryId: null as string | null, previousStatus: "posted" as string };
+    }
+    if (current.status === "draft") {
+      const submission = await submitAndReleaseIfUngated("transfer", created.id, actorId);
+      if (submission.flowError) {
         throw depositError(
-          `This drop was already recorded as ${existing.number} (${existing.status}).`,
-          409,
-          "Open the existing drop in Banking instead of recording it again.",
+          `The bank drop could not be released: ${submission.flowError}`,
+          422,
+          "Release the drop from Banking, or ask an approver.",
         );
       }
+      if (submission.gated || submission.approvalRequired) {
+        return { kind: "pending" as const };
+      }
+    } else if (current.status !== "approved") {
+      throw depositError(
+        `The bank drop is ${current.status} and cannot post.`,
+        409,
+        "Open the drop in Banking to see its state.",
+      );
     }
-    // Submit (auto-released when ungated) and post in one unit with the
-    // sale lock held: a refused posting rolls back nothing recorded — the
-    // draft drop stands with its slip for the bookkeeper.
-    const outcome = await withOrgTransaction(orgId, async () => {
-      const current = (await db.execute<{ status: string }>(sql`
-        select status from documents where org_id = ${orgId} and id = ${created.id} for update`)).rows[0];
-      if (!current) {
-        throw depositError("The bank drop disappeared while recording.", 409, "Record the drop again from the cash sale.");
+    try {
+      const entryId = await postDocument(created.id, await controlDeps(orgId), {
+        audit: { actorId, source: "ui" },
+      });
+      return { kind: "posted" as const, entryId, previousStatus: current.status };
+    } catch (error) {
+      if (error instanceof PostingError) {
+        return { kind: "refused" as const, reason: error.message };
       }
-      if (current.status === "posted") {
-        return { kind: "posted" as const, entryId: null as string | null, previousStatus: "posted" as string };
-      }
-      if (current.status === "draft") {
-        const submission = await submitAndReleaseIfUngated("transfer", created.id, actorId);
-        if (submission.flowError) {
-          throw depositError(
-            `The bank drop could not be released: ${submission.flowError}`,
-            422,
-            "Release the drop from Banking, or ask an approver.",
-          );
-        }
-        if (submission.gated || submission.approvalRequired) {
-          return { kind: "pending" as const };
-        }
-      } else if (current.status !== "approved") {
-        throw depositError(
-          `The bank drop is ${current.status} and cannot post.`,
-          409,
-          "Open the drop in Banking to see its state.",
-        );
-      }
-      try {
-        const entryId = await postDocument(created.id, await controlDeps(orgId), {
-          audit: { actorId, source: "ui" },
-        });
-        return { kind: "posted" as const, entryId, previousStatus: current.status };
-      } catch (error) {
-        if (error instanceof PostingError) {
-          return { kind: "refused" as const, reason: error.message };
-        }
-        throw error;
-      }
-    });
-    const numbered = (await db.execute<{ number: string; entry: string | null }>(sql`
-      select document_number as number, posted_entry_id as entry
-        from documents where org_id = ${orgId} and id = ${created.id}`)).rows[0]!;
-    if (outcome.kind === "posted") {
-      return { transferId: created.id, documentNumber: numbered.number, posted: true, entryId: outcome.entryId ?? numbered.entry };
+      throw error;
     }
-    if (outcome.kind === "pending") {
-      return {
-        transferId: created.id,
-        documentNumber: numbered.number,
-        posted: false,
-        entryId: null,
-        pendingApproval: true,
-        postRefusal: "The drop is waiting on an approval flow — the bookkeeper releases it from Banking.",
-      };
-    }
+  });
+  const numbered = (await db.execute<{ number: string; entry: string | null }>(sql`
+    select document_number as number, posted_entry_id as entry
+      from documents where org_id = ${orgId} and id = ${created.id}`)).rows[0]!;
+  if (outcome.kind === "posted") {
+    return { transferId: created.id, documentNumber: numbered.number, posted: true, entryId: outcome.entryId ?? numbered.entry };
+  }
+  if (outcome.kind === "pending") {
     return {
       transferId: created.id,
       documentNumber: numbered.number,
       posted: false,
       entryId: null,
-      postRefusal: outcome.reason,
+      pendingApproval: true,
+      postRefusal: "The drop is waiting on an approval flow — the bookkeeper releases it from Banking.",
     };
+  }
+  return {
+    transferId: created.id,
+    documentNumber: numbered.number,
+    posted: false,
+    entryId: null,
+    postRefusal: outcome.reason,
+  };
+}
+
+export interface TillDropInput {
+  /** The till's cash account the counted cash leaves. */
+  tillAccountId: string;
+  /** Decimal amount string in the till's currency. */
+  amount: string;
+  /** Drop date (the bank slip's date), YYYY-MM-DD. */
+  date: string;
+  bankAccountId: string;
+  slipNumber: string;
+  /** Required when the organization books through more than one legal entity. */
+  subsidiaryId?: string | null;
+  /** Required when the drop exceeds the till's undropped cash for its window. */
+  reason?: string | null;
+}
+
+/**
+ * A till's reconciliation window ending on a drop date: the cash its sales
+ * tendered since the till's previous drop, against everything dropped in
+ * the same span. Drops legitimately precede the sales being recorded, so a
+ * difference is information for the close-out, never a refusal.
+ */
+export interface TillDropWindow {
+  tillAccountId: string;
+  /** Exclusive start: the till's previous drop date, or null for its first drop. */
+  after: string | null;
+  /** Inclusive end: the drop date. */
+  through: string;
+  salesCount: number;
+  /** Cash tendered to the till in the window (sales minus refunds). */
+  tendered: string;
+  /** Cash dropped from the till in the window, every non-voided drop. */
+  dropped: string;
+  /** dropped − tendered: positive means more left the till than its sales took in. */
+  difference: string;
+}
+
+/** Non-voided drops leaving one till: sale-linked drops and dated till drops alike. */
+function tillDropsSql(orgId: string, tillAccountId: string) {
+  return sql`
+    select d.id, d.document_date, l.amount
+      from documents d
+      join document_lines l on l.document_id = d.id and l.org_id = d.org_id and l.line_number = 1
+      join document_lines src on src.document_id = d.id and src.org_id = d.org_id and src.line_number = 2
+     where d.org_id = ${orgId} and d.kind = 'transfer' and d.status <> 'voided'
+       and (d.custom ? 'cashSaleDeposit' or d.custom ? 'tillDrop')
+       and src.account_id = ${tillAccountId}::uuid`;
+}
+
+/** The reconciliation window a drop on `date` closes for one till. */
+export async function readTillDropWindow(
+  orgId: string,
+  tillAccountId: string,
+  date: string,
+): Promise<TillDropWindow> {
+  if (!isUuid(tillAccountId) || !isIsoCalendarDate(date)) {
+    throw depositError("The till drop names no valid till account or date.", 422, "Pick the till and the drop date from the bank slip.");
+  }
+  return withOrg(orgId, async () => {
+    const after = (await db.execute<{ date: string | null }>(sql`
+      select max(drop.document_date)::text as date
+        from (${tillDropsSql(orgId, tillAccountId)}) drop
+       where drop.document_date < ${date}::date`)).rows[0]?.date ?? null;
+    const tendered = (await db.execute<{ minor: string; sales: number }>(sql`
+      select coalesce(sum(case when d.kind = 'cash_refund' then -t.amount_minor else t.amount_minor end), 0)::text as minor,
+             count(distinct d.id) filter (where d.kind = 'cash_sale')::int as sales
+        from document_tenders t
+        join documents d on d.id = t.document_id and d.org_id = t.org_id
+       where t.org_id = ${orgId} and t.kind = 'cash' and t.account_id = ${tillAccountId}::uuid
+         and d.kind in ('cash_sale', 'cash_refund') and d.status <> 'voided'
+         and d.document_date <= ${date}::date
+         ${after ? sql`and d.document_date > ${after}::date` : sql``}`)).rows[0]!;
+    const dropped = (await db.execute<{ minor: string }>(sql`
+      select coalesce(sum(round(drop.amount * 10000)), 0)::bigint::text as minor
+        from (${tillDropsSql(orgId, tillAccountId)}) drop
+       where drop.document_date <= ${date}::date
+         ${after ? sql`and drop.document_date > ${after}::date` : sql``}`)).rows[0]!;
+    const tenderedMinor = BigInt(tendered.minor);
+    const droppedMinor = BigInt(dropped.minor);
+    return {
+      tillAccountId,
+      after,
+      through: date,
+      salesCount: tendered.sales,
+      tendered: fromUnits(tenderedMinor),
+      dropped: fromUnits(droppedMinor),
+      difference: fromUnits(droppedMinor - tenderedMinor),
+    };
+  });
+}
+
+/**
+ * Record a till drop by till and date — cash leaves the till before the
+ * back office posts the sales it came from. The source is fenced to a till
+ * cash account (the configured default cash account, or an account cash
+ * sales tender cash to), the destination to the configured deposit
+ * accounts. The sales reconcile against the drop's window when the
+ * operator closes out the till; a drop above the window's undropped cash
+ * needs a reason, because it declares cash the recorded sales do not yet
+ * explain.
+ */
+export async function recordTillDrop(
+  orgId: string,
+  actorId: string,
+  input: TillDropInput,
+  options: { key?: string; allowedSubsidiaryIds?: ReadonlySet<string> | null },
+): Promise<CashDepositResult & { window: TillDropWindow }> {
+  const { amountMinor, slip } = parseDepositInput({ ...input, saleId: input.tillAccountId });
+  if (!isUuid(input.tillAccountId)) {
+    throw depositError("The till drop names no valid till account.", 422, "Pick the till the cash was counted from.");
+  }
+  return withOrg(orgId, async () => {
+    const settings = (await db.execute<{ cashSales: unknown; currency: string }>(sql`
+      select settings->'cashSales' as "cashSales", base_currency as currency from orgs where id = ${orgId}`)).rows[0];
+    const bag = (settings?.cashSales && typeof settings.cashSales === "object" && !Array.isArray(settings.cashSales)
+      ? settings.cashSales : {}) as Record<string, unknown>;
+    const tillAccounts = new Set<string>([
+      ...(typeof bag.defaultCashAccountId === "string" ? [bag.defaultCashAccountId] : []),
+      ...(await db.execute<{ id: string }>(sql`
+        select distinct t.account_id as id from document_tenders t
+          join documents d on d.id = t.document_id and d.org_id = t.org_id
+         where t.org_id = ${orgId} and t.kind = 'cash' and d.kind in ('cash_sale', 'cash_refund')`)).rows.map((row) => row.id),
+    ]);
+    if (!tillAccounts.has(input.tillAccountId)) {
+      throw depositError(
+        "The till drop names an account no till takes cash into.",
+        422,
+        "Pick the till cash account set as the default cash account in Company Settings → Cash sales till defaults, or one your cash sales tender cash to.",
+      );
+    }
+    const configured = Array.isArray(bag.depositAccountIds)
+      ? [...new Set(bag.depositAccountIds.filter((id): id is string => typeof id === "string"))]
+      : [];
+    if (!configured.includes(input.bankAccountId)) {
+      throw depositError(
+        configured.length === 0
+          ? "Till drops are not configured — no deposit account is set up for this organization."
+          : "The drop names a bank account outside this organization's configured deposit accounts.",
+        configured.length === 0 ? 409 : 422,
+        SETTINGS_REMEDY,
+      );
+    }
+    if (input.bankAccountId === input.tillAccountId) {
+      throw depositError(
+        "The drop's bank account is the till cash account it leaves — a drop must move money.",
+        422,
+        "Pick the bank account the cash was dropped into.",
+      );
+    }
+    const subsidiaries = (await db.execute<{ id: string }>(sql`
+      select id from subsidiaries where org_id = ${orgId} and is_active and not is_elimination order by id`)).rows.map((row) => row.id);
+    const subsidiaryId = input.subsidiaryId ?? (subsidiaries.length === 1 ? subsidiaries[0]! : null);
+    if (!subsidiaryId || !subsidiaries.includes(subsidiaryId) ||
+        (options.allowedSubsidiaryIds && !options.allowedSubsidiaryIds.has(subsidiaryId))) {
+      throw depositError(
+        "The till drop needs the legal entity the till belongs to.",
+        422,
+        "Choose the entity whose till the cash was counted from.",
+      );
+    }
+    // Serialize drops per till so two cashiers cannot both read the same
+    // undropped balance.
+    await db.execute(sql`select pg_advisory_xact_lock(hashtext(${`till-drop:${orgId}:${input.tillAccountId}`}))`);
+    const window = await readTillDropWindow(orgId, input.tillAccountId, input.date);
+    const undropped = toUnits(window.tendered) - toUnits(window.dropped);
+    const reason = typeof input.reason === "string" ? input.reason.trim() : "";
+    if (amountMinor > undropped && (reason.length < 5 || reason.length > 500)) {
+      throw depositError(
+        `Drop ${fromUnits(amountMinor)} is more than the till's recorded undropped cash ${fromUnits(undropped > 0n ? undropped : 0n)} since ${window.after ?? "its first sale"}.`,
+        422,
+        "Enter a reason for the count (for example, sales not yet recorded), between 5 and 500 characters.",
+      );
+    }
+    const result = await createAndPostDrop(orgId, actorId, {
+      key: options.key,
+      date: input.date,
+      slip,
+      memo: `Till drop — slip ${slip}`,
+      currency: settings?.currency ?? "",
+      subsidiaryId,
+      custom: { tillDrop: { tillAccountId: input.tillAccountId, dropDate: input.date, slipNumber: slip, ...(reason ? { reason } : {}) } },
+      bankAccountId: input.bankAccountId,
+      sourceAccountId: input.tillAccountId,
+      amountMinor,
+    });
+    return { ...result, window: await readTillDropWindow(orgId, input.tillAccountId, input.date) };
   });
 }

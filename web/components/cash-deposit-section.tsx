@@ -22,18 +22,35 @@ export interface CashDepositAccountOption {
  * the counted till balance lives, and an inline section avoids a nested
  * modal inside the drawer's focus and scroll locks.
  */
+type TillWindow = {
+  after: string | null
+  through: string
+  salesCount: number
+  tendered: string
+  dropped: string
+  difference: string
+}
+
+/**
+ * `mode="till"` records a drop by till and date for a sale not yet posted:
+ * cash leaves the till before the back office posts its sales, and the
+ * form shows the till's window since its previous drop (tendered vs.
+ * dropped) so the cashier sees what the count explains.
+ */
 export function CashDepositSection({
   saleId,
   currency,
   defaultDate,
   bankOptions,
   sourceOptions,
+  mode = 'sale',
 }: {
   saleId: string
   currency: string
   defaultDate: string
   bankOptions: CashDepositAccountOption[]
   sourceOptions: CashDepositAccountOption[]
+  mode?: 'sale' | 'till'
 }) {
   const t = useTranslations('ar')
   const [amount, setAmount] = useState('')
@@ -48,11 +65,35 @@ export function CashDepositSection({
     { transferId: string; documentNumber: string; dropDate: string; amount: string; status: string; slipNumber: string | null }[] | null
   >(null)
   const [reload, setReload] = useState(0)
+  const [reason, setReason] = useState('')
+  const [tillWindow, setTillWindow] = useState<TillWindow | null>(null)
+  const tillAccountId = mode === 'till'
+    ? (sourceOptions.some((o) => o.value === sourceAccountId) ? sourceAccountId : (sourceOptions[0]?.value ?? ''))
+    : ''
+
+  // The till's window a drop on this date closes: refreshed when the till,
+  // the date or a recorded drop changes.
+  useEffect(() => {
+    if (mode !== 'till' || !tillAccountId || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      setTillWindow(null)
+      return
+    }
+    let live = true
+    const query = new URLSearchParams({ tillAccountId, date })
+    fetch(`/api/cash-sales/till-drops?${query}`, { headers: { accept: 'application/json' } })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body) => { if (live) setTillWindow(body as TillWindow | null) })
+      .catch(() => { if (live) setTillWindow(null) })
+    return () => {
+      live = false
+    }
+  }, [mode, tillAccountId, date, reload])
 
   // Recorded drops beside the form: the cashier sees what already left the
   // till (a refused POST still records a draft drop), so a double drop
   // reads as a duplicate before it is recorded, never after.
   useEffect(() => {
+    if (mode === 'till') return
     let live = true
     fetch(`/api/cash-sales/${saleId}/deposit`, { headers: { accept: 'application/json' } })
       .then((res) => (res.ok ? res.json() : null))
@@ -65,7 +106,7 @@ export function CashDepositSection({
     return () => {
       live = false
     }
-  }, [saleId, reload])
+  }, [saleId, reload, mode])
 
   const selectedBank = bankOptions.some((o) => o.value === bankAccountId)
     ? bankAccountId
@@ -76,17 +117,30 @@ export function CashDepositSection({
     setRefusal(null)
     setSavedNumber(null)
     try {
-      const response = await fetch(`/api/cash-sales/${saleId}/deposit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          amount: amount.trim(),
-          date,
-          bankAccountId: selectedBank,
-          slipNumber: slipNumber.trim(),
-          ...(sourceOptions.length > 1 && sourceAccountId ? { sourceAccountId } : {}),
-        }),
-      })
+      const response = mode === 'till'
+        ? await fetch('/api/cash-sales/till-drops', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              tillAccountId,
+              amount: amount.trim(),
+              date,
+              bankAccountId: selectedBank,
+              slipNumber: slipNumber.trim(),
+              ...(reason.trim() ? { reason: reason.trim() } : {}),
+            }),
+          })
+        : await fetch(`/api/cash-sales/${saleId}/deposit`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              amount: amount.trim(),
+              date,
+              bankAccountId: selectedBank,
+              slipNumber: slipNumber.trim(),
+              ...(sourceOptions.length > 1 && sourceAccountId ? { sourceAccountId } : {}),
+            }),
+          })
       const body = (await response.json().catch(() => ({}))) as Record<string, unknown>
       if (!response.ok) {
         const message = typeof body.error === 'string' && body.error ? body.error : t('tenders.depositFailed')
@@ -98,6 +152,7 @@ export function CashDepositSection({
       setSavedNumber(documentNumber)
       setAmount('')
       setSlipNumber('')
+      setReason('')
       setReload((n) => n + 1)
       toast.success(t('tenders.depositSaved', { documentNumber }))
     } catch {
@@ -146,11 +201,28 @@ export function CashDepositSection({
               />
             </div>
           </div>
+          {mode === 'till' && tillWindow ? (
+            <p className="text-xs text-slate-600 dark:text-slate-300">
+              {t(tillWindow.after ? 'tenders.tillWindow' : 'tenders.tillWindowFirst', {
+                after: tillWindow.after ?? '',
+                sales: tillWindow.salesCount,
+                tendered: tillWindow.tendered,
+                dropped: tillWindow.dropped,
+                currency,
+              })}
+            </p>
+          ) : null}
+          {mode === 'till' ? (
+            <div className="max-w-md">
+              <FieldLabel fieldName={t('tenders.tillReason')}>{t('tenders.tillReason')}</FieldLabel>
+              <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder={t('tenders.tillReasonHint')} />
+            </div>
+          ) : null}
           {sourceOptions.length > 1 ? (
             <div className="max-w-xs">
               <FieldLabel fieldName={t('tenders.depositSource')}>{t('tenders.depositSource')}</FieldLabel>
               <Select value={sourceAccountId} onChange={(e) => setSourceAccountId(e.target.value)}>
-                <option value="">{t('tenders.depositSourceDefault')}</option>
+                {mode === 'till' ? null : <option value="">{t('tenders.depositSourceDefault')}</option>}
                 {sourceOptions.map((o) => (
                   <option key={o.value} value={o.value}>{o.label}</option>
                 ))}

@@ -1460,7 +1460,7 @@ export async function applyDocumentEdit(
   }
 
   // Till-drop linkage (transfer only): the cashier's bank drop records
-  // which posted cash sale it moves till cash from, plus the bank slip
+  // which posted cash sale (or which till, by date) it moves cash from, plus the bank slip
   // number as control evidence. Not a registered custom field, so it is
   // carried explicitly like the funding override: uuid-shaped sale plus a
   // short slip reference. Absent leaves the stored link untouched; an
@@ -1482,6 +1482,38 @@ export async function applyDocumentEdit(
           throw new DocumentEditError(422, 'bank drop needs the bank slip number — enter it from the deposit slip')
         }
         headerCustom.cashSaleDeposit = { saleId, slipNumber: slipNumber.trim() }
+      }
+    }
+    // A drop recorded by till and date (before its sales post) names the
+    // till cash account it leaves, the drop date and the slip, plus the
+    // count reason when the drop exceeds what the recorded sales explain.
+    const till = (body.custom as Record<string, unknown>).tillDrop
+    if (till !== undefined) {
+      if (till === null) {
+        delete headerCustom.tillDrop
+      } else {
+        if (!till || typeof till !== 'object' || Array.isArray(till)) {
+          throw new DocumentEditError(422, 'till drop linkage must be an object — record the drop from Cash Sales')
+        }
+        const { tillAccountId, dropDate, slipNumber, reason } = till as Record<string, unknown>
+        if (typeof tillAccountId !== 'string' || !isUuid(tillAccountId)) {
+          throw new DocumentEditError(422, 'till drop linkage must name the till cash account — record the drop from Cash Sales')
+        }
+        if (typeof dropDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(dropDate)) {
+          throw new DocumentEditError(422, 'till drop linkage must carry the drop date — record the drop from Cash Sales')
+        }
+        if (typeof slipNumber !== 'string' || slipNumber.trim().length === 0 || slipNumber.trim().length > 120) {
+          throw new DocumentEditError(422, 'till drop needs the bank slip number — enter it from the deposit slip')
+        }
+        if (reason !== undefined && (typeof reason !== 'string' || reason.trim().length < 5 || reason.trim().length > 500)) {
+          throw new DocumentEditError(422, 'till drop count note must be between 5 and 500 characters')
+        }
+        headerCustom.tillDrop = {
+          tillAccountId,
+          dropDate,
+          slipNumber: slipNumber.trim(),
+          ...(typeof reason === 'string' ? { reason: reason.trim() } : {}),
+        }
       }
     }
   }
