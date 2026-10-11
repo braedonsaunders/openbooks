@@ -25,6 +25,7 @@ export const POST = defineRoute({
   feature: "resourcing",
   params: Params,
   body: Body,
+  invalidBodyStatus: 422,
   handler: async ({ request, authz, body }) => {
     const custom = await validateDemandCustomValues(authz.user.orgId, body.custom);
     if (custom instanceof Response) return custom;

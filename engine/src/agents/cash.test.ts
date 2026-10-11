@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { predictItem, type SettlementStats } from "./cash.ts";
+import { beyondCollectibilityHorizon, predictItem, type SettlementStats } from "./cash.ts";
 
 // The cash agent's placement rule with no payment history: the contractual
 // due date predicts (a fact), and an item with neither history nor a due
@@ -47,6 +47,7 @@ test("a configured ladder prices through predictItem", () => {
       overduePushLongDays: 28,
       overdueMidThresholdDays: 30,
       overdueLongThresholdDays: 60,
+      collectibilityHorizonDays: 90,
     }),
     { date: "2026-09-15", method: "Statistical" },
   );
@@ -62,4 +63,19 @@ test("no history anywhere predicts the contractual due date, not tranDate + 45",
 
 test("no history and no due date is unplaced rather than invented", () => {
   assert.deepEqual(predictItem(item({}), "2026-09-05", EMPTY), { date: null, method: "Unplaced" });
+});
+
+test("a receivable past the collectibility horizon is not projected; credits and payables are not excluded", () => {
+  const model = { settleBufferSigma: 0.5, overduePushShortDays: 7, overduePushMidDays: 14, overduePushLongDays: 28, overdueMidThresholdDays: 30, overdueLongThresholdDays: 60, collectibilityHorizonDays: 90 };
+  const stale = item({ id: "old", dueDate: "2025-12-30", tranDate: "2025-12-01", remaining: "9900.0000" });
+  assert.equal(beyondCollectibilityHorizon(stale, "2026-10-11", model), true);
+  // A balance inside the horizon is still projected.
+  const recent = item({ id: "recent", dueDate: "2026-08-12", tranDate: "2026-07-01", remaining: "250.0000" });
+  assert.equal(beyondCollectibilityHorizon(recent, "2026-10-11", model), false);
+  // Unapplied credits never qualify, however old.
+  const credit = item({ id: "credit", dueDate: "2025-12-30", tranDate: "2025-12-01", remaining: "-400.0000" });
+  assert.equal(beyondCollectibilityHorizon(credit, "2026-10-11", model), false);
+  // No due date ages from the posting date.
+  const undated = item({ id: "undated", dueDate: null, tranDate: "2025-12-01", remaining: "100.0000" });
+  assert.equal(beyondCollectibilityHorizon(undated, "2026-10-11", model), true);
 });

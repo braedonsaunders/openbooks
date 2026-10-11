@@ -1,7 +1,10 @@
 {
   "types": {
     "asset_bank": "Bank",
-    "liability_card": "Karte"
+    "liability_card": "Karte",
+    "liability_payable": "Verbindlichkeiten aus Lieferungen und Leistungen",
+    "liability_current_other": "Sonstige kurzfristige Verbindlichkeiten",
+    "liability_long_term": "Langfristige Verbindlichkeiten"
   },
   "reconStatus": {
     "signed_off": "abgezeichnet",
@@ -80,7 +83,7 @@
     },
     "vitals": {
       "cash": "Gesamtguthaben",
-      "cards": "Kartensalden",
+      "cards": "Karten- und Kreditsalden",
       "unmatched": "Offene Positionen",
       "unmatchedSub": "warten im Abgleich",
       "allMatched": "alle Positionen abgeglichen",
@@ -95,7 +98,7 @@
       "hint": "Salden aus dem gebuchten Hauptbuch",
       "empty": "Noch keine aktiven Bank- oder Kartenkonten. Fügen Sie diese im Kontenplan hinzu.",
       "bankSection": "Bankkonten",
-      "cardSection": "Kreditkarten",
+      "cardSection": "Karten und Kreditlinien",
       "reconciledThrough": "Abgestimmt bis {date}",
       "neverReconciled": "Nie abgestimmt",
       "lastStatement": "Auszug {date}",
@@ -436,8 +439,8 @@
     "preview": "Vorschau",
     "importAction": "Importieren",
     "importCount": "{count, plural, one {# Zeile} other {# Zeilen}} importieren",
-    "importedToast": "{imported, plural, one {# Zeile importiert} other {# Zeilen importiert}}{duplicates, plural, =0 {} one { — # Duplikat übersprungen} other { — # Duplikate übersprungen}}{possibleDuplicates, plural, =0 {} one { — # zur Prüfung markiert} other { — # zur Prüfung markiert}}",
-    "previewSummary": "{imported, plural, one {# neue Zeile} other {# neue Zeilen}}{duplicates, plural, =0 {} one { · # Duplikat übersprungen} other { · # Duplikate übersprungen}}{possibleDuplicates, plural, =0 {} one { · # zur Prüfung markiert} other { · # zur Prüfung markiert}}",
+    "importedToast": "{imported, plural, one {# Zeile importiert} other {# Zeilen importiert}}{duplicates, plural, =0 {} one { — # Duplikat übersprungen} other { — # Duplikate übersprungen}}{possibleDuplicates, plural, =0 {} one { — # mögliches Duplikat} other { — # mögliche Duplikate}}",
+    "previewSummary": "{imported, plural, one {# neue Zeile} other {# neue Zeilen}}{duplicates, plural, =0 {} one { · # Duplikat übersprungen} other { · # Duplikate übersprungen}}{possibleDuplicates, plural, =0 {} one { · # mögliches Duplikat} other { · # mögliche Duplikate}}",
     "format": "Format",
     "formatOfx": "OFX / QFX",
     "formatCsv": "CSV",
@@ -484,7 +487,12 @@
     "previewEmpty": "Die Vorschau enthält keine Buchungszeilen — Betragsspalte und Datumsformat prüfen, dann Vorschau erneut ausführen.",
     "previewRequired": "Vor dem Importieren zuerst die Vorschau ausführen.",
     "suggestedOpeningFrom": "Eröffnungssaldo aus dem Schlusssaldo vom {date} übernommen — bei Bedarf anpassen.",
-    "openingMismatch": "Eröffnungssaldo {supplied} weicht vom Schlusssaldo vom {date} ({expected}) ab — auf einen fehlenden Monat prüfen."
+    "openingMismatch": "Eröffnungssaldo {supplied} weicht vom Schlusssaldo vom {date} ({expected}) ab — auf einen fehlenden Monat prüfen.",
+    "closingMismatch": "Eröffnungssaldo {opening} plus die Auszugszeilen {lines} ergibt {expected}, nicht den Schlusssaldo {closing} — beide Salden mit dem Kontoauszug abgleichen oder den Schlusssaldo leer lassen, wenn die Datei nur einen Teil abdeckt.",
+    "possibleDuplicatesNotice": "{count, plural, one {# Zeile entspricht einer Zeile, die bereits auf diesem Konto vorhanden ist, und wird nicht importiert} other {# Zeilen entsprechen Zeilen, die bereits auf diesem Konto vorhanden sind, und werden nicht importiert}}.",
+    "includePossibleDuplicates": "{count, plural, one {Dieses mögliche Duplikat trotzdem importieren} other {Diese # möglichen Duplikate trotzdem importieren}}",
+    "possibleDuplicateMatch": "Entspricht einer Zeile, die bereits auf diesem Konto vorhanden ist",
+    "onlyPossibleDuplicates": "Jede erkannte Zeile ist bereits auf diesem Konto vorhanden oder ein mögliches Duplikat. Schließen Sie die möglichen Duplikate unten ein, um sie zu importieren."
   },
   "start": {
     "resume": "Abstimmung fortsetzen",
@@ -539,7 +547,7 @@
     "formSetPreferredDone": "Bevorzugtes Formular gespeichert",
     "formPreferredCleared": "Bevorzugtes Formular zurückgesetzt",
     "formPreferredFailed": "Das bevorzugte Formular konnte nicht gespeichert werden",
-    "cardAccountHelp": "Keine Karten hinterlegt — wählen Sie das abstimmbare Kartenkonto, gegen das gebucht wird.",
+    "cardAccountHelp": "Wählen Sie das abstimmbare Kartenkonto, gegen das diese Belastung gebucht wird.",
     "noCardAccounts": "Noch keine abstimmbaren Kartenkonten.",
     "noCardAccountsCta": "Im Kontenplan hinzufügen",
     "partylessControlWarning": "Ohne Kunden oder Lieferanten auf {accounts} gebucht. Diese Beträge stehen außerhalb der Debitoren- und Kreditoren-Nebenbücher, offene Rechnungen bleiben daher unbezahlt. Erfassen Sie Kundeneingänge mit „Zahlung erfassen“ und Lieferantenzahlungen mit „Rechnungen bezahlen“ oder geben Sie den Kunden bzw. Lieferanten auf der Zeile an. Unter Einrichtung → Unternehmen & Buchhaltung → Kontrollkonten lassen sich solche Buchungen ablehnen.",
@@ -647,7 +655,11 @@
     "openingConfirm": "Eröffnung bestätigen",
     "openingConfirmedToast": "Eröffnung {amount} bestätigt",
     "openingConfirmedNote": "Eröffnung {amount} bestätigt — {reason}",
-    "openingStaleNote": "Die bestätigte Eröffnung stimmt nicht mehr mit dem übernommenen Buchsaldo überein — prüfen Sie das Hauptbuch und bestätigen Sie die Eröffnung erneut."
+    "openingStaleNote": "Die bestätigte Eröffnung stimmt nicht mehr mit dem übernommenen Buchsaldo überein — prüfen Sie das Hauptbuch und bestätigen Sie die Eröffnung erneut.",
+    "excludeDuplicate": "Duplikat ausschließen",
+    "clearDuplicate": "Als kein Duplikat markieren",
+    "excludeDuplicateReason": "Duplikat der Banktransaktion vom {date} über {amount}: {description}",
+    "excludeDuplicateReasonGeneric": "Duplikat einer früheren Banktransaktion"
   },
   "sftp": {
     "title": "SFTP",
@@ -1037,7 +1049,8 @@
       "recurly": "Recurly",
       "chargebee": "Chargebee",
       "shopify_payments": "Shopify Payments",
-      "paypal": "PayPal"
+      "paypal": "PayPal",
+      "square": "Square"
     },
     "externalRef": "Externe Referenz / Auszahlungs-ID",
     "settlementDate": "Abrechnungsdatum",
@@ -1074,6 +1087,9 @@
     "paypalPayloadHint": "Fügen Sie '{\"transactions\": [{\"transaction_info\": {...}}]}' aus der Transaction Search API ein, oder den Abrechnungsbericht als CSV mit Kopfzeile. Benennen Sie den Export unter Externe Referenz, damit der Stapel idempotent bleibt.",
     "invalidShopifyPayload": "Die Shopify-Nutzlast muss ein JSON-Objekt mit payout und transactions sein.",
     "csvUpload": "CSV hochladen",
+    "squarePayloadLabel": "Auszahlung und Auszahlungsbuchungen (JSON)",
+    "squarePayloadHint": "Ein JSON-Objekt mit payout und entries: '{\"payout\": {\"id\", \"amount_money\"}, \"entries\": [{\"id\", \"type\", \"gross_amount_money\", \"fee_amount_money\", \"net_amount_money\"}]}'. Beträge sind ganzzahlige Minor-Units. Die Square-Auszahlungs-ID als externe Referenz eintragen.",
+    "invalidSquarePayload": "Die Square-Nutzlast muss ein JSON-Objekt mit payout und entries sein.",
     "fxTitle": "Fremdwährung",
     "fxNone": "Durchgehend gleiche Währung",
     "fxSourceCurrency": "Belastungswährung",
@@ -1313,5 +1329,63 @@
   },
   "payoutAssistance": {
     "chipLabel": "Vorschlag prüfen"
+  },
+  "reconcileEvidence": {
+    "tabs": {
+      "workspace": "Abstimmung",
+      "statements": "Belegende Kontoauszüge",
+      "history": "Verlauf"
+    },
+    "statements": {
+      "title": "Belegende Kontoauszüge",
+      "windowAfter": "Kontoauszugszeilen mit Buchungsdatum nach {start} bis einschließlich {end} belegen diese Abstimmung.",
+      "windowThrough": "Kontoauszugszeilen mit Buchungsdatum bis einschließlich {end} belegen diese Abstimmung.",
+      "empty": "Kein Kontoauszug belegt den Saldo dieser Abstimmung.",
+      "sourceEmpty": "Diese Abstimmung beruht auf Quelldaten. Es wurde kein Kontoauszug importiert.",
+      "columns": {
+        "date": "Auszugsdatum",
+        "source": "Quelle",
+        "imported": "Importiert",
+        "opening": "Anfangssaldo",
+        "closing": "Endsaldo",
+        "lines": "Zeilen im Zeitraum",
+        "matched": "Zugeordnet",
+        "excluded": "Ausgeschlossen",
+        "unmatched": "Offen",
+        "total": "Summe im Zeitraum",
+        "open": "Auszug öffnen"
+      },
+      "excludedBadge": "Ausgeschlossen",
+      "reason": "Grund: {reason}",
+      "duplicateOf": "Mögliches Duplikat von {date} · {amount}",
+      "excludedByAt": "Ausgeschlossen {at} von {name}",
+      "excludedAt": "Ausgeschlossen {at}"
+    },
+    "history": {
+      "title": "Verlauf",
+      "description": "Genehmigungen, Zurücknahmen, Bestätigungen des Eröffnungssaldos und Anpassungen dieser Abstimmung sowie verworfene Sitzungen auf demselben Bankkonto.",
+      "empty": "Für dieses Bankkonto sind keine Genehmigung, Zurücknahme, Anpassung oder Verwerfung erfasst.",
+      "columns": {
+        "when": "Zeitpunkt",
+        "event": "Ereignis",
+        "by": "Von",
+        "details": "Einzelheiten"
+      },
+      "events": {
+        "sign_off": "Genehmigt",
+        "withdraw_sign_off": "Genehmigung zurückgenommen",
+        "discard": "Sitzung verworfen",
+        "confirm_opening": "Eröffnungssaldo bestätigt",
+        "session_adjustment": "Sitzung angepasst"
+      },
+      "signOffStatement": "Auszugssaldo {balance} · bis {date} · {matched} Journalzeilen markiert · {excluded} Auszugszeilen ausgeschlossen",
+      "signOffSource": "Quelldaten · Saldo {balance} · bis {date} · {matched} abgestimmte Journalzeilen",
+      "withdrawReason": "Grund: {reason}",
+      "withdrawPrior": "Zuvor genehmigter Saldo {balance} · genehmigt {at} von {by}",
+      "withdrawReleased": "Freigegebene Journalzeilen: {count} · Sitzung jetzt {status}",
+      "discardDetail": "Bis {date} · Saldo {balance} · {matches} Zuordnungen und {lines} Auszugszeilen freigegeben",
+      "confirmDetail": "Eröffnungssaldo {amount} ab {date} · Grund: {reason}",
+      "adjustDetail": "Bis {beforeDate} → {afterDate} · Saldo {beforeBalance} → {afterBalance}"
+    }
   }
 }

@@ -138,12 +138,10 @@ function assertStoredBoolean(value: boolean): boolean {
  * employee per fact; the stored value fills what the request omits; an
  * answer missing from both stays missing and the engine fails closed on it.
  *
- * The engine takes ONE absence value per employee per period, while storage
- * is per holiday occurrence. Where several holidays in the period demand the
- * assertion, the stored rows collapse to a single value only when EVERY
- * demanding occurrence is asserted AND unanimous — anything less leaves the
- * fact missing and the engine refuses by name, because a partial or split
- * answer is not the single coherent answer the engine consumes.
+ * Absence answers retain their holiday occurrence. An employee-wide answer
+ * is also available when every demanding occurrence has the same answer.
+ * Explicit request answers take precedence over stored answers; an unanswered
+ * occurrence remains missing and the calculation refuses it by name.
  */
 export function mergeHolidayEligibility(
   perRequest: Readonly<Record<string, StatutoryHolidayEligibilityFacts>> | undefined,
@@ -181,9 +179,18 @@ export function mergeHolidayEligibility(
         if (values.every((value) => value === first)) entry.absentWithoutConsent = first;
       }
     }
+    // Each filed occurrence also travels on its own, so an answer filed for
+    // one holiday clears that holiday while another still awaits its answer.
+    const filed = stored.assertions.get(employeeId);
+    const occurrenceAnswers = {
+      ...(request?.absentWithoutConsent === undefined && filed?.size ? Object.fromEntries(filed) : {}),
+      ...request?.absentWithoutConsentByHoliday,
+    };
+    if (Object.keys(occurrenceAnswers).length > 0) entry.absentWithoutConsentByHoliday = occurrenceAnswers;
     const entitled = stored.entitledDays.get(employeeId);
     if (entitled?.size) entry.entitledDayAttestations = Object.fromEntries(entitled);
     if (entry.paidOnCommission !== undefined || entry.absentWithoutConsent !== undefined
+        || entry.absentWithoutConsentByHoliday !== undefined
         || entry.entitledDayAttestations !== undefined || entry.constructionEmployee !== undefined) {
       merged[employeeId] = entry;
     }

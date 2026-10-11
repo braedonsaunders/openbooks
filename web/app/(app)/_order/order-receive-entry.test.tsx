@@ -174,3 +174,31 @@ test('the inventory picker says plainly when nothing is waiting', async (t) => {
     'an empty queue explains itself instead of rendering a bare drawer',
   )
 })
+
+function primaryReceiveButton(): HTMLButtonElement | undefined {
+  return [...document.querySelectorAll('button')]
+    .find((button) => button.textContent?.trim() === 'Receive goods') as HTMLButtonElement | undefined
+}
+
+test('an issued purchase order with stock left to receive offers Receive goods as its primary action', async (t) => {
+  mockPrefill(t)
+  const { unmount } = await mountDashboard(<OrderDrawer {...drawerProps(stockPo('approved'))} />, messages)
+  t.after(unmount)
+  await tick()
+  const primary = primaryReceiveButton()
+  assert.ok(primary, 'the issued order exposes the receipt step without opening Actions')
+  primary.click()
+  await tick()
+  await tick()
+  assert.ok(receiptDialog(), 'the primary action raises the receipt form')
+})
+
+test('an issued purchase order with nothing left to receive offers no receive primary action', async (t) => {
+  mockPrefill(t)
+  const received = stockPo('approved')
+  received.lines = received.lines.map((line) => ({ ...line, quantity_fulfilled: '10' })) as typeof received.lines
+  const { unmount } = await mountDashboard(<OrderDrawer {...drawerProps(received)} />, messages)
+  t.after(unmount)
+  await tick()
+  assert.equal(primaryReceiveButton(), undefined, 'a fully received order has no receipt step to offer')
+})

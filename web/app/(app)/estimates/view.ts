@@ -52,6 +52,7 @@ export interface EstimateDrawer {
   createMode?: boolean
   closeHref?: string
   kind: string
+  orgId: string
   parties: unknown
   accounts: unknown
   items: unknown
@@ -63,6 +64,7 @@ export interface EstimateDrawer {
   segments: unknown
   subsidiaries: unknown
   canManage: boolean
+  canApprove: boolean
   canOverrideCredit: boolean
   layout: unknown
   barcodeScanningEnabled: boolean
@@ -242,6 +244,8 @@ export async function loadEstimates(
               name: `${'  '.repeat(subsidiary.depth ?? 0)}${subsidiary.name}`,
             })),
           canManage,
+          // Quotes approve (issue) under estimates.issue, not the create grant.
+          canApprove: can(authz, 'estimates.issue'),
           canOverrideCredit: can(authz, 'ar.approve'),
           layout: resolvedForm?.layout,
           barcodeScanningEnabled,

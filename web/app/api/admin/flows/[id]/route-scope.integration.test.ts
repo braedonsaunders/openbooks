@@ -224,7 +224,7 @@ test('restricted flows.manage cannot create, edit or delete org-wide flow policy
   }
 })
 
-test('direct employee policy creation is explicit, disabled until enabled, and refused for unsupported subjects', async () => {
+test('direct employee policy creation is explicit, starts enabled when its graph validates, and is refused for unsupported subjects', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     await enableFlows(org.orgId)
@@ -239,7 +239,7 @@ test('direct employee policy creation is explicit, disabled until enabled, and r
     const { id } = await created.json() as { id: string }
     const row = (await withBypassContext(() => db.execute<{ enabled: boolean; graph: { ungatedOutcome?: string; nodes: { data: { kind: string; trigger: { trigger: string } } }[] } }>(sql`
       select enabled, graph from flows where org_id = ${org.orgId} and id = ${id}`))).rows[0]!
-    assert.equal(row.enabled, false)
+    assert.equal(row.enabled, true, 'a trigger-only apply graph lints clean, so the flow starts enabled')
     assert.equal(row.graph.ungatedOutcome, 'apply')
     assert.equal(row.graph.nodes.length, 1)
     assert.equal(row.graph.nodes[0]!.data.kind, 'trigger')

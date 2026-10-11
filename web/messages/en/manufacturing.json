@@ -51,6 +51,7 @@
     "process": "Process run"
   },
   "fields": {
+    "correctedOn": "Corrected date",
     "number": "Number",
     "code": "Code",
     "name": "Name",
@@ -171,7 +172,9 @@
     "campaignReference": "Campaign reference",
     "inputQuantity": "Input quantity",
     "outputQuantity": "Output quantity",
-    "difference": "Unreconciled difference"
+    "difference": "Difference",
+    "measuredOutputQuantity": "Measured output",
+    "differenceKind": "Difference type"
   },
   "actions": {
     "create": "Create",
@@ -198,6 +201,7 @@
     "resumeOperation": "Resume operation",
     "pauseOperation": "Pause operation",
     "correctOperationStart": "Correct start date",
+    "correctCompletionDate": "Correct completion date",
     "completeOperation": "Complete operation",
     "waive": "Waive material balance",
     "endRate": "End rate",
@@ -280,6 +284,7 @@
   "mrpNote": "MRP proposes supply from the saved inputs. Capacity is an advisory check; overloaded weeks do not shift planned dates.",
   "issueNote": "Select each component and its exact quantity. Tracked components need lot or serial choices. The posting command checks availability and holds at the issue location.",
   "outputNote": "This receipt adds finished quantity to inventory. Enter the quantity received now, its tracking and any required by-product valuation.",
+  "completionDateNote": "Moves the finished-goods receipt and its completion posting to the day production finished. The original postings are reversed on their own date and re-posted on the corrected day with the same quantities, costs and accounts. A correction is refused when a later movement of the same item would change cost, when the day precedes recorded operations or materials, or when a period is closed.",
   "doneNote": "Done closes execution and settles remaining WIP. Quantity tolerance, measured quantities and material requirements are enforced. Finished quantity below ordered quantity needs a short-completion reason, including orders with recorded scrap.",
   "normalScrapNote": "Record normal in-process production loss before the first finished-goods receipt. Its cost remains in WIP for the good output. This does not dispose stocked inventory. Abnormal losses or losses discovered after a receipt require holding the order for valuation review.",
   "activateNote": "Propose this draft for approval. Applying the approved event controls its effective window and ends an overlapping prior revision. Released work orders retain their own snapshots.",
@@ -608,10 +613,15 @@
     "details": "Optional run details",
     "balance": "Recorded material balance",
     "windowNote": "Use the existing planned start and finish to bound a continuous run, with an expected output quantity. Partial receipts account for each run’s output. A campaign reference groups related runs in search; it does not pool costs or replace each run’s approved recipe.",
-    "balanceNote": "Quantities are grouped by the current inventory base unit. Different units stay separate. The difference is recorded input minus all recorded good and secondary output, not an automatic scrap or physical mass calculation. Reversed movements are excluded.",
+    "balanceNote": "Quantities are grouped by inventory base unit, and different units stay separate. Input is the recorded consumption. Output is the recorded receipts plus the measured output of the last measured operation that is not yet received, so a measured weight counts before its receipt and is not counted twice after it. The difference is input minus that output; with a measured output, a positive difference is the measured loss. Reversed movements are excluded.",
     "empty": "No recorded material movements",
     "emptyNote": "Issue components and receive output to see the recorded balance.",
     "carryover": "Carry material into the next run",
-    "carryoverNote": "Receive retained intermediate material as a traceable inventory item, then issue that item and its lot or serial into the next run. Quality holds still apply. Genealogy follows the actual receipt and issue; no unrecorded WIP or automatic financial carryover is assumed."
+    "carryoverNote": "Receive retained intermediate material as a traceable inventory item, then issue that item and its lot or serial into the next run. Quality holds still apply. Genealogy follows the actual receipt and issue; no unrecorded WIP or automatic financial carryover is assumed.",
+    "differenceKind": {
+      "balanced": "Balanced",
+      "measured_loss": "Measured loss",
+      "unreconciled": "Unreconciled"
+    }
   }
 }

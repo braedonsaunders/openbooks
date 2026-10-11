@@ -10,8 +10,6 @@
   "compute": "Berechnen",
   "computing": "Wird berechnet…",
   "empty": "Wählen Sie eine Erklärung und einen Zeitraum aus und berechnen Sie dann.",
-  "adjustmentAria": "Anpassung für {label}",
-  "adjustmentPlaceholder": "0,00",
   "columns": {
     "line": "Zeile",
     "description": "Beschreibung",
@@ -102,6 +100,12 @@
       "pdf": "PDF",
       "xlsx": "Excel",
       "csv": "CSV"
+    },
+    "adjustments": {
+      "title": "Anpassungen",
+      "reason": "Begründung",
+      "recordedBy": "Erfasst von",
+      "noReason": "Keine Begründung erfasst"
     }
   },
   "provisions": {
@@ -326,5 +330,27 @@
       "threshold": "Umsatzschwelle"
     },
     "contextUnavailable": "Die Meldungsnachweise konnten nicht geladen werden. Wiederholen Sie den Vorgang, bevor Sie sich darauf verlassen."
+  },
+  "adjustments": {
+    "title": "Anpassungen",
+    "description": "Erfassen Sie Beträge, die in eine Anpassungszeile gehören, aber nicht im Hauptbuch dieses Systems stehen, etwa Geschäftsvorfälle vor Ihrer Umstellung. Jede Anpassung benötigt eine Begründung und wird beim Speichern der Steuererklärung mit ihrem Bearbeiter erfasst.",
+    "entryLabel": "Anpassung",
+    "line": "Zeile",
+    "amount": "Betrag",
+    "amountPlaceholder": "0.00",
+    "reason": "Begründung",
+    "reasonPlaceholder": "z. B. Geschäftsvorfälle Jan.–Aug. 2025 laut Vorsystem",
+    "add": "Anpassung hinzufügen",
+    "remove": "Entfernen",
+    "removeAria": "Anpassung entfernen: {reason}",
+    "errors": {
+      "lineCode": "Wählen Sie eine Anpassungszeile dieser Steuererklärung.",
+      "amount": "Geben Sie einen Betrag mit bis zu vier Dezimalstellen ein, zum Beispiel 3018.84 oder -50.",
+      "reason": "Geben Sie die Begründung für diese Anpassung ein (höchstens 500 Zeichen)."
+    }
+  },
+  "conversion": {
+    "notice": "Dieser Steuerzeitraum beginnt vor Ihrer Umstellung am {date}. Erfassen Sie die Beträge vor der Umstellung aus Ihrem bisherigen System.",
+    "action": "Beträge vor Umstellung erfassen"
   }
 }

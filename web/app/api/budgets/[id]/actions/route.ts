@@ -20,7 +20,7 @@ const POSTBodySchema1 = z.discriminatedUnion('action', [
   z.object({ action: z.literal('apply_source'), expectedRevision: revisionSchema, sourceScenarioId: z.string().uuid() }),
   z.object({ action: z.literal('submit'), expectedRevision: revisionSchema }),
   z.object({ action: z.literal('approve'), expectedRevision: revisionSchema }),
-  z.object({ action: z.literal('reject'), expectedRevision: revisionSchema }),
+  z.object({ action: z.literal('reject'), expectedRevision: revisionSchema, reason: z.string().trim().min(1).max(2000) }),
 ]);
 
 
@@ -117,13 +117,15 @@ export const POST = defineRoute({
             `))
             if (!linePresent.rows[0]) throw new BudgetMutationError('budget_requires_lines', 422)
             const nextRevision = expectedRevision + 1
-            await tx.execute(sql`
+            const decision = await tx.execute(sql`
               update budget_scenarios set
                 status = 'pending_approval', revision = ${nextRevision},
                 submitted_at = now(), submitted_by = ${user.id},
                 updated_at = now(), updated_by = ${user.id}
-              where id = ${id} and org_id = ${user.orgId}
+              where id = ${id} and org_id = ${user.orgId} and revision = ${expectedRevision}
+              returning id
             `)
+            if (decision.rows.length !== 1) throw new BudgetMutationError('revision_conflict', 409)
             await tx.execute(sql`
               insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
               values (${user.orgId}, 'budget_scenarios', ${id}, 'update',
@@ -146,7 +148,7 @@ export const POST = defineRoute({
             }
             const to = action === 'approve' ? 'approved' : 'draft'
             const nextRevision = expectedRevision + 1
-            await tx.execute(sql`
+            const decision = await tx.execute(sql`
               update budget_scenarios set
                 status = ${to}, revision = ${nextRevision},
                 submitted_at = case when ${to} = 'draft' then null else submitted_at end,
@@ -154,12 +156,15 @@ export const POST = defineRoute({
                 approved_at = case when ${to} = 'approved' then now() else approved_at end,
                 approved_by = case when ${to} = 'approved' then ${user.id} else approved_by end,
                 updated_at = now(), updated_by = ${user.id}
-              where id = ${id} and org_id = ${user.orgId}
+              where id = ${id} and org_id = ${user.orgId} and revision = ${expectedRevision}
+              returning id
             `)
+            if (decision.rows.length !== 1) throw new BudgetMutationError('revision_conflict', 409)
             await tx.execute(sql`
               insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
               values (${user.orgId}, 'budget_scenarios', ${id}, 'update',
-                ${JSON.stringify({ action, from: 'pending_approval', to })}::jsonb, ${user.id})
+                ${JSON.stringify({ action, from: 'pending_approval', to, revisionBefore: expectedRevision, revisionAfter: nextRevision,
+                  ...(action === 'reject' ? { reason: body.reason } : {}) })}::jsonb, ${user.id})
             `)
             return { revision: nextRevision, status: to }
           }

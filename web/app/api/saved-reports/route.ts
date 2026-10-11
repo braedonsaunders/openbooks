@@ -5,6 +5,8 @@ import { db } from "@openbooks/engine/platform/db";
 import { defineRoute } from '@/lib/api/route'
 import { unprocessable } from '@/lib/api/responses'
 import { uuidId } from "@/lib/api/json";
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { assertSavedReportPeriod } from "@/lib/report-filters";
 
 const createBody = z.object({
   name: z.string().trim().min(1),
@@ -20,10 +22,17 @@ export const POST = defineRoute({
   permission: 'reports.create',
   feature: { none: 'Saved report shortcuts are available independently of optional report capabilities.' },
   body: createBody,
-  handler: async ({ body, authz }) => {
+  handler: async ({ body, authz, request: req }) => {
   const { name, path, params } = body
   if (!name || !path.startsWith("/reports")) {
     return unprocessable("name and a /reports path required", { status: 400 });
+  }
+  // A saved custom period must carry the bounds it reopens with; a view saved
+  // without them would reopen as a different, wider window.
+  try {
+    assertSavedReportPeriod(params ?? {});
+  } catch (error) {
+    return apiErrorResponse(error, { request: req });
   }
   await db.execute(sql`
     insert into saved_reports (org_id, name, path, params, created_by_user_id)

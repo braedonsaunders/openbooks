@@ -56,6 +56,8 @@ export interface StatementPickerData {
   columnBalance: string
   company: string
   periodPhrase: string
+  /** Only offered when the org holds more than one accounting book. */
+  primaryFilter: { paramKey: string; label: string; value: string; options: { value: string; label: string }[] } | null
   dateRange: { from: string; to: string }
   rows: StatementPickerRow[]
   totalRows: number
@@ -93,7 +95,8 @@ export async function loadStatementPicker(
   const tp = await getTranslations('reports.statementsPicker')
   const tr = await getTranslations('reports')
 
-  const { selectedBook } = await reportBookSelection(authz.user.orgId, Array.isArray(sp.book) ? sp.book[0] : sp.book)
+  const tb = await getTranslations('budgets')
+  const { books, selectedBook } = await reportBookSelection(authz.user.orgId, Array.isArray(sp.book) ? sp.book[0] : sp.book)
   const params = parseListParams(sp, { sort: 'balance', allowedSorts: ['balance'] as const, perPage: PER_PAGE })
   const asOf = await businessToday(await resolveOrgId())
   // Legal-entity scope resolves through the subsidiary view — the same
@@ -151,7 +154,12 @@ export async function loadStatementPicker(
     columnCustomer: tp('columnCustomer'),
     columnBalance: tp('columnBalance'),
     company: org?.name ?? '',
-    periodPhrase: from && to ? tp('periodRange', { from, to }) : tp('periodDefault'),
+    periodPhrase: books.length > 1
+      ? `${selectedBook.name} · ${from && to ? tp('periodRange', { from, to }) : tp('periodDefault')}`
+      : from && to ? tp('periodRange', { from, to }) : tp('periodDefault'),
+    primaryFilter: books.length > 1
+      ? { paramKey: 'book', label: tb('list.bookFilter'), value: selectedBook.id, options: books.map((book) => ({ value: book.id, label: book.name })) }
+      : null,
     dateRange: { from: from ?? '', to: to ?? '' },
     rows: pageRows.map((row) => ({
       rowKey: row.id as string,
@@ -190,6 +198,7 @@ export function statementPickerSpec(data: StatementPickerData): PageSpec {
         searchPlaceholder: f('searchPlaceholder'),
         dateRange: f('dateRange'),
         subsidiaries: f('subsidiaries'),
+        primaryFilter: f('primaryFilter'),
       },
     }],
     // A picker opens statements; it is not itself a schedulable statement.

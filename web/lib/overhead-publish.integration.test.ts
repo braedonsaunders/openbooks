@@ -329,3 +329,75 @@ test(
     runIntegrationSource(source);
   },
 );
+
+test(
+  "a zero publish over a non-zero standard is refused until acknowledged and leaves the card unchanged",
+  { skip: !env.OPENBOOKS_DB_URL },
+  () => {
+    const source = `
+      import assert from "node:assert/strict";
+      import { randomUUID } from "node:crypto";
+      import { sql } from "drizzle-orm";
+      import { db } from "./engine/src/platform/db.ts";
+      import { installTrustedTestDatabaseBypass } from "./engine/src/testing/database-bypass.ts";
+      import {
+        createScratchOrg,
+        dropScratchOrg,
+        seedFlowActors,
+      } from "./engine/src/testing/fixtures.ts";
+      import { stubModules } from "./web/testing/stub-modules.ts";
+
+      installTrustedTestDatabaseBypass();
+      stubModules({ intl: true, extra: { 'next-intl': 'export async function getTranslations(){return (key)=>key}export async function getMessages(){return {}}export async function getLocale(){return "en"}export function createTranslator(options){const messages=options.messages;const catalog=options.namespace?messages?.[options.namespace]:messages ?? {};return (key,values)=>{const parts=String(key).split(".");let template=catalog;for(const part of parts)template=template?.[part];if(typeof template!=="string")return String(key);if(!values)return template;let out=template;for(const name of Object.keys(values))out=out.split("{"+name+"}").join(String(values[name]));return out;}}' } });
+      const { publishOverheadRates, OverheadZeroOverStandardError } = await import("./web/lib/overhead-publish.ts");
+      const org = await createScratchOrg();
+      try {
+        const actorId = (await seedFlowActors(org.orgId)).adminId;
+        const dept = randomUUID();
+        await db.execute(sql\`
+          insert into departments (id, org_id, code, name)
+          values (\${dept}, \${org.orgId}, 'SHOP-OVERHEAD', 'Shop')
+        \`);
+        await db.execute(sql\`
+          insert into overhead_rates
+            (id, org_id, department_id, category, method, rate_kind, rate_percent, effective_from)
+          values
+            (\${randomUUID()}, \${org.orgId}, \${dept}, 'Published', 'standard', 'per_hour', '12.5000', '2026-01-01')
+        \`);
+
+        await assert.rejects(
+          publishOverheadRates(org.orgId, actorId, '2026-09-01', [{ departmentId: dept, ratePerHour: '0.00' }]),
+          (error) => error instanceof OverheadZeroOverStandardError
+            && error.replacements.length === 1
+            && error.replacements[0].standardRatePerHour === '12.5000',
+        );
+        const refused = await db.execute(sql\`
+          select effective_to, rate_percent from overhead_rates where org_id = \${org.orgId}
+        \`);
+        assert.deepEqual(refused.rows, [{ effective_to: null, rate_percent: '12.5000' }]);
+        const audits = await db.execute(sql\`
+          select 1 from audit_log where org_id = \${org.orgId} and table_name = 'overhead_rates'
+        \`);
+        assert.equal(audits.rows.length, 0);
+
+        const result = await publishOverheadRates(
+          org.orgId,
+          actorId,
+          '2026-09-01',
+          [{ departmentId: dept, ratePerHour: '0.00' }],
+          null,
+          { acknowledgeZeroOverStandard: true },
+        );
+        assert.equal(result.published, 1);
+        const open = await db.execute(sql\`
+          select rate_percent, effective_from::text as effective_from from overhead_rates
+           where org_id = \${org.orgId} and effective_to is null
+        \`);
+        assert.deepEqual(open.rows, [{ rate_percent: '0.0000', effective_from: '2026-09-01' }]);
+      } finally {
+        await dropScratchOrg(org.orgId);
+      }
+    `;
+    runIntegrationSource(source);
+  },
+);

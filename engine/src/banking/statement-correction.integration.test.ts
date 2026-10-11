@@ -426,6 +426,7 @@ test(
           statementDate: org.date,
           currency: "CAD",
           lines: [{ postedOn: org.date, amount: "33", description: "To match" }],
+          includePossibleDuplicates: true,
         },
         ctx,
       );

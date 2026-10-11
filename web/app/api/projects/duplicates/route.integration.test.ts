@@ -29,6 +29,16 @@ const mockAuthz = `
   export async function guardProjectsFeature() { return null }
 `;
 
+// defineRoute loads the feature gate through the @/ alias, so the gate answers
+// with the same session as the relative boundary above.
+const mockFeatureGates = `
+  const state = globalThis[Symbol.for('openbooks.project-merge-route-test')]
+  export async function guardFeaturePermission() {
+    if (!state.authz) return new Response(null, { status: 401 })
+    return state.authz
+  }
+`;
+
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (
@@ -38,6 +48,10 @@ const hooks = registerHooks({
       return { url: "mock:authz", shortCircuit: true };
     }
 
+    if (specifier === "@/lib/feature-gates" && context.parentURL?.includes("/lib/api/route")) {
+      return { url: "mock:project-merge-feature-gates", shortCircuit: true };
+    }
+
     const engineUrl = resolveEngineSpecifier(specifier);
     if (engineUrl) return nextResolve(engineUrl, context);
     return nextResolve(specifier, context);
@@ -45,6 +59,9 @@ const hooks = registerHooks({
   load(url, context, nextLoad) {
     if (url === "mock:authz") {
       return { format: "module", source: mockAuthz, shortCircuit: true };
+    }
+    if (url === "mock:project-merge-feature-gates") {
+      return { format: "module", source: mockFeatureGates, shortCircuit: true };
     }
     return nextLoad(url, context);
   },

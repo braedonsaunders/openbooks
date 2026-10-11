@@ -25,10 +25,10 @@ async function mount(canBuy: boolean) {
     calls.push({ url, body })
     if (url.endsWith('/buy')) {
       purchased = true
-      return Response.json({ rows: [{ shipmentId: 'shipment-a', ok: true, labelId: 'label-a', trackingNumber: 'TRACK-A', duplicate: false }], merged: { pages: 1, pdfBase64: 'cGRm' } })
+      return Response.json({ rows: [{ shipmentId: 'shipment-a', handlingUnitId: 'unit-a', ok: true, labelId: 'label-a', trackingNumber: 'TRACK-A', duplicate: false }], merged: { pages: 1, pdfBase64: 'cGRm' } })
     }
-    if (init?.method === 'POST') return Response.json({ rows: [{ shipmentId: 'shipment-a', documentNumber: 'SHIP-101', ok: true, providerRateId: 'rate-a', carrier: 'Carrier', service: 'Ground', amount: '21.05', currency: 'USD', deliveryDate: null }] })
-    return Response.json({ candidates: purchased ? [] : [{ shipmentId: 'shipment-a', documentNumber: 'SHIP-101', customerName: 'Customer', promisedDate: null, labelCount: 0 }] })
+    if (init?.method === 'POST') return Response.json({ rows: [{ shipmentId: 'shipment-a', handlingUnitId: 'unit-a', documentNumber: 'SHIP-101', ok: true, providerRateId: 'rate-a', carrier: 'Carrier', service: 'Ground', amount: '21.05', currency: 'USD', deliveryDate: null }] })
+    return Response.json({ candidates: purchased ? [] : [{ shipmentId: 'shipment-a', handlingUnitId: 'unit-a', handlingUnitCode: 'HU-1', documentNumber: 'SHIP-101', customerName: 'Customer', promisedDate: null, labelCount: 0 }] })
   }) as typeof fetch
   const host = document.createElement('div')
   document.body.append(host)
@@ -58,14 +58,14 @@ test('shipment selection, rates and purchased labels replace each other and reta
     assert.match(view.host.textContent ?? '', /\$21\.05/)
     assert.equal(view.calls.filter(call => call.url.endsWith('/buy')).length, 0, 'previewing never purchases a label')
     await click(view.host, words.tabs.shipments)
-    assert.equal(view.host.querySelector<HTMLInputElement>('input[aria-label="SHIP-101"]')?.checked, true, 'tab switching retains selected shipments')
+    assert.equal(view.host.querySelector<HTMLInputElement>('input[aria-label="SHIP-101 · HU-1"]')?.checked, true, 'tab switching retains selected shipments')
     await click(view.host, words.tabs.rates)
     await click(view.host, words.buy)
     assert.equal(view.host.querySelectorAll('table').length, 0, 'purchase results replace rate and shipment tables')
     assert.match(view.host.textContent ?? '', /TRACK-A/)
     assert.ok(view.host.querySelector('a[download="shipping-labels.pdf"]'), 'candidate refresh cannot erase the purchased labels or print action')
     assert.equal(view.calls.filter(call => call.url.endsWith('/buy')).length, 1)
-    assert.deepEqual(view.calls.find(call => call.url.endsWith('/buy'))?.body?.items, [{ shipmentId: 'shipment-a', providerRateId: 'rate-a' }])
+    assert.deepEqual(view.calls.find(call => call.url.endsWith('/buy'))?.body?.items, [{ shipmentId: 'shipment-a', handlingUnitId: 'unit-a', providerRateId: 'rate-a' }])
   } finally { await view.close() }
 })
 

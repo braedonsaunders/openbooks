@@ -49,9 +49,9 @@ test("README connector, locale, and container claims match shipped files", () =>
     /image: \$\{OPENBOOKS_IMAGE:\?OPENBOOKS_IMAGE must be a post-clean, scanned image pinned by digest\}/,
   );
   assert.doesNotMatch(compose, /ghcr\.io\/braedonsaunders\/openbooks/);
-  assert.match(readme, /### One-command Docker Compose installation/);
-  assert.match(readme, /\.\/scripts\/compose-up\.sh/);
-  assert.match(readme, /OPENBOOKS_IMAGE='[^']+@sha256:[^']+'/);
+  assert.match(readme, /### Install the prebuilt Docker image/);
+  assert.match(readme, /\.\/scripts\/compose-up\.sh|sh \.\/scripts\/compose-up\.sh/);
+  assert.match(readme, /resolves the official release to an\s+immutable\s+image digest/);
   assert.match(
     installer,
     new RegExp(`official_openbooks_image=ghcr\\.io/braedonsaunders/openbooks:${packageVersion.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`),

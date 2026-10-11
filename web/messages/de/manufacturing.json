@@ -51,6 +51,7 @@
     "process": "Prozesslauf"
   },
   "fields": {
+    "correctedOn": "Korrigiertes Datum",
     "number": "Nummer",
     "code": "Kennung",
     "name": "Bezeichnung",
@@ -171,7 +172,9 @@
     "campaignReference": "Kampagnenreferenz",
     "inputQuantity": "Einsatzmenge",
     "outputQuantity": "Ausbringungsmenge",
-    "difference": "Nicht abgestimmte Differenz"
+    "difference": "Differenz",
+    "measuredOutputQuantity": "Gemessene Ausbeute",
+    "differenceKind": "Differenzart"
   },
   "actions": {
     "create": "Anlegen",
@@ -198,6 +201,7 @@
     "resumeOperation": "Arbeitsgang fortsetzen",
     "pauseOperation": "Arbeitsgang pausieren",
     "correctOperationStart": "Startdatum korrigieren",
+    "correctCompletionDate": "Abschlussdatum korrigieren",
     "completeOperation": "Arbeitsgang abschließen",
     "waive": "Materialrest erlassen",
     "endRate": "Satz beenden",
@@ -280,6 +284,7 @@
   "mrpNote": "MRP schlägt Beschaffung aus gespeicherten Eingaben vor. Kapazität ist nur ein Hinweis; Überlast verschiebt keine Termine.",
   "issueNote": "Komponente und genaue Menge auswählen. Verfolgte Artikel brauchen Charge oder Seriennummer. Buchung prüft Bestand und Sperren am Entnahmeplatz.",
   "outputNote": "Dieser Eingang erhöht den Fertigwarenbestand. Jetzt empfangene Menge, Verfolgung und nötige Nebenproduktbewertung eingeben.",
+  "completionDateNote": "Verschiebt den Fertigwareneingang und seine Abschlussbuchung auf den Tag, an dem die Fertigung abgeschlossen war. Die ursprünglichen Buchungen werden zu ihrem eigenen Datum storniert und zum korrigierten Tag mit denselben Mengen, Kosten und Konten neu gebucht. Eine Korrektur wird abgelehnt, wenn eine spätere Bewegung desselben Artikels ihre Kosten ändern würde, wenn der Tag vor erfassten Arbeitsgängen oder Materialien liegt oder wenn eine Periode geschlossen ist.",
   "doneNote": "Erledigen beendet Ausführung und verrechnet Rest-WIP. Toleranz, Messungen und Materialbedarf bleiben bindend. Minderfertigung benötigt auch bei Ausschuss eine Begründung.",
   "normalScrapNote": "Normalen Produktionsverlust vor dem ersten Fertigwareneingang erfassen. Kosten bleiben für Gutware in WIP; Lagerbestand wird nicht entsorgt. Außergewöhnliche Verluste oder Verluste nach Eingang: Auftrag zur Bewertungsprüfung sperren.",
   "activateNote": "Reichen Sie den Entwurf zur Genehmigung ein. Die Anwendung steuert die Gültigkeit und beendet den überlappenden Vorgänger. Freigegebene Aufträge behalten ihre Versionen.",
@@ -608,10 +613,15 @@
     "details": "Optionale Laufdetails",
     "balance": "Erfasste Materialbilanz",
     "windowNote": "Begrenzen Sie einen kontinuierlichen Lauf mit dem vorhandenen geplanten Beginn und Ende sowie einer erwarteten Ausbringungsmenge. Teilzugänge erfassen die Ausbringung jedes Laufs. Eine Kampagnenreferenz gruppiert zusammengehörige Läufe in der Suche; Kosten und genehmigte Rezepturen bleiben je Lauf getrennt.",
-    "balanceNote": "Mengen werden nach der aktuellen Lagerbasiseinheit gruppiert. Verschiedene Einheiten bleiben getrennt. Die Differenz ist erfasster Einsatz abzüglich aller erfassten Gut- und Nebenausgänge, keine automatische Ausschuss- oder physikalische Massenberechnung. Stornierte Bewegungen sind ausgeschlossen.",
+    "balanceNote": "Mengen werden nach der Lagerbasiseinheit gruppiert; verschiedene Einheiten bleiben getrennt. Der Input ist der erfasste Verbrauch. Der Output besteht aus den erfassten Zugängen plus der gemessenen Ausbeute des letzten gemessenen Arbeitsgangs, soweit noch nicht zugegangen, sodass eine gemessene Menge schon vor dem Zugang zählt und danach nicht doppelt. Die Differenz ist Input minus diese Output-Menge; bei gemessener Ausbeute ist eine positive Differenz der gemessene Schwund. Stornierte Bewegungen sind ausgeschlossen.",
     "empty": "Keine erfassten Materialbewegungen",
     "emptyNote": "Geben Sie Komponenten aus und erfassen Sie Ausgänge, um die Bilanz zu sehen.",
     "carryover": "Material in den nächsten Lauf übernehmen",
-    "carryoverNote": "Buchen Sie aufbewahrtes Zwischenmaterial als rückverfolgbaren Lagerartikel ein und geben Sie diesen Artikel mit seiner Charge oder Seriennummer in den nächsten Lauf aus. Qualitätssperren gelten weiterhin. Die Genealogie folgt dem tatsächlichen Zugang und der Ausgabe; es wird kein ungebuchter WIP oder automatischer Kostenübertrag angenommen."
+    "carryoverNote": "Buchen Sie aufbewahrtes Zwischenmaterial als rückverfolgbaren Lagerartikel ein und geben Sie diesen Artikel mit seiner Charge oder Seriennummer in den nächsten Lauf aus. Qualitätssperren gelten weiterhin. Die Genealogie folgt dem tatsächlichen Zugang und der Ausgabe; es wird kein ungebuchter WIP oder automatischer Kostenübertrag angenommen.",
+    "differenceKind": {
+      "balanced": "Ausgeglichen",
+      "measured_loss": "Gemessener Schwund",
+      "unreconciled": "Nicht abgestimmt"
+    }
   }
 }

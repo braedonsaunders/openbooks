@@ -20,6 +20,7 @@ const POSTBodySchema = z.object({
   tillAccountId: z.string().uuid(),
   amount: z.string().min(1),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'drop date must be YYYY-MM-DD'),
+  coversThrough: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'cash cutoff must be YYYY-MM-DD').nullable().optional(),
   bankAccountId: z.string().uuid(),
   slipNumber: z.string().min(1).max(120),
   subsidiaryId: z.string().uuid().nullable().optional(),
@@ -30,8 +31,9 @@ const POSTBodySchema = z.object({
  * Till drops by till and date: cash counted out of a till and taken to the
  * bank before the back office posts the sales it came from. Same gate as the
  * per-sale drop — `cash_sales.deposit` — and the same destination fence.
- * GET reads the reconciliation window a drop on `date` would close (sales
- * tendered vs. dropped since the till's previous drop) for the drop form.
+ * GET reads the reconciliation window a drop covering sales through `date`
+ * would close (sales tendered vs. dropped since the previous drop's cutoff)
+ * for the drop form.
  */
 export const GET = defineRoute({
   public: 'session',
@@ -77,6 +79,7 @@ export const POST = defineRoute({
         tillAccountId: body.tillAccountId,
         amount: body.amount,
         date: body.date,
+        coversThrough: body.coversThrough ?? null,
         bankAccountId: body.bankAccountId,
         slipNumber: body.slipNumber,
         subsidiaryId: body.subsidiaryId ?? null,

@@ -33,6 +33,8 @@ const DOCUMENTS_SUBJECT_KINDS = new Set([
   'quote',
   'pick_list',
   'shipment',
+  'purchase_receipt',
+  'sales_fulfillment',
   'rma',
   'journal',
 ])

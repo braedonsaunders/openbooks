@@ -832,15 +832,15 @@ async function readDashboardMetrics(
   // 29–30) and silently drop predictions the cut-off would keep. The
   // organization's forecast-model knobs ride along, so a tuned push ladder
   // moves the tile and the cockpit together.
-  const forecast30d = (items: OpenItem[], stats: PaymentStats | null): string | null => {
+  const forecast30d = (items: OpenItem[], stats: PaymentStats | null, receivable: boolean): string | null => {
     if (!stats) return null
     const asOf = parseISO(today)
     const cutoff = addDays(asOf, 30)
-    const forecast = scheduleForecast(items, stats, asOf, weekStart(asOf), cutoff, expectedModel)
+    const forecast = scheduleForecast(items, stats, asOf, weekStart(asOf), cutoff, expectedModel, receivable)
     return sumMoney(forecast.entries.map((e) => e.amount))
   }
-  const expectedReceipts = need('expectedReceipts30d') ? forecast30d(arItems, arStats) : null
-  const expectedPayments = need('expectedPayments30d') ? forecast30d(apItems, apStats) : null
+  const expectedReceipts = need('expectedReceipts30d') ? forecast30d(arItems, arStats, true) : null
+  const expectedPayments = need('expectedPayments30d') ? forecast30d(apItems, apStats, false) : null
   // Party rollups over the identical item arrays — groupBy sorts largest
   // first, the tile takes five. Same functions as the cockpits, so a
   // customer never owes one figure on the dashboard and another on /ar.

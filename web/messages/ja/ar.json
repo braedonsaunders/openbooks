@@ -81,8 +81,9 @@
     "depositRecording": "記録中…",
     "depositNeedsSetup": "レジ入金用の銀行口座が設定されていません。経理担当者に会社設定で選択してもらってください。",
     "depositRequiresPermission": "現金の銀行入金を記録するにはcash_sales.deposit権限が必要です（現金売上を計上するロールが保有）。管理者に付与を依頼してください。",
-    "tillWindow": "{after} のドロップ以降：{sales} 件の販売で現金 {tendered} {currency}、これまでのドロップ {dropped} {currency}。",
-    "tillWindowFirst": "このレジの以前のドロップはありません：{sales} 件の販売で現金 {tendered} {currency}、これまでのドロップ {dropped} {currency}。",
+    "tillWindow": "{after} より後から {through} までの販売：{sales} 件の販売で現金 {tendered} {currency}、これまでのドロップ {dropped} {currency}。",
+    "tillWindowFirst": "{through} までの販売（このレジの以前のドロップはありません）：{sales} 件の販売で現金 {tendered} {currency}、これまでのドロップ {dropped} {currency}。",
+    "tillCoversThrough": "対象販売の最終日",
     "tillReason": "集計メモ",
     "tillReasonHint": "記録済みの販売で説明できる額を超えるドロップの場合に必要です（例：未入力の販売）",
     "tillDifference": "{after} から {through} までのレジ集計：ドロップ額が記録済み現金と {difference} 異なります。",
@@ -152,7 +153,10 @@
     "controlAccountHelp": "この伝票が計上される売掛金勘定です。入金とクレジットは同じ勘定で消し込まれます。空欄の場合は既定の勘定を使用します。",
     "controlAccountPartyDefault": "得意先の既定 — {account}",
     "controlAccountOrganizationDefault": "組織の既定 — {account}",
-    "controlAccountUnset": "売掛金勘定が設定されていません — 「セットアップ → 会社と会計 → 統制勘定」で設定してください"
+    "controlAccountUnset": "売掛金勘定が設定されていません — 「セットアップ → 会社と会計 → 統制勘定」で設定してください",
+    "createUnconfirmed": "サーバーが新しい伝票の作成を確認できませんでした。もう一度保存してください。再試行はこの下書きのキーを再利用するため、伝票が2件作成されることはありません。",
+    "saveUnconfirmed": "サーバーが保存を確認できませんでした。再編集する前に伝票を再読み込みして、保存された状態を確認してください。",
+    "createConflict": "この下書きは別の内容で保存済みです。ページを再読み込みし、一覧から保存済みの伝票を開いてください。再入力しないでください。"
   },
   "dailySummary": {
     "date": "日付",
@@ -269,6 +273,13 @@
       },
       "recurring": "補助金、受取家賃、サブスクリプションなどの定期入金はカテゴリとして予測に加わります。<cashCockpit>資金繰りコックピット</cashCockpit>で設定してください。",
       "documentation": "売掛金ガイドを読む"
+    },
+    "notForecast": {
+      "title": "予測対象外 — {days}日を超えて延滞",
+      "hint": "{count}件 · {total}",
+      "body": "これらの売掛金は入金予定に含めません。エイジング集計には含まれ、回収対象として残ります。",
+      "daysOverdue": "{days}日延滞",
+      "more": "ほか{count}件は非表示"
     }
   },
   "appliedPayments": {
@@ -376,6 +387,8 @@
       "cancelSubscription": "解約する",
       "cancelConfirmTitle": "サブスクリプションを解約しますか?",
       "cancelConfirmBody": "解約すると、このサブスクリプションの定期請求が終了します。この操作は取り消せません。",
+      "cancelEffectiveOn": "解約の適用日",
+      "cancelPaidThroughHint": "{date} まで請求済みです。適用日で請求が停止します。計上済みの請求書は変更されません。",
       "toasts": {
         "prorated": "日割り調整 {adjustment} → {documentNumber}",
         "qtyUpdatedNoProration": "数量を更新しました（日割りなし）",
@@ -386,6 +399,10 @@
         "loading": "高度なサブスクリプションを読み込み中",
         "loadFailed": "高度なサブスクリプションのライフサイクルデータを読み込めませんでした",
         "loadFailedFallback": "高度なサブスクリプションを読み込めませんでした",
+        "noContractSuffix": "契約なし",
+        "amendNeedsContract": "このサブスクリプションにはまだ契約がありません。「契約」で契約を有効化してから、ここで変更してください。",
+        "planChangeHint": "請求済みの期間は元のプランのままです。変更は請求済み期間の終了日 {date} 以降に適用されます。",
+        "contractNeedsVersion": "{plan} には公開済みのカタログバージョンがありません。契約を有効化する前に「プランのバージョン」で公開してください。",
         "actionFailed": "操作に失敗しました",
         "catalogTitle": "発効日付きカタログ",
         "catalogDescription": "公開済みバージョンは変更不可です。商用条件が変わる場合は新しいバージョンを作成してください。",
@@ -495,6 +512,8 @@
         "changeTiming": "請求時期を変更",
         "changeRenew": "更新",
         "changeCoterm": "期間を揃える",
+        "changePlan": "プランを変更",
+        "changeType_change_plan": "プラン変更",
         "name": "名称",
         "newTermEnd": "新しい期間終了日",
         "timing": "時期",

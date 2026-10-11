@@ -35,7 +35,7 @@ registerHooks({
               const gate = globalThis.__definitionPatchAuditGate;
               return {
                 user: { orgId: gate.orgId, id: gate.userId },
-                permissions: new Set(['reports.read', 'reports.create']),
+                permissions: new Set(['reports.read', 'reports.create', 'gl.read']),
                 allowedSubsidiaryIds: null,
               };
             }

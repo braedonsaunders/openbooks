@@ -13,6 +13,7 @@ import { useBusinessToday } from '@/components/business-date-provider'
 import { readApiErrorMessage } from '@/lib/api-error'
 import { useMoney } from '@/components/money-provider'
 import { canonicalDecimal, compareDecimal } from '@/lib/exact-decimal'
+import type { LaborControlAccountOption, LaborControlRole } from './view'
 
 /**
  * Guided setup — four plain questions, then we do the configuration. Each
@@ -24,7 +25,7 @@ export function LaborCostingWizard(props: {
   open: boolean
   closeHref: string
   onApplied: (applied: { mode: 'off' | 'post'; components: LaborCostComponent[]; laborWip: string | null; laborClearing: string | null; payrollVariance: string | null }) => void
-  accounts: { id: string; label: string }[]
+  accounts: LaborControlAccountOption[]
   hoursPerDay: string
   annualHours: string
 }) {
@@ -44,10 +45,14 @@ export function LaborCostingWizard(props: {
   const [fallbackRate, setFallbackRate] = useState('')
   // Q3 — posting.
   const [posting, setPosting] = useState<'off' | 'post'>('off')
-  const guessAccount = (patterns: RegExp[]) => props.accounts.find((a) => patterns.some((p) => p.test(a.label)))?.id ?? ''
-  const [wipAcct, setWipAcct] = useState(() => guessAccount([/labou?r.*(wip|progress)/i, /\bwip\b/i, /work in progress/i]))
-  const [clrAcct, setClrAcct] = useState(() => guessAccount([/labou?r.*clearing/i, /clearing/i, /accrued (wages|labou?r|payroll)/i]))
-  const [varAcct, setVarAcct] = useState(() => guessAccount([/payroll.*variance/i, /labou?r.*variance/i, /variance/i]))
+  // Suggestions come only from accounts whose type the role accepts, and the
+  // clearing account is never guessed from a wages payable: absorption
+  // credits must not land among the wages the payroll owes.
+  const guessAccount = (role: LaborControlRole, patterns: RegExp[]) =>
+    props.accounts.find((a) => a.roles.includes(role) && patterns.some((p) => p.test(a.label)))?.id ?? ''
+  const [wipAcct, setWipAcct] = useState(() => guessAccount('laborWip', [/labou?r.*(wip|progress)/i, /\bwip\b/i, /work in progress/i]))
+  const [clrAcct, setClrAcct] = useState(() => guessAccount('laborClearing', [/labou?r.*clearing/i, /clearing/i]))
+  const [varAcct, setVarAcct] = useState(() => guessAccount('payrollVariance', [/payroll.*variance/i, /labou?r.*variance/i, /variance/i]))
 
   // Custom burden stays decimal text end to end: the settings boundary only
   // reads strings, so the wizard validates the spelling itself and the Next
@@ -247,7 +252,7 @@ export function LaborCostingWizard(props: {
                   <Label htmlFor="wiz-wip">{t('posting.wip')}</Label>
                   <Select id="wiz-wip" value={wipAcct} onChange={(e) => setWipAcct(e.target.value)}>
                     <option value="">—</option>
-                    {props.accounts.map((a) => (
+                    {props.accounts.filter((a) => a.roles.includes('laborWip') || a.id === wipAcct).map((a) => (
                       <option key={a.id} value={a.id}>
                         {a.label}
                       </option>
@@ -258,7 +263,7 @@ export function LaborCostingWizard(props: {
                   <Label htmlFor="wiz-clr">{t('posting.clearing')}</Label>
                   <Select id="wiz-clr" value={clrAcct} onChange={(e) => setClrAcct(e.target.value)}>
                     <option value="">—</option>
-                    {props.accounts.map((a) => (
+                    {props.accounts.filter((a) => a.roles.includes('laborClearing') || a.id === clrAcct).map((a) => (
                       <option key={a.id} value={a.id}>
                         {a.label}
                       </option>
@@ -269,7 +274,7 @@ export function LaborCostingWizard(props: {
                   <Label htmlFor="wiz-var">{t('posting.variance')}</Label>
                   <Select id="wiz-var" value={varAcct} onChange={(e) => setVarAcct(e.target.value)}>
                     <option value="">{t('posting.varianceLater')}</option>
-                    {props.accounts.map((a) => (
+                    {props.accounts.filter((a) => a.roles.includes('payrollVariance') || a.id === varAcct).map((a) => (
                       <option key={a.id} value={a.id}>
                         {a.label}
                       </option>

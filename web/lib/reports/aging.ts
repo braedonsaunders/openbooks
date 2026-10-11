@@ -7,7 +7,7 @@ import { mulDecimal } from "@openbooks/engine/money/money";
 // bare @openbooks/* to the main checkout, so a new engine module would not
 // resolve until merge; a relative import binds this checkout everywhere.
 import { AP_OPEN_ITEM_KINDS, AR_OPEN_ITEM_KINDS } from "@openbooks/engine/records/open-item-kinds";
-import { appliedLegAmountExpr } from "@openbooks/engine/records/balance-due";
+import { appliedLegAmountExpr, datedAppliedAmountSql } from "@openbooks/engine/records/balance-due";
 import { asOfPostedEntryLateral } from "@openbooks/engine/records/open-item-scopes";
 import { resolveOrgId } from "../org-scope";
 import { presentationCurrency, presentationRates, presentationSpotRatesSql, presentationAmountSql } from "../fx-presentation";
@@ -53,6 +53,25 @@ export interface AgingRow {
   b3: ExactDecimal; // 61–90
   b4: ExactDecimal; // 90+
   total: ExactDecimal;
+  /**
+   * The reconciling line: control-account balance that no open document
+   * explains (a manual journal credited to AR or debited to AP without an
+   * invoice or bill behind it). Its total is part of the control tie, never
+   * part of any document's open.
+   */
+  reconciling?: boolean;
+  /** Reconciling rows only: the journal entries behind the balance, in the row's sign. */
+  entries?: UnopenedControlEntry[];
+}
+
+/** One journal entry making up a reconciling line, presented in the reporting currency. */
+export interface UnopenedControlEntry {
+  entryId: string;
+  entryNumber: string | null;
+  postingDate: string;
+  memo: string | null;
+  partyName: string | null;
+  amount: ExactDecimal;
 }
 
 export interface AgingResult {
@@ -142,9 +161,9 @@ export class AgingRatesUnavailableError extends Error {
  *
  * Documents are not the whole control account: unapplied receipts, direct
  * control journals, and legacy partyless opening balances post control lines
- * with no invoice/credit document behind them. Those balances are folded in
- * as an explicit per-party residual (the "(no party)" row when no party is
- * stamped), so the aging total always ties to the control.
+ * with no invoice/credit document behind them. Those balances appear as an
+ * explicit reconciling line per party (see controlResiduals), so the aging
+ * total always ties to the control.
  */
 /**
  * One open document as rebuilt from stored dual-recorded amounts: the signed
@@ -392,7 +411,7 @@ export async function agingByParty(
   const docs = await openDocuments(side, asOf, dims, resolvedOrgId, orgBase, kinds, negativeKinds, {
     bookId: opts?.bookId,
   });
-  const residuals = await controlResiduals(side, asOf, dims, resolvedOrgId, orgBase, opts?.bookId);
+  const { residuals, unopenedLines } = await controlResiduals(side, asOf, dims, resolvedOrgId, orgBase, opts?.bookId);
   // A document currency with no spot must never block the BASE report (it
   // converts nothing through it): only request the legs this basis reads,
   // plus the functional legs the residual always needs.
@@ -427,10 +446,10 @@ export async function agingByParty(
     row.total = decimalAdd(row.total, open);
   }
   const rows: AgingRow[] = [...byParty.values()];
-  await foldControlResidual(side, resolvedOrgId, rows, docs, residuals, convert);
-  // The residual merge can change row totals: restore the
-  // abs(total)-descending display order of the old grouped query.
-  rows.sort((a, b) => compareAbsoluteDescending(a.total, b.total));
+  await foldControlResidual(side, resolvedOrgId, rows, docs, residuals, unopenedLines, convert);
+  // Reconciling lines sort after the document rows; within each group the
+  // rows read in abs(total)-descending order.
+  rows.sort((x, y) => Number(x.reconciling === true) - Number(y.reconciling === true) || compareAbsoluteDescending(x.total, y.total));
   const totals = rows.reduce(
     (a, r) => ({
       current: decimalAdd(a.current, r.current),
@@ -446,38 +465,59 @@ export async function agingByParty(
 }
 
 /**
- * Fold control-account balances that no invoice/credit document explains into
- * the aging rows, per party. Unapplied receipts, direct control
- * journals, and legacy partyless opening balances all post control lines
+ * Control-account balance that no open document explains becomes a reconciling
+ * line, never part of a party's document row. Unapplied receipts, direct
+ * control journals, and legacy partyless opening balances post control lines
  * outside the document population above; without this the aging silently
  * understates the control (SIM AR CA$503,288 aged vs CA$687,038 on GL 1100).
+ * Each residual is one "Control-account entries without an open item" row per
+ * party (the partyless row when no party is stamped). The row lists the
+ * journal entries behind it, so the bookkeeper can see the entry that breaks
+ * the subledger tie. Keeping the residual out of party rows means a
+ * customer's document total always equals that customer's open invoices.
  * The residual lands in `current` — an undated balance has no age to bucket
- * by — and a party with no stamped lines renders through the existing
- * "(no party)" row, exactly like the registers' unassigned section. Exact
- * ties produce no row at all, so a clean subledger reads exactly as before.
+ * by. Exact ties produce no row at all, so a clean subledger reads exactly as
+ * before.
  *
- * Two deliberate scope boundaries. First, one book per read: the document
- * side above joins each line's entry and keeps the primary (or selected)
- * book, so the control side answers in that same scope — reading every
- * book on either side would double-count parallel-book mirrors. Second,
- * document dims attribute by document HEADER while control
- * lines attribute by LINE (one invoice, lines in many departments): under
- * department/project/location/class/segment filters the two populations
- * partition differently and control-minus-docs is not attributable per
- * party, so the residual stays out and the aging reads documents only, as
- * before. Subsidiary stamps ride on documents and lines together, so
- * subsidiary-scoped reads keep the residual. Third, the control side uses the
- * same account scope as the document side (0171): the AP control counts
- * liability_payable accounts plus the designated employee-payable control, so
- * newly aged OOP reports cancel out of the residual instead of being netted
- * back off it; the AR control excludes the designated employee-receivable
- * account, whose personal balances age nowhere by design (see
- * arResidualAccountScope) rather than landing as document-less AR rows.
+ * Scope boundaries. First, one book per read: the document side above joins
+ * each line's entry and keeps the primary (or selected) book, so the control
+ * side answers in that same scope — reading every book on either side would
+ * double-count parallel-book mirrors. Second, document dims attribute by
+ * document HEADER while control lines attribute by LINE (one invoice, lines in
+ * many departments): under department/project/location/class/segment filters
+ * the two populations partition differently and control-minus-docs is not
+ * attributable per party, so the reconciling line stays out and the aging
+ * reads documents only. Subsidiary stamps ride on documents and lines
+ * together, so subsidiary-scoped reads keep the reconciling line. Third, the
+ * control side uses the same account scope as the document side (0171): the
+ * AP control counts liability_payable accounts plus the designated
+ * employee-payable control, so newly aged OOP reports cancel out of the
+ * residual instead of being netted back off it; the AR control excludes the
+ * designated employee-receivable account, whose personal balances age nowhere
+ * by design (see arResidualAccountScope).
  */
 interface ControlResidual {
   partyId: string | null;
   funcCcy: string;
   bal: string;
+}
+
+/**
+ * One control journal line that no open document carries as of the report
+ * date, with the part of it still unapplied (`remainder`, signed as the
+ * control balance). The remainders of a party's lines sum to that party's
+ * reconciling balance; lines fully applied by a document or a receipt drop
+ * out, so an applied receipt never appears as an unexplained entry.
+ */
+interface UnopenedControlLine {
+  partyId: string | null;
+  partyName: string | null;
+  entryId: string;
+  entryNumber: string | null;
+  postingDate: string;
+  memo: string | null;
+  funcCcy: string;
+  remainder: string;
 }
 
 async function controlResiduals(
@@ -487,12 +527,13 @@ async function controlResiduals(
   orgId: string,
   orgBase: string,
   bookId?: string | null,
-): Promise<ControlResidual[]> {
+): Promise<{ residuals: ControlResidual[]; unopenedLines: () => Promise<UnopenedControlLine[]> }> {
+  const noLines = async (): Promise<UnopenedControlLine[]> => [];
   if (
     dims?.departmentId || dims?.projectId || dims?.locationId || dims?.classId ||
     (dims?.segments && Object.keys(dims.segments).length > 0)
   ) {
-    return [];
+    return { residuals: [], unopenedLines: noLines };
   }
   // The control side reads the SAME account scope as the document side above:
   // the AP control counts liability_payable plus the designated
@@ -516,7 +557,84 @@ async function controlResiduals(
      -- different bind parameter per occurrence, which GROUP BY will not match.
      group by l.party_id, 2
   `);
-  return control.rows.map((c) => ({ partyId: c.party_id, funcCcy: c.func_ccy, bal: c.bal }));
+  const residuals = control.rows.map((c) => ({ partyId: c.party_id, funcCcy: c.func_ccy, bal: c.bal }));
+  // The journal-entry listing is read only once a reconciling balance is
+  // known to exist (see foldControlResidual), so a tied subledger pays nothing.
+  return {
+    residuals,
+    unopenedLines: () => unopenedControlLines(side, asOf, dims, orgId, orgBase, bookId),
+  };
+}
+
+/**
+ * The journal entries behind the reconciling line: control lines the
+ * open-item rebuild does not carry as of the report date, each reduced by
+ * the amount applied to it as of that date. Carried lines are the same
+ * population the document side reads (a document of a side kind, posted or
+ * voided after the date, whose as-of entry holds the open-item line), so the
+ * two sides partition the control with no line counted twice.
+ */
+async function unopenedControlLines(
+  side: AgingSide,
+  asOf: string,
+  dims: DimFilter | undefined,
+  orgId: string,
+  orgBase: string,
+  bookId?: string | null,
+): Promise<UnopenedControlLine[]> {
+  const controlScope = side === "ap"
+    ? apOpenAccountScope(sql`a`, orgId)
+    : arResidualAccountScope(sql`a`, orgId);
+  const { kinds } = agingKinds(side);
+  const r = await db.execute<{
+    party_id: string | null; party_name: string | null; entry_id: string; entry_number: string | null;
+    posting_date: string; memo: string | null; func_ccy: string; remainder: string;
+  }>(sql`
+    with control_lines as (
+      select l.id as line_id, l.amount, l.party_id, e.id as entry_id, e.entry_number,
+             e.posting_date::text as posting_date, e.memo,
+             coalesce(sub.base_currency, ${orgBase}) as func_ccy
+        from journal_lines l
+        join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
+        join accounts a on a.id = l.account_id and a.org_id = l.org_id
+        left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
+       where l.org_id = ${orgId} and ${controlScope} and e.posting_date <= ${asOf}
+         and e.book_id = ${statementBookExpr(orgId, bookId)}
+         and ${dimWhere(dims)}
+         and not exists (
+           select 1 from documents d
+           ${asOfPostedEntryLateral(orgId, asOf)}
+           join journal_lines dl on dl.entry_id = je.id and dl.is_open_item
+          where dl.id = l.id
+            and d.org_id = ${orgId}
+            and d.kind in (${sql.join(kinds.map((kind) => sql`${kind}`), sql`, `)})
+            and (d.status = 'posted' or (d.voided_at is not null and d.voided_at::date > ${asOf}::date))
+            and coalesce(d.posting_date, d.document_date) <= ${asOf}
+            and ${dimWhere(dims, sql`d`)}
+         )
+    ), remainders as (
+      select cl.*, ${datedAppliedAmountSql(orgId, sql`cl.line_id`, asOf)} as consumed
+        from control_lines cl
+    )
+    select rm.party_id, p.display_name as party_name, rm.entry_id, rm.entry_number, rm.posting_date,
+           rm.memo, rm.func_ccy,
+           sum(rm.amount - (case when rm.amount < 0 then -1 else 1 end) * rm.consumed)::text as remainder
+      from remainders rm
+      left join parties p on p.id = rm.party_id and p.org_id = ${orgId}
+     group by rm.party_id, p.display_name, rm.entry_id, rm.entry_number, rm.posting_date, rm.memo, rm.func_ccy
+    having sum(rm.amount - (case when rm.amount < 0 then -1 else 1 end) * rm.consumed) <> 0
+     order by rm.posting_date, rm.entry_number nulls last, rm.entry_id
+  `);
+  return r.rows.map((x) => ({
+    partyId: x.party_id,
+    partyName: x.party_name,
+    entryId: x.entry_id,
+    entryNumber: x.entry_number,
+    postingDate: x.posting_date,
+    memo: x.memo,
+    funcCcy: x.func_ccy,
+    remainder: x.remainder,
+  }));
 }
 
 async function foldControlResidual(
@@ -525,6 +643,7 @@ async function foldControlResidual(
   rows: AgingRow[],
   docs: OpenDocument[],
   residuals: ControlResidual[],
+  unopenedLines: () => Promise<UnopenedControlLine[]>,
   convert: (native: string, from: string) => ExactDecimal,
 ): Promise<void> {
   if (residuals.length === 0) return;
@@ -547,42 +666,43 @@ async function foldControlResidual(
     residualByParty.set(key, decimalAdd(residualByParty.get(key) ?? ZERO, convert(residual, c.funcCcy)));
   }
   if (residualByParty.size === 0) return;
-  const unnamed: string[] = [];
-  for (const [partyId, residual] of residualByParty) {
-    if (decimalCmp(residual, ZERO) === 0) continue;
-    const existing = rows.find((row) => row.partyId === partyId);
-    if (existing) {
-      existing.current = decimalAdd(existing.current, residual);
-      existing.total = decimalAdd(existing.total, residual);
-    } else {
-      rows.push({
-        partyId,
-        partyName: null,
-        current: residual,
-        b1: ZERO,
-        b2: ZERO,
-        b3: ZERO,
-        b4: ZERO,
-        total: residual,
-      });
-      if (partyId !== null) unnamed.push(partyId);
-    }
+  const entriesByParty = new Map<string | null, UnopenedControlEntry[]>();
+  for (const line of await unopenedLines()) {
+    const presented = (side === "ap" ? decimalNeg(line.remainder) : line.remainder) as ExactDecimal;
+    const list = entriesByParty.get(line.partyId) ?? [];
+    list.push({
+      entryId: line.entryId,
+      entryNumber: line.entryNumber,
+      postingDate: line.postingDate,
+      memo: line.memo,
+      partyName: line.partyName,
+      amount: convert(presented, line.funcCcy),
+    });
+    entriesByParty.set(line.partyId, list);
   }
-  if (unnamed.length > 0) {
+  const partyIds = [...residualByParty.keys()].filter((id): id is string => id !== null);
+  const names = new Map<string, string | null>();
+  if (partyIds.length > 0) {
     const named = await db.execute<{ id: string; display_name: string | null }>(sql`
       select p.id, p.display_name from parties p
-       where p.org_id = ${orgId} and p.id = any(${`{${unnamed.join(",")}}`}::uuid[])
+       where p.org_id = ${orgId} and p.id = any(${`{${partyIds.join(",")}}`}::uuid[])
     `);
-    const names = new Map(named.rows.map((n) => [n.id, n.display_name]));
-    for (const row of rows) {
-      if (row.partyId !== null && row.partyName === null) row.partyName = names.get(row.partyId) ?? null;
-    }
+    for (const n of named.rows) names.set(n.id, n.display_name);
   }
-  // The merge nets a row to zero exactly when its control balance is zero —
-  // nothing outstanding, so it reads as no row (the grouped query's own
-  // abs(total) > 0 rule).
-  for (let i = rows.length - 1; i >= 0; i--) {
-    if (decimalCmp(rows[i]!.total, ZERO) === 0) rows.splice(i, 1);
+  for (const [partyId, residual] of residualByParty) {
+    if (decimalCmp(residual, ZERO) === 0) continue;
+    rows.push({
+      partyId,
+      partyName: partyId === null ? null : names.get(partyId) ?? null,
+      current: residual,
+      b1: ZERO,
+      b2: ZERO,
+      b3: ZERO,
+      b4: ZERO,
+      total: residual,
+      reconciling: true,
+      entries: entriesByParty.get(partyId) ?? [],
+    });
   }
 }
 
@@ -803,7 +923,7 @@ export async function agingSummaryAndDetail(
   const docs = await openDocuments(side, asOf, dims, resolvedOrgId, orgBase, kinds, negativeKinds, {
     bookId: opts?.bookId,
   });
-  const residuals = await controlResiduals(side, asOf, dims, resolvedOrgId, orgBase, opts?.bookId);
+  const { residuals, unopenedLines } = await controlResiduals(side, asOf, dims, resolvedOrgId, orgBase, opts?.bookId);
   const needed = new Set<string>();
   for (const d of docs) needed.add(basis === "transaction" ? d.txnCcy : d.funcCcy);
   for (const res of residuals) needed.add(res.funcCcy);
@@ -835,8 +955,8 @@ export async function agingSummaryAndDetail(
     row.total = decimalAdd(row.total, open);
   }
   const rows: AgingRow[] = [...byParty.values()];
-  await foldControlResidual(side, resolvedOrgId, rows, docs, residuals, convert);
-  rows.sort((a, b) => compareAbsoluteDescending(a.total, b.total));
+  await foldControlResidual(side, resolvedOrgId, rows, docs, residuals, unopenedLines, convert);
+  rows.sort((x, y) => Number(x.reconciling === true) - Number(y.reconciling === true) || compareAbsoluteDescending(x.total, y.total));
   const totals = rows.reduce(
     (a, r) => ({
       current: decimalAdd(a.current, r.current),

@@ -100,7 +100,7 @@ const ACTIONS: CreateAction[] = [
   { key: 'purchaseOrder', group: 'purchases', enabled: (p) => p.accountsPayable && p.orders, icon: ShoppingCart, endpoint: '/api/purchase-orders/draft', destination: (id) => `/purchase-orders?order=${id}&mode=edit` },
   { key: 'vendorPayment', group: 'purchases', enabled: (p) => p.vendorPayments, icon: WalletCards, endpoint: '/api/payments/draft', body: { kind: 'vendor_payment' }, destination: (id) => `/payments?payment=${id}&mode=edit` },
   { key: 'journal', group: 'accounting', enabled: (p) => p.journal, icon: ScrollText, endpoint: '/api/journals/draft', destination: (id) => `/journal?entry=${id}&mode=edit` },
-  { key: 'expense', group: 'accounting', enabled: (p) => p.expenses, icon: Receipt, endpoint: '/api/expenses/draft', destination: (id) => `/expenses/reports?expense=${id}&mode=edit` },
+  { key: 'expense', group: 'accounting', enabled: (p) => p.expenses, icon: Receipt, directHref: '/expenses/reports?expense=new&mode=edit' },
   { key: 'cardCharge', group: 'accounting', enabled: (p) => p.accountsPayable, icon: WalletCards, directHref: documentCreateHref('/banking/transactions', 'card_charge') },
   { key: 'cardRefund', group: 'accounting', enabled: (p) => p.accountsPayable, icon: WalletCards, directHref: documentCreateHref('/banking/transactions', 'card_refund') },
   { key: 'check', group: 'accounting', enabled: (p) => p.accountsPayable, icon: FileMinus2, directHref: documentCreateHref('/banking/transactions', 'check') },

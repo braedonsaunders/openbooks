@@ -69,7 +69,7 @@ test("history-less items forecast at their due date; dateless ones stay unplaced
     const gentle = predict(stale, asOf, stats, {
       settleBufferSigma: 0.5,
       overduePushShortDays: 7, overduePushMidDays: 14, overduePushLongDays: 28,
-      overdueMidThresholdDays: 100, overdueLongThresholdDays: 200,
+      overdueMidThresholdDays: 100, overdueLongThresholdDays: 200, collectibilityHorizonDays: 90,
       cardTrajectoryTolerance: 0.2, cardMedianBlendWeight: 0.7, vendorOutlierSigma: 2,
       cardStatementCloseDays: 27, cardDefaultPayDay: 24, cardStalePaymentDays: 30,
     });

@@ -22,8 +22,6 @@ stubModules({
       `export async function findCardsExpiringSoon(){return []}` +
       `export async function getRecoveryMetrics(){return {}}` +
       `export const MISSING_COLLECTION_POLICY = 'missing_collection_policy'`,
-    '@openbooks/engine/platform/civil-date':
-      `export function addCalendarDays(day){return day}`,
     '@openbooks/engine/platform/business-date':
       `export async function businessToday(){return '2026-10-01'}`,
     '../../../lib/custom-reports':

@@ -71,7 +71,10 @@
     "controlAccountPartyDefault": "Lieferantenstandard — {account}",
     "controlAccountOrganizationDefault": "Unternehmensstandard — {account}",
     "controlAccountUnset": "Kein Verbindlichkeitenkonto eingerichtet – legen Sie eines unter Einrichtung → Unternehmen & Buchhaltung → Kontrollkonten fest",
-    "matchBanner": "Einige Lagerzeilen sind keiner Bestellung zugeordnet — die Rechnung kann erst gebucht werden, wenn sie zugeordnet sind."
+    "matchBanner": "Einige Lagerzeilen sind keiner Bestellung zugeordnet — die Rechnung kann erst gebucht werden, wenn sie zugeordnet sind.",
+    "createUnconfirmed": "Der Server hat den neuen Beleg nicht bestätigt. Speichern Sie erneut: Der Wiederholungsversuch verwendet den Schlüssel dieses Entwurfs und kann daher keinen zweiten Beleg erzeugen.",
+    "saveUnconfirmed": "Der Server hat das Speichern nicht bestätigt. Laden Sie den Beleg neu, um seinen gespeicherten Stand zu prüfen, bevor Sie erneut bearbeiten.",
+    "createConflict": "Dieser Entwurf wurde bereits mit anderen Angaben gespeichert. Laden Sie die Seite neu und öffnen Sie den gespeicherten Beleg aus der Liste, statt ihn erneut zu erfassen."
   },
   "capture": {
     "title": "Rechnungserfassung",

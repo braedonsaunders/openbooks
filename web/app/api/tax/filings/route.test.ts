@@ -13,7 +13,7 @@ import { NextResponse } from 'next/server'
 // holder is refused.
 
 interface EngineCall {
-  op: 'compute' | 'markFiled'
+  op: 'compute' | 'prepare' | 'markFiled'
   orgId: string
   userId: string
 }
@@ -25,8 +25,10 @@ interface RouteState {
   scopeChecks: (string | null)[]
   engineCalls: EngineCall[]
   computeOpts: unknown[]
+  computeAdjustments: unknown[]
   markFiledError: unknown
-  filingInserts: string[]
+  /** Arguments of each prepareTaxFiling call: the computed return and its entries. */
+  filingInserts: { result: Record<string, unknown>; entries: unknown[] }[]
 }
 
 const stateKey = Symbol.for('openbooks.tax-filing-route-test')
@@ -37,6 +39,7 @@ const routeState: RouteState = {
   scopeChecks: [],
   engineCalls: [],
   computeOpts: [],
+  computeAdjustments: [],
   markFiledError: null,
   filingInserts: [],
 }
@@ -116,11 +119,17 @@ const mockSources = new Map<string, string>([
     'mock:tax-filing',
     `
       const state = globalThis[Symbol.for('openbooks.tax-filing-route-test')]
-      export const TAX_FILING_SNAPSHOT_VERSION = 2
+      export * from ${JSON.stringify(new URL('../../../../../engine/src/tax-returns/adjustments.ts', import.meta.url).href)}
+      export const TAX_FILING_SNAPSHOT_VERSION = 3
       export class TaxFilingError extends Error {
         constructor(code, message) { super(message ?? code); this.code = code }
       }
       globalThis.openbooksTaxFilingError = (code, message) => new TaxFilingError(code, message)
+      export async function prepareTaxFiling(orgId, userId, result, entries) {
+        state.engineCalls.push({ op: 'prepare', orgId, userId })
+        state.filingInserts.push({ result, entries })
+        return { id: 'filing-1', version: 2 }
+      }
       export async function markTaxFilingFiled(orgId, id, userId) {
         state.engineCalls.push({ op: 'markFiled', orgId, userId })
         if (state.markFiledError) throw state.markFiledError
@@ -138,6 +147,7 @@ const mockSources = new Map<string, string>([
       export async function computeTaxReturn(orgId, code, from, to, adjustments, opts) {
         state.engineCalls.push({ op: 'compute', orgId, userId: 'user-1' })
         state.computeOpts.push(opts ?? null)
+        state.computeAdjustments.push(adjustments)
         // The double must produce the full return identity the prepare path
         // freezes: a double that cannot produce it would let the insert
         // silently persist NULL posture without any test noticing. It echoes
@@ -215,6 +225,7 @@ function reset(permissions: string[], allowedSubsidiaryIds: string[] | null = nu
   routeState.scopeChecks.length = 0
   routeState.engineCalls.length = 0
   routeState.computeOpts.length = 0
+  routeState.computeAdjustments.length = 0
   routeState.markFiledError = null
   routeState.filingInserts.length = 0
 }
@@ -257,31 +268,71 @@ test('POST prepare demands compliance.file and freezes the snapshot under it', a
     to: '2026-03-31',
   })
   assert.deepEqual(routeState.permissionChecks, ['compliance.file'])
-  assert.deepEqual(routeState.engineCalls, [{ op: 'compute', orgId: 'org-1', userId: 'user-1' }])
+  assert.deepEqual(routeState.engineCalls, [
+    { op: 'compute', orgId: 'org-1', userId: 'user-1' },
+    { op: 'prepare', orgId: 'org-1', userId: 'user-1' },
+  ])
 })
 
-// The prepare insert must freeze the return's identity and currency posture
-// (0265): a reprint or staleness check that reads live configuration instead
-// is the D2/D3 defect, so the insert text itself is asserted here.
-test('POST prepare freezes the return identity and snapshot version', async () => {
+// The prepared filing freezes the computed return itself — its identity and
+// currency posture travel with the boxes into the engine, which persists them.
+// A reprint or staleness check that reads live configuration instead is the
+// D2/D3 defect, so the hand-off is asserted here.
+test('POST prepare hands the computed return identity to the engine to freeze', async () => {
   reset(['compliance.file'])
 
   const response = await post()
 
   assert.equal(response.status, 201)
   assert.equal(routeState.filingInserts.length, 1)
-  const insert = routeState.filingInserts[0]!
-  for (const column of [
-    'functional_currency',
-    'presentation_currency',
+  const { result } = routeState.filingInserts[0]!
+  for (const field of [
+    'functionalCurrency',
     'translation',
-    'subsidiary_ids',
-    'registration_id',
-    'registration_number',
-    'snapshot_version',
+    'subsidiaryIds',
+    'registrationId',
+    'registrationNumber',
   ]) {
-    assert.match(insert, new RegExp(column), `prepare insert must freeze ${column}`)
+    assert.ok(field in result, `prepare must receive ${field}`)
   }
+})
+
+test('POST prepare records each adjustment entry with its reason and sums the amounts for the computation', async () => {
+  reset(['compliance.file'])
+
+  const response = await post({
+    code: 'GST-Q',
+    from: '2026-01-01',
+    to: '2026-03-31',
+    adjustments: [
+      { lineCode: '104', amount: '1000.00', reason: 'January to June 2025 per prior system' },
+      { lineCode: '104', amount: '2018.84', reason: 'July and August 2025 per prior system' },
+    ],
+  })
+
+  assert.equal(response.status, 201)
+  assert.deepEqual(routeState.computeAdjustments, [{ '104': '3018.8400' }])
+  assert.equal(routeState.filingInserts[0]!.entries.length, 2)
+  assert.deepEqual(routeState.filingInserts[0]!.entries[1], {
+    lineCode: '104',
+    amount: '2018.8400',
+    reason: 'July and August 2025 per prior system',
+  })
+})
+
+test('POST prepare refuses an adjustment without a reason before reaching the engine', async () => {
+  reset(['compliance.file'])
+
+  const response = await post({
+    code: 'GST-Q',
+    from: '2026-01-01',
+    to: '2026-03-31',
+    adjustments: [{ lineCode: '104', amount: '3018.84', reason: '   ' }],
+  })
+
+  assert.equal(response.status, 422)
+  assert.match(JSON.stringify(await response.json()), /line 104 needs a reason/)
+  assert.deepEqual(routeState.engineCalls, [], 'an unexplained adjustment never reaches the engine')
 })
 
 // TR2: prepare accepts the same filing scope the preview GET does and hands
@@ -342,7 +393,7 @@ test('POST prepare keeps restricted callers inside their allowed subsidiaries', 
   const orgWide = await post()
   assert.equal(orgWide.status, 403, 'freezing the org-wide return is an org-wide write: restricted callers get the named remedy')
   assert.deepEqual(await orgWide.json(), { error: 'requires unrestricted subsidiary access' })
-  assert.equal(routeState.engineCalls.length, 1, 'only the in-scope prepare reached the engine')
+  assert.equal(routeState.engineCalls.length, 2, 'only the in-scope prepare reached the engine (compute, then prepare)')
 })
 
 test('PATCH mark-filed demands compliance.file, not the report authority', async () => {

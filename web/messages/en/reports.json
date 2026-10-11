@@ -375,7 +375,12 @@
     "currency": "Currency",
     "convertFrom": "Convert from",
     "baseOption": "Base currency",
-    "transactionOption": "Transaction currency"
+    "transactionOption": "Transaction currency",
+    "controlEntries": {
+      "label": "Control-account entries without an open item",
+      "hint": "Posted to the control account with no invoice, bill or credit behind them",
+      "more": "+{count} more"
+    }
   },
   "cashFlow": {
     "title": "Cash Flow Statement",
@@ -3105,7 +3110,7 @@
     },
     "analytics-asset-lifecycle": {
       "name": "Asset lifecycle",
-      "description": "Current fixed-asset register: assets in service, fully depreciated, disposed and awaiting activation."
+      "description": "Fixed-asset register: in service, fully depreciated, disposed and awaiting activation."
     },
     "analytics-production": {
       "name": "Production overview",
@@ -3117,15 +3122,15 @@
     },
     "analytics-grant-portfolio": {
       "name": "Grant portfolio",
-      "description": "Current grant lifecycle: awarded, active, closed out and draft grants. Requires nonprofit reporting permission."
+      "description": "Awarded, active, closed-out and draft grants. Requires nonprofit reporting permission."
     },
     "analytics-allocation-controls": {
       "name": "Allocation controls",
-      "description": "Current allocation run controls: posted runs, pending approvals, failed calculations and total runs."
+      "description": "Allocation runs by status: posted, pending approval, failed calculations and total runs."
     },
     "analytics-payroll-reconciliation": {
       "name": "Payroll reconciliation",
-      "description": "Filed payroll comparison results: differences, exact matches, tolerated differences and unattributed amounts. Counts refer to comparison cells."
+      "description": "Filed payroll comparison cells: differences, exact matches, tolerated and unattributed."
     },
     "analytics-workforce-capacity": {
       "name": "Workforce capacity",

@@ -375,7 +375,12 @@
     "currency": "通貨",
     "convertFrom": "換算元",
     "baseOption": "基準通貨",
-    "transactionOption": "取引通貨"
+    "transactionOption": "取引通貨",
+    "controlEntries": {
+      "label": "未消込の統制勘定仕訳",
+      "hint": "対応する請求書・支払請求書・クレジットメモがないまま統制勘定に計上された仕訳",
+      "more": "他 {count} 件"
+    }
   },
   "cashFlow": {
     "title": "キャッシュフロー計算書",

@@ -7,6 +7,7 @@ import { isIsoCalendarDate } from "../platform/business-date.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { InventoryError, type Runner } from "./contracts.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
+import { assertPeriodModulesOpen, CloseError } from "../periods/period-policy.ts";
 
 export function persistReceiptMoney(value: unknown, label: string): string {
   const exact = canonicalDecimal(value, 4);
@@ -208,11 +209,12 @@ export interface PriorIssueDraw {
 }
 
 /**
- * Stock-on-date coverage for a backdated issue. An issue dated before a
- * posted movement at its position must be covered by the stock that was on
- * hand on its own date: a receipt dated later cannot supply it, even when
- * stock on hand today would. An issue dated on or after every posted movement
- * needs no such check, since the current on-hand read already answers it.
+ * Stock-on-date coverage for a backdated outbound movement (issue or transfer
+ * source). A movement dated before a posted movement at its position must be
+ * covered by the stock that was on hand on its own date: a receipt dated later
+ * cannot supply it, even when stock on hand today would. A movement dated on or
+ * after every posted movement needs no such check, since the current on-hand
+ * read already answers it.
  *
  * Quantities are the posted movements dated on or before `date` (reversals
  * are posted movements with signed quantities, so a reversed receipt nets to
@@ -231,6 +233,7 @@ export async function backdatedIssueShortage(
   date: string,
   quantity: string,
   priorDraws: PriorIssueDraw[] = [],
+  movement: "issue" | "transfer" = "issue",
 ): Promise<string | null> {
   const lotId = scope.lotId ?? null;
   const serialId = scope.serialId ?? null;
@@ -270,7 +273,28 @@ export async function backdatedIssueShortage(
      where i.org_id = ${orgId} and i.id = ${scope.itemId}`)).rows[0];
   const item = labels?.item ?? scope.itemId;
   const location = labels?.location ? ` at ${labels.location}` : "";
-  return `Item ${item}${location} had ${fromUnits(onHand)} on hand on ${date} but the issue needs ${fromUnits(requested)} — date the issue on or after the receipt that brings the stock in, or receive it first.`;
+  return `Item ${item}${location} had ${fromUnits(onHand)} on hand on ${date} but the ${movement} needs ${fromUnits(requested)} — date the ${movement} on or after the receipt that brings the stock in, or receive it first.`;
+}
+
+/**
+ * The message an inventory posting into this covering period would be refused
+ * with, or null when the GL accepts it. Same fence as postInventoryEntry; callers
+ * that need a remedy name the period instead of relaying the raw closure text.
+ */
+export async function inventoryPeriodClosure(
+  runner: Runner,
+  orgId: string,
+  periodId: string,
+  bookId: string,
+  subsidiaryIds: string[],
+): Promise<string | null> {
+  try {
+    await assertPeriodModulesOpen(runner, { orgId, periodId, bookId, subsidiaryIds, modules: [] });
+    return null;
+  } catch (error) {
+    if (error instanceof CloseError) return error.message;
+    throw error;
+  }
 }
 
 export function assertInventoryDate(value: string, label: string): void {

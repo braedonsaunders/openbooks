@@ -36,6 +36,7 @@ import { orgYearEndFilings, type YearEndFilingSection } from '@openbooks/engine/
 import { factorLabelForPack, PAYROLL_COUNTRY_PACKS } from '@openbooks/engine/payroll/packs'
 import { buildRegisterBuckets, type RegisterBucket } from '../../../../../lib/payroll-register-buckets.ts'
 import { can, requirePermission } from '../../../../../lib/authz'
+import { documentKindPermissions, postPermission } from '@openbooks/engine/records/document-kind-permissions'
 import { subsidiaryUiOptions } from '../../../../../lib/subsidiaries'
 import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
@@ -111,6 +112,8 @@ export interface PayRunWizardData {
    */
   factorLabels: Record<string, Record<string, string>>
   canRun: boolean
+  /** Withdrawing an approval to recalculate it (the return-to-draft permission for pay runs). */
+  canWithdrawApproval: boolean
   initialStep: WizardStep
   /**
    * The latest calculate's per-employee outcomes, persisted wholesale at
@@ -506,6 +509,7 @@ export async function loadPayRunWizard(
       traceEngines,
       factorLabels,
       canRun: can(authz, 'payroll.run'),
+      canWithdrawApproval: can(authz, documentKindPermissions('pay_run')?.approve ?? postPermission('pay_run')),
       initialStep,
       calculationErrors,
       refusalAcknowledgement,
@@ -563,6 +567,7 @@ export function payRunWizardSpec(data: PayRunWizardData): PageSpec {
         traceEngines: data.traceEngines,
         factorLabels: data.factorLabels,
         canRun: data.canRun,
+        canWithdrawApproval: data.canWithdrawApproval,
         initialStep: data.initialStep,
         calculationErrors: data.calculationErrors,
         refusalAcknowledgement: data.refusalAcknowledgement,

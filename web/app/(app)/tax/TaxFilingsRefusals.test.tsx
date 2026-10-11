@@ -236,8 +236,69 @@ test("a refused save toasts the server refusal, not a generic failure", async ()
       code: "CA_GST34",
       from: "2026-07-01",
       to: "2026-07-31",
-      adjustments: {},
+      adjustments: [],
     });
+  } finally {
+    await unmount();
+    restoreFetch();
+  }
+});
+
+
+async function enterInput(id: string, value: string) {
+  const input = document.getElementById(id) as HTMLInputElement;
+  assert.ok(input);
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!.call(input, value);
+    input.dispatchEvent(new window.Event("input", { bubbles: true }));
+  });
+}
+
+test("a refused adjustment preview removes the old totals and save action until a successful recompute", async () => {
+  let refuseAdjusted = true;
+  const prepareBodies: unknown[] = [];
+  const restoreFetch = scriptFetch((url, init) => {
+    if (url.startsWith("/api/tax/returns/")) {
+      if (url.includes("adj_104=") && refuseAdjusted) {
+        return Response.json({ error: "The adjustment cannot be included in this return." }, { status: 422 });
+      }
+      return Response.json({
+        formCode: "CA_GST34", formName: "GST/HST Return", from: "2026-07-01", to: "2026-07-31",
+        submissionChannel: "portal_manual", watermark: null, subsidiaryIds: [], registrationId: null, translation: null,
+        boxes: [
+          { lineCode: "104", label: "Adjustments", value: url.includes("adj_104=") ? "3018.8400" : "0.0000", computed: false, editable: true },
+        ],
+      });
+    }
+    if (url === "/api/tax/filings" && init?.method === "POST") {
+      prepareBodies.push(JSON.parse(String(init.body)));
+      return Response.json({ id: "filing-1", version: 1 }, { status: 201 });
+    }
+    return null;
+  });
+  const { unmount } = await mount();
+  try {
+    await click(buttonsNamed("Compute")[0]!);
+    await enterInput("tax-adjustment-amount", "3018.84");
+    await enterInput("tax-adjustment-reason", "Pre-conversion activity");
+    const form = document.querySelector<HTMLFormElement>('form');
+    assert.ok(form);
+    await act(async () => {
+      form.dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
+      await tick();
+    });
+    await tick();
+    assert.deepEqual(errorToasts(), ["The adjustment cannot be included in this return."]);
+    assert.equal(buttonsNamed("Save to history").length, 0);
+    assert.deepEqual(prepareBodies, []);
+    refuseAdjusted = false;
+    await click(buttonsNamed("Compute")[0]!);
+    assert.match(document.body.textContent ?? "", /3,018\.84/);
+    await click(buttonsNamed("Save to history")[0]!);
+    assert.deepEqual(prepareBodies, [{
+      code: "CA_GST34", from: "2026-07-01", to: "2026-07-31",
+      adjustments: [{ lineCode: "104", amount: "3018.84", reason: "Pre-conversion activity" }],
+    }]);
   } finally {
     await unmount();
     restoreFetch();

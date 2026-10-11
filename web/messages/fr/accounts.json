@@ -42,9 +42,15 @@
     "expense": "Charges"
   },
   "hygiene": {
-    "assetBankUncorroborated": "« {name} » est typé comme compte bancaire mais n’a ni nom bancaire ni rapprochement possible ; il sera donc compté comme trésorerie partout. Vérifiez le type (les comptes de compensation, de provision et de crédit sont souvent mal typés) ou activez le rapprochement."
+    "assetBankUncorroborated": "« {name} » est typé comme compte bancaire mais n’a ni nom bancaire ni rapprochement possible ; il sera donc compté comme trésorerie partout. Vérifiez le type (les comptes de compensation, de provision et de crédit sont souvent mal typés) ou activez le rapprochement.",
+    "duplicateAccountName": "Enregistré. Un autre compte actif porte aussi le nom « {name} » ({account})."
   },
   "drawer": {
+    "duplicateName": {
+      "body": "Un compte actif nommé « {name} » existe déjà ({account}). Utilisez ce compte ou créez celui-ci malgré tout.",
+      "useExisting": "Utiliser le compte existant",
+      "createAnyway": "Créer quand même"
+    },
     "saved": "Compte enregistré",
     "created": "Compte créé",
     "newTitle": "Nouveau compte",
@@ -85,6 +91,7 @@
       "invalid_custom_fields": "Vérifiez les valeurs des champs personnalisés.",
       "number_in_use": "Ce numéro de compte est déjà utilisé.",
       "numberInUseBy": "Ce numéro de compte est déjà utilisé par <account>{number} · {name}</account>.",
+      "duplicate_account_name": "Un compte actif utilise déjà ce nom.",
       "account_changed": "Ce compte a changé pendant votre modification. Rouvrez-le et réessayez.",
       "invalid_idempotency_key": "La demande de compte n’a pas pu être relancée de façon sécuritaire.",
       "save_failed": "Le compte n’a pas pu être enregistré.",

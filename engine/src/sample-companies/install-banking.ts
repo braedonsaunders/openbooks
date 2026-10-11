@@ -50,7 +50,7 @@ export async function installOperatingBanking(c: DemoContext): Promise<void> {
     const csvMapping = { date: 0, amount: 1, description: 2, bankTransactionId: 3 };
     const parsed = parseCsv(csv, csvMapping);
     await importStatement({ accountId, source: "csv", statementDate: date, openingBalance: "0.00", closingBalance: fromUnits(closing), currency: c.currency,
-      lines: parsed.lines, skippedLines: parsed.skipped,
+      lines: parsed.lines, skippedLines: parsed.skipped, includePossibleDuplicates: true,
       sourceEvidence: { content: csv, filename: `${key}-synthetic.csv`, contentType: "text/csv", csvMapping } }, ctx);
     const reconciliation = await startReconciliation({ accountId, throughDate: date, statementBalance: fromUnits(closing) }, ctx);
     for (const entry of entries) {

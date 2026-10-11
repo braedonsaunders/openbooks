@@ -235,6 +235,7 @@ export async function loadAssets(
       books: [],
       schedulePage: { total: 0, page: 1, perPage: 25, bookId: null, query: '' },
       hasAccountingEvidence: false,
+      placement: { missing: [] },
       schedule: [],
     }
     const createForm = await resolveFormLayout({

@@ -4,10 +4,14 @@ import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
 import { computeTaxReturn } from '@openbooks/engine/tax-returns/return'
-import { buildTaxFilingSnapshot, TAX_FILING_SNAPSHOT_VERSION } from '@openbooks/engine/tax-returns/filing'
+import {
+  aggregateTaxReturnAdjustments,
+  normalizeTaxReturnAdjustments,
+  prepareTaxFiling,
+  TAX_RETURN_ADJUSTMENT_LIMIT,
+  TAX_RETURN_ADJUSTMENT_REASON_MAX,
+} from '@openbooks/engine/tax-returns/filing'
 import { loadOrgFilingCalendar } from '@openbooks/engine/tax/nexus-ledger'
 import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import { guardSubsidiaryScope, guardUnrestrictedScope } from '../../../../lib/authz'
@@ -20,9 +24,11 @@ const bodyObjectSchema = z.object({
   code: z.string().min(1),
   from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  adjustments: z.record(z.string(), z.string().max(100)).refine((adjustments) =>
-    Object.keys(adjustments).length <= 100 && Object.keys(adjustments).every((key) => key.length > 0),
-  ).optional(),
+  adjustments: z.array(z.object({
+    lineCode: z.string().min(1).max(20),
+    amount: z.string().max(100),
+    reason: z.string().max(10 * TAX_RETURN_ADJUSTMENT_REASON_MAX),
+  }).strict()).max(TAX_RETURN_ADJUSTMENT_LIMIT).optional(),
   filingEntity: z.object({
     subsidiaryIds: z.array(z.string()).optional(),
     registrationId: z.string().optional(),
@@ -74,7 +80,11 @@ async function legacyGET(req: Request, ctx: { params: Promise<unknown> }, inject
   return NextResponse.json({ from, to, obligations })
 }
 
-/** Recompute server-side and freeze a versioned return snapshot in history. */
+/**
+ * Recompute server-side and freeze a versioned return snapshot in history.
+ * Each adjustment entry is recorded with its reason, the preparing user and the
+ * time; the engine validates the entries and writes the filing and its audit.
+ */
 async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injectedGate?: Authz | null) {
   const gate = injectedGate as Authz;
   const parsedBody = await parseJsonBody(req, bodyObjectSchema, { status: 400 });
@@ -83,7 +93,7 @@ async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injec
     code?: string
     from?: string
     to?: string
-    adjustments?: Record<string, string>
+    adjustments?: { lineCode: string; amount: string; reason: string }[]
     filingEntity?: unknown
     translation?: unknown
   } | null
@@ -91,12 +101,6 @@ async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injec
     return NextResponse.json({ error: 'invalid return or period' }, { status: 422 })
   }
   if (body.from > body.to) return NextResponse.json({ error: 'invalid period' }, { status: 422 })
-  if (body.adjustments !== undefined && (
-    !body.adjustments || typeof body.adjustments !== 'object' || Array.isArray(body.adjustments) ||
-    Object.keys(body.adjustments).length > 100 ||
-    Object.entries(body.adjustments).some(([key, value]) => !key || typeof value !== 'string' || value.length > 100)
-  )) return NextResponse.json({ error: 'invalid adjustments' }, { status: 422 })
-  const adjustments = body.adjustments ?? {}
   // The filing scope parses with the SAME shared parser the preview GET
   // uses, so a scoped preview can always be frozen as prepared. An
   // explicitly scoped prepare stays inside the caller's allowed
@@ -117,64 +121,12 @@ async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injec
   }
 
   try {
-    const result = await computeTaxReturn(gate.user.orgId, body.code, body.from, body.to, adjustments, returnScopeOpts(parsedScope.scope))
-    const editableCodes = new Set(result.boxes.filter((box) => box.editable).map((box) => box.lineCode))
-    const normalizedAdjustments = Object.fromEntries(
-      Object.entries(adjustments)
-        .filter(([key, value]) => editableCodes.has(key) && value.trim() !== '')
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([key, value]) => [key, value.trim()]),
+    const entries = normalizeTaxReturnAdjustments(body.adjustments ?? [])
+    const result = await computeTaxReturn(
+      gate.user.orgId, body.code, body.from, body.to,
+      aggregateTaxReturnAdjustments(entries), returnScopeOpts(parsedScope.scope),
     )
-    const { snapshot, snapshotHash } = buildTaxFilingSnapshot(result, normalizedAdjustments)
-
-    // The engine clamps the requested window to the registration's filing
-    // period (result.from/result.to) and THAT window is the filing's stored
-    // identity (tax_filings_period_version). The advisory lock and the version
-    // must be derived from the same persisted key — never from the caller's
-    // unclamped dates — or two prepares inside one quarter would compute the
-    // same version and collide, and mark-filed (which locks on the stored
-    // window) would serialize against nothing.
-    const filing = await db.transaction(async (tx) => {
-      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`tax-filing:${gate.user.orgId}:${result.formCode}:${result.from}:${result.to}`}))`)
-      const form = (await tx.execute<{ country: string | null }>(sql`
-        select country from tax_return_forms
-         where org_id = ${gate.user.orgId} and code = ${result.formCode} limit 1`))
-      const versions = (await tx.execute<{ version: number }>(sql`
-        select coalesce(max(version), 0)::int + 1 as version
-          from tax_filings
-         where org_id = ${gate.user.orgId} and form_code = ${result.formCode}
-           and period_from = ${result.from} and period_to = ${result.to}`))
-      const version = Number(versions.rows[0]?.version ?? 1)
-      // The filing freezes the return's identity and currency posture
-      // alongside its boxes: the export reprint and the mark-filed staleness
-      // check read these columns, never the org's live configuration. An
-      // org-wide (legacy-scope) return stores an empty scope, not NULL —
-      // NULL means pre-snapshot (unknown scope, v1 semantics).
-      const inserted = (await tx.execute<{ id: string; version: number }>(sql`
-        insert into tax_filings
-          (org_id, form_code, form_name, country, period_from, period_to, version,
-           status, submission_channel, boxes, adjustments, snapshot_hash,
-           functional_currency, presentation_currency, translation, subsidiary_ids,
-           registration_id, registration_number, snapshot_version,
-           created_by, updated_by)
-        values (${gate.user.orgId}, ${result.formCode}, ${result.formName}, ${form.rows[0]?.country ?? null},
-                ${result.from}, ${result.to}, ${version}, 'prepared', ${result.submissionChannel},
-                ${JSON.stringify(snapshot.boxes)}::jsonb, ${JSON.stringify(normalizedAdjustments)}::jsonb,
-                ${snapshotHash},
-                ${result.functionalCurrency}, ${result.translation?.presentationCurrency ?? null},
-                ${result.translation ? JSON.stringify(result.translation) : null}::jsonb,
-                ${`{${result.subsidiaryIds.join(',')}}`}::uuid[],
-                ${result.registrationId}, ${result.registrationNumber}, ${TAX_FILING_SNAPSHOT_VERSION},
-                ${gate.user.id}, ${gate.user.id})
-        returning id, version`))
-      const row = inserted.rows[0]!
-      await tx.execute(sql`
-        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-        values (${gate.user.orgId}, 'tax_filings', ${row.id}, 'insert',
-                ${JSON.stringify({ status: 'prepared', formCode: result.formCode, from: result.from, to: result.to, version, snapshotHash, snapshotVersion: TAX_FILING_SNAPSHOT_VERSION })}::jsonb,
-                ${gate.user.id})`)
-      return row
-    })
+    const filing = await prepareTaxFiling(gate.user.orgId, gate.user.id, result, entries)
     // The creation response exposes the persisted filing window, not the requested range.
     return NextResponse.json(
       { ...filing, formCode: result.formCode, from: result.from, to: result.to },

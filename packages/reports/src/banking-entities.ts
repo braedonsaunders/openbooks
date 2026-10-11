@@ -13,7 +13,7 @@ export const BANKING_REPORT_ENTITIES: ReportEntity[] = [
     key: "payout_reconciliation",
     label: "Payout reconciliation",
     description:
-      "Every provider payout broken into settlement lines with the matched native document, the bank-deposit tie-out and any in-transit accrual — one row per line with the payout's status and gap.",
+      "Provider payouts as settlement lines, matched to documents and bank deposits, with gaps.",
     // One row per settlement line. Stored amounts are 4dp major units, so
     // money columns read directly with no scaling. Match status derives
     // from the stored document link exactly like the payouts workspace:

@@ -122,6 +122,7 @@ async function renderDrawer(options: {
   openItems: never[];
   governedByFlow?: boolean;
   side?: "ar" | "ap";
+  mode?: "view" | "edit";
 }) {
   const side = options.side ?? "ar";
   const prior = globalThis.fetch;
@@ -148,7 +149,7 @@ async function renderDrawer(options: {
             bankAccounts={[]}
             side={side}
             basePath={side === "ap" ? "/payments" : "/receipts"}
-            initialMode={"view" as never}
+            initialMode={(options.mode ?? "view") as never}
           />
         </MoneyProvider>
       </NextIntlClientProvider>,
@@ -236,6 +237,31 @@ test("a draft with no applications names the blocker beside a disabled Post", as
     assert.ok(
       (document.body.textContent ?? "").includes("Apply the receipt to at least one invoice"),
       "the drawer must say an application is missing",
+    );
+  } finally {
+    await done();
+  }
+});
+
+test("a receipt with no open invoice takes an amount received instead of blocking on applications", async () => {
+  const { done } = await renderDrawer({
+    bankAccountId: "bank-1",
+    allocations: [],
+    openItems: [],
+    mode: "edit",
+  });
+  try {
+    const received = document.querySelector<HTMLInputElement>('input[aria-label="Amount received"]');
+    assert.ok(received, "the amount received input is offered when no invoice is open");
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+    await act(async () => {
+      setValue.call(received, "250.00");
+      received.dispatchEvent(new window.Event("input", { bubbles: true }));
+    });
+    await tick();
+    assert.ok(
+      !(document.body.textContent ?? "").includes("Apply the receipt to at least one invoice"),
+      "an on-account amount satisfies the application blocker",
     );
   } finally {
     await done();

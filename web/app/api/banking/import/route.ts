@@ -45,6 +45,12 @@ interface ImportBody {
   statementDate?: string | null
   openingBalance?: string | null
   closingBalance?: string | null
+  /**
+   * Import lines flagged as possible duplicates of lines already on the
+   * account. Default false: they are listed in the preview and left out of
+   * the import until the reviewer opts in.
+   */
+  includePossibleDuplicates?: boolean
 }
 
 const CANONICAL_BASE64 = /^(?:[a-zA-Z0-9+/]{4})*(?:[a-zA-Z0-9+/]{2}==|[a-zA-Z0-9+/]{3}=)?$/
@@ -83,6 +89,7 @@ export const POST = defineRoute({
       mode: z.enum(['decode', 'columns', 'preview', 'import'], { error: 'mode must be decode, columns, preview or import' }).optional(),
       statementDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
       openingBalance: z.string().nullable().optional(), closingBalance: z.string().nullable().optional(),
+      includePossibleDuplicates: z.boolean().optional(),
     });
     const parsedBody = await parseJsonBody(req, routeBodySchema1, { maxBodyBytes: 10 * 1024 * 1024 });
     if (!parsedBody.ok) return parsedBody.response;
@@ -183,6 +190,7 @@ export const POST = defineRoute({
               parserVersion: BANK_STATEMENT_PARSER_VERSION,
               csvMapping: body.source === 'csv' ? body.mapping : null,
             },
+            includePossibleDuplicates: body.includePossibleDuplicates === true,
             dryRun: mode === 'preview',
           },
           {
@@ -193,6 +201,11 @@ export const POST = defineRoute({
         )
 
         if (mode === 'import' && result.statementId === null) {
+          if (result.possibleDuplicates > 0 && body.includePossibleDuplicates !== true) {
+            throw new BankingError(
+              `Nothing imported — ${result.possibleDuplicates} line${result.possibleDuplicates === 1 ? '' : 's'} match${result.possibleDuplicates === 1 ? 'es' : ''} a line already on this account and ${result.possibleDuplicates === 1 ? 'was' : 'were'} excluded as possible duplicate${result.possibleDuplicates === 1 ? '' : 's'}; review them in the preview and import them anyway to include them`,
+            )
+          }
           if (result.balanceCandidates.length > 0 && result.duplicates === 0) {
             throw new BankingError(
               `Nothing imported — ${result.balanceCandidates.length} row${result.balanceCandidates.length === 1 ? '' : 's'} look${result.balanceCandidates.length === 1 ? 's' : ''} like a statement balance, not a transaction; use ${result.balanceCandidates.length === 1 ? 'it' : 'them'} as the opening or closing balance instead`,
@@ -209,10 +222,13 @@ export const POST = defineRoute({
           imported: result.imported,
           duplicates: result.duplicates,
           possibleDuplicates: result.possibleDuplicates,
+          possibleDuplicateLines: mode === 'preview' ? result.possibleDuplicateLines : undefined,
           skipped: result.skipped,
           balanceCandidates: result.balanceCandidates,
           suggestedOpening: result.suggestedOpening,
           openingMismatch: result.openingMismatch,
+          statementLinesTotal: result.statementLinesTotal,
+          balanceMismatch: result.balanceMismatch,
           statementDate: meta.statementDate ?? null,
           closingBalance: meta.closingBalance ?? null,
           currency: meta.currency ?? null,

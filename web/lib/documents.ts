@@ -4,6 +4,7 @@ import { db } from '@openbooks/engine/platform/database'
 import { subsidiaryVisibleFilter } from '@openbooks/engine/organization/scope'
 import { segmentRegistry } from './segments'
 import { resolveOrgId } from './org-scope'
+import { bankAccountMembership } from './banking-accounts'
 import type { DocKindConfig } from './document-kinds'
 import { taxProfileMap } from '@openbooks/engine/documents/totals'
 
@@ -155,6 +156,25 @@ export async function bankAccountOptions(orgId?: string): Promise<Opt[]> {
     select id, number, name, currency_restriction from accounts
      where org_id = ${resolvedOrgId} and is_active and not is_summary and reconcilable and type = 'asset_bank'
      order by number nulls last
+  `))
+  return r.rows
+}
+
+/**
+ * Transfer legs (destination and source) name any active bank or credit-card
+ * account the banking module manages, the same membership its registers list.
+ * Debiting a card account pays its balance down; crediting it draws on the card.
+ */
+export async function transferAccountOptions(
+  orgId?: string,
+  allowedSubsidiaryIds?: ReadonlySet<string> | null,
+): Promise<Opt[]> {
+  const resolvedOrgId = await resolveOrgId(orgId)
+  const r = (await db.execute<Opt>(sql`
+    select a.id, a.number, a.name, a.currency_restriction from accounts a
+     where a.org_id = ${resolvedOrgId} and ${bankAccountMembership()}
+       ${allowedSubsidiaryIds === undefined ? sql`` : subsidiaryVisibleFilter(sql`a.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
+     order by a.number nulls last
   `))
   return r.rows
 }

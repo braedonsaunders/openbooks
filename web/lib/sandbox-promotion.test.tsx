@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import * as React from "react";
+
+// Component modules under test render JSX with the automatic runtime; expose
+// React for them when the test process compiles JSX classically.
+Object.assign(globalThis, { React });
 import { renderToStaticMarkup } from "react-dom/server";
 import { NextIntlClientProvider } from "next-intl";
 import { JsonValue } from "../app/(app)/admin/audit/AuditEventDrawer";

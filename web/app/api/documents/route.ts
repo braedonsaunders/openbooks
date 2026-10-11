@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { defineRoute } from '@/lib/api/route';
+import { documentLineSchema } from '@/lib/api/document-edit-schema';
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -15,24 +16,6 @@ import { createPermission, isDocumentCreateKind } from "../../../lib/document-ki
 import type { DocumentEditInput } from "@openbooks/engine/ledger/document-input";
 import { notFound } from "@/lib/api/responses";
 const jsonObjectSchema = z.record(z.string(), z.json());
-const documentLineSchema = z.object({
-  lineId: z.string().uuid().nullable().optional(), accountId: z.string().uuid(),
-  amount: z.string(), description: z.string().nullable().optional(),
-  taxCodeId: z.string().uuid().nullable().optional(), taxGroupId: z.string().uuid().nullable().optional(),
-  taxOverridden: z.boolean().optional(), taxAmount: z.string().nullable().optional(),
-  marketplaceFacilitator: z.string().nullable().optional(),
-  itemId: z.string().uuid().nullable().optional(), quantity: z.string().nullable().optional(),
-  unit: z.string().nullable().optional(), unitPrice: z.string().nullable().optional(),
-  partyId: z.string().uuid().nullable().optional(), departmentId: z.string().uuid().nullable().optional(),
-  projectId: z.string().uuid().nullable().optional(), locationId: z.string().uuid().nullable().optional(),
-  classId: z.string().uuid().nullable().optional(), stockLocationId: z.string().uuid().nullable().optional(),
-  workFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), workTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
-  inventoryReturnSource: z.object({ movementId: z.string().uuid(), lotId: z.string().uuid().nullable().optional(), serialId: z.string().uuid().nullable().optional() }).nullable().optional(),
-  inventoryAllowance: z.boolean().nullable().optional(),
-  extraDims: z.record(z.string(), z.string().nullable()).optional(), custom: jsonObjectSchema.optional(),
-  distributionKey: z.string().uuid().nullable().optional(), distributionGroupId: z.string().uuid().nullable().optional(),
-  distributionLocked: z.boolean().nullable().optional(),
-});
 const POSTBodySchema1 = z.object({
   kind: z.enum(['customer_invoice', 'customer_credit', 'cash_sale', 'cash_refund', 'vendor_bill', 'vendor_credit', 'card_charge', 'card_refund', 'check', 'deposit', 'transfer'], { error: 'unknown document kind' }),
   expectedUpdatedAt: z.string().optional(),
@@ -185,7 +168,9 @@ export const POST = defineRoute({
           // Fail closed: a reused key with a changed payload, or a key
           // colliding with another org's row, never returns the older row as
           // though it matched.
-          return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 409 })
+          // A code-only refusal: the drawer renders its localized remedy for
+          // this code (reload and open the saved document) instead of a raw token.
+          return NextResponse.json({ code: 'document_create_conflict' }, { status: 409 })
         }
         if (e instanceof DocumentEditError) {
           if (e.status === 404 && e.message === 'not found') return notFound("record")

@@ -971,6 +971,14 @@
         "cashOverShort": {
           "label": "Écarts de caisse",
           "hint": "Espèces comptées en trop ou en moins par rapport au total attendu"
+        },
+        "badDebtExpense": {
+          "label": "Charge de créances irrécouvrables",
+          "hint": "Débitée lorsqu'un solde de facture irrécouvrable est passé en perte, sauf si un compte de provision est défini"
+        },
+        "allowanceForDoubtfulAccounts": {
+          "label": "Provision pour créances douteuses",
+          "hint": "Compte de contrepartie des créances ; les pertes le débitent à la place de la charge lorsqu'il est défini"
         }
       },
       "defaultsNote": "Ce sont les valeurs par défaut de toute l’entreprise. Chaque filiale peut les remplacer sur sa propre fiche ; les remplacements vides reprennent celles-ci.",
@@ -3004,6 +3012,12 @@
         "publishTitle": "Publier sur la grille de taux",
         "publishHint": "Fige les taux calculés du moteur dans des lignes datées de la grille de taux. Les projets utilisent ces taux publiés jusqu’à la prochaine publication — les périodes antérieures conservent leurs taux d’origine.",
         "publishConfirm": "Publier",
+        "zeroOverStandard": {
+          "title": "Remplacer les taux standard par zéro ?",
+          "intro": "La publication écrit un taux nul par-dessus un taux standard non nul. Les travaux chiffrés avec ces départements à compter de la date de début n'auraient plus de frais généraux issus du standard. Confirmez uniquement si ce standard n'est plus utilisé.",
+          "line": "{department} : le standard de {standard} par heure est remplacé par {published} par heure.",
+          "confirm": "Publier les taux nuls"
+        },
         "publishDone": "Taux publiés sur la grille",
         "cancel": "Annuler",
         "wizardTitle": "Configurer les frais généraux de projet",
@@ -5383,6 +5397,40 @@
         "newWorkerComp": "Indemnisation (WSIB)",
         "workerCompHint": "Le taux provient du groupe d'indemnisation assigné à chaque employé (Configuration → Personnel → Groupes d'indemnisation ; assigné sur la fiche employé). La valeur ici n'est que le % de repli quand un employé n'a pas de groupe."
       },
+      "catchUp": {
+        "title": "Temps approuvé non encore coûté",
+        "hint": "Le temps approuvé avant l'activation de la comptabilisation, ou avant l'affectation des comptes de contrôle de main-d'œuvre, n'a aucun coût de main-d'œuvre dans le grand livre. Chaque écriture est datée du dernier jour qu'elle couvre. Les lignes des périodes clôturées sont ignorées et restent non comptabilisées.",
+        "through": "Approuvé jusqu'au",
+        "reason": "Motif pour la piste d'audit",
+        "post": "Comptabiliser le coût de main-d'œuvre",
+        "month": "Mois",
+        "entries": "Lignes",
+        "hours": "Heures",
+        "cost": "Coût standard",
+        "period": "Période",
+        "total": "Ensemble",
+        "openSetup": "Ouvrir le paramétrage",
+        "nothingPosted": "Rien à comptabiliser. Le temps approuvé est déjà coûté.",
+        "postedResult": "Lignes comptabilisées : {count}. Coût standard comptabilisé : {cost}.",
+        "skippedResult": "Lignes non comptabilisées : {count}.",
+        "states": {
+          "open": "Ouvert",
+          "closed": "Clôturé",
+          "no_period": "Aucune période",
+          "partial": "Partiellement clôturé"
+        },
+        "skipRemedy": {
+          "closed": "Rouvrez la période dans Clôture, ou laissez-les en l'état.",
+          "no_period": "Créez la période comptable dans Clôture, ou laissez-les en l'état."
+        },
+        "blockers": {
+          "projects_disabled": "Projets est désactivé. Activez-le dans Paramètres de l'entreprise → Fonctionnalités avant de comptabiliser le coût de main-d'œuvre.",
+          "mode_off": "Le coûtage de la main-d'œuvre ne comptabilise pas le coût standard sur les projets. Choisissez « Comptabiliser le coût standard sur les projets » ci-dessus, enregistrez, puis comptabilisez le rattrapage.",
+          "accounts_unmapped": "Associez ci-dessus les comptes d'en-cours de main-d'œuvre et de compensation de main-d'œuvre, puis enregistrez.",
+          "no_posting_book": "Aucun grand livre principal actif ne comptabilise dans le grand livre. Configurez-en un avant de comptabiliser.",
+          "no_root_subsidiary": "Aucune filiale racine active n'est configurée. Configurez-en une avant de comptabiliser."
+        }
+      },
       "posting": {
         "title": "Comptabilisation",
         "hint": "Une fois activée, le temps approuvé génère DR travaux en cours (par projet) / CR compte d'attente main-d'œuvre au taux standard. La paie réelle solde ensuite le même compte ; le résidu est l'écart de paie.",
@@ -5805,6 +5853,8 @@
       "shopifyName": "Shopify Payments",
       "shopifyDescription": "Importe les exports de versements et de transactions de solde. Remboursements et litiges via l'automatisation ci-dessus.",
       "shopifyChannelsNote": "Se connecte via l'espace Canaux une fois relié.",
+      "squareName": "Square",
+      "squareDescription": "Importe les exports des versements et de leurs écritures. Remboursements et litiges sont comptabilisés via l'automatisation ci-dessus.",
       "errors": {
         "loadFailed": "Impossible de charger les paramètres des prestataires de paiement.",
         "saveFailed": "Impossible d’enregistrer les paramètres des prestataires de paiement.",

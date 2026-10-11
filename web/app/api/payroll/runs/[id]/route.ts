@@ -1,7 +1,7 @@
 import { defineRoute } from '@/lib/api/route'
 import { z } from 'zod'
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { lockAndCheckPayrollRunPopulation } from "@openbooks/engine/payroll/scope";
+import { lockAndCheckPayrollRunPopulation, type PayrollSubsidiaryScope } from "@openbooks/engine/payroll/scope";
 import { parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -9,12 +9,13 @@ import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
 import { acknowledgePayRunRefusals, commitPayRun, previewPayRunGl } from "@openbooks/engine/payroll/run-commit";
 import { calculatePayRun } from "@openbooks/engine/payroll/run-calculation";
 import { attributePayRunEntity, discardPayRun } from "@openbooks/engine/payroll/run-lifecycle";
+import { documentKindPermissions, postPermission } from "@openbooks/engine/records/document-kind-permissions";
 import { PayrollError } from "@openbooks/engine/payroll/error";
 import { recordPayRunPayment } from '@openbooks/engine/payroll/payment'
 import { assertPayRunNotStale } from '@openbooks/engine/payroll/readiness'
 import { resolvePayrollProfileEmploymentLinks } from '@openbooks/engine/payroll/profile-employment'
 import {
-  assertPayRunApprovalReleased, payRunApprovalState,
+  assertPayRunApprovalReleased, payRunApprovalState, recalculateStaleApprovedPayRun,
 } from '@openbooks/engine/payroll/approval'
 import { submitForApproval } from '@openbooks/engine/flows/module'
 import { rendererStatusResponse } from '../../../../../lib/api/pdf-renderer'
@@ -25,7 +26,7 @@ import { storedHolidayEligibilityForRun } from '@openbooks/engine/payroll/holida
 import { normalizeMoney } from '@openbooks/engine/money/money'
 import '../../../../../lib/feature-gates';
 import { aiRailsErrorResponse } from '../../../../../lib/ai-rails'
-import { guardSubsidiaryScope } from '../../../../../lib/authz'
+import { can, guardSubsidiaryScope } from '../../../../../lib/authz'
 import { guardPayrollEmployees } from '../../subsidiary-scope'
 import { isUuid } from '../../../../../lib/list-params'
 import { canonicalDecimal } from '../../../../../lib/exact-decimal'
@@ -66,6 +67,7 @@ const requestBodySchema = z.discriminatedUnion('action', [
   z.strictObject({ ...actionBody('email-stubs') }),
   z.strictObject({ ...actionBody('record-payment'), bankAccountId: payrollRunUuid('bankAccountId', 'a bank account id', 'choose a bank account') }),
   z.strictObject({ ...actionBody('submit-approval') }),
+  z.strictObject({ ...actionBody('recalculate-approved') }),
   z.strictObject({ ...actionBody('approval-state') }),
   z.strictObject({ ...actionBody('acknowledge-refusals') }),
   z.strictObject({ ...actionBody('resolve-employment-links'), employeePartyIds: employeeIds('pass the employees to link as a list').optional() }),
@@ -235,6 +237,35 @@ export const GET = defineRoute({
 
   },
 })
+
+/**
+ * Assemble the evidence package and route the run into its approval Flow. The
+ * submit-approval and recalculate-approved actions share it, so a resubmitted
+ * run meets the same population and freshness checks as a first submission.
+ */
+async function submitPayRunForApproval(
+  orgId: string,
+  userId: string,
+  documentId: string,
+  allowedSubsidiaryIds: PayrollSubsidiaryScope,
+): Promise<{ ok: true; evidence: unknown; gated: boolean } | { ok: false; error: string }> {
+  // Population opacity precedes freshness: the staleness gate answers
+  // from the caller's visible inputs, so an opaque run would leak its
+  // activity as a stale-calculation refusal instead of the opaque
+  // 'pay run not found'. Assemble enforces the same check; this probe
+  // only orders it first (no-op for unrestricted callers).
+  await lockAndCheckPayrollRunPopulation(db, orgId, documentId, allowedSubsidiaryIds)
+  // A tab left open across an edit must not route superseded figures to
+  // approvers: re-check calculation freshness here, immediately before
+  // evidence assembly, exactly as the commit branch does. A stale run is
+  // refused with the named stale-calculation error instead of parking
+  // evidence the commit gate would later reject.
+  await assertPayRunNotStale(orgId, documentId, db, allowedSubsidiaryIds)
+  const evidence = await assemblePayRunEvidence(orgId, userId, documentId, allowedSubsidiaryIds)
+  const submission = await submitForApproval('pay_run', documentId, userId)
+  if (submission.flowError) return { ok: false, error: submission.flowError }
+  return { ok: true, evidence, gated: submission.gated }
+}
 
 export const POST = defineRoute({
   permission: 'payroll.run',
@@ -662,24 +693,45 @@ export const POST = defineRoute({
       // register + GL preview) onto the run, then route it through Flows. A
       // tenant with no pay_run flow gets `gated: false` and nothing is parked.
       if (body.action === 'submit-approval') {
-        // Population opacity precedes freshness: the staleness gate answers
-        // from the caller's visible inputs, so an opaque run would leak its
-        // activity as a stale-calculation refusal instead of the opaque
-        // 'pay run not found'. Assemble enforces the same check; this probe
-        // only orders it first (no-op for unrestricted callers).
-        await lockAndCheckPayrollRunPopulation(db, gate.user.orgId, id, gate.allowedSubsidiaryIds)
-        // A tab left open across an edit must not route superseded figures to
-        // approvers: re-check calculation freshness here, immediately before
-        // evidence assembly, exactly as the commit branch does. A stale run is
-        // refused with the named stale-calculation error instead of parking
-        // evidence the commit gate would later reject.
-        await assertPayRunNotStale(gate.user.orgId, id, db, gate.allowedSubsidiaryIds)
-        const evidence = await assemblePayRunEvidence(gate.user.orgId, gate.user.id, id, gate.allowedSubsidiaryIds)
-        const submission = await submitForApproval('pay_run', id, gate.user.id)
-        if (submission.flowError) {
-          return NextResponse.json({ error: submission.flowError }, { status: 422 })
+        const submitted = await submitPayRunForApproval(gate.user.orgId, gate.user.id, id, gate.allowedSubsidiaryIds)
+        if (!submitted.ok) return NextResponse.json({ error: submitted.error }, { status: 422 })
+        return NextResponse.json({ ok: true, evidence: submitted.evidence, gated: submitted.gated })
+      }
+      // Recalculate an approved run whose inputs changed after approval. The
+      // engine withdraws the approval (audited, with the stale inputs as the
+      // reason) and recalculates in one transaction; the run then goes back
+      // through its approval Flow, so commit stays refused until re-approved.
+      // Withdrawing an approval takes the same permission as the generic
+      // return-to-draft action for this document kind.
+      if (body.action === 'recalculate-approved') {
+        const withdrawPermission = documentKindPermissions('pay_run')?.approve ?? postPermission('pay_run')
+        if (!can(gate, withdrawPermission)) {
+          return NextResponse.json({ error: `missing permission: ${withdrawPermission}` }, { status: 403 })
         }
-        return NextResponse.json({ ok: true, evidence, gated: submission.gated })
+        const mergedEligibility = await storedHolidayEligibilityForRun(db, {
+          orgId: gate.user.orgId, documentId: id, perRequest: holidayEligibility,
+        })
+        const recalculated = await recalculateStaleApprovedPayRun({
+          orgId: gate.user.orgId, documentId: id, actorId: gate.user.id,
+          holidayEligibility: mergedEligibility,
+          allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+        })
+        const base = { ok: true, ...recalculated.calculation, reasons: recalculated.reasons }
+        const approval = await payRunApprovalState(gate.user.orgId, id)
+        if (!approval.policyExists) return NextResponse.json({ ...base, resubmitted: false, gated: false })
+        // The recalculation has already committed. A refused resubmission leaves the
+        // run in draft with its fresh figures, and the refusal names that state.
+        const resubmitted = await submitPayRunForApproval(gate.user.orgId, gate.user.id, id, gate.allowedSubsidiaryIds)
+          .catch((error: unknown) => {
+            if (error instanceof PayrollError) return { ok: false as const, error: error.message }
+            throw error
+          })
+        if (!resubmitted.ok) {
+          return NextResponse.json({
+            error: `The run was recalculated and returned to draft, but it was not sent for approval: ${resubmitted.error}`,
+          }, { status: 422 })
+        }
+        return NextResponse.json({ ...base, resubmitted: true, gated: resubmitted.gated })
       }
       if (body.action === 'approval-state') {
         return NextResponse.json({ ok: true, ...(await payRunApprovalState(gate.user.orgId, id)) })

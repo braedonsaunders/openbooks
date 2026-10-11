@@ -74,27 +74,6 @@ async function fileCount(org: Org): Promise<number> {
   return Number(r.rows[0]?.n ?? 0)
 }
 
-test('backup GET with no stored packet is a 404 that writes nothing', { skip: !DB }, async () => {
-  const { org, actor, project } = await setup()
-  try {
-    const request = await withOrgContext(org.orgId, () => createBillingRequest(org.orgId, actor, {
-      projectId: project, basis: 'draw_amount', drawAmount: '100', backupRequired: true, backupType: 'costed_timesheets',
-    }))
-    const generated = await withOrgContext(org.orgId, () => generateInvoiceFromBillingRequest(org.orgId, actor, request.id, null))
-    const filesBefore = await fileCount(org)
-    const response = await withOrgContext(org.orgId, () =>
-      GET(new Request('http://audit.local/api/backup', { method: 'GET' }), { params: Promise.resolve({ id: request.id }) }))
-    assert.equal(response.status, 404)
-    assert.match(String((await response.json() as { error: string }).error), /generate it from the billing request/)
-    assert.equal(await backupRowCount(org, generated.id), 0)
-    assert.equal(await fileCount(org), filesBefore)
-  } finally {
-    session.user = null
-    await dropScratchOrg(org.orgId)
-  }
-})
-
-
 const consolidatedRows = [
   { label: "billing backup generate", register: async () => {
         const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
@@ -569,6 +548,28 @@ const consolidatedRows = [
 ] as const;
 
 for (const row of consolidatedRows) await row.register();
+
+test('backup GET with no stored packet is a 404 that writes nothing', { skip: !DB }, async () => {
+  const { org, actor, project } = await setup()
+  try {
+    const request = await withOrgContext(org.orgId, () => createBillingRequest(org.orgId, actor, {
+      projectId: project, basis: 'draw_amount', drawAmount: '100', backupRequired: true, backupType: 'costed_timesheets',
+    }))
+    const generated = await withOrgContext(org.orgId, () => generateInvoiceFromBillingRequest(org.orgId, actor, request.id, null))
+    const filesBefore = await fileCount(org)
+    const response = await withOrgContext(org.orgId, () =>
+      GET(new Request('http://audit.local/api/backup', { method: 'GET' }), { params: Promise.resolve({ id: request.id }) }))
+    assert.equal(response.status, 404)
+    assert.match(String((await response.json() as { error: string }).error), /generate it from the billing request/)
+    assert.equal(await backupRowCount(org, generated.id), 0)
+    assert.equal(await fileCount(org), filesBefore)
+  } finally {
+    session.user = null
+    await dropScratchOrg(org.orgId)
+  }
+})
+
+
 
 // Capture the native renderer boundary; packet storage is never reached.
 for (const recipe of ['costed_timesheets', 'timesheets_purchases', 'purchases_shop_time'] as const) {

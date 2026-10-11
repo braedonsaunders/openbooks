@@ -136,8 +136,35 @@ export type SavePortalSettingsInput = {
   effectiveFrom?: string | null;
 };
 
-function parseSettingsInput(input: SavePortalSettingsInput): Omit<SettingsRow, "portal_name"> & { portalName: string } {
+/**
+ * Return reasons are required exactly while portal returns are on: a customer
+ * cannot choose a reason from an empty list, and a portal with returns off has
+ * no use for one. Pure.
+ */
+export function assertPortalReturnReasons(returnsOn: boolean, reasons: readonly string[]): void {
+  if (returnsOn && reasons.length === 0) {
+    throw portalRefusal(
+      "Add at least one return reason while portal returns are on",
+      "invalid_input",
+      422,
+      "List the reasons customers can choose, or turn off portal returns",
+    );
+  }
+}
+
+/**
+ * Parse a portal settings save over the currently effective settings. Omitted
+ * sections and return reasons (or a null reason list) keep their stored values,
+ * so the returns rule is judged against what the portal actually runs with and
+ * switching returns off and back on does not discard the operator's reasons.
+ */
+function parseSettingsInput(
+  input: SavePortalSettingsInput,
+  stored: PortalSettings,
+): Omit<SettingsRow, "portal_name"> & { portalName: string } {
   const settings = structuredClone(DEFAULT_PORTAL_SETTINGS);
+  settings.sections = { ...stored.sections };
+  settings.returnReasons = [...stored.returnReasons];
   if (input.portalName !== undefined) {
     if (typeof input.portalName !== "string" || !input.portalName.trim() || input.portalName.trim().length > 80) {
       throw portalRefusal("The portal name must be 1–80 characters", "invalid_input", 422, "Enter a short customer-facing portal name");
@@ -167,10 +194,10 @@ function parseSettingsInput(input: SavePortalSettingsInput): Omit<SettingsRow, "
     }
     settings.returnWindowDays = days;
   }
-  if (input.returnReasons !== undefined) {
-    if (!Array.isArray(input.returnReasons) || input.returnReasons.length === 0 || input.returnReasons.length > 20
+  if (input.returnReasons !== undefined && input.returnReasons !== null) {
+    if (!Array.isArray(input.returnReasons) || input.returnReasons.length > 20
       || !input.returnReasons.every((reason) => typeof reason === "string" && reason.trim() && reason.trim().length <= 40)) {
-      throw portalRefusal("Return reasons must be 1–20 short labels", "invalid_input", 422, "List up to twenty short return reasons");
+      throw portalRefusal("Return reasons must be up to 20 short labels", "invalid_input", 422, "List up to twenty short return reasons");
     }
     settings.returnReasons = input.returnReasons.map((reason) => (reason as string).trim());
   }
@@ -204,6 +231,7 @@ function parseSettingsInput(input: SavePortalSettingsInput): Omit<SettingsRow, "
     }
     settings.saveOffers = input.saveOffers as PortalSaveOffer[];
   }
+  assertPortalReturnReasons(settings.sections.returns, settings.returnReasons);
   return {
     portalName: settings.portalName,
     sections: settings.sections,
@@ -224,11 +252,12 @@ export async function savePortalSettings(
   actorId: string,
   input: SavePortalSettingsInput,
 ): Promise<PortalSettings> {
-  const parsed = parseSettingsInput(input);
   if (input.effectiveFrom !== undefined && input.effectiveFrom !== null && !/^\d{4}-\d{2}-\d{2}$/.test(input.effectiveFrom)) {
     throw portalRefusal("The effective date must be a calendar date", "invalid_input", 422, "Pick the date the new portal rules start");
   }
   return withOrgTransaction(orgId, async () => {
+    const stored = await readPortalSettings(orgId, db);
+    const parsed = parseSettingsInput(input, stored);
     const effectiveFrom = input.effectiveFrom ?? await businessTodayInTx(db, orgId);
     const existing = (await db.execute<{ id: string }>(sql`
       select id from customer_portal_settings

@@ -56,7 +56,9 @@ const mockAuthz = `
   }
 `;
 
-const hooks = registerHooks({
+// defineRoute loads the feature gate lazily per request, so the hook stays
+// registered for the life of the file.
+registerHooks({
   resolve(specifier, context, nextResolve) {
     if (
       specifier === "./authz" &&
@@ -77,7 +79,6 @@ const hooks = registerHooks({
 
 const itemUrl = "./route.ts?sftp-delete-dependents-test";
 const { DELETE } = (await import(itemUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 const { db, withBypass, withOrgContext } =
   await import("@openbooks/engine/platform/db");

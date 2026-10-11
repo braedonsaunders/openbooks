@@ -105,7 +105,7 @@ async function mount(t: TestContext, deleteResponder: () => Response, recurringF
   await act(async () => {
     rootHandle.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-        <MoneyProvider currency="CAD"><CollectionsClient initialView={view} subscriptionsEnabled /></MoneyProvider>
+        <BusinessDateProvider today="2026-10-05"><MoneyProvider currency="CAD"><CollectionsClient initialView={view} subscriptionsEnabled /></MoneyProvider></BusinessDateProvider>
       </NextIntlClientProvider>,
     )
     await tick()

@@ -22,6 +22,8 @@
     "rangeValue": "{start} → {end}",
     "status": "Status",
     "readiness": "Bereitschaft",
+    "closedBy": "Abgeschlossen von",
+    "closedByDetail": "{name} am {date}",
     "action": "Aktion",
     "lockedDetail": "{modules} gesperrt · {book}"
   },
@@ -504,8 +506,10 @@
       "endReopenTitle": "Diese Wiedereröffnung beenden",
       "endReopenHint": "Das Beenden schließt alle Module, die dieses Fenster geöffnet hat, wieder und gibt die Periode für neue Wiedereröffnungsanfragen frei.",
       "endReopenReasonRequired": "Zum Beenden der Wiedereröffnung ist eine Begründung mit mindestens 10 Zeichen erforderlich.",
-      "extendReopenTitle": "Verlängern oder erweitern",
-      "extendReopenHint": "Fügen Sie diesem Fenster Zeit oder Module hinzu, statt eine überlappende Anfrage zu stellen.",
+      "reopenRequestedUntil": "Beantragter Ablauf: {date}",
+      "extendReopenTitle": "Verlängerung oder Erweiterung beantragen",
+      "extendReopenHint": "Stellen Sie einen neuen Antrag, über den eine berechtigte Person entscheidet. Die Genehmigung ersetzt dieses Zeitfenster. Lassen Sie zusätzliche Stunden leer oder geben Sie 0 ein, um den Ablauf beizubehalten.",
+      "extendByApproverOnly": "Um Ihr eigenes Fenster zu erweitern oder zu verlängern, stellen Sie eine Wiedereröffnungsanfrage, die alle Module dieses Fensters und die zusätzlich benötigten enthält. Eine berechtigte genehmigende Person entscheidet darüber, und die Genehmigung ersetzt dieses Fenster.",
       "extendHoursLabel": "Zusätzliche Stunden",
       "extendModulesLabel": "Module hinzufügen",
       "extendReopenReasonRequired": "Zum Verlängern der Wiedereröffnung ist eine Begründung mit mindestens 10 Zeichen erforderlich.",
@@ -588,7 +592,7 @@
       "addRow": "Hinzufügen",
       "removeValue": "{value} entfernen",
       "endReopen": "Wiedereröffnung beenden",
-      "extendReopen": "Wiedereröffnung verlängern"
+      "extendReopen": "Verlängerung beantragen"
     },
     "fields": {
       "name": "Name",
@@ -668,6 +672,7 @@
       "gl": "Hauptbuch"
     },
     "reopenStates": {
+      "superseded": "Ersetzt",
       "requested": "Angefordert",
       "approved": "Genehmigt",
       "rejected": "Abgelehnt",
@@ -776,7 +781,7 @@
       "automationSaved": "Automatisierungsregel gespeichert",
       "packageSaved": "Berichtspaket gespeichert",
       "reopenEnded": "Wiedereröffnungsfenster beendet.",
-      "reopenExtended": "Wiedereröffnungsfenster verlängert."
+      "reopenExtended": "Änderungsantrag zur Wiederöffnung eingereicht."
     },
     "errors": {
       "actionFailed": "Die Einrichtungsänderung konnte nicht gespeichert werden",

@@ -49,7 +49,7 @@ function splitQuery(query: unknown): { text: string; values: unknown[] } {
 const hooks = registerHooks({
   resolve(specifier, context, next) {
     if (
-      specifier === "../../engine/src/platform/db.ts" &&
+      specifier === "@openbooks/engine/platform/db" &&
       context.parentURL?.endsWith("/field-ticket-import.ts")
     ) {
       return {

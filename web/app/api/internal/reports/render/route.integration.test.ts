@@ -94,8 +94,10 @@ test('close-package run renders under the sender close.run grant', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     const sender = await withBypassContext(() => createScratchUser(org.orgId, 'Close sender', 'close_sender'))
+    // A trial balance reads the general ledger, so the sender also holds gl.read
+    // (statement content grants are enforced on every render path).
     await db.execute(sql`
-      update app_roles set permissions = '["close.run","reports.read","reports.schedule"]'::jsonb,
+      update app_roles set permissions = '["close.run","gl.read","reports.read","reports.schedule"]'::jsonb,
                            subsidiary_restriction = '{"mode":"all"}'::jsonb
        where org_id = ${org.orgId} and key = 'close_sender'`)
     const definitionId = await seedDefinition(org.orgId)
@@ -113,7 +115,7 @@ test('close-package run renders under the sender close.run grant', async () => {
     // The sender loses close.run: the same run refuses by name with the
     // remedy instead of rendering.
     await db.execute(sql`
-      update app_roles set permissions = '["reports.read"]'::jsonb
+      update app_roles set permissions = '["gl.read","reports.read","reports.schedule"]'::jsonb
        where org_id = ${org.orgId} and key = 'close_sender'`)
     const refused = await GET(renderRequest(org.orgId, definitionId, runId))
     assert.equal(refused.status, 422)
@@ -133,7 +135,7 @@ test('a scheduled run lacking requiredPermissions renders and records them once'
   try {
     const sender = await withBypassContext(() => createScratchUser(org.orgId, 'Scheduler', 'scheduler'))
     await db.execute(sql`
-      update app_roles set permissions = '["reports.read","reports.schedule"]'::jsonb,
+      update app_roles set permissions = '["gl.read","reports.read","reports.schedule"]'::jsonb,
                            subsidiary_restriction = '{"mode":"all"}'::jsonb
        where org_id = ${org.orgId} and key = 'scheduler'`)
     const definitionId = await seedDefinition(org.orgId)

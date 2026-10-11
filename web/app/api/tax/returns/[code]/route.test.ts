@@ -179,3 +179,32 @@ test("GET fails closed on an explicitly empty subsidiary filter", async () => {
   });
   assert.equal(routeState.calls.length, 0);
 });
+
+
+test("GET sums repeated adjustment entries exactly", async () => {
+  routeState.calls.length = 0;
+  const response = await get("?from=2026-07-01&to=2026-07-31&subsidiary=sub-allowed&adj_104=1000.00&adj_104=2018.84");
+  assert.equal(response.status, 200);
+  assert.deepEqual(routeState.calls[0]!.adjustments, { "104": "3018.8400" });
+});
+
+test("GET refuses adjustment precision or magnitude it cannot record", async () => {
+  for (const amount of ["0.00001", "1000000000000000"]) {
+    routeState.calls.length = 0;
+    const response = await get(`?from=2026-07-01&to=2026-07-31&subsidiary=sub-allowed&adj_104=${amount}`);
+    assert.equal(response.status, 400);
+    assert.match(JSON.stringify(await response.json()), /adjustment 104/);
+    assert.equal(routeState.calls.length, 0);
+  }
+});
+
+
+test("GET treats special property names as named adjustment lines without inherited values", async () => {
+  routeState.calls.length = 0;
+  const response = await get("?from=2026-07-01&to=2026-07-31&subsidiary=sub-allowed&adj___proto__=0.10&adj___proto__=0.20");
+  assert.equal(response.status, 200);
+  const amounts = routeState.calls[0]!.adjustments;
+  assert.equal(Object.getPrototypeOf(amounts), Object.prototype);
+  assert.ok(Object.hasOwn(amounts, "__proto__"));
+  assert.equal(amounts["__proto__"], "0.3000");
+});

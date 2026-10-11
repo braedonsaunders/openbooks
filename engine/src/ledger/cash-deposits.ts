@@ -476,6 +476,13 @@ export interface TillDropInput {
   amount: string;
   /** Drop date (the bank slip's date), YYYY-MM-DD. */
   date: string;
+  /**
+   * The last sale date the counted cash covers, on or before the drop date.
+   * Defaults to the drop date; a drop that carries earlier days' cash to the
+   * bank names the day before, so that day's later sales fall in the next
+   * window.
+   */
+  coversThrough?: string | null;
   bankAccountId: string;
   slipNumber: string;
   /** Required when the organization books through more than one legal entity. */
@@ -485,16 +492,17 @@ export interface TillDropInput {
 }
 
 /**
- * A till's reconciliation window ending on a drop date: the cash its sales
- * tendered since the till's previous drop, against everything dropped in
- * the same span. Drops legitimately precede the sales being recorded, so a
- * difference is information for the close-out, never a refusal.
+ * A till's reconciliation window ending on a drop's cash cutoff: the cash
+ * its sales tendered since the cutoff of the till's previous drop, against
+ * everything dropped in the same span. Drops legitimately precede the sales
+ * being recorded, so a difference is information for the close-out, never a
+ * refusal.
  */
 export interface TillDropWindow {
   tillAccountId: string;
-  /** Exclusive start: the till's previous drop date, or null for its first drop. */
+  /** Exclusive start: the previous drop's cutoff, or null for the till's first drop. */
   after: string | null;
-  /** Inclusive end: the drop date. */
+  /** Inclusive end: the last sale date this drop covers. */
   through: string;
   salesCount: number;
   /** Cash tendered to the till in the window (sales minus refunds). */
@@ -505,10 +513,15 @@ export interface TillDropWindow {
   difference: string;
 }
 
-/** Non-voided drops leaving one till: sale-linked drops and dated till drops alike. */
+/**
+ * Non-voided drops leaving one till: sale-linked drops and dated till drops
+ * alike. `covers_through` is the last sale date a drop's cash covers — its
+ * stated cutoff, else its own date.
+ */
 function tillDropsSql(orgId: string, tillAccountId: string) {
   return sql`
-    select d.id, d.document_date, l.amount
+    select d.id, d.document_date, l.amount,
+           coalesce((d.custom->'tillDrop'->>'coversThrough')::date, d.document_date) as covers_through
       from documents d
       join document_lines l on l.document_id = d.id and l.org_id = d.org_id and l.line_number = 1
       join document_lines src on src.document_id = d.id and src.org_id = d.org_id and src.line_number = 2
@@ -517,7 +530,7 @@ function tillDropsSql(orgId: string, tillAccountId: string) {
        and src.account_id = ${tillAccountId}::uuid`;
 }
 
-/** The reconciliation window a drop on `date` closes for one till. */
+/** The reconciliation window a drop covering sales through `date` closes for one till. */
 export async function readTillDropWindow(
   orgId: string,
   tillAccountId: string,
@@ -528,9 +541,9 @@ export async function readTillDropWindow(
   }
   return withOrg(orgId, async () => {
     const after = (await db.execute<{ date: string | null }>(sql`
-      select max(drop.document_date)::text as date
+      select max(drop.covers_through)::text as date
         from (${tillDropsSql(orgId, tillAccountId)}) drop
-       where drop.document_date < ${date}::date`)).rows[0]?.date ?? null;
+       where drop.covers_through < ${date}::date`)).rows[0]?.date ?? null;
     const tendered = (await db.execute<{ minor: string; sales: number }>(sql`
       select coalesce(sum(case when d.kind = 'cash_refund' then -t.amount_minor else t.amount_minor end), 0)::text as minor,
              count(distinct d.id) filter (where d.kind = 'cash_sale')::int as sales
@@ -543,8 +556,8 @@ export async function readTillDropWindow(
     const dropped = (await db.execute<{ minor: string }>(sql`
       select coalesce(sum(round(drop.amount * 10000)), 0)::bigint::text as minor
         from (${tillDropsSql(orgId, tillAccountId)}) drop
-       where drop.document_date <= ${date}::date
-         ${after ? sql`and drop.document_date > ${after}::date` : sql``}`)).rows[0]!;
+       where drop.covers_through <= ${date}::date
+         ${after ? sql`and drop.covers_through > ${after}::date` : sql``}`)).rows[0]!;
     const tenderedMinor = BigInt(tendered.minor);
     const droppedMinor = BigInt(dropped.minor);
     return {
@@ -628,17 +641,40 @@ export async function recordTillDrop(
         "Choose the entity whose till the cash was counted from.",
       );
     }
+    const coversThrough = input.coversThrough ?? input.date;
+    if (!isIsoCalendarDate(coversThrough) || coversThrough > input.date) {
+      throw depositError(
+        "The drop's cash cutoff must be a date on or before the drop date.",
+        422,
+        "Enter the last sale date the counted cash covers — the drop date, or an earlier day when the drop carries earlier days' cash.",
+      );
+    }
     // Serialize drops per till so two cashiers cannot both read the same
     // undropped balance.
     await db.execute(sql`select pg_advisory_xact_lock(hashtext(${`till-drop:${orgId}:${input.tillAccountId}`}))`);
-    const window = await readTillDropWindow(orgId, input.tillAccountId, input.date);
+    const window = await readTillDropWindow(orgId, input.tillAccountId, coversThrough);
     const undropped = toUnits(window.tendered) - toUnits(window.dropped);
     const reason = typeof input.reason === "string" ? input.reason.trim() : "";
-    if (amountMinor > undropped && (reason.length < 5 || reason.length > 500)) {
+    const reasonGiven = reason.length >= 5 && reason.length <= 500;
+    if (amountMinor > undropped && !reasonGiven) {
       throw depositError(
         `Drop ${fromUnits(amountMinor)} is more than the till's recorded undropped cash ${fromUnits(undropped > 0n ? undropped : 0n)} since ${window.after ?? "its first sale"}.`,
         422,
         "Enter a reason for the count (for example, sales not yet recorded), between 5 and 500 characters.",
+      );
+    }
+    // A drop entered behind a later one lands inside a window that drop
+    // already closed and moves that window's over/short; it needs a note
+    // saying why it is late.
+    const later = (await db.execute<{ date: string }>(sql`
+      select max(drop.covers_through)::text as date
+        from (${tillDropsSql(orgId, input.tillAccountId)}) drop
+       where drop.covers_through > ${coversThrough}::date`)).rows[0]?.date ?? null;
+    if (later && !reasonGiven) {
+      throw depositError(
+        `A later drop from this till already covers sales through ${later}; this drop covers sales through ${coversThrough} and changes that drop's count.`,
+        422,
+        "Check the drop date and cash cutoff against the bank slip, or enter a reason for the late drop between 5 and 500 characters.",
       );
     }
     const result = await createAndPostDrop(orgId, actorId, {
@@ -648,12 +684,12 @@ export async function recordTillDrop(
       memo: `Till drop — slip ${slip}`,
       currency: settings?.currency ?? "",
       subsidiaryId,
-      custom: { tillDrop: { tillAccountId: input.tillAccountId, dropDate: input.date, slipNumber: slip, ...(reason ? { reason } : {}) } },
+      custom: { tillDrop: { tillAccountId: input.tillAccountId, dropDate: input.date, coversThrough, slipNumber: slip, ...(reason ? { reason } : {}) } },
       bankAccountId: input.bankAccountId,
       sourceAccountId: input.tillAccountId,
       amountMinor,
     });
-    return { ...result, window: await readTillDropWindow(orgId, input.tillAccountId, input.date) };
+    return { ...result, window: await readTillDropWindow(orgId, input.tillAccountId, coversThrough) };
   });
 }
 
@@ -687,9 +723,9 @@ export async function readSaleTillWindow(
     }
     if (!sale.tillAccountId) return null;
     const closingDrop = (await db.execute<{ date: string | null }>(sql`
-      select min(drop.document_date)::text as date
+      select min(drop.covers_through)::text as date
         from (${tillDropsSql(orgId, sale.tillAccountId)}) drop
-       where drop.document_date >= ${sale.date}::date`)).rows[0]?.date ?? null;
+       where drop.covers_through >= ${sale.date}::date`)).rows[0]?.date ?? null;
     if (!closingDrop) return null;
     const window = await readTillDropWindow(orgId, sale.tillAccountId, closingDrop);
     const later = (await db.execute<{ id: string }>(sql`

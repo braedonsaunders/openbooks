@@ -22,6 +22,8 @@
     "rangeValue": "{start} → {end}",
     "status": "Estado",
     "readiness": "Preparación",
+    "closedBy": "Cerrado por",
+    "closedByDetail": "{name}, {date}",
     "action": "Acción",
     "lockedDetail": "{modules} bloqueado · {book}"
   },
@@ -504,8 +506,10 @@
       "endReopenTitle": "Terminar esta reapertura",
       "endReopenHint": "Al terminar se vuelven a cerrar todos los módulos que abrió esta ventana y el período queda libre para nuevas solicitudes.",
       "endReopenReasonRequired": "Se requiere un motivo de al menos 10 caracteres para terminar la reapertura.",
-      "extendReopenTitle": "Extender o ampliar",
-      "extendReopenHint": "Agregue tiempo o módulos a esta ventana en lugar de abrir una solicitud superpuesta.",
+      "reopenRequestedUntil": "Vencimiento solicitado: {date}",
+      "extendReopenTitle": "Solicitar ampliación de plazo o módulos",
+      "extendReopenHint": "Envíe una nueva solicitud a un aprobador autorizado. Su aprobación sustituye esta ventana. Deje las horas adicionales en blanco o introduzca 0 para conservar el vencimiento actual.",
+      "extendByApproverOnly": "Para ampliar o extender su propia ventana, envíe una solicitud de reapertura que incluya todos los módulos de esta ventana más los que necesite. Un aprobador habilitado la decide y su aprobación reemplaza esta ventana.",
       "extendHoursLabel": "Horas adicionales",
       "extendModulesLabel": "Agregar módulos",
       "extendReopenReasonRequired": "Se requiere un motivo de al menos 10 caracteres para extender la reapertura.",
@@ -588,7 +592,7 @@
       "addRow": "Agregar",
       "removeValue": "Quitar {value}",
       "endReopen": "Terminar reapertura",
-      "extendReopen": "Extender reapertura"
+      "extendReopen": "Solicitar ampliación"
     },
     "fields": {
       "name": "Nombre",
@@ -668,6 +672,7 @@
       "gl": "LM"
     },
     "reopenStates": {
+      "superseded": "Reemplazada",
       "requested": "Solicitada",
       "approved": "Aprobada",
       "rejected": "Rechazada",
@@ -776,7 +781,7 @@
       "automationSaved": "Regla de automatización guardada",
       "packageSaved": "Paquete de informes guardado",
       "reopenEnded": "Ventana de reapertura terminada.",
-      "reopenExtended": "Ventana de reapertura extendida."
+      "reopenExtended": "Solicitud de cambio de reapertura enviada."
     },
     "errors": {
       "actionFailed": "No se pudo guardar el cambio",

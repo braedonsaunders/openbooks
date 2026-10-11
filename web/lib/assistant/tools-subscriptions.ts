@@ -4,11 +4,13 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
 import { addCalendarDays, businessToday } from "@openbooks/engine/platform/business-date/module";
 import {
-  monthlyRecurringRevenue,
+  contractRecurringAmounts,
+  subscriptionRecurringRevenue,
+  type ContractRecurring,
   type Interval,
 } from "@openbooks/engine/billing/subscription-billing";
 import { recurringTemplateScopeFilter } from "@openbooks/engine/billing/recurring";
-import { add, mulDecimal } from "@openbooks/engine/money/money";
+import { add, mulDecimal, toUnits } from "@openbooks/engine/money/money";
 import { isFeatureEnabled } from "../features";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { subsidiaryScopeAllows } from "../authz";
@@ -26,8 +28,9 @@ import { uuidInput, money, numberValue, capList, decimalText } from "./tools-sha
  * Recurring-schedule reads mirror GET /api/recurring (`documents.manage`,
  * no feature flag — the route has none).
  *
- * Per-row MRR uses the engine's `monthlyRecurringRevenue`; the org-currency
- * rollup uses the same dated spot-rate policy as the route's MRR card.
+ * Per-row MRR uses the engine's `subscriptionRecurringRevenue`, the same rule
+ * as the route's MRR card; the org-currency rollup uses the same dated
+ * spot-rate policy as that card.
  */
 
 const FEATURE_ERROR = "subscription_billing_feature_disabled";
@@ -45,7 +48,9 @@ async function orgCurrency(orgId: string): Promise<string | null> {
 }
 
 type MrrSource = {
+  id: unknown;
   status: string;
+  canceledOn?: unknown;
   priceOverride: unknown;
   planAmount: unknown;
   interval: Interval;
@@ -54,15 +59,35 @@ type MrrSource = {
   planCurrency: unknown;
 };
 
-function rowMrr(row: MrrSource): string {
-  if (row.status !== "active") return "0.0000";
-  const price = row.priceOverride ?? row.planAmount;
-  return monthlyRecurringRevenue(
-    money(price),
-    row.interval,
-    Number(row.intervalCount ?? 1),
-    String(row.quantity ?? "1"),
-  );
+/** The as-of date and contract charges every MRR figure in this file reads. */
+type MrrContext = { asOf: string; contracts: ReadonlyMap<string, ContractRecurring> };
+
+async function mrrContext(orgId: string): Promise<MrrContext> {
+  const asOf = await businessToday(orgId);
+  return { asOf, contracts: await contractRecurringAmounts(orgId, asOf) };
+}
+
+/** A subscription's MRR today: zero unless it still earns. */
+function rowMrr(row: MrrSource, ctx: MrrContext): string {
+  return subscriptionRecurringRevenue({
+    status: row.status,
+    canceledOn: row.canceledOn == null ? null : String(row.canceledOn),
+    asOf: ctx.asOf,
+    priceOverride: money(row.priceOverride ?? row.planAmount),
+    planAmount: row.planAmount,
+    contract: ctx.contracts.get(String(row.id)) ?? null,
+    interval: row.interval,
+    intervalCount: row.intervalCount,
+    quantity: row.quantity,
+  });
+}
+
+/**
+ * What a subscription was earning at its price, whatever its status now is:
+ * the recurring revenue a cancellation or pause removed from the book.
+ */
+function rowPricedMrr(row: MrrSource, ctx: MrrContext): string {
+  return rowMrr({ ...row, status: "active", canceledOn: null }, ctx);
 }
 
 /**
@@ -73,13 +98,16 @@ async function mrrInOrgCurrency(
   orgId: string,
   orgCode: string,
   rows: readonly MrrSource[],
+  ctx: MrrContext,
 ): Promise<string> {
-  const asOf = await businessToday(orgId);
+  const asOf = ctx.asOf;
   const rates = new Map<string, string>();
   let total = "0.0000";
   for (const row of rows) {
-    if (row.status !== "active") continue;
-    const amount = rowMrr(row);
+    const amount = rowMrr(row, ctx);
+    // Nothing earned today needs no rate: a foreign plan with no spot rate
+    // must not refuse the rollup for revenue that is not there.
+    if (toUnits(amount) === 0n) continue;
     const sourceCurrency = String(row.planCurrency ?? orgCode).trim().toUpperCase();
     if (sourceCurrency === orgCode) {
       total = add(total, amount);
@@ -120,7 +148,7 @@ async function mrrInOrgCurrency(
 const SUBSCRIPTION_SELECT = sql`
   select s.id, s.customer_id as "customerId", s.plan_id as "planId", s.quantity,
          s.price_override as "priceOverride", s.status, s.start_on as "startOn",
-         s.next_bill_on as "nextBillOn", s.canceled_on as "canceledOn",
+         s.next_bill_on as "nextBillOn", s.canceled_on::text as "canceledOn",
          s.paused_on as "pausedOn", s.resume_on as "resumeOn",
          s.auto_post as "autoPost", s.run_count as "runCount",
          s.last_invoice_id as "lastInvoiceId", s.last_error as "lastError",
@@ -134,7 +162,7 @@ const SUBSCRIPTION_SELECT = sql`
     join subscription_plans p on p.id = s.plan_id and p.org_id = s.org_id
     left join parties c on c.id = s.customer_id and c.org_id = s.org_id`;
 
-function subscriptionRow(r: Record<string, unknown>) {
+function subscriptionRow(r: Record<string, unknown>, ctx: MrrContext) {
   return {
     id: r.id,
     customerId: r.customerId,
@@ -156,7 +184,7 @@ function subscriptionRow(r: Record<string, unknown>) {
     advancedLifecycle: r.advancedLifecycle,
     planCurrency: r.planCurrency,
     planInterval: r.interval,
-    mrr: decimalText(rowMrr(r as unknown as MrrSource)),
+    mrr: decimalText(rowMrr(r as unknown as MrrSource, ctx)),
     memo: r.memo == null ? null : truncateText(String(r.memo), 300),
   };
 }
@@ -255,7 +283,7 @@ const listSubscriptions: AssistantToolDef = {
          group by s.status order by s.status
       `),
       db.execute<MrrSource & Record<string, unknown>>(sql`
-        select s.status, s.price_override as "priceOverride", p.amount as "planAmount",
+        select s.id, s.status, s.canceled_on::text as "canceledOn", s.price_override as "priceOverride", p.amount as "planAmount",
                p.interval, p.interval_count as "intervalCount", s.quantity,
                p.currency_code as "planCurrency"
           from subscriptions s
@@ -264,19 +292,21 @@ const listSubscriptions: AssistantToolDef = {
          where s.org_id = ${authz.user.orgId}${filters}${scope}
       `),
     ]);
-    const capped = capList(page.rows.map(subscriptionRow));
+    const ctx = await mrrContext(authz.user.orgId);
+    const capped = capList(page.rows.map((row) => subscriptionRow(row, ctx)));
     const mrrByCurrency = new Map<string, string>();
     for (const row of mrrRows.rows) {
-      if (row.status !== "active") continue;
+      const amount = rowMrr(row, ctx);
+      if (toUnits(amount) === 0n) continue;
       const code = String(row.planCurrency ?? "").trim().toUpperCase() || "UNKNOWN";
-      mrrByCurrency.set(code, add(mrrByCurrency.get(code) ?? "0.0000", rowMrr(row)));
+      mrrByCurrency.set(code, add(mrrByCurrency.get(code) ?? "0.0000", amount));
     }
     const currency = await orgCurrency(authz.user.orgId);
     let mrrOrgTotal: string | null = null;
     let mrrNote: string | undefined;
     if (currency) {
       try {
-        mrrOrgTotal = decimalText(await mrrInOrgCurrency(authz.user.orgId, currency, mrrRows.rows));
+        mrrOrgTotal = decimalText(await mrrInOrgCurrency(authz.user.orgId, currency, mrrRows.rows, ctx));
       } catch (error) {
         // The route fails the whole read on a missing rate; the tool still
         // returns every row and the per-currency totals with the reason noted.
@@ -385,10 +415,11 @@ const getSubscription: AssistantToolDef = {
     if (!fresh || !subsidiaryScopeAllows(authz.allowedSubsidiaryIds, fresh.customerSubsidiaryId, { orgWideNull: true })) {
       return { ok: false, error: "subscription_not_found" };
     }
+    const ctx = await mrrContext(authz.user.orgId);
     return {
       ok: true,
       data: {
-        subscription: subscriptionRow(head),
+        subscription: subscriptionRow(head, ctx),
         events: capList(events.rows, 20).items,
         periodInvoices: invoices.rows.map((i) => ({ ...i, invoiceTotal: decimalText(i.invoiceTotal) })),
         dunningLog: dunning.rows.map((d) => ({ ...d, amountDue: decimalText(d.amountDue) })),
@@ -412,9 +443,10 @@ const subscriptionMrr: AssistantToolDef = {
     const today = await businessToday(authz.user.orgId);
     const churnSince = addCalendarDays(today, -30);
     const scope = subsidiaryVisibleFilter(sql`c.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true });
+    const ctx = await mrrContext(authz.user.orgId);
     const [mrrRows, byPlan, byDunning, churn] = await Promise.all([
       db.execute<MrrSource & Record<string, unknown>>(sql`
-        select s.status, s.price_override as "priceOverride", p.amount as "planAmount",
+        select s.id, s.status, s.canceled_on::text as "canceledOn", s.price_override as "priceOverride", p.amount as "planAmount",
                p.interval, p.interval_count as "intervalCount", s.quantity,
                p.currency_code as "planCurrency"
           from subscriptions s
@@ -423,14 +455,13 @@ const subscriptionMrr: AssistantToolDef = {
          where s.org_id = ${authz.user.orgId}${scope}
       `),
       db.execute<Record<string, unknown>>(sql`
-        select p.name as "planName", p.currency_code as currency, count(*)::int as count,
+        select s.id, p.name as "planName", p.currency_code as currency,
                s.status, s.price_override as "priceOverride", p.amount as "planAmount",
                p.interval, p.interval_count as "intervalCount", s.quantity
           from subscriptions s
           join subscription_plans p on p.id = s.plan_id and p.org_id = s.org_id
           left join parties c on c.id = s.customer_id and c.org_id = s.org_id
          where s.org_id = ${authz.user.orgId}${scope}
-         group by p.name, p.currency_code, s.status, s.price_override, p.amount, p.interval, p.interval_count, s.quantity
          order by p.name
       `),
       db.execute<Record<string, unknown>>(sql`
@@ -441,7 +472,7 @@ const subscriptionMrr: AssistantToolDef = {
          group by s.dunning_state order by s.dunning_state
       `),
       db.execute<Record<string, unknown>>(sql`
-        select s.status, s.price_override as "priceOverride", p.amount as "planAmount",
+        select s.id, s.status, s.canceled_on::text as "canceledOn", s.price_override as "priceOverride", p.amount as "planAmount",
                p.interval, p.interval_count as "intervalCount", s.quantity,
                p.currency_code as "planCurrency",
                (s.created_at >= now() - interval '30 days') as "isNew",
@@ -459,18 +490,19 @@ const subscriptionMrr: AssistantToolDef = {
     let mrrNote: string | undefined;
     if (currency) {
       try {
-        mrrOrgTotal = decimalText(await mrrInOrgCurrency(authz.user.orgId, currency, mrrRows.rows));
+        mrrOrgTotal = decimalText(await mrrInOrgCurrency(authz.user.orgId, currency, mrrRows.rows, ctx));
       } catch (error) {
         mrrNote = error instanceof Error ? error.message : "mrr conversion unavailable";
       }
     }
     const mrrByPlan = new Map<string, { currency: string; mrr: string; count: number }>();
     for (const row of byPlan.rows) {
-      if (row.status !== "active") continue;
+      const amount = rowMrr(row as unknown as MrrSource, ctx);
+      if (toUnits(amount) === 0n) continue;
       const key = `${String(row.planName)}||${String(row.currency ?? "")}`;
       const prev = mrrByPlan.get(key) ?? { currency: String(row.currency ?? ""), mrr: "0.0000", count: 0 };
-      prev.mrr = add(prev.mrr, rowMrr(row as unknown as MrrSource));
-      prev.count += Number(row.count ?? 0);
+      prev.mrr = add(prev.mrr, amount);
+      prev.count += 1;
       mrrByPlan.set(key, prev);
     }
     let newCount = 0;
@@ -482,7 +514,7 @@ const subscriptionMrr: AssistantToolDef = {
       if (row.canceledRecent) {
         canceledCount += 1;
         const code = String(row.planCurrency ?? "").trim().toUpperCase() || "UNKNOWN";
-        lostByCurrency.set(code, add(lostByCurrency.get(code) ?? "0.0000", rowMrr(row as unknown as MrrSource)));
+        lostByCurrency.set(code, add(lostByCurrency.get(code) ?? "0.0000", rowPricedMrr(row as unknown as MrrSource, ctx)));
       }
       if (row.pausedRecent) pausedCount += 1;
     }

@@ -49,19 +49,19 @@ const hooks = registerHooks({
 const { POST } = await import("./route.ts");
 const { PATCH } = await import("./[id]/route.ts");
 
-const { db } = await import("@openbooks/engine/platform/db");
+const { db, withBypass} = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
 
 
 async function fixture() {
-  const org = await createScratchOrg();
-  const { adminId } = await seedFlowActors(org.orgId);
-  await db.execute(sql`
+  const org = await withBypass(() => createScratchOrg());
+  const { adminId } = await withBypass(() => seedFlowActors(org.orgId));
+  await withBypass(() => db.execute(sql`
     update orgs
        set settings = jsonb_set(
              coalesce(settings, '{}'::jsonb), '{features,projects}',
              to_jsonb(true::boolean), true)
-     where id = ${org.orgId}`);
+     where id = ${org.orgId}`));
   routeState.authz = { user: { orgId: org.orgId, id: adminId }, allowedSubsidiaryIds: null };
   return org;
 }

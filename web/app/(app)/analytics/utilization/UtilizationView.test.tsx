@@ -5,6 +5,8 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { add } from '@openbooks/engine/money/money'
 import type { UtilizationData } from '../../../../lib/analytics/utilization-data'
 
+const { stubModules } = await import('../../../../testing/stub-modules')
+stubModules({ navigation: { pathname: '/analytics/utilization' } })
 const React = await import('react')
 Object.assign(globalThis, { React })
 const { NextIntlClientProvider } = await import('next-intl')

@@ -4,7 +4,7 @@ import { registerHooks } from 'node:module'
 import test from 'node:test'
 
 // Moving a lead to Prospect from the account drawer must persist.
-// The drawer sends the whole form, including the now-stale lead status id,
+// The relationship tab sends the whole form, including the now-stale lead status id,
 // alongside the new stage. The stage write must survive that payload (and a
 // missing status), while genuinely unknown statuses still fail closed.
 const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
@@ -111,13 +111,14 @@ async function revisionFor(partyId: string): Promise<string> {
 test('PATCH keeps a stage-only drawer save: stale lead status falls back to the prospect default', async () => {
   const f = await fixture()
   try {
-    // Byte-shape of the AccountDrawer save when only the stage dropdown moved.
+    // Byte-shape of the party Relationship tab save when only the stage dropdown
+    // moved (PartyRelationshipSection sends its whole form; party fields live on
+    // the party record and are not part of this route's typed body).
     const result = await patch(f.partyId, {
-      displayName: 'Stagelead', email: '', phone: '', website: '',
       lifecycleStage: 'prospect', statusId: f.leadStatusId,
       ownerUserId: null, territoryId: null, leadSourceId: null,
       industry: '', category: '', annualRevenue: '', employeeCount: '',
-      qualificationScore: '', nextActionAt: null, isActive: true,
+      qualificationScore: '', nextActionAt: '', isActive: true, stageReason: null,
       expectedUpdatedAt: await revisionFor(f.partyId),
     })
     assert.equal(result.status, 200, JSON.stringify(result.json))

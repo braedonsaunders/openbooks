@@ -773,7 +773,7 @@ for (const operation of ['read', 'stale', 'repeat']) {
       const actor = await createScratchUser(org.orgId,'Project administrator','reviewer');
       const projectId = randomUUID();
       await db.execute(sql`insert into projects (id,org_id,subsidiary_id,name,code) values (${projectId},${org.orgId},${org.subsidiaryId},'Revision project',${projectId})`);
-      const input = {code:null,name:'First',status:'open' as const,estimatedHours:'10',estimatedCost:'100'};
+      const input = {code:null,name:'First',status:'open' as const,estimatedHours:'10',estimatedCost:'100',estimatedPrice:null};
       const args = {orgId:org.orgId,projectId,actorId:actor,allowedSubsidiaryIds:null,input};
       await withOrg(org.orgId,async()=>{
         const task = await createWorkBreakdownTask(args);
@@ -801,7 +801,7 @@ test('independent task editors do not upgrade their shared project locks', { ski
     const actor=await createScratchUser(org.orgId,'Project administrator','reviewer');
     const projectId=randomUUID();
     await db.execute(sql`insert into projects (id,org_id,subsidiary_id,name,code) values (${projectId},${org.orgId},${org.subsidiaryId},'Revision project',${projectId})`);
-    const input={code:null,name:'First',status:'open' as const,estimatedHours:'10',estimatedCost:'100'};
+    const input={code:null,name:'First',status:'open' as const,estimatedHours:'10',estimatedCost:'100',estimatedPrice:null};
     const args={orgId:org.orgId,projectId,actorId:actor,allowedSubsidiaryIds:null,input};
     const tasks=[await createWorkBreakdownTask(args),await createWorkBreakdownTask(args)];
     let ready=()=>{},n=0;

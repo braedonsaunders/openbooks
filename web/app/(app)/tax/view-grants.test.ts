@@ -13,8 +13,9 @@ interface ViewState {
   grants: Set<string>
   filingCount: number
   failedCount: number
+  adjustments: unknown
 }
-const viewState: ViewState = { grants: new Set(), filingCount: 0, failedCount: 0 }
+const viewState: ViewState = { grants: new Set(), filingCount: 0, failedCount: 0, adjustments: {} }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = viewState
 
 function sqlText(query: unknown): string {
@@ -67,6 +68,7 @@ const navigationMock = `export function notFound() { throw new Error('notFound')
      export function redirect(url) { throw new Error('redirect:' + url) }`
 
 const mockSources = new Map<string, string>([
+  ['mock:migration-plan', `export async function readMigrationPlan(){ return {cutoverDate: '2025-09-01'} }`],
   [
     'mock:viewspec',
     `
@@ -81,8 +83,9 @@ const mockSources = new Map<string, string>([
       export const db = {
         async execute(query) {
           const text = (${sqlText.toString()})(query)
-          if (text.includes('where id')) return { rows: [${JSON.stringify(FILING_ROW)}] }
           const state = globalThis[Symbol.for('openbooks.tax-view-grants-test')]
+          if (text.includes('where id')) return { rows: [{ ...${JSON.stringify(FILING_ROW)}, adjustments: state.adjustments }] }
+          if (text.includes('from users')) return { rows: [{id: '11111111-1111-4111-8111-111111111111', name: 'Tax preparer'}] }
           if (text.includes('count(*)') && text.includes('tax_filings')) return { rows: [{ count: state.filingCount }] }
           if (text.includes('count(*)')) return { rows: [{ count: state.failedCount }] }
           return { rows: [] }
@@ -117,6 +120,7 @@ const mockSources = new Map<string, string>([
 ])
 
 const mockUrls = new Map<string, string>([
+  ['../../../lib/migration/plan', 'mock:migration-plan'],
   ['@openbooks/engine/platform/db', 'mock:db'],
   ['@openbooks/engine/tax-returns/return', 'mock:tax-return'],
   ['@openbooks/engine/tax-returns/filing', 'mock:tax-filing'],
@@ -188,4 +192,22 @@ test('the History badge counts the filings the list shows; Activity counts faile
     assert.equal(data.tabs.find((tab) => tab.key === 'activity')?.count, 1)
     assert.equal(data.history.total, 2)
   }
+})
+
+
+test('the prepare surface receives the organization conversion date', async () => {
+  reset(['reports.read'])
+  assert.equal((await loadTax({})).conversionDate, '2025-09-01')
+})
+
+
+test('history resolves governed entries and retains earlier amount-only filing evidence', async () => {
+  reset(['reports.read', 'compliance.file'])
+  viewState.adjustments = [{ lineCode: '104', amount: '3018.8400', reason: 'Pre-conversion activity', enteredBy: '11111111-1111-4111-8111-111111111111', enteredAt: '2026-08-01T12:00:00.000Z' }]
+  const prepared = await loadTax({ filing: '11111111-1111-4111-8111-111111111111' })
+  assert.deepEqual(prepared.drawer?.filing.adjustments, [{ lineCode: '104', amount: '3018.8400', reason: 'Pre-conversion activity', enteredByName: 'Tax preparer', enteredAt: '2026-08-01T12:00:00.000Z' }])
+  viewState.adjustments = { '104': '3018.8400' }
+  const legacy = await loadTax({ filing: '11111111-1111-4111-8111-111111111111' })
+  assert.deepEqual(legacy.drawer?.filing.adjustments, [{ lineCode: '104', amount: '3018.8400', reason: null, enteredByName: null, enteredAt: null }])
+  viewState.adjustments = {}
 })

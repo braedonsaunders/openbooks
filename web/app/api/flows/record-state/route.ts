@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
 import { ScopeNotFoundError } from "@openbooks/engine/organization/scope";
+import { documentKindPermissions } from "@openbooks/engine/records/document-kind-permissions";
 import {
   gateDecisionCapability,
   getFlowAdapter,
@@ -99,12 +100,12 @@ export interface RecordApprovalState {
   /** Whether the caller may retry a failed run (flows.manage). */
   canRetry: boolean;
   /**
-   * Whether the caller may withdraw the open submission (the viewer
-   * submitted it, or may decide a live gate): drawers render "Withdraw
-   * submission" only on this flag — never offered then refused. The
-   * documents action route re-checks submitter-or-approver on POST.
+   * Whether the viewer submitted the open submission. Withdraw availability
+   * combines this fact with the viewer's grants in the shared document
+   * action rule (web/lib/document-action-availability.ts); the documents
+   * action route re-checks the same rule on POST.
    */
-  canWithdraw: boolean;
+  submittedByViewer: boolean;
 }
 
 const iso = (v: unknown): string =>
@@ -122,7 +123,7 @@ function emptyApprovalState(status: string): RecordApprovalState {
     failedRun: null,
     neverSubmitted: false,
     canRetry: false,
-    canWithdraw: false,
+    submittedByViewer: false,
   };
 }
 
@@ -178,10 +179,17 @@ async function legacyGET(req: Request) {
     const status = await adapter.getStatus(subjectId);
     if (status === null)
       return NextResponse.json({ error: "record not found" }, { status: 404 });
+    const documentSubmission = status === "pending_approval" && documentKindPermissions(subjectKind)
+      ? await db.execute<{ submittedBy: string | null }>(sql`
+          select submitted_by as "submittedBy" from documents
+           where org_id = ${orgId} and id = ${subjectId} and kind = ${subjectKind}
+        `)
+      : null;
+    const submittedByViewer = documentSubmission?.rows[0]?.submittedBy === authz.user.id;
     // With Flows off no flow applies to any record: the visible record
     // answers an empty approval state, never a refusal the drawer would
     // render as an error.
-    if (!flowsEnabled) return NextResponse.json(emptyApprovalState(status));
+    if (!flowsEnabled) return NextResponse.json({ ...emptyApprovalState(status), submittedByViewer });
 
     const [gates, runs, roleRows] = await Promise.all([
       db.execute<Record<string, unknown>>(sql`
@@ -203,7 +211,7 @@ async function legacyGET(req: Request) {
     `),
       db.execute<Record<string, unknown>>(sql`
       select r.id, r.status, r.error, r.finished_at as "finishedAt",
-             r.started_at as "startedAt", r.created_by as "submitterId",
+             r.started_at as "startedAt",
              u.name as "submitterName"
         from flow_runs r
         left join users u on u.id = r.created_by
@@ -311,25 +319,9 @@ async function legacyGET(req: Request) {
 
     const latestRun =
       runs.rows.length > 0 ? runs.rows[runs.rows.length - 1]! : null;
-    // Withdraw is the submitter's own recall (or a live approver's) of a
-    // submission still awaiting decision. The submission is the run that owns
-    // the live gates: other runs on the same record (a scheduled reminder, an
-    // automation that completed later) are not the submission and must not
-    // hide the recall. Anyone else never sees the button; the action route
-    // enforces the same rule.
-    const openGateRunIds = new Set(
-      gates.rows
-        .filter((g) => g.status === "pending" || g.status === "escalated")
-        .map((g) => String(g.runId)),
-    );
-    const openRun =
-      runs.rows.find(
-        (r) =>
-          openGateRunIds.has(String(r.id)) &&
-          (r.status === "running" || r.status === "waiting"),
-      ) ?? null;
-    const canWithdraw =
-      !!openRun && (openRun.submitterId === authz.user.id || !!myActions.gateId);
+    // Withdrawal authority belongs to the document's submission actor,
+    // independently of workflow retries, reminders or the presence of a
+    // live gate. This is the same field the native withdrawal command locks.
     const body: RecordApprovalState = {
       approvalState: {
         status,
@@ -348,7 +340,7 @@ async function legacyGET(req: Request) {
           : null,
       neverSubmitted: runs.rows.length === 0 && pendingWith.length === 0,
       canRetry: can(authz, "flows.manage"),
-      canWithdraw,
+      submittedByViewer,
     };
     return NextResponse.json(body);
   });

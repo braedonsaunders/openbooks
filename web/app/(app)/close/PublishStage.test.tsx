@@ -13,7 +13,7 @@ const root = pathToFileURL(`${process.cwd()}/`).href;
 // restatement note — and the publish button previously sent no comment at
 // all, so a restatement died with a 422 and no way to comply.
 const { stubModules } = await import("../../../testing/stub-modules");
-stubModules({ navigation: "export function useRouter() { return { refresh() {}, push() {}, replace() {} } }", extra: { "next-intl": "export function useTranslations() { const t = (key) => key; t.has = () => true; return t }" } });
+stubModules({ navigation: "export function useRouter() { return { refresh() {}, push() {}, replace() {} } }", extra: { "next-intl": "export function useTranslations() { const t = (key) => key; t.has = () => true; return t }; export function useLocale() { return \"en\" }" } });
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "react" && context.parentURL?.startsWith("data:")) {

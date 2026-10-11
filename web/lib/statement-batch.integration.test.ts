@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
-import { db, withOrg } from '@openbooks/engine/platform/db'
+import { db, withOrg, withBypass } from '@openbooks/engine/platform/db'
 import { postDocument } from '@openbooks/engine/ledger/posting-document'
 import {
   createScratchOrg,
@@ -51,7 +51,7 @@ async function seedInvoice(
 }
 
 test('overdue balances, billing contacts, and no-email exclusions resolve from live postings', async () => {
-  const org = await createScratchOrg()
+  const org = await withBypass(() => createScratchOrg())
   try {
     await withOrg(org.orgId, async () => {
       await db.execute(sql`update parties set email = 'office@acme.test' where id = ${org.customerId} and org_id = ${org.orgId}`)

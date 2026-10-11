@@ -108,7 +108,8 @@
     "applySource": "Remplacer toutes les lignes de ce brouillon par les valeurs du budget sélectionné?",
     "submit": "Soumettre ce budget pour approbation ? Il sera verrouillé en modification jusqu’à la décision.",
     "approve": "Approuver ce budget ?",
-    "reject": "Renvoyer ce budget en brouillon ?"
+    "reject": "Renvoyer ce budget en brouillon ?",
+    "rejectionReason": "Motif du rejet"
   },
   "feedback": {
     "archived": "Budget archivé.",

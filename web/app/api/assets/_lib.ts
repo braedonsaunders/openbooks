@@ -2,7 +2,11 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { documentRevisionSql } from '@openbooks/engine/records/revision'
 import { db, type SqlExecutor } from '@openbooks/engine/platform/db'
-import { resolveAssetAccounts } from '@openbooks/engine/assets/depreciation'
+import {
+  assetPlacementShortfall,
+  resolveAssetAccounts,
+  type AssetPlacementField,
+} from '@openbooks/engine/assets/depreciation'
 import { fromUnits, toUnits } from '@openbooks/engine/money/money'
 import { lockScopeRow, ScopeNotFoundError } from '@openbooks/engine/organization/scope'
 
@@ -122,6 +126,8 @@ export interface AssetPayload {
   }[]
   schedulePage: { total: number; page: number; perPage: number; bookId: string | null; query: string }
   hasAccountingEvidence: boolean
+  /** Fields a draft still lacks for placement in service; empty once ready. */
+  placement: { missing: AssetPlacementField[] }
   schedule: {
     id: string
     sequence: number
@@ -447,6 +453,22 @@ export async function loadAssetWithRunner(
           primaryBasis.accumulated,
       );
 
+  // Only a draft can be placed in service, so only a draft reports what it
+  // still lacks. The list comes from the same rules the placement gate uses.
+  const placementMissing =
+    asset.status === 'draft'
+      ? await assetPlacementShortfall(tx, orgId, asset.category_id, {
+          acquisitionCost: asset.acquisition_cost,
+          inServiceOn: asset.in_service_on,
+          depreciationMethod: asset.depreciation_method,
+          depreciationMethodId: asset.depreciation_method_id,
+          usefulLifeMonths: asset.useful_life_months,
+          depreciationUnitsTotal: asset.depreciation_units_total,
+          openingAccumulated: asset.opening_accumulated_depreciation,
+          openingAsOf: asset.opening_accumulated_as_of,
+        })
+      : []
+
   return {
     asset,
     category,
@@ -492,6 +514,7 @@ export async function loadAssetWithRunner(
       Boolean(primaryTotals.rows[0]?.has_evidence) ||
       lifecycle.length > 0 ||
       basisChanges.length > 0,
+    placement: { missing: placementMissing },
     schedule,
   };
 }

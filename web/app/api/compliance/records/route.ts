@@ -15,16 +15,9 @@ import { canonicalDecimal } from '@/lib/exact-decimal'
 import { moneyRefusal } from '@/lib/payroll-decimal-refusal'
 import { notFound } from "@/lib/api/responses";
 
-const requestMoney = (field: string) => z.union([
-  z.string().superRefine((value, ctx) => {
-    const exact = canonicalDecimal(value, 4)
-    if (exact === null || wholeDigits(exact) > 15) {
-      ctx.addIssue({ code: 'custom', message: moneyRefusal(field, value) })
-    }
-  }),
-  z.literal(''),
-  z.null(),
-])
+// Money is decimal text at the boundary; malformed and over-width figures are
+// domain refusals (422) raised by optionalCoverageMoney before any write.
+const requestMoney = z.string().nullable()
 const requestBodySchema = z.object({
   partyId: z.string().uuid({ error: 'partyId must be a valid vendor id' }),
   requirementId: z.string().uuid({ error: 'requirementId must be a valid compliance requirement id' }),
@@ -33,8 +26,8 @@ const requestBodySchema = z.object({
   policyNumber: z.string().trim().max(200).nullable().optional(),
   effectiveFrom: z.string().refine(isIsoCalendarDate, 'effectiveFrom must be a real calendar date (YYYY-MM-DD)'),
   expiresOn: z.string().refine(isIsoCalendarDate, 'expiresOn must be a real calendar date (YYYY-MM-DD)').nullable().optional(),
-  coverageAmount: requestMoney('Coverage amount').optional(),
-  aggregateAmount: requestMoney('Aggregate amount').optional(),
+  coverageAmount: requestMoney.optional(),
+  aggregateAmount: requestMoney.optional(),
   coverageCurrency: z.string().regex(/^[A-Z]{3}$/, 'coverageCurrency must be a three-letter ISO currency code').nullable().optional(),
   additionalInsured: z.boolean().optional(),
   waiverOfSubrogation: z.boolean().optional(),

@@ -724,6 +724,10 @@ export const ANALYTICS_CONFIG = {
       overduePushLongDays: 28,
       overdueMidThresholdDays: 30,
       overdueLongThresholdDays: 60,
+      // Receivables more than this many days past their aging basis are not
+      // projected as receipts; they are listed as not forecast. 90 is the
+      // aging report's 90+ boundary.
+      collectibilityHorizonDays: 90,
       cardTrajectoryTolerance: 0.2,
       cardMedianBlendWeight: 0.7,
       vendorOutlierSigma: 2,
@@ -743,6 +747,7 @@ export const ANALYTICS_CONFIG = {
       num("overduePushLongDays", "analytics.cashflow.config.fields.overduePushLongDays", 0, 90, 1, true),
       num("overdueMidThresholdDays", "analytics.cashflow.config.fields.overdueMidThresholdDays", 1, 180, 1, true),
       num("overdueLongThresholdDays", "analytics.cashflow.config.fields.overdueLongThresholdDays", 1, 180, 1, true),
+      num("collectibilityHorizonDays", "analytics.cashflow.config.fields.collectibilityHorizonDays", 1, 730, 1, true),
       num("cardTrajectoryTolerance", "analytics.cashflow.config.fields.cardTrajectoryTolerance", 0, 1, 0.05),
       num("cardMedianBlendWeight", "analytics.cashflow.config.fields.cardMedianBlendWeight", 0, 1, 0.05),
       num("vendorOutlierSigma", "analytics.cashflow.config.fields.vendorOutlierSigma", 0.5, 6, 0.1),
@@ -757,7 +762,7 @@ export const ANALYTICS_CONFIG = {
     groups: [
       { labelKey: "analytics.cashflow.config.groups.forecast", fields: ["defaultHorizonWeeks", "runwayCautionWeeks", "paymentHistoryMonths"] },
       { labelKey: "analytics.cashflow.config.groups.scheduling", fields: ["weeklyApCap", "restrictToSafe"] },
-      { labelKey: "analytics.cashflow.config.groups.prediction", fields: ["settleBufferSigma", "overduePushShortDays", "overduePushMidDays", "overduePushLongDays", "overdueMidThresholdDays", "overdueLongThresholdDays", "vendorOutlierSigma"] },
+      { labelKey: "analytics.cashflow.config.groups.prediction", fields: ["settleBufferSigma", "overduePushShortDays", "overduePushMidDays", "overduePushLongDays", "overdueMidThresholdDays", "overdueLongThresholdDays", "collectibilityHorizonDays", "vendorOutlierSigma"] },
       { labelKey: "analytics.cashflow.config.groups.cards", fields: ["cardTrajectoryTolerance", "cardMedianBlendWeight", "cardStatementCloseDays", "cardDefaultPayDay", "cardStalePaymentDays"] },
     ],
   },

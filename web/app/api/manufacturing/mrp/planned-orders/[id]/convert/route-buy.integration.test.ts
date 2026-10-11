@@ -8,7 +8,7 @@ const stateKey = Symbol.for("openbooks.mrp-buy-route-test");
 const state: { gate: { user: { id: string; orgId: string }; permissions: Set<string>; allowedSubsidiaryIds: null } | null } = { gate: null };
 Object.assign(globalThis, { [stateKey]: state });
 const gates = `const s=globalThis[Symbol.for("openbooks.mrp-buy-route-test")]; export async function guardFeaturePermission(){return s.gate ?? new Response(null,{status:401})}`;
-const authz = `export function guardSubsidiaryScope(){return null}`;
+const authz = `export function guardSubsidiaryScope(){return null} export function can(a,p){return a.permissions.has(p)}`;
 const hooks = registerHooks({ resolve(specifier, context, next) {
   if (specifier === "@/lib/feature-gates" || (specifier === "../../../lib/feature-gates" && context.parentURL?.includes("/_order/handlers"))) return { shortCircuit: true, url: `data:text/javascript,${encodeURIComponent(gates)}` };
   if (specifier === "@/lib/authz" && context.parentURL?.includes("/convert/route")) return { shortCircuit: true, url: `data:text/javascript,${encodeURIComponent(authz)}` };
@@ -17,17 +17,19 @@ const hooks = registerHooks({ resolve(specifier, context, next) {
 const routeSpecifier: string = "./route.ts?mrp-buy-route-test";
 const { POST } = await import(routeSpecifier) as typeof import("./route.ts");
 const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 const { runMrp, confirmPlannedOrder } = await import("@openbooks/engine/manufacturing/mrp");
 const { upsertItemPolicy } = await import("@openbooks/engine/manufacturing/item-policies");
 const { businessToday } = await import("@openbooks/engine/platform/business-date/module");
+const { createWorkOperator } = await import("@openbooks/engine/testing/manufacturing");
 const tx = <T>(work: (runner: Parameters<Parameters<typeof db.transaction>[0]>[0]) => Promise<T>) => withBypassContext(() => db.transaction(work));
 const plus = (day: string, count: number) => { const date = new Date(`${day}T00:00:00Z`); date.setUTCDate(date.getUTCDate() + count); return date.toISOString().slice(0, 10); };
 
 test("buy suggestions create one vendor purchase draft and preserve conversion refusals", async () => {
   const org = await withBypassContext(() => createScratchOrg());
-  const actorId = await withBypassContext(() => createScratchUser(org.orgId, "MRP buyer", "admin"));
-  state.gate = { user: { id: actorId, orgId: org.orgId }, permissions: new Set(["manufacturing.manage", "purchase_orders.create"]), allowedSubsidiaryIds: null };
+  const grants = ["manufacturing.manage", "items.read", "purchase_orders.create"];
+  const actorId = await withBypassContext(() => createWorkOperator(org.orgId, "MRP buyer", grants));
+  state.gate = { user: { id: actorId, orgId: org.orgId }, permissions: new Set(grants), allowedSubsidiaryIds: null };
   try {
     await withBypassContext(() => db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"manufacturing":true,"inventory":true,"warehousing":true,"manufacturingMrp":true,"orders":true}'::jsonb) where id=${org.orgId}`));
     const due = plus(await businessToday(org.orgId), 30);

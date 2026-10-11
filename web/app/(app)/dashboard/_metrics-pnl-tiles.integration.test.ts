@@ -88,7 +88,7 @@ async function loadPlTiles(
   widgetIds: readonly string[] = [...PNL_IDS],
 ) {
   const actor = await withBypass(() => createScratchUser(org.orgId, "P&L Reader", "admin"));
-  const authz = authzFor(org.orgId, actor as unknown as string, ["dashboard.read", "reports.read"], allowedSubsidiaryIds);
+  const authz = authzFor(org.orgId, actor as unknown as string, ["dashboard.read", "reports.read", "gl.read"], allowedSubsidiaryIds);
   for (const id of PNL_IDS) assert.equal(canSeeWidget(authz, id), true);
   return pinClock(TODAY, () =>
     withOrgContext(org.orgId, () => loadDashboardMetrics(authz, [...widgetIds], denialProofReaders(calls))),
@@ -277,7 +277,7 @@ test("a business day before the first accounting period refuses on the tiles, ne
         values(${randomUUID()},${org.orgId},2026,8,'2026-08','2026-08-01','2026-08-31',false,${cal})`);
     });
     const actor = await withBypass(() => createScratchUser(org.orgId, "P&L Reader", "admin"));
-    const authz = authzFor(org.orgId, actor as unknown as string, ["dashboard.read", "reports.read"]);
+    const authz = authzFor(org.orgId, actor as unknown as string, ["dashboard.read", "reports.read", "gl.read"]);
     const readers: DashboardMoneyReaders = {
       ...denialProofReaders([]),
       profitAndLoss: (async () => {
@@ -299,11 +299,12 @@ test("a business day before the first accounting period refuses on the tiles, ne
   }
 });
 
-test("P&L readers never run without reports.read", { skip: !DB }, async () => {
+test("P&L readers never run without the ledger grant", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {
-    const deniedId = await withBypass(() => createScratchUser(org.orgId, "No Reports", "staff"));
-    const denied = authzFor(org.orgId, deniedId as unknown as string, ["dashboard.read", "gl.read"]);
+    // reports.read opens the reporting tools; the P&L tiles read the ledger.
+    const deniedId = await withBypass(() => createScratchUser(org.orgId, "No Ledger", "staff"));
+    const denied = authzFor(org.orgId, deniedId as unknown as string, ["dashboard.read", "reports.read"]);
     for (const id of PNL_IDS) assert.equal(canSeeWidget(denied, id), false);
     const readers: DashboardMoneyReaders = {
       bankBalances: (async () => []) as DashboardMoneyReaders["bankBalances"],

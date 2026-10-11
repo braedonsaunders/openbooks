@@ -33,7 +33,7 @@ async function fixture() {
   const partner = await createScratchUser(org.orgId, 'Partner', 'partner')
   const supervisor = await createScratchUser(org.orgId, 'Time supervisor', 'time_supervisor')
   await db.execute(sql`update app_roles set permissions='["time.self"]'::jsonb where org_id=${org.orgId} and key='partner'`)
-  await db.execute(sql`update app_roles set permissions='["time.read","time.manage","time.approve"]'::jsonb where org_id=${org.orgId} and key='time_supervisor'`)
+  await db.execute(sql`update app_roles set permissions='["time.read","time.manage","time.approve","projects.read"]'::jsonb where org_id=${org.orgId} and key='time_supervisor'`)
   await db.execute(sql`update orgs set settings = settings || ${JSON.stringify({
     features: { projects: true, timeTracking: true },
     timesheets: { requireApproval: true },
@@ -41,6 +41,10 @@ async function fixture() {
   const mate = randomUUID()
   await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom)
     values (${mate},${org.orgId},'person','Service partner',${org.subsidiaryId},true,'{}'::jsonb)`)
+  // Billable hours name a project; costing applies to project-side time.
+  const project = randomUUID()
+  await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active,custom)
+    values (${project},${org.orgId},${org.subsidiaryId},'ROAST','Roastery build',${org.customerId},'active',true,'{}'::jsonb)`)
   await db.execute(sql`update users set party_id=${mate} where id=${partner} and org_id=${org.orgId}`)
   const as = (userId: string, name: string) => {
     session.user = { id: userId, orgId: org.orgId, name, email: `${name.replace(/\s/g, '.')}@example.test`, roles: [], isSuperAdmin: false,
@@ -52,7 +56,7 @@ async function fixture() {
       method: 'PUT',
       body: JSON.stringify({
         employee: mate, week: WEEK,
-        rows: [{ projectId: null, itemId: org.items.service, isBillable: true, hours: ['', '', '6', '', '', '', ''] }],
+        rows: [{ projectId: project, itemId: org.items.service, isBillable: true, hours: ['', '', '6', '', '', '', ''] }],
         expectedRevision,
       }),
     })))
@@ -66,7 +70,7 @@ async function fixture() {
   const entries = async () => (await db.execute<{ status: string }>(sql`
     select status from time_entries where org_id=${org.orgId} and employee_party_id=${mate}`)).rows
   const close = async () => { session.user = null; await dropScratchOrgReporting(org.orgId) }
-  return { org, partner, supervisor, mate, as, save, submit, approve, entries, close }
+  return { org, partner, supervisor, mate, project, as, save, submit, approve, entries, close }
 }
 
 test('approval without a covering wage rate refuses by name and rolls back', async () => {
@@ -97,7 +101,8 @@ test('allowing unrated time opens the same approval', async () => {
     f.as(f.partner, 'Partner')
     assert.equal((await f.save()).status, 200)
     assert.equal((await f.submit()).status, 200)
-    await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{laborCosting,allowUnratedTime}', 'true'::jsonb, true)
+    await db.execute(sql`update orgs set settings = coalesce(settings, '{}'::jsonb)
+      || jsonb_build_object('laborCosting', coalesce(settings->'laborCosting', '{}'::jsonb) || '{"allowUnratedTime":true}'::jsonb)
       where id=${f.org.orgId}`)
     f.as(f.supervisor, 'Time supervisor')
     const approved = await f.approve()

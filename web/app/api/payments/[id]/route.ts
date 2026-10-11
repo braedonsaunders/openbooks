@@ -48,6 +48,8 @@ const paymentPatchBody = z.object({
   withholdingAuthorisation: z.string().trim().max(100).nullable().optional(),
   withholdingAuthorisedAmount: exactMoney().nullable().optional(),
   allocations: z.array(allocationInput).optional(),
+  // Cash received beyond the applications (customer receipts only).
+  onAccountAmount: exactMoney().optional(),
   // Credit-memo applications (engine CreditAllocationInput). The engine
   // validates endpoints, signs, and capacity at save and at posting; the
   // route only shapes them. Without this field a receipt can never apply a
@@ -164,6 +166,7 @@ async function patchPayment(req: Request, { params }: { params: Promise<{ id: st
         withholdingAuthorisation: body.withholdingAuthorisation,
         withholdingAuthorisedAmount: body.withholdingAuthorisedAmount,
         allocations: body.allocations,
+        onAccountAmount: body.onAccountAmount,
         creditAllocations: body.creditAllocations,
         storedValueTenders: body.storedValueTenders,
       },

@@ -43,3 +43,16 @@ test('the withheld-payroll-tax role maps to a deductions account, never a payabl
     assert.equal(mapped, deductions.number, `${industry.key} resolves withheld payroll tax to its deductions account`)
   }
 })
+
+test('construction shop supplies are overhead expense, not project direct cost', () => {
+  const construction = INDUSTRY_BY_KEY.get('construction_contractor')
+  assert.ok(construction)
+
+  const numbers = construction.coa.map((account) => account.number)
+  assert.equal(new Set(numbers).size, numbers.length)
+
+  const shopSupplies = construction.coa.find((account) => account.name === 'Shop Supplies & Small Tools')
+  assert.ok(shopSupplies, 'construction chart includes a shop supplies account')
+  assert.equal(shopSupplies.type, 'expense')
+  assert.match(shopSupplies.number, /^6\d{3}$/, 'shop supplies sit in the overhead expense range, not the 5000 cost-of-sales range')
+})

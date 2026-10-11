@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
 
-// Route-boundary regression for fnd_mtcb44tn_fbugz4: an account idempotency
+// Route-boundary regression: an account idempotency
 // key identifies one exact create request. A replay of the same request is a
 // success, while reusing that key for a changed chart-of-accounts request is
 // a conflict and must never return the older account as though it matched.
@@ -140,7 +140,10 @@ const mockSources = new Map<string, string>([
        return { id: state.account.id, name: state.account.name, type: state.account.type }
      }
      export async function orgBaseCurrency() { return 'USD' }
-     export async function redactAccountCustomFields(payload) { return payload }`,
+     export async function redactAccountCustomFields(payload) { return payload }
+     export function accountNameLock() { return { queryChunks: [] } }
+     export async function findNamedAccounts() { return [] }
+     export function duplicateNameRefusal() { throw new Error("the duplicate-name refusal is covered by route-duplicate.integration.test.ts") }`,
   ],
   [
     "mock:schema",

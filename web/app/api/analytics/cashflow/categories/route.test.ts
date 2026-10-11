@@ -3,6 +3,9 @@ import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { NextResponse } from 'next/server'
 
+// The real business-date module, so the calendar check runs unmodified.
+const BUSINESS_DATE_URL = new URL('../../../../../../engine/src/platform/business-date.ts', import.meta.url).href
+
 interface RouteState {
   permissions: Set<string>
   permissionChecks: string[]
@@ -124,10 +127,21 @@ const mockSources = new Map<string, string>([
   ],
 ])
 
+// The org business day is the clock the anchor defaults to; the real calendar
+// check is re-exported so refusals still run against the production validator.
+mockSources.set(
+  'mock:business-date',
+  `
+    export { isIsoCalendarDate } from ${JSON.stringify(BUSINESS_DATE_URL)}
+    export async function businessToday() { return new Date().toISOString().slice(0, 10) }
+  `,
+)
+
 const mockUrls = new Map<string, string>([
   ['../../../../../lib/authz', 'mock:authz'],
   ['@/lib/authz', 'mock:authz'],
   ['@openbooks/engine/platform/db', 'mock:db'],
+  ['@openbooks/engine/platform/business-date/module', 'mock:business-date'],
 ])
 
 registerHooks({

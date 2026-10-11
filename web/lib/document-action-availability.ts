@@ -12,16 +12,18 @@ export interface DocumentActionFacts {
   status: string;
   /** The kind posts directly on save/create instead of routing approval. */
   directPost: boolean;
-  /** The caller holds the create grant for the record's namespace. */
+  /** The caller holds the create (submit) grant for the record's kind. */
   canCreate: boolean;
-  /** The caller holds the post (approve) grant for the record's namespace. */
+  /** The caller holds the post (approve) grant for the record's kind. */
   canPost: boolean;
+  /** The caller is the submitter of the open approval submission. */
+  submittedByViewer?: boolean;
 }
 
-export type DocumentLifecycleAction = "submit" | "post" | "void" | "delete" | "returnToDraft";
+export type DocumentLifecycleAction = "submit" | "post" | "void" | "delete" | "returnToDraft" | "withdraw";
 
 export function documentActionAvailable(action: DocumentLifecycleAction, facts: DocumentActionFacts): boolean {
-  const { status, directPost, canCreate, canPost } = facts;
+  const { status, directPost, canCreate, canPost, submittedByViewer = false } = facts;
   // Terminal states: a posted or voided record offers no lifecycle transition
   // other than a governed void of a posted record.
   if (status === "posted") return action === "void" && canPost;
@@ -37,5 +39,11 @@ export function documentActionAvailable(action: DocumentLifecycleAction, facts: 
       return status === "draft" && canCreate;
     case "returnToDraft":
       return status === "approved" && canPost;
+    case "withdraw":
+      // Withdrawal recalls a pending submission. The submitter recalls with
+      // either the submit or the approve grant; anyone else must hold the
+      // approve grant. Mirrors the documents action route and the engine's
+      // withdrawDocumentSubmission authority rule.
+      return status === "pending_approval" && (submittedByViewer ? canCreate || canPost : canPost);
   }
 }

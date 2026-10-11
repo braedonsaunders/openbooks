@@ -17,15 +17,15 @@ export function PartyLinkCell({
   partyId: string | null
   partyName: string
   href: string
-  /** Provenance for partyless rows: control lines with no counterparty read
-   * as operating items missing one, so the cell says what they are. */
+  /** Provenance caption under the name. Multi-line captions (a reconciling
+   * line's journal entries) keep their line breaks. */
   note?: string | null
 }) {
   if (!partyId) {
     return (
       <span>
         <span className="text-slate-400 italic">{partyName}</span>
-        {note ? <span className="block text-xs font-normal not-italic text-slate-400 dark:text-slate-500">{note}</span> : null}
+        {note ? <span className="block text-xs font-normal not-italic whitespace-pre-line text-slate-400 dark:text-slate-500">{note}</span> : null}
       </span>
     )
   }

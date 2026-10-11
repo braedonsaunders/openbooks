@@ -57,7 +57,7 @@ type WeeklyGridProps = Parameters<typeof WeeklyGrid>[0]
 export interface TimesheetsData {
   title: string
   workFamily: TimeWorkFamily
-  basePath: string
+  basePath: TimesheetMount
   description: string
   canManage: boolean
   /** True when New timesheet has a week it may open for this user. */
@@ -75,6 +75,10 @@ export interface TimesheetsData {
   /** Gateless submitted weeks awaiting a direct decision: the bulk panel, empty for non-approvers. */
   bulkWeeks: BulkApproveWeek[]
 }
+
+/** The mounts this view renders at: project time and production time. */
+export const TIMESHEET_MOUNTS = { routes: ['/timesheets', '/manufacturing/time'] } as const
+type TimesheetMount = (typeof TIMESHEET_MOUNTS.routes)[number]
 
 export async function loadTimesheets(
   sp: Record<string, string | string[] | undefined>,

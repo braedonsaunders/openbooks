@@ -24,20 +24,25 @@ const forecastAmount = z.string().superRefine((value, ctx) => {
   }
 })
 
-const requestBodySchema = z.strictObject({
-  periodStart: z.string().refine(isIsoCalendarDate, 'periodStart must be a real calendar date (YYYY-MM-DD)'),
-  periodEnd: z.string().refine(isIsoCalendarDate, 'periodEnd must be a real calendar date (YYYY-MM-DD)'),
-  ownerUserId: z.string().uuid().nullable().optional(),
-  salesTeamId: z.string().uuid().nullable().optional(),
-  overrideAmount: forecastAmount.nullable().optional(),
-  snapshotKind: z.enum(['calculated', 'rep_override', 'manager_override']).optional(),
-  currency: z.string().trim().regex(/^[A-Za-z]{3}$/).transform((value) => value.toUpperCase()).nullable().optional(),
-  note: z.string().max(2000).nullable().optional(),
-}).refine((body) => body.periodEnd >= body.periodStart, {
-  message: 'periodEnd must be on or after periodStart', path: ['periodEnd'],
-}).refine((body) => !(body.ownerUserId && body.salesTeamId), {
-  message: 'choose at most one owner or team', path: ['salesTeamId'],
-})
+// Each forecast target must be a UUID or an explicit null. A non-UUID value of
+// any type (false, 0, "") is refused with the named, translated message for
+// that target, so the operator sees which field to fix.
+function requestBodySchema(messages: { invalidOwnerTarget: string; invalidTeamTarget: string }) {
+  return z.strictObject({
+    periodStart: z.string().refine(isIsoCalendarDate, 'periodStart must be a real calendar date (YYYY-MM-DD)'),
+    periodEnd: z.string().refine(isIsoCalendarDate, 'periodEnd must be a real calendar date (YYYY-MM-DD)'),
+    ownerUserId: z.string({ error: messages.invalidOwnerTarget }).uuid({ error: messages.invalidOwnerTarget }).nullable().optional(),
+    salesTeamId: z.string({ error: messages.invalidTeamTarget }).uuid({ error: messages.invalidTeamTarget }).nullable().optional(),
+    overrideAmount: forecastAmount.nullable().optional(),
+    snapshotKind: z.enum(['calculated', 'rep_override', 'manager_override']).optional(),
+    currency: z.string().trim().regex(/^[A-Za-z]{3}$/).transform((value) => value.toUpperCase()).nullable().optional(),
+    note: z.string().max(2000).nullable().optional(),
+  }).refine((body) => body.periodEnd >= body.periodStart, {
+    message: 'periodEnd must be on or after periodStart', path: ['periodEnd'],
+  }).refine((body) => !(body.ownerUserId && body.salesTeamId), {
+    message: 'choose at most one owner or team', path: ['salesTeamId'],
+  })
+}
 
 
 
@@ -96,17 +101,17 @@ export const POST = defineRoute({
     // Stored forecasts aggregate the whole organization and lack entity lineage.
     if (gate.allowedSubsidiaryIds !== null) return notFound("record")
     const { user } = gate
-    const parsedBody = await parseJsonBody(req, requestBodySchema, { status: 422 });
+    const t = await getTranslations('crm')
+    const parsedBody = await parseJsonBody(req, requestBodySchema({
+      invalidOwnerTarget: t('forecasts.invalidOwnerTarget'),
+      invalidTeamTarget: t('forecasts.invalidTeamTarget'),
+    }), { status: 422 });
     if (!parsedBody.ok) return parsedBody.response;
     const body = parsedBody.data
     const { periodStart, periodEnd } = body
     // An explicit null means the caller is targeting a team (or, with both
     // null, the whole organization). When the owner key is absent we retain the
-    // convenient personal-snapshot default. Each target must be a UUID or an
-    // explicit null: falsy non-null values (false, 0, "") used to skip the
-    // format check, sail through the forecast as unscoped, then die in
-    // Postgres on the uuid columns as a generic 500.
-    const t = await getTranslations('crm')
+    // convenient personal-snapshot default.
     const rawOwnerUserId = body.ownerUserId === undefined ? user.id : body.ownerUserId
     const rawSalesTeamId = body.salesTeamId ?? null
     const ownerUserId = rawOwnerUserId

@@ -36,7 +36,7 @@ test("GoCardless webhook verification distinguishes invalid signatures and prese
       {
         id: "EV-IGNORED",
         resource_type: "mandates",
-        action: "created",
+        action: "cancelled",
         links: { mandate: "MD-1" },
       },
       {
@@ -206,7 +206,7 @@ test("a valid webhook containing only unhandled events remains authenticated", (
       {
         id: "EV-MANDATE",
         resource_type: "mandates",
-        action: "created",
+        action: "cancelled",
         links: { mandate: "MD-1" },
       },
     ],

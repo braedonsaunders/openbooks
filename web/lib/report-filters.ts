@@ -17,6 +17,7 @@ import type {
 import type { ReportDrillTarget } from './report-drill'
 import type { AgingCurrencyBasis } from './reports/aging'
 import { isUuid } from '@openbooks/engine/platform/identifiers'
+import { isIsoCalendarDate } from '@openbooks/engine/platform/civil-date'
 
 export type ReportScale = 'actual' | 'thousands' | 'millions'
 export type ProjectReportScope = 'active' | 'all'
@@ -90,6 +91,53 @@ export function isReportUuidParam(value: string | null | undefined): value is st
   return !!value && isUuid(value)
 }
 
+/**
+ * A `period=custom` request whose bounds are missing, malformed or reversed.
+ * Typed so every surface (screen, export, saved view) refuses it with the same
+ * remedy instead of widening the window to a default period.
+ */
+export class IncompleteReportPeriodError extends Error {
+  readonly code = 'incomplete-report-period'
+  readonly status = 422
+  readonly remedy = 'Set both a From and a To date, with From on or before To.'
+  readonly from: string | null
+  readonly to: string | null
+
+  constructor(from: string | null | undefined, to: string | null | undefined) {
+    super(
+      `A custom period needs both a From and a To date, with From on or before To (received from '${from ?? ''}', to '${to ?? ''}').`,
+    )
+    this.name = 'IncompleteReportPeriodError'
+    this.from = from ?? null
+    this.to = to ?? null
+  }
+}
+
+/**
+ * The inclusive window a custom period names. Both bounds must be calendar
+ * dates and From must not follow To; anything else refuses rather than
+ * resolving to a default window.
+ */
+export function assertCustomPeriodBounds(
+  from: string | null | undefined,
+  to: string | null | undefined,
+): { from: string; to: string } {
+  if (!isIsoCalendarDate(from) || !isIsoCalendarDate(to) || from > to) {
+    throw new IncompleteReportPeriodError(from, to)
+  }
+  return { from, to }
+}
+
+/**
+ * Validates a saved view's stored params before it is written. Only a custom
+ * period (named, or implied by dates without a named period) carries its own
+ * bounds, so only it is checked; every other param set passes through.
+ */
+export function assertSavedReportPeriod(params: Record<string, string | undefined>): void {
+  const custom = params.period === 'custom' || (!params.period && (params.from || params.to))
+  if (custom) assertCustomPeriodBounds(params.from, params.to)
+}
+
 function segmentFilters(sp: ParamSource): Record<string, string> {
   const entries = sp instanceof URLSearchParams ? [...sp.entries()] : Object.entries(sp)
   return Object.fromEntries(
@@ -139,10 +187,16 @@ export function parseReportQuery(
   } = {},
 ): ReportQuery {
   const periodRaw = read(sp, REPORT_PARAM_KEYS.period)
+  const from = read(sp, REPORT_PARAM_KEYS.from) || undefined
+  const to = read(sp, REPORT_PARAM_KEYS.to) || undefined
   return {
-    period: isPeriodPreset(periodRaw) ? periodRaw! : (options.defaultPeriod ?? DEFAULT_PERIOD_PRESET),
-    from: read(sp, REPORT_PARAM_KEYS.from) || undefined,
-    to: read(sp, REPORT_PARAM_KEYS.to) || undefined,
+    // Dates without a named period are a custom window: a link or saved view
+    // carrying only From/To must never reopen as the default period.
+    period: isPeriodPreset(periodRaw)
+      ? periodRaw!
+      : !periodRaw && (from || to) ? 'custom' : (options.defaultPeriod ?? DEFAULT_PERIOD_PRESET),
+    from,
+    to,
     breakout: (() => {
       const value = read(sp, REPORT_PARAM_KEYS.breakout)
       return value?.startsWith('segment:') && /^[a-z][a-z0-9_]{0,62}$/.test(value.slice(8))

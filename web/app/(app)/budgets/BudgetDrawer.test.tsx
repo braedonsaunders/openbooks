@@ -45,6 +45,7 @@ const { createRoot } = await import("react-dom/client");
 const { act } = await import("react");
 const { NextIntlClientProvider } = await import("next-intl");
 const { MoneyProvider } = await import("../../../components/money-provider");
+const { PromptRoot } = await import("../../../lib/prompt");
 const messages = (await import("../../../messages/en")).default;
 const { BudgetDrawer } = await import("./BudgetDrawer");
 
@@ -99,6 +100,7 @@ async function mountDrawer(overrides?: { status?: string; canApprove?: boolean; 
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <MoneyProvider currency="CAD">
+          <PromptRoot />
           <BudgetDrawer
             initial={initial as never}
             currentParams={overrides?.budgetImport ? { budgetImport: '1' } : {}}
@@ -193,6 +195,55 @@ test("a refused self-approval pins the typed refusal on the drawer", async (t) =
     /cannot approve a budget you submitted/i.test(el.textContent ?? ""),
   );
   assert.ok(alert, "the typed refusal must persist inline on the drawer");
+});
+
+test('rejecting a budget captures the checker rationale before sending the decision', async (t) => {
+  const priorFetch = globalThis.fetch;
+  const decisions: Record<string, unknown>[] = [];
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (String(input).includes('/actions')) {
+      decisions.push(JSON.parse(String(init?.body)));
+      return Response.json({ status: 'draft', revision: 2 });
+    }
+    return Response.json({}, { status: 404 });
+  }) as typeof fetch;
+  const { host, root } = await mountDrawer({ status: 'pending_approval', canApprove: true });
+  t.after(() => cleanupDrawer(host, root, priorFetch));
+  const reject = [...document.querySelectorAll('button')].find((el) => el.textContent?.trim() === 'Reject')!;
+  await act(async () => { reject.click(); await tick(); });
+  assert.equal(decisions.length, 0);
+  const dialog = document.querySelector('[aria-labelledby="prompt-title"]')!;
+  assert.match(dialog.textContent ?? '', /Reason for rejection/);
+  const field = dialog.querySelector('textarea')!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!.call(field, 'Revenue assumptions need supporting evidence.');
+    field.dispatchEvent(new window.Event('input', { bubbles: true }));
+    field.dispatchEvent(new window.FocusEvent('focusout', { bubbles: true }));
+    await tick();
+    dialog.querySelector('form')!.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await tick();
+  });
+  assert.equal(decisions.length, 1);
+  assert.equal(decisions[0]!.reason, 'Revenue assumptions need supporting evidence.');
+  assert.equal(decisions[0]!.expectedRevision, 1);
+  assert.equal(decisions[0]!.action, 'reject');
+});
+
+test('cancelling the rejection reason preserves the pending budget without a write', async (t) => {
+  const priorFetch = globalThis.fetch;
+  let writes = 0;
+  globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    if (init?.method && init.method !== 'GET') writes++;
+    return Response.json({}, { status: 404 });
+  }) as typeof fetch;
+  const { host, root } = await mountDrawer({ status: 'pending_approval', canApprove: true });
+  t.after(() => cleanupDrawer(host, root, priorFetch));
+  const reject = [...document.querySelectorAll('button')].find((el) => el.textContent?.trim() === 'Reject')!;
+  await act(async () => { reject.click(); await tick(); });
+  const cancel = [...document.querySelectorAll<HTMLButtonElement>('[aria-labelledby="prompt-title"] button')].find((el) => el.textContent?.trim() === 'Cancel')!;
+  await act(async () => { cancel.click(); await tick(); });
+  assert.equal(writes, 0);
+  assert.ok([...document.querySelectorAll('button')].some((el) => el.textContent?.trim() === 'Reject'));
 });
 
 /* ------------------------------------------------ OM-05 unsaved-create */

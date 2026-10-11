@@ -74,6 +74,7 @@ const mockSources = new Map<string, string>([
       export function sql(strings, ...values) {
         return { queryChunks: strings.flatMap((part, index) => index < values.length ? [part, values[index]] : [part]) }
       }
+      sql.join = (items, separator) => ({ queryChunks: items.flatMap((item, index) => index === 0 ? [item] : [separator, item]) })
       export function and() { return {} }
       export function asc() { return {} }
       export function desc() { return {} }

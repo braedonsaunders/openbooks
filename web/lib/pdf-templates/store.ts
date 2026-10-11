@@ -36,6 +36,19 @@ const COLS = sql`
   is_default as "isDefault", is_active as "isActive", revision, updated_at as "updatedAt"
 `
 
+/**
+ * The organization's brand accent, which tints every starter design. Starters
+ * built anywhere (the built-in fallback, the template list's duplicate
+ * designs) read it here so a duplicated starter carries the same accent as
+ * a freshly created one.
+ */
+export async function orgBrandPrimary(orgId: string): Promise<string | null> {
+  const r = (await db.execute<{ brand_primary: string | null }>(sql`
+    select settings ->> 'brandPrimary' as brand_primary from orgs where id = ${orgId}
+  `))
+  return r.rows[0]?.brand_primary ?? null
+}
+
 export async function listPdfTemplates(orgId: string, recordType?: string): Promise<PdfTemplateRow[]> {
   const filter = recordType ? sql` and record_type = ${recordType}` : sql``
   const r = (await db.execute<PdfTemplateRow>(sql`
@@ -217,10 +230,7 @@ export async function resolvePdfTemplate(
   }
 
   // Built-in fallback: compile the starter on the fly with the org accent.
-  const org = (await db.execute<{ brand_primary: string | null }>(sql`
-    select settings ->> 'brandPrimary' as brand_primary from orgs where id = ${orgId}
-  `))
-  const starter = starterTemplate(meta, org.rows[0]?.brand_primary)
+  const starter = starterTemplate(meta, await orgBrandPrimary(orgId))
   const { compiledHtml } = compileTemplateHtml(starter.sourceHtml)
   const paperSize = starter.paperSize ?? 'letter'
   const orientation = starter.orientation ?? 'portrait'

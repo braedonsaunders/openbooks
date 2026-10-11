@@ -113,7 +113,12 @@
         "settings": "工资设置",
         "ytd": "另一核算的累计发生额",
         "openingBalances": "期初余额(转入)"
-      }
+      },
+      "approvedTitle": "已批准，但批准后输入已变更（{reasons}）。重新计算将撤回批准，并重新提交审批。",
+      "pendingTitle": "本薪资运行计算后输入已变更（{reasons}）。该运行正在等待审批：审批人需先对该审批请求作出决定，之后才能重新计算。",
+      "recalculateApproved": "重新计算并重新提交",
+      "approvedConfirmTitle": "撤回批准并重新计算？",
+      "approvedConfirmBody": "重新计算将撤回此薪资运行的批准，依据当前输入重新计算，并重新提交审批。在获得新的批准之前，无法确认发放。"
     },
     "readiness": {
       "blockedTitle": "{count, plural, one {# 项阻止本次核算} other {# 项阻止本次核算}}",
@@ -295,7 +300,8 @@
       "ackLabel": "我理解{count, plural, one {该员工} other {这 # 名员工}}因上述原因将不会在本次核算中获得支付。",
       "ackRecord": "记录确认",
       "ackRecorded": "已为{count, plural, one {# 名员工} other {# 名员工}}记录确认。",
-      "ackRecordedNote": "确认日期：{date} — 该决定已记录在本次核算中。"
+      "ackRecordedNote": "确认日期：{date} — 该决定已记录在本次核算中。",
+      "staleApprovedBlocked": "提交前请重新计算并重新提交该薪资运行。"
     },
     "finish": {
       "notCommitted": "请先在总账步骤提交本轮计算，然后再过账。",
@@ -454,7 +460,10 @@
     "committed": "已确认",
     "posted": "已过账",
     "void": "已作废",
-    "rejected": "已驳回"
+    "rejected": "已驳回",
+    "approved": "已批准",
+    "approvedStale": "已批准 · 需要重新计算",
+    "pendingApproval": "等待审批"
   },
   "empty": {
     "runs": "尚无工资核算。请从发薪计划创建一条以开始。",
@@ -493,7 +502,8 @@
     "approvalPending": "等待审批(还有 {count} 项)——确认和过账已被阻止",
     "printSet": "打印套件(仅用于打印分发)",
     "stubsPrintOnly": "{count} 名员工仅打印,未发送邮件",
-    "calculateRefusedAll": "无人能够计算 — {count, plural, one {# 名员工被拒绝} other {# 名员工被拒绝}}。请修正输入并重新计算，或在提交前确认。"
+    "calculateRefusedAll": "无人能够计算 — {count, plural, one {# 名员工被拒绝} other {# 名员工被拒绝}}。请修正输入并重新计算，或在提交前确认。",
+    "recalculateApprovedDone": "已撤回批准。薪资运行已重新计算并重新提交审批。"
   },
   "profiles": {
     "addEmployee": "无档案员工",
@@ -1799,6 +1809,11 @@
     }
   },
   "holidayAttestations": {
+    "bulkNotAbsentTitle": "确认缺勤回答",
+    "bulkNotAbsentConfirm": "为本次工资运行中的 {count} 个未回答的假日问题登记“未经同意未缺勤”？每项都会记录为您对该员工和该假日的声明。",
+    "bulkNotAbsentAction": "全部回答（{count} 项）：未缺勤",
+    "bulkNotAbsentFiled": "已登记 {count} 项回答。",
+    "bulkNotAbsentHint": "有 {count} 个假日缺勤问题未回答。可一次性全部回答“未经同意未缺勤”，或在下方逐行回答。",
     "loadFailed": "无法加载这些例外所需回答的员工。请重试，确认所需信息后再作答。",
     "retry": "重试",
     "commissionTitle": "佣金薪酬状态",

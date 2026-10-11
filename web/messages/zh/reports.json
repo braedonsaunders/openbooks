@@ -375,7 +375,12 @@
     "currency": "币种",
     "convertFrom": "换算来源",
     "baseOption": "基准币种",
-    "transactionOption": "交易币种"
+    "transactionOption": "交易币种",
+    "controlEntries": {
+      "label": "无未清项目的控制账户分录",
+      "hint": "记入控制账户、但没有对应发票、账单或贷项通知单的分录",
+      "more": "另有 {count} 条"
+    }
   },
   "cashFlow": {
     "title": "现金流量表",

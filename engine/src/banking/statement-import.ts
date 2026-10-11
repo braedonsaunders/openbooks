@@ -1,12 +1,12 @@
 /** Statement import with dedupe. Split from banking.ts (pure moves only). */
-import { BankingError, type ParsedStatementLine, type StatementSource, BANK_STATEMENT_PARSER_VERSION, type StatementSourceEvidence, type BankingContext, requireActorId, type SkippedStatementRow, type BalanceCandidateLine } from "./banking-core"
+import { BankingError, statementTotalsAgree, type ParsedStatementLine, type StatementSource, BANK_STATEMENT_PARSER_VERSION, type StatementSourceEvidence, type BankingContext, requireActorId, type SkippedStatementRow, type BalanceCandidateLine } from "./banking-core"
 import { canonicalCsvMapping } from "./statement-parsers/csv"
 import { loadReconcilableAccount, lockBankAccountInScope, lockReconciliationAccount } from "./reconcilable-account"
 import { assertRealDate, detectStatementBalanceRole, normalizeAmount } from "./statement-parsers/shared"
 import { createHash, randomUUID } from "node:crypto"
 import { sql } from "drizzle-orm"
 import { db, schema, type SqlExecutor } from "../platform/db.ts"
-import { toUnits } from "../money/money.ts"
+import { fromUnits, toUnits } from "../money/money.ts"
 import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts"
 
 export function normalizeFingerprintText(value: string | null | undefined): string {
@@ -48,12 +48,12 @@ export function filterDuplicateStatementLines(
 type StoredContentCandidate = { id: string; amountUnits: bigint };
 
 /**
- * Partition validated lines into fresh imports. Source-identified lines go
- * through the ID filter; ID-less lines match stored content on this account:
- * a tuple colliding with an already-imported line imports flagged with the
- * earliest stored line as its possible-duplicate evidence, because a tuple
- * alone cannot tell a re-export from a genuine twin — only an exact
- * source-byte replay or a bank-provided ID may auto-skip. Batch order is
+ * Partition validated lines for import. Source-identified lines go through the
+ * ID filter; ID-less lines match stored content on this account: a tuple
+ * colliding with an already-imported line is returned flagged with the earliest
+ * stored line as its possible-duplicate evidence. A tuple alone cannot tell a
+ * re-export from a genuine twin, so the flag never skips on its own; the caller
+ * decides whether flagged lines import (see importStatement). Batch order is
  * preserved so the dry-run preview reads file order.
  */
 async function partitionIdlessLines(
@@ -137,11 +137,19 @@ export interface ImportResult {
   /** Source rows set aside at parse time (see SkippedStatementRow). */
   skipped: SkippedStatementRow[];
   /**
-   * ID-less lines imported on unproven content overlap, flagged as possible
-   * duplicates of an earlier line for review. The reviewer clears the flag
-   * or excludes the line; matching refuses flagged lines until then.
+   * ID-less lines whose content overlaps a line already on the account
+   * without proven identity. They are excluded by default and listed in
+   * `possibleDuplicateLines`; with `includePossibleDuplicates` they import
+   * flagged with the earlier line as evidence, and matching refuses flagged
+   * lines until the reviewer clears the flag or excludes the line.
    */
   possibleDuplicates: number;
+  /**
+   * The possible-duplicate candidates (flagged, `possibleDuplicateOf` set),
+   * whether or not they were imported. The preview shows them so the operator
+   * can decide before committing.
+   */
+  possibleDuplicateLines: FlaggedStatementLine[];
   /**
    * The prior signed-off statement's closing balance for this account, when
    * one chains into this import: the operator's opening-balance default.
@@ -154,6 +162,18 @@ export interface ImportResult {
    * mismatches, and the operator may know better.
    */
   openingMismatch: OpeningBalanceMismatch | null;
+  /**
+   * Net of every transaction line in the file, duplicates of earlier
+   * imports included: opening plus this is the statement's closing. The
+   * preview checks the typed balances against it as they change.
+   */
+  statementLinesTotal: string;
+  /**
+   * Set when both balances are supplied and opening plus the file's lines
+   * does not reach the closing: a flag for review, like the opening
+   * mismatch — sign-off refuses any closing the matched lines do not reach.
+   */
+  balanceMismatch: StatementBalanceMismatch | null;
   /** The deduped lines (dry-run preview shows exactly what import would write, flags included). */
   lines: FlaggedStatementLine[];
 }
@@ -274,11 +294,12 @@ function sourceEvidence(
  * Import normalized statement lines for a reconcilable account. Lines whose
  * source-provided `bankTransactionId` already exists on the account are
  * skipped, as is an exact retry of source bytes for the same account.
- * Nothing else auto-skips: a matching balance or a matching content tuple
- * is possible overlap, not identity, so an ID-less line colliding with
- * stored content imports flagged as a possible duplicate of the earlier
- * line for review. With `dryRun` nothing is
- * written — used for preview.
+ * An ID-less line whose content matches a line already on the account is a
+ * possible duplicate: it is excluded from the import unless the caller passes
+ * `includePossibleDuplicates`, and when imported it is flagged for review.
+ * A matching balance or content tuple is never identity on its own. With
+ * `dryRun` nothing is written — used for preview; the preview reports the
+ * same partition the commit would apply.
  * Committed imports retain their exact source bytes in the append-only audit
  * log and point `rawFileRef` to that evidence. Engine callers without an
  * external file/feed payload retain a canonical copy of the import request.
@@ -299,6 +320,13 @@ export async function importStatement(
     closingBalance?: string | null;
     currency?: string | null;
     sourceEvidence?: StatementSourceEvidence | null;
+    /**
+     * Import possible duplicates flagged for review instead of excluding them.
+     * Operator commits pass the reviewer's explicit choice; unattended feeds
+     * pass true because no operator is present to review an exclusion, so
+     * their flagged lines enter the review queue rather than disappearing.
+     */
+    includePossibleDuplicates?: boolean;
     dryRun?: boolean;
     beforeWrite?: (executor: SqlExecutor) => Promise<void>;
     /** Domain fence checked on the import writer immediately before persistence. */
@@ -371,6 +399,13 @@ export async function importStatement(
   const closingBalance = opts.closingBalance
     ? normalizeAmount(opts.closingBalance, "Closing balance")
     : null;
+  // A statement is arithmetic: opening plus its lines is its closing. Both
+  // balances supplied and disagreeing means a mistyped figure, a file that
+  // covers only part of the statement, or a line the bank's own balance
+  // leaves out. The preview and the result name the gap before and after
+  // import; sign-off stays the strict gate against the typed closing.
+  const statementLinesTotal = fromUnits(transactable.reduce((sum, line) => sum + toUnits(line.amount), 0n));
+  const balanceMismatch = statementBalanceMismatch(openingBalance, closingBalance, statementLinesTotal, account.type);
   // Prepare before opening the transaction so preview exercises the same
   // evidence limits as import and hashing/base64 work never holds the account
   // dedupe lock.
@@ -431,11 +466,19 @@ export async function importStatement(
       for (const row of existing.rows) existingIds.add(row.id);
     }
     // ID-less lines partition by content against stored lines on this
-    // account. A tuple matching a stored line is possible overlap — both
-    // lines import, the new one flagged with the earlier line as its
-    // evidence for review. Genuinely new content imports clean.
-    const { lines: fresh, duplicates, possibleDuplicates } =
+    // account. A tuple matching a stored line is a possible duplicate: it
+    // carries the earlier line as its evidence and imports only on the
+    // reviewer's opt-in. Genuinely new content imports clean.
+    const partitioned =
       await partitionIdlessLines(tx, ctx.orgId, account.id, transactable, existingIds, sourceAlreadyImported);
+    const duplicates = partitioned.duplicates;
+    const possibleDuplicates = partitioned.possibleDuplicates;
+    const possibleDuplicateLines = partitioned.lines.filter((line) => line.possibleDuplicateOf !== null);
+    // Possible duplicates import only on the reviewer's explicit opt-in; by
+    // default they are reported (preview) and left out of the write.
+    const fresh = opts.includePossibleDuplicates
+      ? partitioned.lines
+      : partitioned.lines.filter((line) => line.possibleDuplicateOf === null);
     // Serialize with sign-off through the shared reconciliation lock. No
     // other path takes the import lock, so acquiring it first here cannot
     // deadlock; holding both through the insert closes the race with a
@@ -444,9 +487,10 @@ export async function importStatement(
     // transaction under a signed cutoff would import as unmatched evidence
     // the closed session can never clear, and without the shared lock it
     // could slip in beside a concurrent sign-off's unmatched check. Only
-    // fresh lines are fenced — already-imported duplicates stay idempotent
-    // so retrying a file never refuses. This runs before the dry-run return
-    // so a preview agrees with the import it previews.
+    // lines that would be written are fenced — excluded duplicates and
+    // already-imported lines stay idempotent so retrying a file never
+    // refuses. This runs before the dry-run return so a preview agrees with
+    // the import it previews.
     await lockReconciliationAccount(tx, ctx.orgId, account.id);
     const signedThrough = (await tx.execute<{ through_date: string }>(sql`
       select through_date::text as through_date from reconciliations
@@ -509,9 +553,12 @@ export async function importStatement(
         balanceCandidates,
         duplicates,
         possibleDuplicates,
+        possibleDuplicateLines,
         skipped,
         suggestedOpening,
         openingMismatch,
+        statementLinesTotal,
+        balanceMismatch,
         lines: fresh,
       };
     }
@@ -567,12 +614,27 @@ export async function importStatement(
         createdBy: ctx.userId,
       })),
     );
+    // Possible duplicates held out of this import are part of its audit
+    // record: the reviewer's default exclusion must be reconstructable from
+    // the statement's audit row, not only from the source bytes.
+    const excludedPossibleDuplicates = opts.includePossibleDuplicates ? [] : possibleDuplicateLines;
+    const auditChanges = excludedPossibleDuplicates.length === 0
+      ? evidence.changes
+      : {
+          ...evidence.changes,
+          possibleDuplicatesExcluded: excludedPossibleDuplicates.map((line) => ({
+            postedOn: line.postedOn,
+            amount: line.amount,
+            description: line.description,
+            possibleDuplicateOf: line.possibleDuplicateOf,
+          })),
+        };
     await tx.execute(sql`
       insert into audit_log
         (id, org_id, table_name, row_id, action, changes, actor_id, request_id)
       values
         (${evidence.auditId}, ${ctx.orgId}, 'bank_statements', ${statementId}, 'insert',
-         ${JSON.stringify(evidence.changes)}::jsonb, ${ctx.userId}, ${ctx.requestId ?? null})
+         ${JSON.stringify(auditChanges)}::jsonb, ${ctx.userId}, ${ctx.requestId ?? null})
     `);
     return {
       statementId,
@@ -581,9 +643,12 @@ export async function importStatement(
       balanceCandidates,
       duplicates,
       possibleDuplicates,
+      possibleDuplicateLines,
       skipped,
       suggestedOpening,
       openingMismatch,
+      statementLinesTotal,
+      balanceMismatch,
       lines: fresh,
     };
   });
@@ -611,6 +676,40 @@ export interface SuggestedStatementOpening {
   balance: string;
   sourceStatementId: string;
   sourceStatementDate: string;
+}
+
+/** Opening plus the statement's lines against its supplied closing. */
+export interface StatementBalanceMismatch {
+  opening: string;
+  linesTotal: string;
+  expectedClosing: string;
+  closing: string;
+}
+
+/**
+ * Null when the balances are incomplete or agree. The lines total covers
+ * every transaction line in the file, duplicates of earlier imports
+ * included: the bank's balances describe the whole statement, not what this
+ * import adds. Liability accounts accept either sign pairing, as their
+ * statement totals do.
+ */
+export function statementBalanceMismatch(
+  openingBalance: string | null,
+  closingBalance: string | null,
+  linesTotal: string,
+  accountType: string,
+): StatementBalanceMismatch | null {
+  if (openingBalance === null || closingBalance === null) return null;
+  const opening = toUnits(openingBalance);
+  const closing = toUnits(closingBalance);
+  const net = toUnits(linesTotal);
+  if (statementTotalsAgree(closing - opening, net, accountType)) return null;
+  return {
+    opening: fromUnits(opening),
+    linesTotal: fromUnits(net),
+    expectedClosing: fromUnits(opening + net),
+    closing: fromUnits(closing),
+  };
 }
 
 /** A supplied opening that differs from the chained closing, for review. */

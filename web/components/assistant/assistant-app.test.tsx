@@ -665,7 +665,7 @@ test("a failed delete restores the row and surfaces the error", async (t) => {
   await openRowMenuAndDelete(view.host, "Chat B");
   assert.ok(sidebarTitles(view.host).some((s) => s.includes("Chat B")), "a failed delete must restore the row");
   assert.ok(
-    (view.host.textContent ?? "").includes("could not be deleted"),
-    "a failed delete must surface the error",
+    (view.host.textContent ?? "").includes("boom"),
+    "a failed delete must surface the server's reason",
   );
 });

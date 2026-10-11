@@ -22,21 +22,19 @@ test('a sole eligible approver self-approves with an attestation and a distinct 
     const soloId = await createScratchUser(org.orgId, 'Solo Admin', 'admin');
     await grantReopen(org.orgId, 'admin');
     await closeGl(org.orgId, org.periodId, org.bookId, soloId);
-    const preview_before = await reopenDecisionPreview(org.orgId,
-      await requestPeriodReopen({ orgId: org.orgId, periodId: org.periodId, bookId: org.bookId, modules: ['gl'], actorId: soloId, reason: 'Correction window' }),
-      soloId);
+    const requestId = await requestPeriodReopen({ orgId: org.orgId, periodId: org.periodId, bookId: org.bookId, modules: ['gl'], actorId: soloId, reason: 'Correction window' });
+    const preview_before = await reopenDecisionPreview(org.orgId, requestId, soloId);
     assert.equal(preview_before.ownRequest, true);
     assert.equal(preview_before.independenceRequired, false);
     assert.equal(preview_before.selfApprovalAllowed, true);
     // Without the attestation the self-approval is refused and audited nowhere.
-    const unattestedId = await requestPeriodReopen({ orgId: org.orgId, periodId: org.periodId, bookId: org.bookId, modules: ['gl'], actorId: soloId, reason: 'Missing attestation' });
+    const unattestedId = requestId;
     await assert.rejects(
       decidePeriodReopen({ orgId: org.orgId, requestId: unattestedId, actorId: soloId, approve: true, hours: 2 }),
       /attestation/,
     );
     assert.equal((await db.execute<{ status: string }>(sql`select status from close_reopen_requests where id = ${unattestedId}`)).rows[0]!.status, 'requested');
-    // With the attestation the same sole approver reopens.
-    const requestId = await requestPeriodReopen({ orgId: org.orgId, periodId: org.periodId, bookId: org.bookId, modules: ['gl'], actorId: soloId, reason: 'Correction window' });
+    // The attestation decides the same pending request after its refusal.
     await decidePeriodReopen({
       orgId: org.orgId, requestId, actorId: soloId, approve: true, hours: 2,
       attestation: 'I am the only administrator; this correction cannot wait for another approver',
@@ -44,7 +42,7 @@ test('a sole eligible approver self-approves with an attestation and a distinct 
     assert.equal((await db.execute<{ status: string }>(sql`select status from close_reopen_requests where id = ${requestId}`)).rows[0]!.status, 'approved');
     const audit = (await db.execute<{ action: string; changes: { after: { note?: string; attestation?: string; conflicts?: unknown[] } } }>(sql`
       select action, changes from audit_log
-       where org_id = ${org.orgId} and table_name = 'close_reopen_requests' and row_id = ${requestId}`)).rows;
+       where org_id = ${org.orgId} and table_name = 'close_reopen_requests' and row_id = ${requestId} and action = 'self_approve'`)).rows;
     assert.equal(audit.length, 1);
     assert.equal(audit[0]!.action, 'self_approve');
     assert.equal(audit[0]!.changes.after.note, 'self-approved: no other eligible approver');
@@ -79,7 +77,7 @@ test('a sole approver conflict is retained in the self-approval audit instead of
     assert.equal((await db.execute<{ status: string }>(sql`select status from close_reopen_requests where id = ${requestId}`)).rows[0]!.status, 'approved');
     const audit = (await db.execute<{ changes: { after: { conflicts?: { count: number }[] } } }>(sql`
       select changes from audit_log
-       where org_id = ${org.orgId} and table_name = 'close_reopen_requests' and row_id = ${requestId}`)).rows[0]!.changes;
+       where org_id = ${org.orgId} and table_name = 'close_reopen_requests' and row_id = ${requestId} and action = 'self_approve'`)).rows[0]!.changes;
     const total = (audit.after.conflicts ?? []).reduce((sum, item) => sum + item.count, 0);
     assert.ok(total > 0, 'the self-approval audit must retain the conflict detail');
   } finally { await dropScratchOrg(org.orgId); }
@@ -133,7 +131,7 @@ test('self-approval still refuses while a Flow requires independent approval', {
     // A Flow that opts out of preventSelfApproval does not block the sole approver.
     await db.execute(sql`update flows set enabled = false where org_id = ${org.orgId}`);
     await seedApprovalFlow(org.orgId, { subjectKind: 'close_run', assignees: [{ type: 'role', role: 'approver' }], mode: 'any', preventSelfApproval: false });
-    const openId = await requestPeriodReopen({ orgId: org.orgId, periodId: org.periodId, bookId: org.bookId, modules: ['gl'], actorId: soloId, reason: 'Correction window' });
+    const openId = requestId;
     await decidePeriodReopen({
       orgId: org.orgId, requestId: openId, actorId: soloId, approve: true, hours: 2,
       attestation: 'The configured flow permits self-approval and no other approver exists',
@@ -225,7 +223,7 @@ test('the requester withdraws a pending reopen with a reason, audited and no lon
     assert.equal((await db.execute<{ status: string }>(sql`select status from close_reopen_requests where id = ${requestId}`)).rows[0]!.status, 'withdrawn');
     const audit = (await db.execute<{ action: string; actor_id: string; changes: { before: { status: string }; after: { status: string; reason: string } } }>(sql`
       select action, actor_id, changes from audit_log
-       where org_id = ${org.orgId} and table_name = 'close_reopen_requests' and row_id = ${requestId}`)).rows;
+       where org_id = ${org.orgId} and table_name = 'close_reopen_requests' and row_id = ${requestId} and action = 'withdraw'`)).rows;
     assert.equal(audit.length, 1);
     assert.equal(audit[0]!.action, 'withdraw');
     assert.equal(audit[0]!.actor_id, requesterId);
@@ -294,7 +292,7 @@ test('a rejection requires an approver reason that the audit keeps, and the requ
     assert.equal((await db.execute<{ status: string }>(sql`select status from close_reopen_requests where id = ${requestId}`)).rows[0]!.status, 'rejected');
     const audit = (await db.execute<{ action: string; actor_id: string; changes: { after: { decisionReason?: string; reason: string } } }>(sql`
       select action, actor_id, changes from audit_log
-       where org_id = ${org.orgId} and table_name = 'close_reopen_requests' and row_id = ${requestId}`)).rows;
+       where org_id = ${org.orgId} and table_name = 'close_reopen_requests' and row_id = ${requestId} and action = 'reject'`)).rows;
     assert.equal(audit.length, 1);
     assert.equal(audit[0]!.action, 'reject');
     assert.equal(audit[0]!.actor_id, approverId);

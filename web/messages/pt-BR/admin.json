@@ -972,6 +972,14 @@
         "cashOverShort": {
           "label": "Diferença de caixa",
           "hint": "Dinheiro contado a maior ou a menor em relação ao total esperado"
+        },
+        "badDebtExpense": {
+          "label": "Despesa com perdas de crédito",
+          "hint": "Debitada quando um saldo de fatura incobrável é baixado, salvo se houver uma conta de provisão configurada"
+        },
+        "allowanceForDoubtfulAccounts": {
+          "label": "Provisão para devedores duvidosos",
+          "hint": "Conta redutora de contas a receber que as baixas debitam em vez da despesa, quando configurada"
         }
       },
       "partylessPolicy": {
@@ -3136,6 +3144,12 @@
         "publishTitle": "Publicar no cartão de taxas",
         "publishHint": "Trava as taxas calculadas pelo motor em linhas com vigência no cartão de Taxas de custos indiretos. Projetos custeiam indiretos por essas taxas publicadas até você publicar de novo — períodos anteriores mantêm suas taxas originais.",
         "publishConfirm": "Publicar",
+        "zeroOverStandard": {
+          "title": "Substituir as taxas padrão por zero?",
+          "intro": "A publicação grava uma taxa zero sobre uma taxa padrão diferente de zero. Os trabalhos custeados por estes departamentos a partir da data inicial não teriam custos indiretos do padrão. Confirme apenas se o padrão não estiver mais em uso.",
+          "line": "{department}: o padrão de {standard} por hora será substituído por {published} por hora.",
+          "confirm": "Publicar taxas zero"
+        },
         "publishDone": "Taxas publicadas no cartão de taxas",
         "cancel": "Cancelar",
         "wizardTitle": "Configurar custos indiretos de projetos",
@@ -5461,6 +5475,40 @@
         "newWorkerComp": "Workers comp (WSIB)",
         "workerCompHint": "A taxa vem do grupo de workers-comp de cada funcionário (Configurações → Equipe → Grupos de workers comp; atribua no cadastro). O valor aqui é só o % reserva quando o funcionário não tem grupo."
       },
+      "catchUp": {
+        "title": "Tempo aprovado ainda não custeado",
+        "hint": "Tempo aprovado antes de o lançamento estar ativado, ou antes de as contas de controle de mão de obra serem mapeadas, não tem custo de mão de obra no razão. Cada lançamento é datado no último dia que cobre. Lançamentos de períodos fechados são ignorados e permanecem sem lançamento.",
+        "through": "Aprovado até",
+        "reason": "Motivo para a trilha de auditoria",
+        "post": "Lançar custo de mão de obra",
+        "month": "Mês",
+        "entries": "Lançamentos",
+        "hours": "Horas",
+        "cost": "Custo padrão",
+        "period": "Período",
+        "total": "Total geral",
+        "openSetup": "Abrir configuração",
+        "nothingPosted": "Nada para lançar. O tempo aprovado já está custeado.",
+        "postedResult": "Lançamentos efetuados: {count}. Custo padrão lançado: {cost}.",
+        "skippedResult": "Lançamentos sem lançamento: {count}.",
+        "states": {
+          "open": "Aberto",
+          "closed": "Fechado",
+          "no_period": "Sem período",
+          "partial": "Parcialmente fechado"
+        },
+        "skipRemedy": {
+          "closed": "Reabra o período no Fechamento, ou deixe como está.",
+          "no_period": "Crie o período contábil no Fechamento, ou deixe como está."
+        },
+        "blockers": {
+          "projects_disabled": "Projetos está desativado. Ative-o em Configurações da empresa → Recursos antes de lançar o custo de mão de obra.",
+          "mode_off": "O custeio de mão de obra não está lançando o custo padrão nos projetos. Escolha «Lançar custo padrão nos projetos» acima, salve e depois lance a regularização.",
+          "accounts_unmapped": "Mapeie acima as contas de WIP de mão de obra e de compensação de mão de obra, e salve.",
+          "no_posting_book": "Nenhum livro-razão principal ativo lança no razão. Configure um antes de lançar.",
+          "no_root_subsidiary": "Nenhuma subsidiária raiz ativa está configurada. Configure uma antes de lançar."
+        }
+      },
       "posting": {
         "title": "Contabilização",
         "hint": "Com a contabilização ligada, horas aprovadas lançam D: mão de obra em WIP (por obra) / C: compensação de mão de obra à taxa de custo-padrão. O realizado da folha depois zera a mesma conta; o resíduo é sua variação de folha.",
@@ -5890,6 +5938,8 @@
       "shopifyName": "Shopify Payments",
       "shopifyDescription": "Importa exportações de repasses e transações de saldo. Reembolsos e disputas pela automação acima.",
       "shopifyChannelsNote": "Conecta-se pelo espaço de Canais após vinculado.",
+      "squareName": "Square",
+      "squareDescription": "Importa exportações de repasses e de seus lançamentos. Reembolsos e disputas são lançados pela automação acima.",
       "errors": {
         "loadFailed": "Não foi possível carregar as configurações dos provedores de pagamento.",
         "saveFailed": "Não foi possível salvar as configurações dos provedores de pagamento.",

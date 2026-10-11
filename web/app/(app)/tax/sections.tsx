@@ -95,12 +95,14 @@ export function TaxPreparePanel({
   forms,
   canSave,
   canManageSetup,
+  conversionDate,
 }: {
   forms: TaxFormOption[]
   canSave: boolean
   canManageSetup: boolean
+  conversionDate?: string | null
 }) {
-  return <TaxFilingsView forms={forms} canSave={canSave} canManageSetup={canManageSetup} />
+  return <TaxFilingsView forms={forms} canSave={canSave} canManageSetup={canManageSetup} conversionDate={conversionDate ?? null} />
 }
 
 /** Native record cells and actions compose the shared table primitives. */

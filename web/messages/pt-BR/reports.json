@@ -375,7 +375,12 @@
     "currency": "Moeda",
     "convertFrom": "Converter de",
     "baseOption": "Moeda base",
-    "transactionOption": "Moeda da transação"
+    "transactionOption": "Moeda da transação",
+    "controlEntries": {
+      "label": "Lançamentos da conta de controle sem item em aberto",
+      "hint": "Lançados na conta de controle sem fatura, conta a pagar ou nota de crédito correspondente",
+      "more": "+{count} mais"
+    }
   },
   "cashFlow": {
     "title": "Demonstração de Fluxo de Caixa",

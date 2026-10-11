@@ -2170,6 +2170,10 @@
           "label": "Overdue long threshold (days)",
           "help": "Overdue beyond this many days takes the long push"
         },
+        "collectibilityHorizonDays": {
+          "label": "Collectability horizon (days)",
+          "help": "Receivables more than this many days past due are not projected as receipts; they are listed as not forecast"
+        },
         "cardTrajectoryTolerance": {
           "label": "Card trajectory tolerance",
           "help": "Relative variance from the median payment within which the card trajectory rules"
@@ -2203,7 +2207,8 @@
       }
     },
     "unplacedAr": "{count, plural, one {# invoice has} other {# invoices have}} no due date and no payment history · {total} not forecast.",
-    "unplacedAp": "{count, plural, one {# bill has} other {# bills have}} no due date and no payment history · {total} not forecast."
+    "unplacedAp": "{count, plural, one {# bill has} other {# bills have}} no due date and no payment history · {total} not forecast.",
+    "notForecastAr": "{count, plural, one {# receivable} other {# receivables}} more than {days} days past due · {total} not forecast as receipts."
   },
   "trueCost": {
     "title": "True Cost",
@@ -4164,7 +4169,12 @@
       "dueDate": "Due Date",
       "average": "Average",
       "pushed": "Pushed",
-      "deferredFrom": "deferred from {date}"
+      "deferredFrom": "deferred from {date}",
+      "pushedAssumption": "Overdue push: assumes overdue balances are collected on their forecast date",
+      "basisHistory": "Customer average {days} days to pay",
+      "basisAverage": "Organization average {days} days to pay",
+      "basisDueDate": "Due {date}",
+      "basisPushed": "{days} days overdue · forecast {date}"
     },
     "breakdownTypes": {
       "scheduled": "Scheduled",
@@ -4177,6 +4187,11 @@
       "formula": "Formula",
       "info": "Info",
       "note": "Note"
+    },
+    "overduePush": {
+      "assumption": "Assumes overdue balances are collected on their forecast date.",
+      "basis": "{count, plural, one {# invoice} other {# invoices}} aged {minDays}–{maxDays} days past due · {amount} in total",
+      "basisSameAge": "{count, plural, one {# invoice} other {# invoices}} aged {days} days past due · {amount} in total"
     }
   },
   "categoryManager": {

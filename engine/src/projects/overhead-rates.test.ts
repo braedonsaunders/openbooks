@@ -13,6 +13,7 @@ import {
   OverheadCalculationError,
   quantizeOverheadMoney,
   UnsupportedOverheadRateError,
+  zeroOverStandardReplacements,
 } from "./overhead-rates.ts";
 
 /** One category over two departments with hand-checked exact rates. */
@@ -379,4 +380,48 @@ test("Overall preserves zero weights and tier bounds, and undefined display base
   assert.equal(deriveOverheadOverallRate(tiered), "25.0000");
   assert.equal(deriveOverheadDisplayRate({ rawRate: "25", expense: "100", rateFormat: "percent_labor", laborDollars: "0" }), null);
   assert.equal(deriveOverheadDisplayRate({ rawRate: "25", expense: "100", rateFormat: "percent_labor", laborDollars: "400" }), "25.0000");
+});
+
+const STANDARD_IN_EFFECT = {
+  departmentId: "dept-shop",
+  departmentName: "Shop",
+  ratePerHour: "12.5000",
+  effectiveFrom: "2026-01-01",
+  inEffectAtStart: true,
+};
+
+test("a zero published over an in-effect non-zero standard is reported with the standard it replaces", () => {
+  assert.deepEqual(
+    zeroOverStandardReplacements([{ departmentId: "dept-shop", ratePerHour: "0.00" }], [STANDARD_IN_EFFECT]),
+    [{ departmentId: "dept-shop", departmentName: "Shop", standardRatePerHour: "12.5000", publishedRatePerHour: "0.00" }],
+  );
+});
+
+test("a zero over a zero standard, or with no standard touched, replaces nothing", () => {
+  const zeroStandard = { ...STANDARD_IN_EFFECT, ratePerHour: "0.0000" };
+  assert.deepEqual(zeroOverStandardReplacements([{ departmentId: "dept-shop", ratePerHour: "0.00" }], [zeroStandard]), []);
+  assert.deepEqual(zeroOverStandardReplacements([{ departmentId: "dept-shop", ratePerHour: "0.00" }], []), []);
+});
+
+test("a non-zero published rate never trips the zero-over-standard guard", () => {
+  assert.deepEqual(zeroOverStandardReplacements([{ departmentId: "dept-shop", ratePerHour: "9.00" }], [STANDARD_IN_EFFECT]), []);
+});
+
+test("a standard only on another department does not match a zero publish", () => {
+  assert.deepEqual(
+    zeroOverStandardReplacements([{ departmentId: "dept-office", ratePerHour: "0.00" }], [STANDARD_IN_EFFECT]),
+    [],
+  );
+});
+
+test("the in-effect standard is named ahead of a future-dated row the publish would delete", () => {
+  const future = { ...STANDARD_IN_EFFECT, ratePerHour: "20.0000", effectiveFrom: "2026-06-01", inEffectAtStart: false };
+  const [entry] = zeroOverStandardReplacements([{ departmentId: "dept-shop", ratePerHour: "0.00" }], [future, STANDARD_IN_EFFECT]);
+  assert.equal(entry?.standardRatePerHour, "12.5000");
+});
+
+test("a future-dated non-zero standard is still refused when nothing is in effect", () => {
+  const future = { ...STANDARD_IN_EFFECT, ratePerHour: "20.0000", effectiveFrom: "2026-06-01", inEffectAtStart: false };
+  const [entry] = zeroOverStandardReplacements([{ departmentId: "dept-shop", ratePerHour: "0" }], [future]);
+  assert.equal(entry?.standardRatePerHour, "20.0000");
 });

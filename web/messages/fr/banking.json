@@ -1,7 +1,10 @@
 {
   "types": {
     "asset_bank": "Banque",
-    "liability_card": "Carte"
+    "liability_card": "Carte",
+    "liability_payable": "Comptes fournisseurs",
+    "liability_current_other": "Autres passifs à court terme",
+    "liability_long_term": "Passifs à long terme"
   },
   "reconStatus": {
     "signed_off": "approuvé",
@@ -80,7 +83,7 @@
     },
     "vitals": {
       "cash": "Trésorerie totale",
-      "cards": "Soldes des cartes",
+      "cards": "Soldes des cartes et du crédit",
       "unmatched": "Lignes non rapprochées",
       "unmatchedSub": "en attente de rapprochement",
       "allMatched": "toutes les lignes rapprochées",
@@ -95,7 +98,7 @@
       "hint": "Soldes du grand livre comptabilisé",
       "empty": "Aucun compte bancaire ou de carte actif. Ajoutez-en dans le plan comptable.",
       "bankSection": "Comptes bancaires",
-      "cardSection": "Cartes de crédit",
+      "cardSection": "Cartes et lignes de crédit",
       "reconciledThrough": "Rapproché jusqu'au {date}",
       "neverReconciled": "Jamais rapproché",
       "lastStatement": "Relevé {date}",
@@ -436,8 +439,8 @@
     "preview": "Aperçu",
     "importAction": "Importer",
     "importCount": "Importer {count, plural, one {# ligne} other {# lignes}}",
-    "importedToast": "{imported, plural, one {# ligne importée} other {# lignes importées}}{duplicates, plural, =0 {} one { — # doublon ignoré} other { — # doublons ignorés}}{possibleDuplicates, plural, =0 {} one { — # doublon signalé} other { — # doublons signalés}}",
-    "previewSummary": "{imported, plural, one {# nouvelle ligne} other {# nouvelles lignes}}{duplicates, plural, =0 {} one { · # doublon ignoré} other { · # doublons ignorés}}{possibleDuplicates, plural, =0 {} one { · # doublon signalé} other { · # doublons signalés}}",
+    "importedToast": "{imported, plural, one {# ligne importée} other {# lignes importées}}{duplicates, plural, =0 {} one { — # doublon ignoré} other { — # doublons ignorés}}{possibleDuplicates, plural, =0 {} one { — # doublon possible} other { — # doublons possibles}}",
+    "previewSummary": "{imported, plural, one {# nouvelle ligne} other {# nouvelles lignes}}{duplicates, plural, =0 {} one { · # doublon ignoré} other { · # doublons ignorés}}{possibleDuplicates, plural, =0 {} one { · # doublon possible} other { · # doublons possibles}}",
     "format": "Format",
     "formatOfx": "OFX / QFX",
     "formatCsv": "CSV",
@@ -484,7 +487,12 @@
     "previewEmpty": "L'aperçu ne contient aucune ligne d'opération — vérifiez la colonne du montant et le format de date, puis relancez l'aperçu.",
     "previewRequired": "Lancez l'aperçu avant d'importer.",
     "suggestedOpeningFrom": "Solde d'ouverture repris du solde de clôture au {date} — modifiez au besoin.",
-    "openingMismatch": "Le solde d'ouverture {supplied} diffère du solde de clôture au {date} ({expected}) — vérifiez qu'aucun mois ne manque."
+    "openingMismatch": "Le solde d'ouverture {supplied} diffère du solde de clôture au {date} ({expected}) — vérifiez qu'aucun mois ne manque.",
+    "closingMismatch": "Le solde d'ouverture {opening} plus les lignes du relevé {lines} donne {expected}, et non le solde de clôture {closing} — vérifiez les deux soldes sur le relevé bancaire, ou laissez le solde de clôture vide si le fichier n'en couvre qu'une partie.",
+    "possibleDuplicatesNotice": "{count, plural, one {# ligne correspond à une ligne déjà présente sur ce compte et est exclue de l'import} other {# lignes correspondent à des lignes déjà présentes sur ce compte et sont exclues de l'import}}.",
+    "includePossibleDuplicates": "{count, plural, one {Importer quand même ce doublon possible} other {Importer quand même ces # doublons possibles}}",
+    "possibleDuplicateMatch": "Correspond à une ligne déjà présente sur ce compte",
+    "onlyPossibleDuplicates": "Chaque ligne analysée est déjà présente sur ce compte ou est un doublon possible. Incluez les doublons possibles ci-dessous pour les importer."
   },
   "start": {
     "resume": "Reprendre le rapprochement",
@@ -539,7 +547,7 @@
     "formSetPreferredDone": "Formulaire préféré enregistré",
     "formPreferredCleared": "Formulaire préféré effacé",
     "formPreferredFailed": "Impossible d’enregistrer le formulaire préféré",
-    "cardAccountHelp": "Aucune carte enregistrée — sélectionnez le compte de carte à rapprocher pour comptabiliser.",
+    "cardAccountHelp": "Sélectionnez le compte de carte à rapprocher sur lequel cette dépense est comptabilisée.",
     "noCardAccounts": "Aucun compte de carte à rapprocher pour l'instant.",
     "noCardAccountsCta": "Ajoutez-en un dans le plan comptable",
     "partylessControlWarning": "Comptabilisé sans client ni fournisseur sur {accounts}. Ces montants restent hors des auxiliaires clients et fournisseurs : les factures ouvertes restent impayées. Enregistrez les encaissements clients avec Recevoir un paiement et les paiements fournisseurs avec Payer des factures, ou indiquez le client ou le fournisseur sur la ligne. Configuration → Société et comptabilité → Comptes de contrôle permet de refuser ces écritures.",
@@ -647,7 +655,11 @@
     "openingConfirm": "Confirmer l'ouverture",
     "openingConfirmedToast": "Ouverture {amount} confirmée",
     "openingConfirmedNote": "Ouverture {amount} confirmée — {reason}",
-    "openingStaleNote": "L'ouverture confirmée ne correspond plus au solde comptable reporté — vérifiez le grand livre et confirmez de nouveau l'ouverture."
+    "openingStaleNote": "L'ouverture confirmée ne correspond plus au solde comptable reporté — vérifiez le grand livre et confirmez de nouveau l'ouverture.",
+    "excludeDuplicate": "Exclure le doublon",
+    "clearDuplicate": "Marquer comme non-doublon",
+    "excludeDuplicateReason": "Doublon de la ligne bancaire du {date} pour {amount} : {description}",
+    "excludeDuplicateReasonGeneric": "Doublon d'une ligne bancaire antérieure"
   },
   "sftp": {
     "title": "Serveurs SFTP",
@@ -1037,7 +1049,8 @@
       "recurly": "Recurly",
       "chargebee": "Chargebee",
       "shopify_payments": "Shopify Payments",
-      "paypal": "PayPal"
+      "paypal": "PayPal",
+      "square": "Square"
     },
     "externalRef": "Référence externe / identifiant du versement",
     "settlementDate": "Date de règlement",
@@ -1074,6 +1087,9 @@
     "paypalPayloadHint": "Collez '{\"transactions\": [{\"transaction_info\": {...}}]}' depuis l'API Transaction Search, ou le relevé de règlement CSV avec sa ligne d'en-tête. Nommez l'export dans Référence externe pour que le lot reste idempotent.",
     "invalidShopifyPayload": "La charge Shopify doit être un objet JSON unique avec payout et transactions.",
     "csvUpload": "Importer un CSV",
+    "squarePayloadLabel": "Versement et écritures du versement (JSON)",
+    "squarePayloadHint": "Un objet JSON avec payout et entries : '{\"payout\": {\"id\", \"amount_money\"}, \"entries\": [{\"id\", \"type\", \"gross_amount_money\", \"fee_amount_money\", \"net_amount_money\"}]}'. Les montants sont des unités mineures entières. Saisissez l'identifiant de versement Square comme référence externe.",
+    "invalidSquarePayload": "La charge Square doit être un objet JSON unique avec payout et entries.",
     "fxTitle": "Devise étrangère",
     "fxNone": "Même devise partout",
     "fxSourceCurrency": "Devise des encaissements",
@@ -1313,5 +1329,63 @@
   },
   "payoutAssistance": {
     "chipLabel": "Examiner la proposition"
+  },
+  "reconcileEvidence": {
+    "tabs": {
+      "workspace": "Rapprochement",
+      "statements": "Relevés justificatifs",
+      "history": "Historique"
+    },
+    "statements": {
+      "title": "Relevés justificatifs",
+      "windowAfter": "Les lignes de relevé postées après le {start} et jusqu'au {end} justifient ce rapprochement.",
+      "windowThrough": "Les lignes de relevé postées jusqu'au {end} justifient ce rapprochement.",
+      "empty": "Aucun relevé bancaire ne justifie le solde de ce rapprochement.",
+      "sourceEmpty": "Ce rapprochement repose sur des données source. Aucun relevé bancaire n'a été importé.",
+      "columns": {
+        "date": "Date du relevé",
+        "source": "Origine",
+        "imported": "Importé le",
+        "opening": "Solde d'ouverture",
+        "closing": "Solde de clôture",
+        "lines": "Lignes de la période",
+        "matched": "Rapprochées",
+        "excluded": "Exclues",
+        "unmatched": "Non rapprochées",
+        "total": "Total de la période",
+        "open": "Ouvrir le relevé"
+      },
+      "excludedBadge": "Exclue",
+      "reason": "Motif : {reason}",
+      "duplicateOf": "Doublon possible de {date} · {amount}",
+      "excludedByAt": "Exclue {at} par {name}",
+      "excludedAt": "Exclue {at}"
+    },
+    "history": {
+      "title": "Historique",
+      "description": "Approbations, retraits, confirmations d'ouverture et ajustements de ce rapprochement, ainsi que les sessions abandonnées sur le même compte bancaire.",
+      "empty": "Aucune approbation, aucun retrait, ajustement ou abandon n'est enregistré pour ce compte bancaire.",
+      "columns": {
+        "when": "Date",
+        "event": "Événement",
+        "by": "Par",
+        "details": "Détails"
+      },
+      "events": {
+        "sign_off": "Approuvé",
+        "withdraw_sign_off": "Approbation retirée",
+        "discard": "Session abandonnée",
+        "confirm_opening": "Ouverture confirmée",
+        "session_adjustment": "Session ajustée"
+      },
+      "signOffStatement": "Solde du relevé {balance} · jusqu'au {date} · {matched} lignes de journal marquées · {excluded} lignes de relevé exclues",
+      "signOffSource": "Données source · solde {balance} · jusqu'au {date} · {matched} lignes de journal rapprochées",
+      "withdrawReason": "Motif : {reason}",
+      "withdrawPrior": "Solde approuvé précédent {balance} · approuvé {at} par {by}",
+      "withdrawReleased": "Lignes de journal libérées : {count} · session désormais {status}",
+      "discardDetail": "Jusqu'au {date} · solde {balance} · {matches} rapprochements et {lines} lignes de relevé libérés",
+      "confirmDetail": "Ouverture {amount} à partir du {date} · motif : {reason}",
+      "adjustDetail": "Jusqu'au {beforeDate} → {afterDate} · solde {beforeBalance} → {afterBalance}"
+    }
   }
 }

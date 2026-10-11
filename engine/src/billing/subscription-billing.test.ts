@@ -13,6 +13,9 @@ import {
   prorationDocument,
   remainingPeriodProration,
   resolveNextBillOnUpdate,
+  resolveSubscriptionCancellation,
+  subscriptionPaidThrough,
+  subscriptionRecurringRevenue,
 } from "./subscription-billing.ts";
 import { unbilledBoundary } from "./advanced-subscriptions.ts";
 
@@ -324,4 +327,95 @@ test("pending subscription periods list exactly the missed starts through asOf",
     ),
     { periods: [], truncated: false },
   );
+});
+
+test("paid-through is the end of the invoiced service: the cursor when billed, the start when never invoiced", () => {
+  assert.equal(
+    subscriptionPaidThrough({ startOn: "2026-03-01", nextBillOn: "2026-09-01", billed: true, guardedThrough: null }),
+    "2026-09-01",
+  );
+  // A bill-now invoice posts its period guard without moving the cursor, so the
+  // later guarded end is the boundary.
+  assert.equal(
+    subscriptionPaidThrough({ startOn: "2026-03-01", nextBillOn: "2026-09-01", billed: true, guardedThrough: "2026-10-01" }),
+    "2026-10-01",
+  );
+  assert.equal(
+    subscriptionPaidThrough({ startOn: "2026-03-01", nextBillOn: "2026-04-01", billed: false, guardedThrough: null }),
+    "2026-03-01",
+  );
+});
+
+test("a cancellation takes effect exactly on the paid-through date and defaults to today only when that is the boundary", () => {
+  assert.equal(
+    resolveSubscriptionCancellation({ today: "2026-09-01", paidThrough: "2026-09-01" }),
+    "2026-09-01",
+  );
+  assert.equal(
+    resolveSubscriptionCancellation({ requestedOn: "2026-10-01", today: "2026-09-01", paidThrough: "2026-10-01" }),
+    "2026-10-01",
+  );
+});
+
+test("a cancellation before the paid-through date is refused with the paid-through remedy", () => {
+  assert.throws(
+    () => resolveSubscriptionCancellation({ today: "2026-08-26", paidThrough: "2026-09-01" }),
+    (error: unknown) => error instanceof SubscriptionError
+      && /precedes the paid-through date 2026-09-01/.test(error.message)
+      && /Cancel effective 2026-09-01/.test(error.message),
+  );
+});
+
+test("a cancellation after the paid-through date is refused because the gap would never be invoiced", () => {
+  assert.throws(
+    () => resolveSubscriptionCancellation({ requestedOn: "2026-10-15", today: "2026-08-26", paidThrough: "2026-09-01" }),
+    /service from 2026-09-01 to 2026-10-15 is not invoiced/,
+  );
+});
+
+test("recurring revenue prices a plan subscription at its override and quantity, and a contract at its amended components", () => {
+  const plan = {
+    status: "active",
+    canceledOn: null,
+    asOf: "2026-08-26",
+    priceOverride: null,
+    planAmount: "3500.0000",
+    contract: null,
+    interval: "monthly" as const,
+    intervalCount: 1,
+    quantity: "2",
+  };
+  assert.equal(subscriptionRecurringRevenue(plan), "7000.0000");
+  // The contract's components already carry quantity and the amended price;
+  // the plan price and subscription quantity must not be applied again.
+  assert.equal(
+    subscriptionRecurringRevenue({
+      ...plan,
+      contract: { amount: "4000.0000", interval: "monthly", intervalCount: 1 },
+    }),
+    "4000.0000",
+  );
+  assert.equal(
+    subscriptionRecurringRevenue({
+      ...plan,
+      contract: { amount: "1200.0000", interval: "annually", intervalCount: 1 },
+    }),
+    "100.0000",
+  );
+});
+
+test("recurring revenue stops at the cancellation date and never counts paused or lapsed subscriptions", () => {
+  const base = {
+    asOf: "2026-08-26",
+    priceOverride: null,
+    planAmount: "100.0000",
+    contract: null,
+    interval: "monthly" as const,
+    intervalCount: 1,
+    quantity: "1",
+  };
+  assert.equal(subscriptionRecurringRevenue({ ...base, status: "paused", canceledOn: null }), "0.0000");
+  assert.equal(subscriptionRecurringRevenue({ ...base, status: "canceled", canceledOn: "2026-08-26" }), "0.0000");
+  // Canceled effective later still bills and earns through that date.
+  assert.equal(subscriptionRecurringRevenue({ ...base, status: "canceled", canceledOn: "2026-09-01" }), "100.0000");
 });

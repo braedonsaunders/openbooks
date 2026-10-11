@@ -56,6 +56,7 @@ function position(byCustomer: { partyId: string; partyName: string; amount: stri
     weeks: [],
     byCustomer,
     worklist: [],
+    notForecast: { horizonDays: 90, count: 0, total: "0.0000", entries: [] },
     categories: [],
     unavailableCategories: [],
     timeline: [],

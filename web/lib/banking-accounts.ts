@@ -1,13 +1,25 @@
 import 'server-only'
 
-import { sql } from 'drizzle-orm'
+import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
+import { LIABILITY_STATEMENT_ACCOUNT_TYPES } from '@openbooks/engine/banking/banking'
 
 /** Bank account membership and reconciliation eligibility share the same
- * active leaf-account policy. Visibility does not require reconciliation
- * setup: the overview and detail pages include every bank/card account;
- * import and Match pickers additionally require the reconcilable flag.
- * Each caller continues to enforce its own subsidiary scope. */
+ * active leaf-account policy. Bank and card accounts are Banking accounts
+ * whether or not reconciliation is configured. Any other statement-capable
+ * account (a credit line, loan or payable) becomes a Banking account once it
+ * is flagged reconcilable, which is what carries its statements. Import and
+ * Match pickers additionally require the reconcilable flag. Each caller
+ * continues to enforce its own subsidiary scope. */
+
+/** Account types Banking lists unconditionally. */
+const BANKING_LISTED_TYPES = ['asset_bank', 'liability_card'] as const
+/** Account types that can carry bank statements. */
+const STATEMENT_CAPABLE_TYPES: readonly string[] = ['asset_bank', ...LIABILITY_STATEMENT_ACCOUNT_TYPES]
+
+function typeList(types: readonly string[]): SQL {
+  return sql.join(types.map((type) => sql`${type}`), sql`, `)
+}
 
 export interface ReconcilableBankAccount {
   id: string
@@ -30,16 +42,24 @@ interface ReconcilableBankAccountRow extends Record<string, unknown> {
 }
 
 /**
- * Shared membership predicate for reconcilable bank/card accounts. Every
- * banking query aliases the accounts table as `a`.
+ * Shared membership predicate for Banking accounts eligible for statement
+ * import and reconciliation. Every banking query aliases the accounts table
+ * as `a`.
  */
 export function reconcilableBankMembership() {
   return sql`${bankAccountMembership()} and a.reconcilable`
 }
 
-/** All active bank/card leaf accounts, including those awaiting setup. */
+/**
+ * Every active leaf account Banking manages: bank and card accounts, plus
+ * statement-capable accounts flagged reconcilable (for example, a credit line
+ * or loan with bank statements). Accounts awaiting setup are included.
+ */
 export function bankAccountMembership() {
-  return sql`a.is_active and not a.is_summary and a.type in ('asset_bank', 'liability_card')`
+  return sql`a.is_active and not a.is_summary and (
+    a.type in (${typeList(BANKING_LISTED_TYPES)})
+    or (a.reconcilable and a.type in (${typeList(STATEMENT_CAPABLE_TYPES)}))
+  )`
 }
 
 /** Detail-page membership; reconciliation eligibility is exposed separately. */

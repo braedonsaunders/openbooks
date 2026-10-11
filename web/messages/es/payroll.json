@@ -113,7 +113,12 @@
         "settings": "configuración de nómina",
         "ytd": "los acumulados anuales de otro ciclo",
         "openingBalances": "saldos iniciales (arrastres)"
-      }
+      },
+      "approvedTitle": "Aprobada, pero los datos cambiaron desde la aprobación ({reasons}). Recalcule para retirar la aprobación y volver a enviar la nómina a aprobación.",
+      "pendingTitle": "Los datos cambiaron desde que se calculó esta nómina ({reasons}). La nómina espera aprobación: quien aprueba debe resolver esa solicitud antes de que pueda recalcularse.",
+      "recalculateApproved": "Recalcular y reenviar",
+      "approvedConfirmTitle": "¿Retirar la aprobación y recalcular?",
+      "approvedConfirmBody": "Recalcular retira la aprobación de esta nómina, la recalcula con los datos actuales y la envía de nuevo a aprobación. La confirmación seguirá bloqueada hasta que se conceda la nueva aprobación."
     },
     "readiness": {
       "blockedTitle": "{count, plural, one {# elemento bloquea este ciclo} other {# elementos bloquean este ciclo}}",
@@ -295,7 +300,8 @@
       "ackLabel": "Entiendo que {count, plural, one {este empleado} other {estos # empleados}} no serán pagados en este ciclo, por los motivos indicados arriba.",
       "ackRecord": "Registrar aceptación",
       "ackRecorded": "Aceptación registrada para {count, plural, one {# empleado} other {# empleados}}.",
-      "ackRecordedNote": "Aceptado el {date} — esta decisión queda registrada en el ciclo."
+      "ackRecordedNote": "Aceptado el {date} — esta decisión queda registrada en el ciclo.",
+      "staleApprovedBlocked": "Recalcule y reenvíe la nómina antes de confirmarla."
     },
     "finish": {
       "notCommitted": "Confirme el ciclo en el paso de contabilidad antes de contabilizar.",
@@ -454,7 +460,10 @@
     "committed": "Confirmado",
     "posted": "Contabilizado",
     "void": "Anulado",
-    "rejected": "Rechazado"
+    "rejected": "Rechazado",
+    "approved": "Aprobada",
+    "approvedStale": "Aprobada · requiere recálculo",
+    "pendingApproval": "Pendiente de aprobación"
   },
   "empty": {
     "runs": "Aún no hay ciclos de nómina. Cree uno desde un calendario de nómina para empezar.",
@@ -493,7 +502,8 @@
     "approvalPending": "En espera de aprobación ({count} pendientes) — la confirmación y contabilización están bloqueadas",
     "printSet": "Juego de impresión (solo impresión)",
     "stubsPrintOnly": "{count} empleados son solo impresión y no recibieron correo",
-    "calculateRefusedAll": "No se pudo calcular a nadie — {count, plural, one {# empleado fue rechazado} other {# empleados fueron rechazados}}. Corrija los datos y recalcule, o acéptelos antes de contabilizar."
+    "calculateRefusedAll": "No se pudo calcular a nadie — {count, plural, one {# empleado fue rechazado} other {# empleados fueron rechazados}}. Corrija los datos y recalcule, o acéptelos antes de contabilizar.",
+    "recalculateApprovedDone": "Aprobación retirada. La nómina se recalculó y se envió de nuevo a aprobación."
   },
   "profiles": {
     "addEmployee": "Empleado sin perfil",
@@ -1799,6 +1809,11 @@
     }
   },
   "holidayAttestations": {
+    "bulkNotAbsentTitle": "Confirmar respuestas de ausencia",
+    "bulkNotAbsentConfirm": "¿Registrar «no ausente sin consentimiento» para {count, plural, one {# pregunta de feriado pendiente} other {# preguntas de feriado pendientes}} en esta nómina? Cada una se registra como su declaración para ese empleado y feriado.",
+    "bulkNotAbsentAction": "Responder {count, plural, one {# pregunta} other {las # preguntas}}: no ausente",
+    "bulkNotAbsentFiled": "{count, plural, one {# respuesta registrada} other {# respuestas registradas}}.",
+    "bulkNotAbsentHint": "Hay {count} preguntas de ausencia en feriados pendientes. Respóndalas todas con «no ausente sin consentimiento» en un paso, o responda cada fila.",
     "loadFailed": "No se pudieron cargar las personas empleadas que requieren estas excepciones. Vuelve a intentarlo en lugar de responder sin la información necesaria.",
     "retry": "Reintentar",
     "commissionTitle": "situación de remuneración por comisión",

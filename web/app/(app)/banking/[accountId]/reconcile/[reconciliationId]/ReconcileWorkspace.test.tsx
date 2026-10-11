@@ -45,7 +45,7 @@ registerHooks({
     if (specifier.endsWith('/lib/prompt')) {
       return {
         shortCircuit: true,
-        url: 'data:text/javascript,export async function promptDialog(){return globalThis.__reconcileTestPrompt ?? "not a transaction"}',
+        url: 'data:text/javascript,export async function promptDialog(o){globalThis.__reconcileTestPromptOptions=o;return globalThis.__reconcileTestPrompt ?? "not a transaction"}',
       }
     }
     return next(specifier, context)
@@ -69,7 +69,16 @@ async function mountWorkspace(
   fetchImpl: typeof fetch,
   override: {
     status?: string;
-    stmtRows?: { id: string; posted_on: string; amount: string; description: string | null; counterparty_ref?: string | null }[];
+    stmtRows?: {
+      id: string
+      posted_on: string
+      amount: string
+      description: string | null
+      counterparty_ref?: string | null
+      possible_duplicate_of?: string | null
+      dup_posted_on?: string | null
+      dup_amount?: string | null
+    }[];
     stmtTotal?: number;
     stmtOutstandingTotal?: string;
     glRows?: { id: string; posting_date: string; entry_number: string; amount: string; memo: string | null; party?: string | null }[];
@@ -644,4 +653,89 @@ test('a confirmed opening reads as the session opening position', async (t) => {
     undefined,
     'a carried confirmation offers no second confirmation',
   )
+})
+
+test('a possible-duplicate bank line offers Exclude duplicate with the duplicated line named in the reason', async (t) => {
+  const calls: { url: string; body?: string }[] = []
+  ;(globalThis as Record<string, unknown>).__reconcileTestPrompt = 'Duplicate of the bank line dated 2026-09-01 for -7.0000: COFFEE SHOP'
+  await mountWorkspace(t, (async (input: unknown, init?: RequestInit) => {
+    if (String(input).includes('/statement-lines/') && init?.method === 'PATCH') {
+      calls.push({ url: String(input), body: String(init.body) })
+    }
+    return Response.json({ ok: true })
+  }) as typeof fetch, {
+    stmtRows: [
+      {
+        id: 'stmt-dup',
+        posted_on: '2026-09-02',
+        amount: '-7.0000',
+        description: 'COFFEE SHOP',
+        possible_duplicate_of: 'stmt-first',
+        dup_posted_on: '2026-09-01',
+        dup_amount: '-7.0000',
+      },
+    ],
+    stmtTotal: 1,
+    stmtOutstandingTotal: '-7.00',
+  })
+  const excludeDuplicate = [...document.querySelectorAll('button')].find(
+    (b) => (b.textContent ?? '').trim() === 'Exclude duplicate',
+  ) as HTMLButtonElement | undefined
+  assert.ok(excludeDuplicate, 'a flagged line must offer Exclude duplicate')
+  assert.ok((document.body.textContent ?? '').includes('Possible duplicate'), 'the flagged line is labelled')
+  await act(async () => {
+    excludeDuplicate.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    for (let i = 0; i < 6; i++) await tick()
+  })
+  const options = (globalThis as Record<string, unknown>).__reconcileTestPromptOptions as { initialValue?: string } | undefined
+  assert.ok(
+    (options?.initialValue ?? '').includes('2026-09-01') && (options?.initialValue ?? '').includes('-7.0000'),
+    `the reason must be prefilled naming the duplicated line, got ${JSON.stringify(options)}`,
+  )
+  assert.ok(
+    calls.some((c) => c.url.includes('/statement-lines/stmt-dup') && (c.body ?? '').includes('"action":"exclude"') && (c.body ?? '').includes('dated 2026-09-01')),
+    `excluding must patch the flagged line with the reason, got ${JSON.stringify(calls)}`,
+  )
+  delete (globalThis as Record<string, unknown>).__reconcileTestPrompt
+})
+
+test('a sign-off blocker that is a possible duplicate names the line it duplicates', async (t) => {
+  await mountWorkspace(t, (async (input: unknown) => {
+    if (String(input).includes('/blockers')) {
+      return Response.json({
+        ok: true,
+        lines: [
+          {
+            id: 'stmt-dup',
+            postedOn: '2026-09-02',
+            amount: '-7.0000',
+            description: 'COFFEE SHOP',
+            possibleDuplicateOf: 'stmt-first',
+            possibleDuplicateOfPostedOn: '2026-09-01',
+            possibleDuplicateOfAmount: '-7.0000',
+          },
+        ],
+        total: 1,
+      })
+    }
+    return Response.json(
+      { error: 'Cannot sign off: 1 statement line(s) through the cutoff remain unmatched' },
+      { status: 422 },
+    )
+  }) as typeof fetch, {
+    stmtRows: [
+      { id: 'stmt-dup', posted_on: '2026-09-02', amount: '-7.0000', description: 'COFFEE SHOP', possible_duplicate_of: 'stmt-first', dup_posted_on: '2026-09-01', dup_amount: '-7.0000' },
+    ],
+    stmtTotal: 1,
+    stmtOutstandingTotal: '-7.00',
+  })
+  await act(async () => {
+    signOffButton().dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    for (let i = 0; i < 8; i++) await tick()
+  })
+  const alert = document.querySelector('[role="alert"]')
+  assert.ok(alert, 'the refusal must persist as a workspace alert')
+  const text = alert.textContent ?? ''
+  assert.ok(text.includes('Possible duplicate'), `the blocker must be labelled a possible duplicate, got ${JSON.stringify(text)}`)
+  assert.ok(text.includes('of 2026-09-01'), `the blocker must name the duplicated line's date, got ${JSON.stringify(text)}`)
 })

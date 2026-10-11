@@ -133,10 +133,12 @@ export async function loadJournalDoc(
     const doc = await db.execute<Record<string, unknown>>(sql`
       select d.*, d.document_date::text as document_date,
              ${documentRevisionCounterSql(sql`d.revision_seq`)} as updated_at,
-             p.display_name as party_name, e.id as entry_id
+             p.display_name as party_name, e.id as entry_id,
+             pe.status as posting_effect_status
         from documents d
         left join parties p on p.id = d.party_id and p.org_id = d.org_id
         left join journal_entries e on e.id = d.posted_entry_id and e.org_id = d.org_id
+        left join posting_effects pe on pe.document_id = d.id and pe.org_id = d.org_id
        where d.id = ${id} and d.org_id = ${resolvedOrgId} and d.kind = 'journal'
          ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
        for share of d

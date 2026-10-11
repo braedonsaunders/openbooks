@@ -8,7 +8,7 @@ import type { Dispatch, SetStateAction } from 'react'
 import { useId, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { Ban, CheckCheck, Link2, Pencil, Trash2, Wand2 } from 'lucide-react'
+import { Ban, CheckCheck, Link2, Pencil, RotateCcw, Trash2, Wand2 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   Alert,
@@ -50,6 +50,9 @@ interface StmtRow {
   amount: string
   description: string | null
   counterparty_ref: string | null
+  possible_duplicate_of: string | null
+  dup_posted_on: string | null
+  dup_amount: string | null
 }
 interface GlRow {
   id: string
@@ -114,6 +117,9 @@ interface SignOffBlocker {
   postedOn: string
   amount: string
   description: string | null
+  possibleDuplicateOf: string | null
+  possibleDuplicateOfPostedOn: string | null
+  possibleDuplicateOfAmount: string | null
 }
 
 interface OpeningConfirmationState {
@@ -452,6 +458,37 @@ function ReconcileWorkspaceForId({
     router.refresh()
   }
 
+  // A flagged line is excluded with the duplicated line named in the reason,
+  // so the audit trail says what it duplicates. The reviewer may edit the
+  // prefilled reason before confirming.
+  async function excludeDuplicate(line: StmtRow) {
+    const description = (line.description ?? '').trim().slice(0, 200)
+    const reason = await promptDialog({
+      title: tMatch('excludeReasonTitle'),
+      label: tMatch('excludeReasonLabel'),
+      confirmLabel: tMatch('exclude'),
+      initialValue: line.dup_posted_on && line.dup_amount
+        ? t('excludeDuplicateReason', { date: line.dup_posted_on, amount: line.dup_amount, description: description || '—' })
+        : t('excludeDuplicateReasonGeneric'),
+    })
+    if (!reason) return
+    const data = await call('PATCH', `/api/banking/statement-lines/${line.id}`, { action: 'exclude', reason })
+    if (!data) return
+    toast.success(tMatch('excludedToast'))
+    if (blockers) await loadBlockers()
+    router.refresh()
+  }
+
+  async function clearDuplicate(id: string) {
+    const ok = await confirmDialog({ message: tMatch('clearDuplicateConfirm') })
+    if (!ok) return
+    const data = await call('PATCH', `/api/banking/statement-lines/${id}`, { action: 'clear-duplicate' })
+    if (!data) return
+    toast.success(tMatch('clearedDuplicateToast'))
+    if (blockers) await loadBlockers()
+    router.refresh()
+  }
+
   async function discard() {
     const ok = await confirmDialog({
       message: t('discardConfirm'),
@@ -670,6 +707,17 @@ function ReconcileWorkspaceForId({
                     <a className="underline" href={`#stmt-line-${line.id}`}>
                       {blockerPostedOn(line)} · {money(line.amount)} · {line.description ?? '—'}
                     </a>
+                    {line.possibleDuplicateOf ? (
+                      <span className="ml-2 inline-flex flex-wrap items-center gap-1 align-middle">
+                        <Badge variant="warning">{tMatch('possibleDuplicateBadge')}</Badge>
+                        <span className="text-xs text-slate-600 dark:text-slate-400">
+                          {tMatch('possibleDuplicateOf', {
+                            date: line.possibleDuplicateOfPostedOn ?? '',
+                            amount: money((line.possibleDuplicateOfAmount ?? '0') as MoneyValue),
+                          })}
+                        </span>
+                      </span>
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -740,18 +788,42 @@ function ReconcileWorkspaceForId({
                           </TableCell>
                         ) : null}
                         <TableCell className="whitespace-nowrap">{l.posted_on}</TableCell>
-                        <TableCell className="max-w-[16rem] truncate">
-                          {l.description ?? '—'}
-                          {l.counterparty_ref ? (
-                            <span className="ml-1.5 text-xs text-slate-400 dark:text-slate-500">{l.counterparty_ref}</span>
+                        <TableCell className="max-w-[16rem]">
+                          <div className="truncate">
+                            {l.description ?? '—'}
+                            {l.counterparty_ref ? (
+                              <span className="ml-1.5 text-xs text-slate-400 dark:text-slate-500">{l.counterparty_ref}</span>
+                            ) : null}
+                          </div>
+                          {l.possible_duplicate_of ? (
+                            <div className="mt-1 flex flex-wrap items-center gap-1">
+                              <Badge variant="warning">{tMatch('possibleDuplicateBadge')}</Badge>
+                              <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                                {tMatch('possibleDuplicateOf', {
+                                  date: l.dup_posted_on ?? '',
+                                  amount: money((l.dup_amount ?? '0') as MoneyValue),
+                                })}
+                              </span>
+                            </div>
                           ) : null}
                         </TableCell>
                         <TableCell className="text-right tabular-nums">{money(l.amount)}</TableCell>
                         {!readOnly ? (
                           <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                            <Button variant="ghost" size="sm" disabled={busy} title={tMatch('exclude')} onClick={() => excludeStatementLine(l.id)}>
-                              <Ban size={14} />
-                            </Button>
+                            {l.possible_duplicate_of ? (
+                              <div className="flex justify-end gap-1">
+                                <Button variant="outline" size="sm" disabled={busy} onClick={() => excludeDuplicate(l)}>
+                                  {t('excludeDuplicate')}
+                                </Button>
+                                <Button variant="ghost" size="sm" disabled={busy} title={t('clearDuplicate')} onClick={() => clearDuplicate(l.id)}>
+                                  <RotateCcw size={14} />
+                                </Button>
+                              </div>
+                            ) : (
+                              <Button variant="ghost" size="sm" disabled={busy} title={tMatch('exclude')} onClick={() => excludeStatementLine(l.id)}>
+                                <Ban size={14} />
+                              </Button>
+                            )}
                           </TableCell>
                         ) : null}
                       </InteractiveTableRow>

@@ -6,14 +6,12 @@ import { db } from "../platform/db.ts";
 import { sealJson } from "../platform/secrets.ts";
 import { endOfMonth } from "../platform/civil-date.ts";
 import { postDocument } from "../ledger/posting-document.ts";
-import {
-  enrollAutopay,
-  getRecoveryMetrics,
-  recordCardUpdaterEvent,
-  retryAttemptNow,
-  runAutopayCollectionForOrg,
-  type ChargeFn,
-} from "./autopay.ts";
+import { enrollAutopay } from "./autopay-enrollment.ts";
+import { getRecoveryMetrics } from "./autopay-recovery.ts";
+import { recordCardUpdaterEvent } from "./autopay-methods.ts";
+import { retryAttemptNow } from "./autopay-attempts.ts";
+import { runAutopayCollectionForOrg } from "./autopay.ts";
+import { type ChargeFn } from "./autopay-policy.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
 

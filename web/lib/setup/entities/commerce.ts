@@ -187,7 +187,9 @@ export const COMMERCE_ENTITIES: SetupEntity[] = [
       { key: 'sectionsReturns', labelKey: 'customerPortalFields.sectionsReturns', kind: 'boolean', defaultValue: true, booleanStyle: 'switch' },
       { key: 'sectionsGiftCards', labelKey: 'customerPortalFields.sectionsGiftCards', kind: 'boolean', defaultValue: true, booleanStyle: 'switch' },
       { key: 'returnWindowDays', labelKey: 'customerPortalFields.returnWindowDays', kind: 'integer', required: true, min: 0, max: 365, defaultValue: 30 },
-      { key: 'returnReasons', labelKey: 'customerPortalFields.returnReasons', kind: 'stringArray', required: true, helpTextKey: 'customerPortalFields.returnReasonsHelp' },
+      // Return reasons apply only while portal returns are on; a hidden list
+      // is cleared rather than sent as an empty requirement.
+      { key: 'returnReasons', labelKey: 'customerPortalFields.returnReasons', kind: 'stringArray', required: true, helpTextKey: 'customerPortalFields.returnReasonsHelp', showWhen: { field: 'sectionsReturns', in: ['true'] }, clearWhenHidden: true },
       { key: 'resolutionRefund', labelKey: 'customerPortalFields.resolutionRefund', kind: 'boolean', defaultValue: true, booleanStyle: 'switch' },
       { key: 'resolutionExchange', labelKey: 'customerPortalFields.resolutionExchange', kind: 'boolean', defaultValue: true, booleanStyle: 'switch' },
       { key: 'resolutionStoreCredit', labelKey: 'customerPortalFields.resolutionStoreCredit', kind: 'boolean', defaultValue: true, booleanStyle: 'switch' },

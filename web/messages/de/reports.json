@@ -375,7 +375,12 @@
     "currency": "Währung",
     "convertFrom": "Umrechnen aus",
     "baseOption": "Basiswährung",
-    "transactionOption": "Transaktionswährung"
+    "transactionOption": "Transaktionswährung",
+    "controlEntries": {
+      "label": "Kontobuchungen ohne offene Position",
+      "hint": "Auf dem Kontrollkonto gebucht, ohne Rechnung, Beleg oder Gutschrift dahinter",
+      "more": "+{count} weitere"
+    }
   },
   "cashFlow": {
     "title": "Kapitalflussrechnung",

@@ -239,6 +239,14 @@ export function recordCommands(
       );
       push("done", [reason("shortCloseReason",cmp(String(r.quantityCompleted),String(r.quantityOrdered))<0)], { note: "doneNote" });
     }
+    if (canPost && (r.status === "done" || r.status === "closed") && cmp(String(r.quantityCompleted), "0") > 0) {
+      // Defaults to the day the last operation finished; the server refuses days before the work it records.
+      push("correctCompletionDate", [date("correctedOn", lastCompletedOn(data.sections.operations) ?? r.plannedStart ?? null, true), reason("reason", true, 5)], {
+        path: base + "/correct-completion-date",
+        create: true,
+        note: "completionDateNote",
+      });
+    }
     if (canPost && r.status === "in_progress")
       push(
         "scrap",

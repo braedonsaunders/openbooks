@@ -94,6 +94,14 @@ export function describeView(file, source) {
   // called `slug`, and the caller supplies what the url says, not what the
   // author typed.
   const kinds = splitParams(loader[2]).map((param) => {
+    // A trailing optional or defaulted parameter, e.g. `contextProjectId?:
+    // string` or `workFamily: TimeWorkFamily = 'project'` — a view detail the
+    // registry cannot supply, so the generated call omits it and the
+    // default applies.
+    const optional = /^[A-Za-z0-9_]+\?\s*:/.test(param) || /^[A-Za-z0-9_]+\s*:[^=]*=\s*'[^']*'$/.test(param)
+    if (optional && !/^[A-Za-z0-9_]+\??\s*:\s*Record</.test(param)) {
+      return { kind: 'options' }
+    }
     const type = param.slice(param.indexOf(':') + 1).trim()
     if (/^Record</.test(type)) return { kind: 'search-params' }
     // A route segment.

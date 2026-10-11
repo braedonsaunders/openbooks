@@ -24,6 +24,7 @@ export const PATCH = defineRoute({
   feature: "resourcing",
   params: Params,
   body: Body,
+  invalidBodyStatus: 422,
   handler: async ({ authz, params, body }) => {
     const existing = (await db.select({ custom: resDemandLines.custom })
       .from(resDemandLines)

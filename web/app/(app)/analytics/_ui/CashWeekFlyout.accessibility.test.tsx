@@ -14,6 +14,7 @@ const { NextIntlClientProvider } = await import('next-intl')
 const messages = (await import('../../../../messages/en')).default
 const { MoneyProvider } = await import('../../../../components/money-provider')
 const { CashWeekFlyout } = await import('./CashWeekFlyout')
+const { BusinessDateProvider } = await import('../../../../components/business-date-provider')
 
 test('cash week entry failures offer retry and pagination controls have translated names', async (t) => {
   const entries = Array.from({ length: 26 }, (_, index) => ({ id: `entry-${index}`, entryId: `entry-${index}`, docKind: 'vendor_bill', docNumber: `B-${index}`, docId: `doc-${index}`, partyId: `party-${index}`, partyName: `Vendor ${index}`, amount: '10.0000', tranDate: '2026-08-01', dueDate: null, predictedDate: '2026-08-03', weekStart: '2026-08-02', daysOverdue: 0, method: 'manual' }))
@@ -41,7 +42,9 @@ test('cash week entry failures offer retry and pagination controls have translat
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <MoneyProvider currency="USD">
-          <CashWeekFlyout week={emptyWeek as never} categories={[]} onClose={() => {}} />
+          <BusinessDateProvider today="2026-08-02">
+            <CashWeekFlyout week={emptyWeek as never} categories={[]} onClose={() => {}} />
+          </BusinessDateProvider>
         </MoneyProvider>
       </NextIntlClientProvider>,
     )

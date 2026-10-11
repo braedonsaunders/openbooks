@@ -27,6 +27,10 @@ registerHooks({
   },
 });
 
+// The drawer bodies compile to classic JSX, so React must be in scope for
+// both this file's markup and the drawer modules it renders.
+const React = await import("react");
+Object.assign(globalThis, { React });
 const { renderToString } = await import("react-dom/server");
 const { sql } = await import("drizzle-orm");
 const { db } = await import("@openbooks/engine/platform/db");

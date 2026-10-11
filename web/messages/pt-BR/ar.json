@@ -81,8 +81,9 @@
     "depositRecording": "Registrando…",
     "depositNeedsSetup": "Nenhuma conta bancária configurada para depósitos de caixa. Peça a um contador para escolhê-las nas configurações da empresa.",
     "depositRequiresPermission": "Registrar um depósito de caixa exige a permissão cash_sales.deposit, detida pelos papéis que lançam vendas em dinheiro. Peça ao seu administrador para concedê-la.",
-    "tillWindow": "Desde a sangria de {after}: {sales} vendas receberam {tendered} {currency} em dinheiro; {dropped} {currency} retirados até agora.",
-    "tillWindowFirst": "Nenhuma sangria anterior deste caixa: {sales} vendas receberam {tendered} {currency} em dinheiro; {dropped} {currency} retirados até agora.",
+    "tillWindow": "Vendas após {after} até {through}: {sales} vendas receberam {tendered} {currency} em dinheiro; {dropped} {currency} retirados até agora.",
+    "tillWindowFirst": "Vendas até {through} (nenhuma sangria anterior deste caixa): {sales} vendas receberam {tendered} {currency} em dinheiro; {dropped} {currency} retirados até agora.",
+    "tillCoversThrough": "Cobre vendas até",
     "tillReason": "Observação da contagem",
     "tillReasonHint": "Necessária quando a sangria for maior do que as vendas registradas explicam (por exemplo, vendas ainda não lançadas)",
     "tillDifference": "Contagem do caixa de {after} até {through}: as sangrias diferem do dinheiro registrado em {difference}.",
@@ -152,7 +153,10 @@
     "controlAccountHelp": "A conta a receber em que este documento é lançado. Pagamentos e créditos o liquidam na mesma conta. Deixe em branco para usar o padrão.",
     "controlAccountPartyDefault": "Padrão do cliente — {account}",
     "controlAccountOrganizationDefault": "Padrão da organização — {account}",
-    "controlAccountUnset": "Nenhuma conta a receber configurada — defina uma em Configuração → Empresa e Contabilidade → Contas de controle"
+    "controlAccountUnset": "Nenhuma conta a receber configurada — defina uma em Configuração → Empresa e Contabilidade → Contas de controle",
+    "createUnconfirmed": "O servidor não confirmou o novo documento. Salve novamente: a nova tentativa reutiliza a chave deste rascunho, então não pode criar um segundo documento.",
+    "saveUnconfirmed": "O servidor não confirmou o salvamento. Recarregue o documento para ver o estado salvo antes de editar novamente.",
+    "createConflict": "Este rascunho já foi salvo com outros dados. Recarregue a página e abra o documento salvo na lista em vez de digitá-lo novamente."
   },
   "dailySummary": {
     "date": "Data",
@@ -269,6 +273,13 @@
       },
       "recurring": "Entradas recorrentes (subsídios, aluguéis recebidos e assinaturas) entram na previsão como categorias — configure-as no <cashCockpit>painel de caixa</cashCockpit>.",
       "documentation": "Ler o guia de contas a receber"
+    },
+    "notForecast": {
+      "title": "Não projetado — atrasado há mais de {days} dias",
+      "hint": "{count, plural, one {# item} other {# itens}} · {total}",
+      "body": "Estes recebíveis não são contados como recebimentos previstos. Permanecem no envelhecimento e abertos para cobrança.",
+      "daysOverdue": "{days} dias em atraso",
+      "more": "+{count} outros não exibidos"
     }
   },
   "appliedPayments": {
@@ -376,6 +387,8 @@
       "cancelSubscription": "Cancelar assinatura",
       "cancelConfirmTitle": "Cancelar a assinatura?",
       "cancelConfirmBody": "Cancelar encerra o faturamento recorrente desta assinatura. Isso não pode ser desfeito.",
+      "cancelEffectiveOn": "Cancelamento válido em",
+      "cancelPaidThroughHint": "Faturado até {date}. O faturamento para na data de vigência; faturas já lançadas não são alteradas.",
       "toasts": {
         "prorated": "Rateio {adjustment} → {documentNumber}",
         "qtyUpdatedNoProration": "Quantidade atualizada (sem rateio)",
@@ -386,6 +399,10 @@
         "loading": "Carregando assinaturas avançadas",
         "loadFailed": "Não foi possível carregar os dados do ciclo de vida das assinaturas avançadas",
         "loadFailedFallback": "Não foi possível carregar as assinaturas avançadas",
+        "noContractSuffix": "sem contrato",
+        "amendNeedsContract": "Esta assinatura ainda não tem contrato. Ative um em Contratos e depois altere-a aqui.",
+        "planChangeHint": "Os períodos faturados mantêm seu plano. A mudança vale a partir de {date} (faturado até essa data) ou depois.",
+        "contractNeedsVersion": "{plan} não tem uma versão publicada do catálogo. Publique uma em Versões de planos antes de ativar um contrato.",
         "actionFailed": "A ação falhou",
         "catalogTitle": "Catálogo com vigência",
         "catalogDescription": "Versões publicadas são imutáveis. Crie uma nova versão quando as condições comerciais mudarem.",
@@ -495,6 +512,8 @@
         "changeTiming": "Alterar momento de faturamento",
         "changeRenew": "Renovar",
         "changeCoterm": "Igualar vigência",
+        "changePlan": "Alterar plano",
+        "changeType_change_plan": "Alteração de plano",
         "name": "Nome",
         "newTermEnd": "Novo fim de vigência",
         "timing": "Momento",

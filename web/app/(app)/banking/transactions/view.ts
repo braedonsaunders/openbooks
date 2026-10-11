@@ -9,7 +9,7 @@ import { can, requirePermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { BANK_KINDS, DOC_KINDS, createPermission, isDocumentCreateKind, postPermission } from "../../../../lib/document-kinds.ts";
 import { canReadDocumentKind } from '../../../../lib/flow-subject-authz'
-import { accountOptions, bankAccountOptions, cardLiabilityAccountOptions, cardOptions, createDocumentSeed, dimensionOptions, partyOptions, taxCodeOptions, taxGroupOptions } from "../../../../lib/documents.ts";
+import { accountOptions, bankAccountOptions, cardLiabilityAccountOptions, cardOptions, createDocumentSeed, dimensionOptions, partyOptions, taxCodeOptions, taxGroupOptions, transferAccountOptions } from "../../../../lib/documents.ts";
 import { loadDocument } from "@openbooks/engine/ledger/document-service";
 import { loadFieldDefs } from '../../../../lib/custom-fields'
 import { isMultiSubsidiary, subsidiaryOptions } from '../../../../lib/subsidiaries'
@@ -175,7 +175,11 @@ export async function loadBankingTransactions(
              )
            order by coalesce(code, name), name limit 2000`).then((r) => r.rows),
         cardOptions(),
-        bankAccountOptions(),
+        // A transfer's legs take any bank or credit-card account; deposits and
+        // checks fund from reconcilable bank accounts only.
+        drawerKind === 'transfer'
+          ? transferAccountOptions(undefined, authz.allowedSubsidiaryIds)
+          : bankAccountOptions(),
         loadFieldDefs('documents', drawerKind!),
         loadFieldDefs('document_lines', drawerKind!),
         // Multi-subsidiary orgs only — null keeps ALL subsidiary UI hidden.

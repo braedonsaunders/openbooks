@@ -176,6 +176,7 @@ test('a multi-term quote focuses one term schedule and keeps the editing draft',
       subsidiaries={[]}
       segments={[]}
       canManage
+      initialMode="edit"
       closeHref="/estimates"
       quoteToCashEnabled
     />,

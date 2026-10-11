@@ -190,22 +190,39 @@ async function deleteRule(fixture: Fixture): Promise<Response> {
   ));
 }
 
-/** Wait until each route transaction is visibly waiting on the rule row lock. */
-async function waitForRuleWriters(expected: number): Promise<void> {
+/**
+ * Wait until route transactions are visibly queued behind the holder. A PATCH
+ * takes the rule-set advisory lock before the rule row lock, so the first
+ * writer queues on the row and a later writer queues on the advisory lock
+ * behind it. A waiter counts only when it is blocked by the holder or by
+ * another queued rule writer, so unrelated sessions in the shared database
+ * cannot satisfy the wait.
+ */
+async function waitForRuleWriters(holderPid: number, expected: number): Promise<void> {
   const deadline = Date.now() + 15_000;
   while (Date.now() < deadline) {
     const result = await db.execute<{ count: number }>(sql`
+      with queued as (
+        select pid, pg_blocking_pids(pid) as blockers
+          from pg_stat_activity
+         where datname = current_database()
+           and pid <> pg_backend_pid()
+           and wait_event_type = 'Lock'
+           and (query ilike '%bank_match_rules%' or query ilike '%pg_advisory_xact_lock%')
+      ),
+      blockers_in_chain as (
+        select pid from queued
+        union all
+        select ${holderPid}::int
+      )
       select count(*)::int as count
-        from pg_stat_activity
-       where datname = current_database()
-         and pid <> pg_backend_pid()
-         and wait_event_type = 'Lock'
-         and query ilike '%bank_match_rules%'`);
+        from queued
+       where blockers && array(select pid from blockers_in_chain)`);
     if ((result.rows[0]?.count ?? 0) >= expected) return;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
   throw new Error(
-    `expected ${expected} banking-rule writers to wait on the row lock`,
+    `expected ${expected} banking-rule writers to queue behind the rule edit`,
   );
 }
 
@@ -221,6 +238,7 @@ test(
       authorize(fixture);
       await holder.connect();
       holderOpen = true;
+      const holderPid = Number((await holder.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid);
       await holder.query("begin");
       await holder.query(
         "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'off', true)",
@@ -244,9 +262,9 @@ test(
         priority: 120,
       };
       const firstWrite = patch(fixture, firstEdit);
-      await waitForRuleWriters(1);
+      await waitForRuleWriters(holderPid, 1);
       const secondWrite = patch(fixture, secondEdit);
-      await waitForRuleWriters(2);
+      await waitForRuleWriters(holderPid, 2);
 
       await holder.query("commit");
       await holder.end();

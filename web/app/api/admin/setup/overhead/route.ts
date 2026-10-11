@@ -14,7 +14,7 @@ import { publishProjectFinancialProfileInTransaction } from '@openbooks/engine/p
 import { isUuid } from '../../../../../lib/list-params'
 import { guardUnrestrictedScope, subsidiariesInScope } from '../../../../../lib/authz'
 import { acquireFeatureGateLock } from '../../../../../lib/features'
-import { publishOverheadRates } from '../../../../../lib/overhead-publish'
+import { OverheadZeroOverStandardError, publishOverheadRates } from '../../../../../lib/overhead-publish'
 import { ScopeNotFoundError } from '@openbooks/engine/organization/scope'
 import { guardProjectsFeature } from '../../../../../lib/projects-gate'
 import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decimal'
@@ -33,7 +33,7 @@ const overheadProfileSchema = z.discriminatedUnion("method", [
   z.object({ method: z.literal("posted_gl_account_group"), accountGroup: z.object({ dimension: z.string().min(1), groupKeys: z.array(z.string()).optional() }) }),
 ]);
 const requestBodySchema = z.discriminatedUnion("action", [
-  z.object({ action: z.literal("publish"), effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), rates: z.array(z.object({ departmentId: z.string().nullable(), ratePerHour: exactDecimalText("Overhead rate") })).max(500).optional() }),
+  z.object({ action: z.literal("publish"), effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), rates: z.array(z.object({ departmentId: z.string().nullable(), ratePerHour: exactDecimalText("Overhead rate") })).max(500).optional(), acknowledgeZeroOverStandard: z.boolean().optional() }),
   z.object({ action: z.literal("apply"), projectTypeIds: z.array(z.string().uuid()).min(1).max(500), overhead: overheadProfileSchema, effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), reason: z.string().trim().max(500).optional() }),
   z.object({ action: z.literal("set-lifecycle"), mode: z.enum(["manual", "scheduled", "live"]).optional(), cadence: z.enum(["monthly", "quarterly"]).optional() }),
   z.object({ action: z.literal("set-application"), mode: z.enum(["report_only", "net_zero_pair", "off"]).optional(), accountId: z.string().uuid().nullable().optional() }),
@@ -172,10 +172,25 @@ export const POST = defineRoute({
             }
           }
         }
-        const result = await publishOverheadRates(orgId, gate.user.id, effectiveFrom, rates.length ? rates : undefined, gate.allowedSubsidiaryIds)
+        const result = await publishOverheadRates(orgId, gate.user.id, effectiveFrom, rates.length ? rates : undefined, gate.allowedSubsidiaryIds, {
+          acknowledgeZeroOverStandard: body.acknowledgeZeroOverStandard === true,
+        })
         if (result.published === 0) return NextResponse.json({ error: 'no rates to publish' }, { status: 400 })
         return NextResponse.json({ ok: true, published: result.published })
       } catch (e) {
+        if (e instanceof OverheadZeroOverStandardError) {
+          // The refusal names every department whose standard a zero would
+          // replace; the client re-sends with acknowledgeZeroOverStandard to confirm.
+          return NextResponse.json(
+            {
+              error: `Publishing would replace a non-zero standard rate with zero for ${e.replacements.map((r) => r.departmentName).join(', ')}.`,
+              code: e.code,
+              replacements: e.replacements,
+              remedy: 'Enter the department rate, or confirm the zero replacement to publish it.',
+            },
+            { status: 409 },
+          )
+        }
         if (e instanceof ScopeNotFoundError) {
           return NextResponse.json(
             { error: 'unknown or out-of-scope department — publish only departments in your visible subsidiaries or ask an administrator for access' },

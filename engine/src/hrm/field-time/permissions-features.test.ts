@@ -1,6 +1,6 @@
 /**
  * Field-time feature and permissions: the one fieldTime switch (registered,
- * defaulted, parented) and the permissions granted to the same built-in
+ * defaulted, parented under timeTracking) and the permissions granted to the same built-in
  * roles as time.read/manage.
  */
 import { describe, it } from "node:test";
@@ -13,12 +13,12 @@ import {
 } from "../../organization/permissions.ts";
 
 describe("field-time feature", () => {
-  it("fieldTime rides timeTracking and needs projects", () => {
+  it("fieldTime rides timeTracking without a Projects requirement", () => {
     const def = FEATURE_BY_KEY.get("fieldTime");
     assert.ok(def, "fieldTime must be registered");
     assert.equal(def.defaultEnabled, false);
     assert.equal(def.parentKey, "timeTracking");
-    assert.deepEqual(def.requiresAll, ["projects"]);
+    assert.equal(def.requiresAll, undefined);
   });
   it("office orgs never see a clock: fieldTime dies with timeTracking", () => {
     assert.equal(

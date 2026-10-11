@@ -62,3 +62,34 @@ test('the paper hides while rates are blocked', () => {
     'the paper shows only when rates are ready — no numbers beside the banner',
   )
 })
+
+// A custom period without valid bounds refuses in place: the filter bar stays
+// so the operator can set the dates, the refusal names the remedy, and the
+// paper hides. It never falls back to another window.
+function incompletePeriodData(): PnlData {
+  return {
+    periodRefusal: 'A custom period needs both a From and a To date, with From on or before To.',
+    filterPeriodLabel: 'Period',
+    ratesBlocked: null,
+    ratesReady: false,
+  } as unknown as PnlData
+}
+
+test('an incomplete custom period keeps the filter bar and names the remedy', () => {
+  const spec = pnlSpec(incompletePeriodData())
+  const header = (spec as unknown as { header: Record<string, unknown>[] }).header
+  assert.ok(header.some((block) => block.kind === 'filter-bar'), 'the filter bar stays so the dates can be set')
+  const refusal = blocksOf(spec).find(
+    (block) => block.widget === 'empty-state' && JSON.stringify(block.when) === JSON.stringify({ $: 'periodRefusal' }),
+  )
+  assert.ok(refusal, 'the refusal renders as an empty-state gated on the period refusal')
+  const props = refusal.props as Record<string, unknown>
+  assert.equal(props.title, 'Period')
+  assert.equal(props.description, incompletePeriodData().periodRefusal)
+})
+
+test('the paper hides while the custom period is incomplete', () => {
+  const blocks = blocksOf(pnlSpec(incompletePeriodData()))
+  const paper = blocks.find((block) => block.kind === 'paper')
+  assert.deepEqual(paper?.when, { $: 'ratesReady' }, 'no statement numbers render beside the refusal')
+})

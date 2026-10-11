@@ -14,6 +14,25 @@ import { useDirtyClose } from '../../../lib/use-dirty-close'
 
 type Option = { value: string; label: string; type?: string }
 
+/** A save refused because another active account already carries the name. */
+interface DuplicateNamePrompt {
+  name: string
+  existingAccountId: string
+  existingAccountName: string
+  existingAccountNumber: string | null
+}
+
+type DuplicateNameWarning = {
+  code: 'duplicate_account_name'
+  name: string
+  existingAccountName: string
+  existingAccountNumber: string | null
+}
+
+function duplicateAccountLabel(holder: { existingAccountName: string; existingAccountNumber: string | null }): string {
+  return holder.existingAccountNumber ? `${holder.existingAccountNumber} ${holder.existingAccountName}` : holder.existingAccountName
+}
+
 const TYPE_VALUES = [
   'asset_bank',
   'asset_receivable',
@@ -171,11 +190,15 @@ export function AccountDrawer({
   // The alert is a node so a duplicate-number refusal can link the account
   // already holding the number; the toast keeps the plain string.
   const [fieldError, setFieldError] = useState<ReactNode>(null)
+  // A second active account would share this name. The save is held until the
+  // operator picks the existing account or confirms the duplicate.
+  const [duplicateName, setDuplicateName] = useState<DuplicateNamePrompt | null>(null)
   const [busy, setBusy] = useState(false)
   const editable = canManage && mode === 'edit' && !busy
   const compatibleParents = parents.filter((option) => option.type === form.type)
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => {
     setFieldError(null)
+    setDuplicateName(null)
     setForm((current) => ({ ...current, [key]: value }))
   }
   // The settlement currency is Multi-currency configuration — except that a
@@ -193,7 +216,7 @@ export function AccountDrawer({
       'name_required', 'invalid_type', 'type_has_transactions', 'invalid_parent', 'parent_must_be_summary',
       'parent_type_mismatch', 'parent_cycle', 'summary_reconcilable_conflict', 'reconcilable_currency_required', 'summary_has_transactions', 'summary_has_children',
       'inactive_has_children', 'invalid_currency', 'invalid_subsidiary', 'invalid_dimensions',
-      'invalid_custom_fields', 'number_in_use', 'account_changed', 'invalid_idempotency_key', 'save_failed',
+      'invalid_custom_fields', 'number_in_use', 'duplicate_account_name', 'account_changed', 'invalid_idempotency_key', 'save_failed',
     ])
     if (!known.has(key)) {
       // Unmapped refusals read through the shared helper so the server's
@@ -245,7 +268,7 @@ export function AccountDrawer({
     message: tc('feedback.unsavedChanges'), confirmLabel: tc('confirm.discardChanges'),
   })
 
-  async function save() {
+  async function save(options: { acknowledgeDuplicateName?: boolean } = {}) {
     if (!form.name.trim()) {
       toast.error(t('drawer.errors.name_required'))
       return
@@ -276,10 +299,24 @@ export function AccountDrawer({
           monetary: form.monetary === '' ? null : form.monetary === 'true',
           ...(multiCurrency || form.reconcilable ? { currencyRestriction: currencyRestriction || null } : {}),
           ...(multiSubsidiary ? { eliminate } : {}),
+          ...(options.acknowledgeDuplicateName ? { acknowledgeDuplicateName: true } : {}),
         }),
       })
       if (!response.ok) {
         const data = await response.json().catch(() => ({})) as { error?: unknown; remedy?: unknown; details?: unknown }
+        if (data.error === 'duplicate_account_name') {
+          const details = (data.details && typeof data.details === 'object' ? data.details : {}) as DuplicateDetails
+          if (typeof details.existingAccountId === 'string' && details.existingAccountId) {
+            setDuplicateName({
+              name: form.name.trim(),
+              existingAccountId: details.existingAccountId,
+              existingAccountName: typeof details.existingAccountName === 'string' ? details.existingAccountName.trim() : '',
+              existingAccountNumber: typeof details.existingAccountNumber === 'string' && details.existingAccountNumber.trim()
+                ? details.existingAccountNumber.trim() : null,
+            })
+            return
+          }
+        }
         const message = errorMessage(data)
         // A duplicate number names the account holding it: the pinned alert
         // links it so the operator can open it instead of guessing, while
@@ -301,8 +338,14 @@ export function AccountDrawer({
       (w): w is { code: string; name: string } =>
         typeof w === 'object' && w !== null && (w as { code?: unknown }).code === 'asset_bank_uncorroborated',
     )
+    const duplicate = warnings.find(
+      (w): w is DuplicateNameWarning =>
+        typeof w === 'object' && w !== null && (w as { code?: unknown }).code === 'duplicate_account_name',
+    )
     const legacy = warnings.find((w): w is string => typeof w === 'string')
+    setDuplicateName(null)
     if (hygiene) toast.warning(t('hygiene.assetBankUncorroborated', { name: hygiene.name }))
+    if (duplicate) toast.warning(t('hygiene.duplicateAccountName', { name: duplicate.name, account: duplicateAccountLabel(duplicate) }))
     else if (legacy) toast.warning(legacy)
       if (createMode) {
         const createdId = data?.account?.id
@@ -361,7 +404,7 @@ export function AccountDrawer({
         mode === 'edit' ? (
           <>
             <Button variant="outline" disabled={busy} onClick={cancel}>{tc('actions.cancel')}</Button>
-            <Button disabled={busy || !form.name.trim()} onClick={save}>
+            <Button disabled={busy || !form.name.trim()} onClick={() => void save()}>
               {busy ? tc('actions.saving') : createMode ? t('drawer.create') : tc('actions.save')}
             </Button>
           </>
@@ -375,6 +418,22 @@ export function AccountDrawer({
           <p role="alert" className="rounded-md border border-red-200 bg-red-50 p-2.5 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
             {fieldError}
           </p>
+        ) : null}
+        {duplicateName ? (
+          <div role="alert" className="space-y-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+            <p>{t('drawer.duplicateName.body', { name: duplicateName.name, account: duplicateAccountLabel(duplicateName) })}</p>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" disabled={busy} onClick={() => {
+                const href = duplicateAccountHref({ existingAccountId: duplicateName.existingAccountId })
+                if (href) router.push(href as never)
+              }}>
+                {t('drawer.duplicateName.useExisting')}
+              </Button>
+              <Button variant="outline" disabled={busy} onClick={() => void save({ acknowledgeDuplicateName: true })}>
+                {t('drawer.duplicateName.createAnyway')}
+              </Button>
+            </div>
+          </div>
         ) : null}
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className={`${fieldClass} lg:col-span-2`}>

@@ -10,7 +10,7 @@ stubModules({ navigation: 'export function notFound(){ throw globalThis.__derive
 registerHooks({ resolve(specifier, context, next) {
 
   if (specifier.endsWith('/platform/db.ts')) return virtual('export const db={execute(){globalThis.__derivedPreviewDbCalls++;return {rows:[]}}}')
-  if (specifier.endsWith('/platform/business-date.ts')) return virtual('export async function businessToday(){return "2026-01-01"}')
+  if (specifier.endsWith('/platform/business-date.ts')) return virtual('export async function businessToday(){return "2026-01-01"}; export function addCalendarDays(){throw Error("must not run")}; export function startOfMonth(){throw Error("must not run")}; export function endOfMonth(){throw Error("must not run")}')
   if (specifier.endsWith('/payroll/derived-earnings.ts')) return virtual('export async function previewDerivedRule(){throw Error("must not run")}')
   if (specifier.endsWith('/lib/authz') && (context.parentURL ?? '').endsWith('/DerivedRulePreviewSection.tsx')) return virtual('export async function guardRootSubsidiaryScope(){return globalThis.__derivedPreviewDenied}')
   if (specifier.endsWith('/lib/list-params')) return virtual('export function pickString(){}')

@@ -253,6 +253,20 @@ export function assembleReturn(
     (a, b) => a.sequence - b.sequence || a.lineCode.localeCompare(b.lineCode),
   );
   const boxCodes = new Set(boxes.map((b) => b.lineCode));
+  // An amount entered on a line that takes no manual amount would be dropped
+  // by the box math without a trace, so it is refused by name.
+  const adjustmentLines = new Set(
+    boxes
+      .filter((b) => b.editable && !b.formula?.trim() && !b.inputKey)
+      .map((b) => b.lineCode),
+  );
+  for (const lineCode of adjustments.keys()) {
+    if (!adjustmentLines.has(lineCode)) {
+      throw new TaxReturnError(
+        `line ${lineCode} is not an adjustment line of this return — enter adjustments only on lines that take a manual amount`,
+      );
+    }
+  }
   const values = new Map<string, string>();
   const result: TaxReturnBox[] = [];
   for (const box of ordered) {

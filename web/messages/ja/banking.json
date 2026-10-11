@@ -1,7 +1,10 @@
 {
   "types": {
     "asset_bank": "銀行",
-    "liability_card": "カード"
+    "liability_card": "カード",
+    "liability_payable": "買掛金",
+    "liability_current_other": "その他の流動負債",
+    "liability_long_term": "固定負債"
   },
   "reconStatus": {
     "signed_off": "承認済み",
@@ -80,7 +83,7 @@
     },
     "vitals": {
       "cash": "現金合計",
-      "cards": "カード残高",
+      "cards": "カード・与信残高",
       "unmatched": "未照合明細",
       "unmatchedSub": "照合待ち",
       "allMatched": "すべて照合済み",
@@ -95,7 +98,7 @@
       "hint": "転記済み元帳の残高",
       "empty": "有効な銀行口座またはカード口座はまだありません。勘定科目表で追加してください。",
       "bankSection": "銀行口座",
-      "cardSection": "クレジットカード",
+      "cardSection": "カードと与信枠",
       "reconciledThrough": "{date}まで消込済み",
       "neverReconciled": "未消込",
       "lastStatement": "明細書 {date}",
@@ -436,8 +439,8 @@
     "preview": "プレビュー",
     "importAction": "インポート",
     "importCount": "{count, plural, one {# 件の明細をインポート} other {# 件の明細をインポート}}",
-    "importedToast": "{imported, plural, one {# 件の明細をインポートしました} other {# 件の明細をインポートしました}}{duplicates, plural, =0 {} one { — # 件の重複をスキップ} other { — # 件の重複をスキップ}}{possibleDuplicates, plural, =0 {} one { — # 件を要確認としてマーク} other { — # 件を要確認としてマーク}}",
-    "previewSummary": "{imported, plural, one {# 件の新規明細} other {# 件の新規明細}}{duplicates, plural, =0 {} one { · # 件の重複をスキップ} other { · # 件の重複をスキップ}}{possibleDuplicates, plural, =0 {} one { · # 件を要確認としてマーク} other { · # 件を要確認としてマーク}}",
+    "importedToast": "{imported, plural, one {# 件の明細をインポートしました} other {# 件の明細をインポートしました}}{duplicates, plural, =0 {} one { — # 件の重複をスキップ} other { — # 件の重複をスキップ}}{possibleDuplicates, plural, =0 {} one { — # 件の重複の可能性} other { — # 件の重複の可能性}}",
+    "previewSummary": "{imported, plural, one {# 件の新規明細} other {# 件の新規明細}}{duplicates, plural, =0 {} one { · # 件の重複をスキップ} other { · # 件の重複をスキップ}}{possibleDuplicates, plural, =0 {} one { · # 件の重複の可能性} other { · # 件の重複の可能性}}",
     "format": "形式",
     "formatOfx": "OFX / QFX",
     "formatCsv": "CSV",
@@ -484,7 +487,12 @@
     "previewEmpty": "プレビューに取引行がありません — 金額列と日付形式を確認して、プレビューを再実行してください。",
     "previewRequired": "インポートの前にプレビューを実行してください。",
     "suggestedOpeningFrom": "期首残高に {date} の期末残高を初期設定しました — 必要に応じて編集してください。",
-    "openingMismatch": "期首残高 {supplied} が {date} の期末残高 {expected} と異なります — 抜けている月がないか確認してください。"
+    "openingMismatch": "期首残高 {supplied} が {date} の期末残高 {expected} と異なります — 抜けている月がないか確認してください。",
+    "closingMismatch": "期首残高 {opening} に明細行 {lines} を加えると {expected} となり、期末残高 {closing} と一致しません — 銀行明細書で両方の残高を確認するか、ファイルが明細書の一部のみの場合は期末残高を空欄にしてください。",
+    "possibleDuplicatesNotice": "{count, plural, one {# 件の明細はこの口座の既存の明細と一致するため、インポートから除外されます} other {# 件の明細はこの口座の既存の明細と一致するため、インポートから除外されます}}。",
+    "includePossibleDuplicates": "{count, plural, one {この重複の可能性のある明細もインポートする} other {これら # 件の重複の可能性のある明細もインポートする}}",
+    "possibleDuplicateMatch": "この口座の既存の明細と一致",
+    "onlyPossibleDuplicates": "解析されたすべての明細は、この口座に既に存在するか、重複の可能性があります。インポートするには、下の重複の可能性のある明細を含めてください。"
   },
   "start": {
     "resume": "消込を再開",
@@ -539,7 +547,7 @@
     "formSetPreferredDone": "優先フォームを保存しました",
     "formPreferredCleared": "優先フォームを解除しました",
     "formPreferredFailed": "優先フォームを保存できませんでした",
-    "cardAccountHelp": "登録済みのカードがありません — 記帳先の消込対象カード勘定を選択してください。",
+    "cardAccountHelp": "このカード利用を記帳する消込対象のカード勘定を選択してください。",
     "noCardAccounts": "消込対象のカード勘定はまだありません。",
     "noCardAccountsCta": "勘定科目表で追加する",
     "partylessControlWarning": "{accounts} に得意先・仕入先なしで転記されました。これらの金額は売掛金・買掛金の補助簿の対象外となるため、未決済の請求書は未払のままです。得意先からの入金は「入金を受け取る」、仕入先への支払は「請求書を支払う」で記録するか、明細行に得意先または仕入先を指定してください。「セットアップ → 会社と会計 → 統制勘定」でこうした転記を拒否できます。",
@@ -647,7 +655,11 @@
     "openingConfirm": "期首残高を確認",
     "openingConfirmedToast": "期首残高 {amount} を確認しました",
     "openingConfirmedNote": "期首残高 {amount} を確認済み — {reason}",
-    "openingStaleNote": "確認済みの期首残高が繰り越された帳簿残高と一致しなくなりました — 元帳を確認し、期首残高を再度確認してください。"
+    "openingStaleNote": "確認済みの期首残高が繰り越された帳簿残高と一致しなくなりました — 元帳を確認し、期首残高を再度確認してください。",
+    "excludeDuplicate": "重複を除外",
+    "clearDuplicate": "重複ではないとしてマーク",
+    "excludeDuplicateReason": "{date} · {amount} の銀行明細の重複: {description}",
+    "excludeDuplicateReasonGeneric": "以前の銀行明細の重複"
   },
   "sftp": {
     "title": "SFTP",
@@ -1037,7 +1049,8 @@
       "recurly": "Recurly",
       "chargebee": "Chargebee",
       "shopify_payments": "Shopify Payments",
-      "paypal": "PayPal"
+      "paypal": "PayPal",
+      "square": "Square"
     },
     "externalRef": "外部参照番号 / 入金 ID",
     "settlementDate": "決済日",
@@ -1074,6 +1087,9 @@
     "paypalPayloadHint": "取引検索APIの '{\"transactions\": [{\"transaction_info\": {...}}]}' を貼り付けるか、ヘッダー行付きの決済レポートCSVを貼り付けてください。外部参照番号に名前を付けてバッチを冪等に保ちます。",
     "invalidShopifyPayload": "Shopifyペイロードは payout と transactions を含む1つのJSONオブジェクトである必要があります。",
     "csvUpload": "CSVをアップロード",
+    "squarePayloadLabel": "ペイアウトとペイアウト明細 (JSON)",
+    "squarePayloadHint": "payout と entries を含む1つのJSONオブジェクト: '{\"payout\": {\"id\", \"amount_money\"}, \"entries\": [{\"id\", \"type\", \"gross_amount_money\", \"fee_amount_money\", \"net_amount_money\"}]}'。金額は最小単位の整数です。外部参照には Square のペイアウトIDを入力してください。",
+    "invalidSquarePayload": "Squareペイロードは payout と entries を含む1つのJSONオブジェクトである必要があります。",
     "fxTitle": "外貨",
     "fxNone": "すべて同一通貨",
     "fxSourceCurrency": "課金通貨",
@@ -1313,5 +1329,63 @@
   },
   "payoutAssistance": {
     "chipLabel": "提案を確認"
+  },
+  "reconcileEvidence": {
+    "tabs": {
+      "workspace": "消込",
+      "statements": "裏付けの取引明細",
+      "history": "履歴"
+    },
+    "statements": {
+      "title": "裏付けの取引明細",
+      "windowAfter": "{start} の翌日から {end} までに計上された明細行が、この消込を裏付けます。",
+      "windowThrough": "{end} までに計上された明細行が、この消込を裏付けます。",
+      "empty": "この消込の残高を裏付ける銀行取引明細はありません。",
+      "sourceEmpty": "この消込はソースデータに基づいています。銀行取引明細は取り込まれていません。",
+      "columns": {
+        "date": "明細日付",
+        "source": "ソース",
+        "imported": "取込日時",
+        "opening": "期首残高",
+        "closing": "期末残高",
+        "lines": "期間内の行数",
+        "matched": "消込済み",
+        "excluded": "除外",
+        "unmatched": "未消込",
+        "total": "期間合計",
+        "open": "明細を開く"
+      },
+      "excludedBadge": "除外",
+      "reason": "理由: {reason}",
+      "duplicateOf": "重複の可能性: {date} · {amount}",
+      "excludedByAt": "{at} に {name} が除外",
+      "excludedAt": "{at} に除外"
+    },
+    "history": {
+      "title": "履歴",
+      "description": "この消込の承認、承認取消、開始残高の確定、調整に加え、同じ銀行口座で破棄されたセッションを表示します。",
+      "empty": "この銀行口座には、承認、承認取消、調整、破棄の記録がありません。",
+      "columns": {
+        "when": "日時",
+        "event": "イベント",
+        "by": "実行者",
+        "details": "詳細"
+      },
+      "events": {
+        "sign_off": "承認",
+        "withdraw_sign_off": "承認取消",
+        "discard": "セッション破棄",
+        "confirm_opening": "開始残高確定",
+        "session_adjustment": "セッション調整"
+      },
+      "signOffStatement": "明細残高 {balance} · {date} まで · 仕訳行 {matched} 件を確定 · 明細行 {excluded} 件を除外",
+      "signOffSource": "ソースデータ · 残高 {balance} · {date} まで · 消込済み仕訳行 {matched} 件",
+      "withdrawReason": "理由: {reason}",
+      "withdrawPrior": "承認時の残高 {balance} · {at} に {by} が承認",
+      "withdrawReleased": "解放された仕訳行: {count} 件 · セッションは現在 {status}",
+      "discardDetail": "{date} まで · 残高 {balance} · 照合 {matches} 件と明細行 {lines} 件を解放",
+      "confirmDetail": "開始残高 {amount}（{date} から）· 理由: {reason}",
+      "adjustDetail": "{beforeDate} → {afterDate} まで · 残高 {beforeBalance} → {afterBalance}"
+    }
   }
 }

@@ -17,8 +17,8 @@ const requestBodySchema = z.object({
   requirementId: z.string().uuid({ error: 'requirementId must be a valid compliance requirement id' }),
   projectId: z.string().uuid({ error: 'projectId must be a valid project id' }).nullable().optional(),
   reason: z.string().trim().min(10, 'reason must contain at least 10 characters').max(2000),
-  effectiveFrom: z.string().refine(isIsoCalendarDate, 'effectiveFrom must be a real calendar date (YYYY-MM-DD)').optional(),
-  expiresOn: z.string().refine(isIsoCalendarDate, 'expiresOn must be a real calendar date (YYYY-MM-DD)'),
+  effectiveFrom: z.string().refine(isIsoCalendarDate, 'the start date must be a real calendar date (YYYY-MM-DD)').optional(),
+  expiresOn: z.string().refine(isIsoCalendarDate, 'the end date must be a real calendar date (YYYY-MM-DD)'),
 })
 
 

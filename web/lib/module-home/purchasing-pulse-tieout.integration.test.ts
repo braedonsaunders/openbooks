@@ -8,6 +8,11 @@ registerHooks({
     return next(specifier)
   },
 })
+// purchasing.ts reads its vendor fallback through next-intl/server; outside a
+// render the React client build refuses getTranslations, so the loader gets the
+// shared key-echo translator, as the other web loader suites do.
+const { stubModules } = await import('../../testing/stub-modules.ts')
+stubModules({ intl: true })
 
 const { sql } = await import('drizzle-orm')
 const { toUnits } = await import('@openbooks/engine/money/money')

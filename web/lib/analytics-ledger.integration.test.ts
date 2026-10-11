@@ -116,10 +116,10 @@ for (const scenario of ['empty', 'balanced', 'excess purchases'] as const) {
         const { summary } = data.commitmentCliff;
         assert.equal(summary.totalPO, scenario === 'empty' ? '0.0000' : scenario === 'excess purchases' ? '250.0000' : '100.0000');
         assert.equal(summary.totalSO, scenario === 'empty' ? '0.0000' : '100.0000');
-        // With no sales-order base the coverage ratio is unknown, not a
-        // healthy-looking zero.
+        // With no sales-order base the coverage ratio and the cliff status
+        // are unknown, not a healthy-looking zero.
         assert.equal(summary.ratio, scenario === 'empty' ? null : scenario === 'excess purchases' ? 2.5 : 1);
-        assert.equal(summary.status, scenario === 'excess purchases' ? 'critical' : 'healthy');
+        assert.equal(summary.status, scenario === 'empty' ? 'unknown' : scenario === 'excess purchases' ? 'critical' : 'healthy');
         // A single commitment month is no measurable velocity: null, never a
         // fabricated 0.
         assert.equal(summary.poVelocity, null);
@@ -461,6 +461,10 @@ for(const view of ['overhead','prior rate','monthly','applied burden','revenue b
           (${rent},${org.orgId},'6601','Office rent','expense'),(${wages},${org.orgId},'6602','Wages','expense'),(${applied},${org.orgId},'4901','Burden applied','income_other'),(${cogs},${org.orgId},'5001','Cost of goods','cogs')`);
         await db.execute(sql`insert into account_groups(id,org_id,dimension,key,name) values (${group},${org.orgId},'burden','rent','Rent')`);
         await db.execute(sql`insert into account_group_members(org_id,group_id,account_id,dimension) values (${org.orgId},${group},${rent},'burden')`);
+        // Labour dollars are the configured direct-labour account set.
+        const laborGroup=randomUUID();
+        await db.execute(sql`insert into account_groups(id,org_id,dimension,key,name) values (${laborGroup},${org.orgId},'cost_pool','direct_labor','Direct labor')`);
+        await db.execute(sql`insert into account_group_members(org_id,group_id,account_id,dimension) values (${org.orgId},${laborGroup},${wages},'cost_pool')`);
         for(const date of ['2026-06-15',org.date])await db.execute(sql`insert into time_entries(org_id,employee_party_id,worked_on,hours,project_id,item_id,department_id,is_billable,cost_rate,status) values (${org.orgId},${employee},${date},10,${project},${org.items.service},${department},true,4,'approved')`);
         async function entry(book:string,status:'posted'|'draft',date:string,account:string,amount:string){
           const id=randomUUID();
@@ -473,7 +477,20 @@ for(const view of ['overhead','prior rate','monthly','applied burden','revenue b
             assert.deepEqual(posted.rows.map(row=>row.id),[id],`${scenario}: true-cost journal is posted`);
           }
         }
-        for(const [account,amount] of [[rent,'100'],[wages,'40'],[cogs,'30'],[org.accounts.revenue,'-200'],[applied,'-10']])await entry(org.bookId,'posted',org.date,account!,amount!);
+        // The posting kernel's net-zero pair: a project-tagged +10 applied leg
+        // and its untagged -10 offset on the same account, origin overhead_applied.
+        // Only the project-tagged leg measures applied burden.
+        async function appliedPair(amount:string){
+          const id=randomUUID();
+          await db.execute(sql`insert into journal_entries(id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status,origin) values (${id},${org.orgId},${org.bookId},${org.subsidiaryId},${id},${org.date},${org.periodId},'draft','overhead_applied')`);
+          await db.execute(sql`insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,department_id,project_id,amount,currency,txn_amount,fx_rate) values
+            (${org.orgId},${id},1,${applied},${org.subsidiaryId},${department},${project},${amount},'CAD',${amount},1),
+            (${org.orgId},${id},2,${applied},${org.subsidiaryId},${department},null,${'-'+amount},'CAD',${'-'+amount},1)`);
+          const posted=await db.execute<{id:string}>(sql`update journal_entries set status='posted',posted_at=now() where id=${id} returning id`);
+          assert.deepEqual(posted.rows.map(row=>row.id),[id],`${scenario}: applied overhead pair is posted`);
+        }
+        for(const [account,amount] of [[rent,'100'],[wages,'40'],[cogs,'30'],[org.accounts.revenue,'-200']])await entry(org.bookId,'posted',org.date,account!,amount!);
+        await appliedPair('10');
         await entry(org.bookId,'posted','2026-06-15',rent,'50');
         if(scenario === 'extra books and drafts'){
           for(const [book,status,amount] of [[taxBook,'posted','700'],[org.bookId,'draft','900']] as const){
@@ -488,7 +505,8 @@ for(const view of ['overhead','prior rate','monthly','applied burden','revenue b
           if(view === 'prior rate')assert.equal(data.kpis.compositeRateChangePct,100);
           if(view === 'monthly')assert.equal(data.monthly.find(row=>row.month === '2026-07')?.burden,'100.0000');
           if(view === 'applied burden'){assert.equal(data.kpis.burdenApplied,10);assert.equal(data.hasBurdenGL,true);}
-          if(view === 'revenue base')assert.equal(data.bases.revenue.total,210);
+          // The applied pair nets to zero on its income account, so it adds no revenue.
+          if(view === 'revenue base')assert.equal(data.bases.revenue.total,200);
           if(view === 'cost base')assert.equal(data.bases.directCost.total,30);
           if(view === 'labor base')assert.equal(data.bases.laborDollars.total,40);
         });
@@ -653,9 +671,8 @@ for (const surface of ['customer', 'vendor', 'spend'] as const) {
             }
             const expectedRevenue = mode === 'all' ? 1099 : mode === 'empty' ? 0 : 100;
             const expected = surface === 'customer' ? expectedRevenue : mode === 'all' ? 1121 : mode === 'empty' ? 0 : 102;
-            // Loader money travels as exact decimal strings on the service and
-            // page boundaries; the customer assistant tool serializes numbers.
-            const want = surface === 'customer' && boundary !== 'assistant' ? expectedRevenue.toFixed(4) : expected;
+            // Loader money travels as exact decimal strings on every boundary.
+            const want = surface === 'customer' ? expectedRevenue.toFixed(4) : expected;
             const expectedMoney = mode === 'all' ? '1121.0000' : mode === 'empty' ? '0' : '102.0000';
             assert.equal(surface === 'customer' ? data.kpis?.totalRevenue : surface === 'vendor' ? data.totals?.spend : data.summary?.totalSpend, surface === 'customer' ? want : expectedMoney);
             assert.equal(JSON.stringify(data).includes('PRIVATE-ANALYTICS-EVIDENCE'), mode === 'all');

@@ -1,5 +1,5 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { parseJsonBody, uuidId } from "@/lib/api/json";
+import { isoDate, parseJsonBody, uuidId } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
@@ -217,7 +217,7 @@ const subcontractRequestBody = z.discriminatedUnion("action", [
   z.object({ action: z.literal("approveSubcontract"), id: uuidId }).strict(),
   z.object({ action: z.literal("transitionSubcontract"), id: uuidId, transition: z.enum(["substantially_complete", "close", "void"]) }).strict(),
   z.object({ action: z.literal("addChangeOrder"), subcontractId: uuidId, number: z.string().trim().min(1), description: z.string().nullable().optional(), amount: z.string(), targetSovLineId: uuidId.nullable().optional() }).strict(),
-  z.object({ action: z.literal("approveChangeOrder"), id: uuidId, approvedOn: z.string() }).strict(),
+  z.object({ action: z.literal("approveChangeOrder"), id: uuidId, approvedOn: isoDate("approvedOn must be a valid calendar date (YYYY-MM-DD)") }).strict(),
   z.object({ action: z.literal("voidChangeOrder"), id: uuidId }).strict(),
   z.object({ action: z.literal("createPayApplication"), subcontractId: uuidId, periodEnd: z.string(), vendorInvoiceNumber: z.string().nullable().optional() }).strict(),
   z.object({ action: z.literal("updatePayApplication"), payApplicationId: uuidId, expectedRevision: z.number().int().positive(), lines: z.array(z.object({ sovLineId: z.string(), workCompletedThisPeriod: z.string().optional(), materialsStoredCurrent: z.string().optional() }).strict()) }).strict(),
@@ -291,7 +291,9 @@ async function actionProjectSubsidiary(
 }
 
 async function dispatchSubcontractAction(request: Request) {
-  const parsedBody = await parseJsonBody(request, subcontractRequestBody);
+  // A well-formed body that fails a field contract is a 422 refusal naming
+  // the field; only unreadable JSON is a 400.
+  const parsedBody = await parseJsonBody(request, subcontractRequestBody, { status: 422 });
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data as unknown as Record<string, unknown>;
   const action = String(body.action);

@@ -29,7 +29,8 @@
       "operationSeq": "Sequência da operação",
       "scrapPct": "% de refugo",
       "isByproduct": "Tipo de linha",
-      "outputCostWeight": "Peso relativo do custo"
+      "outputCostWeight": "Peso relativo do custo",
+      "effectiveRequirement": "Efetiva por unidade"
     },
     "values": {
       "component": "Componente",
@@ -44,7 +45,11 @@
       "invalidOperation": "A sequência da operação deve ser um número inteiro positivo.",
       "manufacturingDisabled": "Ative Manufatura em Configurações da empresa → Recursos para editar operações e subprodutos."
     },
-    "jointOutputNote": "Os coprodutos compartilham o custo de produção por quantidade e peso relativo por unidade base. O produto principal tem peso 1. Os subprodutos mantêm seu tratamento separado pelo valor realizável líquido."
+    "jointOutputNote": "Os coprodutos compartilham o custo de produção por quantidade e peso relativo por unidade base. O produto principal tem peso 1. Os subprodutos mantêm seu tratamento separado pelo valor realizável líquido.",
+    "help": {
+      "scrapPct": "Acrescenta este percentual à quantidade por unidade. Deixe 0 se a quantidade já incluir perdas.",
+      "effectiveRequirement": "A necessidade para uma unidade do item pai: quantidade × (1 + % de sucata). As ordens de produção usam o mesmo cálculo."
+    }
   },
   "labels": {
     "item": "Item",
@@ -280,8 +285,10 @@
       "loadingMore": "Carregando…"
     },
     "secondCount": "Salvar segunda contagem",
+    "recordedQuantity": "Registrado: {quantity}",
     "secondReason": "Observação da segunda contagem",
-    "secondReasonHint": "A segunda contagem difere da primeira. Explique a diferença (pelo menos 5 caracteres) para registrá-la com esta contagem."
+    "secondReasonHint": "A segunda contagem difere da primeira. Explique a diferença (pelo menos 5 caracteres) para registrá-la com esta contagem.",
+    "secondNotRecorded": "Não registrado. Uma segunda contagem que difere da primeira precisa do seu motivo (pelo menos {minLength} caracteres) antes de ser salva."
   },
   "create": {
     "subsidiary": "Subsidiária proprietária",

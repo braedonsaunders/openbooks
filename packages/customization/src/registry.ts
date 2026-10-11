@@ -1928,7 +1928,7 @@ const PSP_SETTLEMENT_LINE_UNMATCHED: RecordTypeMeta = {
     },
     {
       key: "provider", labelKey: "banking.pspUnmatched.colProvider", kind: "select", operators: OPERATORS_BY_KIND.select,
-      options: ["stripe", "recurly", "chargebee", "shopify_payments", "paypal"].map((value) => ({
+      options: ["stripe", "recurly", "chargebee", "shopify_payments", "paypal", "square"].map((value) => ({
         value,
         labelKey: `banking.pspSettlements.providers.${value}`,
       })),
@@ -2836,6 +2836,7 @@ const TAX_PROVIDER_TRANSACTION: RecordTypeMeta = {
     { key: "provider", labelKey: "tax.activity.columns.provider", kind: "text", sortable: true, sortKey: "provider" },
     { key: "status", labelKey: "tax.activity.columns.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
     { key: "attempts", labelKey: "tax.activity.columns.attempts", kind: "text", sortable: true, sortKey: "attempts", defaultWidth: 90 },
+    { key: "created_at", labelKey: "common.labels.created", kind: "date", sortable: true, sortKey: "created_at", defaultWidth: 120 },
     { key: "next_attempt_at", labelKey: "tax.activity.columns.nextAttempt", kind: "date", sortable: true, sortKey: "next_attempt_at", defaultWidth: 120 },
     { key: "committed_at", labelKey: "tax.activity.columns.committedAt", kind: "date", sortable: true, sortKey: "committed_at", defaultWidth: 120 },
     { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },

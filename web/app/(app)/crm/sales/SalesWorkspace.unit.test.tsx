@@ -212,7 +212,9 @@ test("representative details use the wide native drawer and Financial Health pan
   try {
     const dialog = document.querySelector('[role="dialog"]')!;
     assert.ok(dialog);
-    assert.match(dialog.className, /max-w-6xl/);
+    const sheaf = dialog.closest("[data-drawer-sheaf]");
+    assert.ok(sheaf, "the drawer panel sits inside its sized sheaf");
+    assert.match(sheaf.className, /sm:max-w-6xl/);
     assert.match(dialog.textContent!, /Assigned customers/);
     assert.match(dialog.textContent!, /Sales over time/);
     assert.match(dialog.textContent!, /No attributed sales/);

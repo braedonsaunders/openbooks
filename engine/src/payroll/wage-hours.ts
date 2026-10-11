@@ -109,7 +109,7 @@ export async function loadWageTimeEntries(
 }
 
 /** Approved wage hours per employee, for roster previews that sum rather than price. */
-export function sumWageHoursByEmployee(rows: readonly Pick<WageTimeEntry, "employeePartyId" | "hours">): Map<string, string> {
+export function sumWageHoursByEmployee(rows: readonly Pick<WageTimeEntry, "employeePartyId" | "hours">[]): Map<string, string> {
   const byEmployee = new Map<string, string[]>();
   for (const row of rows) {
     const bucket = byEmployee.get(row.employeePartyId);

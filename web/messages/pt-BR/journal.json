@@ -68,6 +68,7 @@
     "deleted": "Lançamento excluído",
     "deleteFailed": "Falha ao excluir",
     "voidStaleRevision": "Este lançamento foi alterado após a abertura — a versão mais recente está carregada. Revise e anule novamente.",
+    "voidRevisionUnavailable": "Não foi possível recarregar o lançamento para anulá-lo. Feche e reabra o lançamento e anule novamente.",
     "totals": "Débitos <strong>{debits}</strong> · Créditos <strong>{credits}</strong>",
     "outOfBalance": "Desbalanceado · {amount}",
     "balanced": "Balanceado",
@@ -83,6 +84,8 @@
       "credit": "Crédito"
     },
     "budgetaryControlWarning": "O orçamento {scenario} excede a dotação para {account}, fundo {fund}, {subsidiary}{dimensions}: disponível {available}, excesso de {amountOver}.",
-    "budgetaryControlRemedy": "Revise o orçamento pelo seu fluxo de aprovação: copie o orçamento aprovado como rascunho, aumente o valor desta conta para o fundo na planilha, aprove a cópia e arquive o orçamento substituído. Ou vincule este valor ao empenho aberto que o reservou."
+    "budgetaryControlRemedy": "Revise o orçamento pelo seu fluxo de aprovação: copie o orçamento aprovado como rascunho, aumente o valor desta conta para o fundo na planilha, aprove a cópia e arquive o orçamento substituído. Ou vincule este valor ao empenho aberto que o reservou.",
+    "voidAwaitingApproval": "A anulação deste lançamento aguarda aprovação. O lançamento permanece contabilizado até que a aprovação seja decidida.",
+    "createUnconfirmed": "O servidor não confirmou o novo lançamento. Salve novamente: a nova tentativa reutiliza a chave deste rascunho, então não pode criar um segundo lançamento."
   }
 }

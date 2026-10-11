@@ -129,6 +129,30 @@ export function groupLaborPostings(rows: LaborPostingSourceRow[]): LaborPostingG
   });
 }
 
+/**
+ * The journal lines for one labor posting group. An amended week approves
+ * its offsetting entry beside the corrected one: a project whose costs net
+ * to nothing carries no line, and a group whose projects net to nothing moves
+ * no clearing. Zero lines are never written; an empty result posts nothing.
+ */
+export function laborPostingLines(
+  group: Pick<LaborPostingGroup, "projectCosts" | "total">,
+  accounts: { laborWip: string; laborClearing: string },
+): GlLine[] {
+  const lines: GlLine[] = group.projectCosts
+    .filter((project) => !isZero(project.amount))
+    .map((project) => ({
+      accountId: accounts.laborWip,
+      amount: project.amount,
+      projectId: project.projectId,
+      memo: "Labor cost",
+    }));
+  if (!isZero(group.total)) {
+    lines.push({ accountId: accounts.laborClearing, amount: neg(group.total), memo: "Labor clearing" });
+  }
+  return lines;
+}
+
 export async function postProjectLaborCost(orgId: string, actorId: string, timeEntryIds: string[]): Promise<string[]> {
   if (timeEntryIds.length === 0) return [];
   return inDbTransaction(async (tx) => {
@@ -158,13 +182,8 @@ export async function postProjectLaborCost(orgId: string, actorId: string, timeE
 
     const entryIds: string[] = [];
     for (const group of groupLaborPostings(rows.rows)) {
-      const lines: GlLine[] = group.projectCosts.map((project) => ({
-        accountId: accts.laborWip!,
-        amount: project.amount,
-        projectId: project.projectId,
-        memo: "Labor cost",
-      }));
-      lines.push({ accountId: accts.laborClearing, amount: neg(group.total), memo: "Labor clearing" });
+      const lines = laborPostingLines(group, { laborWip: accts.laborWip!, laborClearing: accts.laborClearing });
+      if (lines.length === 0) continue;
       const postingDate = group.postingDate || await businessToday(orgId);
       // A released group (reverseProjectLaborCost) can be re-posted with the
       // same date and first member, so the entry number must be unique per

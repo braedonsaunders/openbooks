@@ -108,9 +108,11 @@ export const POST = defineRoute({
       }
     const cfg = DOC_KINDS[doc.kind]
     // Withdrawal recalls a pending submission through the kind-agnostic
-    // withdraw service, so purchase orders ride this same native path for
-    // withdraw only — every other action stays on the document registry.
-    if (!cfg && !(doc.kind === 'purchase_order' && action === 'withdraw')) {
+    // withdraw service, so every kind with a Flows permission mapping
+    // (quotes, sales and purchase orders, and the registry kinds) withdraws
+    // here. Every other action stays on the document registry.
+    const withdrawable = action === 'withdraw' && documentKindPermissions(doc.kind) !== null
+    if (!cfg && !withdrawable) {
       return NextResponse.json({ error: `kind "${doc.kind}" is not actionable here` }, { status: 422 })
     }
     if (!canReadDocumentKind(authz, doc.kind)) {
@@ -124,7 +126,7 @@ export const POST = defineRoute({
     const kindPerms = documentKindPermissions(doc.kind)
     const approvePerm = kindPerms?.approve ?? postPermission(doc.kind)
     // The registry namespace helper throws for non-registry kinds, so a
-    // purchase order withdrawing here resolves its submit grant from the
+    // order withdrawing here resolves its submit grant from the
     // same permission table instead; registry kinds keep their helper.
     const submitPerm = kindPerms && !DOC_KINDS[doc.kind] ? kindPerms.edit : createPermission(doc.kind)
     if (action === 'withdraw') {

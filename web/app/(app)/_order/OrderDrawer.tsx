@@ -625,6 +625,7 @@ export function OrderDrawer({
   subsidiaries,
   segments,
   canManage,
+  canApprove = false,
   allowedConvertKinds,
   canOverrideCredit = false,
   layout,
@@ -669,6 +670,12 @@ export function OrderDrawer({
   subsidiaries: Opt[]
   segments: SegmentOption[]
   canManage: boolean
+  /**
+   * The kind's approve grant (quotes: estimates.issue; sales and purchase
+   * orders: their create grant). Lets the approver withdraw a pending
+   * submission they did not make. Absent means no approve grant.
+   */
+  canApprove?: boolean
   /**
    * Conversion targets this caller may run on an approved order, when they
    * are granted separately from authoring the order (purchase orders:
@@ -2064,6 +2071,16 @@ export function OrderDrawer({
     (dropShipping && canCreateDropShipPurchaseOrder && kind === 'sales_order' && isApproved && dropShipRoutes.some((row) => row.purchaseOrderLineId === null)) ||
     (dropShipping && canConfirmDropShip && isDropShipPurchaseOrder && isApproved) ||
     (returnAuthorizations && kind === 'sales_order' && isApproved)
+  // An issued purchase order with stock still to receive makes Receive goods
+  // its primary action: receiving is the next step after issue. The receipt
+  // form posts only on its own explicit save, and the receiving grant is the
+  // one the convert targets already encode.
+  const hasOpenStockLines = order.lines.some((line) => line.item_id != null
+    && toQuantityUnits(String(line.quantity ?? '0'))
+      - toQuantityUnits(String(line.quantity_fulfilled ?? '0'))
+      - toQuantityUnits(String(line.quantity_cancelled ?? '0')) > 0n)
+  const receiveAvailable = kind === 'purchase_order' && !createMode && isApproved && canManage
+    && hasOpenStockLines && convertTargets.some((target) => target.kind === 'purchase_receipt')
 
   return (
     <TransactionDrawer
@@ -2108,6 +2125,10 @@ export function OrderDrawer({
             void maybeOfferDraftRestore()
           }}>
             {mode === 'edit' ? tCommon('actions.cancel') : tCommon('actions.edit')}
+          </Button>
+        ) : receiveAvailable && mode !== 'edit' ? (
+          <Button size="sm" className="h-8 px-2.5 text-xs" disabled={busy} onClick={() => setReceiveOpen(true)}>
+            {t('receive.title')}
           </Button>
         ) : null
       }
@@ -2215,11 +2236,11 @@ export function OrderDrawer({
             <ApprovalActions
               subjectKind={kind}
               subjectId={String(doc.id)}
-              // A pending-approval purchase order withdraws through the same
-              // native document withdraw the bill drawer uses; the button
-              // additionally requires record-state canWithdraw, so only the
-              // submitter or a live approver sees it.
-              withdrawDocumentId={kind === 'purchase_order' && doc.status === 'pending_approval' ? String(doc.id) : undefined}
+              // A pending-approval order withdraws through the same native
+              // document withdraw the bill drawer uses. The shared document
+              // action rule decides who sees it: the submitter, or a holder
+              // of the approve grant.
+              withdraw={{ documentId: String(doc.id), status: doc.status, canCreate: canManage, canApprove }}
             />
           </>
         ) : null

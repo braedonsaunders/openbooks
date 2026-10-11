@@ -59,21 +59,21 @@ registerHooks({ resolve(specifier, context, next) {
 }})
 
 const { sql } = await import('drizzle-orm')
-const { db, withOrgContext } = await import('@openbooks/engine/platform/db')
+const { db, withOrgContext, withBypass} = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { GET } = await import('./route')
 
 const needsDb = { skip: !env.OPENBOOKS_DB_URL }
 
 test('an invoice with no custom template prints with the native starter design', needsDb, async () => {
-  const org = await createScratchOrg()
+  const org = await withBypass(() => createScratchOrg())
   try {
     ;(state as { authz?: unknown }).authz = { user: { id: randomUUID(), orgId: org.orgId } }
     const invoiceId = randomUUID()
-    await db.execute(sql`
+    await withBypass(() => db.execute(sql`
       insert into documents (id, org_id, kind, document_number, document_date, currency, subsidiary_id)
       values (${invoiceId}, ${org.orgId}, 'customer_invoice', 'INV-000123', '2026-07-15', 'CAD', ${org.subsidiaryId})
-    `)
+    `))
     const templates = await db.execute(sql`
       select count(*)::int as n from pdf_templates where org_id = ${org.orgId} and record_type = 'customer_invoice'
     `)

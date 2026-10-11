@@ -42,9 +42,15 @@
     "expense": "Gastos"
   },
   "hygiene": {
-    "assetBankUncorroborated": "«{name}» está clasificada como cuenta bancaria pero no tiene un nombre bancario ni es conciliable, por lo que se contará como efectivo en todas partes. Confirme el tipo (las cuentas de compensación, provisión y crédito se clasifican mal con frecuencia) o active la conciliación."
+    "assetBankUncorroborated": "«{name}» está clasificada como cuenta bancaria pero no tiene un nombre bancario ni es conciliable, por lo que se contará como efectivo en todas partes. Confirme el tipo (las cuentas de compensación, provisión y crédito se clasifican mal con frecuencia) o active la conciliación.",
+    "duplicateAccountName": "Guardado. Otra cuenta activa también se llama «{name}» ({account})."
   },
   "drawer": {
+    "duplicateName": {
+      "body": "Ya existe una cuenta activa llamada «{name}» ({account}). Use esa cuenta o cree esta de todos modos.",
+      "useExisting": "Usar cuenta existente",
+      "createAnyway": "Crear de todos modos"
+    },
     "saved": "Cuenta guardada",
     "created": "Cuenta creada",
     "newTitle": "Nueva cuenta",
@@ -85,6 +91,7 @@
       "invalid_custom_fields": "Revise los valores de los campos personalizados.",
       "number_in_use": "Ese número de cuenta ya está en uso.",
       "numberInUseBy": "Ese número de cuenta ya está en uso por <account>{number} · {name}</account>.",
+      "duplicate_account_name": "Una cuenta activa ya usa este nombre.",
       "account_changed": "Esta cuenta cambió mientras la editaba. Vuelva a abrirla e inténtelo de nuevo.",
       "invalid_idempotency_key": "No se pudo reintentar la solicitud de cuenta de forma segura.",
       "save_failed": "No se pudo guardar la cuenta.",

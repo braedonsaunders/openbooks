@@ -4,7 +4,7 @@ import test from 'node:test'
 
 const testRedisUrl = process.env.OPENBOOKS_TEST_REDIS_URL
 
-test('Redis lease renewal and publication enforce current ownership atomically', { skip: !testRedisUrl }, async t => {
+test('Redis lease renewal and publication enforce current ownership atomically', { skip: !process.env.OPENBOOKS_TEST_REDIS_URL }, async t => {
   const resourceId = process.env.OPENBOOKS_TEST_REDIS_RESOURCE_ID
   assert.match(resourceId ?? '', /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, 'the disposable Redis resource needs an explicit UUID identity')
   const previous = process.env.OPENBOOKS_REDIS_URL

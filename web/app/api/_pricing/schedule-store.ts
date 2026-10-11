@@ -44,9 +44,16 @@ export const priceScheduleBody = z.object({
   breaks: z.array(z.object({ minimumQuantity: z.string(), unitPrice: z.string() }).strict()).min(1),
 }).strict()
 
+const REVISION_REMEDY = 'A current schedule revision is required; reload the schedule and try again'
+
 export const priceScheduleUpdateBody = priceScheduleBody.extend({
   id: uuidId,
-  revision: z.number().int().nonnegative().optional(),
+  // Every malformed token shares the reload remedy: an absent, wrong-typed,
+  // fractional or negative revision can never be fenced against the row.
+  revision: z.number({ error: REVISION_REMEDY })
+    .int({ error: REVISION_REMEDY })
+    .nonnegative({ error: REVISION_REMEDY })
+    .optional(),
   reason: z.string().optional(),
 })
 
@@ -361,7 +368,7 @@ export async function patchSchedule(request: Request, actor: ScheduleActor, subj
   const scheduleId = String(body.id ?? '')
   if (!isUuid(scheduleId)) return NextResponse.json({ error: 'Schedule id is required' }, { status: 400 })
   const expectedRevision = parseRevision(body.revision)
-  if (expectedRevision === null) return NextResponse.json({ error: 'A current schedule revision is required; reload the schedule and try again' }, { status: 400 })
+  if (expectedRevision === null) return NextResponse.json({ error: REVISION_REMEDY }, { status: 400 })
   const parsed = parseSchedule(body)
   if ('error' in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 })
   const reason = String(body.reason ?? '').trim()
@@ -509,7 +516,7 @@ export async function deleteSchedule(request: Request, actor: ScheduleActor, sub
   const reason = (query.get('reason') ?? '').trim()
   const expectedRevision = parseRevision(Number(query.get('revision')))
   if (query.get('revision') === null || expectedRevision === null) {
-    return NextResponse.json({ error: 'A current schedule revision is required; reload the schedule and try again' }, { status: 400 })
+    return NextResponse.json({ error: REVISION_REMEDY }, { status: 400 })
   }
   const outcome = await db.transaction(async (tx) => {
     const today = String((await tx.execute<{ today: string }>(sql`select current_date::text as today`)).rows[0]!.today)

@@ -9,11 +9,12 @@
 import Link from 'next/link'
 
 /** Resource name over its optional source filename, with durable job recovery. */
-export function ResourceCell({ label, fileName, href }: { label: string; fileName: string | null; href?: string | null }) {
+export function ResourceCell({ label, fileName, href, failureMessage }: { label: string; fileName: string | null; href?: string | null; failureMessage?: string | null }) {
   return (
     <>
       <div className="font-medium">{href ? <Link className="text-primary hover:underline" href={href}>{label}</Link> : label}</div>
       {fileName && <div className="text-xs text-muted-foreground">{fileName}</div>}
+      {failureMessage && <p className="mt-1 text-sm text-destructive">{failureMessage}</p>}
     </>
   )
 }

@@ -68,7 +68,7 @@ function stubFetch(responder: FetchResponder): FetchCall[] {
     const call = { url: String(url), init: init ?? {} }
     calls.push(call)
     const body = responder(call)
-    return { ok: true, status: 200, json: async () => body }
+    return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } })
   }
   Object.assign(globalThis, { fetch: fetchStub })
   return calls

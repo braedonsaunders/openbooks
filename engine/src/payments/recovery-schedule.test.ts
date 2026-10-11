@@ -1,13 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  AutopayError,
-  classifyDecline,
-  parseExpiryNoticeDays,
-  retryLadderForClass,
-  terminalDeclineDetail,
-  type AutopayPolicy,
-} from "./autopay.ts";
+import { AutopayError, classifyDecline, parseExpiryNoticeDays, retryLadderForClass, terminalDeclineDetail, type AutopayPolicy } from "./autopay-policy.ts";
 
 function policy(): AutopayPolicy {
   return {

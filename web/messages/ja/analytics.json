@@ -2170,6 +2170,10 @@
           "label": "延滞長期しきい値（日）",
           "help": "この日数を超える延滞は長期の繰延を受ける"
         },
+        "collectibilityHorizonDays": {
+          "label": "回収可能期間（日）",
+          "help": "支払期日からこの日数を超えて遅延している売掛金は入金として予測せず、予測対象外として別途表示します"
+        },
         "cardTrajectoryTolerance": {
           "label": "カード軌道許容度",
           "help": "中央値支払からの相対乖離で軌道予測が有効な範囲"
@@ -2203,7 +2207,8 @@
       }
     },
     "unplacedAr": "期日も支払履歴もない請求書が{count}件 · {total}は予測対象外。",
-    "unplacedAp": "期日も支払履歴もない請求書（仕入）が{count}件 · {total}は予測対象外。"
+    "unplacedAp": "期日も支払履歴もない請求書（仕入）が{count}件 · {total}は予測対象外。",
+    "notForecastAr": "{days}日を超えて延滞している売掛金 {count}件 · {total} は入金として予測していません。"
   },
   "trueCost": {
     "title": "真のコスト",
@@ -4171,7 +4176,12 @@
       "dueDate": "期日",
       "history": "履歴",
       "pushed": "プッシュ",
-      "deferredFrom": "{date}から繰延"
+      "deferredFrom": "{date}から繰延",
+      "pushedAssumption": "期日超過の繰延: 期日超過残高は予測日に回収されると仮定します",
+      "basisHistory": "顧客の平均支払日数：{days}日",
+      "basisAverage": "組織全体の平均支払日数：{days}日",
+      "basisDueDate": "支払期日 {date}",
+      "basisPushed": "{days}日延滞・予測日 {date}"
     },
     "netChange": "純変動額",
     "pagination": {
@@ -4212,6 +4222,11 @@
       "formula": "計算式",
       "info": "情報",
       "note": "メモ"
+    },
+    "overduePush": {
+      "assumption": "期日超過残高は予測日に回収されると仮定します。",
+      "basis": "請求書 {count} 件 · 期日超過 {minDays}〜{maxDays} 日 · 合計 {amount}",
+      "basisSameAge": "請求書 {count} 件 · 期日超過 {days} 日 · 合計 {amount}"
     }
   },
   "categoryManager": {

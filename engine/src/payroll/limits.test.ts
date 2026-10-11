@@ -530,7 +530,7 @@ test("an earnings-assessed line that moved between passes fails loudly", () => {
       assert.match(error.message, /Terry Worker/);
       assert.match(error.message, /CPP/);
       assert.match(error.message, /142\.6600 to 140\.1100/);
-      assert.match(error.message, /taxable_income/);
+      assert.match(error.message, /contact support/);
       return true;
     },
   );

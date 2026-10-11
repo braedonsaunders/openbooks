@@ -108,7 +108,8 @@
     "applySource": "Substituir todas as linhas deste rascunho pelos valores do orçamento selecionado?",
     "submit": "Enviar este orçamento para aprovação? Ele ficará bloqueado para edição até a decisão.",
     "approve": "Aprovar este orçamento?",
-    "reject": "Devolver este orçamento para rascunho?"
+    "reject": "Devolver este orçamento para rascunho?",
+    "rejectionReason": "Motivo da rejeição"
   },
   "feedback": {
     "archived": "Orçamento arquivado.",

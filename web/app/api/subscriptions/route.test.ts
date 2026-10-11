@@ -6,7 +6,12 @@ import {
   firstPeriodStub,
   normalizeSubscriptionCadence,
   normalizeSubscriptionMoney,
+  pendingSubscriptionPeriods,
   resolveNextBillOnUpdate,
+  resolveSubscriptionCancellation,
+  subscriptionPaidThrough,
+  subscriptionRecurringRevenue,
+  type ContractRecurring,
 } from "@openbooks/engine/billing/subscription-billing";
 import {
   assertUnrestrictedScope,
@@ -32,6 +37,7 @@ interface RouteState {
   beforeSubscription: Record<string, unknown> | null;
   guardedThrough: string | null;
   overridePartyIsCustomer: boolean;
+  contractAmounts: Map<string, ContractRecurring>;
 }
 
 const stateKey = Symbol.for("openbooks.subscription-route-test");
@@ -44,6 +50,10 @@ const routeState: RouteState & {
   normalizeSubscriptionCadence: typeof normalizeSubscriptionCadence;
   normalizeSubscriptionMoney: typeof normalizeSubscriptionMoney;
   resolveNextBillOnUpdate: typeof resolveNextBillOnUpdate;
+  pendingSubscriptionPeriods: typeof pendingSubscriptionPeriods;
+  resolveSubscriptionCancellation: typeof resolveSubscriptionCancellation;
+  subscriptionPaidThrough: typeof subscriptionPaidThrough;
+  subscriptionRecurringRevenue: typeof subscriptionRecurringRevenue;
 } = {
   queries: [],
   transactionQueries: [],
@@ -62,6 +72,7 @@ const routeState: RouteState & {
   beforeSubscription: null,
   guardedThrough: null,
   overridePartyIsCustomer: true,
+  contractAmounts: new Map(),
   SubscriptionError,
   assertUnrestrictedScope,
   unrestrictedScopeError: UnrestrictedScopeError,
@@ -69,6 +80,11 @@ const routeState: RouteState & {
   // The cursor guard is pure domain validation: the double delegates to the
   // real function, or the refusal cases below would test a copy of the rule.
   resolveNextBillOnUpdate,
+  // The paid-through and cancellation rules are pure: delegate to the real code.
+  resolveSubscriptionCancellation,
+  subscriptionPaidThrough,
+  subscriptionRecurringRevenue,
+  pendingSubscriptionPeriods,
   firstPeriodStub,
   normalizeSubscriptionCadence: (interval, intervalCount) => {
     const cadence = normalizeSubscriptionCadence(interval, intervalCount);
@@ -189,6 +205,15 @@ stubModules({
         return tx.execute({ queryChunks: ['select customer for share'] })
       }
       export const resolveNextBillOnUpdate = (...args) => state.resolveNextBillOnUpdate(...args)
+      export const pendingSubscriptionPeriods = (...args) => state.pendingSubscriptionPeriods(...args)
+      export async function runSubscriptionCatchUp(...args) {
+        state.engineCalls.push({ fn: 'runSubscriptionCatchUp', args })
+        return { stopped: null, results: [] }
+      }
+      export const resolveSubscriptionCancellation = (...args) => state.resolveSubscriptionCancellation(...args)
+      export const subscriptionPaidThrough = (...args) => state.subscriptionPaidThrough(...args)
+      export const subscriptionRecurringRevenue = (...args) => state.subscriptionRecurringRevenue(...args)
+      export async function contractRecurringAmounts() { return state.contractAmounts }
       export const firstPeriodStub = (...args) => state.firstPeriodStub(...args)
       export function monthlyRecurringRevenue(amount) { return String(amount) }
       export async function prorateFirstInvoice(...args) {
@@ -222,6 +247,7 @@ function reset(): void {
   routeState.beforeSubscription = null;
   routeState.guardedThrough = null;
   routeState.overridePartyIsCustomer = true;
+  routeState.contractAmounts = new Map();
 }
 
 function post(body: Record<string, unknown>): Promise<Response> {
@@ -556,6 +582,103 @@ test("updateSubscription accepts a next bill date exactly on the boundary", asyn
   const response = await post({ action: "updateSubscription", id: "00000000-0000-4000-8000-00000000c003", nextBillOn: "2026-04-01" });
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { ok: true });
+});
+
+/** Advance-billed through 2026-09-01: the next period has not been invoiced. */
+function invoicedThroughSeptember(): void {
+  routeState.beforeSubscription = {
+    id: "00000000-0000-4000-8000-00000000c003",
+    start_on: "2026-03-01",
+    current_period_start: "2026-08-01",
+    next_bill_on: "2026-09-01",
+    last_invoice_id: "invoice-9",
+  };
+  routeState.guardedThrough = null;
+}
+
+const cancelBody = (extra: Record<string, unknown> = {}) => ({
+  action: "updateSubscription",
+  id: "00000000-0000-4000-8000-00000000c003",
+  status: "canceled",
+  ...extra,
+});
+
+function cancelUpdate(): unknown {
+  return routeState.transactionQueries.find((query) => sqlText(query).includes("update subscriptions set"));
+}
+
+test("cancel without a date is refused while the paid period runs past today, naming the paid-through date", async () => {
+  reset();
+  invoicedThroughSeptember();
+  const response = await post(cancelBody());
+  assert.equal(response.status, 422);
+  const error = String((await response.json() as { error: string }).error);
+  assert.match(error, /precedes the paid-through date 2026-09-01/);
+  assert.equal(cancelUpdate(), undefined, "a refused cancellation must not reach the update");
+});
+
+test("cancel effective on the paid-through date records that date as canceled_on", async () => {
+  reset();
+  invoicedThroughSeptember();
+  const response = await post(cancelBody({ canceledOn: "2026-09-01" }));
+  assert.equal(response.status, 200, JSON.stringify(await response.json().catch(() => null)));
+  const update = cancelUpdate();
+  assert.ok(update, "an accepted cancellation writes the subscription");
+  assert.ok(sqlText(update).includes("canceled_on ="), "the write sets canceled_on");
+  assert.ok(boundStrings(update).includes("2026-09-01"), "the effective date is the bound canceled_on value");
+});
+
+test("cancel after the paid-through date is refused because the gap would never be invoiced", async () => {
+  reset();
+  invoicedThroughSeptember();
+  const response = await post(cancelBody({ canceledOn: "2026-10-01" }));
+  assert.equal(response.status, 422);
+  assert.match(String((await response.json() as { error: string }).error), /is not invoiced/);
+  assert.equal(cancelUpdate(), undefined);
+});
+
+test("a cancellation date on a status other than canceled is refused", async () => {
+  reset();
+  invoicedThroughSeptember();
+  const response = await post({
+    action: "updateSubscription",
+    id: "00000000-0000-4000-8000-00000000c003",
+    status: "paused",
+    canceledOn: "2026-09-01",
+  });
+  assert.equal(response.status, 422);
+  assert.match(String((await response.json() as { error: string }).error), /applies only when canceling/);
+  assert.equal(cancelUpdate(), undefined);
+});
+
+test("a malformed cancellation date is refused by the typed body schema before any write", async () => {
+  reset();
+  invoicedThroughSeptember();
+  const response = await post(cancelBody({ canceledOn: "2026-9-1" }));
+  assert.ok(response.status >= 400 && response.status < 500, `expected a client refusal, got ${response.status}`);
+  assert.equal(routeState.transactionQueries.length, 0, "no transaction starts for a refused body");
+});
+
+test("subscription MRR reads a contract's amended component price, not the plan price it was activated from", async () => {
+  reset();
+  routeState.mrrRows = [{
+    id: "subscription-contract",
+    status: "active",
+    priceOverride: null,
+    planAmount: "3500.0000",
+    interval: "monthly",
+    intervalCount: 1,
+    quantity: "1",
+    planCurrency: "CAD",
+    canceledOn: null,
+  }];
+  routeState.contractAmounts = new Map([["subscription-contract", { amount: "4000.0000", interval: "monthly", intervalCount: 1 }]]);
+
+  const response = await GET(new Request("http://openbooks.test/api/subscriptions"));
+  assert.equal(response.status, 200);
+  const body = await response.json() as { mrr: string; subscriptions: Array<{ mrr: string }> };
+  assert.equal(body.mrr, "4000.0000");
+  assert.equal(body.subscriptions[0]?.mrr, "4000.0000");
 });
 
 test("updateSubscription stores bill-to/payer overrides and clears them back to null", async () => {

@@ -16,6 +16,12 @@ export type OrgIdentityRow = {
 /** Identifier schemes that are a VAT number or a company registration. */
 const VAT_SCHEMES = ['gb_vat', 'eu_vat'] as const
 const REGISTRATION_SCHEMES = ['gb_crn', 'registration'] as const
+/**
+ * Schemes that are a sales or GST registration number. Only these print on
+ * the "Tax registration" line: a US employer identification number or a
+ * generic tax ID is not a tax registration, so a US seller prints no such line.
+ */
+const TAX_REGISTRATION_SCHEMES = ['ca_bn', 'ca_gst_hst', 'ca_qst', 'au_abn'] as const
 
 /**
  * The seller block's merge values — the same on every record type, from the
@@ -30,9 +36,8 @@ export function orgIdentityMergeValues(org: OrgIdentityRow): Record<string, stri
   const address = formatCompanyAddress(readCompanyAddress(org.company_address))
   const taxIds = readTaxIds(org.tax_ids)
   const pick = (schemes: readonly string[]) => schemes.map((scheme) => taxIds[scheme]).find(Boolean) ?? ''
-  const otherTaxNumbers = Object.fromEntries(
-    Object.entries(taxIds).filter(([scheme]) =>
-      !(VAT_SCHEMES as readonly string[]).includes(scheme) && !(REGISTRATION_SCHEMES as readonly string[]).includes(scheme)),
+  const taxRegistrations = Object.fromEntries(
+    Object.entries(taxIds).filter(([scheme]) => (TAX_REGISTRATION_SCHEMES as readonly string[]).includes(scheme)),
   )
   return {
     org_name: org.name,
@@ -41,7 +46,7 @@ export function orgIdentityMergeValues(org: OrgIdentityRow): Record<string, stri
     org_tax_ids: formatTaxIds(taxIds),
     seller_address: address,
     seller_vat_id: pick(VAT_SCHEMES),
-    seller_tax_number: formatTaxIds(otherTaxNumbers),
+    seller_tax_number: formatTaxIds(taxRegistrations),
     seller_legal_registration: pick(REGISTRATION_SCHEMES),
   }
 }

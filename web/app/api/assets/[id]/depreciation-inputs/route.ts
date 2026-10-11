@@ -8,7 +8,6 @@ import {
   buildAllSchedules,
   recordDepreciationInput,
 } from "@openbooks/engine/assets/depreciation";
-import { isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
 import { normalizeMoney } from "@openbooks/engine/money/money";
 import { isUuid } from "../../../../../lib/list-params";
 import { canonicalDecimal } from "../../../../../lib/exact-decimal";
@@ -40,6 +39,7 @@ export const POST = defineRoute({
   feature: "fixedAssets",
   params: z.object({ id: z.string() }),
   body: postBodySchema0,
+  invalidBodyStatus: 422,
   handler: async ({ request: _req, authz: gate, params, body: routeBody }) => {
     const { id } = await params;
     if (!isUuid(id))
@@ -72,14 +72,6 @@ export const POST = defineRoute({
           error:
             "method, effective date, value, and attached evidence file are required",
         },
-        { status: 422 },
-      );
-    }
-    // Shape alone admits impossible dates ('2026-09-31') that Postgres then
-    // refuses inside the period lookup with a raw driver failure.
-    if (!isIsoCalendarDate(effectiveDate)) {
-      return NextResponse.json(
-        { error: "effective date must be a real calendar date (YYYY-MM-DD)" },
         { status: 422 },
       );
     }

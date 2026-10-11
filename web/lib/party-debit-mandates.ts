@@ -1,6 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/database'
+import { payablePayeeBankAccountSql } from '@openbooks/engine/payments/run-readiness'
 import { subsidiaryVisibleFilter } from './subsidiaries'
 
 export type PartyDebitMandateRow = {
@@ -62,7 +63,7 @@ export async function loadPartyDebitMandates(
                case when b.account_last_four is not null then '••••' || b.account_last_four end) as label
         from party_bank_accounts b
        where b.org_id = ${orgId} and b.party_id = ${partyId}
-         and b.is_active and b.approved_at is not null
+         and ${payablePayeeBankAccountSql('b')}
        order by b.created_at desc, b.id
     `),
   ])

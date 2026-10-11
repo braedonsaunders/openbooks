@@ -126,6 +126,7 @@ export async function listApplicationAging(
     parties: ranked.slice(0, limit).map((row) => ({
       partyId: row.partyId,
       party: row.partyName,
+      reconciling: row.reconciling === true,
       current: money(row.current),
       days1to30: money(row.b1),
       days31to60: money(row.b2),

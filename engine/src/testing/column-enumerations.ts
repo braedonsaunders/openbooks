@@ -74,6 +74,16 @@ export const COLUMN_ENUMERATIONS: readonly EnumerationRegistration[] = [
     ],
   },
   {
+    file: "engine/src/crm/sales-readiness.ts",
+    sites: [
+      { stance: "presence-probe", note: "Sales rollout gate: the employee role flag exists" },
+      { stance: "presence-probe", note: "Sales rollout gate: the quota employee column exists" },
+      { stance: "presence-probe", note: "Sales rollout gate: the quota lifecycle column exists" },
+      { stance: "presence-probe", note: "Sales rollout gate: the team member employee column exists" },
+      { stance: "presence-probe", note: "Sales rollout gate: the account profile rep column exists" },
+    ],
+  },
+  {
     file: "engine/src/golden/scenario.ts",
     sites: [
       { stance: "presence-probe", note: "RLS census over tables that carry org_id" },
@@ -83,6 +93,18 @@ export const COLUMN_ENUMERATIONS: readonly EnumerationRegistration[] = [
     file: "engine/src/hrm/documents/dsar.ts",
     sites: [
       { stance: "descriptive", note: "subject-access export projection shown to the data subject; generated columns are readable computed values legitimately part of the export" },
+    ],
+  },
+  {
+    file: "engine/src/hrm/employment-start-correction.ts",
+    sites: [
+      { stance: "feeds-a-write", note: "the copied successor version's column list; generated columns are never copied into an INSERT" },
+    ],
+  },
+  {
+    file: "engine/src/hrm/performance/authoring-schema.ts",
+    sites: [
+      { stance: "presence-probe", note: "review authoring readiness: the named columns exist on the review tables" },
     ],
   },
   {
@@ -106,6 +128,28 @@ export const COLUMN_ENUMERATIONS: readonly EnumerationRegistration[] = [
     ],
   },
   {
+    file: "engine/src/sample-companies/preservation.ts",
+    sites: [
+      { stance: "descriptive", note: "sample-record preservation snapshot: the columns of each preserved table" },
+      { stance: "key-members", note: "native primary-key member columns of each preserved table" },
+    ],
+  },
+  {
+    file: "engine/src/sample-companies/retirement-data.ts",
+    sites: [
+      { stance: "key-members", note: "foreign-key child member columns for the retirement dependency order" },
+      { stance: "key-members", note: "foreign-key parent member columns for the retirement dependency order" },
+      { stance: "presence-probe", note: "retirement table selection: a table carries a user reference column" },
+    ],
+  },
+  {
+    file: "engine/src/sample-companies/retirement-plan.ts",
+    sites: [
+      { stance: "descriptive", note: "retirement plan fingerprint: column names, types and nullability per table" },
+      { stance: "presence-probe", note: "retirement plan: the table carries an organization column" },
+    ],
+  },
+  {
     file: "engine/src/sandbox/catalog.ts",
     sites: [
       { stance: "feeds-a-write", note: "the clone's copy column list; generated columns are never named in `insert into t (cols)`" },
@@ -126,6 +170,12 @@ export const COLUMN_ENUMERATIONS: readonly EnumerationRegistration[] = [
     file: "engine/src/testing/migration-catalog.ts",
     sites: [
       { stance: "descriptive", note: "pre/post-test table snapshot (name, type, nullability, default) diffed for humans; generated columns are legitimately part of what is described" },
+    ],
+  },
+  {
+    file: "engine/src/sync/entity-mappings.ts",
+    sites: [
+      { stance: "presence-probe", note: "reference choices: the display and organization-scope columns of a whitelisted table" },
     ],
   },
   {
@@ -162,6 +212,12 @@ export const COLUMN_ENUMERATIONS: readonly EnumerationRegistration[] = [
       { stance: "presence-probe", note: "RLS coverage census over org_id tables" },
       { stance: "presence-probe", note: "RLS policy census over org_id tables" },
       { stance: "presence-probe", note: "ownership census over org_id tables" },
+    ],
+  },
+  {
+    file: "scripts/migration-baseline-catalog.mjs",
+    sites: [
+      { stance: "descriptive", note: "migration baseline fingerprint: column definitions read from the catalog" },
     ],
   },
   {

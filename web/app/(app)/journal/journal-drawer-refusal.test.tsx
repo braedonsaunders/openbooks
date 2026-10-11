@@ -376,6 +376,48 @@ test("a stale-revision void reloads and pins translated copy", async (t) => {
   );
 });
 
+test("a void awaiting approval pins its state and holds Void while the journal stays posted", async (t) => {
+  freshGlobals();
+  const doc = { ...DRAFT_DOC(), status: "posted", void_requested_at: TOKEN };
+  const restoreFetch = scriptFetch((url) => {
+    if (url.includes("/api/flows/record-state")) {
+      return Response.json({
+        approvalState: { status: "pending", pendingWith: [], myActions: null },
+        history: [],
+        failedRun: null,
+        canRetry: false,
+        neverSubmitted: true,
+      });
+    }
+    return null;
+  });
+  t.after(restoreFetch);
+  const { unmount } = await mountJournal(doc);
+  t.after(unmount);
+  const notice = document.querySelector('[role="status"]');
+  assert.match(
+    notice?.textContent ?? "",
+    /awaiting approval/,
+    "a requested void must say it is awaiting approval, not look like an unchanged posted journal",
+  );
+  const voidButton = buttonsNamed("Void")[0];
+  assert.ok(voidButton, "the posted journal still shows its lifecycle action");
+  assert.equal(voidButton.disabled, true, "Void stays held until the pending request is decided");
+});
+
+test("a terminal posting-effect failure offers its retry beside Void", async (t) => {
+  freshGlobals();
+  const doc = { ...DRAFT_DOC(), status: "posted", posting_effect_status: "terminal_failed" };
+  const restoreFetch = scriptFetch(() => null);
+  t.after(restoreFetch);
+  const { unmount } = await mountJournal(doc);
+  t.after(unmount);
+  const retry = buttonsNamed("Retry posting effects")[0];
+  assert.ok(retry, "a void blocked by a terminal posting failure must name a remedy the drawer can run");
+  assert.equal(retry.disabled, false);
+  assert.equal(buttonsNamed("Void")[0]?.disabled, false, "Void stays offered alongside the retry");
+});
+
 test("a successful post refreshes the revision used by a later void", async (t) => {
   freshGlobals();
   const doc = DRAFT_DOC();
@@ -387,7 +429,12 @@ test("a successful post refreshes the revision used by a later void", async (t) 
       canonicalReads += 1;
       return Response.json({
         ...snapshotBody(String(doc.id)),
-        doc: { ...snapshotBody(String(doc.id)).doc, updated_at: canonicalReads === 1 ? TOKEN : afterPostRevision },
+        // The canonical read names the posted status once the post has committed.
+        doc: {
+          ...snapshotBody(String(doc.id)).doc,
+          updated_at: canonicalReads === 1 ? TOKEN : afterPostRevision,
+          status: canonicalReads === 1 ? "draft" : "posted",
+        },
       });
     }
     if (url === "/api/journals/actions" && init?.method === "POST") return Response.json({});

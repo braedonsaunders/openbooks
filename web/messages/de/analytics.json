@@ -2170,6 +2170,10 @@
           "label": "Lange Überfälligkeitsschwelle (Tage)",
           "help": "Überfälligkeit jenseits dieser Tage erhält die lange Verschiebung"
         },
+        "collectibilityHorizonDays": {
+          "label": "Einbringlichkeitshorizont (Tage)",
+          "help": "Forderungen, die mehr als so viele Tage überfällig sind, gelten nicht als Zahlungseingang und werden separat als nicht prognostiziert ausgewiesen"
+        },
         "cardTrajectoryTolerance": {
           "label": "Karten-Trajektorientoleranz",
           "help": "Relative Abweichung von der Medianzahlung, innerhalb derer die Kartentrajektorie gilt"
@@ -2203,7 +2207,8 @@
       }
     },
     "unplacedAr": "{count, plural, one {# Rechnung hat} other {# Rechnungen haben}} weder Fälligkeitsdatum noch Zahlungshistorie · {total} nicht prognostiziert.",
-    "unplacedAp": "{count, plural, one {# Eingangsrechnung hat} other {# Eingangsrechnungen haben}} weder Fälligkeitsdatum noch Zahlungshistorie · {total} nicht prognostiziert."
+    "unplacedAp": "{count, plural, one {# Eingangsrechnung hat} other {# Eingangsrechnungen haben}} weder Fälligkeitsdatum noch Zahlungshistorie · {total} nicht prognostiziert.",
+    "notForecastAr": "{count, plural, one {# Forderung} other {# Forderungen}} mehr als {days} Tage überfällig · {total} nicht als Zahlungseingang prognostiziert."
   },
   "trueCost": {
     "title": "Echte Kosten",
@@ -4171,7 +4176,12 @@
       "dueDate": "Fälligkeit",
       "history": "Historie",
       "pushed": "Geschoben",
-      "deferredFrom": "übertragen vom {date}"
+      "deferredFrom": "übertragen vom {date}",
+      "pushedAssumption": "Überfällige Forderung: geht davon aus, dass überfällige Salden an ihrem Prognosedatum eingehen",
+      "basisHistory": "Durchschnittliche Zahlungsdauer des Kunden: {days} Tage",
+      "basisAverage": "Durchschnittliche Zahlungsdauer (alle Kunden): {days} Tage",
+      "basisDueDate": "Fällig {date}",
+      "basisPushed": "{days} Tage überfällig · Prognose {date}"
     },
     "netChange": "Nettoänderung",
     "pagination": {
@@ -4212,6 +4222,11 @@
       "formula": "Formel",
       "info": "Info",
       "note": "Hinweis"
+    },
+    "overduePush": {
+      "assumption": "Geht davon aus, dass überfällige Salden an ihrem Prognosedatum eingehen.",
+      "basis": "{count, plural, one {# Rechnung} other {# Rechnungen}} · {minDays}–{maxDays} Tage überfällig · {amount} insgesamt",
+      "basisSameAge": "{count, plural, one {# Rechnung} other {# Rechnungen}} · {days} Tage überfällig · {amount} insgesamt"
     }
   },
   "categoryManager": {

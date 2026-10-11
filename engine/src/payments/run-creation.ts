@@ -11,6 +11,7 @@ import {
   subsidiaryScopeAllows,
 } from "../organization/subsidiary-scope.ts";
 import { PaymentError } from "../payments-core/payment-errors.ts";
+import { payablePayeeBankAccountSql } from "./payee-bank-account.ts";
 import { sameCurrencyAllocation, type AllocationInput } from "./settlement-policy.ts";
 import { type CreditAllocationInput } from "./payment-contracts.ts";
 import { nextNumber, createPaymentDocument, updateDraftPayment } from "./payment-documents.ts";
@@ -612,12 +613,13 @@ async function createPaymentRunWithinTransaction(
       throw new PaymentError("the run payment's cash does not equal its applications less discount and withholding");
     }
 
-    // Latest approved, active bank account for the payee (may be none — the
-    // file export blocks on it with a clear error, never silently).
+    // Latest payable bank account for the payee (may be none — the file
+    // export blocks on it with a clear error, never silently). Same
+    // eligibility the run builder's bank-details column reports.
     const payeeBank = (await db.execute<{ id: string }>(sql`
-      select id from party_bank_accounts
-       where party_id = ${partyId} and org_id = ${opts.orgId} and is_active and approved_at is not null
-       order by approved_at desc, created_at desc limit 1
+      select b.id from party_bank_accounts b
+       where b.party_id = ${partyId} and b.org_id = ${opts.orgId} and ${payablePayeeBankAccountSql("b")}
+       order by b.approved_at desc, b.created_at desc limit 1
        for share
     `));
 

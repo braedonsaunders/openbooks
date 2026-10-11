@@ -704,8 +704,8 @@ test('applyRulesToAccount reports a refused line and still applies the rest', { 
   try {
     // Categorizing journals post to the ledger, so the applier holds gl.post;
     // scratch roles start with no permissions.
-    await db.execute(sql`update app_roles set permissions = '["gl.post"]'::jsonb
-      where org_id = ${fx.orgId} and key = 'admin'`)
+    await withBypass(() => db.execute(sql`update app_roles set permissions = '["gl.post"]'::jsonb
+      where org_id = ${fx.orgId} and key = 'admin'`))
     await seedExcludeRule(fx.orgId, fx.actor)
     await importStatement(
       {

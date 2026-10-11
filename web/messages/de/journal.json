@@ -68,6 +68,7 @@
     "deleted": "Buchung gelöscht",
     "deleteFailed": "Löschen fehlgeschlagen",
     "voidStaleRevision": "Diese Buchung wurde nach dem Öffnen geändert — die neueste Version ist geladen. Prüfen Sie sie und stornieren Sie erneut.",
+    "voidRevisionUnavailable": "Das Journal konnte zum Stornieren nicht neu geladen werden. Schließen und öffnen Sie das Journal erneut und stornieren Sie dann noch einmal.",
     "totals": "Soll <strong>{debits}</strong> · Haben <strong>{credits}</strong>",
     "outOfBalance": "Nicht ausgeglichen · {amount}",
     "balanced": "Ausgeglichen",
@@ -83,6 +84,8 @@
       "credit": "Haben"
     },
     "budgetaryControlWarning": "Budget {scenario} überschreitet die Zuweisung für {account}, Fonds {fund}, {subsidiary}{dimensions}: verfügbar {available}, überschritten um {amountOver}.",
-    "budgetaryControlRemedy": "Das Budget über seinen Genehmigungsablauf anpassen: das genehmigte Budget als Entwurf kopieren, den Betrag dieses Kontos für den Fonds im Arbeitsblatt erhöhen, die Kopie genehmigen und das ersetzte Budget archivieren. Oder den Ist-Betrag mit der offenen Verpflichtung verknüpfen, die ihn reserviert hat."
+    "budgetaryControlRemedy": "Das Budget über seinen Genehmigungsablauf anpassen: das genehmigte Budget als Entwurf kopieren, den Betrag dieses Kontos für den Fonds im Arbeitsblatt erhöhen, die Kopie genehmigen und das ersetzte Budget archivieren. Oder den Ist-Betrag mit der offenen Verpflichtung verknüpfen, die ihn reserviert hat.",
+    "voidAwaitingApproval": "Eine Stornierung dieses Journals wartet auf Genehmigung. Das Journal bleibt gebucht, bis über die Genehmigung entschieden ist.",
+    "createUnconfirmed": "Der Server hat das neue Journal nicht bestätigt. Speichern Sie erneut: Der Wiederholungsversuch verwendet den Schlüssel dieses Entwurfs und kann daher kein zweites Journal erzeugen."
   }
 }

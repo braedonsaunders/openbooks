@@ -188,15 +188,19 @@ export function ReportFilterBar({
   const shownFrom = rangeDraft?.from ?? rangeBaseFrom
   const shownTo = rangeDraft?.to ?? rangeBaseTo
   const rangeDirty = rangeDraft !== null && (rangeDraft.from !== rangeBaseFrom || rangeDraft.to !== rangeBaseTo)
+  // A custom window commits only with both bounds and From on or before To;
+  // a half-typed range would otherwise reach the report, its exports and any
+  // saved view with no window to resolve.
+  const rangeComplete = shownFrom !== '' && shownTo !== '' && shownFrom <= shownTo
   const applyRange = useCallback(() => {
-    if (!rangeDirty) return
-    setParams({ period: 'custom', from: shownFrom || null, to: shownTo || null })
-  }, [rangeDirty, setParams, shownFrom, shownTo])
+    if (!rangeDirty || !rangeComplete) return
+    setParams({ period: 'custom', from: shownFrom, to: shownTo })
+  }, [rangeComplete, rangeDirty, setParams, shownFrom, shownTo])
   const applyRangeOnEnter = useCallback((e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') applyRange()
   }, [applyRange])
   const applyRangeButton = (isCustom || controls.dateRange) ? (
-    <Button type="button" size="sm" onClick={applyRange} disabled={!rangeDirty} className="h-8 shrink-0 text-xs">
+    <Button type="button" size="sm" onClick={applyRange} disabled={!rangeDirty || !rangeComplete} className="h-8 shrink-0 text-xs">
       {t('apply')}
     </Button>
   ) : null

@@ -23,12 +23,14 @@
     "vitals": {
       "healthScore": "健全性スコア",
       "netIncome": "当期純利益",
+      "throughDate": "{label} · {date}まで",
       "close": "決算進捗",
       "closeSub": "{period}",
       "closeUnavailable": "利用不可",
       "closeOrgWide": "決算診断は組織全体が対象です — 制限のない子会社可視性を持つ管理者に一覧表示を依頼してください",
       "noClose": "—",
       "noCloseSub": "決算未開始",
+      "lockedThroughSub": "{period}まで締め済み",
       "draftJournals": "下書き仕訳",
       "draftJournalsSub": "今週 {posted} 件計上",
       "openFindings": "未処理の検出事項",
@@ -145,7 +147,11 @@
           "removed": "削除",
           "changed": "変更",
           "unchanged": "変更なし",
-          "disposition": "変更内容"
+          "disposition": "変更内容",
+          "effectivePerUnit": "単位あたりの実効量",
+          "showUnchanged": "変更のない {count} 行を表示",
+          "hideUnchanged": "変更のない行を非表示",
+          "noChanges": "構成品目の行に変更はありません。"
       },
       "fields": {
         "existingId": "既存の履行義務",

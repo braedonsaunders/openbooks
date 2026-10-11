@@ -56,6 +56,30 @@ const LEGACY_ALLOWLIST: Array<{ file: string; literal: string; reason: string }>
     literal: 'Cumulative translation adjustment',
     reason: 'statement-layer computed line name; financial statements own their locale mechanism, not the insight bundles',
   },
+  // Engine refusal diagnostics. Each is thrown inside a category calculator
+  // whose catch maps the error's code and values to catalog copy
+  // (refuseCategory -> refuseFromValues in true-cost-data.ts), so the
+  // message text itself is never rendered to an operator.
+  {
+    file: 'true-cost-engine.ts',
+    literal: 'The overhead model contains a category with a missing amount. Correct the stored category amount before retrying.',
+    reason: 'engine diagnostic; operator copy comes from the unreadableAmount code in true-cost-data.ts',
+  },
+  {
+    file: 'true-cost-engine.ts',
+    literal: "A per-unit category's department base is unreadable. Correct the stored category base before retrying.",
+    reason: 'engine diagnostic; operator copy comes from the unreadableAmount code in true-cost-data.ts',
+  },
+  {
+    file: 'true-cost-engine.ts',
+    literal: 'A derived category is missing its percentage of the source category. Correct the derivation before retrying.',
+    reason: 'engine diagnostic; operator copy comes from the formulaReference code in true-cost-data.ts',
+  },
+  {
+    file: 'true-cost-engine.ts',
+    literal: 'A formula category cannot be evaluated. Correct the formula before retrying.',
+    reason: 'engine diagnostic; operator copy comes from the formulaReference code in true-cost-data.ts',
+  },
 ]
 
 interface Literal {

@@ -14,7 +14,9 @@ registerHooks({
     if (specifier === 'drizzle-orm' && context.parentURL?.startsWith('data:')) {
       return next(root + 'node_modules/drizzle-orm/index.js', context)
     }
-    if (specifier === '@openbooks/engine/platform/db') {
+    // The analytics query helper reads through the public database contract,
+    // which re-exports the same executor.
+    if (specifier === '@openbooks/engine/platform/db' || specifier === '@openbooks/engine/platform/database') {
       return virtual('export const db = globalThis.__customersPipelineDb')
     }
     if (specifier === '@openbooks/engine/platform/business-date/module') {
@@ -88,7 +90,7 @@ Object.assign(globalThis, {
       const text = queryText(query)
       executedQueryTexts.push(text)
       if (text.includes('base_currency')) return { rows: [{ baseCurrency: 'CAD' }] }
-      if (text.includes('from fx_rates')) return { rows: [{ rate: '1.3500000000', as_of: '2026-01-15' }] }
+      if (text.includes('from fx_rates')) return { rows: [{ func: 'USD', rate: '1.3500000000', as_of: '2026-01-15' }] }
       return { rows: [] }
     },
   },

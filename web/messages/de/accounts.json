@@ -42,9 +42,15 @@
     "expense": "Aufwendungen"
   },
   "hygiene": {
-    "assetBankUncorroborated": "„{name}“ ist als Bankkonto typisiert, hat aber keinen bankähnlichen Namen und ist nicht abstimmfähig, daher wird es überall als Bargeld gezählt. Prüfen Sie die Typisierung (Verrechnungs-, Rückstellungs- und Kreditkonten werden häufig falsch typisiert) oder aktivieren Sie die Kontoauszugsabstimmung."
+    "assetBankUncorroborated": "„{name}“ ist als Bankkonto typisiert, hat aber keinen bankähnlichen Namen und ist nicht abstimmfähig, daher wird es überall als Bargeld gezählt. Prüfen Sie die Typisierung (Verrechnungs-, Rückstellungs- und Kreditkonten werden häufig falsch typisiert) oder aktivieren Sie die Kontoauszugsabstimmung.",
+    "duplicateAccountName": "Gespeichert. Ein weiteres aktives Konto heißt ebenfalls „{name}“ ({account})."
   },
   "drawer": {
+    "duplicateName": {
+      "body": "Ein aktives Konto mit dem Namen „{name}“ existiert bereits ({account}). Verwenden Sie dieses Konto oder legen Sie dieses trotzdem an.",
+      "useExisting": "Vorhandenes Konto verwenden",
+      "createAnyway": "Trotzdem anlegen"
+    },
     "saved": "Konto gespeichert",
     "typeLocked": "Der Typ kann nicht mehr geändert werden, sobald das Konto Buchungsaktivität aufweist.",
     "parent": "Übergeordnetes Konto",
@@ -80,6 +86,7 @@
       "invalid_custom_fields": "Überprüfen Sie die Werte der benutzerdefinierten Felder.",
       "number_in_use": "Diese Kontonummer wird bereits verwendet.",
       "numberInUseBy": "Diese Kontonummer wird bereits von <account>{number} · {name}</account> verwendet.",
+      "duplicate_account_name": "Ein aktives Konto verwendet diesen Namen bereits.",
       "save_failed": "Das Konto konnte nicht gespeichert werden.",
       "parent_type_mismatch": "Ober- und Unterkonto müssen dieselbe Kontoart verwenden.",
       "reconcilable_currency_required": "Abstimmbare Konten brauchen eine Abrechnungswährung — wählen Sie vor dem Speichern eine.",

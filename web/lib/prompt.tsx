@@ -14,7 +14,7 @@ import * as React from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useTranslations } from 'next-intl'
-import { Button, Input, Label, Textarea } from '@openbooks/ui'
+import { Button, Input, Label, OverlayExit, Textarea } from '@openbooks/ui'
 
 type PromptOptions = {
   title: string
@@ -133,8 +133,14 @@ export function PromptRoot() {
   return createPortal(
     <AnimatePresence>
       {req ? (
+        // Marked as an overlay so a drawer beneath does not also take this
+        // dialog's Escape: Escape dismisses the prompt, and the drawer keeps
+        // the operator's unsaved entries.
+        <OverlayExit key={req.id}>
+        {(exiting) => (
         <div
-          key={req.id}
+          data-ui-overlay
+          data-overlay-exiting={exiting || undefined}
           className="fixed inset-0 z-[60] flex items-center justify-center p-4"
           role="dialog"
           aria-modal="true"
@@ -224,6 +230,8 @@ export function PromptRoot() {
             </form>
           </motion.div>
         </div>
+        )}
+        </OverlayExit>
       ) : null}
     </AnimatePresence>,
     document.body,

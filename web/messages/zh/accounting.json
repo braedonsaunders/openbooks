@@ -23,12 +23,14 @@
     "vitals": {
       "healthScore": "健康评分",
       "netIncome": "净利润",
+      "throughDate": "{label} · 截至 {date}",
       "close": "结账进度",
       "closeSub": "{period}",
       "closeUnavailable": "不可用",
       "closeOrgWide": "结账诊断覆盖整个组织 — 请让具有子公司无限制可见性的管理员列出",
       "noClose": "—",
       "noCloseSub": "尚未开始结账",
+      "lockedThroughSub": "已锁定至 {period}",
       "draftJournals": "草稿凭证",
       "draftJournalsSub": "本周已过账 {posted} 笔",
       "openFindings": "未处理发现",
@@ -145,7 +147,11 @@
           "removed": "删除",
           "changed": "已更改",
           "unchanged": "未更改",
-          "disposition": "变更"
+          "disposition": "变更",
+          "effectivePerUnit": "每单位有效用量",
+          "showUnchanged": "显示 {count} 行未变更的内容",
+          "hideUnchanged": "隐藏未变更的行",
+          "noChanges": "没有组件行发生变更。"
       },
       "fields": {
         "existingId": "现有履约义务",

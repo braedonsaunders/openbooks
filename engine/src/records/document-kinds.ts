@@ -248,6 +248,30 @@ export function documentCreateHref(basePath: string, kind: string): string {
   return `${basePath}?doc=new&kind=${kind}&mode=edit`
 }
 
+/**
+ * A new record is persisted only once it carries content, so a Save of an
+ * untouched form cannot leave a blank numbered draft behind. A transfer needs
+ * its amount and both accounts (the two-leg kernel shape); every other kind
+ * needs at least one line. Returns the refusal to show the operator, or null.
+ */
+export function documentCreateContentRefusal(
+  kind: string,
+  lines: ReadonlyArray<{ accountId?: string | null; amount?: string | number | null }> | null | undefined,
+): string | null {
+  const list = lines ?? []
+  if (kind === 'transfer') {
+    const [destination, source] = list
+    const amount = String(destination?.amount ?? '').trim()
+    const positive = /^(\d+(\.\d*)?|\.\d+)$/.test(amount) && /[1-9]/.test(amount)
+    if (list.length !== 2 || !destination?.accountId || !source?.accountId || !positive) {
+      return 'A transfer needs an amount and both accounts before it can be saved.'
+    }
+    return null
+  }
+  if (list.length === 0) return 'A new document needs at least one line before it can be saved.'
+  return null
+}
+
 /** Optional-module kinds: the generic document APIs must 404 when the feature is off. */
 export { DOC_KIND_FEATURE } from '../records/document-kind-features.ts'
 

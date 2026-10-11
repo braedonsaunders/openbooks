@@ -16,7 +16,8 @@ const gate: { permissions: string[] } = { permissions: ["reports.read"] };
 Object.assign(globalThis, { __drillGate: gate });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/analytics/drill/")) {
+    if (specifier.endsWith("/lib/authz")
+      && (context.parentURL?.includes("/api/analytics/drill/") || context.parentURL?.includes("/lib/api/route"))) {
       return {
         shortCircuit: true,
         url:

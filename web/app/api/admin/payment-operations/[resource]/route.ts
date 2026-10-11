@@ -10,6 +10,7 @@ import {
   type PaymentBankProfileInput,
 } from '@openbooks/engine/payments/operations'
 import { computeNextRunAt } from '@openbooks/engine/scripting/scripting'
+import { payablePayeeBankAccountSql } from '@openbooks/engine/payments/run-readiness'
 import { guardPermission } from '../../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../../lib/features'
 import { isUuid } from '../../../../../lib/list-params'
@@ -315,7 +316,7 @@ export const POST = defineRoute({
         const mandateBank = (await tx.execute(sql`
           select 1 from party_bank_accounts b
            where b.id = ${body.partyBankAccountId} and b.party_id = ${body.partyId}
-             and b.org_id = ${gate.user.orgId} and b.is_active and b.approved_at is not null
+             and b.org_id = ${gate.user.orgId} and ${payablePayeeBankAccountSql('b')}
            for update
         `))
         if (!mandateBank.rows[0]) return { kind: 'invalid-bank' as const }

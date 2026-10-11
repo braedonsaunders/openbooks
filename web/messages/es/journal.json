@@ -68,6 +68,7 @@
     "deleted": "Diario eliminado",
     "deleteFailed": "No se pudo eliminar",
     "voidStaleRevision": "Este asiento cambió después de abrirlo — la última versión está cargada. Revíselo y anúlelo de nuevo.",
+    "voidRevisionUnavailable": "No se pudo recargar el asiento para anularlo. Cierre y vuelva a abrir el asiento y anúlelo de nuevo.",
     "totals": "Débitos <strong>{debits}</strong> · Créditos <strong>{credits}</strong>",
     "outOfBalance": "Descuadrado · {amount}",
     "balanced": "Cuadrado",
@@ -83,6 +84,8 @@
       "credit": "Crédito"
     },
     "budgetaryControlWarning": "El presupuesto {scenario} supera la asignación para {account}, fondo {fund}, {subsidiary}{dimensions}: disponible {available}, exceso de {amountOver}.",
-    "budgetaryControlRemedy": "Revise el presupuesto mediante su flujo de aprobación: copie el presupuesto aprobado como borrador, aumente el importe de esta cuenta para el fondo en la hoja de trabajo, apruebe la copia y archive el presupuesto sustituido. O vincule este importe al compromiso abierto que lo reservó."
+    "budgetaryControlRemedy": "Revise el presupuesto mediante su flujo de aprobación: copie el presupuesto aprobado como borrador, aumente el importe de esta cuenta para el fondo en la hoja de trabajo, apruebe la copia y archive el presupuesto sustituido. O vincule este importe al compromiso abierto que lo reservó.",
+    "voidAwaitingApproval": "La anulación de este asiento espera aprobación. El asiento permanece contabilizado hasta que se decida la aprobación.",
+    "createUnconfirmed": "El servidor no confirmó el nuevo asiento. Guarde de nuevo: el reintento usa la clave de este borrador, así que no puede crear un segundo asiento."
   }
 }

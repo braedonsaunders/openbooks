@@ -115,3 +115,47 @@ test("other proposals label every known field and humanize the rest", () => {
   assert.doesNotMatch(markup, /Additional accounting detail/, "no catch-all labels");
   assert.doesNotMatch(markup, new RegExp(grant), "no raw ids");
 });
+
+test("unchanged components stay hidden in a recipe revision until the reader shows them", () => {
+  const markup = render(
+    <BomRevisionEvidence
+      before={{ lines: [
+        { componentItemId: COMP_A, quantityPer: "16", sortOrder: 0, effectiveFrom: "2026-01-01", effectiveTo: null, operationSeq: null, scrapPct: null, isByproduct: false, quantityBasis: "per_unit" },
+        { componentItemId: COMP_B, quantityPer: "1", sortOrder: 1, effectiveFrom: "2026-01-01", effectiveTo: null, operationSeq: null, scrapPct: null, isByproduct: false, quantityBasis: "per_unit" },
+      ] }}
+      after={{ components: [
+        { componentItemId: COMP_A, quantityPer: "16", sortOrder: 0, effectiveFrom: "2026-01-01", effectiveTo: null, operationSeq: null, scrapPct: null, isByproduct: false, quantityBasis: "per_unit" },
+        { componentItemId: COMP_B, quantityPer: "2", sortOrder: 1, effectiveFrom: "2026-01-01", effectiveTo: null, operationSeq: null, scrapPct: null, isByproduct: false, quantityBasis: "per_unit" },
+      ] }}
+      names={names}
+    />,
+  );
+  assert.match(markup, /Show 1 unchanged lines/, "the unchanged count is offered as a toggle");
+  assert.doesNotMatch(markup, /RM-1 — Steel blank/, "unchanged components are hidden by default");
+  assert.match(markup, /RM-2 — Bracket/, "changed components are shown");
+});
+
+test("a moved operation reads as one changed component, not a removal and an addition", () => {
+  const markup = render(
+    <BomRevisionEvidence
+      before={{ lines: [{ componentItemId: COMP_A, quantityPer: "16", sortOrder: 0, effectiveFrom: null, effectiveTo: null, operationSeq: 10, scrapPct: null, isByproduct: false, quantityBasis: "per_unit" }] }}
+      after={{ components: [{ componentItemId: COMP_A, quantityPer: "16", sortOrder: 0, effectiveFrom: null, effectiveTo: null, operationSeq: 20, scrapPct: null, isByproduct: false, quantityBasis: "per_unit" }] }}
+      names={names}
+    />,
+  );
+  assert.match(markup, /Changed/, "the component is marked changed");
+  assert.doesNotMatch(markup, /Removed/, "no removal row for the moved component");
+  assert.doesNotMatch(markup, /Added/, "no addition row for the moved component");
+  assert.match(markup, /10 → 20/, "the operation sequence shows old → new");
+});
+
+test("the approval view shows each proposed line's effective requirement per parent unit", () => {
+  const markup = render(
+    <BomRevisionEvidence
+      before={{ lines: [] }}
+      after={{ components: [{ componentItemId: COMP_A, quantityPer: "0.893", sortOrder: 0, effectiveFrom: null, effectiveTo: null, operationSeq: null, scrapPct: "16", isByproduct: false, quantityBasis: "per_unit" }] }}
+      names={names}
+    />,
+  );
+  assert.match(markup, /1\.0359/, "quantity times one plus scrap, the engine's exact requirement");
+});

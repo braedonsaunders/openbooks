@@ -737,3 +737,74 @@ test("voiding a payment releases the credits it applied, and only then may they 
     assert.equal(await openBalance(org.orgId, invoiceLine), "200.0000");
   }),
 );
+
+/**
+ * The payable side of the same settlement: a posted vendor credit settles an
+ * open vendor bill of the same vendor with no cash. The vendor credit's AP leg
+ * is a debit and the bill's a credit, so the sign checks run the mirror image
+ * of the receivable case.
+ */
+async function postVendorDoc(
+  org: Awaited<ReturnType<typeof createScratchOrg>>,
+  userId: string,
+  kind: "vendor_bill" | "vendor_credit",
+  documentNumber: string,
+  amount: string,
+): Promise<string> {
+  const id = randomUUID();
+  await withBypass(async () => {
+    await db.execute(sql`
+      insert into documents
+        (id, org_id, kind, status, document_number, subsidiary_id, party_id,
+         document_date, currency, fx_rate, subtotal, tax_total, total, created_by)
+      values (${id}, ${org.orgId}, ${kind}, 'draft', ${documentNumber},
+              ${org.subsidiaryId}, ${org.vendorId}, ${org.date}, 'CAD', '1',
+              ${amount}, '0', ${amount}, ${userId})`);
+    await db.execute(sql`
+      insert into document_lines
+        (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount)
+      values (${org.orgId}, ${id}, 1, ${org.accounts.cogs}, '1', ${amount}, ${amount}, '0')`);
+    await db.execute(sql`
+      update documents set status = 'approved', updated_at = now()
+       where id = ${id} and org_id = ${org.orgId}`);
+  });
+  await withBypass(() =>
+    postDocument(id, {
+      control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+    }),
+  );
+  return id;
+}
+
+test("a posted vendor credit settles an open vendor bill of the same vendor with no cash", { skip: !DB }, () =>
+  withCreditOrg("Vendor credit settler", async (org, userId) => {
+    const billId = await postVendorDoc(org, userId, "vendor_bill", "VB-STANDALONE-1", "210");
+    const creditId = await postVendorDoc(org, userId, "vendor_credit", "VCRED-STANDALONE-1", "210");
+    const billLine = await openLineId(org.orgId, billId);
+    const creditLine = await openLineId(org.orgId, creditId);
+    assert.equal(await openBalance(org.orgId, billLine), "210.0000");
+
+    const state = await creditSettlementState(org.orgId, creditId);
+    assert.equal(state?.lineId, creditLine);
+    assert.equal(state?.open, "210.0000");
+
+    const entriesBefore = await entryCount(org.orgId);
+    const result = await withBypass(() =>
+      applyStandaloneCredits(org.orgId, userId, {
+        idempotencyKey: randomUUID(),
+        partyId: org.vendorId,
+        side: "ap",
+        appliedOn: org.date,
+        credits: [
+          { fromLineId: creditLine, toLineId: billLine, amount: "210", sourceDocumentId: creditId },
+        ],
+      }),
+    );
+
+    assert.equal(result.applicationIds.length, 1);
+    assert.equal(result.amount, "210.0000");
+    assert.equal(await entryCount(org.orgId), entriesBefore);
+    assert.equal(await openBalance(org.orgId, billLine), "0.0000");
+    assert.equal(await sourceOpenBalance(org.orgId, creditLine), "0.0000");
+  }),
+);

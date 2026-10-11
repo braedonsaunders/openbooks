@@ -61,6 +61,10 @@ export function CashDepositSection({
   const [mode, setMode] = useState<'sale' | 'till'>(initialMode)
   const [amount, setAmount] = useState('')
   const [date, setDate] = useState(defaultDate)
+  // The last sale date the drop's cash covers; follows the drop date until
+  // the cashier names an earlier cutoff.
+  const [coversThrough, setCoversThrough] = useState<string | null>(null)
+  const cutoff = coversThrough ?? date
   const [bankAccountId, setBankAccountId] = useState(bankOptions[0]?.value ?? '')
   const [slipNumber, setSlipNumber] = useState('')
   const [sourceAccountId, setSourceAccountId] = useState('')
@@ -80,12 +84,12 @@ export function CashDepositSection({
   // The till's window a drop on this date closes: refreshed when the till,
   // the date or a recorded drop changes.
   useEffect(() => {
-    if (mode !== 'till' || !tillAccountId || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    if (mode !== 'till' || !tillAccountId || !/^\d{4}-\d{2}-\d{2}$/.test(cutoff)) {
       setTillWindow(null)
       return
     }
     let live = true
-    const query = new URLSearchParams({ tillAccountId, date })
+    const query = new URLSearchParams({ tillAccountId, date: cutoff })
     fetch(`/api/cash-sales/till-drops?${query}`, { headers: { accept: 'application/json' } })
       .then((res) => (res.ok ? res.json() : null))
       .then((body) => { if (live) setTillWindow(body as TillWindow | null) })
@@ -93,7 +97,7 @@ export function CashDepositSection({
     return () => {
       live = false
     }
-  }, [mode, tillAccountId, date, reload])
+  }, [mode, tillAccountId, cutoff, reload])
 
   // Recorded drops beside the form: the cashier sees what already left the
   // till (a refused POST still records a draft drop), so a double drop
@@ -131,6 +135,7 @@ export function CashDepositSection({
               tillAccountId,
               amount: amount.trim(),
               date,
+              coversThrough: cutoff,
               bankAccountId: selectedBank,
               slipNumber: slipNumber.trim(),
               ...(reason.trim() ? { reason: reason.trim() } : {}),
@@ -159,6 +164,7 @@ export function CashDepositSection({
       setAmount('')
       setSlipNumber('')
       setReason('')
+      setCoversThrough(null)
       setReload((n) => n + 1)
       toast.success(t('tenders.depositSaved', { documentNumber }))
     } catch {
@@ -217,10 +223,17 @@ export function CashDepositSection({
               ))}
             </div>
           ) : null}
+          {mode === 'till' ? (
+            <div className="max-w-xs">
+              <FieldLabel fieldName={t('tenders.tillCoversThrough')}>{t('tenders.tillCoversThrough')}</FieldLabel>
+              <Input type="date" value={cutoff} max={date} onChange={(e) => setCoversThrough(e.target.value || null)} />
+            </div>
+          ) : null}
           {mode === 'till' && tillWindow ? (
             <p className="text-xs text-slate-600 dark:text-slate-300">
               {t(tillWindow.after ? 'tenders.tillWindow' : 'tenders.tillWindowFirst', {
                 after: tillWindow.after ?? '',
+                through: tillWindow.through,
                 sales: tillWindow.salesCount,
                 tendered: tillWindow.tendered,
                 dropped: tillWindow.dropped,

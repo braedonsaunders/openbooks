@@ -269,12 +269,15 @@ export type CashPredictionModel = {
   overduePushLongDays: number;
   overdueMidThresholdDays: number;
   overdueLongThresholdDays: number;
+  /** Receivables past their aging basis by more than this are not projected as receipts. */
+  collectibilityHorizonDays: number;
 };
 
 /**
  * The cashflow config defaults, mirrored from the config surface (engine
  * cannot import the web config spec): statistical, global average, due
- * date, with the 7/14/28 push ladder on the 30/60 thresholds.
+ * date, with the 7/14/28 push ladder on the 30/60 thresholds and a 90-day
+ * collectibility horizon.
  */
 const DEFAULT_PREDICTION_MODEL: CashPredictionModel = {
   settleBufferSigma: 0.5,
@@ -283,6 +286,7 @@ const DEFAULT_PREDICTION_MODEL: CashPredictionModel = {
   overduePushLongDays: 28,
   overdueMidThresholdDays: 30,
   overdueLongThresholdDays: 60,
+  collectibilityHorizonDays: 90,
 };
 
 /**
@@ -393,6 +397,16 @@ export function predictItem(
 }
 
 /**
+ * Whether a receivable balance has aged past the collectibility horizon, so it
+ * is not projected as a receipt. The age runs from the aging basis (due date,
+ * else posting date). Unapplied credits (negative balances) never qualify:
+ * they net against future receipts.
+ */
+export function beyondCollectibilityHorizon(item: OpenItem, asOf: string, model: CashPredictionModel): boolean {
+  return cmp(item.remaining, "0.0000") > 0 && calendarDaysBetween(item.dueDate ?? item.tranDate, asOf) > model.collectibilityHorizonDays;
+}
+
+/**
  * Predict every open item into a week bucket. Returns the by-week entry map
  * and the total scheduled inside the horizon — the shared step behind the
  * analytics timeline and the cockpit worklists.
@@ -404,9 +418,12 @@ function scheduleByWeek(
   start: string,
   end: string,
   model: CashPredictionModel,
+  receivable: boolean,
 ): Map<string, ForecastEntry[]> {
   const byWeek = new Map<string, ForecastEntry[]>();
   for (const item of items) {
+    // A receivable past the collectibility horizon is not a receipt in any week.
+    if (receivable && beyondCollectibilityHorizon(item, asOf, model)) continue;
     const { date, method } = predictItem(item, asOf, stats, model);
     // No history and no due date: unplaced, never invented into a week.
     if (date === null) continue;
@@ -528,6 +545,7 @@ async function cashflowSettings(orgId: string): Promise<{
     overduePushLongDays?: unknown;
     overdueMidThresholdDays?: unknown;
     overdueLongThresholdDays?: unknown;
+    collectibilityHorizonDays?: unknown;
     paymentHistoryMonths?: unknown;
   };
   let weeklyCap = "0.0000";
@@ -553,6 +571,7 @@ async function cashflowSettings(orgId: string): Promise<{
     overduePushLongDays: num(stored.overduePushLongDays, 0, 90, DEFAULT_PREDICTION_MODEL.overduePushLongDays, true),
     overdueMidThresholdDays: num(stored.overdueMidThresholdDays, 1, 180, DEFAULT_PREDICTION_MODEL.overdueMidThresholdDays, true),
     overdueLongThresholdDays: num(stored.overdueLongThresholdDays, 1, 180, DEFAULT_PREDICTION_MODEL.overdueLongThresholdDays, true),
+    collectibilityHorizonDays: num(stored.collectibilityHorizonDays, 1, 730, DEFAULT_PREDICTION_MODEL.collectibilityHorizonDays, true),
   };
   const historyMonths = num(stored.paymentHistoryMonths, 3, 36, 12, true);
   return { weeklyCap, restrictToSafe, model, historyMonths };
@@ -693,8 +712,8 @@ export async function cashFindings(
     const timeline = rollTimeline({
       weekStarts,
       startingCash,
-      arByWeek: scheduleByWeek(arItems, arStats, asOf, start, end, settings.model),
-      apByWeek: scheduleByWeek(apItems, apStats, asOf, start, end, settings.model),
+      arByWeek: scheduleByWeek(arItems, arStats, asOf, start, end, settings.model, true),
+      apByWeek: scheduleByWeek(apItems, apStats, asOf, start, end, settings.model, false),
       weeklyCap: settings.weeklyCap,
       restrictToSafe: settings.restrictToSafe,
     });

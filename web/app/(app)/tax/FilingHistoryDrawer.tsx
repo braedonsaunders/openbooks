@@ -9,6 +9,15 @@ import { Download } from 'lucide-react'
 import { Badge, Button, Input, Label, UrlDrawer } from '@openbooks/ui'
 import { formatDecimal } from '../../../lib/money-format'
 
+/** One adjustment entry on a stored filing, with the author who recorded it. */
+export type FilingAdjustmentRecord = {
+  lineCode: string
+  amount: string
+  reason: string | null
+  enteredByName: string | null
+  enteredAt: string | null
+}
+
 export type FilingHistoryRecord = {
   id: string
   form_name: string
@@ -22,6 +31,7 @@ export type FilingHistoryRecord = {
   filed_at: string | null
   snapshot_hash: string
   boxes: { lineCode: string; label: string; value: string; computed: boolean; editable: boolean }[]
+  adjustments: FilingAdjustmentRecord[]
 };
 
 export function FilingHistoryDrawer({ filing, closeHref, canFile }: { filing: FilingHistoryRecord; closeHref: string; canFile: boolean }) {
@@ -109,6 +119,17 @@ export function FilingHistoryDrawer({ filing, closeHref, canFile }: { filing: Fi
             <SharedTableBody>{filing.boxes.map((box) => <SharedTableRow key={box.lineCode} className="border-t border-slate-100 dark:border-slate-800"><SharedTableCell className="px-3 py-2 font-mono text-xs">{box.lineCode}</SharedTableCell><SharedTableCell className="px-3 py-2">{box.label}</SharedTableCell><SharedTableCell className="px-3 py-2 text-right tabular-nums">{formatDecimal(locale, box.value, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</SharedTableCell></SharedTableRow>)}</SharedTableBody>
           </SharedTable>
         </div>
+        {filing.adjustments.length > 0 ? (
+          <section aria-labelledby="filing-adjustments-heading" className="space-y-2">
+            <h3 id="filing-adjustments-heading" className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('adjustments.title')}</h3>
+            <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
+              <SharedTable className="w-full text-sm">
+                <SharedTableHeader><SharedTableRow className="bg-slate-50 text-left text-xs text-slate-500 dark:bg-slate-900 dark:text-slate-400"><SharedTableHead className="px-3 py-2">{t('line')}</SharedTableHead><SharedTableHead className="px-3 py-2">{t('adjustments.reason')}</SharedTableHead><SharedTableHead className="px-3 py-2">{t('adjustments.recordedBy')}</SharedTableHead><SharedTableHead className="px-3 py-2 text-right">{t('amount')}</SharedTableHead></SharedTableRow></SharedTableHeader>
+                <SharedTableBody>{filing.adjustments.map((entry, index) => <SharedTableRow key={`${entry.lineCode}-${index}`} className="border-t border-slate-100 dark:border-slate-800"><SharedTableCell className="px-3 py-2 font-mono text-xs">{entry.lineCode}</SharedTableCell><SharedTableCell className="px-3 py-2">{entry.reason ?? t('adjustments.noReason')}</SharedTableCell><SharedTableCell className="px-3 py-2 text-xs text-slate-500 dark:text-slate-400">{[entry.enteredByName ?? null, entry.enteredAt ? new Date(entry.enteredAt).toLocaleString(locale) : null].filter(Boolean).join(' · ') || '—'}</SharedTableCell><SharedTableCell className="px-3 py-2 text-right tabular-nums">{formatDecimal(locale, entry.amount, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</SharedTableCell></SharedTableRow>)}</SharedTableBody>
+              </SharedTable>
+            </div>
+          </section>
+        ) : null}
         <p className="break-all text-xs text-slate-400 dark:text-slate-500">{t('hash', { hash: filing.snapshot_hash })}</p>
       </div>
     </UrlDrawer>

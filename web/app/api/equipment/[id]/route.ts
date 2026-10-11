@@ -88,11 +88,14 @@ export const PATCH = defineRoute({
   permission: 'assets.manage',
   feature: 'equipment',
   params: z.object({ "id": z.string() }),
+  // Field refusals (including impossible calendar dates) answer 422 like the
+  // handler's own named refusals, not the generic 400 of a malformed body.
+  invalidBodyStatus: 422,
   handler: async ({ request: req, authz: gate, params: routeParams }) => {
     const params = Promise.resolve(routeParams);
     const { id } = await params
     if (!isUuid(id)) return notFound("record")
-    const parsedBody = await parseJsonBody(req, requestBodySchema);
+    const parsedBody = await parseJsonBody(req, requestBodySchema, { status: 422 });
     if (!parsedBody.ok) return parsedBody.response;
     const body = (parsedBody.data)
     // Mandatory optimistic-concurrency token: the caller echoes the revision it

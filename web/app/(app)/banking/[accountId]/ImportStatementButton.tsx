@@ -4,6 +4,7 @@ import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as Sha
 import { useMoney } from '@/components/money-provider'
 import { readApiErrorMessage } from '@/lib/api-error'
 import { editableMoneyDecimal, sameMoneyDecimal } from '@/lib/exact-decimal'
+import { fromUnits, toUnits } from '@openbooks/engine/money/money'
 import { useId, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -56,10 +57,16 @@ interface StatementPreview {
   imported: number
   duplicates: number
   possibleDuplicates: number
+  /** Candidates held out of the import (or listed for opt-in), each naming the line it duplicates. */
+  possibleDuplicateLines: PreviewLine[]
+  /** The choice this preview was computed with; the import commits exactly this choice. */
+  includePossibleDuplicates: boolean
   skipped: SkippedRow[]
   balanceCandidates: BalanceCandidate[]
   suggestedOpening: SuggestedOpening | null
   openingMismatch: OpeningMismatch | null
+  /** Net of every transaction line in the file: opening plus this is the closing. */
+  statementLinesTotal: string | null
   currency: string | null
   sourceRevision: number
   accountId: string
@@ -207,6 +214,9 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
   const [statementDate, setStatementDate] = useState('')
   const [openingBalance, setOpeningBalance] = useState('')
   const [closingBalance, setClosingBalance] = useState('')
+  // The reviewer's choice to import possible duplicates. Off by default: they
+  // are listed in the preview and held out of the import until opted in.
+  const [includePossibleDuplicates, setIncludePossibleDuplicates] = useState(false)
 
   function reviseInputs() {
     const revision = ++sourceRevision.current
@@ -229,6 +239,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
     setHeader(null)
     setMapping(EMPTY_MAPPING)
     setPreview(null)
+    setIncludePossibleDuplicates(false)
     clearDerivedStatementValues()
   }
 
@@ -284,11 +295,13 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
     imported?: number
     duplicates?: number
     possibleDuplicates?: number
+    possibleDuplicateLines?: PreviewLine[]
     skipped?: SkippedRow[]
     balanceCandidates?: BalanceCandidate[]
     statementDate?: string
     closingBalance?: string
     currency?: string
+    statementLinesTotal?: string | null
     accounts?: DialogAccount[]
   }
 
@@ -320,6 +333,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
   const visiblePreview = preview?.accountId === selectedAccountId ? preview : null
   const previewStale = preview !== null && (visiblePreview === null || preview.sourceRevision !== sourceRevisionView)
   const selectedAccount = dialogAccounts?.find((a) => a.id === selectedAccountId) ?? null
+  const closingMismatch = statementClosingMismatch(openingBalance, closingBalance, visiblePreview?.statementLinesTotal ?? null, selectedAccount?.type ?? null)
   const statementCurrency = visiblePreview?.currency ?? null
   const currencyMismatch = statementCurrency !== null
     && selectedAccount?.currency != null
@@ -389,7 +403,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
     setSource((current) => rememberedFormat(id, current))
   }
 
-  function useCandidateAsBalance(amount: string, field: 'openingBalance' | 'closingBalance') {
+  function applyCandidateAsBalance(amount: string, field: 'openingBalance' | 'closingBalance') {
     // A balance change needs a fresh preview, exactly like an edited
     // statement date: the notice below says so and Import stays disabled.
     reviseInputs()
@@ -436,7 +450,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
     }
   }
 
-  async function runPreview() {
+  async function runPreview(include: boolean = includePossibleDuplicates) {
     const requestRevision = sourceRevision.current
     const requestAccountId = selectedAccountId
     setBusy(true)
@@ -451,6 +465,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
         // partition as the import, so the preview agrees with what import writes.
         openingBalance: openingBalance || null,
         closingBalance: closingBalance || null,
+        includePossibleDuplicates: include,
         ...(source === 'csv' ? { mapping: toEngineMapping(mapping) } : {}),
       })
       if (requestRevision !== sourceRevision.current) return
@@ -459,10 +474,13 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
         imported: data.imported ?? 0,
         duplicates: data.duplicates ?? 0,
         possibleDuplicates: data.possibleDuplicates ?? 0,
+        possibleDuplicateLines: data.possibleDuplicateLines ?? [],
+        includePossibleDuplicates: include,
         skipped: data.skipped ?? [],
         balanceCandidates: data.balanceCandidates ?? [],
         suggestedOpening: data.suggestedOpening ?? null,
         openingMismatch: data.openingMismatch ?? null,
+        statementLinesTotal: data.statementLinesTotal ?? null,
         currency: data.currency ?? null,
         sourceRevision: requestRevision,
         accountId: requestAccountId,
@@ -501,6 +519,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
         statementDate: statementDate || null,
         openingBalance: openingBalance || null,
         closingBalance: closingBalance || null,
+        includePossibleDuplicates: preview.includePossibleDuplicates,
         ...(source === 'csv' ? { mapping: toEngineMapping(mapping) } : {}),
       })
       rememberFormat(selectedAccountId, source)
@@ -557,7 +576,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
         description={t('description')}
         headerActions={
           <>
-            <Button variant="outline" disabled={busy || !hasSource || !csvReady} onClick={runPreview}>
+            <Button variant="outline" disabled={busy || !hasSource || !csvReady} onClick={() => runPreview()}>
               {t('preview')}
             </Button>
             {!visiblePreview || visiblePreview.sourceRevision !== sourceRevisionView ? (
@@ -765,7 +784,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
                             variant="outline"
                             size="sm"
                             disabled={busy}
-                            onClick={() => useCandidateAsBalance(c.amount, 'openingBalance')}
+                            onClick={() => applyCandidateAsBalance(c.amount, 'openingBalance')}
                           >
                             {t('useAsOpening')}
                           </Button>
@@ -773,7 +792,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
                             variant="outline"
                             size="sm"
                             disabled={busy}
-                            onClick={() => useCandidateAsBalance(c.amount, 'closingBalance')}
+                            onClick={() => applyCandidateAsBalance(c.amount, 'closingBalance')}
                           >
                             {t('useAsClosing')}
                           </Button>
@@ -820,6 +839,12 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
                 </div>
               </div>
 
+              {closingMismatch ? (
+                <p role="note" className="text-xs text-amber-700 dark:text-amber-300">
+                  {t('closingMismatch', closingMismatch)}
+                </p>
+              ) : null}
+
               {visiblePreview.skipped.length > 0 ? (
                 <div
                   role="note"
@@ -844,7 +869,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
                               size="sm"
                               disabled={busy}
                               onClick={() =>
-                                useCandidateAsBalance(
+                                applyCandidateAsBalance(
                                   row.amount as string,
                                   row.balanceRole === 'opening' ? 'openingBalance' : 'closingBalance',
                                 )
@@ -861,9 +886,13 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
                   </ul>
                 </div>
               ) : null}
-              {visiblePreview.lines.length === 0 ? (
+              {visiblePreview.lines.length === 0 && visiblePreview.possibleDuplicateLines.length === 0 ? (
                 <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-300">
                   {t('previewEmpty')}
+                </p>
+              ) : visiblePreview.lines.length === 0 ? (
+                <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-300">
+                  {t('onlyPossibleDuplicates')}
                 </p>
               ) : visiblePreview.imported === 0 ? (
                 <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-300">
@@ -906,10 +935,75 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
                   ) : null}
                 </div>
               )}
+              {visiblePreview.possibleDuplicateLines.length > 0 ? (
+                <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50/60 p-3 dark:border-amber-800/60 dark:bg-amber-950/30">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="warning">{t('possibleDuplicateBadge')}</Badge>
+                    <p className="text-sm text-slate-700 dark:text-slate-300">
+                      {t('possibleDuplicatesNotice', { count: visiblePreview.possibleDuplicateLines.length })}
+                    </p>
+                  </div>
+                  <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+                    <input
+                      type="checkbox"
+                      className="accent-teal-700"
+                      checked={visiblePreview.includePossibleDuplicates}
+                      disabled={busy || previewStale}
+                      onChange={(event) => {
+                        const next = event.target.checked
+                        setIncludePossibleDuplicates(next)
+                        void runPreview(next)
+                      }}
+                    />
+                    {t('includePossibleDuplicates', { count: visiblePreview.possibleDuplicateLines.length })}
+                  </label>
+                  <ul className="divide-y divide-amber-200/70 text-sm dark:divide-amber-900/60">
+                    {visiblePreview.possibleDuplicateLines.slice(0, PREVIEW_CAP).map((l, i) => (
+                      <li key={i} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5">
+                        <span className="whitespace-nowrap tabular-nums">{l.postedOn}</span>
+                        <span className="min-w-0 flex-1 truncate">{l.description ?? '—'}</span>
+                        <span className="text-xs text-slate-500 dark:text-slate-400">{t('possibleDuplicateMatch')}</span>
+                        <span className="whitespace-nowrap text-right tabular-nums">{money(l.amount)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
             </div>
           ) : null}
         </div>
       </Drawer>
     </>
   )
+}
+
+/**
+ * Opening plus the file's lines against the typed closing, as the import
+ * checks it: liability statements accept either sign pairing. Null while
+ * either balance is blank or not yet a number.
+ */
+export function statementClosingMismatch(
+  opening: string,
+  closing: string,
+  linesTotal: string | null,
+  accountType: string | null,
+): { opening: string; lines: string; expected: string; closing: string } | null {
+  if (linesTotal === null || opening.trim() === '' || closing.trim() === '') return null
+  let openingUnits: bigint, closingUnits: bigint, linesUnits: bigint
+  try {
+    openingUnits = toUnits(opening)
+    closingUnits = toUnits(closing)
+    linesUnits = toUnits(linesTotal)
+  } catch {
+    return null
+  }
+  const movement = closingUnits - openingUnits
+  if (movement === linesUnits) return null
+  if (accountType?.startsWith('liability') && movement === -linesUnits) return null
+  return {
+    opening: editableMoneyDecimal(fromUnits(openingUnits)),
+    lines: editableMoneyDecimal(fromUnits(linesUnits)),
+    expected: editableMoneyDecimal(fromUnits(openingUnits + linesUnits)),
+    closing: editableMoneyDecimal(fromUnits(closingUnits)),
+  }
 }

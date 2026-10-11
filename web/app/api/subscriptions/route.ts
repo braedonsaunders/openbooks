@@ -11,18 +11,21 @@ import {
   firstPeriodStub,
   lockCustomerForScope,
   lockSubscriptionCustomerForScope,
-  monthlyRecurringRevenue,
+  contractRecurringAmounts,
   normalizeSubscriptionCadence,
   normalizeSubscriptionMoney,
   pendingSubscriptionPeriods,
   prorateFirstInvoice,
   resolveNextBillOnUpdate,
+  resolveSubscriptionCancellation,
   runSubscriptionCatchUp,
+  subscriptionPaidThrough,
+  subscriptionRecurringRevenue,
   type Interval,
 } from "@openbooks/engine/billing/subscription-billing";
 import { CATCH_UP_CHOICE_THRESHOLD } from "@openbooks/engine/billing/recurring";
 import { ScopeNotFoundError } from "@openbooks/engine/organization/scope";
-import { add, mulDecimal } from "@openbooks/engine/money/money";
+import { add, mulDecimal, toUnits } from "@openbooks/engine/money/money";
 import { guardSubsidiaryScope, guardUnrestrictedScope, type Authz } from "../../../lib/authz";
 import { isFeatureEnabled } from "../../../lib/features";
 import { businessToday } from "@openbooks/engine/platform/business-date/module";
@@ -35,7 +38,7 @@ const POSTBodySchema1 = z.discriminatedUnion('action', [
   z.object({ action: z.literal('deletePlan'), id: z.string().uuid() }),
   z.object({ action: z.literal('addSubscription'), customerId: z.string().uuid(), planId: z.string().uuid(), startOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), firstBillOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), prorateFirstPeriod: z.boolean().optional(), autoPost: z.boolean().optional(), quantity: z.string().optional(), priceOverride: z.string().nullable().optional(), memo: z.string().nullable().optional(), catchUp: z.object({ mode: z.enum(["post_all", "drafts", "skip", "selected"]), dates: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).optional(), post: z.boolean().optional() }).optional() }),
   z.object({ action: z.literal('changeSubscription'), id: z.string().uuid(), quantity: z.string().optional(), priceOverride: z.string().nullable().optional() }),
-  z.object({ action: z.literal('updateSubscription'), id: z.string().uuid(), status: z.enum(['active', 'paused', 'canceled']).optional(), quantity: z.string().optional(), priceOverride: z.string().nullable().optional(), autoPost: z.boolean().optional(), nextBillOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), skipUnbilledService: z.boolean().optional(), skipReason: z.string().optional(), billToPartyId: z.string().uuid().nullable().optional(), payerPartyId: z.string().uuid().nullable().optional(), catchUp: z.object({ mode: z.enum(["post_all", "drafts", "skip", "selected"]), dates: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).optional(), post: z.boolean().optional() }).optional() }),
+  z.object({ action: z.literal('updateSubscription'), id: z.string().uuid(), status: z.enum(['active', 'paused', 'canceled']).optional(), canceledOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), quantity: z.string().optional(), priceOverride: z.string().nullable().optional(), autoPost: z.boolean().optional(), nextBillOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), skipUnbilledService: z.boolean().optional(), skipReason: z.string().optional(), billToPartyId: z.string().uuid().nullable().optional(), payerPartyId: z.string().uuid().nullable().optional(), catchUp: z.object({ mode: z.enum(["post_all", "drafts", "skip", "selected"]), dates: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).optional(), post: z.boolean().optional() }).optional() }),
   z.object({ action: z.literal('billNow'), id: z.string().uuid() }),
 ]);
 
@@ -43,13 +46,9 @@ const POSTBodySchema1 = z.discriminatedUnion('action', [
 
 export const runtime = "nodejs";
 
+/** One subscription's monthly recurring revenue in its contract currency. */
 type SubscriptionMrrRow = {
-  status: string;
-  priceOverride: unknown;
-  planAmount: unknown;
-  interval: Interval;
-  intervalCount: unknown;
-  quantity: unknown;
+  mrr: string;
   planCurrency: unknown;
 };
 
@@ -68,13 +67,10 @@ async function subscriptionMrrInOrgCurrency(
   const rates = new Map<string, string>();
   let total = "0.0000";
   for (const row of rows) {
-    if (row.status !== "active") continue;
-    const amount = monthlyRecurringRevenue(
-      String(row.priceOverride ?? row.planAmount ?? "0"),
-      row.interval,
-      Number(row.intervalCount ?? 1),
-      String(row.quantity ?? "1"),
-    );
+    const amount = row.mrr;
+    // A subscription earning nothing today needs no rate: a foreign plan with
+    // no spot rate must not refuse the card for revenue that is not there.
+    if (toUnits(amount) === 0n) continue;
     const sourceCurrency = String(row.planCurrency ?? orgCurrency).trim().toUpperCase();
     if (sourceCurrency === orgCurrency) {
       total = add(total, amount);
@@ -216,6 +212,7 @@ export const GET = defineRoute({
   handler: async ({ authz: routeAuthz }) => {
     const authz = routeAuthz;
     const orgId = authz.user.orgId;
+    const asOf = await businessToday(orgId);
     const [plans, subs, org] = await Promise.all([
         db.execute(sql`
           select id, name, description, amount, currency_code as "currency", interval,
@@ -228,14 +225,22 @@ export const GET = defineRoute({
                  s.price_override as "priceOverride", s.status, s.start_on as "startOn",
                  s.next_bill_on as "nextBillOn", s.auto_post as "autoPost", s.run_count as "runCount",
                  s.last_invoice_id as "lastInvoiceId", s.last_error as "lastError",
+                 s.start_on::text as "startOnDate", s.next_bill_on::text as "nextBillOnDate",
+                 s.canceled_on::text as "canceledOn",
                  exists(select 1 from subscription_lifecycles l where l.subscription_id = s.id and l.org_id = s.org_id) as "advancedLifecycle",
                  c.display_name as "customerName", p.name as "planName", p.amount as "planAmount",
-                 p.interval, p.interval_count as "intervalCount", coalesce(v.currency_code, p.currency_code) as "planCurrency"
+                 p.interval, p.interval_count as "intervalCount", coalesce(v.currency_code, p.currency_code) as "planCurrency",
+                 guard."guardedThrough"
             from subscriptions s
             join subscription_plans p on p.id = s.plan_id and p.org_id = s.org_id
             left join parties c on c.id = s.customer_id and c.org_id = s.org_id
             left join subscription_lifecycles l on l.subscription_id = s.id and l.org_id = s.org_id
             left join subscription_plan_versions v on v.id = l.plan_version_id and v.org_id = s.org_id
+            left join lateral (
+              select max(inv.period_ends_on)::text as "guardedThrough"
+                from subscription_period_invoices inv
+               where inv.org_id = s.org_id and inv.subscription_id = s.id
+            ) guard on true
            where s.org_id = ${orgId}
              ${customerSubsidiaryFilter(authz.allowedSubsidiaryIds)}
            order by s.created_at desc
@@ -246,16 +251,40 @@ export const GET = defineRoute({
       ]);
     const orgCurrency = String(org.rows[0]?.baseCurrency ?? "").trim().toUpperCase();
     if (!orgCurrency) throw new SubscriptionError("organization currency is not configured");
-    const subscriptions = subs.rows.map((s) => ({
-        ...s,
-        mrr:
-          s.status === "active"
-            ? monthlyRecurringRevenue(String(s.priceOverride ?? s.planAmount ?? "0"), s.interval as Interval, Number(s.intervalCount ?? 1), String(s.quantity ?? "1"))
-            : "0.0000",
-      }));
+    // Contract subscriptions earn their amended component prices, not the plan
+    // price they were activated from, so MRR reads the same figure the invoices do.
+    const contractAmounts = await contractRecurringAmounts(orgId, asOf);
+    const earning = subs.rows.map((s) => {
+      const contract = contractAmounts.get(String(s.id)) ?? null;
+      const paidThroughOn = subscriptionPaidThrough({
+        startOn: String(s.startOnDate),
+        nextBillOn: String(s.nextBillOnDate),
+        billed: s.lastInvoiceId != null || s.guardedThrough != null,
+        guardedThrough: s.guardedThrough == null ? null : String(s.guardedThrough),
+      });
+      const mrr = subscriptionRecurringRevenue({
+        status: String(s.status),
+        canceledOn: s.canceledOn == null ? null : String(s.canceledOn),
+        asOf,
+        priceOverride: s.priceOverride,
+        planAmount: s.planAmount,
+        contract,
+        interval: s.interval as Interval,
+        intervalCount: s.intervalCount,
+        quantity: s.quantity,
+      });
+      return { row: s, mrr, paidThroughOn };
+    });
+    const subscriptions = earning.map(({ row, mrr, paidThroughOn }) => {
+      const { startOnDate: _startOnDate, nextBillOnDate: _nextBillOnDate, guardedThrough: _guardedThrough, ...publicRow } = row;
+      return { ...publicRow, mrr, paidThroughOn };
+    });
     let mrr: string;
     try {
-        mrr = await subscriptionMrrInOrgCurrency(orgId, orgCurrency, subs.rows as SubscriptionMrrRow[]);
+        mrr = await subscriptionMrrInOrgCurrency(orgId, orgCurrency, earning.map(({ row, mrr: rowMrr }) => ({
+          mrr: rowMrr,
+          planCurrency: row.planCurrency,
+        })));
       } catch (e) {
         if (e instanceof SubscriptionError) return apiErrorResponse(e);
         throw e;
@@ -580,7 +609,12 @@ export const POST = defineRoute({
               }
               sets.push(sql`status = ${body.status}`);
             }
-            if (body.status === "canceled") sets.push(sql`canceled_on = ${await businessToday(orgId)}`);
+            // A cancellation date applies only to a cancellation. Its value is
+            // resolved against the paid-through date inside the locked
+            // transaction below, where the invoiced periods are read.
+            if (body.canceledOn != null && body.status !== "canceled") {
+              throw new SubscriptionError("a cancellation date applies only when canceling the subscription");
+            }
             if ("quantity" in body) {
               const quantity = normalizeSubscriptionMoney(body.quantity, "quantity", "positive");
               sets.push(sql`quantity = ${quantity}`);
@@ -653,18 +687,50 @@ export const POST = defineRoute({
                 select * from subscriptions where id = ${body.id} and org_id = ${orgId} for update
               `));
               if (!before.rows[0]) return null;
+              const guards = (await tx.execute<{ guardedThrough: string | null }>(sql`
+                select max(pi.period_ends_on)::text as "guardedThrough"
+                  from subscription_period_invoices pi
+                 where pi.org_id = ${orgId} and pi.subscription_id = ${body.id}
+              `));
+              const guardedThrough = guards.rows[0]?.guardedThrough ?? null;
+              if (body.status === "canceled") {
+                const today = await businessToday(orgId);
+                const billed = before.rows[0].last_invoice_id != null || guardedThrough !== null;
+                const paidThrough = subscriptionPaidThrough({
+                  startOn: String(before.rows[0].start_on),
+                  nextBillOn: String(before.rows[0].next_bill_on),
+                  billed,
+                  guardedThrough,
+                });
+                // An arrears contract's current period is served but not yet
+                // invoiced, so ending it on a date would drop that invoice.
+                // Only an advance-billed subscription has a clean end date.
+                const lifecycle = (await tx.execute<{ billingTiming: string }>(sql`
+                  select billing_timing as "billingTiming" from subscription_lifecycles
+                   where org_id = ${orgId} and subscription_id = ${body.id}
+                `)).rows[0];
+                if (lifecycle?.billingTiming === "arrears") {
+                  if (body.canceledOn != null) {
+                    throw new SubscriptionError(
+                      "an arrears contract cannot be canceled on a chosen date yet, because its current period is invoiced only at its end. Cancel it without a date to end it today",
+                    );
+                  }
+                  sets.push(sql`canceled_on = ${today}`);
+                } else {
+                  const canceledOn = resolveSubscriptionCancellation({
+                    requestedOn: body.canceledOn == null ? null : subscriptionDate(body.canceledOn, "cancellation date"),
+                    today,
+                    paidThrough,
+                  });
+                  sets.push(sql`canceled_on = ${canceledOn}`);
+                }
+              }
               // Resolve the cursor move against the unbilled boundary — the end
               // of the last billed period (m47's shared helper). Rewinding into
               // billed service or skipping forward without a reason throws a
               // SubscriptionError, which the handler maps to a named 422.
               let skippedWindow: { from: string; to: string } | null = null;
               if (nextBillOn !== undefined) {
-                const guards = (await tx.execute<{ guardedThrough: string | null }>(sql`
-                  select max(pi.period_ends_on)::text as "guardedThrough"
-                    from subscription_period_invoices pi
-                   where pi.org_id = ${orgId} and pi.subscription_id = ${body.id}
-                `));
-                const guardedThrough = guards.rows[0]?.guardedThrough ?? null;
                 const resolved = resolveNextBillOnUpdate({
                   startOn: String(before.rows[0].start_on),
                   currentPeriodStart: before.rows[0].current_period_start == null

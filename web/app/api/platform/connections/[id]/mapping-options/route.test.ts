@@ -34,6 +34,8 @@ test('mapping discovery requires setup permission and full entity scope, and bin
   assert.equal(state.permission, 'admin.setup.manage'); assert.ok(state.reads.every((read) => read === `org-1:${id}`));
   assert.deepEqual(state.fields, ['timeTypeMultiplierField:customrecord_time']);
   state.refusal = 'Grant custom-record read access and retry';
-  const denied = await call('field=timeTypeRecord'); assert.equal(denied.status, 422); assert.match((await denied.json()).error, /Grant custom-record read access/);
+  // Adapter errors are untrusted: the operator gets the static remedy, never the adapter's text.
+  const denied = await call('field=timeTypeRecord'); assert.equal(denied.status, 422);
+  const deniedBody = await denied.json(); assert.match(deniedBody.error, /check the connection's read permissions and retry/); assert.doesNotMatch(deniedBody.error, /custom-record/);
   state.exists = false; assert.equal((await call('field=timeTypeRecord')).status, 404);
 });

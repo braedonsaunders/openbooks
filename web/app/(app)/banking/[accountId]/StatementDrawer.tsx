@@ -1,5 +1,5 @@
 import { getMoneyFormatter } from '@/lib/money-server'
-import { getFormatter, getTranslations } from 'next-intl/server'
+import { getTranslations } from 'next-intl/server'
 import { Badge, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, UrlDrawer } from '@openbooks/ui'
 import { SearchInput } from '../../../../components/search-input'
 import { Pagination } from '../../../../components/pagination'
@@ -43,7 +43,8 @@ export async function StatementDrawer({
     statement_date: string
     opening_balance: string | null
     closing_balance: string | null
-    imported_at: string
+    /** The import timestamp, formatted in the business time zone with its time. */
+    importedAtLabel: string
   }
   canEditBalances: boolean
   balancesBlockedReason: string | null
@@ -63,7 +64,6 @@ export async function StatementDrawer({
   dir: 'asc' | 'desc'
 }) {
   const { money } = await getMoneyFormatter()
-  const format = await getFormatter()
   const t = await getTranslations('banking')
   const tCommon = await getTranslations('common')
   const closeHref = mergeHref(basePath, currentParams, {
@@ -96,7 +96,7 @@ export async function StatementDrawer({
         </span>
       }
       description={t('drawer.description', {
-        date: format.dateTime(new Date(statement.imported_at), { dateStyle: 'medium' }),
+        date: statement.importedAtLabel,
         opening: statement.opening_balance != null ? money(statement.opening_balance) : '—',
         closing: statement.closing_balance != null ? money(statement.closing_balance) : '—',
       })}

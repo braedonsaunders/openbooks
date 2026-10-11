@@ -108,7 +108,8 @@
     "applySource": "¿Reemplazar todas las líneas de este borrador con los valores del presupuesto seleccionado?",
     "submit": "¿Enviar este presupuesto para su aprobación? Se bloqueará la edición hasta que se decida.",
     "approve": "¿Aprobar este presupuesto?",
-    "reject": "¿Devolver este presupuesto a borrador?"
+    "reject": "¿Devolver este presupuesto a borrador?",
+    "rejectionReason": "Motivo del rechazo"
   },
   "feedback": {
     "archived": "Presupuesto archivado.",

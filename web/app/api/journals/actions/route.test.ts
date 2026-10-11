@@ -125,6 +125,61 @@ test('posting a partyless control leg returns its typed warning with the entry i
   }
 })
 
+test('posting fences on the revision the reviewer saw and refuses a stale one before any posting', { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg())
+  try {
+    const { adminId } = await withBypassContext(() => seedFlowActors(org.orgId))
+    ;(globalThis as Record<string, unknown>).__journalActionsSession = { id: adminId, orgId: org.orgId, isSuperAdmin: true }
+    routeState.authz = {
+      user: { orgId: org.orgId, id: adminId },
+      permissions: new Set(['gl.post']),
+      allowedSubsidiaryIds: null,
+    }
+
+    const documentId = randomUUID()
+    const createResponse = await withOrgContext(org.orgId, () => createJournal(new Request('http://localhost/api/journals', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'Idempotency-Key': documentId },
+      body: JSON.stringify({
+        documentDate: '2026-07-14',
+        lines: [
+          { accountId: org.accounts.revenue, amount: '-50', description: 'revenue leg' },
+          { accountId: org.accounts.bank, amount: '50', description: 'bank leg' },
+        ],
+      }),
+    })))
+    assert.equal(createResponse.status, 201, await createResponse.text())
+    const currentRevision = (await withOrgContext(org.orgId, () => db.execute<{ rev: string }>(sql`
+      select revision_seq::text as rev from documents where id = ${documentId} and org_id = ${org.orgId}
+    `))).rows[0]?.rev
+    assert.ok(currentRevision, 'the created journal carries its exact revision counter')
+
+    const post = (expectedUpdatedAt: string) => withOrgContext(org.orgId, () => postJournal(new Request('http://localhost/api/journals/actions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'post', documentId, expectedUpdatedAt }),
+    })))
+
+    const stale = await post('0')
+    assert.equal(stale.status, 409, 'a revision the row never held is refused')
+    const afterStale = await withOrgContext(org.orgId, () => db.execute<{ status: string }>(sql`
+      select status from documents where id = ${documentId} and org_id = ${org.orgId}
+    `))
+    assert.equal(afterStale.rows[0]?.status, 'draft', 'a refused post leaves the draft unposted')
+
+    const accepted = await post(currentRevision)
+    assert.equal(accepted.status, 200, await accepted.clone().text())
+    const afterPost = await withOrgContext(org.orgId, () => db.execute<{ status: string }>(sql`
+      select status from documents where id = ${documentId} and org_id = ${org.orgId}
+    `))
+    assert.equal(afterPost.rows[0]?.status, 'posted')
+  } finally {
+    routeState.authz = null
+    ;(globalThis as Record<string, unknown>).__journalActionsSession = null
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
+
 const ledgerRequest = (body: unknown) => new Request('http://localhost/api/ledger-actions', {
   method: 'POST',
   headers: { 'content-type': 'application/json' },

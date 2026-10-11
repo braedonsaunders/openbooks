@@ -267,7 +267,10 @@ testCase('copy_prior_actuals keeps each subsidiary as a distinct budget cell', a
   const query = sourceCopyQuery()
   assert.match(query, /insert into budget_lines[\s\S]*subsidiary_id/)
   assert.match(query, /sum\(l\.amount\)/)
-  assert.match(query, /group by l\.account_id, destination\.id, l\.subsidiary_id/)
+  // Grouped by select-list position: the 5th expression is l.subsidiary_id,
+  // so each subsidiary stays its own cell.
+  assert.match(query, /l\.account_id, destination\.id,\s+l\.subsidiary_id, l\.department_id/)
+  assert.match(query, /group by 3, 4, 5, 6, 7, 8, 9, 10\b/)
   assert.doesNotMatch(query, /and false/)
 })
 

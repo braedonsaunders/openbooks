@@ -39,7 +39,7 @@ export const CONTROLS_WIDGETS = {
     )
   },
   'resource-cell': (props) => (
-    <ResourceCell label={str(props, 'label') ?? ''} fileName={(props.fileName as string | null) ?? null} href={str(props, 'href')} />
+    <ResourceCell label={str(props, 'label') ?? ''} fileName={(props.fileName as string | null) ?? null} href={str(props, 'href')} failureMessage={str(props, 'failureMessage')} />
   ),
   'row-counts-cell': (props) => (
     <RowCountsCell

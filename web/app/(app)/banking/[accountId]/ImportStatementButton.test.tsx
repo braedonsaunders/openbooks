@@ -14,6 +14,9 @@ const script = {
   toasts: [] as Array<{ kind: string; message: string }>,
   previewStatus: 422 as number,
   previewBody: { error: 'CSV has a header but no data rows' } as unknown,
+  previewPayload: { lines: [], imported: 0, duplicates: 0 } as unknown,
+  importPayload: { statementId: 'stmt-1', imported: 1, duplicates: 0, possibleDuplicates: 0 } as unknown,
+  requests: [] as Array<Record<string, unknown>>,
 }
 Object.assign(globalThis, {
   __importTestToasts: script.toasts,
@@ -67,8 +70,13 @@ async function mount() {
       return Response.json({ header: ['hello', 'not', 'a', 'statement'] })
     }
     if (url === '/api/banking/import' && body.mode === 'preview') {
-      if (script.previewStatus === 200) return Response.json({ lines: [], imported: 0, duplicates: 0 })
+      script.requests.push(body as Record<string, unknown>)
+      if (script.previewStatus === 200) return Response.json(script.previewPayload)
       return Response.json(script.previewBody, { status: script.previewStatus })
+    }
+    if (url === '/api/banking/import' && body.mode === 'import') {
+      script.requests.push(body as Record<string, unknown>)
+      return Response.json(script.importPayload)
     }
     throw new Error(`unexpected fetch ${String(url)} ${body.mode}`)
   }) as typeof fetch
@@ -617,4 +625,95 @@ test('opening defaults from the prior closing and flags a mismatch', async (t) =
     (document.body.textContent ?? '').includes('Opening 900.00 differs from the 2026-10-31 closing balance 1150.00'),
     'a differing opening flags instead of refusing',
   )
+})
+
+const DUPLICATE_PREVIEW = {
+  lines: [{ postedOn: '2026-11-03', amount: '20.0000', description: 'REFUND' }],
+  imported: 1,
+  duplicates: 0,
+  possibleDuplicates: 1,
+  possibleDuplicateLines: [
+    { postedOn: '2026-11-02', amount: '-5.0000', description: 'COFFEE SHOP', possibleDuplicateOf: 'line-coffee' },
+  ],
+  skipped: [],
+  balanceCandidates: [],
+}
+
+test('possible duplicates are listed in the preview and held out of the default import', async (t) => {
+  script.previewStatus = 200
+  script.previewPayload = DUPLICATE_PREVIEW
+  script.importPayload = { statementId: 'stmt-1', imported: 1, duplicates: 0, possibleDuplicates: 1 }
+  script.requests.length = 0
+  const { host, root } = await mount()
+  t.after(async () => {
+    await act(async () => {
+      root.unmount()
+    })
+    host.remove()
+  })
+  await mapJunkCsv()
+  await act(async () => {
+    clickButton('Preview').click()
+    await tick()
+    await tick()
+  })
+  assert.match(document.body.textContent ?? '', /Matches a line already on this account/, 'the duplicate is named in the preview')
+  const optIn = document.querySelector('input[type="checkbox"]') as HTMLInputElement | null
+  assert.ok(optIn, 'the preview must offer the explicit opt-in')
+  assert.equal(optIn.checked, false, 'possible duplicates are excluded by default')
+  await act(async () => {
+    clickButton('Import 1 line').click()
+    await tick()
+    await tick()
+  })
+  const commit = script.requests.find((body) => body.mode === 'import')
+  assert.ok(commit, 'the import must post a commit')
+  assert.equal(commit.includePossibleDuplicates, false, 'the default commit leaves possible duplicates out')
+})
+
+test('opting in re-previews the duplicates and the commit imports exactly that choice', async (t) => {
+  script.previewStatus = 200
+  script.previewPayload = DUPLICATE_PREVIEW
+  script.importPayload = { statementId: 'stmt-2', imported: 2, duplicates: 0, possibleDuplicates: 1 }
+  script.requests.length = 0
+  const { host, root } = await mount()
+  t.after(async () => {
+    await act(async () => {
+      root.unmount()
+    })
+    host.remove()
+  })
+  await mapJunkCsv()
+  await act(async () => {
+    clickButton('Preview').click()
+    await tick()
+    await tick()
+  })
+  script.previewPayload = {
+    ...DUPLICATE_PREVIEW,
+    imported: 2,
+    lines: [
+      ...DUPLICATE_PREVIEW.lines,
+      { postedOn: '2026-11-02', amount: '-5.0000', description: 'COFFEE SHOP', possibleDuplicateOf: 'line-coffee' },
+    ],
+  }
+  await act(async () => {
+    ;(document.querySelector('input[type="checkbox"]') as HTMLInputElement).click()
+    await tick()
+    await tick()
+  })
+  const previews = script.requests.filter((body) => body.mode === 'preview')
+  assert.equal(previews.at(-1)?.includePossibleDuplicates, true, 'opting in re-previews with the choice')
+  assert.equal(
+    (document.querySelector('input[type="checkbox"]') as HTMLInputElement).checked,
+    true,
+    'the opt-in stays on for the previewed choice',
+  )
+  await act(async () => {
+    clickButton('Import 2 lines').click()
+    await tick()
+    await tick()
+  })
+  const commit = script.requests.find((body) => body.mode === 'import')
+  assert.equal(commit?.includePossibleDuplicates, true, 'the commit imports the reviewed duplicates')
 })

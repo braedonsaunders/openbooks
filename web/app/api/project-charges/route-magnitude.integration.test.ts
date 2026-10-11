@@ -38,7 +38,17 @@ const mockAuthz = `
   }
 `;
 
-const hooks = registerHooks({
+const mockFeatureGates = `
+  const state = globalThis[Symbol.for('openbooks.project-charge-magnitude-test')]
+  export async function guardFeaturePermission(_permission, _feature) {
+    if (!state.authz) return new Response(null, { status: 403 })
+    return state.authz
+  }
+`;
+
+// These doubles stay registered: defineRoute loads the feature gate through the
+// @/ alias on each request, after the route module has finished importing.
+registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "next/navigation") {
       return { shortCircuit: true, format: "module", url: "data:text/javascript,export function redirect() {}" };
@@ -49,11 +59,17 @@ const hooks = registerHooks({
     ) {
       return { url: "mock:project-charge-magnitude-authz", shortCircuit: true };
     }
+    if (specifier === "@/lib/feature-gates" && context.parentURL?.includes("/lib/api/route")) {
+      return { url: "mock:project-charge-magnitude-feature-gates", shortCircuit: true };
+    }
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
     if (url === "mock:project-charge-magnitude-authz") {
       return { format: "module", source: mockAuthz, shortCircuit: true };
+    }
+    if (url === "mock:project-charge-magnitude-feature-gates") {
+      return { format: "module", source: mockFeatureGates, shortCircuit: true };
     }
     return nextLoad(url, context);
   },
@@ -61,7 +77,6 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?project-charge-magnitude-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 const { db, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(

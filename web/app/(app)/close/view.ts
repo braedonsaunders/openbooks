@@ -21,6 +21,8 @@ import {
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { guardCloseScope } from '../../../lib/close-scope'
+import { parseLockDates, periodCloser } from '../../../lib/close/period-attribution'
+import { canonicalPeriodLabelSql, periodDisplayLabel } from '@openbooks/engine/periods/period-policy'
 import { can, requirePermission } from '../../../lib/authz'
 import { requireFeatureEnabled } from '../../../lib/feature-gates'
 import { currentFiscalYear } from '../../../lib/fiscal'
@@ -96,11 +98,13 @@ export interface ClosePeriodRow {
   range: string
   statusLabel: string
   statusVariant: BadgeVariant
-  /** Localized "which modules are locked · on which book" line, or null when
+  /** Localized "which modules are locked (lock date) · on which book" line, or null when
    * the selected book holds no closed locks for the period. Locks can exist
    * without any close run (autopilot/provisioner closes, API closes), so the
    * run badge alone cannot speak for them. */
   lockLabel: string | null
+  /** "Name · date" of whoever closed the period, or a dash while it is open. */
+  closedByLabel: string
   readiness: number
   entries: string
   actionHref: string | null
@@ -127,6 +131,7 @@ type ClosePeriodDbRow = {
   ends_on: string
   fiscal_year: number
   period_number: number
+  is_adjustment: boolean
   run_id: string | null
   status: string | null
   current_stage: string | null
@@ -134,6 +139,12 @@ type ClosePeriodDbRow = {
   target_close_date: string | null
   entries: string | number
   locked_modules: string | null
+  /** `module:YYYY-MM-DD` per closed lock, comma separated (UTC lock dates). */
+  lock_dates: string | null
+  lock_closed_on: string | null
+  lock_closer_name: string | null
+  run_closed_on: string | null
+  run_closer_name: string | null
 }
 
 export interface CloseData {
@@ -157,6 +168,7 @@ export interface CloseData {
   columnPeriod: string
   columnRange: string
   columnStatus: string
+  columnClosedBy: string
   columnReadiness: string
   columnEntries: string
   columnAction: string
@@ -289,11 +301,15 @@ async function loadCloseWizard(
 function lockModulesLateral(selectedBookId: string) {
   return sql`
         left join lateral (
-          select string_agg(pl.module, ',' order by array_position(array['ar','ap','banking','assets','tax','gl'], pl.module)) as locked_modules
+          select string_agg(pl.module, ',' order by array_position(array['ar','ap','banking','assets','tax','gl'], pl.module)) as locked_modules,
+                 string_agg(pl.module || ':' || to_char(pl.locked_at at time zone 'UTC', 'YYYY-MM-DD'), ',' order by array_position(array['ar','ap','banking','assets','tax','gl'], pl.module)) as lock_dates,
+                 to_char(max(pl.locked_at) at time zone 'UTC', 'YYYY-MM-DD') as lock_closed_on,
+                 (array_agg(pl.locked_by order by pl.locked_at desc nulls last))[1] as lock_closed_by
             from period_locks pl
            where pl.period_id = p.id and pl.org_id = p.org_id and pl.subsidiary_id is null and pl.state = 'closed'
              and pl.book_id = ${selectedBookId || null}
-        ) l on true`
+        ) l on true
+        left join users lock_closer on lock_closer.id = l.lock_closed_by`
 }
 
 export async function loadClose(
@@ -341,19 +357,27 @@ export async function loadClose(
     : (books.rows.find((book) => book.is_primary)?.id ??
       books.rows[0]?.id ??
       '')
+  // Search matches the label the list shows as well as the stored name, so a
+  // period listed as "P11 FY2025" is found by typing "P11".
+  const periodSearch = q
+    ? sql`and (p.name ilike ${`%${q}%`} or ${canonicalPeriodLabelSql()} ilike ${`%${q}%`})`
+    : sql``
   const [periods, count, fys] = ((await Promise.all([
     db.execute<ClosePeriodDbRow>(sql`
-      select p.id, p.name, p.starts_on, p.ends_on, p.fiscal_year, p.period_number,
+      select p.id, p.name, p.starts_on, p.ends_on, p.fiscal_year, p.period_number, p.is_adjustment,
              r.id as run_id, r.status, r.current_stage, r.readiness_score, r.target_close_date,
              coalesce(a.entries, 0) as entries,
-             l.locked_modules
+             l.locked_modules, l.lock_dates, l.lock_closed_on, lock_closer.name as lock_closer_name,
+             to_char(r.closed_at at time zone 'UTC', 'YYYY-MM-DD') as run_closed_on,
+             run_closer.name as run_closer_name
         from accounting_periods p
         left join close_runs r on r.period_id = p.id and r.org_id = p.org_id
           and r.book_id = ${selectedBookId || null}
+        left join users run_closer on run_closer.id = r.closed_by
         left join lateral (select count(*) as entries from journal_entries e where e.period_id = p.id and e.org_id = p.org_id and e.book_id = ${selectedBookId || null}) a on true
         ${lockModulesLateral(selectedBookId)}
        where p.org_id = ${orgId} and p.fiscal_year = ${fy}
-         ${q ? sql`and p.name ilike ${`%${q}%`}` : sql``}
+         ${periodSearch}
          ${status && status !== 'all' ? sql`and coalesce(r.status, 'not_started') = ${status}` : sql``}
        order by p.period_number
        limit ${PER_PAGE} offset ${offset}`),
@@ -362,7 +386,7 @@ export async function loadClose(
       left join close_runs r on r.period_id = p.id and r.org_id = p.org_id
         and r.book_id = ${selectedBookId || null}
       where p.org_id = ${orgId} and p.fiscal_year = ${fy}
-        ${q ? sql`and p.name ilike ${`%${q}%`}` : sql``}
+        ${periodSearch}
         ${status && status !== 'all' ? sql`and coalesce(r.status, 'not_started') = ${status}` : sql``}`),
     db.execute(
       sql`select distinct fiscal_year from accounting_periods where org_id = ${orgId} order by fiscal_year desc`,
@@ -401,6 +425,7 @@ export async function loadClose(
     columnPeriod: t('table.period'),
     columnRange: t('table.range'),
     columnStatus: t('table.status'),
+    columnClosedBy: t('table.closedBy'),
     columnReadiness: t('table.readiness'),
     columnEntries: t('table.entries'),
     columnAction: t('table.action'),
@@ -414,9 +439,27 @@ export async function loadClose(
       const lockedModules = String(period.locked_modules ?? '')
         .split(',')
         .filter(Boolean)
+      // Each closed module with the UTC date it was locked, so the lock line
+      // names when every module closed rather than only which ones did.
+      const lockDates = parseLockDates(period.lock_dates)
+      const formatDay = (iso: string) => format.dateTime(new Date(`${iso}T00:00:00Z`), { dateStyle: 'medium', timeZone: 'UTC' })
+      const closer = periodCloser({
+        runStatus: period.status,
+        runCloserName: period.run_closer_name,
+        runClosedOn: period.run_closed_on,
+        lockCloserName: period.lock_closer_name,
+        lockClosedOn: period.lock_closed_on,
+      })
+      // One label rule for every period of the calendar; a stored name that
+      // differs (a seeded or custom name) is kept visible beside it.
       return {
       id: period.id,
-      name: period.name,
+      name: periodDisplayLabel({
+        name: period.name,
+        fiscalYear: period.fiscal_year,
+        periodNumber: period.period_number,
+        adjustment: period.is_adjustment,
+      }),
       range: `${period.starts_on} → ${period.ends_on}`,
       statusLabel: t(`runStatus.${period.status ?? 'not_started'}`),
       statusVariant: (
@@ -428,10 +471,16 @@ export async function loadClose(
       ) as BadgeVariant,
       lockLabel: lockedModules.length
         ? t('table.lockedDetail', {
-            modules: lockedModules.map((module) => t(`modules.${module}`)).join(', '),
+            modules: lockedModules
+              .map((module) => {
+                const lockedOn = lockDates.get(module)
+                return lockedOn ? `${t(`modules.${module}`)} (${formatDay(lockedOn)})` : t(`modules.${module}`)
+              })
+              .join(', '),
             book: lockBookName,
           })
         : null,
+      closedByLabel: closer ? t('table.closedByDetail', { name: closer.name, date: formatDay(closer.on) }) : '—',
       readiness: period.readiness_score ?? 0,
       entries: format.number(Number(period.entries)),
       actionHref: period.run_id ? `/close?run=${period.run_id}` : null,
@@ -549,6 +598,9 @@ export function closeSpec(data: CloseData): PageSpec {
                     lockLabel: item('lockLabel'),
                   }),
                 ),
+                column(rootF('columnClosedBy'), text(item('closedByLabel')), {
+                  className: 'text-slate-500',
+                }),
                 column(
                   rootF('columnReadiness'),
                   widgetCell('close-readiness-cell', { readiness: item('readiness') }),

@@ -112,6 +112,7 @@ const { GET: getPayment, PATCH: patchPayment } =
   await import('../app/api/payments/[id]/route')
 const { POST: settleInstruction } = await import('../app/api/payments/runs/[id]/instructions/[instructionId]/settlement/route')
 const { GET: openItems } = await import('../app/api/payments/open-items/route')
+const { cancelPaymentRun } = await import('@openbooks/engine/payments/run-cancellation')
 
 async function fixture() {
   const org = await withBypassContext(() => createScratchOrg())
@@ -175,8 +176,13 @@ async function fixture() {
         runs[label!] = runId
         await db.execute(sql`insert into payment_runs(id,org_id,run_number,bank_account_id,subsidiary_id,method,direction,currency,created_by)
         values (${runId},${org.orgId},${label + '-RUN'},${org.accounts.bank},${subsidiary},'wire','outbound','CAD',${actor})`)
-        await db.execute(sql`insert into payment_run_items(org_id,payment_run_id,source_document_id,source_open_line_id,kind,gross_amount,payment_amount,currency,created_by)
-        select ${org.orgId},${runId},${documentId},jl.id,'bill','100','100','CAD',${actor}
+        // Every run item belongs to an instruction, as run creation writes them:
+        // the instruction is what cancellation releases the reservation through.
+        const instructionId = randomUUID()
+        await db.execute(sql`insert into payment_instructions(id,org_id,payment_run_id,payee_party_id,amount,currency,created_by)
+        values (${instructionId},${org.orgId},${runId},${org.vendorId},'100','CAD',${actor})`)
+        await db.execute(sql`insert into payment_run_items(org_id,payment_run_id,payment_instruction_id,source_document_id,source_open_line_id,kind,gross_amount,payment_amount,currency,created_by)
+        select ${org.orgId},${runId},${instructionId},${documentId},jl.id,'bill','100','100','CAD',${actor}
         from documents d join journal_lines jl on jl.entry_id=d.posted_entry_id and jl.org_id=d.org_id
         where d.id=${documentId} and d.org_id=${org.orgId} and jl.is_open_item and jl.amount<0`)
       }
@@ -208,8 +214,11 @@ async function fixture() {
         if (label === 'AR-VISIBLE') runs.INBOUND = runId
         await db.execute(sql`insert into payment_runs(id,org_id,run_number,bank_account_id,subsidiary_id,method,direction,purpose,currency,created_by)
         values (${runId},${org.orgId},${label + '-RUN'},${org.accounts.bank},${subsidiary},'direct_debit','inbound','customer_collections','CAD',${actor})`)
-        await db.execute(sql`insert into payment_run_items(org_id,payment_run_id,source_document_id,source_open_line_id,kind,gross_amount,payment_amount,currency,created_by)
-        select ${org.orgId},${runId},${documentId},jl.id,'receivable','100','100','CAD',${actor}
+        const instructionId = randomUUID()
+        await db.execute(sql`insert into payment_instructions(id,org_id,payment_run_id,payee_party_id,amount,currency,created_by)
+        values (${instructionId},${org.orgId},${runId},${org.customerId},'100','CAD',${actor})`)
+        await db.execute(sql`insert into payment_run_items(org_id,payment_run_id,payment_instruction_id,source_document_id,source_open_line_id,kind,gross_amount,payment_amount,currency,created_by)
+        select ${org.orgId},${runId},${instructionId},${documentId},jl.id,'receivable','100','100','CAD',${actor}
         from documents d join journal_lines jl on jl.entry_id=d.posted_entry_id and jl.org_id=d.org_id where d.id=${documentId} and d.org_id=${org.orgId} and jl.is_open_item and jl.amount>0`)
       }
       const format = randomUUID()
@@ -261,6 +270,13 @@ for (const boundary of [
           const authz = await getAuthz()
           assert.ok(authz)
           assert.deepEqual([...authz.allowedSubsidiaryIds!], [org.subsidiaryId])
+          if (boundary === 'suggestions' || boundary === 'allocation write') {
+            // A live draft run reserves its bills, and a reserved bill is never
+            // suggested or settled outside its run. These boundaries exercise the
+            // visible bill as a free open item, so release its run through the
+            // native cancellation (the remedy the refusal names).
+            await cancelPaymentRun(runs.VISIBLE!, org.orgId, actor, 'Release the visible bill for direct application')
+          }
           if (boundary === 'malformed settlement identifiers') {
             for (const params of [
               { id: 'invalid-run', instructionId: randomUUID() },

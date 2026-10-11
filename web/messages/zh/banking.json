@@ -1,7 +1,10 @@
 {
   "types": {
     "asset_bank": "银行",
-    "liability_card": "信用卡"
+    "liability_card": "信用卡",
+    "liability_payable": "应付账款",
+    "liability_current_other": "其他流动负债",
+    "liability_long_term": "长期负债"
   },
   "reconStatus": {
     "signed_off": "已签核",
@@ -80,7 +83,7 @@
     },
     "vitals": {
       "cash": "现金总额",
-      "cards": "卡余额",
+      "cards": "卡与授信余额",
       "unmatched": "未匹配明细",
       "unmatchedSub": "等待匹配",
       "allMatched": "全部已匹配",
@@ -95,7 +98,7 @@
       "hint": "已过账总账余额",
       "empty": "尚无有效的银行或信用卡账户。请在科目表中添加。",
       "bankSection": "银行账户",
-      "cardSection": "信用卡",
+      "cardSection": "信用卡与授信额度",
       "reconciledThrough": "已对账至 {date}",
       "neverReconciled": "从未对账",
       "lastStatement": "对账单 {date}",
@@ -436,8 +439,8 @@
     "preview": "预览",
     "importAction": "导入",
     "importCount": "导入 {count, plural, one {# 条明细} other {# 条明细}}",
-    "importedToast": "{imported, plural, one {已导入 # 条明细} other {已导入 # 条明细}}{duplicates, plural, =0 {} one { — 已跳过 # 条重复} other { — 已跳过 # 条重复}}{possibleDuplicates, plural, =0 {} one { — 已标记 # 条待复核} other { — 已标记 # 条待复核}}",
-    "previewSummary": "{imported, plural, one {# 条新明细} other {# 条新明细}}{duplicates, plural, =0 {} one { · 已跳过 # 条重复} other { · 已跳过 # 条重复}}{possibleDuplicates, plural, =0 {} one { · 已标记 # 条待复核} other { · 已标记 # 条待复核}}",
+    "importedToast": "{imported, plural, one {已导入 # 条明细} other {已导入 # 条明细}}{duplicates, plural, =0 {} one { — 已跳过 # 条重复} other { — 已跳过 # 条重复}}{possibleDuplicates, plural, =0 {} one { — # 条可能重复} other { — # 条可能重复}}",
+    "previewSummary": "{imported, plural, one {# 条新明细} other {# 条新明细}}{duplicates, plural, =0 {} one { · 已跳过 # 条重复} other { · 已跳过 # 条重复}}{possibleDuplicates, plural, =0 {} one { · # 条可能重复} other { · # 条可能重复}}",
     "format": "格式",
     "formatOfx": "OFX / QFX",
     "formatCsv": "CSV",
@@ -484,7 +487,12 @@
     "previewEmpty": "预览未找到交易行 — 请检查金额列和日期格式，然后重新运行预览。",
     "previewRequired": "请先运行预览，再导入。",
     "suggestedOpeningFrom": "期初余额已取自 {date} 的期末余额 — 可按需修改。",
-    "openingMismatch": "期初余额 {supplied} 与 {date} 的期末余额 {expected} 不一致 — 请检查是否漏掉某个月。"
+    "openingMismatch": "期初余额 {supplied} 与 {date} 的期末余额 {expected} 不一致 — 请检查是否漏掉某个月。",
+    "closingMismatch": "期初余额 {opening} 加上对账单明细 {lines} 等于 {expected}，而不是期末余额 {closing} — 请对照银行对账单核对两个余额；如果文件只覆盖部分对账单，请将期末余额留空。",
+    "possibleDuplicatesNotice": "{count, plural, one {# 条明细与本账户中已有的明细匹配，已排除在导入之外} other {# 条明细与本账户中已有的明细匹配，已排除在导入之外}}。",
+    "includePossibleDuplicates": "{count, plural, one {仍然导入这条可能重复的明细} other {仍然导入这 # 条可能重复的明细}}",
+    "possibleDuplicateMatch": "与本账户中已有的明细匹配",
+    "onlyPossibleDuplicates": "解析出的所有明细均已存在于本账户或可能重复。如需导入，请包含下方可能重复的明细。"
   },
   "start": {
     "resume": "继续对账",
@@ -539,7 +547,7 @@
     "formSetPreferredDone": "首选表单已保存",
     "formPreferredCleared": "已清除首选表单",
     "formPreferredFailed": "无法保存首选表单",
-    "cardAccountHelp": "未登记卡 — 请选择用于过账的可对账卡账户。",
+    "cardAccountHelp": "请选择本次刷卡入账所对应的可对账卡账户。",
     "noCardAccounts": "暂无可对账的卡账户。",
     "noCardAccountsCta": "在会计科目表中添加",
     "partylessControlWarning": "已过账到 {accounts}，但未指定客户或供应商。这些金额不在应收和应付明细账中，未结发票和账单仍显示未付。请使用“收款”登记客户收款、使用“支付账单”登记供应商付款，或在该行指定客户或供应商。可在“设置 → 公司与会计 → 控制科目”中设置拒绝此类过账。",
@@ -647,7 +655,11 @@
     "openingConfirm": "确认期初余额",
     "openingConfirmedToast": "期初余额 {amount} 已确认",
     "openingConfirmedNote": "期初余额 {amount} 已确认 — {reason}",
-    "openingStaleNote": "已确认的期初余额与结转的账面余额不再一致 — 请检查分类账并重新确认期初余额。"
+    "openingStaleNote": "已确认的期初余额与结转的账面余额不再一致 — 请检查分类账并重新确认期初余额。",
+    "excludeDuplicate": "排除重复项",
+    "clearDuplicate": "标记为非重复",
+    "excludeDuplicateReason": "与 {date} 金额 {amount} 的银行明细重复：{description}",
+    "excludeDuplicateReasonGeneric": "与较早银行明细重复"
   },
   "sftp": {
     "title": "SFTP",
@@ -1037,7 +1049,8 @@
       "recurly": "Recurly",
       "chargebee": "Chargebee",
       "shopify_payments": "Shopify Payments",
-      "paypal": "PayPal"
+      "paypal": "PayPal",
+      "square": "Square"
     },
     "externalRef": "外部参考号 / 打款 ID",
     "settlementDate": "结算日期",
@@ -1074,6 +1087,9 @@
     "paypalPayloadHint": "粘贴交易查询API的 '{\"transactions\": [{\"transaction_info\": {...}}]}',或粘贴带标题行的结算报告CSV。在“外部参考号”中为导出命名,以保持批次幂等。",
     "invalidShopifyPayload": "Shopify负载必须是包含 payout 与 transactions 的单个JSON对象。",
     "csvUpload": "上传 CSV",
+    "squarePayloadLabel": "付款单与付款明细 (JSON)",
+    "squarePayloadHint": "包含 payout 与 entries 的单个JSON对象: '{\"payout\": {\"id\", \"amount_money\"}, \"entries\": [{\"id\", \"type\", \"gross_amount_money\", \"fee_amount_money\", \"net_amount_money\"}]}'。金额为最小货币单位的整数。外部引用请填写 Square 付款单ID。",
+    "invalidSquarePayload": "Square负载必须是包含 payout 与 entries 的单个JSON对象。",
     "fxTitle": "外币",
     "fxNone": "全程同一币种",
     "fxSourceCurrency": "扣款币种",
@@ -1313,5 +1329,63 @@
   },
   "payoutAssistance": {
     "chipLabel": "查看建议"
+  },
+  "reconcileEvidence": {
+    "tabs": {
+      "workspace": "对账",
+      "statements": "佐证银行对账单",
+      "history": "历史记录"
+    },
+    "statements": {
+      "title": "佐证银行对账单",
+      "windowAfter": "过账日期在 {start} 之后、至 {end} 为止的对账单明细行支持本次对账。",
+      "windowThrough": "过账日期至 {end} 为止的对账单明细行支持本次对账。",
+      "empty": "没有银行对账单支持本次对账的余额。",
+      "sourceEmpty": "本次对账基于源数据，未导入银行对账单。",
+      "columns": {
+        "date": "对账单日期",
+        "source": "来源",
+        "imported": "导入时间",
+        "opening": "期初余额",
+        "closing": "期末余额",
+        "lines": "期间行数",
+        "matched": "已匹配",
+        "excluded": "已排除",
+        "unmatched": "未匹配",
+        "total": "期间合计",
+        "open": "打开对账单"
+      },
+      "excludedBadge": "已排除",
+      "reason": "原因：{reason}",
+      "duplicateOf": "可能重复：{date} · {amount}",
+      "excludedByAt": "{at} 由 {name} 排除",
+      "excludedAt": "{at} 排除"
+    },
+    "history": {
+      "title": "历史记录",
+      "description": "本次对账的签核、撤回签核、期初余额确认和调整记录，以及同一银行账户上被丢弃的会话。",
+      "empty": "此银行账户没有签核、撤回、调整或丢弃记录。",
+      "columns": {
+        "when": "时间",
+        "event": "事件",
+        "by": "操作人",
+        "details": "详情"
+      },
+      "events": {
+        "sign_off": "已签核",
+        "withdraw_sign_off": "已撤回签核",
+        "discard": "已丢弃会话",
+        "confirm_opening": "已确认期初余额",
+        "session_adjustment": "已调整会话"
+      },
+      "signOffStatement": "对账单余额 {balance} · 截至 {date} · 已标记 {matched} 条日记账行 · 已排除 {excluded} 条对账单行",
+      "signOffSource": "源数据 · 余额 {balance} · 截至 {date} · 已清算 {matched} 条日记账行",
+      "withdrawReason": "原因：{reason}",
+      "withdrawPrior": "撤回前签核余额 {balance} · {at} 由 {by} 签核",
+      "withdrawReleased": "已释放日记账行：{count} · 会话当前状态 {status}",
+      "discardDetail": "截至 {date} · 余额 {balance} · 已释放 {matches} 笔匹配和 {lines} 条对账单行",
+      "confirmDetail": "期初余额 {amount}（自 {date} 起）· 原因：{reason}",
+      "adjustDetail": "截至 {beforeDate} → {afterDate} · 余额 {beforeBalance} → {afterBalance}"
+    }
   }
 }

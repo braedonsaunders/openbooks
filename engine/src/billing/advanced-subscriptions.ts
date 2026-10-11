@@ -23,7 +23,8 @@ export type AmendmentType =
   | "change_term"
   | "change_timing"
   | "renew"
-  | "coterm";
+  | "coterm"
+  | "change_plan";
 
 export class AdvancedSubscriptionError extends Error {
   constructor(message: string, readonly status = 422) {
@@ -152,6 +153,21 @@ export function unbilledBoundary(nextBillOn: string, guardedThrough: string | nu
 }
 
 /**
+ * The date through which a subscription's service is invoiced: the end of its
+ * last billed period. A billed subscription uses the unbilled boundary (the
+ * cursor or the latest guarded period end, whichever is later); one never
+ * invoiced has no billed period, so its boundary is its start. Pure.
+ */
+export function subscriptionPaidThrough(input: {
+  startOn: string;
+  nextBillOn: string;
+  billed: boolean;
+  guardedThrough: string | null;
+}): string {
+  return input.billed ? unbilledBoundary(input.nextBillOn, input.guardedThrough) : input.startOn;
+}
+
+/**
  * Resolve the billing cursors an activation writes. A termStartsOn inside
  * already-billed service would rewind next_bill_on into posted periods and
  * bill them twice (period guards dedupe only exact period end + revision),
@@ -182,6 +198,107 @@ export function activationBillingCursors(input: {
   };
 }
 
+/** The plan-version facts a plan change compares, read from the catalog. */
+export interface PlanVersionTerms {
+  planId: string;
+  status: string;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  interval: Interval;
+  intervalCount: number;
+  billingTiming: BillingTiming;
+  /** Effective billing currency: the version's, else its plan's. */
+  currency: string;
+  requiredComponents: number;
+}
+
+/**
+ * Refuse a plan change that would reinterpret invoiced service or break the
+ * contract's billing shape. The date may not precede the paid-through date,
+ * so no invoiced period is repriced. Billing currency and timing must carry
+ * over, because one contract cannot span two currencies or timings. A change
+ * of cadence moves the next invoice's period length, so it is allowed only on
+ * the paid-through date, when no invoice falls between the record and the
+ * switch. Pure.
+ */
+export function assertPlanChangeRules(input: {
+  effectiveOn: string;
+  paidThrough: string;
+  termStartsOn: string;
+  billingTiming: BillingTiming;
+  pinned: PlanVersionTerms;
+  target: PlanVersionTerms;
+}): void {
+  const { pinned, target, effectiveOn } = input;
+  if (target.status !== "published") throw new AdvancedSubscriptionError("a published plan version is required to change plan");
+  if (target.planId === pinned.planId) {
+    throw new AdvancedSubscriptionError("the contract is already on this plan; change its components to reprice it");
+  }
+  if (target.requiredComponents < 1) {
+    throw new AdvancedSubscriptionError("plan version has no required components — mark a component as required before changing plan to it");
+  }
+  if (target.currency.toUpperCase() !== pinned.currency.toUpperCase()) {
+    throw new AdvancedSubscriptionError(
+      `billing currency cannot change mid-contract from ${pinned.currency} to ${target.currency}; create a new contract for the ${target.currency} plan instead`,
+    );
+  }
+  if (target.billingTiming !== pinned.billingTiming || target.billingTiming !== input.billingTiming) {
+    throw new AdvancedSubscriptionError("the new plan bills on a different timing; change the billing timing of the contract first, then change plan");
+  }
+  if (effectiveOn < input.paidThrough) {
+    throw new AdvancedSubscriptionError(
+      `effective date ${effectiveOn} precedes the paid-through date ${input.paidThrough}, the end of the last invoiced period; choose ${input.paidThrough} or later`,
+    );
+  }
+  if (effectiveOn < input.termStartsOn) {
+    throw new AdvancedSubscriptionError(`effective date ${effectiveOn} precedes the contract term start ${input.termStartsOn}`);
+  }
+  if (target.effectiveFrom > effectiveOn || (target.effectiveTo !== null && target.effectiveTo < effectiveOn)) {
+    throw new AdvancedSubscriptionError(`the plan version is not effective on ${effectiveOn}; choose a date inside its effective window`);
+  }
+  const cadenceChanged = target.interval !== pinned.interval || target.intervalCount !== pinned.intervalCount;
+  if (cadenceChanged && (effectiveOn !== input.paidThrough || input.billingTiming !== "advance")) {
+    throw new AdvancedSubscriptionError(
+      `a change of billing cadence takes effect only on the paid-through date ${input.paidThrough} for an advance-billed contract; ` +
+      "change the cadence on that date, or keep the cadence and change only the components",
+    );
+  }
+}
+
+/** One recorded plan change, projected from the amendment ledger. */
+export interface PlanChangeFact {
+  effectiveOn: string;
+  /** Recording order; breaks ties between changes effective the same day. */
+  seq: number;
+  fromVersionId: string | null;
+  toVersionId: string | null;
+}
+
+/**
+ * The plan version a contract is on as of a date. The record always holds the
+ * version in force after the latest recorded change, so a future-dated change
+ * is read back as its predecessor until its date arrives. Changes fold in
+ * effective-date order (recording order breaks ties), and the starting version
+ * is the predecessor of the first recorded change. Pure.
+ */
+export function planVersionInForce(input: {
+  asOf: string;
+  pinnedVersionId: string;
+  changes: PlanChangeFact[];
+}): string {
+  if (input.changes.length === 0) return input.pinnedVersionId;
+  const ordered = [...input.changes].sort((left, right) => (
+    left.effectiveOn < right.effectiveOn ? -1 : left.effectiveOn > right.effectiveOn ? 1 : left.seq - right.seq
+  ));
+  const first = input.changes.reduce((earliest, change) => (change.seq < earliest.seq ? change : earliest));
+  let current = first.fromVersionId ?? input.pinnedVersionId;
+  for (const change of ordered) {
+    if (change.effectiveOn > input.asOf) break;
+    if (change.toVersionId) current = change.toVersionId;
+  }
+  return current;
+}
+
 export interface AmendmentRequest {
   subscriptionId: string;
   type: AmendmentType;
@@ -200,6 +317,8 @@ export interface AmendmentRequest {
   billingTiming?: BillingTiming;
   renewalTermMonths?: number;
   anchorSubscriptionId?: string;
+  /** change_plan: the published version of the plan the contract moves to. */
+  planVersionId?: string;
 }
 
 interface OwnedPlanRow extends Record<string, unknown> {
@@ -835,7 +954,9 @@ export async function activateLifecycle(orgId: string, actorId: string, input: A
 async function snapshot(orgId: string, subscriptionId: string) {
   const lifecycle = await subscriptionContext(orgId, subscriptionId);
   if (!lifecycle.lifecycleId || !lifecycle.termStartsOn || !lifecycle.billingTiming || !lifecycle.renewalPolicy) {
-    throw new AdvancedSubscriptionError("advanced lifecycle is not active");
+    throw new AdvancedSubscriptionError(
+      "this subscription has no contract, so it cannot be amended. Activate a published plan version as its contract in Contracts first",
+    );
   }
   const components = (await db.execute<SubscriptionComponentRow>(sql`
     select component_key as "componentKey", name, description, quantity, unit_price as "unitPrice",
@@ -860,6 +981,112 @@ export interface SystemAmendmentSource {
 }
 
 interface AmendmentCallOptions { system?: SystemAmendmentSource; allowedSubsidiaryIds?: ReadonlySet<string> | null }
+
+const UUID_TEXT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** The catalog facts a plan change compares, or null when the version is not in this organization. */
+async function planVersionTerms(orgId: string, versionId: string): Promise<PlanVersionTerms | null> {
+  const row = (await db.execute<{
+    planId: string; status: string; effectiveFrom: string; effectiveTo: string | null; interval: Interval;
+    intervalCount: number; billingTiming: BillingTiming; currency: string; requiredComponents: number;
+  }>(sql`
+    select v.plan_id as "planId", v.status, v.effective_from::text as "effectiveFrom", v.effective_to::text as "effectiveTo",
+           v.interval, v.interval_count as "intervalCount", v.billing_timing as "billingTiming",
+           coalesce(v.currency_code, p.currency_code) as currency,
+           (select count(*)::int from subscription_plan_version_components c
+             where c.org_id = v.org_id and c.version_id = v.id and not c.is_optional) as "requiredComponents"
+      from subscription_plan_versions v join subscription_plans p on p.id = v.plan_id and p.org_id = v.org_id
+     where v.id = ${versionId} and v.org_id = ${orgId}
+  `)).rows[0];
+  if (!row) return null;
+  return {
+    ...row,
+    intervalCount: Number(row.intervalCount),
+    requiredComponents: Number(row.requiredComponents),
+  };
+}
+
+/**
+ * Move a contract to another plan's published version from the effective date.
+ * The subscription keeps its customer and history. Its current component
+ * windows close the day before the change, and the new version's required
+ * components open on it, so invoices before the date keep their prices. The
+ * lifecycle pins the new version and the subscription records the new plan.
+ * Entitlements refresh to the new grant with the change.
+ */
+async function applyPlanChange(
+  orgId: string,
+  attributedBy: string,
+  request: AmendmentRequest,
+  before: Awaited<ReturnType<typeof snapshot>>,
+  effectiveOn: string,
+): Promise<void> {
+  const targetId = request.planVersionId;
+  if (!targetId || !UUID_TEXT.test(targetId)) throw new AdvancedSubscriptionError("a plan version is required to change plan");
+  if (!request.reason?.trim()) throw new AdvancedSubscriptionError("a reason is required to change plan, because the change is recorded in the contract history");
+  const pinnedId = before.lifecycle.planVersionId;
+  const pinned = pinnedId ? await planVersionTerms(orgId, pinnedId) : null;
+  if (!pinned) throw new AdvancedSubscriptionError("the contract's plan version is missing; repair the contract before changing plan");
+  const target = await planVersionTerms(orgId, targetId);
+  if (!target) throw new AdvancedSubscriptionError("plan version not found", 404);
+  const timeline = (await db.execute<{
+    startOn: string; nextBillOn: string; lastInvoiceId: string | null; guardedThrough: string | null;
+  }>(sql`
+    select s.start_on::text as "startOn", s.next_bill_on::text as "nextBillOn", s.last_invoice_id as "lastInvoiceId",
+           (select max(pi.period_ends_on)::text from subscription_period_invoices pi
+             where pi.org_id = s.org_id and pi.subscription_id = s.id) as "guardedThrough"
+      from subscriptions s where s.id = ${request.subscriptionId} and s.org_id = ${orgId}
+  `)).rows[0];
+  if (!timeline) throw new AdvancedSubscriptionError("subscription not found", 404);
+  const paidThrough = subscriptionPaidThrough({
+    startOn: timeline.startOn,
+    nextBillOn: timeline.nextBillOn,
+    billed: timeline.lastInvoiceId !== null || timeline.guardedThrough !== null,
+    guardedThrough: timeline.guardedThrough,
+  });
+  assertPlanChangeRules({
+    effectiveOn,
+    paidThrough,
+    termStartsOn: before.lifecycle.termStartsOn!,
+    billingTiming: before.lifecycle.billingTiming!,
+    pinned,
+    target,
+  });
+  // A component already scheduled to start on or after the change would be
+  // cut or left empty by the re-seed, so the change is refused by name.
+  const scheduled = before.components.find((component) => component.effectiveFrom >= effectiveOn
+    && (component.effectiveTo === null || component.effectiveTo >= effectiveOn));
+  if (scheduled) {
+    throw new AdvancedSubscriptionError(
+      `component ${scheduled.componentKey} is already scheduled from ${scheduled.effectiveFrom}; ` +
+      `remove or change it before moving the contract to another plan on ${effectiveOn}`,
+    );
+  }
+  await db.execute(sql`
+    update subscription_components set effective_to = (${effectiveOn}::date - interval '1 day')::date,
+           updated_at = now(), updated_by = ${attributedBy}
+     where org_id = ${orgId} and subscription_id = ${request.subscriptionId}
+       and effective_from < ${effectiveOn}::date and (effective_to is null or effective_to >= ${effectiveOn}::date)
+  `);
+  await db.execute(sql`
+    insert into subscription_components
+      (org_id, subscription_id, source_version_component_id, component_key, name, description,
+       quantity, unit_price, income_account_id, item_id, tax_code_id, effective_from, sort_order, created_by, updated_by)
+    select org_id, ${request.subscriptionId}, id, component_key, name, description, quantity, unit_price,
+           income_account_id, item_id, tax_code_id, ${effectiveOn}::date, sort_order, ${attributedBy}, ${attributedBy}
+      from subscription_plan_version_components
+     where org_id = ${orgId} and version_id = ${targetId} and not is_optional
+  `);
+  await db.execute(sql`
+    update subscription_lifecycles set plan_version_id = ${targetId}, updated_at = now(), updated_by = ${attributedBy}
+     where org_id = ${orgId} and subscription_id = ${request.subscriptionId}
+  `);
+  await db.execute(sql`
+    update subscriptions set plan_id = ${target.planId}, updated_at = now(), updated_by = ${attributedBy}
+     where id = ${request.subscriptionId} and org_id = ${orgId}
+  `);
+  await refreshEntitlementSnapshot(orgId, request.subscriptionId, attributedBy);
+}
 
 export async function applyAmendment(orgId: string, actorId: string | null, request: AmendmentRequest, opts?: AmendmentCallOptions) {
   return withOrg(orgId, async () => { await assertEnabled(orgId);
@@ -894,7 +1121,7 @@ export async function applyAmendment(orgId: string, actorId: string | null, requ
       assertIdempotentReplay(replay.rows[0].subscriptionId, request.subscriptionId, replay.rows[0].request, requestSnapshot);
       return { id: replay.rows[0].id, replayed: true };
     }
-    if (!["add_component", "remove_component", "change_component", "change_term", "change_timing", "renew", "coterm"].includes(request.type)) {
+    if (!["add_component", "remove_component", "change_component", "change_term", "change_timing", "renew", "coterm", "change_plan"].includes(request.type)) {
       throw new AdvancedSubscriptionError("invalid amendment type");
     }
     const effectiveOn = validDate(request.effectiveOn, "effective date", true)!;
@@ -976,6 +1203,9 @@ export async function applyAmendment(orgId: string, actorId: string | null, requ
       if (!anchor.lifecycleId || !anchor.termEndsOn) throw new AdvancedSubscriptionError("anchor subscription needs an advanced term end");
       assertCotermAllowed({ subscriptionId: request.subscriptionId, anchorSubscriptionId: request.anchorSubscriptionId, customerId: before.lifecycle.customerId, anchorCustomerId: anchor.customerId });
       await db.execute(sql`update subscription_lifecycles set term_ends_on = ${anchor.termEndsOn}, renewal_on = ${anchor.termEndsOn}, coterm_anchor_subscription_id = ${request.anchorSubscriptionId}, updated_at = now(), updated_by = ${attributedBy} where org_id = ${orgId} and subscription_id = ${request.subscriptionId}`);
+    }
+    if (request.type === "change_plan") {
+      await applyPlanChange(orgId, attributedBy, request, before, effectiveOn);
     }
     await db.execute(sql`update subscription_lifecycles set contract_revision = contract_revision + 1, updated_at = now(), updated_by = ${attributedBy} where org_id = ${orgId} and subscription_id = ${request.subscriptionId}`);
     const after = await snapshot(orgId, request.subscriptionId);

@@ -17,7 +17,10 @@ import { useDirtyClose } from '../../../../lib/use-dirty-close'
 import { optionalScanResolver } from '../../../../lib/scan'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import type { StockCountDetail, StockCountSummary } from '@openbooks/engine/inventory/stock-count-queries'
-import { secondObservationNeedsReason } from './observation-reason'
+import { hasUnsavedObservation, SECOND_COUNT_REASON_MIN_LENGTH, secondObservationNeedsReason } from './observation-reason'
+
+/** Source id under which the count editor reports unsaved observations to the drawer guard. */
+const COUNT_DETAIL_DIRTY_SOURCE = 'count-detail'
 
 const field = 'space-y-1.5'
 const OPEN_NEW_COUNT = 'openbooks:inventory-new-count'
@@ -109,11 +112,20 @@ export function CountsList({
   selectedCountId?: string
 }) {
   const t = useTranslations('inventory')
+  const tCommon = useTranslations('common')
   const router = useRouter()
   const [createOpen, setCreateOpen] = useState(createRequested)
   const [selectedId, setSelectedId] = useState<string | null>(selectedCountId ?? null)
   const [detail, setDetail] = useState<StockCountDetail | null>(null)
   const [detailError, setDetailError] = useState<string | null>(null)
+  // Typed observations that are not yet recorded hold the count drawer open
+  // behind a discard confirmation, so Escape or a row switch cannot drop them.
+  const detailGuard = useDirtyClose({
+    dirty: false,
+    onClose: () => {},
+    message: tCommon('feedback.unsavedChanges'),
+    confirmLabel: tCommon('confirm.discardChanges'),
+  })
   // Server-paged rows: the first page renders with the page; older counts
   // load on demand so count #501+ stays reachable instead of truncated.
   const [rows, setRows] = useState(counts)
@@ -277,7 +289,13 @@ export function CountsList({
         />
       ) : null}
       {selectedId ? (
-        <UrlDrawer open closeHref="/inventory?inventoryView=counts" size="xl" title={t('counts.detail.title')}>
+        <UrlDrawer
+          open
+          closeHref="/inventory?inventoryView=counts"
+          size="xl"
+          title={t('counts.detail.title')}
+          beforeClose={detailGuard.beforeClose}
+        >
           {detail ? (
             <CountDetailBody
               key={`${detail.header.id}:${detail.header.status}:${detail.header.countedOn}`}
@@ -286,6 +304,7 @@ export function CountsList({
               stockLocationOptions={stockLocationOptions}
               canPost={canPost}
               reviewRequired={reviewRequired}
+              registerDirty={detailGuard.registerDirty}
               onDone={() => {
                 setSelectedId(null)
                 router.replace('/inventory?inventoryView=counts')
@@ -614,6 +633,7 @@ function CountDetailBody({
   reviewRequired,
   onDone,
   onChanged,
+  registerDirty,
 }: {
   detail: StockCountDetail
   itemOptions: { value: string; label: string }[]
@@ -622,9 +642,16 @@ function CountDetailBody({
   reviewRequired: boolean
   onDone: () => void
   onChanged: () => void
+  /** Reports unsaved typed observations to the drawer's close guard. */
+  registerDirty: (sourceId: string, dirty: boolean) => void
 }) {
   const t = useTranslations('inventory')
-  const execution=useDirectedExecution('/api/inventory/execution',onChanged)
+  // A recorded observation confirms the same way a run step does: the toast
+  // names the saved state before the refreshed count replaces the suggestion.
+  const execution = useDirectedExecution('/api/inventory/execution', () => {
+    toast.success(t('counts.updated'))
+    onChanged()
+  })
   const [busy, setBusy] = useState(false)
   const [postError, setPostError] = useState<string | null>(null)
   const [counted, setCounted] = useState<Record<string, string>>({})
@@ -645,16 +672,50 @@ function CountDetailBody({
   const itemLabel = (id: string) => itemOptions.find((o) => o.value === id)?.label ?? id
   const locLabel = (id: string) => stockLocationOptions.find((o) => o.value === id)?.label ?? id
 
+  // Typed observations that have not been recorded yet. A second observation
+  // is always unsaved until it is recorded; a first one is unsaved until its
+  // typed value matches the recorded quantity.
+  const unsavedObservation = header.status === 'counting' && canPost && lines.some(
+    (l) => !l.adjustmentMovementId && hasUnsavedObservation(counted[l.id] ?? '', l.secondCountRequired ? null : l.countedQuantity),
+  )
+  const hasUnsaved = unsavedObservation || Object.values(foundCosts).some((cost) => cost.trim() !== '')
+  useEffect(() => {
+    registerDirty(COUNT_DETAIL_DIRTY_SOURCE, hasUnsaved)
+    return () => registerDirty(COUNT_DETAIL_DIRTY_SOURCE, false)
+  }, [registerDirty, hasUnsaved])
+
+  // The reason prompt re-asks when the reason is under the engine's minimum,
+  // keeping the typed text so the operator corrects it instead of retyping.
+  // Cancelling or dismissing it returns null.
+  async function askSecondReason(): Promise<string | null> {
+    let typed = ''
+    for (;;) {
+      const answer = await promptDialog({
+        title: t('counts.secondReason'),
+        message: t('counts.secondReasonHint'),
+        initialValue: typed,
+      })
+      if (answer === null) return null
+      if (answer.length >= SECOND_COUNT_REASON_MIN_LENGTH) return answer
+      typed = answer
+    }
+  }
+
   // A second observation that agrees with the first is requested as is. One
   // that differs is explained first: the reason is required, and cancelling
   // the prompt abandons the observation (the engine refuses a differing second
-  // count without a reason, so proceeding would only defer that refusal).
+  // count without a reason, so proceeding would only defer that refusal). The
+  // abandonment is reported on the count, so it is never a silent no-op.
   async function observeCount(line: StockCountDetail['lines'][number]) {
+    setPostError(null)
     const quantity = (counted[line.id] ?? '').trim()
     let reason: string | null = null
     if (line.secondCountRequired && secondObservationNeedsReason(quantity, line.countedQuantity)) {
-      reason = await promptDialog({ title: t('counts.secondReason'), message: t('counts.secondReasonHint') })
-      if (reason === null) return
+      reason = await askSecondReason()
+      if (reason === null) {
+        setPostError(t('counts.secondNotRecorded', { minLength: SECOND_COUNT_REASON_MIN_LENGTH }))
+        return
+      }
     }
     await execution.prepare({
       action: 'count',
@@ -725,9 +786,17 @@ function CountDetailBody({
               inputMode="decimal"
               className="w-24 text-right tabular-nums"
               placeholder={l.countedQuantity ?? ''}
+              aria-label={t('counts.columns.counted')}
               value={counted[l.id] ?? ''}
               onChange={(e) => setCounted((prev) => ({ ...prev, [l.id]: e.target.value }))}
             />
+            {/* A saved count clears the entry field for the next observation;
+                the recorded quantity stays in view so it never reads as lost. */}
+            {l.countedQuantity != null && !(counted[l.id] ?? '').trim() ? (
+              <span className="text-xs font-medium text-emerald-700 tabular-nums dark:text-emerald-300">
+                {t('counts.recordedQuantity', { quantity: l.countedQuantity })}
+              </span>
+            ) : null}
             <Button
               size="sm"
               disabled={busy || execution.busy || !(counted[l.id] ?? '').trim()}

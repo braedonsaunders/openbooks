@@ -13,7 +13,7 @@ export const DEMAND_REPORT_ENTITIES: ReportEntity[] = [
     label: "Forecast accuracy",
     category: "inventory",
     description:
-      "Past demand forecasts scored against actual issues by item class: scored weeks, mean absolute percentage error, and bias. Positive bias reads over-forecast.",
+      "Forecast error by item class: scored weeks, MAPE and bias (positive means over-forecast).",
     from: `(
       with actuals as (
         select m.org_id, m.subsidiary_id, m.item_id,

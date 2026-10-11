@@ -159,10 +159,11 @@ async function caEmployee(fx: CaFixture, name: string, province: string): Promis
   await db.execute(sql`
     insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
                                            country, province, pay_basis, federal_claim_code,
-                                           provincial_claim_code,
+                                           provincial_claim_code, wcb_exempt, wcb_exempt_reason,
                                            is_active, created_by, updated_by)
     values (${fx.orgId}, ${id}, ${employmentId}, ${fx.scheduleId}, 'CA', ${province},
-            'hourly', 1, 1, true, ${fx.actorId}, ${fx.actorId})`)
+            'hourly', 1, 1, true, 'income tax fixture: workers-compensation coverage out of scope',
+            true, ${fx.actorId}, ${fx.actorId})`)
   await seedVacationTerms(fx.orgId, employmentId, fx.actorId, '4', 'accrue')
   for (const day of ['2026-07-06', '2026-07-08', '2026-07-10', '2026-07-14', '2026-07-20', '2026-07-22', '2026-07-24', '2026-07-28']) {
     await db.execute(sql`

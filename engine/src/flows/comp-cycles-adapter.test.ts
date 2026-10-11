@@ -13,7 +13,7 @@ installEngineSeams();
 
 /**
  * Comp-cycle Flows adapter (unit partition — no database): the subject
- * profile shape, the frozen self-approval policy, and the release's
+ * profile shape, the self-approval policy, and the release's
  * refusal of unknown subjects. Release-onto-cycle is covered DB-side in
  * compensation.integration.test.ts through decideGate.
  */
@@ -24,8 +24,8 @@ describe("comp-cycle flow adapter", () => {
     assert.deepEqual(hrmCompCycleFlowAdapter.writableFields, new Set<string>());
   });
 
-  test("self-approval is forbidden outright", () => {
-    assert.equal(hrmCompCycleFlowAdapter.selfApprovalPolicy, "forbidden");
+  test("self-approval follows the submitted tenant Flow policy", () => {
+    assert.equal(hrmCompCycleFlowAdapter.selfApprovalPolicy, "configurable");
   });
 
   test("status changes go through the approval engine, never a flow action", async () => {

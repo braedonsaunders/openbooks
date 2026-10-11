@@ -46,6 +46,8 @@ const SUGGESTION = {
   suggestedFiscalYear: 2026,
   suggestedPeriodName: '2025-10',
   suggestedOpen: true,
+  // The revision the server fences the void POST on; every resolved choice carries it.
+  revision: 'rev-7',
 }
 
 async function mountPromptRoot(t: TestContext): Promise<void> {
@@ -140,6 +142,17 @@ async function settle(): Promise<void> {
   })
 }
 
+// The period choice mounts after the date dialog's exit animation, which
+// outlasts a fixed settle, so wait for the control itself (bounded).
+async function settleUntilPeriodChoice(): Promise<void> {
+  const deadline = Date.now() + 5000
+  while (!document.querySelector('select#prompt-input') && Date.now() < deadline) {
+    await act(async () => {
+      await tick()
+    })
+  }
+}
+
 test('the confirmation shows both dates with fiscal years and keeps the suggestion', async (t) => {
   await mountPromptRoot(t)
   scriptFetch(t, (url) => {
@@ -153,7 +166,7 @@ test('the confirmation shows both dates with fiscal years and keeps the suggesti
   assert.ok(dialogText().includes('Reversal: 2025-10-31 (FY 2026)'), 'the suggested date and fiscal year show')
   assert.equal(dateInput()?.value, '2025-10-31', 'the input arrives prefilled with the suggestion')
   await submitDate('2025-10-31')
-  assert.deepEqual(await pending, { cancelled: false, reversalDate: '2025-10-31', reversalPeriodId: null })
+  assert.deepEqual(await pending, { cancelled: false, reversalDate: '2025-10-31', reversalPeriodId: null, revision: 'rev-7' })
 })
 
 test('a closed entry period names the fallback in the confirmation', async (t) => {
@@ -171,7 +184,7 @@ test('a closed entry period names the fallback in the confirmation', async (t) =
   assert.ok(dialogText().includes(COPY.fallbackNotice), 'the fallback notice is explicit')
   assert.ok(dialogText().includes('Reversal: 2025-11-01 (FY 2026)'), 'the moved default shows')
   await submitDate('2025-11-01')
-  assert.deepEqual(await pending, { cancelled: false, reversalDate: '2025-11-01', reversalPeriodId: null })
+  assert.deepEqual(await pending, { cancelled: false, reversalDate: '2025-11-01', reversalPeriodId: null, revision: 'rev-7' })
 })
 
 test('no open period after the entry warns instead of silently defaulting', async (t) => {
@@ -185,7 +198,7 @@ test('no open period after the entry warns instead of silently defaulting', asyn
   await settle()
   assert.ok(dialogText().includes(COPY.closedNotice), 'the closed warning is explicit')
   await submitDate('2025-10-31')
-  assert.deepEqual(await pending, { cancelled: false, reversalDate: '2025-10-31', reversalPeriodId: null })
+  assert.deepEqual(await pending, { cancelled: false, reversalDate: '2025-10-31', reversalPeriodId: null, revision: 'rev-7' })
 })
 
 test('the operator may pick another reversal date', async (t) => {
@@ -194,7 +207,7 @@ test('the operator may pick another reversal date', async (t) => {
   const pending = promptVoidReversalPeriod('doc-1', COPY)
   await settle()
   await submitDate('2025-11-15')
-  assert.deepEqual(await pending, { cancelled: false, reversalDate: '2025-11-15', reversalPeriodId: null })
+  assert.deepEqual(await pending, { cancelled: false, reversalDate: '2025-11-15', reversalPeriodId: null, revision: 'rev-7' })
 })
 
 test('a non-date is re-prompted instead of sent to the server', async (t) => {
@@ -205,7 +218,7 @@ test('a non-date is re-prompted instead of sent to the server', async (t) => {
   await submitDate('next Friday')
   assert.ok(dialog(), 'junk stays in the dialog for correction')
   await submitDate('2025-11-01')
-  assert.deepEqual(await pending, { cancelled: false, reversalDate: '2025-11-01', reversalPeriodId: null })
+  assert.deepEqual(await pending, { cancelled: false, reversalDate: '2025-11-01', reversalPeriodId: null, revision: 'rev-7' })
 })
 
 test('dismissing the date confirmation cancels the void', async (t) => {
@@ -214,7 +227,7 @@ test('dismissing the date confirmation cancels the void', async (t) => {
   const pending = promptVoidReversalPeriod('doc-1', COPY)
   await settle()
   await clickCancel()
-  assert.deepEqual(await pending, { cancelled: true, reversalDate: null, reversalPeriodId: null })
+  assert.deepEqual(await pending, { cancelled: true, reversalDate: null, reversalPeriodId: null, revision: 'rev-7' })
 })
 
 test('adjustment periods are offered after the date confirmation', async (t) => {
@@ -229,7 +242,7 @@ test('adjustment periods are offered after the date confirmation', async (t) => 
   const pending = promptVoidReversalPeriod('doc-1', COPY)
   await settle()
   await submitDate('2025-10-31')
-  await settle()
+  await settleUntilPeriodChoice()
   const options = [...document.querySelectorAll('select#prompt-input option')]
   assert.deepEqual(
     options.map((o) => [(o as HTMLOptionElement).value, (o.textContent ?? '').trim()]),
@@ -240,7 +253,7 @@ test('adjustment periods are offered after the date confirmation', async (t) => 
     ],
   )
   await chooseOption('period-b')
-  assert.deepEqual(await pending, { cancelled: false, reversalDate: '2025-10-31', reversalPeriodId: 'period-b' })
+  assert.deepEqual(await pending, { cancelled: false, reversalDate: '2025-10-31', reversalPeriodId: 'period-b', revision: 'rev-7' })
 })
 
 test('choosing the regular default resolves a null override', async (t) => {
@@ -254,9 +267,9 @@ test('choosing the regular default resolves a null override', async (t) => {
   const pending = promptVoidReversalPeriod('doc-1', COPY)
   await settle()
   await submitDate('2025-10-31')
-  await settle()
+  await settleUntilPeriodChoice()
   await chooseOption('')
-  assert.deepEqual(await pending, { cancelled: false, reversalDate: '2025-10-31', reversalPeriodId: null })
+  assert.deepEqual(await pending, { cancelled: false, reversalDate: '2025-10-31', reversalPeriodId: null, revision: 'rev-7' })
 })
 
 test('dismissing the period choice cancels the void', async (t) => {
@@ -270,15 +283,16 @@ test('dismissing the period choice cancels the void', async (t) => {
   const pending = promptVoidReversalPeriod('doc-1', COPY)
   await settle()
   await submitDate('2025-10-31')
-  await settle()
+  await settleUntilPeriodChoice()
+  assert.ok(document.querySelector('select#prompt-input'), 'the period choice must be open before it is dismissed')
   await clickCancel()
-  assert.deepEqual(await pending, { cancelled: true, reversalDate: null, reversalPeriodId: null })
+  assert.deepEqual(await pending, { cancelled: true, reversalDate: null, reversalPeriodId: null, revision: 'rev-7' })
 })
 
 test('a failed lookup falls back to the server default without prompting', async (t) => {
   await mountPromptRoot(t)
   scriptFetch(t, () => new Response('proxy error', { status: 502 }))
   const choice = await promptVoidReversalPeriod('doc-1', COPY)
-  assert.deepEqual(choice, { cancelled: false, reversalDate: null, reversalPeriodId: null })
+  assert.deepEqual(choice, { cancelled: false, reversalDate: null, reversalPeriodId: null, revision: null })
   assert.equal(dialog(), null)
 })

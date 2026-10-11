@@ -238,10 +238,10 @@ const mockDb = `
       return { rows: rows.map((d) => ({ subsidiary_id: d.subsidiary_id })) }
     }
     if (text.includes('insert into documents')) {
-      // (id, org, kind, number, party, docDate, due, currency, 'draft',
+      // (id, org, kind, number, party, docDate, due, workCompletedOn, currency,
       //  subsidiary, dept, project, extraDims, memo, subtotal, tax, total,
       //  actor, actor) — 'draft' stays inline, the rest arrive positionally.
-      const [id, orgId, kind, number, party, docDate, due, currency] = params
+      const [id, orgId, kind, number, , docDate, , , currency, subsidiary, , , , , subtotal, taxTotal, total] = params
       if (id === '${CROSS_KEY}') return { rows: [] }
       if (state.docs.some((d) => d.id === id)) return { rows: [] }
       if (params.includes('${FOREIGN_ACCOUNT_ID}')) {
@@ -249,8 +249,8 @@ const mockDb = `
       }
       state.docs.push({
         id, org_id: orgId, kind, document_number: number, status: 'draft',
-        currency, document_date: docDate, subtotal: params[13], tax_total: params[14], total: params[15],
-        subsidiary_id: params[8] ?? null,
+        currency, document_date: docDate, subtotal, tax_total: taxTotal, total,
+        subsidiary_id: subsidiary ?? null,
       })
       return { rows: [{ id }] }
     }
@@ -282,6 +282,10 @@ const mockDb = `
     if (text.includes('from audit_log')) {
       const rows = state.audits.filter((a) => a.org_id === '${ORG_ID}')
       return { rows: rows.map((a) => ({ after: a.after })) }
+    }
+    if (text.includes('entered_on')) {
+      // The entry day is the business day the row was created on.
+      return { rows: [{ entered_on: state.today }] }
     }
     if (text.includes('from documents d')) {
       // The fake database honours the scope predicate the loader sends: a
@@ -359,6 +363,8 @@ const mockDb = `
   export async function withBypassContext(fn) { return fn() }
   export async function withOrgContext(orgId, fn) { return fn() }
   export async function withTransactionSavepoint(runner, name, work) { return work(runner) }
+  // The executor handed in is the caller's own unit, so it is joined as is.
+  export async function inExecutorTransaction(executor, work) { return work(executor) }
   export function registerRequestOrgResolver(fn) { return undefined }
   export function currentRequestOrgResolver() { return null }
   export function ambientTenantOrgId() { return null }

@@ -97,6 +97,7 @@ function payload() {
     books: [],
     schedulePage: { total: 0, page: 1, perPage: 25, bookId: null, query: '' },
     hasAccountingEvidence: false,
+    placement: { missing: [] },
     schedule: [],
   }
 }
@@ -231,4 +232,56 @@ test('a new asset opens on its category accounts and follows a category change',
     assert.ok(switched.includes(label), `the new category must supply ${label}; saw ${switched.join(' | ')}`)
   }
   assert.ok([...document.querySelectorAll('input')].some((input) => input.value === '36'), 'the new category life must replace the old default')
+})
+
+function draftPayload(missing: string[] = []) {
+  const base = payload()
+  return {
+    ...base,
+    asset: {
+      ...base.asset,
+      id: 'asset-draft-1',
+      asset_number: 'FA-100',
+      name: 'Forklift',
+      status: 'draft',
+      category_id: EQUIPMENT.id,
+      acquisition_cost: '12000.0000',
+      in_service_on: '2026-01-15',
+      depreciation_method: 'straight_line',
+      useful_life_months: 48,
+      updated_at: 'rev-1',
+    },
+    category: EQUIPMENT,
+    placement: { missing },
+  }
+}
+
+async function openScheduleTab(): Promise<void> {
+  const tab = [...document.querySelectorAll('button')].find((button) => (button.textContent ?? '').trim() === 'Depreciation schedule')
+  assert.ok(tab, 'the depreciation schedule tab must render')
+  await act(async () => {
+    tab.click()
+    await tick()
+  })
+}
+
+test('a complete draft offers Place in service in the header and says placement builds the schedule', async (t) => {
+  await mountDrawer(t, baseProps({ payload: draftPayload([]), categories: [EQUIPMENT], accounts: CATEGORY_ACCOUNTS, createMode: false }))
+  const placeButtons = [...document.querySelectorAll('button')].filter((button) => (button.textContent ?? '').trim() === 'Place in service')
+  assert.equal(placeButtons.length, 1, 'a draft must offer Place in service directly in the header, not only inside Actions')
+  await openScheduleTab()
+  const body = document.body.textContent ?? ''
+  assert.match(body, /Placing the asset in service builds its depreciation schedule/, 'a complete draft must say placement builds the schedule')
+  assert.doesNotMatch(body, /set cost, in-service date/, 'a complete draft must not repeat the generic set-these-fields instruction')
+})
+
+test('a draft names exactly the fields still missing on the schedule tab', async (t) => {
+  await mountDrawer(t, baseProps({ payload: draftPayload(['in_service_on', 'useful_life_months']), categories: [EQUIPMENT], accounts: CATEGORY_ACCOUNTS, createMode: false }))
+  await openScheduleTab()
+  const body = document.body.textContent ?? ''
+  assert.ok(
+    body.includes('No schedule yet. Still needed before this asset can be placed in service: In service and Useful life (months).'),
+    `the schedule copy must name the missing fields; saw: ${body.slice(0, 400)}`,
+  )
+  assert.doesNotMatch(body, /set cost, in-service date/, 'the generic instruction must not replace the named fields')
 })

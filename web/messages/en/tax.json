@@ -58,8 +58,6 @@
   "compute": "Compute",
   "computing": "Computing…",
   "empty": "Choose a return and a period, then compute.",
-  "adjustmentAria": "Adjustment for {label}",
-  "adjustmentPlaceholder": "0.00",
   "columns": {
     "line": "Line",
     "description": "Description",
@@ -150,6 +148,12 @@
       "pdf": "PDF",
       "xlsx": "Excel",
       "csv": "CSV"
+    },
+    "adjustments": {
+      "title": "Adjustments",
+      "reason": "Reason",
+      "recordedBy": "Recorded by",
+      "noReason": "No reason recorded"
     }
   },
   "provisions": {
@@ -326,5 +330,27 @@
       "threshold": "Sales threshold"
     },
     "contextUnavailable": "Filing evidence could not be loaded. Retry before relying on it."
+  },
+  "adjustments": {
+    "title": "Adjustments",
+    "description": "Enter amounts that belong on an adjustment line but are not in this system's ledger, such as activity from before your conversion. Each adjustment needs a reason and is recorded with its author when the return is saved.",
+    "entryLabel": "Adjustment",
+    "line": "Line",
+    "amount": "Amount",
+    "amountPlaceholder": "0.00",
+    "reason": "Reason",
+    "reasonPlaceholder": "e.g. Jan–Aug 2025 pre-conversion activity per prior system",
+    "add": "Add adjustment",
+    "remove": "Remove",
+    "removeAria": "Remove adjustment: {reason}",
+    "errors": {
+      "lineCode": "Choose an adjustment line of this return.",
+      "amount": "Enter an amount with up to four decimal places, for example 3018.84 or -50.",
+      "reason": "Enter the reason for this adjustment (up to 500 characters)."
+    }
+  },
+  "conversion": {
+    "notice": "This return period starts before your conversion on {date}. Add the pre-conversion amounts from your prior system.",
+    "action": "Add pre-conversion amounts"
   }
 }

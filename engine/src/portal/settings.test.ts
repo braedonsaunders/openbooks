@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
   DEFAULT_PORTAL_SETTINGS,
+  assertPortalReturnReasons,
   mergePortalSettings,
   returnWindowDeadline,
 } from './settings.ts'
@@ -76,4 +77,16 @@ test('fulfilment tracking reads every adapter key shape', () => {
   assert.equal(extractPayloadTracking({}), null)
   assert.equal(extractPayloadTracking(null), null)
   assert.equal(extractPayloadTracking({ tracking_number: '   ' }), null)
+})
+
+test('return reasons are required exactly while portal returns are on', () => {
+  assert.doesNotThrow(() => assertPortalReturnReasons(true, ['damaged']))
+  assert.doesNotThrow(() => assertPortalReturnReasons(false, []))
+  assert.throws(
+    () => assertPortalReturnReasons(true, []),
+    (error: unknown) => error instanceof Error
+      && (error as { code?: string }).code === 'invalid_input'
+      && (error as { status?: number }).status === 422
+      && typeof (error as { remedy?: string }).remedy === 'string',
+  )
 })

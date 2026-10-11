@@ -67,6 +67,7 @@ for (const masked of [false, true]) {
         productionOrgId: org.orgId, name, tier: "full", masked, createdBy: actorId, lifecycleAuthority: { actorId },
       }));
       const target = created.sandboxOrgId;
+      assert.ok(evidenceTables.length > 0, "the sandbox copy covers the Field Ticket evidence tables");
       const assertCopy = async () => {
         for (const table of evidenceTables) {
           const replacements = table.ids.map(key => sql`${key}::text,ob_rebase(original.${sql.identifier(key)},target.sandbox_seed)`);

@@ -11,6 +11,7 @@ import { Button, Label, SearchSelect, Textarea, UrlDrawer } from '@openbooks/ui'
 import { isAssemblyCapableKind } from '@openbooks/engine/inventory/contracts'
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
 import { PagedTable, type PagedColumn } from '../../../components/paged-table'
+import { effectiveRequirementPerUnit } from '@/lib/bom-lines'
 
 export interface BomComponent {
   id: string
@@ -317,10 +318,20 @@ export function BomDrawer({
     {
       key: 'scrapPct',
       label: tInventory('bom.columns.scrapPct'),
+      help: tInventory('bom.help.scrapPct'),
       width: '130px',
       type: 'decimal',
       decimalScale: 4,
       align: 'right',
+    },
+    {
+      key: 'effectiveRequirement',
+      label: tInventory('bom.columns.effectiveRequirement'),
+      help: tInventory('bom.help.effectiveRequirement'),
+      width: '150px',
+      type: 'readonly',
+      align: 'right',
+      render: (row) => effectiveRequirementPerUnit(row) ?? '—',
     },
     ...(showManufacturing ? [
       {

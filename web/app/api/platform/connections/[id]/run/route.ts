@@ -14,7 +14,7 @@ const runBody = z.object({ mode: z.enum(CONNECTION_RUN_MODES) });
 
 export const POST = defineRoute({
   permission: "sync.run", feature: { none: "Connection synchronization is controlled by sync-run permission and has no separate organization feature gate." },
-  scope: "unrestricted", params: z.object({ id: z.string().uuid() }), body: runBody,
+  scope: "unrestricted", params: z.object({ id: z.string() }), body: runBody,
   handler: async ({ params: { id }, body, authz: gate }) => {
   // Running a sync is the `sync.run` grant, not connection configuration:
   // a caller who may run but not reconfigure still passes here, while the

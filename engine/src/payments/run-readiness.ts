@@ -6,6 +6,8 @@ import { PaymentError } from "../payments-core/payment-errors.ts";
 import { decryptAccountNumber, isValidBic, isValidIban, loadEftSettings, type EftSettings, type EftSettingsResult } from "../payments-core/rail-settings.ts";
 import { loadNachaSettings, nachaCheckDigit } from "../payments-core/rail-nacha.ts";
 import { loadSepaSettings } from "../payments-core/rail-sepa.ts";
+import { payeeBankStateSql } from "./payee-bank-account.ts";
+export { payablePayeeBankAccountSql, payeeBankStateSql } from "./payee-bank-account.ts";
 export interface RunBlocker {
   instructionId: string;
   payee: string;
@@ -321,6 +323,14 @@ export async function assertRunPayeesInScope(
   await assertPaymentPartiesInScope(orgId, rows.map((r) => r.payee_party_id), allowedSubsidiaryIds);
 }
 
+/** Why a payee-side instruction has no payable bank account, by payee state. */
+const UNPINNED_BANK_REASON: Record<string, string> = {
+  pending: "bank details are awaiting approval; approve them, then cancel and recreate this run",
+  undated: "bank details are approved without an approval date; save them again to re-approve, then cancel and recreate this run",
+  missing: "no approved bank account on file; add and approve one under the vendor's bank details, then cancel and recreate this run",
+  approved: "an approved bank account was added after this run was created; cancel and recreate this run",
+};
+
 /**
  * Everything the run detail view and the file export need to agree on:
  * EFT settings state, per-instruction bank-detail blockers, and subcontractor
@@ -368,6 +378,7 @@ export async function paymentRunReadiness(
   const rows = (await db.execute<{
       id: string;
       payee: string;
+      payee_party_id: string;
       payee_bank_account_id: string | null;
       approved_at: string | null;
       is_active: boolean | null;
@@ -375,7 +386,7 @@ export async function paymentRunReadiness(
       account_number_encrypted: string | null;
       currency: string;
     }>(sql`
-    select i.id, p.display_name as payee, i.payee_bank_account_id,
+    select i.id, p.display_name as payee, i.payee_party_id, i.payee_bank_account_id,
            b.approved_at, b.is_active, b.routing, b.account_number_encrypted, i.currency
       from payment_instructions i
       join parties p on p.id = i.payee_party_id and p.org_id = i.org_id
@@ -383,11 +394,29 @@ export async function paymentRunReadiness(
      where i.payment_run_id = ${runId} and i.org_id = ${orgId} and i.status <> 'cancelled' ${payeeScope}
   `));
 
+  // An unpinned payee is named by the state its bank details are in, so the
+  // blocker says what is missing and how to fix it. The state comes from the
+  // same classification run creation and the run builder use.
+  const payeeSideMethod = method === "ach" || method === "sepa" || method === "eft";
+  const unpinnedPartyIds = [...new Set(rows.rows.filter((r) => !r.payee_bank_account_id).map((r) => r.payee_party_id))];
+  const payeeBankStates = new Map<string, string>();
+  if (payeeSideMethod && unpinnedPartyIds.length > 0) {
+    const states = await db.execute<{ party_id: string; state: string }>(sql`
+      select p.id as party_id, ${payeeBankStateSql(sql`p.id`, sql`${orgId}::uuid`)} as state
+        from parties p
+       where p.org_id = ${orgId} and p.id = any(${`{${unpinnedPartyIds.join(",")}}`}::uuid[])
+    `);
+    for (const row of states.rows) payeeBankStates.set(row.party_id, row.state);
+  }
+
   const blockers: RunBlocker[] = [];
   for (const r of rows.rows) {
     if (method === "cheque" || method === "positive_pay") continue;
     if (!r.payee_bank_account_id) {
-      blockers.push({ instructionId: r.id, payee: r.payee, reason: "no approved bank account on file" });
+      const reason = payeeSideMethod
+        ? UNPINNED_BANK_REASON[payeeBankStates.get(r.payee_party_id) ?? "missing"] ?? UNPINNED_BANK_REASON.missing!
+        : "no approved bank account on file";
+      blockers.push({ instructionId: r.id, payee: r.payee, reason });
       continue;
     }
     // Only the three bank-detail rails carry account evidence; every other

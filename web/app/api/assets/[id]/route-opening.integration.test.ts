@@ -79,6 +79,7 @@ interface Fixture {
   orgId: string;
   actorId: string;
   assetId: string;
+  categoryId: string;
 }
 
 async function seedFixture(): Promise<Fixture> {
@@ -108,7 +109,7 @@ async function seedFixture(): Promise<Fixture> {
        acquisition_cost, salvage_value, custom)
     values (${assetId}, ${org.orgId}, ${org.subsidiaryId}, ${categoryId}, 'OPEN-1',
             'Onboarded asset', 'draft', '0', '0', '{}'::jsonb)`);
-  return { orgId: org.orgId, actorId, assetId };
+  return { orgId: org.orgId, actorId, assetId, categoryId };
 }
 
 async function revisionOf(assetId: string): Promise<string> {
@@ -268,6 +269,87 @@ test("the register list reads NBV as cost minus opening minus posted", async () 
        where a.org_id = ${fixture.orgId} and a.id = ${fixture.assetId}`)).rows;
     assert.equal(rows[0]?.accumulated, "58000.0000", "register accumulated = opening 55000 + posted 3000");
     assert.equal(rows[0]?.nbv, "62000.0000", "register NBV = cost − opening − posted");
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrgReporting(fixture.orgId);
+  }
+});
+
+interface PlacementPayload {
+  asset: { status: string };
+  placement: { missing: string[] };
+  schedule: { plannedAmount: string }[];
+}
+
+test("a complete draft is placed in service by the status-only action and continues from its opening figures", async () => {
+  const fixture = await seedFixture();
+  try {
+    const saved = await PATCH(
+      await patchRequest(fixture, {
+        acquisitionCost: "120000",
+        inServiceOn: "2021-06-15",
+        method: "straight_line",
+        lifeMonths: 120,
+        openingAccumulated: "55000",
+        openingAsOf: "2025-12-31",
+      }),
+      { params: Promise.resolve({ id: fixture.assetId }) },
+    );
+    assert.equal(saved.status, 200, "a draft save with complete fields must succeed");
+    const draft = (await saved.json()) as PlacementPayload;
+    assert.equal(draft.asset.status, "draft");
+    assert.deepEqual(draft.placement.missing, [], "a complete draft reports nothing missing");
+    assert.equal(draft.schedule.length, 0, "a draft owns no schedule until it is placed in service");
+
+    const placed = await PATCH(await patchRequest(fixture, { status: "in_service" }), {
+      params: Promise.resolve({ id: fixture.assetId }),
+    });
+    assert.equal(placed.status, 200, "the status-only placement must succeed for a complete draft");
+    const after = (await placed.json()) as PlacementPayload;
+    assert.equal(after.asset.status, "in_service");
+    assert.equal(
+      after.schedule[0]?.plannedAmount,
+      "1000.0000",
+      "placement continues from the opening as-of date without re-posting pre-cutover months",
+    );
+    assert.deepEqual(after.placement.missing, []);
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrgReporting(fixture.orgId);
+  }
+});
+
+test("placement refuses a draft naming exactly the fields still missing and leaves it a draft", async () => {
+  const fixture = await seedFixture();
+  try {
+    // With the category default life cleared, the asset itself must carry a life.
+    await db.execute(sql`
+      update asset_categories set default_life_months = null where id = ${fixture.categoryId}`);
+    const draftSave = await PATCH(
+      await patchRequest(fixture, {
+        acquisitionCost: "120000",
+        inServiceOn: "2021-06-15",
+        method: "straight_line",
+      }),
+      { params: Promise.resolve({ id: fixture.assetId }) },
+    );
+    assert.equal(draftSave.status, 200);
+
+    const before = (await getPayload(fixture)).body as unknown as PlacementPayload;
+    assert.deepEqual(before.placement.missing, ["useful_life_months"]);
+
+    const refused = await PATCH(await patchRequest(fixture, { status: "in_service" }), {
+      params: Promise.resolve({ id: fixture.assetId }),
+    });
+    assert.equal(refused.status, 422);
+    const refusal = (await refused.json()) as { error: string; code: string; missing: string[] };
+    assert.equal(refusal.code, "asset_placement_incomplete");
+    assert.deepEqual(refusal.missing, ["useful_life_months"], "only the missing life is named");
+    assert.match(refusal.error, /Useful life \(months\)/);
+    assert.doesNotMatch(refusal.error, /Cost|In service|Opening/, "set fields must not be named");
+
+    const still = (await getPayload(fixture)).body as unknown as PlacementPayload;
+    assert.equal(still.asset.status, "draft", "a refused placement leaves the asset a draft");
   } finally {
     routeState.authz = null;
     await dropScratchOrgReporting(fixture.orgId);

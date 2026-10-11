@@ -1,7 +1,14 @@
 import { sql, type SQL } from "drizzle-orm";
-import { db } from "../platform/db.ts";
+import { db, withOrgTransaction } from "../platform/db.ts";
 import { PayrollError } from "./error.ts";
 import { PAY_RUN_SUBJECT_KIND } from "../flows/pay-runs-adapter.ts";
+import { returnDocumentToDraft, ReturnToDraftError } from "../flows/submit.ts";
+import { payRunStaleness } from "./readiness.ts";
+import { calculatePayRun, type CalculatePayRunInput, type PayRunCalculation } from "./run-calculation.ts";
+import { payrollSubsidiaryInScope, type PayrollSubsidiaryScope } from "./scope.ts";
+import { actorHasPermission } from "../organization/actor-permissions.ts";
+import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
+import { PAY_RUN_WORKFLOW_PERMISSIONS } from "../records/document-kind-permissions.ts";
 
 type Executor = Pick<typeof db, "execute">;
 
@@ -221,4 +228,106 @@ export async function assertPayRunApprovalReleased(
     );
   }
   throw new PayrollError("pay run is awaiting approval");
+}
+
+export interface RecalculateApprovedPayRunInput {
+  orgId: string;
+  documentId: string;
+  actorId: string;
+  holidayEligibility?: CalculatePayRunInput["holidayEligibility"];
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope;
+}
+
+export interface RecalculatedApprovedPayRun {
+  calculation: PayRunCalculation;
+  /** The stale inputs that withdrew the approval, as payRunStaleness names them. */
+  reasons: string[];
+  /** Completed approval runs the return to draft kept as history. */
+  supersededRunIds: string[];
+  /** Live approval runs and gates the return to draft cancelled. */
+  cancelledRunIds: string[];
+}
+
+/** Why an approved-run recalculation is refused, by the document's current state. */
+function refusalForDocumentStatus(status: string): string {
+  if (status === "draft") {
+    return "pay run is a draft — recalculate it directly; there is no approval to withdraw";
+  }
+  if (status === "pending_approval") {
+    return "pay run is awaiting approval — its approver must decide that request before the run can be recalculated";
+  }
+  return `pay run is ${status} — only an approved, uncommitted run is recalculated by withdrawing its approval`;
+}
+
+/**
+ * Recalculate an APPROVED pay run whose inputs changed after approval.
+ *
+ * Calculation accepts only a draft document, so the approval is withdrawn
+ * first through the Flows return-to-draft boundary: live gates are cancelled,
+ * the audit row carries the stale inputs as its reason, and the document must
+ * be approved again before commit. The recalculation runs in the same
+ * transaction, so a refused calculation leaves the approval standing. The
+ * caller resubmits the run to its approval Flow; this function never approves.
+ */
+export async function recalculateStaleApprovedPayRun(
+  input: RecalculateApprovedPayRunInput,
+): Promise<RecalculatedApprovedPayRun> {
+  const { orgId, documentId, actorId, holidayEligibility } = input;
+  return withOrgTransaction(orgId, async () => {
+    for (const permission of ["payroll.run", PAY_RUN_WORKFLOW_PERMISSIONS.approve]) {
+      if (!(await actorHasPermission(db, orgId, actorId, permission))) {
+        throw new PayrollError(`missing permission: ${permission}`);
+      }
+    }
+    const actorScope = await actorAllowedSubsidiaryIds(db, orgId, actorId);
+    const allowedSubsidiaryIds = actorScope === null
+      ? input.allowedSubsidiaryIds
+      : input.allowedSubsidiaryIds == null
+        ? actorScope
+        : new Set([...actorScope].filter((id) => input.allowedSubsidiaryIds!.has(id)));
+    const locked = (await db.execute<{ status: string; subsidiary_id: string | null; run_status: string }>(sql`
+      select d.status, d.subsidiary_id, r.run_status
+        from pay_runs r
+        join documents d on d.id = r.document_id and d.org_id = r.org_id
+       where r.org_id = ${orgId} and r.document_id = ${documentId}
+       for update of r, d
+    `)).rows[0];
+    if (!locked || !payrollSubsidiaryInScope(allowedSubsidiaryIds, locked.subsidiary_id)) {
+      throw new PayrollError("pay run not found");
+    }
+    if (locked.run_status === "committed") {
+      throw new PayrollError("pay run is already committed — void it and run the period again to correct its figures");
+    }
+    if (locked.status !== "approved") {
+      throw new PayrollError(refusalForDocumentStatus(locked.status));
+    }
+    const staleness = await payRunStaleness(orgId, documentId, db, allowedSubsidiaryIds);
+    if (!staleness.stale) {
+      throw new PayrollError("the approved run's inputs have not changed since it was approved — there is nothing to recalculate");
+    }
+
+    let returned;
+    try {
+      returned = await returnDocumentToDraft({
+        documentId,
+        orgId,
+        actorId,
+        reason: `Inputs changed since approval (${staleness.reasons.join(", ")})`,
+        allowedSubsidiaryIds,
+      });
+    } catch (error) {
+      if (error instanceof ReturnToDraftError) throw new PayrollError(error.message);
+      throw error;
+    }
+
+    const calculation = await calculatePayRun({
+      orgId, documentId, actorId, dryRun: false, holidayEligibility, allowedSubsidiaryIds,
+    });
+    return {
+      calculation,
+      reasons: staleness.reasons,
+      supersededRunIds: returned.supersededRunIds,
+      cancelledRunIds: returned.cancelledRunIds,
+    };
+  });
 }

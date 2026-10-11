@@ -26,7 +26,7 @@ registerHooks({
           const s = globalThis.__reportVisibilityState;
           return {
             user: { orgId: s.orgId, id: s.actorId },
-            permissions: new Set(['reports.read']),
+            permissions: new Set(['reports.read', 'gl.read', 'projects.read']),
             allowedSubsidiaryIds: null,
           };
         }

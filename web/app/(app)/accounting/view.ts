@@ -20,6 +20,9 @@ import { resolvePeriod } from '../../../lib/periods'
 import { financialHealth, scoreLabelOf, type FinancialHealth, type RatioResult } from '../../../lib/analytics/financial-health'
 import { healthStrings, localizedRatioDefs } from '../../../lib/analytics/health-strings'
 import { accountingHome } from '../../../lib/module-home/accounting'
+import { homeFiscalWindow } from '../../../lib/module-home/fiscal-window'
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
+import { formatCivilDate } from '@/lib/format'
 import { getMoneyFormatter } from '@/lib/money-server'
 import { groupTabs } from '../../../components/module-home/group-tabs'
 import type { DirectoryItem } from '../../../components/module-home/ui'
@@ -101,8 +104,15 @@ export async function loadAccounting(): Promise<AccountingData> {
   const ratioDefs = localizedRatioDefs(tAnalytics)
   const tNav = await getTranslations('nav')
 
-  // Same default period as the analytics dashboard, so the score matches it.
-  const period = await resolvePeriod(null, { orgId: authz.user.orgId })
+  // The default fiscal year, the same one the analytics dashboard opens on.
+  // Its window is cut at the business day, so the figures and the label agree.
+  const locale = await getLocale()
+  const today = await businessToday(authz.user.orgId)
+  const period = await resolvePeriod(null, { orgId: authz.user.orgId, today })
+  const yearWindow = homeFiscalWindow(period, today)
+  const windowLabel = yearWindow.throughDate
+    ? t('home.vitals.throughDate', { label: period.label, date: formatCivilDate(yearWindow.throughDate, locale) })
+    : period.label
   // The health score, net income and the ratio set are financial-statement
   // figures: they follow the same data grants as the statements they come
   // from (reports.read plus the ledger grant the balance sheet and P&L
@@ -119,7 +129,7 @@ export async function loadAccounting(): Promise<AccountingData> {
   const [data, healthResult, navGroups] = await Promise.all([
     accountingHome(authz.user.orgId, authz.allowedSubsidiaryIds, access),
     financialsVisible
-      ? financialHealth({ from: period.from, to: period.to, label: period.label }, authz.user.orgId, authz.allowedSubsidiaryIds, healthStrings(tAnalytics, await getLocale()))
+      ? financialHealth({ from: yearWindow.from, to: yearWindow.to, label: period.label }, authz.user.orgId, authz.allowedSubsidiaryIds, healthStrings(tAnalytics, locale))
       : Promise.resolve(null),
     resolveNav(
       authz.user.orgId,
@@ -226,7 +236,7 @@ export async function loadAccounting(): Promise<AccountingData> {
     netIncomeAccent: health?.figures.netIncome.startsWith('-') ? 'red' : 'teal',
     netIncomeLabel: t('home.vitals.netIncome'),
     netIncomeValue: health ? moneyCompact(health.figures.netIncome) : '—',
-    netIncomeSub: period.label,
+    netIncomeSub: windowLabel,
     netIncomeTone: health?.figures.netIncome.startsWith('-') ? 'negative' : 'positive',
     closeLabel: t('home.vitals.close'),
     // A restricted caller reads the organization-wide refusal by name —
@@ -234,7 +244,13 @@ export async function loadAccounting(): Promise<AccountingData> {
     // stays a short catalogued word; the refusal itself is the reason in
     // the sub-caption, never a sentence in the KPI slot.
     closeValue: data.closeUnavailable ? t('home.vitals.closeUnavailable') : (data.close.progressPct === null ? t('home.vitals.noClose') : `${data.close.progressPct}%`),
-    closeSub: data.closeUnavailable ? t('home.vitals.closeOrgWide') : (data.close.periodName ? t('home.vitals.closeSub', { period: data.close.periodName }) : t('home.vitals.noCloseSub')),
+    closeSub: data.closeUnavailable
+      ? t('home.vitals.closeOrgWide')
+      : data.close.periodName
+        ? t('home.vitals.closeSub', { period: data.close.periodName })
+        : data.lastLockedPeriod
+          ? t('home.vitals.lockedThroughSub', { period: data.lastLockedPeriod })
+          : t('home.vitals.noCloseSub'),
     draftLabel: t('home.vitals.draftJournals'),
     draftValue: format.number(data.draftJournals),
     draftSub: t('home.vitals.draftJournalsSub', { posted: data.postedJournals7d }),
@@ -246,7 +262,7 @@ export async function loadAccounting(): Promise<AccountingData> {
     findingsAccent: data.workItems.critical > 0 ? 'red' : data.workItems.total > 0 ? 'amber' : 'emerald',
     findingsTone: data.workItems.critical > 0 ? 'negative' : data.workItems.total > 0 ? 'warning' : 'positive',
     heroTitle: t('home.hero.title'),
-    heroHint: period.label,
+    heroHint: windowLabel,
     gaugeValue: health?.overallScore ?? 0,
     gaugeLabel: health?.scoreLabel ? t(`home.score.${health.scoreLabel}`) : t('home.score.unscored'),
     // An unscored organization carries no verdict: null bands keep the hero

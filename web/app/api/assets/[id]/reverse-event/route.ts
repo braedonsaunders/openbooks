@@ -143,6 +143,7 @@ export const POST = defineRoute({
   feature: "fixedAssets",
   params: z.object({ id: z.string() }),
   body: postBodySchema0,
+  invalidBodyStatus: 422,
   handler: async ({ request: _req, authz: gate, params, body: routeBody }) => {
     const { id } = await params;
     if (!isUuid(id))

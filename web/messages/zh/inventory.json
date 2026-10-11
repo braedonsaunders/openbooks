@@ -29,7 +29,8 @@
       "operationSeq": "工序顺序",
       "scrapPct": "报废率 %",
       "isByproduct": "行类型",
-      "outputCostWeight": "相对成本权重"
+      "outputCostWeight": "相对成本权重",
+      "effectiveRequirement": "每单位有效用量"
     },
     "values": {
       "component": "组件",
@@ -44,7 +45,11 @@
       "invalidOperation": "工序顺序必须是正整数。",
       "manufacturingDisabled": "请在公司设置 → 功能中启用制造，以编辑工序和副产品设置。"
     },
-    "jointOutputNote": "联产品按数量和每基本单位的相对权重分摊生产成本。主产品的权重为1。副产品仍单独按可变现净值计价。"
+    "jointOutputNote": "联产品按数量和每基本单位的相对权重分摊生产成本。主产品的权重为1。副产品仍单独按可变现净值计价。",
+    "help": {
+      "scrapPct": "在每单位用量上额外加上此百分比。若用量已包含损耗，请保持为 0。",
+      "effectiveRequirement": "父项目每一单位的需求量：用量 ×（1 + 报废率 %）。工单使用相同的计算。"
+    }
   },
   "labels": {
     "item": "物料",
@@ -280,8 +285,10 @@
       "loadingMore": "正在加载…"
     },
     "secondCount": "保存第二次盘点",
+    "recordedQuantity": "已记录 {quantity}",
     "secondReason": "第二次盘点实测",
-    "secondReasonHint": "第二次盘点与第一次不同。请说明差异原因（至少5个字符），以便与本次盘点一并记录。"
+    "secondReasonHint": "第二次盘点与第一次不同。请说明差异原因（至少5个字符），以便与本次盘点一并记录。",
+    "secondNotRecorded": "未记录。与第一次不同的第二次盘点需先填写差异原因（至少{minLength}个字符）才能保存。"
   },
   "create": {
     "subsidiary": "所属子公司",

@@ -113,7 +113,12 @@
         "settings": "payroll settings",
         "ytd": "another run's year-to-date",
         "openingBalances": "opening balances (carry-ins)"
-      }
+      },
+      "approvedTitle": "Approved, but inputs changed since approval ({reasons}). Recalculate to withdraw the approval and send the run for approval again.",
+      "pendingTitle": "Inputs changed since this run was calculated ({reasons}). The run is awaiting approval: its approver must decide that request before it can be recalculated.",
+      "recalculateApproved": "Recalculate and resubmit",
+      "approvedConfirmTitle": "Withdraw approval and recalculate?",
+      "approvedConfirmBody": "Recalculating withdraws this run's approval, recalculates it from the current inputs, and sends it for approval again. Commit stays blocked until the new approval is granted."
     },
     "readiness": {
       "blockedTitle": "{count, plural, one {# item blocks this run} other {# items block this run}}",
@@ -295,7 +300,8 @@
       "ackLabel": "I understand {count, plural, one {this employee} other {these # employees}} will not be paid on this run, for the reasons listed above.",
       "ackRecord": "Record acknowledgement",
       "ackRecorded": "Acknowledgement recorded for {count, plural, one {# employee} other {# employees}}.",
-      "ackRecordedNote": "Acknowledged on {date} — this decision is recorded on the run."
+      "ackRecordedNote": "Acknowledged on {date} — this decision is recorded on the run.",
+      "staleApprovedBlocked": "Recalculate and resubmit the run before committing."
     },
     "finish": {
       "notCommitted": "Commit the run in the GL step before posting.",
@@ -454,7 +460,10 @@
     "committed": "Committed",
     "posted": "Posted",
     "void": "Void",
-    "rejected": "Rejected"
+    "rejected": "Rejected",
+    "approved": "Approved",
+    "approvedStale": "Approved · needs recalculation",
+    "pendingApproval": "Awaiting approval"
   },
   "empty": {
     "runs": "No pay runs yet. Create one from a pay schedule to get started.",
@@ -493,7 +502,8 @@
     "approvalPending": "Awaiting approval ({count} outstanding) — commit and posting are blocked",
     "printSet": "Print set (print delivery only)",
     "stubsPrintOnly": "{count} employees are print-only and were not emailed",
-    "calculateRefusedAll": "Nobody could be calculated — {count, plural, one {# employee was refused} other {# employees were refused}}. Fix the input and recalculate, or acknowledge them before committing."
+    "calculateRefusedAll": "Nobody could be calculated — {count, plural, one {# employee was refused} other {# employees were refused}}. Fix the input and recalculate, or acknowledge them before committing.",
+    "recalculateApprovedDone": "Approval withdrawn. The run is recalculated and sent for approval again."
   },
   "profiles": {
     "addEmployee": "Employee without a profile",
@@ -1799,6 +1809,11 @@
     }
   },
   "holidayAttestations": {
+    "bulkNotAbsentTitle": "Confirm absence answers",
+    "bulkNotAbsentConfirm": "File \"not absent without consent\" for {count, plural, one {# open holiday question} other {# open holiday questions}} on this run? Each is recorded as your assertion for that employee and holiday.",
+    "bulkNotAbsentAction": "Answer {count, plural, one {# question} other {all # questions}}: not absent",
+    "bulkNotAbsentFiled": "{count, plural, one {# answer} other {# answers}} filed.",
+    "bulkNotAbsentHint": "{count} holiday absence questions are open. Answer them all \"not absent without consent\" in one step, or answer each row below.",
     "loadFailed": "Could not load the employees these exceptions need — retry rather than answer blind.",
     "retry": "Retry",
     "commissionTitle": "commission-pay status",

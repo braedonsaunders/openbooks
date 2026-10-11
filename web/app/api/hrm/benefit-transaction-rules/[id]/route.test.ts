@@ -109,9 +109,19 @@ for (const address of addresses) {
     const body = validBody();
     const response = await address.route.PATCH(request(address.path, "PATCH", { ...body, orgId: itemId, actorId: itemId, programId: itemId }), context());
     assert.equal(response.status, 200, await response.clone().text());
+    // The typed boundary fills the policy's declared defaults before the
+    // command runs; the forwarded policy is that normalized value.
     const { expectedRevision, reason, ...policy } = body;
-    assert.deepEqual(state.calls, [{ command: "write", input: { orgId, actorId, programId, expectedRevision, reason, policy } }]);
-    assert.deepEqual((await response.json()).record, { programRevision: 5, policy });
+    const normalized = {
+      ...policy,
+      unassignedShare: "refuse",
+      rounding: "per_group",
+      capPercent: null,
+      capProjectTypeId: null,
+      positions: policy.positions.map((position) => ({ ...position, recipientSource: "assignment", fallbackSource: null })),
+    };
+    assert.deepEqual(JSON.parse(JSON.stringify(state.calls)), [{ command: "write", input: { orgId, actorId, programId, expectedRevision, reason, policy: normalized } }]);
+    assert.deepEqual((await response.json()).record, { programRevision: 5, policy: normalized });
     assert.equal(state.gates.length, 1, "each address has one route factory gate");
     assert.deepEqual(state.invalidations, [orgId]);
   });

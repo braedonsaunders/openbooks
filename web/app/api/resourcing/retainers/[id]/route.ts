@@ -27,6 +27,7 @@ export const PATCH = defineRoute({
   feature: "retainerBilling",
   params: Params,
   body: Body,
+  invalidBodyStatus: 422,
   handler: async ({ authz, params: { id }, body }) => withOrgTransaction(authz.user.orgId, async () => {
     const input = {
       orgId: authz.user.orgId,

@@ -12,7 +12,8 @@ import { assertTracking, validateTrackingSelection } from "./tracking.ts";
 import { assertStockLocationAdmitsSubsidiary, assertNoForeignOnHand, resolveProfile, assertMovementOwner, assertInventoryFeature } from "./profile-policy.ts";
 import { assertItemsActive } from "./item-active.ts";
 import { postInventoryEntry } from "./journal.ts";
-import { primaryBookId, periodForDate, subsidiaryCurrency, getOnHandWith, lockInventoryPosition, persistReceiptMoney } from "./position.ts";
+import { primaryBookId, periodForDate, subsidiaryCurrency, getOnHandWith, lockInventoryPosition, persistReceiptMoney, assertInventoryDate, backdatedIssueShortage } from "./position.ts";
+import { assertPeriodModulesOpen, CloseError } from "../periods/period-policy.ts";
 import { consumeLayers, recordConsumptions, addLayerAtCost } from "./cost-layers.ts";
 
 export interface TransferInput {
@@ -138,6 +139,7 @@ export async function transferInventoryTx(
     throw new InventoryError("transfer quantity must be positive");
   if (input.fromStockLocationId === input.toStockLocationId)
     throw new InventoryError("transfer needs two different locations");
+  assertInventoryDate(input.date, "transfer date");
   // Canonical lock order: fence both positions before the transaction takes
   // any row lock (the feature share-lock below included), or a peer holding
   // the fence deadlocks against this transaction at posting. The subsidiary
@@ -165,6 +167,21 @@ export async function transferInventoryTx(
   if (!period)
     throw new InventoryError(`no accounting period for ${input.date}`);
   const bookId = input.postingBookId ?? await primaryBookId(orgId, tx);
+  // A transfer between locations that share a business dimension posts no
+  // journal, so postInventoryEntry's GL close gate never runs for it. Check the
+  // period explicitly, before any movement is written.
+  try {
+    await assertPeriodModulesOpen(tx, {
+      orgId,
+      periodId: period,
+      bookId,
+      subsidiaryIds: [input.subsidiaryId],
+      modules: [],
+    });
+  } catch (error) {
+    if (error instanceof CloseError) throw new InventoryError(error.message);
+    throw error;
+  }
   const currency = await subsidiaryCurrency(orgId, input.subsidiaryId, tx);
   assertMovementOwner(ctx, input.subsidiaryId);
   // Costing policy revisions lock this same profile before revaluing layers;
@@ -235,6 +252,27 @@ export async function transferInventoryTx(
       `insufficient stock at source: need ${input.quantity}, on hand ${onHand.quantity}`,
     );
   }
+  // Current stock does not prove the source held the goods on the transfer's
+  // own date: a backdated transfer must be covered by the stock posted on or
+  // before that date. Destination legs only add stock, so only the source is
+  // checked.
+  const backdated = await backdatedIssueShortage(
+    tx,
+    orgId,
+    {
+      itemId: input.itemId,
+      stockLocationId: input.fromStockLocationId,
+      subsidiaryId: input.subsidiaryId,
+      lotId: input.lotId,
+      serialId: input.serialId,
+      sourceReceiptMovementId: input.sourceReceiptMovementId,
+    },
+    input.date,
+    quantity,
+    [],
+    "transfer",
+  );
+  if (backdated) throw new InventoryError(backdated);
 
   await assertOwnedLocation(tx,orgId,input.fromStockLocationId);
   await assertOwnedLocation(tx,orgId,input.toStockLocationId);

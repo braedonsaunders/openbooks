@@ -42,9 +42,15 @@
     "expense": "費用"
   },
   "hygiene": {
-    "assetBankUncorroborated": "「{name}」は銀行口座として設定されていますが、銀行らしい名称がなく、明細照合もできないため、すべての場所で現金として集計されます。種別を確認してください（清算・引当・与信口座は誤設定が多くあります）。または明細照合を有効にしてください。"
+    "assetBankUncorroborated": "「{name}」は銀行口座として設定されていますが、銀行らしい名称がなく、明細照合もできないため、すべての場所で現金として集計されます。種別を確認してください（清算・引当・与信口座は誤設定が多くあります）。または明細照合を有効にしてください。",
+    "duplicateAccountName": "保存しました。同じ名前「{name}」（{account}）の有効な勘定科目が他にもあります。"
   },
   "drawer": {
+    "duplicateName": {
+      "body": "同じ名前の有効な勘定科目「{name}」（{account}）が既にあります。既存の勘定科目を使用するか、このまま作成してください。",
+      "useExisting": "既存の勘定科目を使用",
+      "createAnyway": "このまま作成"
+    },
     "saved": "勘定を保存しました",
     "created": "勘定を作成しました",
     "newTitle": "新規勘定",
@@ -85,6 +91,7 @@
       "invalid_custom_fields": "カスタムフィールドの値を確認してください。",
       "number_in_use": "その勘定番号はすでに使用されています。",
       "numberInUseBy": "その勘定番号は<account>{number} · {name}</account>で既に使用されています。",
+      "duplicate_account_name": "有効な勘定科目が既にこの名前を使用しています。",
       "account_changed": "編集中に勘定が変更されました。開き直して再試行してください。",
       "invalid_idempotency_key": "勘定の作成要求を安全に再試行できませんでした。",
       "save_failed": "勘定を保存できませんでした。",

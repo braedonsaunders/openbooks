@@ -102,6 +102,8 @@ const mockDb = `
     return work()
   }
   export async function withBypassContext(orgOrWork, work) { return (work ?? orgOrWork)() } export { withBypassContext as withOrgContext }
+  export async function inExecutorTransaction(executor, work) { return work(executor) }
+  export const orgContext = { getStore: () => undefined, run: (store, fn) => fn() }
 `;
 
 const mockSources = new Map<string, string>([

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { stubModules } from "../../../testing/stub-modules";
+import { stubModules, withPlatformDbTestSurface } from "../../../testing/stub-modules";
 import test from "node:test";
 
 // Unsaved-create contract for POST /api/projects: opening the drawer writes
@@ -61,7 +61,7 @@ stubModules({
   intl: false,
   authz: true,
   features: false,
-  database: `
+  database: withPlatformDbTestSurface(`
       const state = globalThis[Symbol.for('openbooks.projects-route-test')]
       const sqlText = globalThis.openbooksProjectsSqlText
       function respond(query) {
@@ -95,13 +95,18 @@ stubModules({
         transaction: async (work) => work(txClient),
       }
       export async function withOrgTransaction(_orgId, work) { return work() }
-  `,
+      export async function withOrgContext(_orgId, fn) { return fn() }
+  `),
   extra: {
     "@/lib/feature-gates": `const state = globalThis[Symbol.for('openbooks.projects-route-test')]
      class FeatureDisabled extends Error { status = 404 }
      export async function guardFeaturePermission() {
        if (!state.projectGate) throw new FeatureDisabled('projects feature is disabled')
-       return { user: { orgId: '${ORG_ID}', id: '${USER_ID}' }, allowedSubsidiaryIds: null }
+       return {
+         user: { orgId: '${ORG_ID}', id: '${USER_ID}', roles: [] },
+         permissions: new Set(['projects.manage']),
+         allowedSubsidiaryIds: null,
+       }
      }`,
     "./_lib": `export async function loadProject(id, orgId) {
        const state = globalThis[Symbol.for('openbooks.projects-route-test')]

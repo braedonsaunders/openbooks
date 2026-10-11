@@ -3813,6 +3813,15 @@ for (const locale of ['de', 'es', 'fr', 'ja', 'pt-BR', 'zh']) {
     COGNATES.add(`${locale}:${key}|${term}`)
   }
 }
+// Square is a PSP brand name and keeps its shared spelling across locales.
+for (const locale of ['de', 'es', 'fr', 'ja', 'pt-BR', 'zh']) {
+  for (const [key, term] of [
+    ['banking.pspSettlements.providers.square', 'Square'],
+    ['admin.setup.paymentProviders.squareName', 'Square'],
+  ] as const) {
+    COGNATES.add(`${locale}:${key}|${term}`)
+  }
+}
 for (const locale of ['de', 'es']) {
   COGNATES.add(`${locale}:banking.pspSettlements.colFx|FX`)
 }

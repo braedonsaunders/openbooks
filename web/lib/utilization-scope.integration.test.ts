@@ -85,15 +85,25 @@ for (const boundary of ['service','page','assistant'] as const) {
     });
   }
 }
-for(const feature of ['projects','timeTracking']){
-  test(`Utilization service enforces ${feature} feature`,{skip:!process.env.OPENBOOKS_DB_URL},async()=>{
-    const org=await withBypassContext(()=>createScratchOrg());
-    try{
-      await withBypassContext(()=>db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||${JSON.stringify({[feature]:false})}::jsonb) where id=${org.orgId}`));
-      await withOrgContext(org.orgId,async()=>{await assert.rejects(utilizationData(org.orgId,period,null),/time.tracking.*disabled/i);});
-    }finally{await dropScratchOrg(org.orgId);}
-  });
-}
+// Time tracking stands alone in the feature registry: utilization is gated by
+// timeTracking only, and Projects is an optional dimension on time lines.
+test('Utilization service enforces timeTracking feature',{skip:!process.env.OPENBOOKS_DB_URL},async()=>{
+  const org=await withBypassContext(()=>createScratchOrg());
+  try{
+    await withBypassContext(()=>db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||${JSON.stringify({timeTracking:false})}::jsonb) where id=${org.orgId}`));
+    await withOrgContext(org.orgId,async()=>{await assert.rejects(utilizationData(org.orgId,period,null),/time.tracking.*disabled/i);});
+  }finally{await dropScratchOrg(org.orgId);}
+});
+test('Utilization service stays available when Projects is off',{skip:!process.env.OPENBOOKS_DB_URL},async()=>{
+  const org=await withBypassContext(()=>createScratchOrg());
+  try{
+    await withBypassContext(()=>db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"projects":false}'::jsonb) where id=${org.orgId}`));
+    await withOrgContext(org.orgId,async()=>{
+      const data=await utilizationData(org.orgId,period,null);
+      assert.ok(data.company);
+    });
+  }finally{await dropScratchOrg(org.orgId);}
+});
 
 
 const consolidatedRows = [

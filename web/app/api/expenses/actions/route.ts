@@ -263,8 +263,10 @@ export const POST = defineRoute({
               })
               return NextResponse.json({ ok: true, ...outcome })
             } catch (e) {
+              // A rehome that lands between the probe and the locked recheck
+              // answers the same hidden not-found as the probe itself.
               if (e instanceof DocumentEditError) {
-                return apiErrorResponse(e)
+                return e.status === 404 ? notFound('record') : apiErrorResponse(e)
               }
               throw e
             }

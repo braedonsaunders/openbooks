@@ -16,7 +16,7 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context)
 }})
 const { sql } = await import('drizzle-orm')
-const { db, withOrgContext } = await import('@openbooks/engine/platform/db')
+const { db, withOrgContext, withBypass} = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { postDocument } = await import('@openbooks/engine/ledger/posting-document')
 const { randomUUID } = await import('node:crypto')
@@ -28,9 +28,9 @@ const { registerRequestOrgResolver } = await import('@openbooks/engine/platform/
 registerRequestOrgResolver(() => ({ orgId: null, bypass: true }))
 
 async function setup(permissions: string[] = ['*']) {
-  const org = await createScratchOrg()
-  const actor = await createScratchUser(org.orgId, 'AR clerk', 'reviewer')
-  await db.execute(sql`update app_roles set permissions=${JSON.stringify(permissions)}::jsonb where org_id=${org.orgId} and key='reviewer'`)
+  const org = await withBypass(() => createScratchOrg())
+  const actor = await withBypass(() => createScratchUser(org.orgId, 'AR clerk', 'reviewer'))
+  await withBypass(() => db.execute(sql`update app_roles set permissions=${JSON.stringify(permissions)}::jsonb where org_id=${org.orgId} and key='reviewer'`))
   session.user = { id: actor, orgId: org.orgId, name: 'AR clerk', email: 'ar@scratch.test', roles: [], isSuperAdmin: false, envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor }
   return { org, actor }
 }
@@ -72,7 +72,7 @@ test('batch preview needs the read grant and lists the overdue customer', async 
     assert.equal(denied.status, 403)
 
     await withOrgContext(org.orgId, () => seedOverdueInvoice(org, 'office@acme.test'))
-    await db.execute(sql`update app_roles set permissions='["ar.read","reports.read"]'::jsonb where org_id=${org.orgId} and key='reviewer'`)
+    await withBypass(() => db.execute(sql`update app_roles set permissions='["ar.read","reports.read"]'::jsonb where org_id=${org.orgId} and key='reviewer'`))
     const res = await withOrgContext(org.orgId, () =>
       preview.GET(new Request('http://audit.local/api'), undefined as never))
     assert.equal(res.status, 200, JSON.stringify(await res.clone().json()))
@@ -91,7 +91,7 @@ test('batch create refuses without the send grant and without transport', async 
       batches.POST(new Request('http://audit.local/api', { method: 'POST', body: JSON.stringify({}) }), undefined as never))
     assert.equal(denied.status, 403)
 
-    await db.execute(sql`update app_roles set permissions='["ar.create","ar.read","reports.read"]'::jsonb where org_id=${org.orgId} and key='reviewer'`)
+    await withBypass(() => db.execute(sql`update app_roles set permissions='["ar.create","ar.read","reports.read"]'::jsonb where org_id=${org.orgId} and key='reviewer'`))
     const unconfigured = await withOrgContext(org.orgId, () =>
       batches.POST(new Request('http://audit.local/api', { method: 'POST', body: JSON.stringify({}) }), undefined as never))
     assert.equal(unconfigured.status, 422)

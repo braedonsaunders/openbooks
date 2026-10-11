@@ -40,6 +40,7 @@ import { isFeatureEnabled } from '../../../../../lib/features'
 import { acquireOrgFeatureGateLock } from '@openbooks/engine/organization/org-feature-lock'
 import { lockActorCommandAuthority } from '@openbooks/engine/organization/actor-command-authority'
 import { notFound } from "@/lib/api/responses";
+import { assertValidControlAccountMappings, ControlAccountsIncompleteError } from '@openbooks/engine/records/control-accounts'
 
 const decimalText = (field: string, noun: string) => z.unknown().transform((value, ctx) => {
   if (typeof value !== "string" || canonicalDecimal(value, 4) === null) {
@@ -463,18 +464,22 @@ export const PUT = defineRoute({
       const current = await db.execute<{ settings: Record<string, unknown> | null }>(sql`
         select settings from orgs where id = ${orgId} for update`)
       if (accountIds.length > 0) {
-        const found = await db.execute<{ id: string }>(sql`
-          select id from accounts
-           where org_id = ${orgId} and not is_summary and is_active
+        const found = await db.execute<{ id: string; type: string; isActive: boolean; isSummary: boolean }>(sql`
+          select id, type, is_active as "isActive", is_summary as "isSummary" from accounts
+           where org_id = ${orgId}
              and id in (${sql.join(accountIds.map((id) => sql`${id}`), sql`, `)}) order by id for share`)
-        const valid = new Set(found.rows.map((row) => row.id))
-        for (const [key, v] of Object.entries(accounts)) {
-          if (v !== null && !valid.has(v)) {
-            return NextResponse.json(
-              { error: `${key}: account not found, inactive, or is a summary account` },
-              { status: 422 },
-            )
+        // The same boundary the posting path enforces: an account of the
+        // wrong type is refused here rather than saved and refused later.
+        try {
+          assertValidControlAccountMappings(
+            Object.fromEntries(Object.entries(accounts).filter((entry): entry is [string, string] => entry[1] !== null)),
+            found.rows,
+          )
+        } catch (error) {
+          if (error instanceof ControlAccountsIncompleteError) {
+            return NextResponse.json({ error: error.message, code: 'invalid_control_account' }, { status: 422 })
           }
+          throw error
         }
       }
       const beforeSettings = (current.rows[0]?.settings ?? {}) as Record<string, unknown>

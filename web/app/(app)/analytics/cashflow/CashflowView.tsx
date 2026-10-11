@@ -144,14 +144,14 @@ function OverviewTab({ data }: { data: CashflowData }) {
       </div>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        <AgingPanel title={t('panels.ar')} side={data.ar} accent="text-sky-600 dark:text-sky-400" unplacedKind="ar" />
+        <AgingPanel title={t('panels.ar')} side={data.ar} accent="text-sky-600 dark:text-sky-400" unplacedKind="ar" notForecast={data.arNotForecast} />
         <AgingPanel title={t('panels.ap')} side={data.ap} accent="text-red-600 dark:text-red-400" unplacedKind="ap" />
       </div>
     </div>
   )
 }
 
-function AgingPanel({ title, side, accent, unplacedKind }: { title: string; side: SideSummary; accent: string; unplacedKind: 'ar' | 'ap' }) {
+function AgingPanel({ title, side, accent, unplacedKind, notForecast }: { title: string; side: SideSummary; accent: string; unplacedKind: 'ar' | 'ap'; notForecast?: { horizonDays: number; count: number; total: string } }) {
   const t = useTranslations('analytics.cashflow')
   const fmtMoney = useAnalyticsMoney()
   const money = (n: string | number) => fmtMoney(n, { compact: true })
@@ -179,6 +179,13 @@ function AgingPanel({ title, side, accent, unplacedKind }: { title: string; side
       {side.unplaced.count > 0 ? (
         <p className="mt-3 border-t border-slate-100 pt-2 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
           {t(unplacedKind === 'ar' ? 'unplacedAr' : 'unplacedAp', { count: side.unplaced.count, total: money(side.unplaced.total) })}
+        </p>
+      ) : null}
+      {/* Receivables past the collectability horizon are not projected as
+        receipts; the panel names them instead of counting them as cash in. */}
+      {notForecast && notForecast.count > 0 ? (
+        <p className="mt-3 border-t border-slate-100 pt-2 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
+          {t('notForecastAr', { count: notForecast.count, days: notForecast.horizonDays, total: money(notForecast.total) })}
         </p>
       ) : null}
     </Panel>

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
-import { stubModules } from '../../../../testing/stub-modules'
+import { stubModules, withPlatformDbTestSurface } from '../../../../testing/stub-modules'
 stubModules({ authz: true })
 
 // Route boundary suite: the real documents OCC primitives run against a
@@ -44,7 +44,7 @@ function sqlText(query: unknown): string {
 const mockSources = new Map<string, string>([
   [
     'mock:db',
-    `
+    withPlatformDbTestSurface(`
       const state = globalThis[Symbol.for('openbooks.expense-route-test')]
       const sqlText = globalThis.openbooksSqlText
       const record = (kind, query) => {
@@ -71,7 +71,8 @@ const mockSources = new Map<string, string>([
       export function ambientTenantOrgId() { return null }
       export const pool = {}
       export const env = {}
-    `,
+      export const connectGovernedReadClient = async () => { throw new Error('no governed read client in this test') }
+    `),
   ],
   [
     'mock:feature-gates',
@@ -118,13 +119,20 @@ const mockUrls = new Map<string, string>([
   ['../../../../lib/expenses', 'mock:expenses-loader'],
 ])
 
+// Engine modules reach the database through relative imports as well; those
+// must hit the same double, or a shared read (segment definitions) runs
+// against the real pool.
+const DATABASE_MODULE_URL = new URL('../../../../../engine/src/platform/db.ts', import.meta.url).href
+
 registerHooks({
   resolve(specifier, context, nextResolve) {
     // load under the plain runner (same seam as documents.test.ts).
     // Forward Next.js-style aliases to the real modules they point at.
     const mocked = mockUrls.get(specifier)
     if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
+    const resolved = nextResolve(specifier, context)
+    if (resolved.url === DATABASE_MODULE_URL) return { url: 'mock:db', shortCircuit: true }
+    return resolved
   },
   load(url, context, nextLoad) {
     const source = mockSources.get(url)

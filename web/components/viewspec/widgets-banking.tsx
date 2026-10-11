@@ -24,6 +24,7 @@ import {
 import { BankingAttentionList } from '../../app/(app)/banking/sections'
 import { ListChecks } from 'lucide-react'
 import { ReconcileStats, ReconcileStatusBadge } from '../../app/(app)/banking/[accountId]/reconcile/[reconciliationId]/sections'
+import { ReconcileHistory, SupportingStatements } from '../../app/(app)/banking/[accountId]/reconcile/[reconciliationId]/ReconcileEvidence'
 import { PaymentsSectionSlot, RunsSectionSlot } from './payments-slots'
 import { ViewTabs as PaymentsViewTabs } from '../../app/(app)/payments/sections'
 import { ReceiptsViewTabs } from '../../app/(app)/receipts/sections'
@@ -123,6 +124,20 @@ export const BANKING_WIDGETS = {
       matchedLabel={str(props, 'matchedLabel') ?? ''}
       matchedValue={str(props, 'matchedValue') ?? ''}
     />
+  ),
+  /** Read-only evidence tabs. Each replaces the workspace body; the loader
+   *  supplies formatted display rows only. */
+  'reconcile-supporting-statements': (props) => (
+    <SupportingStatements
+      accountPath={str(props, 'accountPath') ?? ''}
+      sourceEvidence={props.sourceEvidence === true}
+      windowStart={str(props, 'windowStart') ?? null}
+      throughDate={str(props, 'throughDate') ?? ''}
+      statements={(props.statements as ComponentProps<typeof SupportingStatements>['statements']) ?? []}
+    />
+  ),
+  'reconcile-history': (props) => (
+    <ReconcileHistory rows={(props.rows as ComponentProps<typeof ReconcileHistory>['rows']) ?? []} />
   ),
   /** Whole, like `match-workspace`: selection state across three prefixed
    *  panes plus every mutation. `canReconcile` is a loader-resolved boolean,

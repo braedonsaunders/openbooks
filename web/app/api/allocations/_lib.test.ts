@@ -11,6 +11,7 @@ test('allocation run refusals map missing records uniformly and preserve domain 
   assert.equal(closed.status, 422)
   assert.deepEqual(await closed.json(), {
     error: 'the GL period January 2026 is closed and cannot take allocation postings',
+    code: 'INVALID',
   })
 
   const missing = await allocationRunErrorResponse(

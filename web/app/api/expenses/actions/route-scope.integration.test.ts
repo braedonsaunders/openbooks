@@ -91,7 +91,7 @@ test('expense submit, post, and recall refuse an out-of-scope report', async () 
           refused.status, 404,
           `${(body as { action: string }).action} on an out-of-scope report must 404: ${JSON.stringify(await refused.clone().json())}`,
         )
-        assert.deepEqual(await refused.json(), { error: 'expense report not found' })
+        assert.deepEqual(await refused.json(), { error: 'not_found' })
       }
       // The in-scope twin reaches the engine instead of the scope refusal.
       const own = await actionCall({ action: 'submit', documentId: visible })

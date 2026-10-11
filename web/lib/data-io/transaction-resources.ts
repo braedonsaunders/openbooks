@@ -517,7 +517,8 @@ async function writeTransactions(
       // Duplicate document number? The storage check comes first so a clash
       // with an already-posted document keeps its existing refusal; the
       // intra-file check then anticipates the clash a duplicate row would hit
-      // at commit, using the same message so preview and commit agree.
+      // at commit, refusing that same row once so preview and commit agree on
+      // which row is refused.
       const wantNumber = String(src.documentNumber ?? '').trim()
       if (wantNumber) {
         const dup = (await db.execute(sql`
@@ -530,8 +531,10 @@ async function writeTransactions(
           continue
         }
         if (claimedNumbers.has(wantNumber)) {
+          // The earlier row in this file holds the number; this copy is the
+          // in-file duplicate, not a clash with an existing document.
           outcome.failed++
-          outcome.errors.push({ row: rowNo, message: `document ${wantNumber} already exists` })
+          outcome.errors.push({ row: rowNo, message: `document ${wantNumber} appears more than once in this file — keep one record per natural key, then upload the corrected file` })
           continue
         }
       }

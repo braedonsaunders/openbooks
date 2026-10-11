@@ -109,7 +109,7 @@ test("POST /api/v1/settings/features refuses unknown feature keys without applyi
   routeState.applied = null;
   const response = await POST(post({ features: { nope: true } }, { "idempotency-key": "key-1" }));
   assert.equal(response.status, 422);
-  assert.deepEqual(await response.json(), { error: "invalid-feature", code: "invalid_input" });
+  assert.deepEqual(await response.json(), { error: "invalid-feature", code: "invalid_input", details: { key: "nope" } });
   assert.equal(routeState.applied, null);
 });
 

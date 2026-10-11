@@ -26,6 +26,9 @@ interface RouteState {
   approvalReleaseCalls: unknown[]
   approvalReleaseError: string | null
   commitCalls: unknown[]
+  permissions: Set<string>
+  recalculationCalls: unknown[]
+  policyExists: boolean
 }
 const routeState: RouteState = {
   ownedSubsidiaryId: 'sub-1',
@@ -35,6 +38,9 @@ const routeState: RouteState = {
   approvalReleaseCalls: [],
   approvalReleaseError: null,
   commitCalls: [],
+  permissions: new Set(['payroll.run']),
+  recalculationCalls: [],
+  policyExists: true,
 }
 ;(globalThis as Record<symbol, unknown>)[stateKey] = routeState
 
@@ -57,8 +63,9 @@ const mockSources = new Map<string, string>([
   [
     'mock:feature-gates',
     `
+      const state = globalThis[Symbol.for('openbooks.payroll-run-submit-approval-test')]
       export async function guardFeaturePermission() {
-        return { user: { orgId: 'org-1', id: 'actor-1' }, permissions: new Set(['payroll.run']), allowedSubsidiaryIds: null }
+        return { user: { orgId: 'org-1', id: 'actor-1' }, permissions: state.permissions, allowedSubsidiaryIds: null }
       }
     `,
   ],
@@ -94,7 +101,11 @@ const mockSources = new Map<string, string>([
         state.approvalReleaseCalls.push({ orgId, documentId })
         if (state.approvalReleaseError) throw new PayrollError(state.approvalReleaseError)
       }
-      export async function payRunApprovalState() { throw new Error('not under test') }
+      export async function payRunApprovalState() { return { policyExists: state.policyExists } }
+      export async function recalculateStaleApprovedPayRun(input) {
+        state.recalculationCalls.push(input)
+        return { calculation: { errors: [], employees: 1, gross: '2000.0000', net: '1400.0000', employerCost: '2200.0000' }, reasons: ['schedule'] }
+      }
     `,
   ],
   [
@@ -186,6 +197,9 @@ function reset() {
   routeState.approvalReleaseCalls = []
   routeState.approvalReleaseError = null
   routeState.commitCalls = []
+  routeState.permissions = new Set(['payroll.run'])
+  routeState.recalculationCalls = []
+  routeState.policyExists = true
 }
 
 function post(body: unknown) {
@@ -247,4 +261,53 @@ test('submit-approval on an unknown run answers not found', async () => {
   const res = await post({ action: 'submit-approval' })
   assert.equal(res.status, 404)
   assert.equal(routeState.submitCalls.length, 0)
+})
+
+test('recalculating an approved run requires payroll approval authority before mutation', async () => {
+  reset()
+  routeState.permissions.add('gl.post')
+  const res = await post({ action: 'recalculate-approved' })
+  assert.equal(res.status, 403)
+  assert.match((await res.json() as { error: string }).error, /payroll.manage/)
+  assert.deepEqual(routeState.recalculationCalls, [])
+  assert.deepEqual(routeState.submitCalls, [])
+})
+
+test('payroll approval authority recalculates and resubmits the new evidence', async () => {
+  reset()
+  routeState.permissions.add('payroll.manage')
+  const res = await post({ action: 'recalculate-approved' })
+  assert.equal(res.status, 200)
+  const body = await res.json() as { resubmitted: boolean; gated: boolean; gross: string }
+  assert.equal(body.resubmitted, true)
+  assert.equal(body.gated, true)
+  assert.equal(body.gross, '2000.0000')
+  assert.deepEqual(routeState.recalculationCalls, [{
+    orgId: 'org-1', documentId: RUN_ID, actorId: 'actor-1', holidayEligibility: {}, allowedSubsidiaryIds: null,
+  }])
+  assert.deepEqual(routeState.submitCalls, [['pay_run', RUN_ID, 'actor-1']])
+  assert.equal(routeState.commitCalls.length, 0)
+})
+
+test('a failed resubmission names the recalculated draft state and the approval remedy', async () => {
+  reset()
+  routeState.permissions.add('payroll.manage')
+  routeState.submitResult.flowError = 'no approvers resolved'
+  const res = await post({ action: 'recalculate-approved' })
+  assert.equal(res.status, 422)
+  assert.match((await res.json() as { error: string }).error, /recalculated and returned to draft.*no approvers resolved/)
+  assert.equal(routeState.recalculationCalls.length, 1)
+  assert.equal(routeState.commitCalls.length, 0)
+})
+
+test('a recalculated run with no approval policy stays draft without inventing an approval', async () => {
+  reset()
+  routeState.permissions.add('payroll.manage')
+  routeState.policyExists = false
+  const res = await post({ action: 'recalculate-approved' })
+  assert.equal(res.status, 200)
+  const body = await res.json() as { resubmitted: boolean; gated: boolean }
+  assert.equal(body.resubmitted, false)
+  assert.equal(body.gated, false)
+  assert.deepEqual(routeState.submitCalls, [])
 })

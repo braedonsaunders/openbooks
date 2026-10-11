@@ -66,6 +66,8 @@ export function RunWizard(props: {
    */
   separationSections: YearEndFilingSection[]
   canRun: boolean
+  /** Withdrawing an approval (the return-to-draft permission) — gates Recalculate on an approved run. */
+  canWithdrawApproval: boolean
   initialStep: WizardStep
   /**
    * The latest calculate's per-employee outcomes, persisted server-side at
@@ -237,6 +239,21 @@ export function RunWizard(props: {
   // the exact boundary (committed, posted, paid, linked all refuse there), so
   // this flag is only the common case — a draft that has never committed.
   const discardable = props.canRun && docDraft && !committed
+  // An approved run whose inputs moved since approval is recalculated by
+  // withdrawing that approval (the engine refuses anything else). A run awaiting
+  // approval has no recalculation control: its approval must be decided first.
+  const canRecalculateApproved = props.canRun && props.canWithdrawApproval
+    && run.document_status === 'approved' && !committed
+  const staleReasonText = props.staleness.reasons
+    .map((r) => (t.has(`wizard.stale.reason.${r}` as never)
+      ? t(`wizard.stale.reason.${r}` as never)
+      : (STALE_REASON_FALLBACK[r] ?? r)))
+    .join(', ')
+  const staleBannerTitle = run.document_status === 'approved'
+    ? t('wizard.stale.approvedTitle', { reasons: staleReasonText })
+    : run.document_status === 'pending_approval'
+      ? t('wizard.stale.pendingTitle', { reasons: staleReasonText })
+      : t('wizard.stale.title', { reasons: staleReasonText })
 
   /** Step completion, derived — never client-side bookkeeping. */
   const complete: Record<WizardStep, boolean> = {
@@ -626,6 +643,45 @@ export function RunWizard(props: {
     }
   }
 
+  /**
+   * Recalculate an approved run whose inputs changed after approval. The engine
+   * withdraws the approval with an audited reason, recalculates, and resubmits
+   * the run to its approval Flow, so commit stays refused until it is approved
+   * again. The run is refreshed on failure too: a refused resubmission leaves it
+   * in draft with fresh figures.
+   */
+  async function recalculateApproved() {
+    const confirmed = await confirmDialog({
+      title: t('wizard.stale.approvedConfirmTitle'),
+      message: t('wizard.stale.approvedConfirmBody'),
+      confirmLabel: t('wizard.stale.recalculateApproved'),
+      tone: 'danger',
+    })
+    if (!confirmed) return
+    setBusy(true)
+    try {
+      const res = await fetch(`/api/payroll/runs/${run.document_id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'recalculate-approved' }),
+      })
+      // The status is checked before the body is parsed (see act above).
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed'))
+      const j = await res.json()
+      applyRefusalState(j)
+      applyVitals(j)
+      setGl({ state: 'idle', legs: [], debitTotal: '0', error: '' })
+      setStep('review')
+      toast.success(t(j.resubmitted ? 'run.recalculateApprovedDone' : 'run.calculateDone'))
+      router.refresh()
+    } catch (e) {
+      toast.error((e as Error).message)
+      router.refresh()
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function discardDraft() {
     const confirmed = await confirmDialog({
       title: t('run.discardTitle'),
@@ -660,7 +716,7 @@ export function RunWizard(props: {
     <div className="space-y-4">
       {/* Run vitals strip */}
       <div className="flex flex-wrap items-center gap-4 text-sm text-slate-600 dark:text-slate-300">
-        <RunStatusBadge status={props.rejection ? 'rejected' : runDisplayStatus(run)} />
+        <RunStatusBadge status={props.rejection ? 'rejected' : runDisplayStatus(run, props.staleness.stale)} />
         {run.run_type !== 'regular' && (
           <Badge variant="secondary">{runTypeLabel(t, run.run_type)}</Badge>
         )}
@@ -719,18 +775,18 @@ export function RunWizard(props: {
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200/80 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-300">
           <span className="flex items-center gap-2">
             <RefreshCw size={16} aria-hidden />
-            {t('wizard.stale.title', {
-              reasons: props.staleness.reasons
-                .map((r) => (t.has(`wizard.stale.reason.${r}` as never)
-                  ? t(`wizard.stale.reason.${r}` as never)
-                  : (STALE_REASON_FALLBACK[r] ?? r)))
-                .join(', '),
-            })}
+            {staleBannerTitle}
           </span>
           {canCalculate && (
             <Button size="sm" disabled={busy} onClick={() => act('calculate')}>
               {busy ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <Calculator size={14} aria-hidden />}
               {t('wizard.period.recalculate')}
+            </Button>
+          )}
+          {canRecalculateApproved && (
+            <Button size="sm" disabled={busy} onClick={() => void recalculateApproved()}>
+              {busy ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <Calculator size={14} aria-hidden />}
+              {t('wizard.stale.recalculateApproved')}
             </Button>
           )}
         </div>
@@ -838,6 +894,7 @@ export function RunWizard(props: {
           approval={props.approval}
           canAcknowledge={props.canRun && commitDocOpen && run.run_status === 'calculated'}
           stale={props.staleness.stale}
+          approved={run.document_status === 'approved'}
           funding={props.funding}
           busy={busy}
           refusals={refusals}

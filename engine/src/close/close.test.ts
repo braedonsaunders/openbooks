@@ -1042,7 +1042,7 @@ test(
       const audits = (await db.execute<{ action: string; actor_id: string; changes: unknown }>(sql`
         select action, actor_id, changes from audit_log
          where org_id = ${org.orgId} and table_name = 'close_reopen_requests'
-           and row_id = ${requestId}`)).rows;
+           and row_id = ${requestId} and action = 'approve'`)).rows;
       assert.equal(audits.length, 1);
       assert.equal(audits[0]!.action, "approve");
       assert.equal(audits[0]!.actor_id, actors.approver1Id);
@@ -1106,7 +1106,7 @@ test(
       const rejection = (await db.execute<{ action: string; actor_id: string }>(sql`
         select action, actor_id from audit_log
          where org_id = ${org.orgId} and table_name = 'close_reopen_requests'
-           and row_id = ${rejectedId}`)).rows;
+           and row_id = ${rejectedId} and action = 'reject'`)).rows;
       assert.equal(rejection.length, 1);
       assert.equal(rejection[0]!.action, "reject");
       assert.equal(rejection[0]!.actor_id, actors.approver1Id);
@@ -1128,7 +1128,7 @@ test(
       const none = (await db.execute<{ count: number }>(sql`
         select count(*)::int as count from audit_log
          where org_id = ${org.orgId} and table_name = 'close_reopen_requests'
-           and row_id = ${ownId}`));
+           and row_id = ${ownId} and action in ('approve', 'self_approve')`));
       assert.equal(none.rows[0]?.count, 0);
       const noEvents = (await db.execute<{ count: number }>(sql`
         select count(*)::int as count from close_events

@@ -102,7 +102,7 @@ for (const page of ['match', 'reconcile'] as const) {
         assert.equal(((page === 'match' ? loaded.session : loaded.reconciliation) as { currency: string }).currency, 'USD')
         if (page === 'reconcile') {
           const statement = (await db.execute<{ id: string }>(sql`select id from bank_statement_lines where org_id=${org.orgId}`)).rows[0]!
-          await createMatch({ reconciliationId: recon.id, statementLineId: statement.id, journalLineIds: [primaryLine] }, ctx)
+          await createMatch({ reconciliationId: recon.id, statementLineIds: [statement.id], journalLineIds: [primaryLine] }, ctx)
           const updated = await loadReconciliation(org.accounts.bank, recon.id, {})
           const matched = updated.matchedRows as Array<{ gl_amount: string; stmt_amount: string }>
           assert.equal(matched[0]!.gl_amount, '100.0000')

@@ -720,6 +720,9 @@ async function syncOne(
           lines,
           currency: currency ?? undefined,
           sourceEvidence,
+          // Unattended sync: flagged possible duplicates import for review
+          // rather than being dropped with no operator to decide.
+          includePossibleDuplicates: true,
           beforeWrite: (executor) => assertCurrentSyncConfiguration(executor, row),
         },
         { orgId: row.orgId, userId: actorId, allowedSubsidiaryIds },

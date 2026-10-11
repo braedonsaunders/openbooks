@@ -62,7 +62,7 @@ async function writeProbeOutcome(
  */
 export const POST = defineRoute({
   permission: "sync.run", feature: { none: "Connection probes are controlled by sync-run permission and have no separate organization feature gate." },
-  scope: "unrestricted", params: z.object({ id: z.string().uuid() }),
+  scope: "unrestricted", params: z.object({ id: z.string() }),
   handler: async ({ params: { id }, authz: gate }) => {
   // Probing a connection exercises its credentials the way a run does, so
   // it rides the `sync.run` grant beside the run route; reconfiguring the

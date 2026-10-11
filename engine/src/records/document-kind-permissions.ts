@@ -33,6 +33,11 @@ export const DOCUMENT_PERMISSION_NAMESPACE: Readonly<Record<string, DocumentPerm
 
 export type DocumentKindPermissions = { read: string; edit: string; approve: string };
 
+/** Payroll owns pay-run workflow authority; GL grants govern its ledger posting. */
+export const PAY_RUN_WORKFLOW_PERMISSIONS: DocumentKindPermissions = {
+  read: "payroll.read", edit: "payroll.manage", approve: "payroll.manage",
+};
+
 function namespaceOf(kind: string): DocumentPermissionNamespace {
   const namespace = DOCUMENT_PERMISSION_NAMESPACE[kind];
   if (!namespace) throw new Error(`unknown document kind "${kind}"`);
@@ -111,6 +116,7 @@ const NON_REGISTRY_DOCUMENT_PERMISSIONS: Readonly<Record<string, DocumentKindPer
  * for a kind neither covers.
  */
 export function documentKindPermissions(kind: string): DocumentKindPermissions | null {
+  if (kind === "pay_run") return PAY_RUN_WORKFLOW_PERMISSIONS;
   if (DOCUMENT_PERMISSION_NAMESPACE[kind]) {
     return {
       read: documentReadPermission(kind),

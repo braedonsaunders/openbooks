@@ -42,6 +42,7 @@ const filing = {
   filing_reference: null,
   filed_at: null,
   snapshot_hash: 'a'.repeat(64),
+  adjustments: [{ lineCode: '104', amount: '3018.8400', reason: 'Pre-conversion activity', enteredByName: 'Tax preparer', enteredAt: '2026-08-01T12:00:00.000Z' }],
   boxes: [{ lineCode: '101', label: 'Sales', value: '1234.56', computed: true, editable: false }],
 }
 
@@ -77,6 +78,9 @@ test('a typed filing refusal stays visible beside the action and the saved amoun
   const markFiled = [...document.querySelectorAll('button')].find((button) => button.textContent?.trim() === messages.tax.history.markFiled)
   assert.ok(markFiled, 'a prepared filing with filing permission offers the mark-filed action')
   assert.match(document.body.textContent ?? '', /1,234\.56/)
+  assert.match(document.body.textContent ?? '', /Pre-conversion activity/)
+  assert.match(document.body.textContent ?? '', /Tax preparer/)
+  assert.match(document.body.textContent ?? '', /3,018\.84/)
   await act(async () => {
     markFiled.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
     await new Promise((resolve) => setTimeout(resolve, 30))

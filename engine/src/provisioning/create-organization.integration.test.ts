@@ -114,6 +114,7 @@ test("a created organization is complete, isolated, audited and its administrato
     const roles = (await db.execute<{ key: string; permissions: string[] }>(sql`
       select key, permissions from app_roles where org_id = ${orgId} and is_built_in order by key`)).rows;
     assert.deepEqual(roles.map((row) => row.key), Object.keys(BUILT_IN_ROLES).sort());
+    assert.ok(roles.length > 0, "the built-in role catalogue is seeded for the organization");
     for (const role of roles) assert.deepEqual(role.permissions, BUILT_IN_ROLES[role.key]!.permissions, role.key);
 
     // Organization defaults: project types, payment formats and forms.

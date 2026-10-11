@@ -3,10 +3,11 @@ import { registerHooks } from "node:module";
 import test from "node:test";
 
 /**
- * PAY-04 (route face): an impossible settlementDate on import must surface
- * the named PspSettlementError as HTTP 422 — never the raw Postgres cast
- * failure as a 500. The real provider parser and the real import boundary
- * run here; only authn/authz and feature flags are stubbed.
+ * PAY-04 (route face): an impossible settlementDate on import is refused at
+ * the request boundary as a field-specific 400 (the same contract as every
+ * other calendar date on this route) — never the raw Postgres cast failure
+ * as a 500, and never a written batch. The real import boundary runs here;
+ * only authn/authz and feature flags are stubbed.
  */
 const state = { orgId: "", actorId: "" };
 Object.assign(globalThis, { __pspSettlementDateRouteState: state });
@@ -69,14 +70,15 @@ async function batchCount(orgId: string, externalRef: string): Promise<number> {
   return Number(rows[0]!.n);
 }
 
-test("psp import maps an impossible settlement date to 422 with nothing written", async () => {
+test("psp import refuses an impossible settlement date at the boundary with nothing written", async () => {
   const { orgId } = await fixture();
   try {
     const externalRef = `payout-route-bad-${orgId}`;
     const response = await postImport(externalRef, "2023-02-30");
-    const json = (await response.json().catch(() => null)) as { error?: string } | null;
-    assert.equal(response.status, 422, `expected 422, got ${response.status}: ${JSON.stringify(json)}`);
-    assert.match(json?.error ?? "", /settlement date must be a real calendar date \(YYYY-MM-DD\)/);
+    const json = (await response.json().catch(() => null)) as { error?: string; issues?: Array<{ path?: string }> } | null;
+    assert.equal(response.status, 400, `expected 400, got ${response.status}: ${JSON.stringify(json)}`);
+    assert.match(json?.error ?? "", /must be a valid calendar date/);
+    assert.equal(json?.issues?.[0]?.path, "settlementDate", "the refusal names the offending field");
     assert.doesNotMatch(json?.error ?? "", /invalid input syntax|Failed query/i);
     assert.equal(await batchCount(orgId, externalRef), 0);
   } finally {

@@ -13,6 +13,8 @@ import {
 import { cancelPaymentRun, PAYMENT_RUN_INTERNAL_CANCEL_REASONS, PAYMENT_RUN_SYSTEM_ACTOR_ID } from "./run-cancellation.ts";
 import { createPaymentDocument, updateDraftPayment } from "./payment-documents.ts";
 import { createPaymentRun } from "./run-creation.ts";
+import { payeeBankStateSql } from "./payee-bank-account.ts";
+import { paymentRunReadiness } from "./run-readiness.ts";
 import { PaymentError, PaymentRevisionConflictError } from "../payments-core/payment-errors.ts";
 import { postPaymentRun } from "./run-posting.ts";
 import { markAutomaticRemittanceEnqueueFailed, settleAutomaticRemittanceEnqueueError } from "./run-remittance.ts";
@@ -805,6 +807,55 @@ test("an open item can be reserved by only one live payment run at a time", { sk
       const secondRun = await createRun();
       assert.notEqual(secondRun.id, firstRun.id);
       assert.deepEqual((await itemStatuses(secondRun.id)).rows, [{ status: "selected", n: 1 }]);
+    });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a payee bank account with no approval date is never pinned to a run, and is reported as undated until it is dated", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const options = await seedPaymentRunSelectionFixture(org);
+    const bankId = randomUUID();
+
+    await withOrgContext(org.orgId, async () => {
+      await db.execute(sql`
+        insert into party_bank_accounts
+          (id, org_id, party_id, bank_name, country, currency, routing,
+           approval_status, is_active, approved_at, created_by, updated_by)
+        values (${bankId}, ${org.orgId}, ${org.vendorId}, 'Vendor bank', 'CA', 'CAD',
+                '{"routingNumber":"021000021"}'::jsonb, 'approved', true, null,
+                ${options.actorId}, ${options.actorId})`);
+
+      const stateOf = async () => (await db.execute<{ state: string }>(sql`
+        select ${payeeBankStateSql(sql`${org.vendorId}::uuid`, sql`${org.orgId}::uuid`)} as state`)).rows[0]!.state;
+      const pinnedBankOf = async (runId: string) => (await db.execute<{ bank: string | null }>(sql`
+        select payee_bank_account_id as bank from payment_instructions
+         where payment_run_id = ${runId} and org_id = ${org.orgId}`)).rows[0]?.bank ?? null;
+      const createRun = () => createPaymentRun({ allowedSubsidiaryIds: null,
+        orgId: org.orgId,
+        createdBy: options.actorId,
+        paymentBankProfileId: options.profileId,
+        billDocumentIds: [options.billId],
+        scheduledFor: org.date,
+      });
+
+      assert.equal(await stateOf(), "undated");
+      const undatedRun = await createRun();
+      assert.equal(await pinnedBankOf(undatedRun.id), null, "an undated approval is not pinned to the instruction");
+      const blocked = (await paymentRunReadiness(undatedRun.id, org.orgId)).blockers.find((b) => b.source === "bank");
+      assert.match(blocked?.reason ?? "", /approved without an approval date; save them again to re-approve/);
+      await cancelPaymentRun(undatedRun.id, org.orgId, options.actorId, "release before the approval is dated");
+
+      const dated = await db.execute(sql`
+        update party_bank_accounts set approved_at = ${org.date}::date
+         where id = ${bankId} and org_id = ${org.orgId} and approval_status = 'approved'`);
+      assert.equal(dated.rowCount, 1, "the approval date is written to exactly the approved row");
+
+      assert.equal(await stateOf(), "approved");
+      const datedRun = await createRun();
+      assert.equal(await pinnedBankOf(datedRun.id), bankId, "a dated approval is pinned to the new instruction");
     });
   } finally {
     await dropScratchOrg(org.orgId);
@@ -2923,6 +2974,65 @@ test("customer receipts refuse a vendor-style early-payment discount", { skip: !
        where d.org_id = ${org.orgId} and d.id = ${payment.id}
     `);
     assert.deepEqual(unchanged.rows[0], { status: "draft", total: "0.0000", lines: 0 });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a customer receipt with no applications posts only as an on-account credit, and refuses with neither", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const userId = await createScratchUser(org.orgId, "On-account receipt", "admin");
+    const approvedReceipt = async (onAccountAmount: string) => {
+      const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
+        orgId: org.orgId,
+        kind: "customer_payment",
+        createdBy: userId,
+        partyId: org.customerId,
+        bankAccountId: org.accounts.bank,
+        subsidiaryId: org.subsidiaryId,
+        documentDate: org.date,
+        currency: "CAD",
+      });
+      await updateDraftPayment(
+        payment.id,
+        { partyId: org.customerId, bankAccountId: org.accounts.bank, allocations: [], onAccountAmount },
+        userId,
+        org.orgId,
+        { allowedSubsidiaryIds: null },
+      );
+      await db.execute(sql`
+        update documents set status = 'approved', updated_at = now()
+         where id = ${payment.id} and org_id = ${org.orgId}`);
+      return payment.id;
+    };
+
+    // Cash received with no invoice open: the whole receipt is an AR credit.
+    const credited = await approvedReceipt("150");
+    const { entryId } = await withOrgTransaction(org.orgId, () =>
+      postPaymentWithApplications(credited, undefined, userId, "ui", { deferEffects: true }));
+    const legs = (await db.execute<{ accountId: string; amount: string; isOpenItem: boolean }>(sql`
+      select account_id as "accountId", amount::text as amount, is_open_item as "isOpenItem"
+        from journal_lines where entry_id = ${entryId} and org_id = ${org.orgId}
+       order by line_number`)).rows;
+    assert.deepEqual(
+      legs.map((leg) => [leg.accountId === org.accounts.bank ? "bank" : leg.accountId === org.accounts.ar ? "ar" : "other", leg.amount, leg.isOpenItem]),
+      [["bank", "150.0000", false], ["ar", "-150.0000", true]],
+      "bank debits the receipt; AR is credited as an open customer credit",
+    );
+    const applied = (await db.execute<{ n: string }>(sql`
+      select count(*)::text as n from applications
+       where org_id = ${org.orgId}
+         and from_line_id in (select id from journal_lines where entry_id = ${entryId} and org_id = ${org.orgId} and is_open_item)`)).rows[0]!;
+    assert.equal(Number(applied.n), 0, "an on-account receipt writes no applications");
+
+    // Neither applications nor an on-account amount: nothing would be recorded, so refuse by name.
+    const empty = await approvedReceipt("0");
+    await assert.rejects(
+      withOrgTransaction(org.orgId, () => postPaymentWithApplications(empty, undefined, userId, "ui", { deferEffects: true })),
+      (error: unknown) =>
+        error instanceof PaymentError && /enter the amount received so the receipt posts as an on-account credit/.test(error.message),
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }

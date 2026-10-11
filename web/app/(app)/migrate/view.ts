@@ -137,9 +137,9 @@ export async function migrationWorkspaceData(
   }
 }
 
-export function migrationWorkspaceSpec(route: string, data: MigrationWorkspaceData): PageSpec {
+export function migrationWorkspaceSpec(target: { route: string }, data: MigrationWorkspaceData): PageSpec {
   return page({
-    route,
+    route: target.route,
     // Bare: the workspace owns its full-height flex column, like the assistant.
     layout: 'bare',
     header: [],

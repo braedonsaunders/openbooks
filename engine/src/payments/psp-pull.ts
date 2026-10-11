@@ -10,6 +10,7 @@ import {
   importSettlementBatch,
   parsePaypalTransactions,
   parseStripeBalanceTransactions,
+  PSP_PULL_PROVIDERS,
   PspSettlementError,
   summarizeSettlement,
   type ImportAccounts,
@@ -311,7 +312,7 @@ export async function importPulledSettlements(
   actorId: string | null,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<{ batchIds: string[] }> {
-  if (provider !== "stripe" && provider !== "paypal" && provider !== "shopify_payments") {
+  if (!(PSP_PULL_PROVIDERS as readonly string[]).includes(provider)) {
     throw new PaymentError(`scheduled pull is not available for ${provider}`);
   }
   return withOrg(orgId, async () => {

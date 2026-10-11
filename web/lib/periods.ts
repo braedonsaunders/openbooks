@@ -10,6 +10,7 @@ import {
 import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import { defaultFiscalCalendarPeriods, fiscalStartMonth } from './fiscal'
 import { resolveOrgId } from './org-scope'
+import { assertCustomPeriodBounds } from './report-filters'
 
 /**
  * Server-side period resolution. Turns a preset id (from `PERIOD_PRESETS`) plus
@@ -112,6 +113,10 @@ export async function resolvePeriod(
   if (typeof presetId === 'string' && presetId !== '' && !isPeriodPreset(presetId)) {
     throw new Error(`preset '${presetId}' no longer exists — choose a current period preset`)
   }
+  // A custom window without valid bounds refuses by name for the same reason:
+  // it must never widen to the default fiscal year. Checked before any
+  // database work, like the stale-preset refusal above.
+  if (presetId === 'custom') assertCustomPeriodBounds(opts.customFrom, opts.customTo)
   const orgId = await resolveOrgId(opts.orgId)
   const today = opts.today ?? await businessToday(orgId)
   const id = isPeriodPreset(presetId) ? presetId! : DEFAULT_PERIOD_PRESET
@@ -153,7 +158,8 @@ export async function resolvePeriod(
   const range = resolvePreset(id, { startMonth, today, customFrom: opts.customFrom, customTo: opts.customTo })
   if (range) return { presetId: id, ...range }
 
-  // Unknown / incomplete custom → safe default (current fiscal year).
+  // Only an absent preset reaches here without a window: it is the ordinary
+  // "no selection" path and resolves the default.
   const fallback = resolvePreset(DEFAULT_PERIOD_PRESET, { startMonth, today })!
   return { presetId: DEFAULT_PERIOD_PRESET, ...fallback }
 }

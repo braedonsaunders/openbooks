@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test, { after } from 'node:test'
 import { NextResponse } from 'next/server'
+const realAuthzUrl = new URL('../../../../../lib/authz.ts', import.meta.url).href
 
 /**
  * DELETE /api/payroll/runs/[id] — the in-UI discard path's HTTP boundary.
@@ -58,6 +59,7 @@ const mockSources = new Map<string, string>([
   [
     'mock:authz',
     `
+      export { can } from '${realAuthzUrl}'
       export function guardSubsidiaryScope() { return undefined }
     `,
   ],

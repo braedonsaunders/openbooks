@@ -78,7 +78,7 @@ test("costing refuses an asset-account move while stock is on hand", { skip: !DB
         select actor_id as "actorId", changes from audit_log
          where org_id = \${org.orgId} and table_name = 'item_inventory_profiles' and row_id = \${org.items.fifo}
            and action = 'update' and changes->>'refused' = 'true'
-         order by created_at desc\`)).rows;
+         order by at desc\`)).rows;
 
       // A second asset account to move to, and a second expense account.
       const newAsset = randomUUID();

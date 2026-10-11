@@ -113,7 +113,12 @@
         "settings": "Lohneinstellungen",
         "ytd": "Jahresstände eines anderen Laufs",
         "openingBalances": "Anfangssalden (Vorträge)"
-      }
+      },
+      "approvedTitle": "Genehmigt, aber die Eingaben haben sich seit der Genehmigung geändert ({reasons}). Neu berechnen, um die Genehmigung zurückzuziehen und den Lauf erneut zur Genehmigung einzureichen.",
+      "pendingTitle": "Die Eingaben haben sich seit der Berechnung dieses Laufs geändert ({reasons}). Der Lauf wartet auf Genehmigung: Der Genehmigende muss diese Anfrage entscheiden, bevor der Lauf neu berechnet werden kann.",
+      "recalculateApproved": "Neu berechnen und erneut einreichen",
+      "approvedConfirmTitle": "Genehmigung zurückziehen und neu berechnen?",
+      "approvedConfirmBody": "Die Neuberechnung zieht die Genehmigung dieses Laufs zurück, berechnet ihn aus den aktuellen Eingaben neu und reicht ihn erneut zur Genehmigung ein. Die Freigabe bleibt gesperrt, bis die neue Genehmigung erteilt ist."
     },
     "readiness": {
       "blockedTitle": "{count, plural, one {# Punkt blockiert diesen Lauf} other {# Punkte blockieren diesen Lauf}}",
@@ -295,7 +300,8 @@
       "ackLabel": "Ich verstehe, dass {count, plural, one {dieser Mitarbeiter} other {diese # Mitarbeiter}} aus den oben genannten Gründen in diesem Lauf nicht bezahlt werden.",
       "ackRecord": "Bestätigung aufzeichnen",
       "ackRecorded": "Bestätigung für {count, plural, one {# Mitarbeiter} other {# Mitarbeiter}} aufgezeichnet.",
-      "ackRecordedNote": "Bestätigt am {date} — diese Entscheidung ist im Lauf aufgezeichnet."
+      "ackRecordedNote": "Bestätigt am {date} — diese Entscheidung ist im Lauf aufgezeichnet.",
+      "staleApprovedBlocked": "Vor der Freigabe neu berechnen und erneut einreichen."
     },
     "finish": {
       "notCommitted": "Erfassen Sie den Lauf im Hauptbuch-Schritt vor dem Buchen.",
@@ -454,7 +460,10 @@
     "committed": "Festgeschrieben",
     "posted": "Verbucht",
     "void": "Storniert",
-    "rejected": "Abgelehnt"
+    "rejected": "Abgelehnt",
+    "approved": "Genehmigt",
+    "approvedStale": "Genehmigt · Neuberechnung nötig",
+    "pendingApproval": "Wartet auf Genehmigung"
   },
   "empty": {
     "runs": "Noch keine Lohnläufe. Legen Sie einen aus einem Lohnplan an, um zu beginnen.",
@@ -493,7 +502,8 @@
     "approvalPending": "Genehmigung ausstehend ({count} offen) — Festschreibung und Buchung sind blockiert",
     "printSet": "Drucksatz (nur Druckausgabe)",
     "stubsPrintOnly": "{count} Mitarbeiter sind nur Druckausgabe und wurden nicht per E-Mail benachrichtigt",
-    "calculateRefusedAll": "Niemand konnte berechnet werden — {count, plural, one {# Mitarbeiter wurde abgelehnt} other {# Mitarbeiter wurden abgelehnt}}. Korrigieren Sie die Eingaben und berechnen Sie neu, oder bestätigen Sie sie vor dem Festschreiben."
+    "calculateRefusedAll": "Niemand konnte berechnet werden — {count, plural, one {# Mitarbeiter wurde abgelehnt} other {# Mitarbeiter wurden abgelehnt}}. Korrigieren Sie die Eingaben und berechnen Sie neu, oder bestätigen Sie sie vor dem Festschreiben.",
+    "recalculateApprovedDone": "Genehmigung zurückgezogen. Der Lauf wurde neu berechnet und erneut zur Genehmigung eingereicht."
   },
   "profiles": {
     "addEmployee": "Mitarbeiter ohne Profil",
@@ -1799,6 +1809,11 @@
     }
   },
   "holidayAttestations": {
+    "bulkNotAbsentTitle": "Abwesenheitsangaben bestätigen",
+    "bulkNotAbsentConfirm": "Für {count, plural, one {# offene Feiertagsfrage} other {# offene Feiertagsfragen}} dieser Abrechnung „nicht unentschuldigt abwesend“ erfassen? Jede Angabe wird als Ihre Erklärung für diese Person und diesen Feiertag gespeichert.",
+    "bulkNotAbsentAction": "{count, plural, one {# Frage} other {Alle # Fragen}} beantworten: nicht abwesend",
+    "bulkNotAbsentFiled": "{count, plural, one {# Angabe} other {# Angaben}} erfasst.",
+    "bulkNotAbsentHint": "{count} Fragen zur Feiertagsabwesenheit sind offen. Beantworten Sie alle in einem Schritt mit „nicht unentschuldigt abwesend“ oder jede Zeile einzeln.",
     "loadFailed": "Die Mitarbeitenden für diese Ausnahmen konnten nicht geladen werden. Bitte erneut versuchen, statt ohne ausreichende Informationen zu antworten.",
     "retry": "Erneut versuchen",
     "commissionTitle": "Status der provisionsbasierten Vergütung",

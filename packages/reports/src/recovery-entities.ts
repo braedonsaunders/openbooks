@@ -22,7 +22,7 @@ export const RECOVERY_REPORT_ENTITIES: ReportEntity[] = [
     key: 'collection_recovery',
     label: 'Collection recovery',
     description:
-      'One row per invoice the automatic-collection engine has charged — attempts, the first decline class, whether a later position recovered it and by which path, and days to recover. Group by decline class and provider for recovery rates.',
+      'One row per automatically charged invoice: attempts, first decline and recovery path.',
     from: `documents d
       join (select distinct org_id, invoice_id from collection_attempts) has
         on has.org_id = d.org_id and has.invoice_id = d.id

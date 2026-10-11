@@ -108,7 +108,8 @@
     "applySource": "用所选预算的值替换此草稿中的每一行？",
     "submit": "要提交此预算进行审批吗？在做出决定之前，它将被锁定，无法编辑。",
     "approve": "批准此预算？",
-    "reject": "将此预算退回草稿？"
+    "reject": "将此预算退回草稿？",
+    "rejectionReason": "拒绝原因"
   },
   "feedback": {
     "archived": "预算已归档。",

@@ -75,14 +75,17 @@ for (const boundary of ["service", "page", "assistant", "drilldown"] as const) {
             if (mode === "all") assert.equal((await invoke()).meta.totalDocs, 2);
             else await assert.rejects(invoke, (error: unknown) => error instanceof Error && (error as Error & { status?: number }).status === 403);
           } else if (boundary === "page") {
-            const invoke = () => Sentinel({ searchParams: Promise.resolve({}) });
+            const invoke = (tab?: string) => Sentinel({ searchParams: Promise.resolve(tab ? { tab } : {}) });
             if (mode === "all") {
-              const output = JSON.stringify(await invoke(), (_key, value: unknown) => React.isValidElement(value) ? value.props : value);
-              assert.ok(output.includes("HIDDEN-SPEND"));
-              // The trail is a one-line summary (table + verb).
-              // The raw routing secret no longer dumps into the page.
-              assert.ok(output.includes("bank_accounts"));
-              assert.ok(!output.includes("PRIVATE-ROUTING-EVIDENCE"));
+              const render = async (tab?: string) => JSON.stringify(await invoke(tab), (_key, value: unknown) => React.isValidElement(value) ? value.props : value);
+              // The page totals both subsidiaries' documents (100 + 999).
+              const overview = await render();
+              assert.ok(overview.includes('"totalDocs":2') && overview.includes('"totalAmount":"1099.0000"'));
+              // Sections load per tab. The Audit tab's trail is a one-line
+              // summary (table + verb); the raw routing secret never reaches the page.
+              const audit = await render("audit");
+              assert.ok(audit.includes("bank_accounts"));
+              assert.ok(!audit.includes("PRIVATE-ROUTING-EVIDENCE"));
             } else await assert.rejects(invoke, (error: unknown) => error instanceof Error && error.message.includes("NEXT_REDIRECT"));
           } else if (boundary === "assistant") {
             const result = await executeAssistantTool(authz, "analytics_sentinel", { fromDate: period.from, toDate: period.to });

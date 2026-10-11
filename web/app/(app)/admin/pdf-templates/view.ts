@@ -6,7 +6,7 @@ import { requirePermission } from '../../../../lib/authz'
 import { disabledDocKinds } from "../../../../lib/documents.ts";
 import { PDF_RECORD_TYPES, PDF_RECORD_TYPE_BY_KEY } from '../../../../lib/pdf-templates/catalog'
 import { starterTemplate } from '../../../../lib/pdf-templates/starters'
-import { listPdfTemplates } from '../../../../lib/pdf-templates/store'
+import { listPdfTemplates, orgBrandPrimary } from '../../../../lib/pdf-templates/store'
 import type { StarterRow, TemplateRow } from './TemplatesList'
 
 /**
@@ -64,8 +64,11 @@ export async function loadPdfTemplates(): Promise<PdfTemplatesData> {
     isDefault: tp.isDefault,
   }))
   const defaultedTypes = new Set(all.filter((tp) => tp.isDefault).map((tp) => tp.recordType))
+  // Starters carry the org accent, so a duplicated starter matches the design
+  // the create route seeds for the same organization.
+  const brandPrimary = await orgBrandPrimary(authz.user.orgId)
   const starters: StarterRow[] = catalog.map((meta) => {
-    const starter = starterTemplate(meta)
+    const starter = starterTemplate(meta, brandPrimary)
     return {
       recordType: meta.key,
       label: t(`recordTypes.${meta.labelKey}` as never),

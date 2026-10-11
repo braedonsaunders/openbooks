@@ -29,7 +29,9 @@ function reader(permissions: string[]): Authz {
 }
 
 const reportsOnly = () => reader(['reports.read'])
-const payrollOwner = () => reader(['reports.read', 'payroll.read'])
+// The general ledger statement is gated by gl.read on top of reports.read.
+const glReader = () => reader(['reports.read', 'gl.read'])
+const payrollOwner = () => reader(['reports.read', 'gl.read', 'payroll.read'])
 
 function glSnapshot(extra: Record<string, unknown> = {}) {
   return {
@@ -49,15 +51,15 @@ function glSnapshot(extra: Record<string, unknown> = {}) {
 }
 
 test('a reports-only viewer is refused a payroll-bearing GL artifact by name', async () => {
-  // The scheduled render stamped the content permission set; the statement
-  // kind itself passes the definition gate (reports feature only), so the
-  // record is what stands between this viewer and per-employee payroll lines.
+  // The scheduled render stamped the content permission set; a viewer who
+  // may open the general ledger passes the definition gate, so the record is
+  // what stands between this viewer and per-employee payroll lines.
   const snapshot = glSnapshot({ requiredPermissions: ['payroll.read'] })
 
-  const detail = await reportArtifactAccessDetail(reportsOnly(), snapshot)
+  const detail = await reportArtifactAccessDetail(glReader(), snapshot)
   assert.equal(detail.ok, false)
   assert.deepEqual(detail.missingPermissions, ['payroll.read'])
-  assert.equal(await canAccessReportArtifact(reportsOnly(), snapshot), false)
+  assert.equal(await canAccessReportArtifact(glReader(), snapshot), false)
 })
 
 test('the payroll owner can download the same artifact', async () => {
@@ -70,8 +72,8 @@ test('the payroll owner can download the same artifact', async () => {
 
 test('snapshots that predate recording keep the definition-level gate', async () => {
   // Artifacts rendered before render-time recording carry no permission set;
-  // the GL kind gate (reports.read) is the whole check, as before.
-  assert.equal(await canAccessReportArtifact(reportsOnly(), glSnapshot()), true)
+  // the GL kind gate (reports.read and gl.read) is the whole check, as before.
+  assert.equal(await canAccessReportArtifact(glReader(), glSnapshot()), true)
 })
 
 test('a malformed permission record fails closed without names to give', async () => {

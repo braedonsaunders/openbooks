@@ -14,7 +14,7 @@ const SEEDED_DEFINITION_MAP: Record<string, { name: string; description: string 
 )
 
 /**
- * UX-12b: hub card copy must fit the card — no mid-word clipping at 1280px.
+ * Hub card copy must fit the card — no mid-word clipping at 1280px.
  *
  * Budgets are derived from the 1280px card width measured in the
  * persona-lane screenshot (shot-ux12-hub-1280.png): at `lg` the hub is three

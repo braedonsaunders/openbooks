@@ -113,7 +113,12 @@
         "settings": "configurações da folha",
         "ytd": "acumulado de outra folha",
         "openingBalances": "saldos iniciais (valores trazidos)"
-      }
+      },
+      "approvedTitle": "Aprovada, mas os dados mudaram desde a aprovação ({reasons}). Recalcule para retirar a aprovação e enviar a folha novamente para aprovação.",
+      "pendingTitle": "Os dados mudaram desde que esta folha foi calculada ({reasons}). A folha aguarda aprovação: o aprovador precisa decidir essa solicitação antes que ela possa ser recalculada.",
+      "recalculateApproved": "Recalcular e reenviar",
+      "approvedConfirmTitle": "Retirar a aprovação e recalcular?",
+      "approvedConfirmBody": "Recalcular retira a aprovação desta folha, recalcula com os dados atuais e a envia novamente para aprovação. O pagamento continua bloqueado até que a nova aprovação seja concedida."
     },
     "readiness": {
       "blockedTitle": "{count, plural, one {# item bloqueia esta folha} other {# itens bloqueiam esta folha}}",
@@ -295,7 +300,8 @@
       "ackLabel": "Entendo que {count, plural, one {este funcionário} other {estes # funcionários}} não serão pagos nesta folha, pelos motivos listados acima.",
       "ackRecord": "Registrar confirmação",
       "ackRecorded": "Confirmação registrada para {count, plural, one {# funcionário} other {# funcionários}}.",
-      "ackRecordedNote": "Confirmado em {date} — esta decisão fica registrada na folha."
+      "ackRecordedNote": "Confirmado em {date} — esta decisão fica registrada na folha.",
+      "staleApprovedBlocked": "Recalcule e reenvie a folha antes de confirmá-la."
     },
     "finish": {
       "notCommitted": "Confirme a execução na etapa do razão antes de lançar.",
@@ -454,7 +460,10 @@
     "committed": "Lançada",
     "posted": "Contabilizada",
     "void": "Anulada",
-    "rejected": "Rejeitada"
+    "rejected": "Rejeitada",
+    "approved": "Aprovada",
+    "approvedStale": "Aprovada · requer recálculo",
+    "pendingApproval": "Aguardando aprovação"
   },
   "empty": {
     "runs": "Nenhuma folha ainda. Crie uma a partir de um cronograma de folha para começar.",
@@ -493,7 +502,8 @@
     "approvalPending": "Aguardando aprovação ({count} pendentes) — lançamento e contabilização bloqueados",
     "printSet": "Jogo de impressão (somente impressão)",
     "stubsPrintOnly": "{count} funcionários são somente impressão e não receberam e-mail",
-    "calculateRefusedAll": "Ninguém pôde ser calculado — {count, plural, one {# funcionário foi recusado} other {# funcionários foram recusados}}. Corrija os dados e recalcule, ou confirme antes de lançar."
+    "calculateRefusedAll": "Ninguém pôde ser calculado — {count, plural, one {# funcionário foi recusado} other {# funcionários foram recusados}}. Corrija os dados e recalcule, ou confirme antes de lançar.",
+    "recalculateApprovedDone": "Aprovação retirada. A folha foi recalculada e enviada novamente para aprovação."
   },
   "profiles": {
     "addEmployee": "Funcionário sem perfil",
@@ -1799,6 +1809,11 @@
     }
   },
   "holidayAttestations": {
+    "bulkNotAbsentTitle": "Confirmar respostas de ausência",
+    "bulkNotAbsentConfirm": "Registrar “não ausente sem consentimento” para {count, plural, one {# pergunta de feriado em aberto} other {# perguntas de feriado em aberto}} nesta folha? Cada resposta é registrada como sua declaração para esse funcionário e feriado.",
+    "bulkNotAbsentAction": "Responder {count, plural, one {# pergunta} other {todas as # perguntas}}: não ausente",
+    "bulkNotAbsentFiled": "{count, plural, one {# resposta registrada} other {# respostas registradas}}.",
+    "bulkNotAbsentHint": "Há {count} perguntas de ausência em feriados em aberto. Responda todas com “não ausente sem consentimento” de uma vez, ou cada linha abaixo.",
     "loadFailed": "Não foi possível carregar as pessoas empregadas que precisam responder a estas exceções. Tente novamente em vez de responder sem as informações necessárias.",
     "retry": "Tentar novamente",
     "commissionTitle": "situação de remuneração por comissão",

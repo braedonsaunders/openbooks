@@ -40,7 +40,10 @@ const mockSources = new Map<string, string>([
         if (!gate) throw new Error('unexpected self.read gate call')
         return 'status' in gate ? NextResponse.json({ error: 'denied' }, { status: gate.status }) : gate
       }
-      export async function getAuthz() { return state.gate && 'status' in state.gate && state.gate.status === 401 ? null : state.gate }
+      export async function getAuthz() {
+        if (state.gate && 'status' in state.gate && state.gate.status === 401) return null
+        return { user: { id: 'user-1', orgId: 'org-1', roles: [] }, permissions: new Set(), allowedSubsidiaryIds: null }
+      }
       export function guardRootSubsidiaryScope() { return null } export function guardUnrestrictedScope() { return null }
       export async function isFeatureEnabled(orgId, key) { if (key !== 'hrm') throw new Error('unexpected feature ' + key); return state.featureOn }
       export async function guardFeaturePermission(permission, feature) { const gate = await guardPermission(permission); if (gate instanceof globalThis.openbooksHrmProcessRouteNextResponse) return gate; return await isFeatureEnabled(gate.user.orgId, feature) ? gate : globalThis.openbooksHrmProcessRouteNextResponse.json({ error: 'not found' }, { status: 404 }) }

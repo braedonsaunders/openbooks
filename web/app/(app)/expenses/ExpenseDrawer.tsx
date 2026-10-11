@@ -306,6 +306,7 @@ export function ExpenseDrawer({
   canRecall,
   layout,
   closeHref = '/expenses/reports',
+  createMode = false,
 }: {
   report: ExpensePayload
   initialMode?: DrawerMode
@@ -326,6 +327,8 @@ export function ExpenseDrawer({
   canRecall: boolean
   layout?: FormLayoutConfig
   closeHref?: string
+  /** Unsaved create: `report` is a blank seed and Save POSTs a new report. */
+  createMode?: boolean
 }) {
   const { money } = useMoney()
   const t = useTranslations('expenses')
@@ -349,9 +352,13 @@ export function ExpenseDrawer({
     (isDraft && canSubmit) ||
     ((isPendingApproval || isApproved) && canRecall && canSubmit) ||
     (isPosted && canSubmit && canPost)
+  const isCreate = createMode === true
   const [mode, setMode] = useState<DrawerMode>(
-    initialDrawerMode(initialMode, canEditStatus),
+    isCreate ? 'edit' : initialDrawerMode(initialMode, canEditStatus),
   )
+  // One key per unsaved-create session: a repeated Save replays the report the
+  // first Save created instead of numbering a second one.
+  const [createKey] = useState(() => crypto.randomUUID())
   const [partyId, setPartyId] = useState<string>(doc.party_id ?? '')
   const [paymentCardId, setPaymentCardId] = useState<string>(doc.payment_card_id ?? '')
   const [documentDate, setDocumentDate] = useState<string>(doc.document_date ?? '')
@@ -548,6 +555,7 @@ export function ExpenseDrawer({
   }
 
   useEffect(() => {
+    if (isCreate) return
     let active = true
     loadDraftDocumentSnapshot(`/api/expenses/${doc.id}`, t('toasts.actionFailed'))
       .then((incoming) => {
@@ -563,7 +571,51 @@ export function ExpenseDrawer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc.id])
 
+  /** First Save of an unsaved create: one POST writes the numbered draft and its lines. */
+  async function saveNewReport() {
+    const missingAccount = findMissingExpenseAccountLine(rows)
+    if (missingAccount) {
+      setSaveState('error')
+      toast.error(t('drawer.lineMissingAccount', { line: missingAccount.lineNumber }))
+      return
+    }
+    setBusy(true)
+    setSaveState('saving')
+    try {
+      const res = await fetch('/api/expenses', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'Idempotency-Key': createKey },
+        body: JSON.stringify(payload),
+      })
+      if (!res.ok) {
+        setSaveState('error')
+        toast.error(await readApiErrorMessage(res, t('toasts.actionFailed')))
+        return
+      }
+      const created = (await res.json().catch(() => null)) as { doc?: { id?: unknown } } | null
+      const createdId = typeof created?.doc?.id === 'string' ? created.doc.id : ''
+      if (!createdId) {
+        setSaveState('error')
+        toast.error(t('toasts.actionFailed'))
+        return
+      }
+      setDirty(false)
+      setSaveState('saved')
+      router.replace(`/expenses/reports?expense=${createdId}&mode=edit`)
+      router.refresh()
+    } catch {
+      setSaveState('error')
+      toast.error(t('toasts.actionFailed'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function save() {
+    if (isCreate) {
+      await saveNewReport()
+      return
+    }
     // A posted report never saves in place — it corrects (bill parity).
     if (isPosted) {
       await savePostedCorrection()
@@ -634,6 +686,12 @@ export function ExpenseDrawer({
   }
 
   function cancel() {
+    // Unsaved create holds nothing persisted: closing navigates away.
+    if (isCreate) {
+      router.push(closeHref)
+      router.refresh()
+      return
+    }
     resetForm(draftBaseline.current.payload)
     setDirty(false)
     setSaveState('saved')
@@ -989,7 +1047,8 @@ export function ExpenseDrawer({
       closeHref={closeHref}
       beforeClose={confirmDiscard}
       recordId={String(doc.id)}
-      canEditAttachments={canSubmit}
+      canEditAttachments={canSubmit && !isCreate}
+      showEvidenceTabs={!isCreate}
       panelClassName={docTypeMeta('expense_report').surfaceCls}
       title={
         <span className="flex items-center gap-2.5">
@@ -1050,7 +1109,7 @@ export function ExpenseDrawer({
           )}
         </>
       }
-      detailTabs={[
+      detailTabs={isCreate ? [] : [
         {
           key: 'approvals',
           label: tCommon('approvalFlow.historyTitle'),

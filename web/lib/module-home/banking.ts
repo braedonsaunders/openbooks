@@ -20,7 +20,7 @@ export interface BankingAccountRow {
   id: string
   number: string | null
   name: string
-  type: string // 'asset_bank' | 'liability_card'
+  type: string // 'asset_bank' or a statement-capable liability type
   currency: string | null
   balance: string
   unmatched: number
@@ -305,7 +305,9 @@ export async function bankingHome(
   return {
     accounts,
     totalCash: sum(accounts.filter((a) => a.type === 'asset_bank').map((a) => a.balance)),
-    totalCards: sum(accounts.filter((a) => a.type === 'liability_card').map((a) => a.balance)),
+    // Every non-bank Banking account is a liability (card or statement-bearing credit line/loan),
+    // so the cards total matches the roster's card-side section.
+    totalCards: sum(accounts.filter((a) => a.type !== 'asset_bank').map((a) => a.balance)),
     unmatchedLines: accounts.reduce((s, a) => s + a.unmatched, 0),
     openRecons: accounts.reduce((s, a) => s + (a.openReconciliationId ? 1 : 0), 0),
     netFlow7d,

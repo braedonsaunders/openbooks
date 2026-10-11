@@ -2170,6 +2170,10 @@
           "label": "逾期长期阈值（天）",
           "help": "超过此天数的逾期适用长期顺延"
         },
+        "collectibilityHorizonDays": {
+          "label": "可收回期限（天）",
+          "help": "逾期超过此天数的应收款不计入预计收款，而是单独列为未预测"
+        },
         "cardTrajectoryTolerance": {
           "label": "卡片轨迹容差",
           "help": "中位数付款相对偏差在此范围内时采用轨迹预测"
@@ -2203,7 +2207,8 @@
       }
     },
     "unplacedAr": "有{count}张发票既无到期日又无付款历史 · {total}未纳入预测。",
-    "unplacedAp": "有{count}张应付单既无到期日又无付款历史 · {total}未纳入预测。"
+    "unplacedAp": "有{count}张应付单既无到期日又无付款历史 · {total}未纳入预测。",
+    "notForecastAr": "逾期超过 {days} 天的应收款 {count} 笔 · {total} 不计入预计收款。"
   },
   "trueCost": {
     "title": "真实成本",
@@ -4171,7 +4176,12 @@
       "dueDate": "到期日",
       "history": "历史",
       "pushed": "顺延",
-      "deferredFrom": "自{date}起递延"
+      "deferredFrom": "自{date}起递延",
+      "pushedAssumption": "逾期顺延：假设逾期余额会在预测日收回",
+      "basisHistory": "客户平均付款天数：{days} 天",
+      "basisAverage": "组织平均付款天数：{days} 天",
+      "basisDueDate": "到期日 {date}",
+      "basisPushed": "逾期 {days} 天 · 预计 {date}"
     },
     "netChange": "净变动",
     "pagination": {
@@ -4212,6 +4222,11 @@
       "formula": "公式",
       "info": "信息",
       "note": "备注"
+    },
+    "overduePush": {
+      "assumption": "假设逾期余额会在预测日收回。",
+      "basis": "{count} 张发票 · 逾期 {minDays}–{maxDays} 天 · 合计 {amount}",
+      "basisSameAge": "{count} 张发票 · 逾期 {days} 天 · 合计 {amount}"
     }
   },
   "categoryManager": {

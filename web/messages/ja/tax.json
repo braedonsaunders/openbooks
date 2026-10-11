@@ -10,8 +10,6 @@
   "compute": "計算",
   "computing": "計算中…",
   "empty": "申告書と期間を選択してから計算してください。",
-  "adjustmentAria": "{label} の調整",
-  "adjustmentPlaceholder": "0.00",
   "columns": {
     "line": "行",
     "description": "説明",
@@ -102,6 +100,12 @@
       "pdf": "PDF",
       "xlsx": "Excel",
       "csv": "CSV"
+    },
+    "adjustments": {
+      "title": "調整",
+      "reason": "理由",
+      "recordedBy": "入力者",
+      "noReason": "理由は記録されていません"
     }
   },
   "provisions": {
@@ -326,5 +330,27 @@
       "threshold": "売上基準額"
     },
     "contextUnavailable": "申告の証拠を読み込めませんでした。内容を利用する前に再試行してください。"
+  },
+  "adjustments": {
+    "title": "調整",
+    "description": "調整行に計上する金額のうち、このシステムの元帳にないもの（移行前の取引など）を入力します。各調整には理由が必要で、申告書の保存時に入力者とともに記録されます。",
+    "entryLabel": "調整",
+    "line": "行",
+    "amount": "金額",
+    "amountPlaceholder": "0.00",
+    "reason": "理由",
+    "reasonPlaceholder": "例: 2025年1月〜8月の移行前取引（旧システムより）",
+    "add": "調整を追加",
+    "remove": "削除",
+    "removeAria": "調整を削除: {reason}",
+    "errors": {
+      "lineCode": "この申告書の調整行を選択してください。",
+      "amount": "小数点以下4桁までの金額を入力してください（例: 3018.84、-50）。",
+      "reason": "この調整の理由を入力してください（500文字以内）。"
+    }
+  },
+  "conversion": {
+    "notice": "この申告期間は移行日（{date}）より前から始まっています。旧システムの移行前の金額を追加してください。",
+    "action": "移行前の金額を追加"
   }
 }

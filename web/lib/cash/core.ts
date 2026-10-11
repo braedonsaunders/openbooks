@@ -10,6 +10,7 @@ import { abs as moneyAbs, add as moneyAdd, cmp as moneyCmp, div as moneyDiv, mul
 import { ANALYTICS_CONFIG } from "../analytics/config-spec";
 import { analyticsConfig } from "../analytics/config";
 import { evaluateFormula } from "./formula";
+import { OVERDUE_PUSH_METHOD } from "./overdue-push";
 import { agingBasisDate, agingBucketIndex } from "../aging-basis";
 import { monthYearLabel } from "../format";
 import { getMoneyFormatter } from '../money-server'
@@ -155,6 +156,26 @@ export interface ForecastEntry {
   weekStart: string;
   daysOverdue: number;
   method: string;
+  /**
+   * The average days-to-pay behind a Statistical (party) or Global avg
+   * prediction, whole days. Null for Due date and Overdue push, whose basis
+   * is the due date and the days overdue carried above.
+   */
+  basisDays?: number | null;
+}
+/** A receivable excluded from projected receipts because it is past the collectability horizon. */
+export interface NotForecastEntry {
+  id: string;
+  entryId: string;
+  docKind: string | null;
+  docNumber: string | null;
+  docId: string | null;
+  partyId: string | null;
+  partyName: string;
+  amount: Money;
+  tranDate: string;
+  dueDate: string | null;
+  daysOverdue: number;
 }
 export interface WeekRow {
   weekStart: string;
@@ -494,6 +515,11 @@ export interface ForecastModelParams {
   overduePushLongDays: number;
   overdueMidThresholdDays: number;
   overdueLongThresholdDays: number;
+  /**
+   * Receivables past their aging basis by more than this many days are not
+   * projected as receipts: they are listed as not forecast instead.
+   */
+  collectibilityHorizonDays: number;
   cardTrajectoryTolerance: number;
   cardMedianBlendWeight: number;
   vendorOutlierSigma: number;
@@ -509,6 +535,7 @@ const CASHFLOW_MODEL_DEFAULTS: ForecastModelParams = {
   overduePushLongDays: ANALYTICS_CONFIG.cashflow.defaults.overduePushLongDays,
   overdueMidThresholdDays: ANALYTICS_CONFIG.cashflow.defaults.overdueMidThresholdDays,
   overdueLongThresholdDays: ANALYTICS_CONFIG.cashflow.defaults.overdueLongThresholdDays,
+  collectibilityHorizonDays: ANALYTICS_CONFIG.cashflow.defaults.collectibilityHorizonDays,
   cardTrajectoryTolerance: ANALYTICS_CONFIG.cashflow.defaults.cardTrajectoryTolerance,
   cardMedianBlendWeight: ANALYTICS_CONFIG.cashflow.defaults.cardMedianBlendWeight,
   vendorOutlierSigma: ANALYTICS_CONFIG.cashflow.defaults.vendorOutlierSigma,
@@ -533,6 +560,7 @@ export function forecastModelParams(
     overduePushLongDays: values.overduePushLongDays ?? CASHFLOW_MODEL_DEFAULTS.overduePushLongDays,
     overdueMidThresholdDays: values.overdueMidThresholdDays ?? CASHFLOW_MODEL_DEFAULTS.overdueMidThresholdDays,
     overdueLongThresholdDays: values.overdueLongThresholdDays ?? CASHFLOW_MODEL_DEFAULTS.overdueLongThresholdDays,
+    collectibilityHorizonDays: values.collectibilityHorizonDays ?? CASHFLOW_MODEL_DEFAULTS.collectibilityHorizonDays,
     cardTrajectoryTolerance: values.cardTrajectoryTolerance ?? CASHFLOW_MODEL_DEFAULTS.cardTrajectoryTolerance,
     cardMedianBlendWeight: values.cardMedianBlendWeight ?? CASHFLOW_MODEL_DEFAULTS.cardMedianBlendWeight,
     vendorOutlierSigma: values.vendorOutlierSigma ?? CASHFLOW_MODEL_DEFAULTS.vendorOutlierSigma,
@@ -2042,16 +2070,19 @@ export function predict(
   asOf: Date,
   stats: PaymentStats,
   model: ForecastModelParams = CASHFLOW_MODEL_DEFAULTS,
-): { date: Date; method: string } | null {
+): { date: Date; method: string; basisDays: number | null } | null {
   let date: Date | null = null;
   let method = "Global avg";
+  let basisDays: number | null = null;
   const s = item.partyId ? stats.map.get(item.partyId) : undefined;
   if (s) {
     const buffer = s.sd ? Math.ceil(s.sd * model.settleBufferSigma) : 0;
     date = addDays(item.tranDate, Math.round(s.avg) + buffer);
     method = "Statistical";
+    basisDays = Math.round(s.avg);
   } else if (stats.globalAvg !== null) {
     date = addDays(item.tranDate, stats.globalAvg);
+    basisDays = Math.round(stats.globalAvg);
   } else if (item.dueDate) {
     date = new Date(item.dueDate);
     method = "Due date";
@@ -2062,6 +2093,7 @@ export function predict(
   if (item.dueDate && date < item.dueDate) {
     date = new Date(item.dueDate);
     method = "Due date";
+    basisDays = null;
   }
   // Overdue → push forward (the configured push ladder).
   if (date < asOf) {
@@ -2072,9 +2104,10 @@ export function predict(
         ? model.overduePushMidDays
         : model.overduePushShortDays;
     date = addDays(asOf, push);
-    method = "Overdue push";
+    method = OVERDUE_PUSH_METHOD;
+    basisDays = null;
   }
-  return { date: businessDay(date), method };
+  return { date: businessDay(date), method, basisDays };
 }
 
 /**
@@ -2164,6 +2197,12 @@ export function summariseSide(
  * buildAPForecast). Returns the by-week entry map and the total scheduled
  * inside the horizon — the shared step behind the analytics timeline and the
  * cockpit worklists.
+ *
+ * `receivable` marks an AR population. A receivable balance more than the
+ * model's collectibility horizon past its aging basis is not projected as a
+ * receipt in any week: it is returned in `notForecast`, counted and listed.
+ * Unapplied credits (negative balances) always stay in the schedule, because
+ * they net against future receipts. Payables are never excluded.
  */
 export function scheduleForecast(
   items: OpenItem[],
@@ -2172,29 +2211,51 @@ export function scheduleForecast(
   start: Date,
   end: Date,
   model: ForecastModelParams = CASHFLOW_MODEL_DEFAULTS,
+  receivable = false,
 ): {
     byWeek: Map<string, ForecastEntry[]>;
     entries: ForecastEntry[];
     scheduled: Money;
     /** Items placed in no week (no history and no due date), counted, never dropped. */
     unplaced: { count: number; total: Money };
+    /** Receivables past the collectability horizon, counted and listed, never projected. */
+    notForecast: { count: number; total: Money; entries: NotForecastEntry[] };
   } {
   const byWeek = new Map<string, ForecastEntry[]>();
   const entries: ForecastEntry[] = [];
   let scheduled = ZERO_MONEY;
   let unplacedCount = 0;
   let unplacedTotal = ZERO_MONEY;
+  let notForecastTotal = ZERO_MONEY;
+  const notForecastEntries: NotForecastEntry[] = [];
   for (const it of items) {
+    const dpd = daysPastDue(it, asOf);
+    if (receivable && compareMoney(it.remaining, ZERO_MONEY) > 0 && dpd > model.collectibilityHorizonDays) {
+      notForecastTotal = addMoney(notForecastTotal, it.remaining);
+      notForecastEntries.push({
+        id: it.id,
+        entryId: it.entryId,
+        docKind: it.docKind,
+        docNumber: it.docNumber,
+        docId: it.docId,
+        partyId: it.partyId,
+        partyName: it.partyName,
+        amount: it.remaining,
+        tranDate: toISO(it.tranDate),
+        dueDate: it.dueDate ? toISO(it.dueDate) : null,
+        daysOverdue: dpd,
+      });
+      continue;
+    }
     const predicted = predict(it, asOf, stats, model);
     if (!predicted) {
       unplacedCount += 1;
       unplacedTotal = addMoney(unplacedTotal, it.remaining);
       continue;
     }
-    const { date, method } = predicted;
+    const { date, method, basisDays } = predicted;
     if (date < start || date > end) continue;
     const wk = toISO(weekStart(date));
-    const dpd = daysPastDue(it, asOf);
     const entry: ForecastEntry = {
       id: it.id,
       entryId: it.entryId,
@@ -2210,11 +2271,22 @@ export function scheduleForecast(
       weekStart: wk,
       daysOverdue: Math.max(0, dpd),
       method,
+      basisDays,
     };
     if (!byWeek.has(wk)) byWeek.set(wk, []);
     byWeek.get(wk)!.push(entry);
     entries.push(entry);
     scheduled = addMoney(scheduled, it.remaining);
   }
-  return { byWeek, entries, scheduled, unplaced: { count: unplacedCount, total: unplacedTotal } };
+  return {
+    byWeek,
+    entries,
+    scheduled,
+    unplaced: { count: unplacedCount, total: unplacedTotal },
+    notForecast: {
+      count: notForecastEntries.length,
+      total: notForecastTotal,
+      entries: notForecastEntries.sort((a, b) => b.daysOverdue - a.daysOverdue),
+    },
+  };
 }

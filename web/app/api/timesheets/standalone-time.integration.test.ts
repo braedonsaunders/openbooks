@@ -12,9 +12,9 @@ import type { SessionUser } from '../../../lib/auth'
  *   and approve for lines that name no project; a line naming a project
  *   refuses with the Projects remedy and writes nothing.
  * - Clock-in works with Projects off through the field-time switch.
- * - A person party with no employment (a partner) records billable time
- *   against the login's own link; payroll admits only employments, so the
- *   partner's approved hours stay unclaimed (proven in
+ * - A person party with no employment (a partner) records time against the
+ *   login's own link; payroll admits only employments, so the partner's
+ *   approved hours stay unclaimed (proven in
  *   engine/src/payroll/timekeeper-exclusion.integration.test.ts).
  * - time.self still confines a caller to their own linked person.
  */
@@ -145,9 +145,12 @@ test('reject, reopen and amend run the full lifecycle with Projects off', async 
     assert.equal((await f.submit(f.own)).status, 200)
     f.as(f.supervisor, 'Time supervisor')
     assert.equal((await f.approve(f.own)).status, 200)
+    // Amendment corrects consumed hours only. An approved week with nothing
+    // consumed refuses and points to reopen, and writes no offset.
     const amended = await f.amend(f.own)
-    assert.equal(amended.status, 201, await amended.clone().text())
-    assert.equal((await amended.json() as { amended?: number }).amended, 0, 'nothing consumed, no offsets')
+    assert.equal(amended.status, 422, await amended.clone().text())
+    assert.match(((await amended.json()) as { error: string }).error, /no locked entries to amend/)
+    assert.deepEqual((await f.entries(f.own)).map((entry) => entry.status), ['approved'], 'the refusal writes no offset')
   } finally { await f.close() }
 })
 
@@ -168,9 +171,11 @@ test('a partner without employment records billable time but never a coworker we
   try {
     f.as(f.partner, 'Partner')
     assert.equal((await f.read(f.mate)).status, 200, 'their own week opens without employment')
-    const saved = await f.save(f.mate, [{ projectId: null, itemId: f.org.items.service, isBillable: true, hours: ['', '', '6', '', '', '', ''] }])
+    // Billable lines name a project, and Projects-off refuses projects, so the
+    // partner's line is nonbillable in this fixture.
+    const saved = await f.save(f.mate, [{ projectId: null, itemId: f.org.items.service, isBillable: false, hours: ['', '', '6', '', '', '', ''] }])
     assert.equal(saved.status, 200, await saved.clone().text())
-    assert.deepEqual((await f.entries(f.mate)).map((entry) => entry.is_billable), [true])
+    assert.deepEqual((await f.entries(f.mate)).map((entry) => entry.is_billable), [false])
     assert.equal((await f.read(f.own)).status, 403, 'a coworker week stays refused under time.self')
     const submitted = await f.submit(f.mate)
     assert.equal(submitted.status, 200, await submitted.clone().text())

@@ -103,7 +103,7 @@ export const SALES_REPORT_ENTITIES: ReportEntity[] = [
     key: "sales_quota_attainment",
     label: "Sales quota attainment",
     description:
-      "Quota version, lifecycle, employee or team target, and actuals from immutable sales evidence in the target currency.",
+      "Quota versions and actuals from immutable sales evidence, in the target currency.",
     from: `crm_sales_quotas q left join parties p on p.org_id=q.org_id and p.id=q.employee_id left join crm_sales_teams t on t.org_id=q.org_id and t.id=q.sales_team_id left join lateral (select sum(e.amount) as actual from crm_sales_evidence e where e.org_id=q.org_id and e.subsidiary_id is not distinct from q.subsidiary_id and e.currency=q.currency and e.metric=q.metric and e.effective_date between q.period_start and q.period_end and ((q.employee_id is not null and e.employee_id=q.employee_id) or (q.sales_team_id is not null and e.sales_team_id=q.sales_team_id))) a on true`,
     orgColumn: "q.org_id",
     subsidiaryScope: { column: "q.subsidiary_id" },
@@ -201,7 +201,7 @@ export const SALES_REPORT_ENTITIES: ReportEntity[] = [
     key: "promotion_performance",
     label: "Promotion performance",
     description:
-      "Discount lines carried by promotions, with the discount given and the gross and net revenue attached, by period and promotion.",
+      "Promotion discounts with gross and net revenue, by period and promotion.",
     // One row per promotion discount line. The lateral attachment prices the
     // parent document once: gross is the positively priced non-promotion
     // lines, net is gross plus every discount on the document.
@@ -253,7 +253,7 @@ export const SALES_REPORT_ENTITIES: ReportEntity[] = [
     key: "cash_tenders",
     label: "Cash tenders",
     description:
-      "How paid-at-sale totals settled — one row per tender with its method, settlement account or stored-value card, and amount — by period, method, and account.",
+      "How paid-at-sale totals settled: one row per tender, by period, method and account.",
     // One row per tender. Amounts leave in document currency through the
     // currency's own minor units; every join stays inside the base
     // organization so a restricted subsidiary scope cannot leak rows.
@@ -308,7 +308,7 @@ export const SALES_REPORT_ENTITIES: ReportEntity[] = [
     key: "channel_sales",
     label: "Channel sales",
     description:
-      "Storefront orders by channel, day, item, location and tender — one row per order line with the order's posting status and document. The location is the summary's stock location for summarized orders, else the channel's single fulfilment location.",
+      "Storefront order lines by channel, day, item, location and tender, with posting status.",
     // One row per normalized order line. Stored minors are JSON strings, so
     // every money column scales through the shop currency's own minor units;
     // every join stays inside the base organization. A channel posts its
@@ -383,7 +383,7 @@ export const SALES_REPORT_ENTITIES: ReportEntity[] = [
     key: "order_economics",
     label: "Order economics",
     description:
-      "Stored contribution-margin facts per channel order line — net revenue, discounts, actual issue cost, processor and marketplace fees, carrier labels, returns with restocking income, and allocated ad spend — with margin as formula measures, never stored ratios.",
+      "Stored contribution-margin facts per channel order line, with margin as formula measures.",
     // One row per current margin fact. Only current facts read: restated
     // history stays in the table for audit, out of the sums. Every join
     // stays inside the base organization, and rows are scoped by the

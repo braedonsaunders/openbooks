@@ -17,6 +17,7 @@ import { Pagination } from '../../../components/pagination'
 import { mergeHref } from '../../../lib/list-params'
 import { readApiErrorMessage, refusalMessageFromBody } from '../../../lib/api-error'
 import { confirmDialog } from '@/lib/confirm'
+import { promptDialog } from '@/lib/prompt'
 import { budgetFromUnits, budgetToUnits, spreadBudgetTotal, upliftBudgetAmount } from '../../../lib/budget-math'
 import type { BudgetDimensions, BudgetStatus, BudgetWorkspace } from '../../../lib/budgets'
 import { ReadOnlyValue } from '../../../components/read-only-value'
@@ -421,7 +422,12 @@ export function BudgetDrawer({
     if (actionName === 'apply_source' && !(await confirmDialog(t('confirm.applySource')))) return
     if (actionName === 'submit' && !(await confirmDialog(t('confirm.submit')))) return
     if (actionName === 'approve' && !(await confirmDialog(t('confirm.approve')))) return
-    if (actionName === 'reject' && !(await confirmDialog(t('confirm.reject')))) return
+    let rejectionReason: string | undefined
+    if (actionName === 'reject') {
+      const reason = await promptDialog({ title: t('confirm.reject'), label: t('confirm.rejectionReason'), multiline: true, confirmLabel: t('actions.reject') })
+      if (!reason) return
+      rejectionReason = reason
+    }
     setMenuTarget(null)
     cellMenu.close()
     setBusy(true)
@@ -432,6 +438,7 @@ export function BudgetDrawer({
         action: actionName,
         ...dims,
         ...extra,
+        ...(rejectionReason ? { reason: rejectionReason } : {}),
       })
       if (data.id) {
         toast.success(t('feedback.copied'))

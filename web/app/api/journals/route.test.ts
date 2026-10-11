@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { stubModules } from "../../../testing/stub-modules";
+import { stubModules, withPlatformDbTestSurface } from "../../../testing/stub-modules";
 import test from "node:test";
 
 // Unsaved-create contract for POST /api/journals: opening the drawer writes
@@ -77,7 +77,7 @@ stubModules({
   intl: false,
   authz: false,
   features: false,
-  database: `
+  database: withPlatformDbTestSurface(`
       const state = globalThis[Symbol.for('openbooks.journals-route-test')]
       const sqlText = globalThis.openbooksJournalsSqlText
       // The shared claim helper reads through sql.identifier, whose chunk
@@ -134,11 +134,12 @@ stubModules({
       export function ambientTenantOrgId() { return '${ORG_ID}' }
       export function withBypassContext(fn) { return fn() }
       export function withOrgContext(_orgId, fn) { return fn() }
+
       export async function withOrgTransaction(orgId, work) {
         if (orgId !== '${ORG_ID}') throw new Error('Journal fixture transaction requires its declared organization')
         return db.transaction(work)
       }
-    `,
+    `),
   extra: {
     "../../../lib/authz": `export async function guardPermission() {
        return { user: { orgId: '${ORG_ID}', id: '${USER_ID}' }, allowedSubsidiaryIds: null }

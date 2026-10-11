@@ -9,7 +9,8 @@ import test, { after } from 'node:test'
 const stateKey = Symbol.for('openbooks.statement-export-route-test')
 const routeState = {
   captured: [] as Array<{ site: string; at: unknown }>,
-  permissions: new Set(['reports.read']),
+  // P&L and balance-sheet exports need the ledger grant as well as reports.read.
+  permissions: new Set(['reports.read', 'gl.read']),
   resolved: [] as string[],
 }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
@@ -197,6 +198,6 @@ test('resourcing export with explicit permission reaches the renderer', async ()
     await capturedInstant('resourcing-capacity-demand', 'xlsx', 'exportDataToXlsx')
     assert.deepEqual(routeState.resolved, ['resourcing-capacity-demand'])
   } finally {
-    routeState.permissions = new Set(['reports.read'])
+    routeState.permissions = new Set(['reports.read', 'gl.read'])
   }
 })

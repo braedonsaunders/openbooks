@@ -273,21 +273,23 @@ const crmForecastCases = [
               const closed = statuses.find((status) => status.is_closed)
               assert.ok(open, 'CRM defaults provide an open status')
               assert.ok(closed, 'CRM defaults provide a closed status')
+              // A closed-won row is sales evidence dated by its closed_at, so the
+              // closed fixture carries one; the open rows stay unclosed.
               const rows = [
-                { title: 'eligible-undated', status: open.id, forecast: 'most_likely', active: true, closeDate: null },
-                { title: 'second-eligible-undated', status: open.id, forecast: 'worst_case', active: true, closeDate: null },
-                { title: 'dated', status: open.id, forecast: 'most_likely', active: true, closeDate: org.date },
-                { title: 'omitted', status: open.id, forecast: 'omitted', active: true, closeDate: null },
-                { title: 'closed', status: closed.id, forecast: 'most_likely', active: true, closeDate: null },
-                { title: 'inactive', status: open.id, forecast: 'most_likely', active: false, closeDate: null },
+                { title: 'eligible-undated', status: open.id, forecast: 'most_likely', active: true, closeDate: null, closedAt: null },
+                { title: 'second-eligible-undated', status: open.id, forecast: 'worst_case', active: true, closeDate: null, closedAt: null },
+                { title: 'dated', status: open.id, forecast: 'most_likely', active: true, closeDate: org.date, closedAt: null },
+                { title: 'omitted', status: open.id, forecast: 'omitted', active: true, closeDate: null, closedAt: null },
+                { title: 'closed', status: closed.id, forecast: 'most_likely', active: true, closeDate: null, closedAt: `${org.date}T12:00:00Z` },
+                { title: 'inactive', status: open.id, forecast: 'most_likely', active: false, closeDate: null, closedAt: null },
               ]
               for (const row of rows) {
                 const id = randomUUID()
                 await db.execute(sql`insert into crm_opportunities
                   (id,org_id,opportunity_number,title,status_id,probability,currency,projected_amount,weighted_amount,
-                   expected_close_date,forecast_category,is_active,created_by,updated_by)
+                   expected_close_date,forecast_category,is_active,closed_at,created_by,updated_by)
                   values(${id},${org.orgId},${id},${row.title},${row.status},50,'USD','100','50',
-                    ${row.closeDate},${row.forecast},${row.active},${actor},${actor})`)
+                    ${row.closeDate},${row.forecast},${row.active},${row.closedAt},${actor},${actor})`)
               }
             })
 

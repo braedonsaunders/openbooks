@@ -23,12 +23,14 @@
     "vitals": {
       "healthScore": "Gesundheitsscore",
       "netIncome": "Jahresüberschuss",
+      "throughDate": "{label} · bis {date}",
       "close": "Abschlussfortschritt",
       "closeSub": "{period}",
       "closeUnavailable": "Nicht verfügbar",
       "closeOrgWide": "Abschlussdiagnosen sind organisationsweit — bitte einen Administrator mit unbeschränktem Zugriff auf Tochtergesellschaften um Auflistung",
       "noClose": "—",
       "noCloseSub": "Kein Abschluss gestartet",
+      "lockedThroughSub": "Gesperrt bis {period}",
       "draftJournals": "Buchungsentwürfe",
       "draftJournalsSub": "{posted} gebucht diese Woche",
       "openFindings": "Offene Feststellungen",
@@ -145,7 +147,11 @@
           "removed": "Entfernt",
           "changed": "Geändert",
           "unchanged": "Unverändert",
-          "disposition": "Änderung"
+          "disposition": "Änderung",
+          "effectivePerUnit": "Wirksam je Einheit",
+          "showUnchanged": "{count} unveränderte Zeilen anzeigen",
+          "hideUnchanged": "Unveränderte Zeilen ausblenden",
+          "noChanges": "Keine Komponentenzeilen geändert."
       },
       "fields": {
         "existingId": "Beste Leistungsverpflichtung",

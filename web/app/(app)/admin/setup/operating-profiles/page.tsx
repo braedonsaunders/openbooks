@@ -1,7 +1,7 @@
 import { getTranslations } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 import { requirePermission,guardRootSubsidiaryScope } from '@/lib/authz';
-import { isFeatureEnabled } from '@/lib/features';
+import { requireAnyFeatureEnabled } from '@/lib/feature-gates';
 import { pickString } from '@/lib/list-params';
 import { SETUP_ENTITY_BY_KEY } from '@/lib/setup/registry';
 import { ModuleHomeTabs } from '@/components/module-home/ui';
@@ -15,7 +15,7 @@ const entities=[{tab:'profiles',key:'operating-profiles'},{tab:'scopes',key:'ope
 export default async function OperatingProfilesSetup({searchParams}:{searchParams:Promise<Record<string,string|string[]|undefined>>}) {
  const sp=await searchParams,authz=await requirePermission('admin.setup.manage');
  if(await guardRootSubsidiaryScope(authz))notFound();
- if(!await isFeatureEnabled(authz.user.orgId,'projects')&&!await isFeatureEnabled(authz.user.orgId,'manufacturing'))notFound();
+ await requireAnyFeatureEnabled(authz.user.orgId,['projects','manufacturing']);
  const requested=pickString(sp.tab),tab=requested==='start'||entities.some(entity=>entity.tab===requested)?requested:pickString(sp.row)?'profiles':'start';
  const selected=entities.find(entity=>entity.tab===tab),entity=selected?SETUP_ENTITY_BY_KEY.get(selected.key):null;
  if(selected&&!entity)notFound();

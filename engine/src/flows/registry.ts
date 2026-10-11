@@ -176,6 +176,9 @@ export function handlerReleasedSubjectKinds(): string[] {
     .filter((kind) => getFlowAdapter(kind)?.releaseViaHandler === true);
 }
 
+/** Document kinds with a dedicated profile; the generic document profile never duplicates them. */
+const DEDICATED_PROFILE_KINDS: ReadonlySet<string> = new Set([PAY_RUN_SUBJECT_KIND, FIELD_TICKET_SUBJECT_KIND]);
+
 /**
  * Every subject kind flows can be authored over, with its profile (builder
  * UI). One entry per subject kind: kinds with a dedicated profile (pay runs
@@ -188,7 +191,7 @@ export function listFlowSubjectProfiles(): FlowSubjectProfile[] {
     scheduleDistributionSubjectProfile,
     scheduleBoardSubjectProfile,
     checklistStepSubjectProfile,
-    ...DOCUMENT_FLOW_KINDS.filter((kind) => kind !== PAY_RUN_SUBJECT_KIND).map((kind) =>
+    ...DOCUMENT_FLOW_KINDS.filter((kind) => !DEDICATED_PROFILE_KINDS.has(kind)).map((kind) =>
       documentSubjectProfile(kind),
     ),
     compensationVersionSubjectProfile,

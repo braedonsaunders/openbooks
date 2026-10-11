@@ -12,7 +12,7 @@ Object.assign(globalThis, { __equipmentPatchRefState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === '../../../../lib/feature-gates') return virtual(`
+    if (specifier === '../../../../lib/feature-gates' || (specifier === '@/lib/feature-gates' && context.parentURL?.includes('/lib/api/route'))) return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__equipmentPatchRefState;
         return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };
@@ -21,7 +21,7 @@ registerHooks({
     return next(specifier, context)
   },
 })
-const { db, withOrgContext } = await import('@openbooks/engine/platform/db')
+const { db, withOrgContext, withBypass} = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { PATCH } = await import('./route.ts')
@@ -32,7 +32,7 @@ interface Fixture {
 }
 
 async function fixture(): Promise<Fixture> {
-  const org = await createScratchOrg()
+  const org = await withBypass(() => createScratchOrg())
   state.orgId = org.orgId
   state.actorId = randomUUID()
   const unitId = (await db.execute<{ id: string }>(sql`

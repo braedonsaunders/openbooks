@@ -3,9 +3,9 @@ import { registerHooks } from 'node:module'
 import test from 'node:test'
 
 const scope = new Set(['subsidiary-visible'])
-let releaseConfig: (value: { weeklyApCap: string; restrictToSafe: number }) => void
+let releaseConfig: (value: { weeklyApCap: string; restrictToSafe: number; defaultHorizonWeeks: number }) => void
 const state = {
-  config: Promise.resolve({ weeklyApCap: '0.0000', restrictToSafe: 0 }),
+  config: Promise.resolve({ weeklyApCap: '0.0000', restrictToSafe: 0, defaultHorizonWeeks: 4 }),
   events: [] as string[],
   positionArgs: [] as unknown[],
   scope,
@@ -39,7 +39,7 @@ for (const [name, load] of [['AR', loadArCockpit], ['AP', loadApCockpit]] as con
       await new Promise<void>((resolve) => setImmediate(resolve))
       assert.deepEqual(state.events, ['configuration', 'tabs'], 'navigation must not wait for configuration or forecasting')
     } finally {
-      releaseConfig!({ weeklyApCap: '1234.5678', restrictToSafe: 1 })
+      releaseConfig!({ weeklyApCap: '1234.5678', restrictToSafe: 1, defaultHorizonWeeks: 4 })
     }
     await pending
     assert.deepEqual(state.events, ['configuration', 'tabs', 'position'])

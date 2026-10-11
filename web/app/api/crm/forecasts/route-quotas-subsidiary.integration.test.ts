@@ -89,9 +89,17 @@ async function fixture() {
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
       select ${randomUUID()}, ${org.orgId}, s.id, 'Second Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb
         from subsidiaries s where s.org_id = ${org.orgId} and s.parent_id is null limit 1`)
+    // Quotas are employee-backed: the target must be an active sales-rep
+    // employment, and only approved quotas are read by the forecast.
+    const employee = (await db.execute<{ id: string }>(sql`
+      insert into parties (org_id, kind, display_name, subsidiary_id)
+      values (${org.orgId}, 'employee', 'Quota representative', ${org.subsidiaryId}) returning id`)).rows[0]!.id
     await db.execute(sql`
-      insert into crm_sales_quotas (org_id, owner_user_id, sales_team_id, period_start, period_end, currency, amount, filters, created_by, updated_by)
-      values (${org.orgId}, ${actor}, null, '2026-07-01', '2026-07-31', 'CAD', '50000', '{}'::jsonb, ${actor}, ${actor})`)
+      insert into employee_roles (org_id, party_id, is_sales_rep, sales_rep_since)
+      values (${org.orgId}, ${employee}, true, '2020-01-01')`)
+    await db.execute(sql`
+      insert into crm_sales_quotas (org_id, employee_id, sales_team_id, name, period_start, period_end, currency, amount, lifecycle, approved_by, approved_at, created_by, updated_by)
+      values (${org.orgId}, ${employee}, null, 'Q3 quota', '2026-07-01', '2026-07-31', 'CAD', '50000', 'approved', ${actor}, now(), ${actor}, ${actor})`)
   })
   state.orgId = org.orgId
   state.actorId = actor

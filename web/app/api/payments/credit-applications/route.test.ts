@@ -93,7 +93,7 @@ registerHooks({
         }
       `);
     }
-    if (specifier.includes("platform/db.ts")) {
+    if (specifier.includes("platform/db.ts") || specifier === "@openbooks/engine/platform/db") {
       // Re-export the real module and override only `db`. Listing the other
       // exports by hand would be a list that can only omit: every transitive
       // importer that needs one more name fails at load with a SyntaxError
@@ -113,7 +113,7 @@ registerHooks({
         };
       `);
     }
-    if (specifier.includes("credit-settlement.ts")) {
+    if (specifier.includes("credit-settlement.ts") || specifier === "@openbooks/engine/payments/credit-settlement") {
       return module_(`
         const s = globalThis[Symbol.for("openbooks.credit-applications-route-test")];
         export async function applyStandaloneCredits(orgId, userId, input) {

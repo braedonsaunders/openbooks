@@ -105,17 +105,21 @@ const mockSources = new Map<string, string>([
         if (orgId !== '${ORG_ID}') throw new Error('Fixture transaction requires the declared organization')
         return db.transaction(work)
       }
+      export async function inExecutorTransaction(executor, work) { return work(executor) }
+      export async function withTransactionSavepoint(runner, name, work) { return work(runner) }
+      export const orgContext = { getStore: () => undefined, run: (store, fn) => fn() }
     `,
   ],
   [
     "mock:authz",
     `const state = globalThis[Symbol.for('openbooks.parties-route-test')]
-     export async function guardPermission() {
-       return { user: { orgId: '${ORG_ID}', id: '${USER_ID}' }, allowedSubsidiaryIds: null }
-     }
-     export async function getAuthz() {
-       return { user: { orgId: '${ORG_ID}', id: '${USER_ID}' }, allowedSubsidiaryIds: null }
-     }
+     const authzShape = () => ({
+       user: { orgId: '${ORG_ID}', id: '${USER_ID}', roles: [] },
+       permissions: new Set(['parties.manage']),
+       allowedSubsidiaryIds: null,
+     })
+     export async function guardPermission() { return authzShape() }
+     export async function getAuthz() { return authzShape() }
      export async function guardRootSubsidiaryScope() { return null }
      export function guardUnrestrictedScope() { return null }
      export function subsidiariesInScope() { return true }`,

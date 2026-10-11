@@ -2,6 +2,13 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
 import { subsidiaryVisibleFilter } from '@openbooks/engine/organization/scope'
+import { NextResponse } from 'next/server'
+import {
+  accountNameKey,
+  type DuplicateAccountNameHolder,
+  type DuplicateAccountNameWarning,
+  DUPLICATE_ACCOUNT_NAME,
+} from '../../../lib/accounts-hygiene'
 import { loadCustomFieldAccessDefs, redactHiddenCustomValues, type CustomFieldViewer } from '../../../lib/custom-fields'
 
 export interface AccountPayload {
@@ -86,4 +93,69 @@ export async function redactAccountCustomFields(
       custom: redactHiddenCustomValues(defs, viewer, payload.account.custom as Record<string, unknown> | null),
     },
   }
+}
+
+/**
+ * Active accounts whose name matches `name` (case- and whitespace-insensitive)
+ * in a subsidiary scope that overlaps the target's. The shared chart overlaps
+ * every subsidiary, so a shared target conflicts with any subsidiary account of
+ * the same name, and a subsidiary target conflicts with shared and same-entity
+ * accounts only. Rows outside the caller's visible scope are never returned, so
+ * the refusal cannot disclose a hidden account. Callers hold the name advisory
+ * lock (accountNameLock) before reading, so two concurrent writes serialize.
+ */
+export async function findNamedAccounts(
+  executor: Pick<typeof db, "execute">,
+  opts: {
+    orgId: string;
+    name: string;
+    subsidiaryId: string | null;
+    excludeId?: string | null;
+    allowedSubsidiaryIds?: ReadonlySet<string> | null;
+  },
+): Promise<DuplicateAccountNameHolder[]> {
+  const excludeId = opts.excludeId ?? null;
+  const subsidiaryId = opts.subsidiaryId ?? null;
+  const visible = opts.allowedSubsidiaryIds === undefined
+    ? sql``
+    : subsidiaryVisibleFilter(sql`a.subsidiary_id`, opts.allowedSubsidiaryIds, { orgWideNull: true });
+  const result = await executor.execute<{ id: string; number: string | null; name: string }>(sql`
+    select a.id, a.number, a.name
+      from accounts a
+     where a.org_id = ${opts.orgId}
+       and a.is_active
+       and lower(btrim(regexp_replace(a.name, '[[:space:]]+', ' ', 'g'))) = ${accountNameKey(opts.name)}
+       and (${excludeId}::uuid is null or a.id <> ${excludeId}::uuid)
+       and (${subsidiaryId}::uuid is null or a.subsidiary_id is null or a.subsidiary_id = ${subsidiaryId}::uuid)
+       ${visible}
+     order by a.number nulls last, a.name
+     limit 5
+  `);
+  return result.rows;
+}
+
+/** Transaction-scoped advisory lock keyed by org and normalized account name. */
+export function accountNameLock(orgId: string, name: string) {
+  return sql`select pg_advisory_xact_lock(hashtextextended(${`accounts-name:${orgId}:${accountNameKey(name)}`}, 0))`;
+}
+
+/**
+ * The 409 refusal for an unacknowledged duplicate name. It names the holding
+ * account so the drawer can offer to open it instead of creating a second one.
+ */
+export function duplicateNameRefusal(warning: DuplicateAccountNameWarning): NextResponse {
+  return NextResponse.json(
+    {
+      error: DUPLICATE_ACCOUNT_NAME,
+      field: "name",
+      remedy:
+        "Open the existing account, or resend the request with acknowledgeDuplicateName set to true to create it anyway.",
+      details: {
+        existingAccountId: warning.existingAccountId,
+        existingAccountName: warning.existingAccountName,
+        existingAccountNumber: warning.existingAccountNumber,
+      },
+    },
+    { status: 409 },
+  );
 }

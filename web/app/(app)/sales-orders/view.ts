@@ -65,6 +65,7 @@ export interface SalesOrderDrawer {
   segments: OrderDrawerProps['segments']
   subsidiaries: { id: string; name: string }[]
   canManage: boolean
+  canApprove: boolean
   canOverrideCredit: boolean
   layout: OrderDrawerProps['layout']
   backorders: boolean
@@ -272,6 +273,8 @@ export async function loadSalesOrders(
             .filter((subsidiary) => !authz.allowedSubsidiaryIds || authz.allowedSubsidiaryIds.has(subsidiary.id))
             .map((subsidiary) => ({ id: subsidiary.id, name: `${'  '.repeat(subsidiary.depth)}${subsidiary.name}` })),
           canManage,
+          // Sales orders approve under the same ar.create grant that creates them.
+          canApprove: can(authz, 'ar.create'),
           canOverrideCredit: can(authz, 'ar.approve'),
           layout: resolvedForm?.layout,
           backorders,

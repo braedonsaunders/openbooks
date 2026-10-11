@@ -162,13 +162,22 @@ async function importBatch(orgId: string, id: string, token: string): Promise<bo
       if (preview) {
         // Scan the collected keys once, including identities shared across
         // batches. Materialization prevents stale tenant cardinality estimates
-        // from choosing a join that repeatedly scans the entire source.
+        // from choosing a join that repeatedly scans the entire source. Every
+        // row of a duplicate group is identified, but a row the resource already
+        // refused (for example, a repeated document number within one batch)
+        // keeps that single refusal rather than a second one.
         await db.execute(sql`insert into data_transfer_issues (org_id,job_id,phase,row_no,severity,message,field)
           with evidence as materialized (
             select row_no,count(*) over (partition by key_hash) as occurrences
             from data_transfer_keys where org_id=${orgId} and job_id=${id}
-          ) select ${orgId},${id},'preview',row_no,'error','This identity appears in more than one source record — keep one record per natural key, then upload the corrected file.',null
-          from evidence where occurrences>1 group by row_no`)
+          ) select ${orgId},${id},'preview',evidence.row_no,'error','This identity appears in more than one source record — keep one record per natural key, then upload the corrected file.',null
+          from evidence
+          where occurrences>1
+            and not exists (
+              select 1 from data_transfer_issues refused
+               where refused.org_id=${orgId} and refused.job_id=${id} and refused.phase='preview'
+                 and refused.severity='error' and refused.row_no=evidence.row_no)
+          group by evidence.row_no`)
         await db.execute(sql`insert into data_transfer_issues (org_id,job_id,phase,row_no,severity,message,field)
           with evidence as materialized (
             select r.row_no,k.value,

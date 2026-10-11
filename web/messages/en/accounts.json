@@ -42,9 +42,15 @@
     "expense": "Expenses"
   },
   "hygiene": {
-    "assetBankUncorroborated": "\"{name}\" is typed as a bank account but has no bank-like name and is not statement-reconcilable, so it will be counted as cash everywhere. Confirm the type (clearing, provision, and credit-facility accounts are commonly mistyped) or enable statement reconciliation."
+    "assetBankUncorroborated": "\"{name}\" is typed as a bank account but has no bank-like name and is not statement-reconcilable, so it will be counted as cash everywhere. Confirm the type (clearing, provision, and credit-facility accounts are commonly mistyped) or enable statement reconciliation.",
+    "duplicateAccountName": "Saved. Another active account is also named \"{name}\" ({account})."
   },
   "drawer": {
+    "duplicateName": {
+      "body": "An active account named \"{name}\" already exists ({account}). Use that account, or create this one anyway.",
+      "useExisting": "Use existing account",
+      "createAnyway": "Create anyway"
+    },
     "saved": "Account saved",
     "created": "Account created",
     "newTitle": "New account",
@@ -86,6 +92,7 @@
       "invalid_custom_fields": "Review the custom field values.",
       "number_in_use": "That account number is already in use.",
       "numberInUseBy": "That account number is already in use by <account>{number} · {name}</account>.",
+      "duplicate_account_name": "An active account already uses this name.",
       "account_changed": "This account changed while you were editing it. Reopen it and try again.",
       "invalid_idempotency_key": "The account request could not be safely retried.",
       "save_failed": "The account could not be saved."

@@ -109,12 +109,25 @@ test('budget approval lifecycle: submit, approve, reject', async () => {
     await withOrgContext(org.orgId, () =>
       POST(request(scenario2, { action: 'submit', expectedRevision: 1 }), params(scenario2)))
     state.user = asUser(approver, org.orgId, 'approver')
+    for (const reason of [undefined, '', '   ']) {
+      const refused = await withOrgContext(org.orgId, () =>
+        POST(request(scenario2, { action: 'reject', expectedRevision: 2, reason }), params(scenario2)))
+      assert.equal(refused.status, 422, 'rejection requires a nonblank reason')
+      assert.equal((await scenarioState(org.orgId, scenario2)).status, 'pending_approval')
+    }
     const rejected = await withOrgContext(org.orgId, () =>
-      POST(request(scenario2, { action: 'reject', expectedRevision: 2 }), params(scenario2)))
+      POST(request(scenario2, { action: 'reject', expectedRevision: 2, reason: '  Reduce operating expense assumptions before resubmission.  ' }), params(scenario2)))
     assert.equal(rejected.status, 200, JSON.stringify(await rejected.clone().json()))
     assert.deepEqual(await rejected.json(), { revision: 3, status: 'draft' })
     const backToDraft = await scenarioState(org.orgId, scenario2)
     assert.equal(backToDraft.submitted_by, null)
+    const evidence = await withOrgContext(org.orgId, () => db.execute<{ actor_id: string; changes: Record<string, unknown> }>(sql`
+      select actor_id, changes from audit_log where org_id=${org.orgId} and table_name='budget_scenarios'
+        and row_id=${scenario2} and changes->>'action'='reject'`))
+    assert.equal(evidence.rows.length, 1)
+    assert.equal(evidence.rows[0]!.actor_id, approver)
+    assert.deepEqual(evidence.rows[0]!.changes, { action: 'reject', from: 'pending_approval', to: 'draft',
+      reason: 'Reduce operating expense assumptions before resubmission.', revisionBefore: 2, revisionAfter: 3 })
 
     // Approving a draft directly is refused; stale revisions conflict.
     const badApprove = await withOrgContext(org.orgId, () =>

@@ -55,7 +55,7 @@ test("finalisation years refuse by name: draft, missing, and the published pass"
     (error: unknown) => {
       assert.ok(error instanceof PayrollPackError);
       assert.match((error as Error).message, /2026/);
-      assert.match((error as Error).message, /draft|placeholder/i);
+      assert.match((error as Error).message, /scaffolded but not filled in/);
       return true;
     },
   );

@@ -5,7 +5,7 @@ import { sql } from 'drizzle-orm';
 import { db } from '../platform/db.ts';
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from '../testing/fixtures.ts';
 import { assertPeriodModulesOpen, CloseError } from "../periods/period-policy.ts";
-import { decidePeriodReopen, recloseApprovedReopen, recloseExpiredReopens, reopenDecisionPreview, requestPeriodReopen } from "./reopening.ts";
+import { decidePeriodReopen, recloseApprovedReopen, recloseExpiredReopens, reopenDecisionPreview, requestPeriodReopen, withdrawPeriodReopen } from "./reopening.ts";
 import { setPeriodLockState } from "../periods/period-locks.ts";
 
 for (const order of ['global first','entity first','race','separate entities'] as const) {
@@ -17,22 +17,26 @@ for (const order of ['global first','entity first','race','separate entities'] a
       await setPeriodLockState({...target,module:'gl',state:'closed',actorId:actors.adminId,reason:'Close for review'});
       const other = randomUUID();
       if (order === 'separate entities') await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${other},${org.orgId},${org.subsidiaryId},'Second entity','CAD','CA')`);
-      const ids=[];
       const scopes = order === 'separate entities' ? [org.subsidiaryId,other] : order === 'entity first' ? [org.subsidiaryId,undefined] : [undefined,org.subsidiaryId];
-      for (const subsidiaryId of scopes) {
-        ids.push(await requestPeriodReopen({...target,subsidiaryId,modules:['gl'],actorId:actors.adminId,reason:'Approved correction work'}));
-      }
+      const request = (subsidiaryId:string|undefined) => requestPeriodReopen({...target,subsidiaryId,modules:['gl'],actorId:actors.adminId,reason:'Approved correction work'});
       const approve = (id:string) => decidePeriodReopen({orgId:org.orgId,requestId:id,actorId:actors.approver1Id,approve:true,hours:2});
       if (order === 'race' || order === 'separate entities') {
-        const results = await Promise.allSettled(ids.map(approve));
+        // Intersecting scopes raised together: exactly one request is
+        // accepted; disjoint entities both are.
+        const results = await Promise.allSettled(scopes.map(request));
         assert.equal(results.filter(r=>r.status==='fulfilled').length,order === 'race' ? 1 : 2);
-        if (order === 'race') assert.ok(results.some(r=>r.status==='rejected' && r.reason instanceof CloseError));
+        if (order === 'race') assert.ok(results.some(r=>r.status==='rejected' && r.reason instanceof CloseError && /awaiting a decision/.test(r.reason.message)));
+        for (const result of results) if (result.status==='fulfilled') await approve(result.value);
       } else {
-        await approve(ids[0]!);
-        await assert.rejects(approve(ids[1]!),CloseError);
+        // The intersecting second request is refused when raised, not at
+        // the approver's step.
+        const first = await request(scopes[0]);
+        await assert.rejects(request(scopes[1]),(error:unknown)=>error instanceof CloseError && /awaiting a decision/.test(error.message));
+        await approve(first);
+        await assert.rejects(request(scopes[1]),(error:unknown)=>error instanceof CloseError && /approved reopen window .* is active; to widen or extend it/.test(error.message));
       }
       const statuses=(await db.execute<{status:string}>(sql`select status from close_reopen_requests where org_id=${org.orgId} order by created_at,id`)).rows.map(r=>r.status).sort();
-      assert.deepEqual(statuses,order === 'separate entities' ? ['approved','approved'] : ['approved','requested']);
+      assert.deepEqual(statuses,order === 'separate entities' ? ['approved','approved'] : ['approved']);
     } finally { await dropScratchOrg(org.orgId); }
   });
 }
@@ -58,11 +62,15 @@ test('reopen approval refuses a scope with no closed locks', {skip:!process.env.
     // same way: the open module's window would be pure time bomb. Narrowing
     // the request to the closed module still approves.
     await setPeriodLockState({...target,module:'ap',state:'closed',actorId:actors.adminId,reason:'AP closed'});
+    // A request that can never be approved is withdrawn before the corrected
+    // one is raised: overlapping requests are refused when raised.
+    await withdrawPeriodReopen({orgId:org.orgId,requestId:mistakenId,actorId:actors.adminId,reason:'Raised on an open period by mistake'});
     const mixedId=await requestPeriodReopen({...target,modules:['ap','gl'],actorId:actors.adminId,reason:'AP correction plus unneeded GL'});
     await assert.rejects(
       decidePeriodReopen({orgId:org.orgId,requestId:mixedId,actorId:actors.approver1Id,approve:true,hours:2}),
       /nothing to reopen/,
     );
+    await withdrawPeriodReopen({orgId:org.orgId,requestId:mixedId,actorId:actors.adminId,reason:'Narrowing to the closed module only'});
     const narrowId=await requestPeriodReopen({...target,modules:['ap'],actorId:actors.adminId,reason:'AP correction only'});
     await decidePeriodReopen({orgId:org.orgId,requestId:narrowId,actorId:actors.approver1Id,approve:true,hours:2});
     assert.equal((await db.execute<{status:string}>(sql`select status from close_reopen_requests where id=${narrowId}`)).rows[0]!.status,'approved');
@@ -120,7 +128,9 @@ test('subledger reopening requires GL in scope at request time, with the approva
       requestPeriodReopen({...target,subsidiaryId:org.subsidiaryId,modules:['ap'],actorId:actors.adminId,reason:'AP correction without GL'}),
       /include General ledger in the reopen scope/,
     );
-    // The remedy works: the widened request is accepted and approves.
+    // The remedy works: the stranded request is withdrawn and the widened
+    // request is accepted and approves.
+    await withdrawPeriodReopen({orgId:org.orgId,requestId,actorId:actors.adminId,reason:'Replaced by a request that includes GL'});
     const widenedId=await requestPeriodReopen({...target,subsidiaryId:org.subsidiaryId,modules:['ap','gl'],actorId:actors.adminId,reason:'AP correction with GL'});
     await decidePeriodReopen({orgId:org.orgId,requestId:widenedId,actorId:actors.approver1Id,approve:true,hours:2});
     assert.equal((await db.execute<{status:string}>(sql`select status from close_reopen_requests where org_id=${org.orgId} and id=${widenedId}`)).rows[0]!.status,'approved');

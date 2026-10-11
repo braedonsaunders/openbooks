@@ -205,7 +205,9 @@ export const POST = defineRoute({
     const orgId = authz.user.orgId
     const actorId = authz.user.id
 
-    const parsedBody = await parseJsonBody(request, requestBodySchema);
+    // Schema refusals (calendar dates, cycle shape) answer 422 like the named
+    // refusals below; malformed JSON keeps the 400 default.
+    const parsedBody = await parseJsonBody(request, requestBodySchema, { status: 422 });
     if (!parsedBody.ok) return parsedBody.response;
     const body = parsedBody.data
     const action = body.action

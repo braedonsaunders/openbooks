@@ -207,6 +207,7 @@ const inventoryFeatureCases = [
                   costingMethod: "fifo", tracking: "none", expectedUpdatedAt: revision,
                   assetAccountId: org.accounts.invAsset, cogsAccountId: org.accounts.cogs,
                 baseUnit: "ea", adjustmentAccountId: org.accounts.adjustment, reorderPoint: "3",
+                receivedNotBilledAccountId: org.accounts.clearing,
               }),
             }), { params: Promise.resolve({ id: org.items.fifo }) });
             await writer.query("begin");

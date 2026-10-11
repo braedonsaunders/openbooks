@@ -220,6 +220,7 @@ const mockDb = `
     return work()
   }
   export async function withBypassContext(orgOrWork, work) { return (work ?? orgOrWork)() } export { withBypassContext as withOrgContext }
+  export const orgContext = { getStore: () => undefined, run: (store, fn) => fn() }
 `;
 
 const mockSources = new Map<string, string>([

@@ -88,8 +88,8 @@ test("30-day forecast tiles tie the cockpit positions item for item", { skip: !D
       await db.execute(sql`insert into accounting_periods(id,org_id,fiscal_year,period_number,name,starts_on,ends_on,is_adjustment,fiscal_calendar_id)
         values(${may},${org.orgId},2026,5,'2026-05','2026-05-01','2026-05-31',false,${cal})`);
     });
-    // Overdue May invoice/bill: no settlement history, so the 45-day model
-    // fallback predicts tran+45d, pushed a week past the as-of — in window.
+    // Overdue May invoice/bill: no settlement history, so the item forecasts
+    // at its due date, pushed past the as-of as overdue — in window.
     await withBypass(() => postedOpenItem(org, { side: "ar", amount: "1000", postingDate: "2026-05-20", period: may, dueDate: "2026-05-27", docNo: "INV-OLD" }));
     await withBypass(() => postedOpenItem(org, { side: "ap", amount: "700", postingDate: "2026-05-20", period: may, dueDate: "2026-05-27", docNo: "BILL-OLD" }));
     // Far-term documents predict past the +30d cut-off and must not count.
@@ -107,9 +107,9 @@ test("30-day forecast tiles tie the cockpit positions item for item", { skip: !D
     );
     assert.equal(toUnits(metrics.expectedReceipts30d ?? "0"), toUnits("1000"), "only the in-window invoice predicts");
     assert.equal(toUnits(metrics.expectedPayments30d ?? "0"), toUnits("700"), "only the in-window bill predicts");
-    // No settlement history anywhere: both averages are the model fallback.
-    assert.equal(metrics.receivablesDso, 45);
-    assert.equal(metrics.payablesDpo, 45);
+    // No settlement history anywhere: no average is invented, so the hints are null.
+    assert.equal(metrics.receivablesDso, null);
+    assert.equal(metrics.payablesDpo, null);
 
     // The tie: the cockpits' own readers on the same org and scope.
     const settings = { weeklyCap: "0", restrictToSafe: false };

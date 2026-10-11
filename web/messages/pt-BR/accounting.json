@@ -23,12 +23,14 @@
     "vitals": {
       "healthScore": "Pontuação de saúde",
       "netIncome": "Lucro líquido",
+      "throughDate": "{label} · até {date}",
       "close": "Progresso do fechamento",
       "closeSub": "{period}",
       "closeUnavailable": "Indisponível",
       "closeOrgWide": "Os diagnósticos de fechamento abrangem toda a organização — peça a um administrador com visibilidade irrestrita de filiais para listá-los",
       "noClose": "—",
       "noCloseSub": "Nenhum fechamento iniciado",
+      "lockedThroughSub": "Bloqueado até {period}",
       "draftJournals": "Lançamentos em rascunho",
       "draftJournalsSub": "{posted} lançados esta semana",
       "openFindings": "Apontamentos abertos",
@@ -145,7 +147,11 @@
           "removed": "Removida",
           "changed": "Alterada",
           "unchanged": "Inalterada",
-          "disposition": "Alteração"
+          "disposition": "Alteração",
+          "effectivePerUnit": "Efetiva por unidade",
+          "showUnchanged": "Mostrar {count} linhas sem alterações",
+          "hideUnchanged": "Ocultar linhas sem alterações",
+          "noChanges": "Nenhuma linha de componente foi alterada."
       },
       "fields": {
         "existingId": "Obrigação de desempenho existente",

@@ -62,6 +62,7 @@ import {
 } from "./employee-facts.ts";
 import { employeePayrollProfiles } from "@openbooks/schema";
 import { laborCostingSettings } from "../projects/labor-costing.ts";
+import { orgSettingsAuditAffectsCalculation } from "./settings-staleness.ts";
 import {
   declaredPayrollCertificates,
   resolveCertificate,
@@ -1526,7 +1527,7 @@ export async function payRunStaleness(
       components_changed: boolean; component_definitions_changed: boolean;
       derived_rules_changed: boolean; entitlements_changed: boolean;
       worker_comp_changed: boolean; time_types_changed: boolean;
-      settings_changed: boolean; ytd_changed: boolean; opening_balances_changed: boolean;
+      settings_changed: boolean; org_setting_changes: unknown[]; ytd_changed: boolean; opening_balances_changed: boolean;
     }>(sql`
     select r.calculated_at, r.calculation_source_snapshot, r.calculation_source_digest,
            r.calculated_at is null as never_calculated,
@@ -1689,23 +1690,27 @@ export async function payRunStaleness(
                         where al.org_id = r.org_id and al.table_name = 'time_types'
                           and al.at > r.calculated_at))
              as time_types_changed,
-           -- Org payroll settings: EHT/SUI rates, exemptions, posting accounts,
-           -- and the filing accounts a remittance is grouped under.
+           -- Org settings are classified from their audit rows (see
+           -- settings-staleness.ts): a posting-account edit does not change
+           -- what a calculation computes, so the org row's audit evidence is
+           -- read in TypeScript below rather than treated as a blanket change.
+           -- An org update that no audit row covers is a write the audit
+           -- trail cannot classify, so it stales the run.
            --
-           -- orgs.updated_at is watched but is NOT sufficient on its own: the
-           -- settings writers update orgs.settings without stamping
-           -- updated_at, and there is no trigger. The audit_log row
-           -- those writers DO insert ('orgs' / the org id) is the reliable
-           -- signal today. A touch trigger on orgs.settings would make the
-           -- column authoritative and let this clause drop the audit_log leg.
-           (exists (select 1 from orgs o
-                     where o.id = r.org_id and o.updated_at > r.calculated_at)
-            or exists (select 1 from audit_log al
-                        where al.org_id = r.org_id and al.table_name = 'orgs'
-                          and al.at > r.calculated_at)
+           -- The filing accounts a remittance is grouped under, and a
+           -- calculation-time join reads them, so their edits stale the run.
+           ((exists (select 1 from orgs o
+                      where o.id = r.org_id and o.updated_at > r.calculated_at
+                        and not exists (select 1 from audit_log cover
+                                         where cover.org_id = o.id and cover.table_name = 'orgs'
+                                           and cover.at >= o.updated_at)))
             or exists (select 1 from payroll_filing_accounts fa
                         where fa.org_id = r.org_id and fa.updated_at > r.calculated_at))
              as settings_changed,
+           (select coalesce(jsonb_agg(org_audit.changes), '[]'::jsonb)
+              from audit_log org_audit
+             where org_audit.org_id = r.org_id and org_audit.table_name = 'orgs'
+               and org_audit.at > r.calculated_at) as org_setting_changes,
            -- Another run consumed this employee's statutory room. A run
            -- calculated before an off-cycle run commits carries the YTD the
            -- off-cycle run has already used, and over-deducts the employee past
@@ -1787,6 +1792,10 @@ export async function payRunStaleness(
   // over-consumption the commit-time levy fence serializes for. This arm is
   // the fence's other half: gated on a pack declaring per-run aggregate
   // levies for this year, so years without them behave exactly as before.
+  // An org-setting audit row stales the run only when it changed something a
+  // calculation reads (posting-account and control-account edits do not).
+  const settingsChanged = row.settings_changed
+    || row.org_setting_changes.some((changes) => orgSettingsAuditAffectsCalculation(changes));
   const employerLevyYtdChanged = await employerLevyRoomConsumed(
     orgId, documentId, executor, allowedSubsidiaryIds,
   );
@@ -1843,7 +1852,7 @@ export async function payRunStaleness(
     row.worker_comp_changed ? "workerComp" : null,
     row.time_types_changed || exactTimeTypesChanged ? "timeTypes" : null,
     exactItemsChanged ? "items" : null,
-    row.settings_changed ? "settings" : null,
+    settingsChanged ? "settings" : null,
     row.ytd_changed ? "ytd" : null,
     row.opening_balances_changed ? "openingBalances" : null,
     employerLevyYtdChanged ? "employerLevyYtd" : null,
@@ -2039,9 +2048,23 @@ async function employerLevyRoomConsumed(
  * API gate and the engine's own commit-time enforcement, so both boundaries
  * say exactly the same thing to the operator.
  */
-export const staleCalculationMessage = (reasons: readonly string[]): string =>
-  `the run's inputs changed after it was last calculated (${reasons.map(reason => reason === "compensationPackages" ? "approved compensation terms" : reason).join(", ")})`
-  + " — recalculate before committing";
+export const staleCalculationMessage = (
+  reasons: readonly string[],
+  documentStatus: string | null = null,
+): string => {
+  const changed = reasons.map(reason => reason === "compensationPackages" ? "approved compensation terms" : reason).join(", ");
+  // The remedy names the control the run's document state actually offers.
+  // Calculation refuses any document that is not a draft, so an approved run
+  // is recalculated through the approval withdrawal, and a run awaiting
+  // approval must first have that approval decided or withdrawn.
+  if (documentStatus === "approved") {
+    return `the run's inputs changed after it was approved (${changed}) — recalculate the run from the pay run page to withdraw the approval and send it for approval again`;
+  }
+  if (documentStatus === "pending_approval") {
+    return `the run's inputs changed after it was last calculated (${changed}) — the run is awaiting approval, so its approver must decide that request before the run can be recalculated`;
+  }
+  return `the run's inputs changed after it was last calculated (${changed}) — recalculate before committing`;
+};
 
 /**
  * The commit-side half of the staleness control.
@@ -2074,7 +2097,10 @@ export async function assertPayRunNotStale(
     orgId, documentId, executor, allowedSubsidiaryIds,
   );
   if (!stale || calculatedAt === null) return;
-  throw new PayrollError(staleCalculationMessage(reasons));
+  const status = (await executor.execute<{ status: string }>(sql`
+    select status from documents where org_id = ${orgId} and id = ${documentId}
+  `)).rows[0]?.status ?? null;
+  throw new PayrollError(staleCalculationMessage(reasons, status));
 }
 
 /** Net pay owed on one rail, and how many people are on it. */

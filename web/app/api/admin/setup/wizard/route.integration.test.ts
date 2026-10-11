@@ -34,9 +34,11 @@ let authzRealUrl = ''
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
+    // The route factory loads the same boundary through the @/ alias.
     if (
-      specifier === "../../../../../lib/authz"
-      && context.parentURL?.includes("setup/wizard")
+      (specifier === "../../../../../lib/authz"
+        && context.parentURL?.includes("setup/wizard"))
+      || (specifier === "@/lib/authz" && context.parentURL?.includes("/lib/api/route"))
     ) {
       authzRealUrl = nextResolve(specifier, context).url
       return { url: "mock:authz", shortCircuit: true };

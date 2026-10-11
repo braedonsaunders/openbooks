@@ -21,6 +21,7 @@ const { NextIntlClientProvider } = await import('next-intl')
 const { MoneyProvider } = await import('../../../../../components/money-provider')
 const { BusinessDateProvider } = await import('../../../../../components/business-date-provider')
 const { OverheadActions } = await import('./OverheadActions')
+const { ConfirmRoot } = await import('../../../../../lib/confirm')
 const messages = Object.fromEntries(['admin', 'common', 'ui'].map(namespace => [namespace,
   JSON.parse(readFileSync(new URL(`../../../../../messages/en/${namespace}.json`, import.meta.url), 'utf8')),
 ]))
@@ -43,6 +44,7 @@ async function mount(autoOpen: boolean, respond: (payload: Record<string, unknow
   const root = createRoot(host)
   await act(async () => {
     root.render(<NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+      <ConfirmRoot />
       <MoneyProvider currency="CAD"><BusinessDateProvider today="2026-10-08">
         <OverheadActions departments={[{ id: 'department', name: 'Field', composite: 12.5 }]}
           projectTypes={[{ id: 'type', name: 'Installation' }]} autoOpen={autoOpen} />
@@ -108,5 +110,58 @@ test('the wizard stops on the named policy refusal and preserves selected types 
     const finish = [...dialog.querySelectorAll('button')].find(button => button.textContent === copy.finish)!
     assert.equal(finish.disabled, false)
     assert.equal(mounted.requests.length, 2, 'a refusal does not trigger an automatic retry')
+  } finally { await mounted.close() }
+})
+
+const zeroRefusal = () => Response.json({
+  error: 'Publishing would replace a non-zero standard rate with zero for Field.',
+  code: 'overhead_zero_over_standard',
+  replacements: [{ departmentId: 'department', departmentName: 'Field', standardRatePerHour: '12.5000', publishedRatePerHour: '0.00' }],
+  remedy: 'Enter the department rate, or confirm the zero replacement to publish it.',
+}, { status: 409 })
+
+function houseConfirm() {
+  const dialogs = [...document.body.querySelectorAll('[role="dialog"]')]
+  const confirm = dialogs[dialogs.length - 1]
+  assert.ok(confirm, 'the house confirm dialog is open')
+  return confirm
+}
+
+test('a zero over a non-zero standard is published only after the operator confirms the named replacement', async () => {
+  let attempt = 0
+  const mounted = await mount(false, async () => ++attempt === 1 ? zeroRefusal() : Response.json({ published: 1 }))
+  try {
+    await click(mounted.host, copy.publish)
+    const dialog = mounted.host.querySelector('[role="dialog"]')!
+    const rate = dialog.querySelector<HTMLInputElement>('input[type="number"]')!
+    await act(async () => { setJsdomInput(rate, '0'); await tick() })
+    await click(dialog, copy.publishConfirm)
+    const confirm = houseConfirm()
+    assert.match(confirm.textContent ?? '', /Field/)
+    assert.equal(mounted.requests.length, 1, 'nothing is written before the confirmation')
+    await click(confirm, copy.zeroOverStandard.confirm)
+    assert.deepEqual(mounted.requests[1], {
+      action: 'publish', effectiveFrom: '2026-10-08', rates: [{ departmentId: 'department', ratePerHour: '0' }],
+      acknowledgeZeroOverStandard: true,
+    })
+    assert.deepEqual(__overheadActions.successes, [copy.publishDone])
+    assert.equal(__overheadActions.errors.length, 0)
+  } finally { await mounted.close() }
+})
+
+test('cancelling the zero-over-standard confirmation writes nothing and keeps the entered rates', async () => {
+  const mounted = await mount(false, async () => zeroRefusal())
+  try {
+    await click(mounted.host, copy.publish)
+    const dialog = mounted.host.querySelector('[role="dialog"]')!
+    const rate = dialog.querySelector<HTMLInputElement>('input[type="number"]')!
+    await act(async () => { setJsdomInput(rate, '0'); await tick() })
+    await click(dialog, copy.publishConfirm)
+    await click(houseConfirm(), copy.cancel)
+    assert.equal(mounted.requests.length, 1)
+    assert.equal(__overheadActions.successes.length, 0)
+    assert.equal(__overheadActions.refreshes, 0)
+    assert.equal(rate.value, '0')
+    assert.ok(mounted.host.querySelector('[role="dialog"]'), 'the publish drawer stays open for correction')
   } finally { await mounted.close() }
 })

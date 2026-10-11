@@ -9,5 +9,5 @@ export function loadMigrationAssistant(sp: Record<string, string | string[] | un
 }
 
 export function migrationAssistantSpec(data: MigrationWorkspaceData): PageSpec {
-  return migrationWorkspaceSpec('/migrate/assistant', data)
+  return migrationWorkspaceSpec({ route: '/migrate/assistant' }, data)
 }

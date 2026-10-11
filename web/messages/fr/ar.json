@@ -81,8 +81,9 @@
     "depositRecording": "Enregistrement…",
     "depositNeedsSetup": "Aucun compte bancaire n’est configuré pour les dépôts de caisse. Demandez à un comptable de les choisir dans les paramètres de la société.",
     "depositRequiresPermission": "L’enregistrement d’un dépôt de caisse exige la permission cash_sales.deposit, détenue par les rôles qui comptabilisent les ventes au comptant. Demandez à votre administrateur de l’accorder.",
-    "tillWindow": "Depuis la remise de caisse du {after} : {sales} ventes ont encaissé {tendered} {currency} en espèces ; {dropped} {currency} remis jusqu’ici.",
-    "tillWindowFirst": "Aucune remise antérieure pour cette caisse : {sales} ventes ont encaissé {tendered} {currency} en espèces ; {dropped} {currency} remis jusqu’ici.",
+    "tillWindow": "Ventes après le {after} jusqu’au {through} : {sales} ventes ont encaissé {tendered} {currency} en espèces ; {dropped} {currency} remis jusqu’ici.",
+    "tillWindowFirst": "Ventes jusqu’au {through} (aucune remise antérieure pour cette caisse) : {sales} ventes ont encaissé {tendered} {currency} en espèces ; {dropped} {currency} remis jusqu’ici.",
+    "tillCoversThrough": "Couvre les ventes jusqu’au",
     "tillReason": "Note de comptage",
     "tillReasonHint": "Requise quand la remise dépasse ce que les ventes enregistrées expliquent (par exemple, ventes pas encore saisies)",
     "tillDifference": "Comptage de caisse du {after} au {through} : les remises diffèrent des espèces enregistrées de {difference}.",
@@ -152,7 +153,10 @@
     "controlAccountHelp": "Le compte client sur lequel ce document est comptabilisé. Les paiements et avoirs le soldent sur ce même compte. Laissez vide pour utiliser le compte par défaut.",
     "controlAccountPartyDefault": "Défaut du client — {account}",
     "controlAccountOrganizationDefault": "Défaut de l’organisation — {account}",
-    "controlAccountUnset": "Aucun compte client configuré — définissez-en un dans Configuration → Société et comptabilité → Comptes de contrôle"
+    "controlAccountUnset": "Aucun compte client configuré — définissez-en un dans Configuration → Société et comptabilité → Comptes de contrôle",
+    "createUnconfirmed": "Le serveur n'a pas confirmé le nouveau document. Enregistrez à nouveau : la nouvelle tentative réutilise la clé de ce brouillon et ne peut pas créer un second document.",
+    "saveUnconfirmed": "Le serveur n'a pas confirmé l'enregistrement. Rechargez le document pour voir son état enregistré avant de le modifier à nouveau.",
+    "createConflict": "Ce brouillon a déjà été enregistré avec d'autres données. Rechargez la page et ouvrez le document enregistré depuis la liste au lieu de le saisir à nouveau."
   },
   "dailySummary": {
     "date": "Date",
@@ -269,6 +273,13 @@
       },
       "recurring": "Les encaissements récurrents (subventions, loyers reçus, abonnements) rejoignent la prévision sous forme de catégories — configurez-les dans le <cashCockpit>cockpit de trésorerie</cashCockpit>.",
       "documentation": "Lire le guide des comptes clients"
+    },
+    "notForecast": {
+      "title": "Non prévu — en retard de plus de {days} jours",
+      "hint": "{count, plural, one {# élément} other {# éléments}} · {total}",
+      "body": "Ces créances ne sont pas comptées comme encaissements prévus. Elles restent dans l'antériorité et ouvertes au recouvrement.",
+      "daysOverdue": "{days} j de retard",
+      "more": "+{count} autres non affichées"
     }
   },
   "appliedPayments": {
@@ -376,6 +387,8 @@
       "cancelSubscription": "Résilier l’abonnement",
       "cancelConfirmTitle": "Annuler l’abonnement ?",
       "cancelConfirmBody": "L’annulation met fin à la facturation récurrente de cet abonnement. Cette action est irréversible.",
+      "cancelEffectiveOn": "Annulation effective le",
+      "cancelPaidThroughHint": "Facturé jusqu’au {date}. La facturation s’arrête à la date d’effet ; les factures déjà validées ne changent pas.",
       "toasts": {
         "prorated": "Prorata {adjustment} → {documentNumber}",
         "qtyUpdatedNoProration": "Quantité mise à jour (aucun prorata dû)",
@@ -386,6 +399,10 @@
         "loading": "Chargement des abonnements avancés",
         "loadFailed": "Impossible de charger les données de cycle de vie des abonnements avancés",
         "loadFailedFallback": "Impossible de charger les abonnements avancés",
+        "noContractSuffix": "sans contrat",
+        "amendNeedsContract": "Cet abonnement n’a pas encore de contrat. Activez-en un dans Contrats, puis modifiez-le ici.",
+        "planChangeHint": "Les périodes facturées conservent leur offre. Le changement prend effet à compter du {date} (facturé jusqu’à cette date) ou plus tard.",
+        "contractNeedsVersion": "{plan} n’a pas de version publiée du catalogue. Publiez-en une dans Versions des offres avant d’activer un contrat.",
         "actionFailed": "L’action a échoué",
         "catalogTitle": "Catalogue à effet différé",
         "catalogDescription": "Les versions publiées sont immuables. Créez une nouvelle version quand les conditions commerciales changent.",
@@ -495,6 +512,8 @@
         "changeTiming": "Modifier le moment de facturation",
         "changeRenew": "Renouveler",
         "changeCoterm": "Aligner la durée",
+        "changePlan": "Changer d’offre",
+        "changeType_change_plan": "Changement d’offre",
         "name": "Nom",
         "newTermEnd": "Nouvelle fin de contrat",
         "timing": "Moment",

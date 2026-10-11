@@ -17,8 +17,10 @@ export const jsonObject = z.looseObject({}) as z.ZodType<Record<string, unknown>
  * can inspect them.
  */
 
+const EXACT_MONEY_MESSAGE = "must be a decimal string; JSON numbers are refused to preserve precision";
+
 /** Exact numeric(19,4)-scale money string ("1234.5", "-10", "0.0001"). */
-export function exactMoney(message = "must be a decimal string; JSON numbers are refused to preserve precision") {
+export function exactMoney(message = EXACT_MONEY_MESSAGE) {
   return z
     .preprocess(
       // Absent/null amounts funnel through the same refusal as junk input,
@@ -31,11 +33,15 @@ export function exactMoney(message = "must be a decimal string; JSON numbers are
 }
 
 /** Optional money on setup forms: null or a blank form value clears it; any
- *  other value must be an exact decimal string. */
-export function nullableExactMoney(message?: string) {
+ *  other value must be an exact decimal string. The refusal carries the
+ *  caller's message directly (a union with null would replace it with a
+ *  generic "Invalid input"). */
+export function nullableExactMoney(message = EXACT_MONEY_MESSAGE) {
   return z.preprocess(
     (v) => (typeof v === "string" && v.trim() === "" ? null : v),
-    z.union([z.null(), exactMoney(message)]),
+    z.unknown()
+      .refine((v) => v === null || toExactMoney(v) !== null, message)
+      .transform((v) => (v === null ? null : toExactMoney(v)!)),
   );
 }
 

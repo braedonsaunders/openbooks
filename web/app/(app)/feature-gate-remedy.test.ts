@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import test from 'node:test'
 
 /**
- * F4/F6: every route that gates on a Features switch must render the
+ * Every route that gates on a Features switch must render the
  * feature-required remedy (requireFeatureEnabled) instead of a bare
  * notFound — an admin who switches HR, field time, or any module off saw
  * a generic "Page not found" with no path to turn it back on. Permission

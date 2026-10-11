@@ -16,7 +16,7 @@ import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { AlertTriangle, HelpCircle } from 'lucide-react'
 import { useTranslations } from 'next-intl'
-import { Button } from '@openbooks/ui'
+import { Button, OverlayExit } from '@openbooks/ui'
 
 export type ConfirmTone = 'default' | 'danger'
 
@@ -109,8 +109,13 @@ export function ConfirmRoot() {
   return createPortal(
     <AnimatePresence>
       {req ? (
+        // Marked as an overlay so a drawer beneath does not also take this
+        // dialog's Escape: Escape answers the confirmation, and the drawer stays.
+        <OverlayExit key={req.id}>
+        {(exiting) => (
         <div
-          key={req.id}
+          data-ui-overlay
+          data-overlay-exiting={exiting || undefined}
           className="fixed inset-0 z-[60] flex items-center justify-center p-4"
           role="dialog"
           aria-modal="true"
@@ -168,6 +173,8 @@ export function ConfirmRoot() {
             </div>
           </motion.div>
         </div>
+        )}
+        </OverlayExit>
       ) : null}
     </AnimatePresence>,
     document.body,

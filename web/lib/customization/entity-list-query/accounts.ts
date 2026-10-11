@@ -158,6 +158,7 @@ export function accountWhere(
     if (predicate) parts.push(sql`and ${predicate}`)
   }
   if (adhoc.filters?.class) parts.push(sql`and ${ACCOUNT_CLASS_EXPR} = ${adhoc.filters.class}`)
+  if (adhoc.filters?.type) parts.push(sql`and a.type = ${adhoc.filters.type}`)
   if (adhoc.q) {
     const query = `%${adhoc.q}%`
     parts.push(sql`and (a.name ilike ${query} or a.number ilike ${query} or a.description ilike ${query})`)

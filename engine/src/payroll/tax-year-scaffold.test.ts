@@ -1,7 +1,7 @@
 // source-pin-contract: the generator's product is a draft edition plus runner instructions; the scratch copy proves generated editions stay isolated from the checkout.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import test, { after, before } from "node:test";
 import { payrollTaxYearSupport } from "./packs.ts";
@@ -56,6 +56,14 @@ before(() => {
   rmSync(SCRATCH_ROOT, { recursive: true, force: true });
   mkdirSync(join(SCRATCH_ROOT, "engine"), { recursive: true });
   cpSync(join(REPO_ROOT, "engine", "src"), join(SCRATCH_ROOT, "engine", "src"), { recursive: true });
+  cpSync(join(REPO_ROOT, "engine", "package.json"), join(SCRATCH_ROOT, "engine", "package.json"));
+  // The generator imports the declarations through the engine package name. The
+  // scratch root sits inside engine/, so without its own package.json that name
+  // would self-reference the checkout's engine/package.json; a neutral manifest
+  // here, plus a link to the copy, makes the name resolve to the copied sources.
+  writeFileSync(join(SCRATCH_ROOT, "package.json"), JSON.stringify({ name: "scaffold-scratch", private: true, type: "module" }));
+  mkdirSync(join(SCRATCH_ROOT, "node_modules", "@openbooks"), { recursive: true });
+  symlinkSync(join(SCRATCH_ROOT, "engine"), join(SCRATCH_ROOT, "node_modules", "@openbooks", "engine"), "dir");
   // The generator too, at its repo-relative path. It reads the DECLARATIONS
   // from its own checkout (`../engine/src/payroll/tax-years.ts`), so the copy
   // reads the copied packs — the only way to drive it against a pack state

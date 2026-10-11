@@ -18,7 +18,7 @@ import {
   type TableSpanRow,
 } from '@braedonsaunders/appkit-viewspec'
 import { getMoneyFormatter } from '@/lib/money-server'
-import { agingByParty, agingCurrenciesInScope, agingDetail, agingSummaryAndDetail, AgingRatesUnavailableError, dimensionOptions, type AgingCurrencyBasis, type AgingSide } from '../../../../lib/reports'
+import { agingByParty, agingCurrenciesInScope, agingDetail, agingSummaryAndDetail, AgingRatesUnavailableError, dimensionOptions, type AgingCurrencyBasis, type AgingRow, type AgingSide } from '../../../../lib/reports'
 import { orgInfo } from '../../../../lib/data'
 import { MissingRatesError, reportSubsidiaryView, type RatesBlockedNotice } from '../../../../lib/consolidation'
 import { resolvePeriod } from '../../../../lib/periods'
@@ -43,6 +43,9 @@ import { statementReportSpec, stringReportParams } from '@/lib/reports/statement
 
 const BUCKETS = ['current', 'b1', 'b2', 'b3', 'b4'] as const
 
+/** Journal entries listed under one reconciling line before the list is summarised. */
+const RECONCILING_ENTRY_LIMIT = 10
+
 // Aging reads as of a POINT IN TIME, never a window: only presets whose end
 // date is a meaningful as-of instant (today, yesterday, end of last month)
 // plus the explicit custom date. Range presets like "this fiscal year" or
@@ -66,6 +69,8 @@ export interface AgingSummaryRow {
   partyHref: string
   /** Provenance caption for partyless rows; null once a party names the row. */
   partyNote: string | null
+  /** The reconciling line: control balance with no open item behind it. */
+  reconciling: boolean
   current: BucketCell
   b1: BucketCell
   b2: BucketCell
@@ -253,6 +258,18 @@ export async function loadAging(sp: Record<string, string | undefined>): Promise
   // the common example without asserting it, so it can never mask a real
   // control/subledger divergence as "just opening balances".
   const noPartyNote = t('noPartyNote')
+  // The reconciling line's caption states what the balance is, then lists the
+  // journal entries behind it (number, date, memo, party, amount) so the
+  // bookkeeper can trace each one. Long lists are capped with a count.
+  const reconcilingNote = (entries: NonNullable<AgingRow['entries']>): string => {
+    const shown = entries.slice(0, RECONCILING_ENTRY_LIMIT).map((e) =>
+      [e.entryNumber ?? '—', e.postingDate, e.memo, e.partyName, m(e.amount)]
+        .filter((part): part is string => typeof part === 'string' && part !== '')
+        .join(' · '),
+    )
+    const hidden = entries.length - shown.length
+    return [t('controlEntries.hint'), ...shown, ...(hidden > 0 ? [t('controlEntries.more', { count: hidden })] : [])].join('\n')
+  }
 
   const bucketLabels: Record<(typeof BUCKETS)[number], string> = {
     current: t('buckets.current'),
@@ -330,14 +347,18 @@ export async function loadAging(sp: Record<string, string | undefined>): Promise
     bucketLabels,
     dashPlaceholder: '—',
     summaryRows: (summary?.rows ?? []).map((r, i) => {
-      const name = r.partyName ?? noParty
+      const reconciling = r.reconciling === true
+      const name = reconciling ? t('controlEntries.label') : r.partyName ?? noParty
       const row = r as unknown as Record<string, string>
       return {
-        key: r.partyId ?? `none-${i}`,
-        partyId: r.partyId,
+        key: reconciling ? `control-${i}` : r.partyId ?? `none-${i}`,
+        // A reconciling line is not a party's statement: it names the control
+        // balance, so it carries no party link even when a party is stamped.
+        partyId: reconciling ? null : r.partyId,
         partyName: name,
         partyHref: `/reports/statements/${r.partyId}?side=${side}`,
-        partyNote: r.partyId ? null : noPartyNote,
+        partyNote: reconciling ? reconcilingNote(r.entries ?? []) : r.partyId ? null : noPartyNote,
+        reconciling,
         current: bucketCell(row, 'current', name, r.partyId),
         b1: bucketCell(row, 'b1', name, r.partyId),
         b2: bucketCell(row, 'b2', name, r.partyId),

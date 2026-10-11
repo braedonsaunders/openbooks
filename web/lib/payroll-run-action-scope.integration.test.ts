@@ -1253,9 +1253,9 @@ const payrollRunRouteCases = [
           try {
             state.gate = runGate(fx);
             const malformedRequests: { body: Record<string, unknown>; expectedMessage: RegExp }[] = [
-              { body: { action: "propose", payScheduleId: fx.scheduleId, payDate: "2026-07-21", excludeSourcePayRunDocumentIds: ["nope"] }, expectedMessage: /UUID/i },
+              { body: { action: "propose", payScheduleId: fx.scheduleId, payDate: "2026-07-21", excludeSourcePayRunDocumentIds: ["nope"] }, expectedMessage: /must be a valid id/ },
               { body: { action: "propose", payScheduleId: fx.scheduleId, payDate: "2026-07-21", excludeSourcePayRunDocumentIds: "nope" }, expectedMessage: /array/i },
-              { body: { action: "propose", payScheduleId: fx.scheduleId, payDate: "2026-07-21", employeePartyIds: ["nope"] }, expectedMessage: /UUID/i },
+              { body: { action: "propose", payScheduleId: fx.scheduleId, payDate: "2026-07-21", employeePartyIds: ["nope"] }, expectedMessage: /must be a valid id/ },
             ];
             for (const { body, expectedMessage } of malformedRequests) {
               const res = await propose(body);

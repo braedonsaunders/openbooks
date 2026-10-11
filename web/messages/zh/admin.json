@@ -972,6 +972,14 @@
         "cashOverShort": {
           "label": "现金长短款",
           "hint": "实际清点现金与预期合计之间的多余或短缺"
+        },
+        "badDebtExpense": {
+          "label": "坏账费用",
+          "hint": "当不可收回的发票余额被核销时计入借方，除非已设置坏账准备科目"
+        },
+        "allowanceForDoubtfulAccounts": {
+          "label": "坏账准备",
+          "hint": "一个应收账款抵减科目；设置后，核销将计入该科目的借方而非坏账费用"
         }
       },
       "partylessPolicy": {
@@ -3136,6 +3144,12 @@
         "publishTitle": "发布到费率卡",
         "publishHint": "将引擎计算的费率锁定为间接费用率卡上的带生效日期行。项目按已发布费率计间接费用，直到下次发布——前期保持原费率不变。",
         "publishConfirm": "发布",
+        "zeroOverStandard": {
+          "title": "用零替换标准费率?",
+          "intro": "发布会在非零标准费率之上写入零费率。从生效日期起按这些部门计算成本的工单将不再承担该标准的间接费用。仅在不再使用该标准时确认。",
+          "line": "{department}：每小时 {standard} 的标准将被替换为每小时 {published}。",
+          "confirm": "发布零费率"
+        },
         "publishDone": "费率已发布到费率卡",
         "cancel": "取消",
         "wizardTitle": "设置项目间接费用",
@@ -5461,6 +5475,40 @@
         "newWorkerComp": "工伤赔偿（WSIB）",
         "workerCompHint": "费率取自各员工指定的工伤赔偿组（设置 → 员工 → 工伤赔偿组；在员工档案中指定）。此处的值仅为员工无组时的后备 %。"
       },
+      "catchUp": {
+        "title": "已批准但未计成本的工时",
+        "hint": "在启用过账之前，或在人工控制科目映射之前批准的工时，在总账中没有人工成本。每笔凭证按其覆盖的最后一天过账。已关闭期间的条目会被跳过，保持未过账。",
+        "through": "批准截至",
+        "reason": "审计追踪原因",
+        "post": "过账人工成本",
+        "month": "月份",
+        "entries": "条目",
+        "hours": "工时",
+        "cost": "标准成本",
+        "period": "期间",
+        "total": "合计",
+        "openSetup": "打开设置",
+        "nothingPosted": "没有可过账的内容。已批准的工时已计算成本。",
+        "postedResult": "已过账条目：{count}。已过账标准成本：{cost}。",
+        "skippedResult": "未过账条目：{count}。",
+        "states": {
+          "open": "开放",
+          "closed": "已关闭",
+          "no_period": "无期间",
+          "partial": "部分关闭"
+        },
+        "skipRemedy": {
+          "closed": "请在关账中重新开放该期间，或保持不变。",
+          "no_period": "请在关账中创建覆盖该日期的会计期间，或保持不变。"
+        },
+        "blockers": {
+          "projects_disabled": "项目功能已关闭。请先在公司设置 → 功能中开启，然后再过账人工成本。",
+          "mode_off": "人工成本核算未将标准成本过账到作业。请在上方选择“将标准成本过账到作业”，保存后再过账补记。",
+          "accounts_unmapped": "请在上方同时映射人工在制品科目和人工清算科目，然后保存。",
+          "no_posting_book": "没有可过账到总账的有效主账簿。请在过账前配置一个。",
+          "no_root_subsidiary": "未配置有效的根子公司。请在过账前配置一个。"
+        }
+      },
       "posting": {
         "title": "过账",
         "hint": "开启过账后，获批工时按标准成本率过账：借人工在产（按项目）/ 贷人工清算。工资实际数随后冲销同一科目；差额即工资差异。",
@@ -5890,6 +5938,8 @@
       "shopifyName": "Shopify Payments",
       "shopifyDescription": "导入打款与余额交易导出。退款与争议通过上述自动化记账。",
       "shopifyChannelsNote": "连接后通过渠道工作区对接。",
+      "squareName": "Square",
+      "squareDescription": "导入付款单与付款明细导出。退款与争议通过上述自动化记账。",
       "errors": {
         "loadFailed": "无法加载支付服务商设置。",
         "saveFailed": "无法保存支付服务商设置。",

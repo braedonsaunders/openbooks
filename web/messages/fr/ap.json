@@ -71,7 +71,10 @@
     "controlAccountPartyDefault": "Défaut du fournisseur — {account}",
     "controlAccountOrganizationDefault": "Défaut de l’organisation — {account}",
     "controlAccountUnset": "Aucun compte fournisseur configuré — définissez-en un dans Configuration → Société et comptabilité → Comptes de contrôle",
-    "matchBanner": "Certaines lignes de stock ne sont rattachées à aucune commande — la facture ne peut être comptabilisée qu'une fois rattachées."
+    "matchBanner": "Certaines lignes de stock ne sont rattachées à aucune commande — la facture ne peut être comptabilisée qu'une fois rattachées.",
+    "createUnconfirmed": "Le serveur n'a pas confirmé le nouveau document. Enregistrez à nouveau : la nouvelle tentative réutilise la clé de ce brouillon et ne peut pas créer un second document.",
+    "saveUnconfirmed": "Le serveur n'a pas confirmé l'enregistrement. Rechargez le document pour voir son état enregistré avant de le modifier à nouveau.",
+    "createConflict": "Ce brouillon a déjà été enregistré avec d'autres données. Rechargez la page et ouvrez le document enregistré depuis la liste au lieu de le saisir à nouveau."
   },
   "capture": {
     "title": "Capture de factures",

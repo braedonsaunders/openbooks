@@ -66,3 +66,58 @@ export function assetBankHygieneWarning(input: AssetBankHygieneInput): AssetBank
       `mistyped) or enable statement reconciliation.`,
   };
 }
+
+/**
+ * Account names are not unique (account numbers are). Two active accounts that
+ * share a name make the pickers ambiguous, so a create or rename that would
+ * place a second active account with the same name where both are visible is
+ * refused until the operator confirms it. Visibility overlaps when either
+ * account is on the shared chart or both sit in the same subsidiary.
+ */
+export const DUPLICATE_ACCOUNT_NAME = "duplicate_account_name" as const;
+
+/** Comparison key: case-insensitive, with runs of whitespace collapsed and trimmed. */
+export function accountNameKey(name: string): string {
+  return name.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+export interface DuplicateAccountNameHolder {
+  id: string;
+  number: string | null;
+  name: string;
+}
+
+export interface DuplicateAccountNameWarning {
+  code: typeof DUPLICATE_ACCOUNT_NAME;
+  /** The name the operator asked for. */
+  name: string;
+  existingAccountId: string;
+  existingAccountName: string;
+  existingAccountNumber: string | null;
+  /** English fallback for API clients; UIs resolve `code` through the accounts catalog. */
+  message: string;
+}
+
+/**
+ * The duplicate-name warning for the first conflicting holder, else null.
+ * Pure: the caller supplies the holders its scoped lookup returned.
+ */
+export function duplicateAccountNameWarning(
+  name: string,
+  holders: readonly DuplicateAccountNameHolder[],
+): DuplicateAccountNameWarning | null {
+  const holder = holders[0];
+  if (!holder) return null;
+  const displayName = name.trim();
+  const holderLabel = holder.number ? `${holder.number} ${holder.name}` : holder.name;
+  return {
+    code: DUPLICATE_ACCOUNT_NAME,
+    name: displayName,
+    existingAccountId: holder.id,
+    existingAccountName: holder.name,
+    existingAccountNumber: holder.number,
+    message:
+      `An active account named "${displayName}" already exists (${holderLabel}). ` +
+      `Use that account, or confirm that a second account with this name is intended.`,
+  };
+}

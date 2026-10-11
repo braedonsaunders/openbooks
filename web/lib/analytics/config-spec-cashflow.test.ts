@@ -27,6 +27,7 @@ function fullCashflowValues(overrides: Record<string, unknown> = {}) {
     overduePushLongDays: 28,
     overdueMidThresholdDays: 30,
     overdueLongThresholdDays: 60,
+    collectibilityHorizonDays: 90,
     cardTrajectoryTolerance: 0.2,
     cardMedianBlendWeight: 0.7,
     vendorOutlierSigma: 2,
@@ -51,6 +52,13 @@ test("cashflow write accepts a full valid object and normalizes money", () => {
   assert.equal(cleaned.weeklyApCap, "5000.0000");
   assert.equal(cleaned.defaultHorizonWeeks, 13);
   assert.equal(cleaned.cardMedianBlendWeight, 0.7);
+});
+
+test("cashflow write refuses an out-of-range collectibility horizon by name", () => {
+  assert.throws(
+    () => cleanConfigValues("cashflow", fullCashflowValues({ collectibilityHorizonDays: 0 })),
+    /'collectibilityHorizonDays' must be a number between 1 and 730/,
+  );
 });
 
 test("cashflow write refuses an out-of-range horizon by name", () => {

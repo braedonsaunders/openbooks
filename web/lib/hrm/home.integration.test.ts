@@ -85,7 +85,9 @@ test('the HRM overview loader executes every one of its queries against a live d
     assert.equal(data.multiSubsidiary, false)
     assert.ok(data.positions, 'the position summary rides the cockpit for a viewer with hrm.position.read')
     assert.equal(data.positions.totals.positions, 0)
-    assert.ok(data.tabs.some((tab) => tab.href === '/hrm' && tab.active), 'the overview tab is active on the overview')
+    // Workspace tabs resolve once in the application layout (b47e8de3c4); the
+    // loader no longer assembles a second strip, so it returns none.
+    assert.deepEqual(data.tabs, [], 'the loader returns no page-owned workspace tabs')
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }

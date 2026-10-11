@@ -100,7 +100,7 @@ test('a missing payroll FX rate reads as unavailable, carrying its reason', asyn
       count: 0,
       href: '/payroll',
       unavailable: true,
-      reason: 'no spot rate for USD→CAD on or before 2026-01-01',
+      reason: 'no spot rate for USD→CAD on or before 2026-01-01 — add it at Setup → Exchange Rates',
     }])
   } finally {
     ;(globalThis as Record<string, unknown>).__personaPayrollMode = undefined

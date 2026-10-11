@@ -9,5 +9,5 @@ export function loadMigrationConversation(id: string): Promise<MigrationWorkspac
 }
 
 export function migrationConversationSpec(data: MigrationWorkspaceData): PageSpec {
-  return migrationWorkspaceSpec('/migrate/[id]', data)
+  return migrationWorkspaceSpec({ route: '/migrate/[id]' }, data)
 }

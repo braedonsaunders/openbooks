@@ -240,6 +240,7 @@ export const INDUSTRIES: IndustryDef[] = [
       { number: '6500', name: 'Professional Fees', type: 'expense' },
       { number: '6600', name: 'Vehicle Expense', type: 'expense' },
       { number: '6700', name: 'Bank Charges', type: 'expense' },
+      { number: '6800', name: 'Shop Supplies & Small Tools', type: 'expense' },
     ],
     controlAccounts: {
       [AR]: '1100',
@@ -280,6 +281,8 @@ export const INDUSTRIES: IndustryDef[] = [
       { number: '1500', name: 'Office Equipment', type: 'asset_fixed' },
       { number: '1510', name: 'Accumulated Depreciation', type: 'asset_fixed' },
       ...standardLiabilities(),
+      // Labor absorption credits clear here, apart from wages payable.
+      { number: '2450', name: 'Labor Clearing', type: 'liability_current_other' },
       ...standardEquity(),
       { number: '4000', name: 'Professional Fees', type: 'income' },
       { number: '4100', name: 'Retainer Revenue', type: 'income' },
@@ -309,7 +312,7 @@ export const INDUSTRIES: IndustryDef[] = [
       [EMPLOYEE_PAYABLE]: '2400',
       [PAYROLL_DEDUCTIONS]: '2300',
       [LABOR_WIP]: '1300',
-      [LABOR_CLR]: '2400',
+      [LABOR_CLR]: '2450',
       [UNBILLED_AR]: '1200',
       [PROJECT_REV]: '4200',
     },
@@ -723,6 +726,8 @@ export const INDUSTRIES: IndustryDef[] = [
       { number: '1520', name: 'Building', type: 'asset_fixed' },
       { number: '1530', name: 'Accumulated Depreciation — Building', type: 'asset_fixed' },
       ...standardLiabilities(),
+      // Labor absorption credits clear here, apart from wages payable.
+      { number: '2450', name: 'Labor Clearing', type: 'liability_current_other' },
       ...standardEquity(),
       { number: '4000', name: 'Product Sales', type: 'income' },
       { number: '4100', name: 'Service Revenue', type: 'income' },
@@ -759,7 +764,7 @@ export const INDUSTRIES: IndustryDef[] = [
       [MFG_LABOR_EFFICIENCY_VARIANCE]: '5410',
       [MFG_OVERHEAD_VARIANCE]: '5420',
       [MFG_OVERHEAD_APPLIED]: '5310',
-      [LABOR_CLR]: '2400',
+      [LABOR_CLR]: '2450',
     },
   },
 

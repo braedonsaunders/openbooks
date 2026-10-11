@@ -29,7 +29,8 @@
       "operationSeq": "Séquence d'opération",
       "scrapPct": "Rebut %",
       "isByproduct": "Type de ligne",
-      "outputCostWeight": "Poids de coût relatif"
+      "outputCostWeight": "Poids de coût relatif",
+      "effectiveRequirement": "Effective par unité"
     },
     "values": {
       "component": "Composant",
@@ -44,7 +45,11 @@
       "invalidOperation": "La séquence d'opération doit être un entier positif.",
       "manufacturingDisabled": "Activez Fabrication dans Paramètres de l'entreprise → Fonctionnalités pour modifier les opérations et les coproduits."
     },
-    "jointOutputNote": "Les coproduits partagent le coût de production selon leur quantité et leur poids relatif par unité de base. Le produit principal a un poids de 1. Les sous-produits conservent leur traitement distinct à la valeur nette réalisable."
+    "jointOutputNote": "Les coproduits partagent le coût de production selon leur quantité et leur poids relatif par unité de base. Le produit principal a un poids de 1. Les sous-produits conservent leur traitement distinct à la valeur nette réalisable.",
+    "help": {
+      "scrapPct": "Ajoute ce pourcentage à la quantité par unité. Laissez 0 si la quantité inclut déjà les pertes.",
+      "effectiveRequirement": "Le besoin pour une unité de l'article parent : quantité × (1 + % de rebut). Les ordres de fabrication utilisent le même calcul."
+    }
   },
   "labels": {
     "item": "Article",
@@ -280,8 +285,10 @@
       "loadingMore": "Chargement…"
     },
     "secondCount": "Enregistrer le second comptage",
+    "recordedQuantity": "Enregistré : {quantity}",
     "secondReason": "Observation du second comptage",
-    "secondReasonHint": "Le second comptage diffère du premier. Expliquez l'écart (au moins 5 caractères) pour qu'il soit enregistré avec ce comptage."
+    "secondReasonHint": "Le second comptage diffère du premier. Expliquez l'écart (au moins 5 caractères) pour qu'il soit enregistré avec ce comptage.",
+    "secondNotRecorded": "Non enregistré. Un second comptage qui diffère du premier exige son motif (au moins {minLength} caractères) avant enregistrement."
   },
   "create": {
     "subsidiary": "Filiale propriétaire",

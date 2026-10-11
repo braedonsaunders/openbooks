@@ -62,7 +62,7 @@ const closeActionSchemas = [
   z.object({ action: z.literal("request-reopen"), periodId: z.string().uuid(), bookId: z.string().uuid(), subsidiaryId: z.string().uuid().nullable().optional(), modules: z.array(z.enum(CLOSE_MODULES)).min(1), reason: z.string().trim().min(1) }),
   z.object({ action: z.literal("decide-reopen"), requestId: z.string().uuid(), approve: z.boolean(), hours: z.number().positive().max(168).optional(), attestation: z.string().max(500).optional(), decisionReason: z.string().max(500).optional() }),
   z.object({ action: z.literal("withdraw-reopen"), requestId: z.string().uuid(), reason: z.string().trim().min(10).max(500) }),
-  z.object({ action: z.literal("extend-reopen"), requestId: z.string().uuid(), additionalHours: z.number().int().min(1).max(168).optional(), addModules: z.array(z.enum(CLOSE_MODULES)).optional(), reason: z.string().trim().min(1) }),
+  z.object({ action: z.literal("extend-reopen"), requestId: z.string().uuid(), additionalHours: z.number().int().min(0).max(168).optional(), addModules: z.array(z.enum(CLOSE_MODULES)).optional(), reason: z.string().trim().min(1) }),
   z.object({ action: z.literal("reopen-conflicts"), requestId: z.string().uuid() }),
   z.object({ action: z.literal("reclose-reopen"), requestId: z.string().uuid(), reason: z.string().trim().min(1) }),
 ] as const;

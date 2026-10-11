@@ -22,6 +22,8 @@
     "rangeValue": "{start} → {end}",
     "status": "Status",
     "readiness": "Readiness",
+    "closedBy": "Closed by",
+    "closedByDetail": "{name} · {date}",
     "action": "Action",
     "lockedDetail": "{modules} locked · {book}"
   },
@@ -504,8 +506,10 @@
       "endReopenTitle": "End this reopen",
       "endReopenHint": "Ending re-closes every module this window opened and frees the period for new reopen requests.",
       "endReopenReasonRequired": "A reason of at least 10 characters is required to end the reopen.",
-      "extendReopenTitle": "Extend or widen",
-      "extendReopenHint": "Add time or modules to this window instead of opening an overlapping request.",
+      "reopenRequestedUntil": "Requested expiry: {date}",
+      "extendReopenTitle": "Request extension or widening",
+      "extendReopenHint": "Submit a new request for an eligible approver to decide. Approval replaces this window. Leave additional hours blank or enter 0 to keep its current expiry.",
+      "extendByApproverOnly": "To widen or extend your own window, raise one reopen request that includes all of this window's modules plus the ones you need. An eligible approver decides it, and its approval replaces this window.",
       "extendHoursLabel": "Additional hours",
       "extendModulesLabel": "Add modules",
       "extendReopenReasonRequired": "A reason of at least 10 characters is required to extend the reopen.",
@@ -588,7 +592,7 @@
       "addRow": "Add",
       "removeValue": "Remove {value}",
       "endReopen": "End reopen",
-      "extendReopen": "Extend reopen"
+      "extendReopen": "Request extension"
     },
     "fields": {
       "name": "Name",
@@ -668,6 +672,7 @@
       "gl": "GL"
     },
     "reopenStates": {
+      "superseded": "Superseded",
       "requested": "Requested",
       "approved": "Approved",
       "rejected": "Rejected",
@@ -776,7 +781,7 @@
       "automationSaved": "Automation rule saved",
       "packageSaved": "Reporting package saved",
       "reopenEnded": "Reopen window ended.",
-      "reopenExtended": "Reopen window extended."
+      "reopenExtended": "Reopen change request submitted."
     },
     "errors": {
       "actionFailed": "The setup change could not be saved",

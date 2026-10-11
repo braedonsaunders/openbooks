@@ -91,6 +91,7 @@ export interface PeriodRow extends Record<string, unknown> {
   ends_on: string;
   fiscal_year: number;
   period_number: number;
+  is_adjustment: boolean;
   calendar_name: string;
   locks: Record<string, PeriodLockState>;
   entries: string;
@@ -181,6 +182,7 @@ export interface ReopenRow extends Record<string, unknown> {
   status: string;
   reason: string;
   modules: unknown[];
+  impact_snapshot?: { amendment?: { expiresAt: string } };
   period_name: string;
   book_name: string;
   requested_by: string;
@@ -287,6 +289,14 @@ type Props = {
   books: CloseSetupBookRow[];
   selectedBookId: string;
   canReopen: boolean;
+  /** The signed-in user: their own pending request offers Withdraw. */
+  viewerId?: string;
+  /**
+   * Every live (requested or approved) request plus the one the URL selects,
+   * whatever page the request list shows: the period panel and the request
+   * drawer resolve from these.
+   */
+  liveReopenRequests?: ReopenRow[];
   blueprints: BlueprintRow[];
   policies: PolicyRow[];
   automations: AutomationRow[];
@@ -1115,7 +1125,8 @@ function PeriodsTab(props: Props) {
       ? props.periods.find((item) => item.id === selected)
       : undefined;
   const reopen = reopenId
-    ? props.reopenRequests.find((item) => item.id === reopenId)
+    ? (props.liveReopenRequests ?? []).find((item) => item.id === reopenId)
+      ?? props.reopenRequests.find((item) => item.id === reopenId)
     : undefined;
   return (
     <div className="space-y-5">
@@ -1862,7 +1873,7 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
   // Pending reopen requests for this period+book, from the already-loaded
   // setup-page list: without them the drawer invites blind
   // duplicate requests and the requester sees no pending state.
-  const pendingReopen = (props.reopenRequests ?? []).filter(
+  const pendingReopen = (props.liveReopenRequests ?? props.reopenRequests ?? []).filter(
     (item) =>
       item.period_id === row.id &&
       item.book_id === (selectedBook?.id ?? null) &&
@@ -1873,7 +1884,7 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
   // re-closed reads approved here with no other user path to end it
   // (a closed module row offers only Reopen), so the row offers End
   // directly beside the pending requests.
-  const activeReopen = (props.reopenRequests ?? []).filter(
+  const activeReopen = (props.liveReopenRequests ?? props.reopenRequests ?? []).filter(
     (item) =>
       item.period_id === row.id &&
       item.book_id === (selectedBook?.id ?? null) &&
@@ -2117,7 +2128,14 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
                       }
                     />
                   </Field>
-                  <div className="flex justify-end">
+                  <div className="flex justify-end gap-2">
+                    {/* The window drawer creates a request for an approver to decide. */}
+                    <Link
+                        href={drawerHref(props.currentParams, "periods", "reopen", item.id)}
+                        className="inline-flex h-8 items-center rounded-md border border-slate-300 px-3 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                      >
+                      {t("periods.extendReopenTitle")}
+                    </Link>
                     <Button
                       variant="outline"
                       size="sm"
@@ -2377,7 +2395,12 @@ function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
   // applies, or when the viewer requested it and independence applies: in
   // both cases the button stays disabled with the reason. A sole eligible
   // approver deciding their own request attests instead.
-  const ownRequest = decisionPreview?.ownRequest ?? false;
+  // The preview decides when it loaded; until then (or if it failed) the
+  // request row itself says whose request it is, so a requester always sees
+  // Withdraw on their own pending request.
+  const ownRequest = props.viewerId != null
+    ? row.requested_by === props.viewerId
+    : (decisionPreview?.ownRequest ?? false);
   // No unconflicted approver exists: a conflicted approver records a
   // conflict acknowledgement instead of leaving the request stuck.
   const conflictAcknowledgement = !ownRequest && (decisionPreview?.conflictAcknowledgementAllowed ?? false);
@@ -2392,13 +2415,13 @@ function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
     ? t("periods.reopenOwnRequestNamedNote", { approvers: approverNames.join(", ") })
     : t("periods.reopenOwnRequestNote");
   const selfAttestationReady = selfAttested && selfAttestation.trim().length >= 10;
-  // An approved window can be ended early or extended/widened instead of
-  // opening an overlapping request. Both carry their own reason and are
-  // audited server-side; ending requires the reopen permission and
-  // extending requires an independent approver.
+  // Ending acts on the active window. Extending or widening submits a new
+  // request whose approval replaces the window; both retain their reasons.
   const [endReason, setEndReason] = useState("");
   const [extendReason, setExtendReason] = useState("");
-  const [extendHours, setExtendHours] = useState("24");
+  // Widening and extending are separate choices: no hours are added unless
+  // the operator enters them.
+  const [extendHours, setExtendHours] = useState("");
   const [extendModules, setExtendModules] = useState<string[]>([]);
   const includedModules = new Set(row.modules.map((module) => String(module)));
   async function decide(approve: boolean, decisionReason?: string) {
@@ -2515,7 +2538,7 @@ function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
     setBusy(true);
     setActionError(null);
     try {
-      await post(
+      const result = await post(
         {
           action: "extend-reopen",
           requestId: row.id,
@@ -2525,8 +2548,10 @@ function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
         },
         t("errors.actionFailed"),
       );
-      toast.success(t("messages.reopenExtended"));
-      router.push(closeHref);
+      toast.success(t("messages.reopenRequested"));
+      router.push(typeof result.requestId === "string"
+        ? drawerHref(props.currentParams, "periods", "reopen", result.requestId)
+        : closeHref);
       router.refresh();
     } catch (error) {
       const message =
@@ -2666,6 +2691,11 @@ function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
             {t("periods.reopenActiveUntil", { date: String(row.expires_at).slice(0, 16).replace("T", " ") })}
           </p>
         ) : null}
+        {row.status === "requested" && row.impact_snapshot?.amendment ? (
+          <p className="text-sm text-slate-600 dark:text-slate-400">
+            {t("periods.reopenRequestedUntil", { date: row.impact_snapshot.amendment.expiresAt.slice(0, 16).replace("T", " ") })}
+          </p>
+        ) : null}
         {row.status === "approved" && props.canReopen ? (
           <div className="space-y-3 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
             <div>
@@ -2701,8 +2731,9 @@ function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
             </div>
             <Field label={t("periods.extendHoursLabel")}>
               <Input
+                aria-label={t("periods.extendHoursLabel")}
                 type="number"
-                min={1}
+                min={0}
                 max={168}
                 value={extendHours}
                 onChange={(e) => setExtendHours(e.target.value)}
@@ -2730,13 +2761,16 @@ function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
             <Field label={t("fields.reason")}>
               <Textarea
                 value={extendReason}
+                maxLength={500}
                 onChange={(e) => setExtendReason(e.target.value)}
               />
             </Field>
             <div className="flex justify-end">
               <Button
                 variant="outline"
-                disabled={busy || extendReason.trim().length < 10}
+                disabled={busy || extendReason.trim().length < 10 ||
+                  (!extendModules.length && Number(extendHours) === 0) ||
+                  !Number.isInteger(Number(extendHours)) || Number(extendHours) < 0 || Number(extendHours) > 168}
                 onClick={extendReopen}
               >
                 {t("actions.extendReopen")}

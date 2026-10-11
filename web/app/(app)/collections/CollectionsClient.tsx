@@ -28,7 +28,6 @@ import {
   Select,
 } from "@openbooks/ui";
 import { AdvancedSubscriptionsPanel } from "./AdvancedSubscriptionsPanel";
-import { confirmDialog } from "../../../lib/confirm";
 import { readApiErrorMessage } from "../../../lib/api-error";
 import { ActionError, fetchAction } from "@braedonsaunders/appkit-errors";
 import { useAppAction } from "../../../lib/use-app-action";
@@ -112,6 +111,8 @@ interface Subscription {
   mrr: string;
   planCurrency: string | null;
   advancedLifecycle?: boolean;
+  /** End of the last invoiced period: the earliest and only clean cancellation date. */
+  paidThroughOn: string;
 }
 interface SubscriptionActionBody {
   documentNumber?: string;
@@ -365,6 +366,14 @@ function SubscriptionsPanel({
   };
   const [changing, setChanging] = useState<string | null>(null);
   const [changeQty, setChangeQty] = useState("");
+  // Cancellation ends billing on a chosen date; the server refuses any date
+  // other than the paid-through boundary, so the dialog opens on it.
+  const [cancelling, setCancelling] = useState<{
+    id: string;
+    customerName: string | null;
+    paidThroughOn: string;
+  } | null>(null);
+  const [cancelOn, setCancelOn] = useState("");
   const action = useAppAction();
 
   // Fetch chain: every state update sits in a promise continuation (the fetch
@@ -834,20 +843,16 @@ function SubscriptionsPanel({
                           size="sm"
                           variant="ghost"
                           disabled={action.busy}
-                          onClick={async () => {
-                            const confirmed = await confirmDialog({
-                              title: t("cancelConfirmTitle"),
-                              message: t("cancelConfirmBody"),
-                              confirmLabel: t("cancelSubscription"),
-                              cancelLabel: t("keepSubscription"),
-                              tone: "danger",
+                          onClick={() => {
+                            setError(null);
+                            setCancelling({
+                              id: s.id,
+                              customerName: s.customerName,
+                              paidThroughOn: s.paidThroughOn,
                             });
-                            if (confirmed)
-                              post({
-                                action: "updateSubscription",
-                                id: s.id,
-                                status: "canceled",
-                              });
+                            // Service ends where invoicing ends: the paid-through
+                            // date is the one date the cancellation accepts.
+                            setCancelOn(s.paidThroughOn);
                           }}
                         >
                           {t("cancelSub")}
@@ -1141,6 +1146,63 @@ function SubscriptionsPanel({
             />
           </Field>
         </InspectorPanel>
+      </Drawer>
+      <Drawer
+        open={cancelling !== null}
+        onClose={() => setCancelling(null)}
+        title={t("cancelConfirmTitle")}
+        description={cancelling?.customerName ?? undefined}
+        size="lg"
+      >
+        {error && (
+          <p role="alert" className="mb-4 text-sm text-destructive">
+            {error}
+          </p>
+        )}
+        <div className="space-y-5">
+          <p className="text-sm text-muted-foreground">
+            {t("cancelConfirmBody")}
+          </p>
+          <InspectorPanel title={forms("subscriptionDetails")}>
+            <Field label={t("cancelEffectiveOn")} required>
+              <Input
+                type="date"
+                value={cancelOn}
+                onChange={(e) => setCancelOn(e.target.value)}
+              />
+            </Field>
+            <p className="mt-2 text-xs text-muted-foreground">
+              {t("cancelPaidThroughHint", {
+                date: cancelling?.paidThroughOn ?? "",
+              })}
+            </p>
+          </InspectorPanel>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button
+              variant="outline"
+              disabled={action.busy}
+              onClick={() => setCancelling(null)}
+            >
+              {t("keepSubscription")}
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={action.busy || !cancelOn || !cancelling}
+              onClick={async () => {
+                if (!cancelling) return;
+                const result = await post({
+                  action: "updateSubscription",
+                  id: cancelling.id,
+                  status: "canceled",
+                  canceledOn: cancelOn,
+                });
+                if (result) setCancelling(null);
+              }}
+            >
+              {t("cancelSubscription")}
+            </Button>
+          </div>
+        </div>
       </Drawer>
       <CatchUpPickerDialog
         open={subPicker !== null}

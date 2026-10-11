@@ -36,6 +36,11 @@ type ScratchOrg = import("@openbooks/engine/testing/fixtures").ScratchOrg;
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
+// The approval tiles and lists this approver can see. The default read covers
+// every built-in widget, which now includes the Sentinel risk tiles this
+// fixture is not granted; the loader reads only the widgets it is handed.
+const APPROVAL_WIDGETS = ["kpi-pending-approvals", "list-pending-approvals", "personal-inbox"];
+
 function authzFor(orgId: string, userId: string): Authz {
   return {
     user: {
@@ -112,7 +117,7 @@ test("dashboard approval widgets list pending budgets with their checker target"
     );
     const pending = await withBypass(() => postedPendingBudget(org, submitter as unknown as string));
     const metrics = await withOrgContext(org.orgId, () =>
-      loadDashboardMetrics(budgetAuthzFor(org.orgId, approver as unknown as string)),
+      loadDashboardMetrics(budgetAuthzFor(org.orgId, approver as unknown as string), APPROVAL_WIDGETS),
     );
     assert.equal(metrics.pendingApprovals, 1, "tile counts the pending budget");
     const row = metrics.pendingApprovalList.find((r) => r.title === pending.name);
@@ -132,7 +137,7 @@ test("dashboard approval widgets list the unified worklist, not gates-only", { s
     const approver = await withBypass(() => createScratchUser(org.orgId, "Widget Approver", "approver"));
     const pending = await withBypass(() => postedPendingDoc(org, submitter as unknown as string));
     const metrics = await withOrgContext(org.orgId, () =>
-      loadDashboardMetrics(authzFor(org.orgId, approver as unknown as string)),
+      loadDashboardMetrics(authzFor(org.orgId, approver as unknown as string), APPROVAL_WIDGETS),
     );
     assert.equal(metrics.pendingApprovals, 1, "tile counts the gateless document");
     assert.equal(metrics.pendingApprovalList.length, 1, "pending list reads the union, not gates-only");

@@ -87,6 +87,7 @@ async function mountPo() {
   )
 }
 
+const { act } = await import('react')
 test('convert to goods receipt opens a draft instead of receiving blindly', async (t) => {
   const posts: string[] = []
   const restoreFetch = scriptFetch((url, init) => {
@@ -237,8 +238,6 @@ function warehouseRefusal() {
     { status: 422 },
   )
 }
-
-const { act } = await import('react')
 
 async function openConvert() {
   const menu = buttonsNamed('Actions')[0]

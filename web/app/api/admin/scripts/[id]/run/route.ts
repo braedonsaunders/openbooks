@@ -25,8 +25,10 @@ import { isUuid } from '../../../../../../lib/list-params'
 import { notFound } from "@/lib/api/responses";
 
 // The bulk key's domain validator supplies the stable SCRIPT_RUN_KEY_INVALID
-// refusal; the boundary still rejects unknown fields and malformed JSON.
-const requestBodySchema = z.strictObject({ idempotencyKey: z.json().optional() });
+// refusal; the boundary still rejects unknown fields and malformed JSON. An
+// absent body is an empty request, so the schema defaults it rather than
+// refusing it before the handler's id and key checks run.
+const requestBodySchema = z.strictObject({ idempotencyKey: z.json().optional() }).default({});
 
 
 
@@ -81,10 +83,10 @@ export const POST = defineRoute({
         // it carries the caller's run key plus a durable claim. A double-click
         // reuses the key: the second request either replays the recorded
         // outcome (completed) or is refused as in-flight (409) — it never runs
-        // twice. Without a client key each request mints a fresh one (no
-        // cross-request dedupe). The queue id is deterministic in the key, so
-        // live duplicates collapse in BullMQ; the worker re-checks the claim
-        // because BullMQ dedupe only covers live jobs.
+        // twice. A request without a valid client key is refused, because a
+        // retry could not be recognized as the same run. The queue id is
+        // deterministic in the key, so live duplicates collapse in BullMQ; the
+        // worker re-checks the claim because BullMQ dedupe only covers live jobs.
         let runKey: string
         try {
           runKey = bulkRunClientKey(body.idempotencyKey)

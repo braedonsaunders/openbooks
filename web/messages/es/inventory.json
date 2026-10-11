@@ -29,7 +29,8 @@
       "operationSeq": "Secuencia de operación",
       "scrapPct": "% de merma",
       "isByproduct": "Tipo de línea",
-      "outputCostWeight": "Peso relativo del costo"
+      "outputCostWeight": "Peso relativo del costo",
+      "effectiveRequirement": "Efectiva por unidad"
     },
     "values": {
       "component": "Componente",
@@ -44,7 +45,11 @@
       "invalidOperation": "La secuencia de operación debe ser un número entero positivo.",
       "manufacturingDisabled": "Activa Fabricación en Configuración de la empresa → Funciones para editar operaciones y subproductos."
     },
-    "jointOutputNote": "Los coproductos comparten el costo de producción según su cantidad y peso relativo por unidad base. El producto principal tiene peso 1. Los subproductos conservan su tratamiento separado por valor neto realizable."
+    "jointOutputNote": "Los coproductos comparten el costo de producción según su cantidad y peso relativo por unidad base. El producto principal tiene peso 1. Los subproductos conservan su tratamiento separado por valor neto realizable.",
+    "help": {
+      "scrapPct": "Suma este porcentaje a la cantidad por unidad. Déjelo en 0 si la cantidad ya incluye las pérdidas.",
+      "effectiveRequirement": "La necesidad para una unidad del artículo padre: cantidad × (1 + % de merma). Las órdenes de trabajo usan el mismo cálculo."
+    }
   },
   "labels": {
     "item": "Artículo",
@@ -280,8 +285,10 @@
       "loadingMore": "Cargando…"
     },
     "secondCount": "Guardar segundo conteo",
+    "recordedQuantity": "Registrado: {quantity}",
     "secondReason": "Observación del segundo conteo",
-    "secondReasonHint": "El segundo conteo difiere del primero. Explique la diferencia (al menos 5 caracteres) para registrarla con este conteo."
+    "secondReasonHint": "El segundo conteo difiere del primero. Explique la diferencia (al menos 5 caracteres) para registrarla con este conteo.",
+    "secondNotRecorded": "No registrado. Un segundo conteo que difiere del primero necesita su motivo (al menos {minLength} caracteres) antes de guardarse."
   },
   "create": {
     "subsidiary": "Filial propietaria",

@@ -178,6 +178,7 @@ export async function correctEmploymentStart(input: {
     const copied = (await exec.execute<{ column_name: string }>(sql`
       select column_name from information_schema.columns
        where table_schema = 'public' and table_name = 'employment_assignment_versions'
+         and is_generated = 'NEVER'
          and column_name not in ('id', 'version_no', 'effective_from', 'recorded_at', 'recorded_until',
                                  'superseded_by', 'closed_by_change_id', 'created_at', 'created_by',
                                  'updated_at', 'updated_by')

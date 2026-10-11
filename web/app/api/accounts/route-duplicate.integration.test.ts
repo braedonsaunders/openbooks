@@ -114,3 +114,73 @@ test("renumbering onto another account names the holding account", async () => {
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("a same-name account is refused until the duplicate is acknowledged", async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    const { adminId } = await withBypassContext(() => seedFlowActors(org.orgId));
+    routeState.authz = { user: { orgId: org.orgId, id: adminId }, permissions: new Set(), allowedSubsidiaryIds: null };
+
+    const holder = await POST(postRequest(randomUUID(), { name: "Interest Expense", type: "expense_other", number: "7000" }));
+    assert.equal(holder.status, 201);
+    const holderId = ((await holder.json()) as { account: { id: string } }).account.id;
+
+    const refused = await POST(postRequest(randomUUID(), { name: "  interest   EXPENSE ", type: "expense_other", number: "8100" }));
+    assert.equal(refused.status, 409);
+    assert.deepEqual(await refused.json(), {
+      error: "duplicate_account_name",
+      field: "name",
+      remedy: "Open the existing account, or resend the request with acknowledgeDuplicateName set to true to create it anyway.",
+      details: { existingAccountId: holderId, existingAccountName: "Interest Expense", existingAccountNumber: "7000" },
+    });
+    const unchanged = await withBypassContext(() => db.execute(sql`select count(*)::int as n from accounts where org_id = ${org.orgId} and number = '8100'`));
+    assert.equal((unchanged.rows[0] as { n: number }).n, 0, "a refused create writes no account row");
+
+    const acknowledgedKey = randomUUID();
+    const acknowledged = await POST(postRequest(acknowledgedKey, { name: "  interest   EXPENSE ", type: "expense_other", number: "8100", acknowledgeDuplicateName: true }));
+    assert.equal(acknowledged.status, 201, JSON.stringify(await acknowledged.clone().json()));
+    const payload = (await acknowledged.json()) as { warnings: { code: string; existingAccountId: string }[] };
+    assert.deepEqual(payload.warnings.map((w) => [w.code, w.existingAccountId]), [["duplicate_account_name", holderId]]);
+
+    const replay = await POST(postRequest(acknowledgedKey, { name: "  interest   EXPENSE ", type: "expense_other", number: "8100", acknowledgeDuplicateName: true }));
+    assert.equal(replay.status, 200, "a retry of an acknowledged create replays the stored account instead of refusing itself");
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("renaming onto an active account's name is refused until acknowledged", async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    const { adminId } = await withBypassContext(() => seedFlowActors(org.orgId));
+    routeState.authz = { user: { orgId: org.orgId, id: adminId }, permissions: new Set(), allowedSubsidiaryIds: null };
+
+    const holder = await POST(postRequest(randomUUID(), { name: "Interest Expense", type: "expense_other", number: "7000" }));
+    assert.equal(holder.status, 201);
+    const other = await POST(postRequest(randomUUID(), { name: "Bank charges", type: "expense_other", number: "7100" }));
+    assert.equal(other.status, 201);
+    const otherId = ((await other.json()) as { account: { id: string } }).account.id;
+    const patch = (body: unknown) => PATCH(
+      new Request(`http://localhost/api/accounts/${otherId}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+      { params: Promise.resolve({ id: otherId }) },
+    );
+
+    const refused = await patch({ name: "Interest Expense" });
+    assert.equal(refused.status, 409);
+    assert.equal(((await refused.json()) as { error: string }).error, "duplicate_account_name");
+
+    const acknowledged = await patch({ name: "Interest Expense", acknowledgeDuplicateName: true });
+    assert.equal(acknowledged.status, 200, JSON.stringify(await acknowledged.clone().json()));
+    const saved = (await acknowledged.json()) as { account: { name: string }; warnings: { code: string }[] };
+    assert.equal(saved.account.name, "Interest Expense");
+    assert.deepEqual(saved.warnings.map((w) => w.code), ["duplicate_account_name"]);
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrg(org.orgId);
+  }
+});

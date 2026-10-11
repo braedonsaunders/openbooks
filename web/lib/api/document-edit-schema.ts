@@ -1,10 +1,10 @@
 /** Shared validation for edits and posted correction payloads. */
 import { z } from 'zod';
 const jsonObjectSchema = z.record(z.string(), z.json());
-const documentLineSchema = z.object({
-  // An intentionally blank account reaches document-edit's line-numbered
+export const documentLineSchema = z.object({
+  // A blank, null or absent account reaches document-edit's line-numbered
   // refusal, which names the missing posting prerequisite for the operator.
-  lineId: z.string().uuid().nullable().optional(), accountId: z.union([z.string().uuid(), z.literal('')]),
+  lineId: z.string().uuid().nullable().optional(), accountId: z.union([z.string().uuid(), z.literal('')]).nullable().optional(),
   amount: z.string(), description: z.string().nullable().optional(),
   taxCodeId: z.string().uuid().nullable().optional(), taxGroupId: z.string().uuid().nullable().optional(),
   withholdingTreatment: z.enum(["labour", "materials", "excluded"]).nullable().optional(),

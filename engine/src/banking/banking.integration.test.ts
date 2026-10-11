@@ -679,7 +679,7 @@ test(
 );
 
 test(
-  "separate ID-less files with distinct balances keep both lines, flagged; the identical file still dedupes",
+  "separate ID-less files with distinct balances hold overlapping lines out until opt-in; the identical file still dedupes",
   async () => {
     const org = await createScratchOrg();
     try {
@@ -712,43 +712,39 @@ test(
       assert.deepEqual(first.lines.map((line) => line.possibleDuplicateOf), [null, null, null]);
 
       // An independent second file carries the same content with DISTINCT
-      // balances: no replay proof exists, so nothing may vanish. Both
-      // overlapping lines import flagged against the earlier import.
-      const preview = await importStatement(
-        {
-          ...fileA,
-          openingBalance: "2000",
-          closingBalance: "2090",
-          lines: [
-            { postedOn: org.date, amount: "100.0000", description: "payroll" },
-            { postedOn: org.date, amount: "-5.0000", description: "COFFEE  SHOP" },
-            { postedOn: org.date, amount: "-5.0000", description: "COFFEE SHOP" },
-          ],
-          dryRun: true,
-        },
-        ctx,
-      );
+      // balances: no replay proof exists, so its overlapping lines are
+      // possible duplicates. The default preview and commit hold them out;
+      // only an explicit opt-in imports them, flagged against the earlier line.
+      const overlapping = {
+        ...fileA,
+        openingBalance: "2000",
+        closingBalance: "2090",
+        lines: [
+          { postedOn: org.date, amount: "100.0000", description: "payroll" },
+          { postedOn: org.date, amount: "-5.0000", description: "COFFEE  SHOP" },
+          { postedOn: org.date, amount: "-5.0000", description: "COFFEE SHOP" },
+        ],
+      };
+      const preview = await importStatement({ ...overlapping, dryRun: true }, ctx);
       assert.equal(preview.statementId, null);
-      assert.equal(preview.imported, 3);
+      assert.equal(preview.imported, 0);
       assert.equal(preview.duplicates, 0);
       assert.equal(preview.possibleDuplicates, 3);
-      assert.equal(
-        preview.lines.filter((line) => line.possibleDuplicateOf).length,
-        3,
-      );
-      const second = await importStatement(
-        {
-          ...fileA,
-          openingBalance: "2000",
-          closingBalance: "2090",
-          lines: [
-            { postedOn: org.date, amount: "100.0000", description: "payroll" },
-            { postedOn: org.date, amount: "-5.0000", description: "COFFEE  SHOP" },
-            { postedOn: org.date, amount: "-5.0000", description: "COFFEE SHOP" },
-          ],
-        },
-        ctx,
-      );
+      assert.deepEqual(preview.lines, [], "the default preview lists no line for import");
+      assert.equal(preview.possibleDuplicateLines.length, 3);
+      assert.ok(preview.possibleDuplicateLines.every((line) => line.possibleDuplicateOf !== null));
+
+      const defaultCommit = await importStatement(overlapping, ctx);
+      assert.equal(defaultCommit.statementId, null, "nothing is written when every line is a possible duplicate");
+      assert.equal(defaultCommit.imported, 0);
+      assert.equal(defaultCommit.possibleDuplicates, 3);
+      const storedBeforeOptIn = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from bank_statement_lines
+         where org_id = ${org.orgId} and account_id = ${org.accounts.bank}
+      `)).rows[0]!.n;
+      assert.equal(storedBeforeOptIn, 3, "held-out lines are not stored");
+
+      const second = await importStatement({ ...overlapping, includePossibleDuplicates: true }, ctx);
       assert.equal(second.imported, 3);
       assert.equal(second.duplicates, 0);
       assert.equal(second.possibleDuplicates, 3);
@@ -786,7 +782,7 @@ test(
 );
 
 test(
-  "an equal closing balance on a distinct file never drops a genuine twin",
+  "an equal closing balance on a distinct file holds a genuine twin for review, never drops it",
   async () => {
     const org = await createScratchOrg();
     try {
@@ -816,7 +812,8 @@ test(
 
       // A distinct second file ends on the same closing balance — offsetting
       // activity in between restores it. A balance match is not transaction
-      // identity, so the genuine second coffee imports flagged, never drops.
+      // identity, so the genuine second coffee is a possible duplicate: the
+      // default commit imports the distinct snack and holds the coffee out.
       const second = await importStatement(
         {
           accountId: org.accounts.bank,
@@ -832,14 +829,40 @@ test(
         },
         ctx,
       );
-      assert.equal(second.imported, 2);
+      assert.equal(second.imported, 1);
       assert.equal(second.duplicates, 0);
       assert.equal(second.possibleDuplicates, 1);
-      const [coffee, snack] = second.lines;
-      assert.ok(coffee!.possibleDuplicateOf);
-      assert.equal(snack!.possibleDuplicateOf, null);
+      assert.deepEqual(second.lines.map((line) => line.description), ["SNACK BAR"]);
+      const [heldCoffee] = second.possibleDuplicateLines;
+      assert.ok(heldCoffee!.possibleDuplicateOf);
 
-      // The flag points at the earlier file's line, and all lines persist.
+      // The earlier file's line is the only unflagged COFFEE SHOP stored so far.
+      const earlierRow = (await db.execute<{ id: string }>(sql`
+        select id from bank_statement_lines
+         where org_id = ${org.orgId} and account_id = ${org.accounts.bank}
+           and description = 'COFFEE SHOP' and possible_duplicate_of is null
+      `)).rows[0]!;
+      assert.equal(heldCoffee!.possibleDuplicateOf, earlierRow.id);
+
+      // The reviewer confirms the coffee is genuine: a further file carrying
+      // it imports it flagged on explicit opt-in.
+      const optedIn = await importStatement(
+        {
+          accountId: org.accounts.bank,
+          source: "manual" as const,
+          statementDate: org.date,
+          openingBalance: "1010",
+          closingBalance: "995",
+          currency: "CAD",
+          lines: [{ postedOn: org.date, amount: "-5.0000", description: "COFFEE SHOP" }],
+          includePossibleDuplicates: true,
+        },
+        ctx,
+      );
+      assert.equal(optedIn.imported, 1);
+      assert.equal(optedIn.possibleDuplicates, 1);
+
+      // The flag points at the earlier file's line, and every imported line persists.
       const stored = await db.execute<{
         id: string;
         description: string | null;
@@ -850,9 +873,9 @@ test(
          where org_id = ${org.orgId} and account_id = ${org.accounts.bank}
       `);
       assert.equal(stored.rows.length, 3);
-      const earlier = stored.rows.find((row) => !row.possible_duplicate_of)!;
-      assert.equal(earlier.description, "COFFEE SHOP");
-      assert.equal(coffee!.possibleDuplicateOf, earlier.id);
+      const flaggedCoffee = stored.rows.find((row) => row.possible_duplicate_of !== null)!;
+      assert.equal(flaggedCoffee.description, "COFFEE SHOP");
+      assert.equal(flaggedCoffee.possible_duplicate_of, earlierRow.id);
     } finally {
       await dropScratchOrg(org.orgId);
     }
@@ -1174,7 +1197,7 @@ test(
 );
 
 test(
-  "a re-exported ID-less file with different bytes imports flagged, never skips",
+  "a re-exported ID-less file with different bytes is never skipped: it imports flagged on opt-in",
   async () => {
     const org = await createScratchOrg();
     try {
@@ -1206,6 +1229,7 @@ test(
       const reexport = await importStatement(
         {
           ...month,
+          includePossibleDuplicates: true,
           lines: [
             { postedOn: org.date, amount: "100.0000", description: "payroll" },
             { postedOn: org.date, amount: "-5.0000", description: "COFFEE  SHOP" },
@@ -1302,7 +1326,7 @@ test(
       };
       await importStatement({ ...base, openingBalance: "1000", closingBalance: "995" }, ctx);
       const second = await importStatement(
-        { ...base, openingBalance: "2000", closingBalance: "1995" },
+        { ...base, openingBalance: "2000", closingBalance: "1995", includePossibleDuplicates: true },
         ctx,
       );
       assert.equal(second.possibleDuplicates, 1);
@@ -1359,7 +1383,7 @@ test(
       // A third overlapping file flags again, and the bulk review excludes
       // every flagged line with one audited row per line.
       const third = await importStatement(
-        { ...base, openingBalance: "3000", closingBalance: "2995" },
+        { ...base, openingBalance: "3000", closingBalance: "2995", includePossibleDuplicates: true },
         ctx,
       );
       assert.equal(third.possibleDuplicates, 1);

@@ -526,3 +526,56 @@ export function assertOverheadRatesPublishable(categories: OverheadPublishCatego
   const blockers = overheadPublishBlockers(categories);
   if (blockers.length > 0) throw new UnsupportedOverheadRateError(blockers);
 }
+
+/**
+ * A manually entered or previously published standard per-hour row that a
+ * publish would close or delete. `inEffectAtStart` marks the row covering the
+ * publish start date; `effectiveFrom` orders the future-dated rows behind it.
+ */
+export interface OverheadStandardRateRow {
+  departmentId: string;
+  departmentName: string;
+  ratePerHour: string;
+  effectiveFrom: string;
+  inEffectAtStart: boolean;
+}
+
+/** A zero published over a non-zero standard that the operator must confirm. */
+export interface OverheadZeroOverStandard {
+  departmentId: string;
+  departmentName: string;
+  standardRatePerHour: string;
+  publishedRatePerHour: string;
+}
+
+/**
+ * Zero-over-standard guard. A publish that writes an exact zero for a
+ * department whose non-zero standard rate would be replaced silently removes
+ * the cost basis for every job costed from that card. Returns one entry per
+ * such department, naming the non-zero standard it would replace; an empty
+ * list means the publish cannot silently erase a standard.
+ */
+export function zeroOverStandardReplacements(
+  rates: { departmentId: string; ratePerHour: string }[],
+  touchedStandards: OverheadStandardRateRow[],
+): OverheadZeroOverStandard[] {
+  const out: OverheadZeroOverStandard[] = [];
+  const seen = new Set<string>();
+  for (const rate of rates) {
+    if (compareOverheadDecimals(rate.ratePerHour, "0") !== 0) continue;
+    if (seen.has(rate.departmentId)) continue;
+    const nonZero = touchedStandards
+      .filter((row) => row.departmentId === rate.departmentId && compareOverheadDecimals(row.ratePerHour, "0") !== 0)
+      .sort((a, b) => Number(b.inEffectAtStart) - Number(a.inEffectAtStart) || (a.effectiveFrom < b.effectiveFrom ? -1 : a.effectiveFrom > b.effectiveFrom ? 1 : 0));
+    const replaced = nonZero[0];
+    if (!replaced) continue;
+    seen.add(rate.departmentId);
+    out.push({
+      departmentId: rate.departmentId,
+      departmentName: replaced.departmentName,
+      standardRatePerHour: replaced.ratePerHour,
+      publishedRatePerHour: rate.ratePerHour,
+    });
+  }
+  return out;
+}

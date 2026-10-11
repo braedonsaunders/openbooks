@@ -5,6 +5,8 @@ import { db } from "../platform/db.ts";
 import { decideGate } from "../flows/gates.ts";
 import { submitForApproval } from "../flows/submit.ts";
 import { commitPayRun } from "./run-commit.ts";
+import { payRunStaleness } from "./readiness.ts";
+import { payRunApprovalState, recalculateStaleApprovedPayRun } from "./approval.ts";
 import { seedAdoption, calculatedRun } from "./filing-test-fixtures.ts";
 import { dropScratchOrg, seedApprovalFlow, seedFlowActors } from "../testing/fixtures.ts";
 import { PayrollError } from "./error.ts";
@@ -233,6 +235,177 @@ test("an approval withdrawn mid-commit is refused by name at the terminal write"
       select count(*)::int as n from document_lines
        where org_id = ${fx.orgId} and document_id = ${input.documentId}`)).rows[0]!.n;
     assert.equal(lines, 0, "a refused commit materializes no GL projection");
+  } finally {
+    await dropScratchOrg(fx.orgId);
+  }
+});
+
+async function documentStatus(orgId: string, documentId: string): Promise<string> {
+  const rows = (await db.execute<{ status: string }>(sql`
+    select status from documents where org_id = ${orgId} and id = ${documentId}`));
+  return rows.rows[0]!.status;
+}
+
+async function pendingGateId(subjectId: string): Promise<string> {
+  const rows = (await db.execute<{ id: string }>(sql`
+    select id from flow_gates where subject_id = ${subjectId} and status = 'pending' order by created_at`));
+  assert.equal(rows.rows.length, 1, `expected one pending gate, got ${rows.rows.length}`);
+  return rows.rows[0]!.id;
+}
+
+/** A calculated run submitted and approved by the second user, as production does it. */
+async function approvedPayRun(fx: Awaited<ReturnType<typeof seedAdoption>>) {
+  const actors = await seedFlowActors(fx.orgId);
+  await db.execute(sql`
+    insert into user_permission_overrides (org_id, user_id, permission, effect)
+    values (${fx.orgId}, ${actors.submitterId}, 'payroll.run', 'grant'),
+           (${fx.orgId}, ${actors.submitterId}, 'payroll.manage', 'grant')`);
+  await seedApprovalFlow(fx.orgId, {
+    subjectKind: "pay_run",
+    assignees: [{ type: "user", userId: actors.approver1Id }],
+    mode: "any",
+  });
+  const { input } = await calculatedRun({ ...fx, actorId: actors.submitterId });
+  await submitForApproval("pay_run", input.documentId, actors.submitterId);
+  await decideGate({
+    gateId: await pendingGateId(input.documentId),
+    decision: "approved",
+    userId: actors.approver1Id,
+  });
+  assert.equal(await documentStatus(fx.orgId, input.documentId), "approved");
+  return { actors, documentId: input.documentId };
+}
+
+test("recalculating a stale approved run withdraws its approval, audits the reason, and requires re-approval", { skip: !DB }, async () => {
+  const fx = await seedAdoption();
+  try {
+    const { actors, documentId } = await approvedPayRun(fx);
+    // An input the run reads moves after approval: the pay calendar is edited.
+    await db.execute(sql`
+      update pay_schedules set updated_at = now()
+       where org_id = ${fx.orgId}
+         and id = (select pay_schedule_id from pay_runs where org_id = ${fx.orgId} and document_id = ${documentId})`);
+    const stale = await payRunStaleness(fx.orgId, documentId);
+    assert.equal(stale.stale, true);
+    assert.ok(stale.reasons.includes("schedule"), `expected a schedule reason, got ${stale.reasons.join(", ")}`);
+
+    const recalculated = await recalculateStaleApprovedPayRun({
+      orgId: fx.orgId, documentId, actorId: actors.submitterId,
+    });
+    assert.ok(recalculated.reasons.includes("schedule"));
+    assert.deepEqual(recalculated.calculation.errors, []);
+
+    const after = await payRunApprovalState(fx.orgId, documentId);
+    assert.equal(after.documentStatus, "draft", "the approval is withdrawn: the document is a draft again");
+    assert.equal(after.submitted, false, "the withdrawal clears the submission");
+    assert.equal(after.released, false, "a withdrawn approval releases nothing");
+    assert.equal((await payRunStaleness(fx.orgId, documentId)).stale, false, "the recalculation is current");
+
+    const audit = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from audit_log
+       where org_id = ${fx.orgId} and table_name = 'documents' and row_id = ${documentId}
+         and action = 'update' and changes::text like ${"%Inputs changed since approval%"}`)).rows[0]!.n;
+    assert.equal(audit, 1, "the withdrawal records the stale inputs as its audited reason");
+
+    await assert.rejects(
+      commitPayRun({ orgId: fx.orgId, documentId, actorId: actors.submitterId }),
+      /not been submitted|awaiting|approval/i,
+      "commit is refused until the recalculated run is approved again",
+    );
+
+    const resubmission = await submitForApproval("pay_run", documentId, actors.submitterId);
+    assert.equal(resubmission.gated, true, "the recalculated run is routed through the approval Flow again");
+    await decideGate({
+      gateId: await pendingGateId(documentId),
+      decision: "approved",
+      userId: actors.approver1Id,
+    });
+    const committed = await commitPayRun({ orgId: fx.orgId, documentId, actorId: actors.submitterId });
+    assert.ok(committed.lines > 0, "the re-approved run commits its GL projection");
+  } finally {
+    await dropScratchOrg(fx.orgId);
+  }
+});
+
+test("recalculating an approved run whose inputs have not changed is refused and keeps the approval", { skip: !DB }, async () => {
+  const fx = await seedAdoption();
+  try {
+    const { actors, documentId } = await approvedPayRun(fx);
+    await assert.rejects(
+      recalculateStaleApprovedPayRun({ orgId: fx.orgId, documentId, actorId: actors.submitterId }),
+      /nothing to recalculate/,
+    );
+    assert.equal(await documentStatus(fx.orgId, documentId), "approved", "a refused recalculation keeps the approval");
+  } finally {
+    await dropScratchOrg(fx.orgId);
+  }
+});
+
+test("a posting-account change does not stale an approved run", { skip: !DB }, async () => {
+  const fx = await seedAdoption();
+  try {
+    const { actors, documentId } = await approvedPayRun(fx);
+    // A control-account mapping is saved: the org row and its audit evidence move,
+    // but no calculated amount does.
+    await db.execute(sql`update orgs set updated_at = now() where id = ${fx.orgId}`);
+    await db.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${fx.orgId}, 'orgs', ${fx.orgId}, 'update',
+              ${JSON.stringify({ controlAccounts: [{}, { laborClearing: "posting-account" }] })}::jsonb,
+              ${actors.submitterId})`);
+    const staleness = await payRunStaleness(fx.orgId, documentId);
+    assert.equal(staleness.stale, false, `a posting-only change must not stale the run (${staleness.reasons.join(", ")})`);
+    const approval = await payRunApprovalState(fx.orgId, documentId);
+    assert.equal(approval.released, true, "the approval still releases the run");
+  } finally {
+    await dropScratchOrg(fx.orgId);
+  }
+});
+
+test("an organization settings write the audit trail does not cover stales a calculated run", { skip: !DB }, async () => {
+  const fx = await seedAdoption();
+  try {
+    const { documentId } = await approvedPayRun(fx);
+    await db.execute(sql`update orgs set updated_at = now() where id = ${fx.orgId}`);
+    const staleness = await payRunStaleness(fx.orgId, documentId);
+    assert.equal(staleness.stale, true);
+    assert.ok(staleness.reasons.includes("settings"), `expected a settings reason, got ${staleness.reasons.join(", ")}`);
+  } finally {
+    await dropScratchOrg(fx.orgId);
+  }
+});
+
+test("payroll calculation authority alone cannot withdraw an approved run", { skip: !DB }, async () => {
+  const fx = await seedAdoption();
+  try {
+    const { actors, documentId } = await approvedPayRun(fx);
+    await db.execute(sql`insert into user_permission_overrides (org_id, user_id, permission, effect)
+      values (${fx.orgId}, ${actors.outsiderId}, 'payroll.run', 'grant')`);
+    await db.execute(sql`update pay_schedules set updated_at = now() where org_id = ${fx.orgId}`);
+    await assert.rejects(recalculateStaleApprovedPayRun({
+      orgId: fx.orgId, documentId, actorId: actors.outsiderId,
+    }), /missing permission: payroll.manage/);
+    assert.equal(await documentStatus(fx.orgId, documentId), "approved");
+    assert.equal((await payRunApprovalState(fx.orgId, documentId)).released, true);
+  } finally {
+    await dropScratchOrg(fx.orgId);
+  }
+});
+
+test("an approved run outside the actor's entity scope cannot be recalculated through an unrestricted input", { skip: !DB }, async () => {
+  const fx = await seedAdoption();
+  try {
+    const { actors, documentId } = await approvedPayRun(fx);
+    await db.execute(sql`update app_roles set subsidiary_restriction = '{"mode":"list","subsidiaryIds":[]}'::jsonb
+      where org_id = ${fx.orgId} and id in (
+        select role_id from role_assignments where org_id = ${fx.orgId} and user_id = ${actors.submitterId})`);
+    for (const allowedSubsidiaryIds of [undefined, null]) {
+      await assert.rejects(recalculateStaleApprovedPayRun({
+        orgId: fx.orgId, documentId, actorId: actors.submitterId, allowedSubsidiaryIds,
+      }), /pay run not found/);
+    }
+    assert.equal(await documentStatus(fx.orgId, documentId), "approved");
+    assert.equal((await payRunApprovalState(fx.orgId, documentId)).released, true);
   } finally {
     await dropScratchOrg(fx.orgId);
   }

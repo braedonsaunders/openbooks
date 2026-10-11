@@ -387,7 +387,7 @@ export function partnersExportData(
 export function agingExportData(
   side: 'ar' | 'ap',
   result: {
-    rows: { partyName: string | null; current: ExactDecimal; b1: ExactDecimal; b2: ExactDecimal; b3: ExactDecimal; b4: ExactDecimal; total: ExactDecimal }[]
+    rows: { partyName: string | null; reconciling?: boolean; current: ExactDecimal; b1: ExactDecimal; b2: ExactDecimal; b3: ExactDecimal; b4: ExactDecimal; total: ExactDecimal }[]
     totals: { current: ExactDecimal; b1: ExactDecimal; b2: ExactDecimal; b3: ExactDecimal; b4: ExactDecimal; total: ExactDecimal }
     asOf: string
   },
@@ -404,7 +404,7 @@ export function agingExportData(
     t('aging.columns.total'),
   ]
   const data = result.rows.map((r) => [
-    r.partyName ?? t('aging.noParty'),
+    r.reconciling ? t('aging.controlEntries.label') : (r.partyName ?? t('aging.noParty')),
     r.current, r.b1, r.b2, r.b3, r.b4, r.total,
   ] as (string | number)[])
   data.push([

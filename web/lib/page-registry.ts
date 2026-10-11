@@ -1024,42 +1024,6 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
-  '/migrate': {
-    route: '/migrate',
-    segments: [],
-    searchParams: false,
-    module: async () => {
-      const m = await import('../app/(app)/migrate/view')
-      return {
-        load: () => m.loadMigrationCutover(),
-        spec: (data) => m.migrationCutoverSpec(data as never),
-      }
-    },
-  },
-  '/migrate/assistant': {
-    route: '/migrate/assistant',
-    segments: [],
-    searchParams: true,
-    module: async () => {
-      const m = await import('../app/(app)/migrate/assistant/view')
-      return {
-        load: (input) => m.loadMigrationAssistant(input.searchParams ?? {}),
-        spec: (data) => m.migrationAssistantSpec(data as never),
-      }
-    },
-  },
-  '/migrate/[id]': {
-    route: '/migrate/[id]',
-    segments: ['id'],
-    searchParams: false,
-    module: async () => {
-      const m = await import('../app/(app)/migrate/[id]/view')
-      return {
-        load: (input) => m.loadMigrationConversation(segment(input, 'id')),
-        spec: (data) => m.migrationConversationSpec(data as never),
-      }
-    },
-  },
   '/banking': {
     route: '/banking',
     segments: [],
@@ -2152,6 +2116,42 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/migrate': {
+    route: '/migrate',
+    segments: [],
+    searchParams: false,
+    module: async () => {
+      const m = await import('../app/(app)/migrate/view')
+      return {
+        load: () => m.loadMigrationCutover(),
+        spec: (data) => m.migrationCutoverSpec(data as never),
+      }
+    },
+  },
+  '/migrate/[id]': {
+    route: '/migrate/[id]',
+    segments: ['id'],
+    searchParams: false,
+    module: async () => {
+      const m = await import('../app/(app)/migrate/[id]/view')
+      return {
+        load: (input) => m.loadMigrationConversation(segment(input, 'id')),
+        spec: (data) => m.migrationConversationSpec(data as never),
+      }
+    },
+  },
+  '/migrate/assistant': {
+    route: '/migrate/assistant',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/migrate/assistant/view')
+      return {
+        load: (input) => m.loadMigrationAssistant(input.searchParams ?? {}),
+        spec: (data) => m.migrationAssistantSpec(data as never),
+      }
+    },
+  },
   '/nonprofit': {
     route: '/nonprofit',
     segments: [],
@@ -2521,6 +2521,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       return {
         load: () => m.loadReportsHub(),
         spec: () => m.reportsHubSpec(),
+      }
+    },
+  },
+  '/reports/1099-preparation': {
+    route: '/reports/1099-preparation',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/reports/1099-preparation/view')
+      return {
+        load: (input) => m.loadNecPreparation(input.searchParams ?? {}),
+        spec: (data) => m.necPreparationSpec(data as never),
       }
     },
   },
@@ -3198,6 +3210,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
   },
   '/timesheets': {
     route: '/timesheets',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/timesheets/view')
+      return {
+        load: (input) => m.loadTimesheets(input.searchParams ?? {}),
+        spec: (data) => m.timesheetsSpec(data as never),
+      }
+    },
+  },
+  '/manufacturing/time': {
+    route: '/manufacturing/time',
     segments: [],
     searchParams: true,
     module: async () => {

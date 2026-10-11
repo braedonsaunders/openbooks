@@ -10,8 +10,6 @@
   "compute": "Calcular",
   "computing": "Calculando…",
   "empty": "Elija una declaración y un período, y luego calcule.",
-  "adjustmentAria": "Ajuste para {label}",
-  "adjustmentPlaceholder": "0,00",
   "columns": {
     "line": "Casilla",
     "description": "Descripción",
@@ -102,6 +100,12 @@
       "pdf": "PDF",
       "xlsx": "Excel",
       "csv": "CSV"
+    },
+    "adjustments": {
+      "title": "Ajustes",
+      "reason": "Motivo",
+      "recordedBy": "Registrado por",
+      "noReason": "Sin motivo registrado"
     }
   },
   "provisions": {
@@ -326,5 +330,27 @@
       "threshold": "Umbral de ventas"
     },
     "contextUnavailable": "No se pudieron cargar las pruebas de la declaración. Reintente antes de basarse en ellas."
+  },
+  "adjustments": {
+    "title": "Ajustes",
+    "description": "Registre importes que corresponden a una línea de ajuste pero que no están en el libro mayor de este sistema, como la actividad anterior a su conversión. Cada ajuste requiere un motivo y se registra con su autor al guardar la declaración.",
+    "entryLabel": "Ajuste",
+    "line": "Línea",
+    "amount": "Importe",
+    "amountPlaceholder": "0.00",
+    "reason": "Motivo",
+    "reasonPlaceholder": "p. ej. Actividad previa a la conversión de ene.–ago. 2025 según el sistema anterior",
+    "add": "Añadir ajuste",
+    "remove": "Quitar",
+    "removeAria": "Quitar ajuste: {reason}",
+    "errors": {
+      "lineCode": "Elija una línea de ajuste de esta declaración.",
+      "amount": "Introduzca un importe con hasta cuatro decimales, por ejemplo 3018.84 o -50.",
+      "reason": "Introduzca el motivo de este ajuste (hasta 500 caracteres)."
+    }
+  },
+  "conversion": {
+    "notice": "Este periodo de la declaración comienza antes de su conversión el {date}. Añada los importes previos a la conversión de su sistema anterior.",
+    "action": "Añadir importes previos a la conversión"
   }
 }

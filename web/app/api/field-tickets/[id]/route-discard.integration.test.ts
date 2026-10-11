@@ -32,10 +32,23 @@ const mockAuthz = `
   }
 `;
 
-const hooks = registerHooks({
+const mockFeatureGates = `
+  const state = globalThis[Symbol.for('openbooks.fieldticket-discard-test')]
+  export async function guardFeaturePermission(_permission, _feature) {
+    if (!state.authz) return new Response(null, { status: 403 })
+    return state.authz
+  }
+`;
+
+// These mocks stay registered: defineRoute loads the feature gate through the
+// @/ alias on each request, after the route module has finished importing.
+registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "../../../../lib/authz") {
       return { url: "mock:authz", shortCircuit: true };
+    }
+    if (specifier === "@/lib/feature-gates" && context.parentURL?.includes("/lib/api/route")) {
+      return { url: "mock:feature-gates", shortCircuit: true };
     }
     return nextResolve(specifier, context);
   },
@@ -43,13 +56,15 @@ const hooks = registerHooks({
     if (url === "mock:authz") {
       return { format: "module", source: mockAuthz, shortCircuit: true };
     }
+    if (url === "mock:feature-gates") {
+      return { format: "module", source: mockFeatureGates, shortCircuit: true };
+    }
     return nextLoad(url, context);
   },
 });
 
 const deleteRouteUrl = "./route.ts?fieldticket-discard-test";
 const routeModule = (await import(deleteRouteUrl)) as typeof import("./route.ts") & Record<string, unknown>;
-hooks.deregister();
 
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(

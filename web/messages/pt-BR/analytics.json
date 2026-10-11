@@ -2170,6 +2170,10 @@
           "label": "Limite longo de atraso (dias)",
           "help": "Atraso além destes dias recebe a prorrogação longa"
         },
+        "collectibilityHorizonDays": {
+          "label": "Horizonte de recuperabilidade (dias)",
+          "help": "Recebíveis com mais destes dias de atraso não são projetados como recebimentos; são listados separadamente como não previstos"
+        },
         "cardTrajectoryTolerance": {
           "label": "Tolerância de trajetória do cartão",
           "help": "Variação relativa ao pagamento mediano dentro da qual vale a trajetória"
@@ -2203,7 +2207,8 @@
       }
     },
     "unplacedAr": "{count, plural, one {# fatura não tem} other {# faturas não têm}} data de vencimento nem histórico de pagamentos · {total} fora da previsão.",
-    "unplacedAp": "{count, plural, one {# conta não tem} other {# contas não têm}} data de vencimento nem histórico de pagamentos · {total} fora da previsão."
+    "unplacedAp": "{count, plural, one {# conta não tem} other {# contas não têm}} data de vencimento nem histórico de pagamentos · {total} fora da previsão.",
+    "notForecastAr": "{count, plural, one {# recebível} other {# recebíveis}} com mais de {days} dias de atraso · {total} não projetados como recebimentos."
   },
   "trueCost": {
     "title": "Custo real",
@@ -4171,7 +4176,12 @@
       "dueDate": "Vencimento",
       "history": "Histórico",
       "pushed": "Adiado",
-      "deferredFrom": "adiado de {date}"
+      "deferredFrom": "adiado de {date}",
+      "pushedAssumption": "Adiamento de vencidos: pressupõe que os saldos vencidos serão recebidos na data prevista",
+      "basisHistory": "Média de pagamento do cliente: {days} dias",
+      "basisAverage": "Média de pagamento da organização: {days} dias",
+      "basisDueDate": "Vencimento {date}",
+      "basisPushed": "{days} dias em atraso · previsto {date}"
     },
     "netChange": "Variação líquida",
     "pagination": {
@@ -4212,6 +4222,11 @@
       "formula": "Fórmula",
       "info": "Info",
       "note": "Nota"
+    },
+    "overduePush": {
+      "assumption": "Pressupõe que os saldos vencidos serão recebidos na data prevista.",
+      "basis": "{count, plural, one {# fatura} other {# faturas}} · {minDays}–{maxDays} dias em atraso · {amount} no total",
+      "basisSameAge": "{count, plural, one {# fatura} other {# faturas}} · {days} dias em atraso · {amount} no total"
     }
   },
   "categoryManager": {

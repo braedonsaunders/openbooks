@@ -6,6 +6,7 @@ import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
 import { Landmark } from 'lucide-react'
+import { classifyPayeeBankAccount } from '@openbooks/engine/payments/payment-contracts'
 import { fetchAction } from '@braedonsaunders/appkit-errors'
 import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
 import { useAppAction } from '@/lib/use-app-action'
@@ -120,8 +121,15 @@ export function BankAccountsPanel({
     delete routing.transit
     delete routing.routingNumber
     delete routing.branchNumber
-    if (draft.routingNumber.trim()) routing.routingNumber = draft.routingNumber.trim()
-    if (draft.branchNumber.trim()) routing.branchNumber = draft.branchNumber.trim()
+    // Canadian accounts carry the institution and transit numbers the EFT
+    // (CPA-005) file and its readiness check read; other countries keep the
+    // routing and branch numbers their rails read.
+    // A 3-digit institution with a 5-digit transit is Canadian by shape even
+    // when no country or currency was entered.
+    const canadian = draft.country.trim().toUpperCase() === 'CA' || draft.currency.trim().toUpperCase() === 'CAD'
+      || (/^\d{3}$/.test(draft.routingNumber.trim()) && /^\d{5}$/.test(draft.branchNumber.trim()))
+    if (draft.routingNumber.trim()) routing[canadian ? 'institution' : 'routingNumber'] = draft.routingNumber.trim()
+    if (draft.branchNumber.trim()) routing[canadian ? 'transit' : 'branchNumber'] = draft.branchNumber.trim()
     let changeReason: string | undefined
     if (draft.id) {
       const reason = await promptDialog({
@@ -203,11 +211,19 @@ export function BankAccountsPanel({
     if (ok) await refreshAccounts()
   }
 
+  // The same classification payment runs use: an approved status without an
+  // approval date is not payable, so it is not shown as approved either.
+  const bankState = (account: Record<string, unknown>) => classifyPayeeBankAccount({
+    approvalStatus: account.approval_status == null ? null : String(account.approval_status),
+    approvedAt: account.approved_at == null ? null : String(account.approved_at),
+    isActive: account.is_active !== false,
+    retiredAt: account.retired_at == null ? null : String(account.retired_at),
+  })
+
   const statusLabel = (account: Record<string, unknown>) => {
     if (account.retired_at) return tc('status.retired')
-    const status = String(account.approval_status ?? (account.approved_at ? 'approved' : 'pending'))
-    if (status === 'approved') return tc('status.approved')
-    if (status === 'rejected') return tc('status.rejected')
+    if (bankState(account) === 'approved') return tc('status.approved')
+    if (account.approval_status === 'rejected') return tc('status.rejected')
     return tc('status.pendingApproval')
   }
 
@@ -293,7 +309,7 @@ export function BankAccountsPanel({
                   <TableCell className="font-mono text-xs text-slate-500 dark:text-slate-400">{Object.values(account.routing ?? {}).filter(Boolean).join(' · ') || '—'}</TableCell>
                   <TableCell className="font-mono">•••• {account.account_last_four || '—'}</TableCell>
                   <TableCell className="font-mono text-xs">{account.currency || '—'}</TableCell>
-                  <TableCell><Badge variant={account.retired_at ? 'outline' : account.approval_status === 'approved' || account.approved_at ? 'success' : account.approval_status === 'rejected' ? 'outline' : 'warning'}>{statusLabel(account)}</Badge></TableCell>
+                  <TableCell><Badge variant={account.retired_at ? 'outline' : bankState(account) === 'approved' ? 'success' : account.approval_status === 'rejected' ? 'outline' : 'warning'}>{statusLabel(account)}</Badge></TableCell>
                   <TableCell>
                     <div className="flex flex-wrap items-center justify-end gap-2">
                       {canEditAccounts ? <FlowManualButtons subjectKind="party_bank_account" subjectId={String(account.id)} /> : null}

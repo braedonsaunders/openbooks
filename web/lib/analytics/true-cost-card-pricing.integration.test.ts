@@ -27,8 +27,6 @@ const hooks = registerHooks({ resolve(specifier, context, next) {
   if (specifier === 'next/headers') return { shortCircuit: true, url: 'data:text/javascript,export function cookies(){return {get(){return undefined}}}' }
   return next(specifier, context)
 } })
-test.after(() => hooks.deregister())
-
 const { sql } = await import('drizzle-orm')
 const { db, withBypass } = await import('@openbooks/engine/platform/db')
 const { assertDedicatedFixtureDatabase } = await import('@openbooks/engine/testing/fixtures')
@@ -36,6 +34,7 @@ const { JULY, withTrueCostOrg } = await import('@openbooks/engine/testing/true-c
 const { overheadRateAppliesToDriver, OVERHEAD_ZERO_APPLIED_MARKER } = await import('@openbooks/engine/allocations/overhead-application')
 const { compareDecimal } = await import('@openbooks/engine/money/decimal')
 const { trueCostData } = await import('./true-cost-data')
+test.after(() => hooks.deregister())
 
 /** Per-entry pricing is the reference for aggregation: no intermediate
  * rounding, and the same native eligibility and effective-date kernel. */

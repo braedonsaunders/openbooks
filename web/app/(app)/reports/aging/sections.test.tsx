@@ -87,3 +87,36 @@ test('provenance copy is translated in every locale', async () => {
     }
   }
 })
+
+/**
+ * The reconciling line and the overdue-push assumption are read by people who
+ * decide on the cash position, so every locale states them in its own words.
+ * The check reads the raw catalog entries (ICU plurals need values to render).
+ */
+test('reconciling-line and overdue-push copy is localized in every locale', async () => {
+  const keys: [string, string][] = [
+    ['reports', 'aging.controlEntries.label'],
+    ['reports', 'aging.controlEntries.hint'],
+    ['reports', 'aging.controlEntries.more'],
+    ['analytics', 'cashWeek.methods.pushedAssumption'],
+    ['analytics', 'cashWeek.overduePush.assumption'],
+    ['analytics', 'cashWeek.overduePush.basis'],
+    ['analytics', 'cashWeek.overduePush.basisSameAge'],
+    ['ar', 'cockpit.worklist.overduePush.assumption'],
+    ['ar', 'cockpit.worklist.overduePush.basis'],
+    ['ar', 'cockpit.worklist.overduePush.basisSameAge'],
+  ]
+  const read = (messages: Record<string, unknown>, namespace: string, key: string): unknown =>
+    `${namespace}.${key}`.split('.').reduce<unknown>((node, part) => (node as Record<string, unknown> | undefined)?.[part], messages)
+  const en = (await import('../../../../messages/en/index.ts')).default as Record<string, unknown>
+  for (const locale of LOCALES) {
+    const messages = (await import(`../../../../messages/${locale}/index.ts`)).default as Record<string, unknown>
+    for (const [namespace, key] of keys) {
+      const rendered = read(messages, namespace, key)
+      assert.ok(typeof rendered === 'string' && rendered.length > 0, `${namespace}.${key} must exist in ${locale}`)
+      if (locale !== 'en') {
+        assert.notEqual(rendered, read(en, namespace, key), `${locale} must localize ${namespace}.${key}`)
+      }
+    }
+  }
+})

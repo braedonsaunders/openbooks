@@ -13,6 +13,7 @@ import {
   parsePaypalTransactions,
   parseRecurlySettlement,
   parseShopifyPaymentsPayout,
+  parseSquarePayout,
   parseStripeBalanceTransactions,
   postSettlementBatch,
   reverseSettlementBatch,
@@ -52,7 +53,7 @@ import {
 import { isUuid } from "../../../../lib/list-params";
 import { notFound } from "@/lib/api/responses";
 import { exactMoney, isoDate } from "@/lib/api/json";
-// Settlement-side provider configuration covers the five importable
+// Settlement-side provider configuration covers the six importable
 // providers only: acceptance-only providers keep their automation half on
 // the acceptance setup route, whose saves the engine merges by field.
 const configProvider = z.enum([
@@ -61,6 +62,7 @@ const configProvider = z.enum([
   "chargebee",
   "shopify_payments",
   "paypal",
+  "square",
 ]);
 const accountReference = z.uuid().nullable().optional();
 const refundPolicy = z.enum(["automatic", "review"]);
@@ -179,6 +181,34 @@ const paypalTransaction = z.object({
   transaction_info: paypalTransactionInfo.optional().nullable(),
 });
 
+// Square money arrives as integer minor units; the engine refuses anything
+// that is not an exact integer and names the field.
+const squareMoney = z.object({
+  amount: decimalAmount,
+  currency: z.string().optional().nullable(),
+});
+
+const squarePayout = z.object({
+  id: z.string().trim().min(1, "Square payout id is required"),
+  status: z.string().optional().nullable(),
+  arrival_date: z.string().optional().nullable(),
+  created_at: z.string().optional().nullable(),
+  amount_money: squareMoney,
+});
+
+const squarePayoutEntry = z.object({
+  id: z.string().optional().nullable(),
+  payout_id: z.string().optional().nullable(),
+  effective_at: z.string().optional().nullable(),
+  type: z.string().trim().min(1, "Square payout entry type is required"),
+  gross_amount_money: squareMoney,
+  fee_amount_money: squareMoney.optional().nullable(),
+  net_amount_money: squareMoney,
+  type_charge_details: z.object({ payment_id: z.string().optional().nullable() }).optional().nullable(),
+  type_refund_details: z.object({ payment_id: z.string().optional().nullable() }).optional().nullable(),
+  type_dispute_details: z.object({ dispute_id: z.string().optional().nullable() }).optional().nullable(),
+});
+
 const importBody = z.discriminatedUnion("provider", [
   z.strictObject({
     action: z.literal("import"),
@@ -236,6 +266,18 @@ const importBody = z.discriminatedUnion("provider", [
     ...importAccountReferences,
   }).refine((body) => body.payload !== undefined || body.csv !== undefined, {
     message: "payload or csv is required",
+  }),
+  z.strictObject({
+    action: z.literal("import"),
+    provider: z.literal("square"),
+    // The operator's reference must name the Square payout: the payout id is
+    // the batch's idempotency key, and the handler refuses any other value.
+    externalRef: z.string().trim().min(1).optional(),
+    settlementDate: calendarDateShape.optional(),
+    payout: squarePayout,
+    entries: z.array(squarePayoutEntry).min(1, "at least one Square payout entry is required"),
+    fx: fxEvidence.optional(),
+    ...importAccountReferences,
   }),
 ]);
 
@@ -614,6 +656,18 @@ export const POST = defineRoute({
                     }),
                     fallbackDate,
                   );
+              break;
+            case "square":
+              if (body.externalRef !== undefined && body.externalRef !== body.payout.id.trim()) {
+                throw new PspSettlementError(
+                  `external ref ${body.externalRef} does not name Square payout ${body.payout.id}; enter the payout id as the external ref`,
+                );
+              }
+              parsed = parseSquarePayout(
+                nullsToUndefined(body.payout),
+                nullsToUndefined(body.entries),
+                fallbackDate,
+              );
               break;
           }
           if (body.fx) {

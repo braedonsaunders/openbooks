@@ -330,6 +330,9 @@ async function runSchedule(
             csvMapping: fmt === "csv" ? s.csv_mapping : null,
           },
           dryRun: false,
+          // Unattended: no operator reviews a preview, so flagged possible
+          // duplicates import for review instead of being dropped.
+          includePossibleDuplicates: true,
           writeFence: (tx) => assertScheduleEffectAllowed(s, claimToken, tx),
         },
         ctx,

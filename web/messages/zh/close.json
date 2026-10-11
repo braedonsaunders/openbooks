@@ -22,6 +22,8 @@
     "rangeValue": "{start} → {end}",
     "status": "状态",
     "readiness": "就绪度",
+    "closedBy": "关账人",
+    "closedByDetail": "{name}，{date}",
     "action": "操作",
     "lockedDetail": "{modules}已锁定 · {book}"
   },
@@ -504,8 +506,10 @@
       "endReopenTitle": "结束此次重开",
       "endReopenHint": "结束后，此窗口打开的所有模块将重新关闭，该期间可接受新的重开申请。",
       "endReopenReasonRequired": "结束重开需要至少 10 个字符的理由。",
-      "extendReopenTitle": "延长或扩大",
-      "extendReopenHint": "向此窗口添加时间或模块，而不是新建重叠申请。",
+      "reopenRequestedUntil": "申请的到期时间：{date}",
+      "extendReopenTitle": "申请延长或扩大范围",
+      "extendReopenHint": "提交新申请，由有权限的审批人决定。批准后将替代当前重新开放窗口。要保留当前到期时间，请将额外小时数留空或输入0。",
+      "extendByApproverOnly": "如需扩大或延长您自己的窗口，请提交一个包含此窗口全部模块及您所需模块的重新开放申请。由符合条件的审批人决定，批准后将替代此窗口。",
       "extendHoursLabel": "额外小时数",
       "extendModulesLabel": "添加模块",
       "extendReopenReasonRequired": "延长重开需要至少 10 个字符的理由。",
@@ -588,7 +592,7 @@
       "addRow": "添加",
       "removeValue": "移除{value}",
       "endReopen": "结束重开",
-      "extendReopen": "延长重开"
+      "extendReopen": "申请延长"
     },
     "fields": {
       "name": "名称",
@@ -668,6 +672,7 @@
       "gl": "总账"
     },
     "reopenStates": {
+      "superseded": "已被替代",
       "requested": "已申请",
       "approved": "已批准",
       "rejected": "已拒绝",
@@ -776,7 +781,7 @@
       "automationSaved": "自动化规则已保存",
       "packageSaved": "报告包已保存",
       "reopenEnded": "重开窗口已结束。",
-      "reopenExtended": "重开窗口已延长。"
+      "reopenExtended": "已提交重新开放变更申请。"
     },
     "errors": {
       "actionFailed": "无法保存该设置更改",

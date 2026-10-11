@@ -28,7 +28,7 @@ import {
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission, can, subsidiaryScopeAllows } from '../../../../lib/authz'
-import { reconciliationStalenessSummaries } from '@openbooks/engine/banking/banking'
+import { listAccountStatements, reconciliationStalenessSummaries } from '@openbooks/engine/banking/banking'
 import { bankAccount } from '../../../../lib/banking-accounts'
 import { isUuid, mergeHref, parsePrefixedListParams, pickString } from '../../../../lib/list-params'
 import type { StatementDrawer as StatementDrawerComponent } from './StatementDrawer'
@@ -61,20 +61,13 @@ const RECON_VARIANT: Record<string, 'success' | 'secondary' | 'warning'> = {
 
 // Enum values with translated labels — unknown values render as the raw code
 // with underscores spaced out.
-const TYPE_KEYS = ['asset_bank', 'liability_card']
+const TYPE_KEYS = ['asset_bank', 'liability_card', 'liability_payable', 'liability_current_other', 'liability_long_term']
 const RECON_STATUS_KEYS = ['signed_off', 'balanced', 'in_progress']
 const STATEMENT_SOURCE_KEYS = ['ofx', 'csv', 'camt053', 'bai2', 'mt940', 'feed_api', 'manual'] as const
 
 // Connector labels resolve from the tenant's own connections table, never
 // from a hardcoded vendor map: the display name is tenant data, so product
 // copy stays vendor-neutral no matter which systems are supported.
-
-const STMT_SORTS = {
-  date: sql`s.statement_date`,
-  source: sql`s.source`,
-  lines: sql`coalesce(lc.n, 0)`,
-  imported: sql`s.imported_at`,
-} as const
 
 const RECON_SORTS = {
   through: sql`r.through_date`,
@@ -94,18 +87,6 @@ interface AccountRow extends Record<string, unknown> {
   unmatched_lines: string | number
   open_reconciliation_id: string | null
 }
-interface StatementRow extends Record<string, unknown> {
-  id: string
-  source: string
-  statement_date: string
-  opening_balance: string | null
-  closing_balance: string | null
-  imported_at: string
-  line_count: string | number
-  unmatched_count: string | number
-  matched_count: string | number
-  excluded_count: string | number
-}
 interface ReconciliationRow extends Record<string, unknown> {
   id: string
   through_date: string
@@ -120,7 +101,9 @@ interface CountRow extends Record<string, unknown> { n: string | number }
 interface SourceCountRow extends CountRow { source: string }
 interface StatusCountRow extends CountRow { status: string }
 type DrawerProps = Parameters<typeof StatementDrawerComponent>[0]
-type StatementDetailRow = DrawerProps['statement'] & Record<string, unknown>
+type StatementDetailRow = Omit<DrawerProps['statement'], 'importedAtLabel'> & {
+  imported_at: Date | string
+} & Record<string, unknown>
 type StatementLineRow = DrawerProps['lines'][number] & Record<string, unknown>
 
 export interface StatementListRow {
@@ -260,6 +243,9 @@ export async function loadBankingAccount(
   const timeZone = await businessTimeZone(orgId)
   const timestampFormatter = new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone })
   const formatTimestamp = (value: string) => timestampFormatter.format(new Date(value))
+  // Statement imports carry their time: same-day imports must stay tellable apart.
+  const importTimestampFormatter = new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short', timeZone })
+  const formatImportTimestamp = (value: Date | string) => importTimestampFormatter.format(new Date(value))
 
   // Read every active bank/card account shown by the overview, including
   // accounts awaiting reconciliation setup. Workflow actions remain gated
@@ -297,10 +283,6 @@ export async function loadBankingAccount(
     allowedSorts: ['date', 'source', 'lines', 'imported'] as const,
   })
   const source = pickString(sp.source)
-  const stmtWhere = sql`s.account_id = ${accountId} and s.org_id = ${orgId}
-    ${source ? sql` and s.source = ${source}` : sql``}
-    ${stmtParams.q ? sql` and (s.statement_date::text ilike ${'%' + stmtParams.q + '%'} or s.source ilike ${'%' + stmtParams.q + '%'})` : sql``}`
-
   // -- reconciliations list (prefixed: recon*) -------------------------------
   const reconParams = parsePrefixedListParams(sp, 'recon', {
     sort: 'created',
@@ -315,22 +297,22 @@ export async function loadBankingAccount(
 
   const openStatementId = pickString(sp.statement)
 
-  const [statements, stmtCount, sourceCounts, recons, reconCount, reconStatusCounts] = (await Promise.all([
-    db.execute<StatementRow>(sql`
-      select s.id, s.source, s.statement_date, s.opening_balance, s.closing_balance, s.imported_at,
-             coalesce(lc.n, 0) as line_count, coalesce(lc.unmatched, 0) as unmatched_count,
-             coalesce(lc.matched, 0) as matched_count, coalesce(lc.excluded, 0) as excluded_count
-        from bank_statements s
-        left join lateral (
-          select count(*) as n, count(*) filter (where l.match_status = 'unmatched') as unmatched,
-                 count(*) filter (where l.match_status = 'matched') as matched,
-                 count(*) filter (where l.match_status = 'excluded') as excluded
-            from bank_statement_lines l where l.statement_id = s.id and l.org_id = s.org_id) lc on true
-       where ${stmtWhere}
-       order by ${STMT_SORTS[stmtParams.sort]} ${stmtParams.dir === 'asc' ? sql`asc` : sql`desc`} nulls last
-       limit ${stmtParams.perPage} offset ${(stmtParams.page - 1) * stmtParams.perPage}
-    `),
-    db.execute<CountRow>(sql`select count(*) as n from bank_statements s where ${stmtWhere}`),
+  // One statement per row, keyed by id: same-date imports stay separate rows.
+  const statementList = await listAccountStatements(
+    accountId,
+    {
+      q: stmtParams.q,
+      source,
+      sort: stmtParams.sort,
+      dir: stmtParams.dir,
+      page: stmtParams.page,
+      perPage: stmtParams.perPage,
+    },
+    { orgId, userId: authz.user.id, allowedSubsidiaryIds: authz.allowedSubsidiaryIds },
+  )
+  const stmtTotal = statementList.total
+
+  const [sourceCounts, recons, reconCount, reconStatusCounts] = (await Promise.all([
     db.execute<SourceCountRow>(sql`select s.source, count(*) as n from bank_statements s where s.account_id = ${accountId} and s.org_id = ${orgId} group by s.source order by s.source`),
     db.execute<ReconciliationRow>(sql`
       select r.id, r.through_date, r.statement_balance, r.status, r.signed_off_at, r.created_at,
@@ -400,7 +382,14 @@ export async function loadBankingAccount(
       drawer = {
         basePath,
         currentParams: sp,
-        statement: { ...s.rows[0], source: statementSourceLabel(s.rows[0].source) },
+        statement: {
+          id: s.rows[0].id,
+          source: statementSourceLabel(s.rows[0].source),
+          statement_date: s.rows[0].statement_date,
+          opening_balance: s.rows[0].opening_balance,
+          closing_balance: s.rows[0].closing_balance,
+          importedAtLabel: formatImportTimestamp(s.rows[0].imported_at),
+        },
         canEditBalances,
         balancesBlockedReason:
           matchedLineCount > 0
@@ -465,7 +454,6 @@ export async function loadBankingAccount(
 
   // The native page shows the empty state only when the list is truly empty —
   // a filter that matches nothing renders the table with zero body rows.
-  const stmtTotal = Number(stmtCount.rows[0]?.n ?? 0)
   const stmtIsEmpty = stmtTotal === 0 && !stmtParams.q && !source
   const reconTotal = Number(reconCount.rows[0]?.n ?? 0)
   const reconIsEmpty = reconTotal === 0 && !reconParams.q && !reconStatus
@@ -511,15 +499,15 @@ export async function loadBankingAccount(
     columnOpening: t('account.columns.opening'),
     columnClosing: t('account.columns.closing'),
     columnImported: t('account.columns.imported'),
-    statementRows: statements.rows.map((s) => {
+    statementRows: statementList.rows.map((s) => {
       const matched = Number(s.matched_count)
       const excluded = Number(s.excluded_count)
       const lineCount = Number(s.line_count)
       return {
         id: s.id,
         // The opener keeps the lists' search, sort and page exactly like the
-        // drawer's closeHref does — rebuilding from the id alone reset the
-        // page underneath to an unfiltered page 1 (F1T-12).
+        // drawer's closeHref does; rebuilding from the id alone would reset
+        // the page underneath to an unfiltered page 1.
         dateHref: mergeHref(basePath, sp, { statement: s.id }),
         dateLabel: s.statement_date,
         sourceLabel: statementSourceLabel(s.source),
@@ -528,7 +516,7 @@ export async function loadBankingAccount(
         unmatchedIsZero: Number(s.unmatched_count) === 0,
         openingBalance: money(s.opening_balance),
         closingBalance: money(s.closing_balance),
-        importedAt: formatTimestamp(s.imported_at),
+        importedAt: formatImportTimestamp(s.imported_at),
         showDelete: canReconcile,
         deleteBlockedReason:
           matched > 0

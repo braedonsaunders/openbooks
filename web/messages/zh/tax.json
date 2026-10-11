@@ -10,8 +10,6 @@
   "compute": "计算",
   "computing": "计算中…",
   "empty": "选择一份申报表和一个期间，然后计算。",
-  "adjustmentAria": "针对 {label} 的调整",
-  "adjustmentPlaceholder": "0.00",
   "columns": {
     "line": "行",
     "description": "说明",
@@ -102,6 +100,12 @@
       "pdf": "PDF",
       "xlsx": "Excel",
       "csv": "CSV"
+    },
+    "adjustments": {
+      "title": "调整",
+      "reason": "原因",
+      "recordedBy": "录入人",
+      "noReason": "未记录原因"
     }
   },
   "provisions": {
@@ -326,5 +330,27 @@
       "threshold": "销售阈值"
     },
     "contextUnavailable": "无法加载申报证据。请重试后再依据这些信息操作。"
+  },
+  "adjustments": {
+    "title": "调整",
+    "description": "录入属于调整行但不在本系统总账中的金额，例如转换前的业务。每项调整都需要填写原因，并会在保存申报表时连同录入人一并记录。",
+    "entryLabel": "调整",
+    "line": "行次",
+    "amount": "金额",
+    "amountPlaceholder": "0.00",
+    "reason": "原因",
+    "reasonPlaceholder": "例如：2025年1月至8月转换前业务（来自原系统）",
+    "add": "添加调整",
+    "remove": "删除",
+    "removeAria": "删除调整：{reason}",
+    "errors": {
+      "lineCode": "请选择本申报表的调整行。",
+      "amount": "请输入最多四位小数的金额，例如 3018.84 或 -50。",
+      "reason": "请填写本次调整的原因（最多 500 个字符）。"
+    }
+  },
+  "conversion": {
+    "notice": "此申报期间早于您的转换日期 {date}。请添加原系统中的转换前金额。",
+    "action": "添加转换前金额"
   }
 }

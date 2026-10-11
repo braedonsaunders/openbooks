@@ -42,9 +42,15 @@
     "expense": "Despesas"
   },
   "hygiene": {
-    "assetBankUncorroborated": "“{name}” está classificada como conta bancária, mas não tem nome bancário nem é conciliável, por isso será contada como caixa em todos os lugares. Confirme o tipo (contas de compensação, provisão e crédito costumam ser classificadas incorretamente) ou ative a conciliação."
+    "assetBankUncorroborated": "“{name}” está classificada como conta bancária, mas não tem nome bancário nem é conciliável, por isso será contada como caixa em todos os lugares. Confirme o tipo (contas de compensação, provisão e crédito costumam ser classificadas incorretamente) ou ative a conciliação.",
+    "duplicateAccountName": "Salvo. Outra conta ativa também se chama “{name}” ({account})."
   },
   "drawer": {
+    "duplicateName": {
+      "body": "Já existe uma conta ativa chamada “{name}” ({account}). Use essa conta ou crie esta mesmo assim.",
+      "useExisting": "Usar conta existente",
+      "createAnyway": "Criar mesmo assim"
+    },
     "saved": "Conta salva",
     "typeLocked": "O tipo não pode ser alterado depois que a conta tem movimentação no razão.",
     "parent": "Conta pai",
@@ -80,6 +86,7 @@
       "invalid_custom_fields": "Revise os valores dos campos personalizados.",
       "number_in_use": "Esse número de conta já está em uso.",
       "numberInUseBy": "Esse número de conta já está em uso por <account>{number} · {name}</account>.",
+      "duplicate_account_name": "Uma conta ativa já usa este nome.",
       "save_failed": "Não foi possível salvar a conta.",
       "parent_type_mismatch": "Pai e filha devem usar o mesmo tipo de conta.",
       "reconcilable_currency_required": "Contas conciliáveis precisam de moeda de liquidação — escolha uma antes de salvar.",

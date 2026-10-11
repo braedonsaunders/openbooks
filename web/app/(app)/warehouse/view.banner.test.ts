@@ -41,11 +41,19 @@ function blocksOf(spec: unknown): Record<string, unknown>[] {
   return found
 }
 
+/** The panel (the node carrying `when`) that hosts a widget block. */
+function panelHosting(spec: unknown, widget: string): Record<string, unknown>[] {
+  return blocksOf(spec).filter(
+    (node) => Array.isArray(node.blocks) && (node.blocks as Record<string, unknown>[]).some((block) => block.widget === widget),
+  )
+}
+
 test('a supply refusal renders as a banner gated on the refusal flag', () => {
-  const blocks = blocksOf(warehouseSpec(blockedData()))
-  const banner = blocks.find((block) => block.widget === 'attention-list')
-  assert.ok(banner, 'the blocked home must render the supply-refusal banner')
-  assert.deepEqual(banner.when, { $: 'showSupplyRefusal' }, 'the banner shows exactly while the refusal is set')
+  const [panel] = panelHosting(warehouseSpec(blockedData()), 'attention-list')
+  assert.ok(panel, 'the blocked home must render the supply-refusal banner')
+  assert.deepEqual(panel.when, { $: 'showSupplyRefusal' }, 'the banner shows exactly while the refusal is set')
+  const [banner] = panel.blocks as Record<string, unknown>[]
+  assert.ok(banner, 'the banner panel carries its attention list')
   const props = banner.props as Record<string, unknown>
   const items = props.items as { tone: string; text: string; href: string }[]
   assert.equal(items.length, 1, 'the banner carries the one refusal')
@@ -56,8 +64,7 @@ test('a supply refusal renders as a banner gated on the refusal flag', () => {
 })
 
 test('the supply figure panels hide while the refusal is shown', () => {
-  const blocks = blocksOf(warehouseSpec(blockedData()))
-  const pulses = blocks.filter((block) => block.widget === 'ap-pulse')
+  const pulses = panelHosting(warehouseSpec(blockedData()), 'ap-pulse')
   assert.equal(pulses.length, 2, 'both supply panels stay in the spec')
   for (const pulse of pulses) {
     assert.deepEqual(

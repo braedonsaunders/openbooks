@@ -15,10 +15,10 @@ import { PayrollError } from "./error.ts";
 import { aggregateUsSupplementalWageAmounts } from "./supplemental-wages.ts";
 import { aggregateUsStatutoryExemptionAmounts } from "./statutory-exemptions.ts";
 import { cmp, sum } from "../money/money.ts";
-import { payrollCertificate, resolveCertificate, revalidateStoredCertificates, type ResolvedCertificate } from "./certificates.ts";
-import { packRates, PayrollPackError, assertPayrollRegionSupported, type EmployeePayrollContext, type PayrollRunContext, type PayrollTaxBaseKey, type SupplementalTaxMethod } from "./packs.ts";
+import { revalidateStoredCertificates } from "./certificates.ts";
+import { type StatutoryRateResolution } from "./statutory-rates.ts";
+import { assertPayrollRegionSupported, type EmployeePayrollContext, type PayrollRunContext, type PayrollTaxBaseKey, type SupplementalTaxMethod } from "./packs.ts";
 import type { PayPeriodPriors } from "./period-priors.ts";
-import { assertConfiguredStatutoryRates, type StatutoryRateResolution } from "./statutory-rates.ts";
 import { createPushStatutory } from "./push-statutory.ts";
 import { assessStubAggregateLevies } from "./employer-aggregate-priors.ts";
 import { assertSettlementFactorsMergeable, settleAnnualSettlement } from "./annual-settlement-run.ts";
@@ -32,8 +32,10 @@ import { assertEarningsAssessedStable, dropIncomeAssessedLines, type EarningsAss
 import { reduceTaxBases } from "./treatment-bases.ts";
 import { assertVacationPlanResolved } from "./run-setup.ts";
 import { type StubComputation, storedTaxCertificates, resolvePayRate, resolveStubStatutoryHours } from "./run-calculation-support.ts";
+import { assertPackStatutoryRatesConfigured, createStubCertificateResolver } from "./run-stub-preflight.ts";
 import { type Line, installablePackOrThrow, insertPayStubRow, insertPayStubLineRows, persistEntitlementMovements, earningsAssessedSnapshot, resolveEmployeeJurisdiction, stampDepartmentExpenseAccounts, employeeHomeDepartment } from "./run-stub-records.ts";
-import { appendPeriodicEarnings, appendRetroSettlementLines, appendDerivedEarningLines, appendStatutoryHolidayEarningLines, applyAssignedComponentLines, applyRunLineAdjustments, appendUnionFringeLines, applyEntitlementPlanMovements } from "./run-earning-lines.ts";
+import { appendPeriodicEarnings, appendRetroSettlementLines, appendDerivedEarningLines, appendStatutoryHolidayEarningLines, applyAssignedComponentLines, applyRunLineAdjustments } from "./run-earning-lines.ts";
+import { appendUnionFringeLines, applyEntitlementPlanMovements } from "./run-plan-earning-lines.ts";
 import { applyBankDrawdown } from "./run-bank-drawdown.ts";
 import { settleTerminationBankPayouts, appendCashVacationPay } from "./run-final-payouts.ts";
 import { assignmentOverlapsPeriod } from "./assignment-windows.ts";
@@ -110,38 +112,10 @@ export async function calculateStub(
   const taxYear = jurisdiction.taxYear;
   const pack = installablePackOrThrow(country);
 
-  // ---- Live-but-unconfigured `refuse` slots stop the employee BY NAME -----
-  // BEFORE any money is computed: a misconfiguration (rates on file, none
-  // resolving for this employee's region and assigned filing account) must be
-  // loud, because a silent zero still balances. The sentence is the readiness
-  // detector's own — the run and the warning cannot disagree. Packs with no
-  // rate declaration, or none declaring `refuse`, cost no query here.
-  let packRefuses = false;
-  try {
-    packRefuses = packRates(country).slots.some((slot) => slot.whenUnconfigured === "refuse");
-  } catch (error) {
-    if (!(error instanceof PayrollPackError)) throw error;
-  }
-  if (packRefuses) {
-    const resolution = await ctx.statutoryRatesFor(country, taxYear);
-    // A pack-recorded waiver stands its slots down from the requirement (US
-    // SUI for a recorded non-contributory account, which prices no SUI).
-    // Nothing recorded waives nothing, so every other scope point keeps
-    // today's gate byte-for-byte.
-    const waived = pack.waivedRateSlots
-      ? await pack.waivedRateSlots(tx, {
-        orgId, region: province, filingAccountId: jurisdiction.filingAccountId, payDate: run.pay_date!,
-        employeePartyId,
-      })
-      : [];
-    assertConfiguredStatutoryRates(
-      waived.length === 0
-        ? resolution
-        : { ...resolution, slots: resolution.slots.filter((slot) => !waived.includes(slot.key)) },
-      { region: province, filingAccountId: jurisdiction.filingAccountId },
-      emp.display_name ?? employeePartyId,
-    );
-  }
+  await assertPackStatutoryRatesConfigured({
+    tx, orgId, pack, country, taxYear, province, jurisdiction, run, employeePartyId,
+    displayName: emp.display_name ?? employeePartyId, statutoryRatesFor: ctx.statutoryRatesFor,
+  });
 
   const lines: Line[] = [];
   // Entitlement movements are written to the ledger only after the stub rows
@@ -177,31 +151,9 @@ export async function calculateStub(
     );
   }
   emp = historicalWithholdingProfile({ country, profile: emp, stored: storedCertificates, payDate: run.pay_date! });
-  /**
-   * One declared certificate, resolved against what is stored — the row the
-   * employee filed or the documented historical inputs, else the current
-   * profile column, else the
-   * pack's declared default (a statutory fact, "no certificate on file is
-   * withheld at single with zero allowances"), else null.
-   *
-   * Returns null for a certificate the pack does not declare at all, so a
-   * caller asking for a form this country never issued gets an honest "no"
-   * rather than an exception.
-   */
-  const certificateFor = (key: string): ResolvedCertificate | null => {
-    let declared;
-    try {
-      declared = payrollCertificate(country, key);
-    } catch {
-      return null;
-    }
-    return resolveCertificate({
-      certificate: declared,
-      stored: storedCertificates,
-      profile: emp as Record<string, unknown>,
-      asOf: run.pay_date,
-    });
-  };
+  const certificateFor = createStubCertificateResolver({
+    country, storedCertificates, emp, payDate: run.pay_date,
+  });
 
   // An off-cycle run pays only its one-off lines: no salary, no time, and no
   // recurring components (a bonus cheque does not re-take the period's benefit

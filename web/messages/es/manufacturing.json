@@ -51,6 +51,7 @@
     "process": "Ejecución de proceso"
   },
   "fields": {
+    "correctedOn": "Fecha corregida",
     "number": "Número",
     "code": "Código",
     "name": "Nombre",
@@ -171,7 +172,9 @@
     "campaignReference": "Referencia de campaña",
     "inputQuantity": "Cantidad de entrada",
     "outputQuantity": "Cantidad de salida",
-    "difference": "Diferencia sin conciliar"
+    "difference": "Diferencia",
+    "measuredOutputQuantity": "Salida medida",
+    "differenceKind": "Tipo de diferencia"
   },
   "actions": {
     "create": "Crear",
@@ -198,6 +201,7 @@
     "resumeOperation": "Reanudar operación",
     "pauseOperation": "Pausar operación",
     "correctOperationStart": "Corregir fecha de inicio",
+    "correctCompletionDate": "Corregir fecha de finalización",
     "completeOperation": "Completar operación",
     "waive": "Eximir saldo de material",
     "endRate": "Finalizar tarifa",
@@ -280,6 +284,7 @@
   "mrpNote": "MRP propone suministro desde datos guardados. La capacidad es orientativa; una sobrecarga no desplaza fechas.",
   "issueNote": "Elija componente y cantidad exacta. Los artículos trazados requieren lote o serie. El comando verifica disponibilidad y bloqueos en origen.",
   "outputNote": "Esta recepción añade productos al inventario. Indique cantidad recibida ahora, trazabilidad y valoración necesaria de subproductos.",
+  "completionDateNote": "Traslada la recepción de productos terminados y su asiento de finalización al día en que terminó la producción. Los asientos originales se revierten en su propia fecha y se vuelven a registrar en el día corregido con las mismas cantidades, costes y cuentas. Se rechaza la corrección si un movimiento posterior del mismo artículo cambiaría su coste, si el día es anterior a operaciones o materiales registrados, o si un periodo está cerrado.",
   "doneNote": "Terminar cierra la ejecución y liquida el trabajo en curso. Se exigen tolerancias, mediciones y materiales. La cantidad buena inferior a la solicitada requiere motivo, incluso con merma.",
   "normalScrapNote": "Registre merma normal antes de la primera recepción terminada. El costo permanece en proceso para los productos buenos; no desecha stock. Pérdidas anormales o posteriores a la recepción requieren bloquear la orden y revisar la valoración.",
   "activateNote": "Proponga el borrador para aprobación. Aplicar el evento aprobado controla su vigencia y finaliza la revisión anterior solapada. Las órdenes liberadas conservan sus versiones.",
@@ -608,10 +613,15 @@
     "details": "Detalles opcionales",
     "balance": "Balance de material registrado",
     "windowNote": "Delimite una ejecución continua con las fechas de inicio y fin previstas y una cantidad esperada. Las recepciones parciales registran cada salida. Una referencia de campaña agrupa ejecuciones relacionadas en la búsqueda; no agrupa costes ni sustituye la receta aprobada de cada ejecución.",
-    "balanceNote": "Las cantidades se agrupan por la unidad base actual de inventario. Las unidades diferentes permanecen separadas. La diferencia es la entrada registrada menos toda la salida buena y secundaria, no un cálculo automático de merma o masa física. Se excluyen los movimientos revertidos.",
+    "balanceNote": "Las cantidades se agrupan por unidad base de inventario y las unidades distintas se mantienen separadas. La entrada es el consumo registrado. La salida son las recepciones registradas más la salida medida de la última operación medida que aún no se ha recibido, de modo que un peso medido cuenta antes de su recepción y no se duplica después. La diferencia es la entrada menos esa salida; con salida medida, una diferencia positiva es la merma medida. Se excluyen los movimientos revertidos.",
     "empty": "Sin movimientos de material registrados",
     "emptyNote": "Emita componentes y reciba producción para ver el balance registrado.",
     "carryover": "Pasar material a la siguiente ejecución",
-    "carryoverNote": "Reciba el material intermedio retenido como un artículo trazable de inventario y emita ese artículo y su lote o serie a la siguiente ejecución. Se mantienen los bloqueos de calidad. La genealogía sigue la recepción y emisión reales; no supone trabajo en curso no registrado ni traspasos financieros automáticos."
+    "carryoverNote": "Reciba el material intermedio retenido como un artículo trazable de inventario y emita ese artículo y su lote o serie a la siguiente ejecución. Se mantienen los bloqueos de calidad. La genealogía sigue la recepción y emisión reales; no supone trabajo en curso no registrado ni traspasos financieros automáticos.",
+    "differenceKind": {
+      "balanced": "Equilibrado",
+      "measured_loss": "Merma medida",
+      "unreconciled": "Sin conciliar"
+    }
   }
 }

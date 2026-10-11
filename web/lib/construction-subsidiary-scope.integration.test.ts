@@ -112,7 +112,7 @@ test('construction and subcontract routes enforce the caller subsidiary scope', 
     assert.equal((await get(subcontracts.GET, org.orgId, `id=${visibleContract}`)).status, 200)
     for (const body of [
       { action: 'createSubcontract', projectId: hidden, vendorId: org.vendorId, number: 'SC-NEW', title: 'New', originalCommitment: '100' },
-      { action: 'updateSubcontract', id: hiddenContract, title: 'Renamed', originalCommitment: '100', defaultRetainagePercent: '10' },
+      { action: 'updateSubcontract', id: hiddenContract, title: 'Renamed', originalCommitment: '100', defaultRetainagePercent: '10', expectedUpdatedAt: new Date().toISOString() },
       { action: 'addSovLine', subcontractId: hiddenContract, description: 'Line', scheduledValue: '100' },
       { action: 'addChangeOrder', subcontractId: hiddenContract, number: 'CO-H', amount: '10' },
       { action: 'submitSubcontract', id: hiddenContract },

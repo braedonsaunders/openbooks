@@ -34,6 +34,13 @@ export interface AccountingHome {
    * for unrestricted callers (the query above already sees every run).
    */
   closeUnavailable: boolean
+  /**
+   * The latest period carrying an organization-wide closed lock, by name, or
+   * null. Locks can close a period without any close run (autopilot, API), so
+   * the progress above can read "no run" while periods are closed. Null for
+   * restricted callers, who see the refusal instead.
+   */
+  lastLockedPeriod: string | null
   draftJournals: number
   postedJournals7d: number
   workItems: { critical: number; warning: number; info: number; total: number }
@@ -159,7 +166,7 @@ export async function accountingHome(
   // entries yet (the /journal list reads documents too), so the draft tile
   // counts draft journal documents with no book scope.
   const bookScope = sql` and je.book_id = ${statementBookExpr(orgId)}`
-  const [closeRes, countsRes, workRes] = (await Promise.all([
+  const [closeRes, countsRes, workRes, lockRes] = (await Promise.all([
     // Latest close run + its task progress ('complete'/'approved' = done).
     access.close ? db.execute<{ id: string; status: string; period_name: string; tasks_total: string; tasks_done: string }>(sql`
       select r.id, r.status, p.name as period_name,
@@ -199,6 +206,17 @@ export async function accountingHome(
          ${workItemScope(orgId, scope)}
        group by severity
     `) : Promise.resolve({ rows: [] }),
+    // Closed organization-wide locks on the primary book, newest period first.
+    access.close ? db.execute<{ period_name: string }>(sql`
+      select p.name as period_name
+        from period_locks pl
+        join accounting_periods p on p.id = pl.period_id and p.org_id = pl.org_id
+       where pl.org_id = ${orgId} and pl.state = 'closed' and pl.subsidiary_id is null
+         and pl.book_id = ${statementBookExpr(orgId)}
+         ${closeRunScope(scope)}
+       order by p.ends_on desc
+       limit 1
+    `) : Promise.resolve({ rows: [] }),
   ]))
 
   const close = closeRes.rows[0]
@@ -230,6 +248,7 @@ export async function accountingHome(
     // the close section rather than naming a diagnostic the caller cannot
     // hold.
     closeUnavailable: access.close && scope !== null,
+    lastLockedPeriod: lockRes.rows[0]?.period_name ?? null,
     draftJournals: Number(counts.draft_journals ?? 0),
     postedJournals7d: Number(counts.posted_7d ?? 0),
     workItems,

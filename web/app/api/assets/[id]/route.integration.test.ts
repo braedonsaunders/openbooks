@@ -49,7 +49,7 @@ const routeUrl = "./route.ts?asset-basis-posting-race-test";
 const { PATCH, DELETE } = (await import(routeUrl)) as typeof import("./route.ts");
 
 const { db } = await import("@openbooks/engine/platform/db");
-const { buildSchedule } = await import("@openbooks/engine/assets/depreciation");
+const { buildSchedule, runDepreciation } = await import("@openbooks/engine/assets/depreciation");
 const { disposeAsset, remeasureAsset } = await import("@openbooks/engine/assets/asset-lifecycle");
 const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import(
   "@openbooks/engine/testing/fixtures",
@@ -355,8 +355,11 @@ test(
   async () => {
     const fixture = await seedAssetWithGainLossCategory("DISPOSED-ASSET");
     try {
+      // A full disposal refuses while a held period is unposted; post the
+      // scratch org's July period first so the disposal ties to the schedule.
+      await runDepreciation(fixture.orgId, "2026-07-31", fixture.actorId, fixture.assetId);
       await disposeAsset(fixture.orgId, fixture.assetId, {
-        date: fixture.date,
+        date: "2026-07-31",
         actorId: fixture.actorId,
         writeOff: true,
       });

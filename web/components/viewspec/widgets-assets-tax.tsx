@@ -211,6 +211,7 @@ export const ASSETS_TAX_WIDGETS = {
             forms={(props.forms as ComponentProps<typeof TaxPreparePanel>['forms']) ?? []}
             canSave={props.canSave === true}
             canManageSetup={props.canManageSetup === true}
+            conversionDate={str(props, 'conversionDate')}
           />
         }
         history={<TaxHistoryTable {...(props.history as ComponentProps<typeof TaxHistoryTable>)} />}

@@ -1,8 +1,9 @@
-import { CloseError, CLOSE_MODULES } from "../periods/period-policy.ts";
+import { CloseError, CLOSE_MODULES, canonicalPeriodLabel } from "../periods/period-policy.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { addCalendarDays, civilDateFromParts, endOfMonth, parseIsoDate } from "../platform/business-date.ts";
 import { periodScopeAdvisoryLock } from "../periods/period-locks.ts";
+
 type CalendarRow = {
   id: string;
   cadence:
@@ -36,9 +37,7 @@ function periodName(
   fiscalYear: number,
   adjustment = false,
 ): string {
-  return adjustment
-    ? `FY${fiscalYear} adjustment`
-    : `P${String(number).padStart(2, "0")} FY${fiscalYear}`;
+  return canonicalPeriodLabel({ fiscalYear, periodNumber: number, adjustment });
 }
 
 function generatedPeriods(

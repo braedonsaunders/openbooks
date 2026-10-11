@@ -18,10 +18,16 @@ import { advanceAnchoredMonth, retreatAnchoredMonth } from "./cadence.ts";
 import { daysInCivilMonth } from "../platform/civil-date.ts";
 import {
   advancedBillingSnapshot,
+  planVersionInForce,
   prepareAdvancedSubscriptionBilling,
+  subscriptionComponentTotal,
+  subscriptionPaidThrough,
   unbilledBoundary,
   type AdvancedBillingLine,
+  type PlanChangeFact,
 } from "./advanced-subscriptions.ts";
+
+export { subscriptionPaidThrough } from "./advanced-subscriptions.ts";
 import { inventoryFeatureEnabled } from "../inventory/profile-policy.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
@@ -437,6 +443,143 @@ export function monthlyRecurringRevenue(
   if (cadence.interval === "weekly") return mulRatio(perPeriod, 52n, 12n * count);
   const months = cadence.interval === "monthly" ? 1n : cadence.interval === "quarterly" ? 3n : 12n;
   return mulRatio(perPeriod, 1n, months * count);
+}
+
+/** A contract's recurring charge as of a date, at the cadence of the plan version in force that day. */
+export interface ContractRecurring {
+  /** Sum of the components in force, priced as the invoice engine prices them. */
+  amount: string;
+  interval: Interval;
+  intervalCount: number;
+}
+
+/**
+ * Recurring charge of every contract-managed subscription as of `asOf`. The
+ * components in force that day set the amount, and the plan version in force
+ * that day sets the cadence, so a plan change reads as its predecessor before
+ * its effective date. A contract with no component in force maps to zero
+ * rather than falling back to its plan price, because the plan price is not
+ * what it bills. Plan-priced subscriptions have no entry.
+ */
+export async function contractRecurringAmounts(orgId: string, asOf: string): Promise<Map<string, ContractRecurring>> {
+  const contracts = (await db.execute<{ subscriptionId: string; pinnedVersionId: string }>(sql`
+    select subscription_id as "subscriptionId", plan_version_id as "pinnedVersionId"
+      from subscription_lifecycles where org_id = ${orgId}
+  `)).rows;
+  if (contracts.length === 0) return new Map();
+  const changes = (await db.execute<{
+    subscriptionId: string; effectiveOn: string; seq: number; fromVersionId: string | null; toVersionId: string | null;
+  }>(sql`
+    select subscription_id as "subscriptionId", effective_on::text as "effectiveOn", amendment_number as seq,
+           before_snapshot #>> '{lifecycle,planVersionId}' as "fromVersionId",
+           after_snapshot #>> '{lifecycle,planVersionId}' as "toVersionId"
+      from subscription_amendments
+     where org_id = ${orgId} and amendment_type = 'change_plan'
+  `)).rows;
+  const versions = (await db.execute<{ id: string; interval: Interval; intervalCount: number }>(sql`
+    select id, interval, interval_count as "intervalCount" from subscription_plan_versions where org_id = ${orgId}
+  `)).rows;
+  const versionById = new Map(versions.map((version) => [version.id, version]));
+  const changesBySubscription = new Map<string, PlanChangeFact[]>();
+  for (const change of changes) {
+    const list = changesBySubscription.get(change.subscriptionId) ?? [];
+    list.push({ effectiveOn: change.effectiveOn, seq: Number(change.seq), fromVersionId: change.fromVersionId, toVersionId: change.toVersionId });
+    changesBySubscription.set(change.subscriptionId, list);
+  }
+  const components = (await db.execute<{ subscriptionId: string; quantity: string | null; unitPrice: string | null }>(sql`
+    select c.subscription_id as "subscriptionId", c.quantity::text as quantity, c.unit_price::text as "unitPrice"
+      from subscription_components c
+      join subscription_lifecycles l on l.org_id = c.org_id and l.subscription_id = c.subscription_id
+     where c.org_id = ${orgId}
+       and c.effective_from <= ${asOf}::date and (c.effective_to is null or c.effective_to >= ${asOf}::date)
+  `)).rows;
+  const linesBySubscription = new Map<string, Array<{ quantity: string; unitPrice: string }>>();
+  for (const row of components) {
+    if (row.quantity === null || row.unitPrice === null) continue;
+    const lines = linesBySubscription.get(row.subscriptionId) ?? [];
+    lines.push({ quantity: row.quantity, unitPrice: row.unitPrice });
+    linesBySubscription.set(row.subscriptionId, lines);
+  }
+  const out = new Map<string, ContractRecurring>();
+  for (const contract of contracts) {
+    const inForce = planVersionInForce({
+      asOf,
+      pinnedVersionId: contract.pinnedVersionId,
+      changes: changesBySubscription.get(contract.subscriptionId) ?? [],
+    });
+    const version = versionById.get(inForce);
+    if (!version) throw new SubscriptionError("the contract's plan version is missing; repair the contract before reading its recurring revenue");
+    out.set(contract.subscriptionId, {
+      amount: subscriptionComponentTotal(linesBySubscription.get(contract.subscriptionId) ?? []),
+      interval: version.interval,
+      intervalCount: Number(version.intervalCount),
+    });
+  }
+  return out;
+}
+
+export interface SubscriptionRecurringInput {
+  status: string;
+  canceledOn: string | null;
+  asOf: string;
+  priceOverride: unknown;
+  planAmount: unknown;
+  /** The contract's recurring charge; null for a plan-priced subscription. */
+  contract: ContractRecurring | null;
+  interval: Interval;
+  intervalCount: unknown;
+  quantity: unknown;
+}
+
+/**
+ * Monthly recurring revenue of one subscription as of a date, the single rule
+ * behind every MRR figure. A contract earns its in-force component total at
+ * its pinned version's cadence (quantity already lives on the components); a
+ * plan-priced subscription earns its price override or plan price times its
+ * quantity. A subscription canceled effective after the as-of date still earns
+ * until that date. Pure.
+ */
+export function subscriptionRecurringRevenue(input: SubscriptionRecurringInput): string {
+  const earning = input.status === "active"
+    || (input.status === "canceled" && input.canceledOn !== null && input.canceledOn > input.asOf);
+  if (!earning) return "0.0000";
+  if (input.contract !== null) {
+    return monthlyRecurringRevenue(input.contract.amount, input.contract.interval, input.contract.intervalCount, "1");
+  }
+  return monthlyRecurringRevenue(
+    String(input.priceOverride ?? input.planAmount ?? "0"),
+    input.interval,
+    Number(input.intervalCount ?? 1),
+    String(input.quantity ?? "1"),
+  );
+}
+
+/**
+ * The effective date a cancellation takes. Billing stops exactly at the
+ * paid-through date, the end of the last invoiced period; any other date is
+ * refused. An earlier date would cancel invoiced service with no automated
+ * credit to refund it, and a later date would leave service between the two
+ * dates uninvoiced, which the scheduler never bills. Pure.
+ */
+export function resolveSubscriptionCancellation(input: {
+  requestedOn?: string | null;
+  today: string;
+  paidThrough: string;
+}): string {
+  const effectiveOn = input.requestedOn ?? input.today;
+  if (effectiveOn < input.paidThrough) {
+    throw new SubscriptionError(
+      `cancellation date ${effectiveOn} precedes the paid-through date ${input.paidThrough}, the end of the last invoiced period. ` +
+      `Cancel effective ${input.paidThrough}; earlier dates need a credit for the unused service, which is not automated.`,
+    );
+  }
+  if (effectiveOn > input.paidThrough) {
+    throw new SubscriptionError(
+      `service from ${input.paidThrough} to ${effectiveOn} is not invoiced, so the subscription cannot end on ${effectiveOn}. ` +
+      `Cancel effective ${input.paidThrough}, the end of the last invoiced period.`,
+    );
+  }
+  return effectiveOn;
 }
 
 async function nextNumber(orgId: string, kind: string, prefix: string): Promise<string> {

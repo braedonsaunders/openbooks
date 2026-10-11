@@ -120,8 +120,9 @@ test("picking a date jumps to its Sunday through the drawer id", async (t) => {
   });
   await tick(60);
   assert.equal(script.pushes.length, 1, "a valid picked date navigates once");
-  assert.ok(
-    script.pushes[0]!.includes("timesheet=emp-6:2026-06-07"),
+  assert.equal(
+    new URL(script.pushes[0]!, "http://localhost").searchParams.get("timesheet"),
+    "emp-6:2026-06-07",
     `the jump preserves the drawer id on the snapped week, got ${JSON.stringify(script.pushes)}`,
   );
 });

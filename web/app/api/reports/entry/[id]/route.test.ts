@@ -255,23 +255,22 @@ test("restricted callers receive only lines from allowed subsidiaries", async ()
   );
 });
 
-test("reports.read-only roles can open the entry flyout data", async () => {
-  // Sales roles hold reports.read without gl.read and can already read every
-  // line of this entry on the journal page; the flyout must not 403 them.
+test("reports.read-only roles are refused journal lines", async () => {
+  // Journal entry lines are ledger data: reports.read alone never opens them,
+  // so the flyout refuses before any line query runs.
   reset(null, ["reports.read"]);
 
   const response = await get();
 
-  assert.equal(response.status, 200);
-  const body = (await response.json()) as { lines: Array<{ memo: string }> };
-  assert.deepEqual(
-    body.lines.map((line) => line.memo),
-    ["visible line", "restricted line"],
+  assert.equal(response.status, 403);
+  assert.ok(
+    !routeState.queries.some((query) => query.includes("from journal_lines l")),
+    "no journal line query runs for a reports.read-only caller",
   );
 });
 
-test("reports.read roles keep line-level subsidiary scope", async () => {
-  reset(new Set(["sub-visible"]), ["reports.read"]);
+test("gl.read roles keep line-level subsidiary scope", async () => {
+  reset(new Set(["sub-visible"]), ["gl.read"]);
 
   const response = await get();
 
@@ -365,7 +364,7 @@ test("payroll.read roles keep full per-employee entry detail", async () => {
 });
 
 test("malformed entry ids refuse before PostgreSQL UUID casts", async () => {
-  reset(null, ["reports.read"]);
+  reset(null, ["gl.read"]);
   const response = await GET(new Request("http://openbooks.test/api/reports/entry/bad"), {
     params: Promise.resolve({ id: "bad" }),
   });

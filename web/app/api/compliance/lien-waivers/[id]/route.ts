@@ -20,14 +20,9 @@ import { canonicalDecimal } from '@/lib/exact-decimal'
 import { moneyRefusal } from '@/lib/payroll-decimal-refusal'
 import { notFound } from "@/lib/api/responses";
 
-const requestAmount = z.union([
-  z.string().superRefine((value, ctx) => {
-    const exact = canonicalDecimal(value, 4)
-    if (exact === null || wholeDigits(exact) > 15) ctx.addIssue({ code: 'custom', message: moneyRefusal('Amount', value) })
-  }),
-  z.literal(''),
-  z.null(),
-]).optional()
+// Money is decimal text at the boundary; malformed and over-width amounts are
+// domain refusals (422) raised by the update branch before any write.
+const requestAmount = z.string().nullable().optional()
 const updateFields = {
   throughDate: z.string().refine(isIsoCalendarDate, 'throughDate must be a real calendar date (YYYY-MM-DD)').nullable().optional(),
   amount: requestAmount,

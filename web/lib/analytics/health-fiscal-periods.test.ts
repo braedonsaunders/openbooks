@@ -47,7 +47,8 @@ const mocks: Record<string, string> = {
   "./financial-health": `export async function priorFiscalWindow(){return {from:'2026-01-01',to:'2026-06-30'}}
     export async function financialHealth(){const r=(n)=>Number(n).toFixed(4);return {ratios:{profitability:[],liquidity:[],solvency:[],efficiency:[],operating:[]},benchmarks:{targets:{}},figures:{
     revenue:r(300),cogs:r(120),grossProfit:r(180),opex:r(30),operatingIncome:r(150),otherIncome:r(0),otherExpense:r(0),netIncome:r(150),
-    revenueGrowth:null,breakevenRevenue:null,operatingLeverage:null,rule40:null}}}`,
+    revenueGrowth:null,breakevenRevenue:null,operatingLeverage:null,rule40:null},
+    priorFigures:{revenue:r(0),cogs:r(0),grossProfit:r(0),opex:r(0),operatingIncome:r(0),otherExpense:r(0),netIncome:r(0)}}}`,
 };
 registerHooks({ resolve(specifier, context, next) {
   if (specifier === "@openbooks/engine/platform/database" && context.parentURL?.endsWith("/analytics/query.ts")) specifier = "@openbooks/engine/platform/db";

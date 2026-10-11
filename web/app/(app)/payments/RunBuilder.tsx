@@ -26,8 +26,22 @@ export interface RunBill extends Record<string, unknown> {
   reference_number: string | null
   open: string
   currency: string
-  has_bank: boolean
+  /** Payee bank eligibility, classified by the engine (payments/payee-bank-account). */
+  bank_state: 'approved' | 'pending' | 'undated' | 'missing'
 }
+
+/** Badge copy and remedy for a payee whose bank details a run cannot pay into. */
+type BlockedBankState = Exclude<RunBill['bank_state'], 'approved'>
+const BANK_STATE_LABEL = {
+  pending: 'bankPending',
+  undated: 'bankUndated',
+  missing: 'bankMissing',
+} as const satisfies Record<BlockedBankState, string>
+const BANK_STATE_HINT = {
+  pending: 'bankPendingHint',
+  undated: 'bankUndatedHint',
+  missing: 'bankMissingHint',
+} as const satisfies Record<BlockedBankState, string>
 
 export function RunBuilder({
   bills,
@@ -281,10 +295,21 @@ export function RunBuilder({
                   <TableCell>{b.due_date ?? '—'}</TableCell>
                   <TableCell className="text-slate-500 dark:text-slate-400">{b.reference_number}</TableCell>
                   <TableCell>
-                    {b.has_bank ? (
-                      <Badge variant="success">{t(mode === 'collections' ? 'mandateActive' : 'bankApproved')}</Badge>
+                    {mode === 'collections' ? (
+                      b.bank_state === 'approved' ? (
+                        <Badge variant="success">{t('mandateActive')}</Badge>
+                      ) : (
+                        <Badge variant="warning">{t('mandateMissing')}</Badge>
+                      )
+                    ) : b.bank_state === 'approved' ? (
+                      <Badge variant="success">{t('bankApproved')}</Badge>
                     ) : (
-                      <Badge variant="warning">{t(mode === 'collections' ? 'mandateMissing' : 'bankMissing')}</Badge>
+                      <Badge
+                        variant="warning"
+                        title={t(BANK_STATE_HINT[b.bank_state])}
+                      >
+                        {t(BANK_STATE_LABEL[b.bank_state])}
+                      </Badge>
                     )}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{money(b.open, { currency: b.currency })}</TableCell>

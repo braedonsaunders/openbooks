@@ -81,8 +81,9 @@
     "depositRecording": "记录中…",
     "depositNeedsSetup": "尚未配置收银存款银行账户。请让记账人员在公司设置中选择。",
     "depositRequiresPermission": "记录收银存款需要 cash_sales.deposit 权限（过账现金销售的角色持有）。请联系管理员授予。",
-    "tillWindow": "自 {after} 该收银台上次解款以来：{sales} 笔销售收取现金 {tendered} {currency}；目前已解款 {dropped} {currency}。",
-    "tillWindowFirst": "该收银台此前没有解款：{sales} 笔销售收取现金 {tendered} {currency}；目前已解款 {dropped} {currency}。",
+    "tillWindow": "{after} 之后至 {through} 的销售：{sales} 笔销售收取现金 {tendered} {currency}；目前已解款 {dropped} {currency}。",
+    "tillWindowFirst": "截至 {through} 的销售（该收银台此前没有解款）：{sales} 笔销售收取现金 {tendered} {currency}；目前已解款 {dropped} {currency}。",
+    "tillCoversThrough": "涵盖销售截至",
     "tillReason": "清点说明",
     "tillReasonHint": "当解款金额超过已记录销售可解释的金额时需要填写（例如尚未录入的销售）",
     "tillDifference": "收银台自 {after} 至 {through} 的清点：解款与已记录现金相差 {difference}。",
@@ -152,7 +153,10 @@
     "controlAccountHelp": "此单据过账的应收科目。收款和贷项在同一科目上核销。留空则使用默认科目。",
     "controlAccountPartyDefault": "客户默认 — {account}",
     "controlAccountOrganizationDefault": "组织默认 — {account}",
-    "controlAccountUnset": "未配置应收科目 — 请在“设置 → 公司与会计 → 控制科目”中设置"
+    "controlAccountUnset": "未配置应收科目 — 请在“设置 → 公司与会计 → 控制科目”中设置",
+    "createUnconfirmed": "服务器未确认新单据。请再次保存：重试会复用此草稿的键，因此不会再创建第二张单据。",
+    "saveUnconfirmed": "服务器未确认保存。请重新加载单据，查看已保存的状态后再继续编辑。",
+    "createConflict": "此草稿已以不同内容保存。请刷新页面，从列表中打开已保存的单据，而不要重新录入。"
   },
   "dailySummary": {
     "date": "日期",
@@ -269,6 +273,13 @@
       },
       "recurring": "补助、租金收入和订阅等经常性流入会作为类别加入预测——请在<cashCockpit>现金驾驶舱</cashCockpit>中配置。",
       "documentation": "阅读应收账款指南"
+    },
+    "notForecast": {
+      "title": "未预测 — 逾期超过 {days} 天",
+      "hint": "{count} 笔 · {total}",
+      "body": "这些应收款不计入预计收款。它们仍计入账龄统计，并保持待收状态。",
+      "daysOverdue": "逾期 {days} 天",
+      "more": "另有 {count} 笔未显示"
     }
   },
   "appliedPayments": {
@@ -376,6 +387,8 @@
       "cancelSubscription": "取消订阅",
       "cancelConfirmTitle": "取消订阅？",
       "cancelConfirmBody": "取消将终止此订阅的定期开票，此操作无法撤销。",
+      "cancelEffectiveOn": "取消生效日期",
+      "cancelPaidThroughHint": "已开票至 {date}。开票将在生效日期停止，已过账的发票不会更改。",
       "toasts": {
         "prorated": "按比例调整 {adjustment} → {documentNumber}",
         "qtyUpdatedNoProration": "数量已更新（无按比例计费）",
@@ -386,6 +399,10 @@
         "loading": "正在加载高级订阅",
         "loadFailed": "无法加载高级订阅生命周期数据",
         "loadFailedFallback": "无法加载高级订阅",
+        "noContractSuffix": "无合同",
+        "amendNeedsContract": "此订阅尚无合同。请先在“合同”中激活合同，再在此处修改。",
+        "planChangeHint": "已开票期间保留原方案。变更自已开票截止日 {date} 或之后生效。",
+        "contractNeedsVersion": "{plan} 没有已发布的目录版本。请先在“方案版本”中发布，再激活合同。",
         "actionFailed": "操作失败",
         "catalogTitle": "生效日期目录",
         "catalogDescription": "已发布版本不可更改。商务条款变化时请创建新版本。",
@@ -495,6 +512,8 @@
         "changeTiming": "更改开票时点",
         "changeRenew": "续订",
         "changeCoterm": "统一期限",
+        "changePlan": "变更方案",
+        "changeType_change_plan": "方案变更",
         "name": "名称",
         "newTermEnd": "新期限结束日",
         "timing": "时点",

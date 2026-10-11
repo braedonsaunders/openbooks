@@ -29,7 +29,8 @@
       "operationSeq": "Arbeitsgangfolge",
       "scrapPct": "Ausschuss %",
       "isByproduct": "Positionstyp",
-      "outputCostWeight": "Relatives Kostengewicht"
+      "outputCostWeight": "Relatives Kostengewicht",
+      "effectiveRequirement": "Wirksam je Einheit"
     },
     "values": {
       "component": "Komponente",
@@ -44,7 +45,11 @@
       "invalidOperation": "Die Arbeitsgangfolge muss eine positive ganze Zahl sein.",
       "manufacturingDisabled": "Aktivieren Sie Fertigung unter Unternehmenseinstellungen → Funktionen, um Arbeitsgang- und Nebenprodukteinstellungen zu bearbeiten."
     },
-    "jointOutputNote": "Kuppelprodukte teilen die Produktionskosten nach Menge und relativem Gewicht je Basiseinheit. Das Hauptprodukt hat Gewicht 1. Nebenprodukte behalten ihre gesonderte Bewertung zum Nettoveräußerungswert."
+    "jointOutputNote": "Kuppelprodukte teilen die Produktionskosten nach Menge und relativem Gewicht je Basiseinheit. Das Hauptprodukt hat Gewicht 1. Nebenprodukte behalten ihre gesonderte Bewertung zum Nettoveräußerungswert.",
+    "help": {
+      "scrapPct": "Addiert diesen Prozentsatz auf die Menge je Einheit. Auf 0 lassen, wenn die Menge bereits Verluste enthält.",
+      "effectiveRequirement": "Der Bedarf für eine Einheit des Elternartikels: Menge × (1 + Ausschuss %). Fertigungsaufträge verwenden dieselbe Berechnung."
+    }
   },
   "labels": {
     "item": "Artikel",
@@ -280,8 +285,10 @@
       "loadingMore": "Wird geladen…"
     },
     "secondCount": "Zweite Zählung speichern",
+    "recordedQuantity": "Erfasst: {quantity}",
     "secondReason": "Zweite Zählbeobachtung",
-    "secondReasonHint": "Die zweite Zählung weicht von der ersten ab. Erklären Sie die Abweichung (mindestens 5 Zeichen), damit sie mit dieser Zählung erfasst wird."
+    "secondReasonHint": "Die zweite Zählung weicht von der ersten ab. Erklären Sie die Abweichung (mindestens 5 Zeichen), damit sie mit dieser Zählung erfasst wird.",
+    "secondNotRecorded": "Nicht erfasst. Eine zweite Zählung, die von der ersten abweicht, benötigt ihre Begründung (mindestens {minLength} Zeichen), bevor sie gespeichert wird."
   },
   "create": {
     "subsidiary": "Zuständige Tochtergesellschaft",

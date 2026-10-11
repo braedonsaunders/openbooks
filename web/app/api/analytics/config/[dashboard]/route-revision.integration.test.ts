@@ -139,6 +139,7 @@ async function storedSettings(
   return { values: r.rows[0]?.values ?? null, revision: Number(r.rows[0]?.revision ?? 0) };
 }
 
+const { ANALYTICS_CONFIG } = (await import("../../../../../lib/analytics/config-spec.ts")) as typeof import("../../../../../lib/analytics/config-spec.ts");
 test(
   "GET exposes the revision alongside the effective values",
   async () => {
@@ -245,8 +246,11 @@ test(
   },
 );
 
+// Whole-object saves must carry every declared threshold, and money thresholds
+// travel as decimal text, so these fixtures start from the spec's own defaults.
 const UTILIZATION = "utilization";
-const UTILIZATION_DEFAULTS = { targetBillablePct: 70, costSpikeThreshold: 1000, minHours: 10 };
+const UTILIZATION_DEFAULTS = { ...ANALYTICS_CONFIG.utilization.defaults, costSpikeThreshold: "1000" };
+const CASHFLOW_DEFAULTS = ANALYTICS_CONFIG.cashflow.defaults;
 
 test(
   "a non-numeric threshold is a named 422 with nothing saved",
@@ -336,13 +340,14 @@ test(
 
     const good = await PUT(
       putRequest(
-        { expectedRevision: 0, values: { weeklyApCap: "5000", restrictToSafe: 1 } },
+        { expectedRevision: 0, values: { ...CASHFLOW_DEFAULTS, weeklyApCap: "5000", restrictToSafe: 1 } },
         "cashflow",
       ),
       params("cashflow"),
     );
     assert.equal(good.status, 200);
     assert.deepEqual((await storedSettings(f.orgId, "cashflow")).values, {
+      ...CASHFLOW_DEFAULTS,
       weeklyApCap: "5000.0000",
       restrictToSafe: 1,
     });

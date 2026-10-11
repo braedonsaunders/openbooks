@@ -8,7 +8,7 @@ interface RouteState {
   partySubsidiaryId: string | null;
   calls: string[];
   payLegs: Array<{ pid: string; days: string | null; paid: string; func: string | null; date: string }>;
-  fxRows: Array<{ as_of: string; rate: string }>;
+  fxRows: Array<{ func: string; as_of: string; rate: string }>;
 }
 
 const routeState: RouteState = {
@@ -236,7 +236,7 @@ test("entity totalPaid translates each payment leg to presentation currency", as
     { pid: "pay-usd", days: "9", paid: "100", func: "USD", date: "2026-08-10" },
     { pid: "pay-cad", days: "7", paid: "100", func: "CAD", date: "2026-08-12" },
   ];
-  routeState.fxRows = [{ as_of: "2026-08-01", rate: "0.7400" }];
+  routeState.fxRows = [{ func: "CAD", as_of: "2026-08-01", rate: "0.7400" }];
 
   const response = await GET(request());
   assert.equal(response.status, 200);

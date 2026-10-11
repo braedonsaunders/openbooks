@@ -44,10 +44,11 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    "mock:payment-queries",
+    "mock:payment-documents",
     `
       export async function loadPaymentDocument() { return null }
       export async function openItemsForParty() { return [] }
+      export const PAYMENT_KIND_SIDE = { vendor_payment: "ap", customer_payment: "ar" }
     `,
   ],
   [
@@ -61,6 +62,10 @@ const mockSources = new Map<string, string>([
   [
     "mock:payment-drawer",
     `export function PaymentDrawer() { return null }`,
+  ],
+  [
+    "mock:features",
+    `export async function isFeatureEnabled() { return true }`,
   ],
   [
     "mock:record-list-view",
@@ -78,10 +83,11 @@ const mockUrls = new Map<string, string>([
   ["next/navigation", "mock:next-navigation"],
   ["next/headers", "mock:next-headers"],
   ["next-intl/server", "mock:next-intl-server"],
-  ["@openbooks/engine/platform/db", "mock:engine-db"],
-  ["@openbooks/engine/payments/payment-queries", "mock:payment-queries"],
-  ["@openbooks/engine/platform/business-date/module", "mock:business-date"],
+  ["@openbooks/engine/platform/database", "mock:engine-db"],
+  ["@openbooks/engine/payments/documents", "mock:payment-documents"],
+  ["@openbooks/engine/platform/business-date", "mock:business-date"],
   ["./PaymentDrawer", "mock:payment-drawer"],
+  ["@/lib/features", "mock:features"],
 ]);
 
 const hooks = registerHooks({

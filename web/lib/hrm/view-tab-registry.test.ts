@@ -30,6 +30,8 @@ test("every page in a job shows the job's one strip with its own tab lit", () =>
     assert.deepEqual(strip(url)?.hrefs, people?.hrefs, `${url} shows the Employees strip`);
   }
   assert.deepEqual(strip("/hrm/processes/templates")?.active, ["processes.templates.title"], "templates select their own destination");
+  assert.deepEqual(strip("/hrm/change-requests")?.hrefs, people?.hrefs, "change requests shows the Employees strip");
+  assert.deepEqual(strip("/hrm/change-requests")?.active, ["modules.hrm-change-requests"], "change requests lights its own tab");
 
   const positions = strip("/hrm/positions?status=open");
   assert.deepEqual(positions?.active, ["home.tabs.positions"]);
@@ -43,7 +45,7 @@ test("every page in a job shows the job's one strip with its own tab lit", () =>
   assert.deepEqual(strip("/hrm/compensation/cycles/c-1")?.active, ["compensation.workspace.overview"]);
   assert.deepEqual(strip("/hrm/compensation/equity")?.active, ["equity.title"], "the longer route wins over the prefix");
 
-  for (const url of ["/hrm", "/hrm/change-requests", "/hrm/compliance", "/hrm/my-leave", "/entities/vendors"]) {
+  for (const url of ["/hrm", "/hrm/compliance", "/hrm/my-leave", "/entities/vendors"]) {
     assert.equal(strip(url), null, `${url} belongs to no job and shows no strip`);
   }
 });

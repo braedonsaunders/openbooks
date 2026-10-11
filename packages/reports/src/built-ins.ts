@@ -333,7 +333,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
   {
     slug: 'collection-recovery-rate',
     name: 'Collection recovery rate',
-    description: 'Recovered invoices, recovered revenue and the recovery rate by decline class, provider and month — the involuntary-churn story of automatic collection.',
+    description: 'Recovered invoices and revenue, and recovery rate by decline class, provider and month.',
     query: {
       entity: 'collection_recovery',
       mode: 'summarize',
@@ -357,7 +357,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
   {
     slug: 'stored-value-liability-roll-forward',
     name: 'Stored-value liability roll-forward',
-    description: 'Issued, redeemed, breakage, expired and adjusted gift-card and store-credit movements with the closing liability, by program and month.',
+    description: 'Gift-card and store-credit issued, redeemed, expired and adjusted, with closing liability.',
     query: {
       entity: 'stored_value_movements',
       mode: 'summarize',
@@ -380,7 +380,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
   {
     slug: 'stored-value-unclaimed-property',
     name: 'Stored-value unclaimed property',
-    description: 'Open gift-card and store-credit balances on open accounts, by customer region and last-activity month, for escheat review.',
+    description: 'Open gift-card and store-credit balances by customer region, for escheat review.',
     query: {
       entity: 'stored_value_balances',
       mode: 'summarize',
@@ -402,7 +402,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
   {
     slug: 'order-margin-by-channel',
     name: 'Order margin by channel',
-    description: 'Contribution margin per storefront channel and month from stored facts: CM1 after actual issue cost, CM2 after fulfilment and payment fees, CM3 after allocated ad spend, with the margin ratio.',
+    description: 'Contribution margin by channel and month: CM1, CM2 and CM3, with the margin ratio.',
     query: {
       entity: 'order_economics', mode: 'summarize', columns: [],
       breakouts: [{ column: 'channel' }, { column: 'ordered_day', bin: 'month' }, { column: 'currency' }],
@@ -440,7 +440,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
   {
     slug: 'order-margin-by-sku',
     name: 'Order margin by item',
-    description: 'Contribution margin per item code and channel from stored facts, with the same CM1/CM2/CM3 ladder and margin ratio as the channel view.',
+    description: 'Contribution margin by item and channel, with the same CM1, CM2 and CM3 ladder.',
     query: {
       entity: 'order_economics', mode: 'summarize', columns: [],
       breakouts: [{ column: 'sku' }, { column: 'channel' }, { column: 'currency' }],

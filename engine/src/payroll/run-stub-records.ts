@@ -306,6 +306,7 @@ export async function statutoryHolidayLinesForStub(
     hourlyRate: holidayRate,
     paidOnCommission: holidayEligibility?.[employeePartyId]?.paidOnCommission,
     absentWithoutConsent: holidayEligibility?.[employeePartyId]?.absentWithoutConsent,
+    absentWithoutConsentByHoliday: holidayEligibility?.[employeePartyId]?.absentWithoutConsentByHoliday,
     entitledDayAttestations: holidayEligibility?.[employeePartyId]?.entitledDayAttestations,
     constructionEmployee: holidayEligibility?.[employeePartyId]?.constructionEmployee,
     periodRegularEarnings,

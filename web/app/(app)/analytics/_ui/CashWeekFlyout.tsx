@@ -34,6 +34,7 @@ import { Gauge } from './Gauge'
 import { EntityDrawer } from './EntityDrawer'
 import { exportCsv } from './exportCsv'
 import { categoryRefusalText } from './category-refusal-text'
+import { forecastMethodBase, OVERDUE_PUSH_METHOD, overduePushBasis } from '../../../../lib/cash/overdue-push'
 import { formatExactPercent, toChartNumber, useAnalyticsMoney } from './format'
 const ZERO_MONEY = '0.0000'
 const PAGE_SIZE = 25
@@ -243,6 +244,18 @@ export function CashWeekFlyout({
   const start = (curPage - 1) * PAGE_SIZE
   const paged = sorted.slice(start, start + PAGE_SIZE)
 
+  // The overdue-push population is the whole week's AR, not the search
+  // result: the assumption describes every item the week's amount includes.
+  const pushBasis = useMemo(
+    () => (side === 'ar' ? overduePushBasis(fetched?.ar ?? []) : null),
+    [fetched, side],
+  )
+  const pushDetail = pushBasis === null
+    ? null
+    : pushBasis.minDaysOverdue === pushBasis.maxDaysOverdue
+      ? t('overduePush.basisSameAge', { count: pushBasis.count, days: pushBasis.minDaysOverdue, amount: money(pushBasis.total) })
+      : t('overduePush.basis', { count: pushBasis.count, minDays: pushBasis.minDaysOverdue, maxDays: pushBasis.maxDaysOverdue, amount: money(pushBasis.total) })
+
   const switchTab = (k: TabKey) => {
     setTab(k)
     setSearch('')
@@ -359,6 +372,13 @@ export function CashWeekFlyout({
         <CategoryPane key={activeCat.id} cat={activeCat} weekAmount={activeCat.weekly[weekIndex] ?? ZERO_MONEY} />
       ) : (
         <>
+          {pushBasis !== null && pushDetail !== null ? (
+            <div role="note" className="shrink-0 border-b border-amber-100 bg-amber-50/60 px-4 py-2 text-xs text-amber-800 dark:border-amber-950 dark:bg-amber-950/30 dark:text-amber-200">
+              <p className="font-semibold">{t('overduePush.assumption')}</p>
+              <p className="tabular-nums">{pushDetail}</p>
+            </div>
+          ) : null}
+
           {/* search toolbar */}
           <div className="flex shrink-0 items-center gap-2 border-b border-slate-100 px-4 py-2 dark:border-slate-800">
             <div className="relative flex-1">
@@ -419,7 +439,7 @@ export function CashWeekFlyout({
                         )}
                       </SharedTableCell>
                       <SharedTableCell className="px-3 py-2.5 text-xs tabular-nums text-slate-500 dark:text-slate-400">{fmtDate(e.predictedDate)}</SharedTableCell>
-                      <SharedTableCell className="px-3 py-2.5 text-center"><MethodPill method={e.method} /></SharedTableCell>
+                      <SharedTableCell className="px-3 py-2.5 text-center"><MethodPill method={e.method} /><ForecastBasisNote entry={e} /></SharedTableCell>
                       <SharedTableCell className="px-3 py-2.5 text-center"><DaysPill entry={e} today={businessToday} /></SharedTableCell>
                       <SharedTableCell className={cn('px-4 py-2.5 text-right font-semibold tabular-nums', side === 'ar' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>{money(e.amount)}</SharedTableCell>
                     </SharedTableRow>
@@ -692,7 +712,7 @@ function MethodPill({ method }: { method: string }) {
   // the tooltip translates it, so neither the color nor the text depends on
   // English.
   const deferred = method.match(/\(deferred from (.*)\)$/)
-  const base = deferred ? method.slice(0, deferred.index).trimEnd() : method
+  const base = forecastMethodBase(method)
   const map: Record<string, { key: string; cls: string }> = {
     Statistical: { key: 'history', cls: 'bg-violet-50 text-violet-700 dark:bg-violet-950/50 dark:text-violet-300' },
     'Due date': { key: 'dueDate', cls: 'bg-sky-50 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300' },
@@ -708,11 +728,34 @@ function MethodPill({ method }: { method: string }) {
   const deferredDay = deferred?.[1] !== undefined
     ? new Date(`${deferred[1]}T12:00:00Z`).toLocaleDateString(locale, { dateStyle: 'medium', timeZone: 'UTC' })
     : null
+  const title = base === OVERDUE_PUSH_METHOD
+    ? t('pushedAssumption')
+    : deferredDay !== null ? `${label} (${t('deferredFrom', { date: deferredDay })})` : label
   return (
-    <span title={deferredDay !== null ? `${label} (${t('deferredFrom', { date: deferredDay })})` : label} className={cn('rounded-full px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap', m?.cls ?? 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300')}>
+    <span title={title} className={cn('rounded-full px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap', m?.cls ?? 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300')}>
       {label}
     </span>
   )
+}
+
+/**
+ * The visible basis behind a projected receipt's date: the average days to pay
+ * behind a history or average prediction, the due date, or the overdue days a
+ * push forecasts from. Every projected row names one, so the date is never a
+ * bare figure.
+ */
+function ForecastBasisNote({ entry }: { entry: ForecastEntry }) {
+  const t = useTranslations('analytics.cashWeek.methods')
+  const locale = useLocale()
+  const base = forecastMethodBase(entry.method)
+  const dateLabel = (iso: string) => shortDateLabel(new Date(iso + 'T00:00:00Z'), locale)
+  let text: string | null = null
+  if (base === 'Statistical' && entry.basisDays != null) text = t('basisHistory', { days: entry.basisDays })
+  else if (base === 'Global avg' && entry.basisDays != null) text = t('basisAverage', { days: entry.basisDays })
+  else if (base === 'Due date' && entry.dueDate) text = t('basisDueDate', { date: dateLabel(entry.dueDate) })
+  else if (base === OVERDUE_PUSH_METHOD) text = t('basisPushed', { days: entry.daysOverdue, date: dateLabel(entry.predictedDate) })
+  if (text === null) return null
+  return <span className="mt-1 block max-w-[14rem] text-[10px] leading-tight text-slate-500 dark:text-slate-400">{text}</span>
 }
 
 /** Whole days between now and a due date (module scope, like `daysSince` in AccountsRoster). */

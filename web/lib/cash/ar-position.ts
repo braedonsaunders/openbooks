@@ -23,6 +23,7 @@ import {
   refusedCategories,
   type CategoryWeekly,
   type ForecastEntry,
+  type NotForecastEntry,
   type OpenItem,
   type RefusedCategory,
   type SideSummary,
@@ -75,6 +76,17 @@ export interface ArPosition {
    * overdue first then largest. The cockpit pre-checks the overdue ones.
    */
   worklist: ForecastEntry[];
+  /**
+   * Receivables past the collectability horizon. They are not projected as
+   * receipts in any week or in expectedThisWeek / expectedNext30; they stay in
+   * the aging figures and are listed here, most overdue first.
+   */
+  notForecast: {
+    horizonDays: number;
+    count: number;
+    total: string;
+    entries: NotForecastEntry[];
+  };
   /** Recurring category flows per week — feeds the schedule drill's chips. */
   categories: CategoryWeekly[];
   /**
@@ -158,7 +170,7 @@ export async function arPosition(
   ]);
 
   const startingCash = sumMoney(banks.map((b) => b.balance));
-  const ar = scheduleForecast(arItems, arStats, grid.asOf, grid.start, grid.end, model);
+  const ar = scheduleForecast(arItems, arStats, grid.asOf, grid.start, grid.end, model, true);
   const ap = scheduleForecast(apItems, apStats, grid.asOf, grid.start, grid.end, model);
   const weekTotals = (byWeek: Map<string, { amount: string }[]>): Record<string, string> =>
     Object.fromEntries([...byWeek.entries()].map(([k, es]) => [k, sumMoney(es.map((e) => e.amount))]));
@@ -202,7 +214,7 @@ export async function arPosition(
   // weekly grid can end short of it, so a cut-off-bounded schedule feeds
   // this figure instead of the grid-bounded entries (placement is
   // end-independent — widening the bound only adds days 29–30).
-  const cutoffSchedule = scheduleForecast(arItems, arStats, grid.asOf, grid.start, addDays(grid.asOf, 30), model);
+  const cutoffSchedule = scheduleForecast(arItems, arStats, grid.asOf, grid.start, addDays(grid.asOf, 30), model, true);
   const expectedNext30 = sumMoney(cutoffSchedule.entries.filter((e) => e.predictedDate <= cutoff30).map((e) => e.amount));
 
   // Collections worklist: receivables only, most overdue first, then largest.
@@ -227,6 +239,12 @@ export async function arPosition(
     weeks,
     byCustomer: groupByCustomer(arItems, grid.asOf),
     worklist,
+    notForecast: {
+      horizonDays: model.collectibilityHorizonDays,
+      count: ar.notForecast.count,
+      total: ar.notForecast.total,
+      entries: ar.notForecast.entries,
+    },
     categories,
     unavailableCategories: refusedCategories(categories),
     timeline: timeline.weeks,

@@ -32,6 +32,7 @@ const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/tes
 const { loadRiskWidgetMetrics } = await import("./_metrics-risk.ts");
 const { sentinelData } = await import("../../../lib/analytics/sentinel-data.ts");
 const { analyticsConfig } = await import("../../../lib/analytics/config.ts");
+const { sentinelStrings } = await import("../../../lib/analytics/sentinel-strings.ts");
 type Authz = import("@/lib/authz.ts").Authz;
 type DashboardWidgetContext = import("./_metrics-context.ts").DashboardWidgetContext;
 
@@ -88,9 +89,12 @@ test("risk widget reader returns the dashboard's own figures", { skip: !env.OPEN
     await seedDuplicateBills(org.orgId, org.subsidiaryId);
     await setDuplicateFloor(org.orgId);
     const ctx = ctxFor(org.orgId);
+    // The loader and the comparison share one translator: the stubbed intl
+    // resolves keys verbatim, so the excluded-source names agree in both.
+    const strings = sentinelStrings((key) => key, "en-CA");
     const [metrics, data] = await withOrgContext(org.orgId, () => Promise.all([
       loadRiskWidgetMetrics(ctx, () => true),
-      sentinelData(org.orgId, P, ctx.authz),
+      sentinelData(org.orgId, P, ctx.authz, strings),
     ]));
     const risk = metrics.forensicRisk;
     assert.ok(risk !== null && risk !== undefined && risk.available);

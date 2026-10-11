@@ -173,6 +173,12 @@ interface Fixture {
 async function seed(): Promise<Fixture> {
   const org = await createScratchOrg();
   const actorId = await createScratchUser(org.orgId, "Labor Admin", "admin");
+  // The session mock stands in for identity only. The command boundary
+  // re-resolves the actor's stored role grants, so the role must carry the
+  // setup permission in the database as well.
+  await db.execute(sql`
+    update app_roles set permissions = '["admin.setup.manage"]'::jsonb
+     where org_id = ${org.orgId} and key = 'admin'`);
   // The route sits behind the Projects feature gate.
   await db.execute(sql`
     update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}',

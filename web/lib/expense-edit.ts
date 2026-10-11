@@ -429,6 +429,36 @@ export async function persistExpenseEdit(
   `)
 }
 
+/**
+ * An expense report's employee must be an active party of the report's legal
+ * entity (or an org-wide party) and within the caller's subsidiary scope. Every
+ * refusal uses the scope-opaque not-found answer, so another entity's employee
+ * is indistinguishable from a missing one.
+ */
+export async function assertReportEmployee(
+  tx: SqlExecutor,
+  args: {
+    orgId: string
+    employeeId: string | null
+    reportSubsidiaryId: string | null
+    allowedSubsidiaryIds: ReadonlySet<string> | null
+  },
+): Promise<void> {
+  if (args.employeeId === null) return
+  const employee = (await tx.execute<{ subsidiaryId: string | null }>(sql`
+    select p.subsidiary_id as "subsidiaryId" from parties p
+     where p.id = ${args.employeeId} and p.org_id = ${args.orgId} and p.is_active
+     for key share of p
+  `)).rows[0]
+  const outsideScope = args.allowedSubsidiaryIds !== null
+    && employee?.subsidiaryId != null
+    && !args.allowedSubsidiaryIds.has(employee.subsidiaryId)
+  const otherEntity = employee?.subsidiaryId != null && employee.subsidiaryId !== args.reportSubsidiaryId
+  if (!employee || outsideScope || otherEntity) {
+    throw new DocumentEditError(404, 'employee not found for this expense report')
+  }
+}
+
 export interface ExpenseCorrectionBody extends ExpenseEditBody {
   amendmentReason?: string
 }

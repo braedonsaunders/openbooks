@@ -15,7 +15,7 @@ import {
   describeStatement,
   type ReportDescriptor,
 } from "../../../../../lib/close/report-descriptor";
-import { clamp, pickString } from "../../../../../lib/list-params";
+import { clamp, isUuid, pickString } from "../../../../../lib/list-params";
 import { CloseSetupWorkspace } from '../../../../../components/viewspec/native-widgets.client'
 import type {
   AutomationRow,
@@ -31,6 +31,7 @@ import type {
   SetupUserRow,
 } from "./CloseSetupWorkspace";
 import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { canonicalPeriodLabelSql, periodDisplayLabel } from "@openbooks/engine/periods/period-policy";
 import { isFeatureEnabled, subsidiaryFeatureEnabled } from "../../../../../lib/features";
 
 const PER_PAGE = 20;
@@ -155,6 +156,40 @@ export async function CloseSetupPage({
       books.rows[0]?.id ??
       "");
 
+  // One select for every reopen read: the paged list, and the live and
+  // selected requests the period panel and the request drawer resolve
+  // whatever page the list shows.
+  const reopenSelect = sql`select r.*, p.name as period_name, b.name as book_name,
+             requester.name as requester_name, approver.name as approver_name,
+             -- Decision evidence is read from the stored audit trail, never
+             -- reconstructed: the decision action (approve vs the
+             -- sole-approver self_approve) with its quoted attestation, and
+             -- the explicit end with its actor and reason. Windows consumed
+             -- automatically carry no end audit row, so those stay absent.
+             (select a.action from audit_log a
+               where a.org_id = r.org_id and a.table_name = 'close_reopen_requests' and a.row_id = r.id
+                 and a.action in ('approve', 'self_approve')
+               order by a.at desc limit 1) as decision_action,
+             (select a.changes#>>'{after,attestation}' from audit_log a
+               where a.org_id = r.org_id and a.table_name = 'close_reopen_requests' and a.row_id = r.id
+                 and a.action in ('approve', 'self_approve')
+               order by a.at desc limit 1) as decision_attestation,
+             (select ender.name from audit_log a
+                left join users ender on ender.id = a.actor_id
+               where a.org_id = r.org_id and a.table_name = 'close_reopen_requests' and a.row_id = r.id
+                 and a.action = 'end'
+               order by a.at desc limit 1) as end_actor_name,
+             (select coalesce(a.changes#>>'{after,reason}', a.changes->>'reason') from audit_log a
+               where a.org_id = r.org_id and a.table_name = 'close_reopen_requests' and a.row_id = r.id
+                 and a.action = 'end'
+               order by a.at desc limit 1) as end_reason
+        from close_reopen_requests r
+        join accounting_periods p on p.id = r.period_id and p.org_id = r.org_id
+        join accounting_books b on b.id = r.book_id and b.org_id = r.org_id
+        join users requester on requester.id = r.requested_by
+        left join users approver on approver.id = r.approved_by`;
+  const selectedReopenId = pickString(searchParams.reopen);
+
   const [
     calendars,
     calendarCount,
@@ -172,6 +207,7 @@ export async function CloseSetupPage({
     packageCount,
     reopenRequests,
     reopenCount,
+    liveReopenRequests,
   ] = ((await Promise.all([
     db.execute<CalendarRow>(sql`
       select * from fiscal_calendars
@@ -201,14 +237,14 @@ export async function CloseSetupPage({
           select count(*) as entries from journal_entries e where e.period_id = p.id and e.org_id = p.org_id
         ) j on true
        where p.org_id = ${orgId} and p.fiscal_year = ${fiscalYear}
-         ${q ? sql`and (p.name ilike ${`%${q}%`} or c.name ilike ${`%${q}%`})` : sql``}
+         ${q ? sql`and (p.name ilike ${`%${q}%`} or ${canonicalPeriodLabelSql()} ilike ${`%${q}%`} or c.name ilike ${`%${q}%`})` : sql``}
        group by p.id, c.name, j.entries
        order by p.period_number
        limit ${PER_PAGE} offset ${offset}`),
     db.execute(sql`
       select count(*) as count from accounting_periods p join fiscal_calendars c on c.id = p.fiscal_calendar_id and c.org_id = p.org_id
        where p.org_id = ${orgId} and p.fiscal_year = ${fiscalYear}
-         ${q ? sql`and (p.name ilike ${`%${q}%`} or c.name ilike ${`%${q}%`})` : sql``}`),
+         ${q ? sql`and (p.name ilike ${`%${q}%`} or ${canonicalPeriodLabelSql()} ilike ${`%${q}%`} or c.name ilike ${`%${q}%`})` : sql``}`),
     db.execute<BlueprintRow>(sql`
       select * from close_blueprints
        where org_id = ${orgId}
@@ -265,35 +301,7 @@ export async function CloseSetupPage({
        where org_id = ${orgId}
          ${packageList.query ? sql`and (name ilike ${`%${packageList.query}%`} or description ilike ${`%${packageList.query}%`} or (${packageDefaultMatch} and name = 'close.defaultData.package.name'))` : sql``}`),
     db.execute<ReopenRow>(sql`
-      select r.*, p.name as period_name, b.name as book_name,
-             requester.name as requester_name, approver.name as approver_name,
-             -- Decision evidence is read from the stored audit trail, never
-             -- reconstructed: the decision action (approve vs the
-             -- sole-approver self_approve) with its quoted attestation, and
-             -- the explicit end with its actor and reason. Windows consumed
-             -- automatically carry no end audit row, so those stay absent.
-             (select a.action from audit_log a
-               where a.org_id = r.org_id and a.table_name = 'close_reopen_requests' and a.row_id = r.id
-                 and a.action in ('approve', 'self_approve')
-               order by a.at desc limit 1) as decision_action,
-             (select a.changes#>>'{after,attestation}' from audit_log a
-               where a.org_id = r.org_id and a.table_name = 'close_reopen_requests' and a.row_id = r.id
-                 and a.action in ('approve', 'self_approve')
-               order by a.at desc limit 1) as decision_attestation,
-             (select ender.name from audit_log a
-                left join users ender on ender.id = a.actor_id
-               where a.org_id = r.org_id and a.table_name = 'close_reopen_requests' and a.row_id = r.id
-                 and a.action = 'end'
-               order by a.at desc limit 1) as end_actor_name,
-             (select coalesce(a.changes#>>'{after,reason}', a.changes->>'reason') from audit_log a
-               where a.org_id = r.org_id and a.table_name = 'close_reopen_requests' and a.row_id = r.id
-                 and a.action = 'end'
-               order by a.at desc limit 1) as end_reason
-        from close_reopen_requests r
-        join accounting_periods p on p.id = r.period_id and p.org_id = r.org_id
-        join accounting_books b on b.id = r.book_id and b.org_id = r.org_id
-        join users requester on requester.id = r.requested_by
-        left join users approver on approver.id = r.approved_by
+      ${reopenSelect}
        where r.org_id = ${orgId}
          ${reopenList.query ? sql`and (p.name ilike ${`%${reopenList.query}%`} or b.name ilike ${`%${reopenList.query}%`} or requester.name ilike ${`%${reopenList.query}%`} or r.reason ilike ${`%${reopenList.query}%`} or r.status ilike ${`%${reopenList.query}%`})` : sql``}
        order by r.created_at desc
@@ -306,6 +314,12 @@ export async function CloseSetupPage({
         join users requester on requester.id = r.requested_by
        where r.org_id = ${orgId}
          ${reopenList.query ? sql`and (p.name ilike ${`%${reopenList.query}%`} or b.name ilike ${`%${reopenList.query}%`} or requester.name ilike ${`%${reopenList.query}%`} or r.reason ilike ${`%${reopenList.query}%`} or r.status ilike ${`%${reopenList.query}%`})` : sql``}`),
+    db.execute<ReopenRow>(sql`
+      ${reopenSelect}
+       where r.org_id = ${orgId}
+         and (r.status in ('requested', 'approved')
+           ${selectedReopenId && isUuid(selectedReopenId) ? sql`or r.id = ${selectedReopenId}::uuid` : sql``})
+       order by r.created_at desc`),
   ])));
 
   // Option sources for the structured policy/automation/package editors — so
@@ -400,10 +414,20 @@ export async function CloseSetupPage({
         },
       }}
       configPerPage={CONFIG_PER_PAGE}
-      periods={periods.rows}
+      periods={periods.rows.map((row) => ({
+        ...row,
+        // Every period of the calendar reads in one label format; the stored name stays beside it.
+        name: periodDisplayLabel({
+          name: row.name,
+          fiscalYear: row.fiscal_year,
+          periodNumber: row.period_number,
+          adjustment: row.is_adjustment,
+        }),
+      }))}
       books={books.rows}
       selectedBookId={selectedBookId}
       canReopen={canReopen}
+      viewerId={authz.user.id}
       blueprints={((blueprints.rows)).map((blueprint) => ({
         ...blueprint,
         steps: stepRows.filter((step) => step.blueprint_id === blueprint.id),
@@ -417,6 +441,7 @@ export async function CloseSetupPage({
       subsidiaries={subsidiaryUiEnabled ? subsidiaries.rows : []}
       dimensions={dimensions}
       reopenRequests={reopenRequests.rows}
+      liveReopenRequests={liveReopenRequests.rows}
       reopenPage={reopenList.page}
       reopenTotal={Number(reopenCount.rows[0]?.count ?? 0)}
       reopenPerPage={CONFIG_PER_PAGE}

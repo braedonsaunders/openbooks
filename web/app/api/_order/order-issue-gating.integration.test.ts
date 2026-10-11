@@ -83,7 +83,7 @@ async function seedDraftQuote(tag: string, total: string): Promise<Fixture> {
 
 async function seedThresholdFlow(orgId: string, approverId: string): Promise<void> {
   await withBypassContext(async () => {
-    await seedApprovalFlow(org.orgId, {
+    await seedApprovalFlow(orgId, {
       subjectKind: "quote",
       assignees: [{ type: "user", userId: approverId }],
       mode: "any",

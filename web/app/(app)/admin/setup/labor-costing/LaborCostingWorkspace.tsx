@@ -16,6 +16,7 @@ import { FilterChips } from '../../../../../components/filter-bar'
 import { Pagination } from '../../../../../components/pagination'
 import { mergeHref } from '../../../../../lib/list-params'
 import type { LaborCostComponent, LaborCostingSettings } from '@openbooks/engine/projects/labor-costing/operations'
+import type { LaborCostAmount, LaborCostCatchUpResult, UnpostedLaborCostPreview } from '@openbooks/engine/projects/labor-costing'
 import { useBusinessToday } from '../../../../../components/business-date-provider'
 import { LaborCostingWizard } from './LaborCostingWizard'
 import { InteractiveTableRow } from '@/components/interactive-table-row'
@@ -30,6 +31,7 @@ import {
   isTimePayRateBasis,
   type PayRateBasis,
 } from '@openbooks/engine/projects/pay-rate-basis'
+import type { LaborControlAccountOption } from './view'
 
 export interface RateRow {
   id: string
@@ -123,6 +125,156 @@ function Card({ title, hint, children }: { title: string; hint?: string; childre
   )
 }
 
+function monthLabel(month: string, locale: string): string {
+  return new Date(`${month}-01T00:00:00Z`).toLocaleDateString(locale, { year: 'numeric', month: 'short', timeZone: 'UTC' })
+}
+
+function hoursText(hours: string, locale: string): string {
+  return Number(hours).toLocaleString(locale, { maximumFractionDigits: 2 })
+}
+
+/** Per-currency amounts, joined. Currencies are never summed into one figure. */
+function costText(costs: LaborCostAmount[], locale: string): string {
+  return costs.length === 0 ? '—' : costs.map((cost) => formatRate(cost.amount, cost.currency, locale)).join(' + ')
+}
+
+/**
+ * Approved time not yet costed. Shown only when the preview finds rows, or
+ * while a run's result is on screen. The through date lives in the URL, so
+ * the table always describes the date the operator is looking at.
+ */
+function LaborCostCatchUpCard({ preview, currentParams }: { preview: UnpostedLaborCostPreview | null; currentParams: Record<string, string | string[] | undefined> }) {
+  const locale = useLocale()
+  const t = useTranslations('admin.setup.laborCosting')
+  const router = useRouter()
+  const [through, setThrough] = useState(preview?.through ?? '')
+  const [reason, setReason] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<LaborCostCatchUpResult | null>(null)
+
+  const hasRows = Boolean(preview && preview.months.length > 0)
+  if (!hasRows && result === null) return null
+
+  function changeThrough(value: string) {
+    if (!value) return
+    setThrough(value)
+    setResult(null)
+    router.push(mergeHref('/admin/setup/labor-costing', currentParams, { view: 'posting', catchUpThrough: value }))
+  }
+
+  async function post() {
+    if (!preview) return
+    setBusy(true)
+    try {
+      const j = await apiJson<LaborCostCatchUpResult & { ok: boolean }>(
+        '/api/admin/setup/labor-costing/catch-up',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ through: preview.through, reason: reason.trim() }),
+        },
+        'failed',
+      )
+      setResult(j)
+      setReason('')
+      router.refresh()
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Card title={t('catchUp.title')} hint={t('catchUp.hint')}>
+      {preview && hasRows ? (
+        <div className="space-y-3">
+          {preview.blockers.map((item) => (
+            <div
+              key={item.code}
+              className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-amber-50 p-2.5 text-sm text-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
+            >
+              <span>{t(`catchUp.blockers.${item.code}`)}</span>
+              <Link href={item.setupHref as never} className="font-medium underline">
+                {t('catchUp.openSetup')}
+              </Link>
+            </div>
+          ))}
+          <div className="flex flex-wrap items-end gap-2">
+            <div>
+              <Label htmlFor="catch-up-through">{t('catchUp.through')}</Label>
+              <Input id="catch-up-through" type="date" value={through} onChange={(e) => changeThrough(e.target.value)} />
+            </div>
+            <div className="min-w-64 flex-1">
+              <Label htmlFor="catch-up-reason">{t('catchUp.reason')}</Label>
+              <Input id="catch-up-reason" value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} />
+            </div>
+            <Button
+              size="sm"
+              onClick={post}
+              disabled={busy || preview.blockers.length > 0 || preview.totals.postableEntries === 0 || through !== preview.through || reason.trim().length < 5}
+            >
+              {t('catchUp.post')}
+            </Button>
+          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t('catchUp.month')}</TableHead>
+                <TableHead className="text-right">{t('catchUp.entries')}</TableHead>
+                <TableHead className="text-right">{t('catchUp.hours')}</TableHead>
+                <TableHead className="text-right">{t('catchUp.cost')}</TableHead>
+                <TableHead>{t('catchUp.period')}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {preview.months.map((month) => (
+                <TableRow key={month.month}>
+                  <TableCell>{monthLabel(month.month, locale)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{month.entries}</TableCell>
+                  <TableCell className="text-right tabular-nums">{hoursText(month.hours, locale)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{costText(month.costs, locale)}</TableCell>
+                  <TableCell className={month.state === 'open' ? undefined : 'text-amber-700 dark:text-amber-400'}>
+                    {t(`catchUp.states.${month.state}`)}
+                  </TableCell>
+                </TableRow>
+              ))}
+              <TableRow className="font-semibold">
+                <TableCell>{t('catchUp.total')}</TableCell>
+                <TableCell className="text-right tabular-nums">{preview.totals.entries}</TableCell>
+                <TableCell className="text-right tabular-nums">{hoursText(preview.totals.hours, locale)}</TableCell>
+                <TableCell className="text-right tabular-nums">{costText(preview.totals.costs, locale)}</TableCell>
+                <TableCell />
+              </TableRow>
+            </TableBody>
+          </Table>
+        </div>
+      ) : null}
+      {result ? (
+        <div className="mt-3 space-y-2 rounded-md bg-teal-50 p-2.5 text-sm text-teal-800 dark:bg-teal-950/40 dark:text-teal-300">
+          {result.postedEntries === 0 && result.skippedEntries === 0 ? (
+            <p>{t('catchUp.nothingPosted')}</p>
+          ) : (
+            <p>{t('catchUp.postedResult', { count: result.postedEntries, cost: costText(result.postedCosts, locale) })}</p>
+          )}
+          {result.skippedEntries > 0 ? (
+            <div className="text-amber-800 dark:text-amber-300">
+              <p>{t('catchUp.skippedResult', { count: result.skippedEntries })}</p>
+              <ul className="list-disc pl-5">
+                {result.skipped.map((group) => (
+                  <li key={`${group.month}|${group.state}`}>
+                    {monthLabel(group.month, locale)} · {t(`catchUp.states.${group.state}`)} · {t(`catchUp.skipRemedy.${group.state}`)}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </Card>
+  )
+}
+
 export function LaborCostingWorkspace(props: {
   view: 'rates' | 'components' | 'posting' | 'reconciliation'
   settings: LaborCostingSettings
@@ -139,13 +291,14 @@ export function LaborCostingWorkspace(props: {
   subsidiaries: SubsidiaryOpt[]
   defaultSubsidiary: SubsidiaryOpt | null
   jobTitles: string[]
-  accounts: { id: string; label: string }[]
+  accounts: LaborControlAccountOption[]
   currencies: string[]
   orgCurrency: string
   laborWip: string | null
   laborClearing: string | null
   payrollVariance: string | null
   coverage: { employees: number; covered: number; hasOrgDefault: boolean }
+  unposted: UnpostedLaborCostPreview | null
 }) {
   const locale = useLocale()
   const t = useTranslations('admin.setup.laborCosting')
@@ -759,7 +912,7 @@ export function LaborCostingWorkspace(props: {
                 <Label htmlFor="lc-wip">{t('posting.laborWip')}</Label>
                 <Select id="lc-wip" value={laborWip} onChange={(e) => setLaborWip(e.target.value)}>
                   <option value="">—</option>
-                  {props.accounts.map((a) => (
+                  {props.accounts.filter((a) => a.roles.includes('laborWip') || a.id === laborWip).map((a) => (
                     <option key={a.id} value={a.id}>
                       {a.label}
                     </option>
@@ -770,7 +923,7 @@ export function LaborCostingWorkspace(props: {
                 <Label htmlFor="lc-clr">{t('posting.laborClearing')}</Label>
                 <Select id="lc-clr" value={laborClearing} onChange={(e) => setLaborClearing(e.target.value)}>
                   <option value="">—</option>
-                  {props.accounts.map((a) => (
+                  {props.accounts.filter((a) => a.roles.includes('laborClearing') || a.id === laborClearing).map((a) => (
                     <option key={a.id} value={a.id}>
                       {a.label}
                     </option>
@@ -781,7 +934,7 @@ export function LaborCostingWorkspace(props: {
                 <Label htmlFor="lc-var">{t('posting.payrollVariance')}</Label>
                 <Select id="lc-var" value={payrollVariance} onChange={(e) => setPayrollVariance(e.target.value)}>
                   <option value="">—</option>
-                  {props.accounts.map((a) => (
+                  {props.accounts.filter((a) => a.roles.includes('payrollVariance') || a.id === payrollVariance).map((a) => (
                     <option key={a.id} value={a.id}>
                       {a.label}
                     </option>
@@ -793,6 +946,8 @@ export function LaborCostingWorkspace(props: {
           </div>
         </Card>
       )}
+
+      {view === 'posting' && <LaborCostCatchUpCard preview={props.unposted} currentParams={props.currentParams} />}
 
       {/* ---- payroll reconciliation ---- */}
       {view === 'reconciliation' && (

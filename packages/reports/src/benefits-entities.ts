@@ -6,7 +6,7 @@ export const BENEFITS_REPORT_ENTITIES: ReportEntity[] = [
   {
     key: 'hrm_benefit_payroll_inputs',
     label: 'Benefit payroll contributions',
-    description: 'Calculated benefit contributions, employee deductions and non-cash benefits with their payroll-run history.',
+    description: 'Calculated benefit contributions, deductions and non-cash benefits by payroll run.',
     category: 'hrm',
     from: `pay_run_benefit_allocations i
       JOIN hrm_benefit_enrollments e ON e.org_id = i.org_id AND e.id = i.enrollment_id
@@ -43,7 +43,7 @@ export const BENEFITS_REPORT_ENTITIES: ReportEntity[] = [
   {
     key: 'hrm_benefit_awards',
     label: 'Benefit awards and payouts',
-    description: 'Employee program awards, approval evidence, delivery references and pay-run adjustment lineage.',
+    description: 'Employee program awards with approval evidence, delivery references and pay-run lineage.',
     category: 'hrm',
     from: `hrm_benefit_awards a
       JOIN hrm_benefit_programs p ON p.org_id = a.org_id AND p.id = a.program_id

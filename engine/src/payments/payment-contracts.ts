@@ -79,3 +79,33 @@ export interface SuggestedApplication {
   /** How the suggestion was reached. */
   strategy: "reference" | "exact" | "fifo" | "none";
 }
+
+/**
+ * Payee bank-account state as payment runs read it. Client-safe: the run
+ * builder and the bank-details panel classify rows with the same rule the
+ * SQL predicates in payments/payee-bank-account apply.
+ */
+export type PayeeBankState = "approved" | "pending" | "undated" | "missing";
+
+export interface PayeeBankAccountFields {
+  approvalStatus: string | null;
+  approvedAt: string | null;
+  isActive: boolean;
+  retiredAt: string | null;
+}
+
+/**
+ * Classify one bank account row. A retired row is always `missing` (its
+ * retirement also clears is_active). `undated` is an approved status without
+ * an approval date: a state payment runs refuse, which the operator resolves
+ * by saving the details again to re-approve them.
+ */
+export function classifyPayeeBankAccount(row: PayeeBankAccountFields): PayeeBankState {
+  if (row.retiredAt) return "missing";
+  if (row.approvalStatus === "approved") {
+    if (row.approvedAt === null) return "undated";
+    return row.isActive ? "approved" : "missing";
+  }
+  if (row.approvalStatus === "pending") return "pending";
+  return "missing";
+}

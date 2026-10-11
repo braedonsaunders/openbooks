@@ -26,7 +26,6 @@ const hooks = registerHooks({ resolve(specifier, context, next) {
   if (specifier === 'next/headers') return { shortCircuit: true, url: 'data:text/javascript,export async function cookies(){return {get(){return undefined}}}' }
   return next(specifier, context)
 } })
-test.after(() => hooks.deregister())
 Object.assign(globalThis, { React: await import('react') })
 const { sql } = await import('drizzle-orm')
 const { db, withOrgContext, withBypass } = await import('@openbooks/engine/platform/db')
@@ -39,6 +38,7 @@ const { withAuthzContext } = await import('./authz-context')
 const { publishOverheadRates } = await import('./overhead-publish')
 const { loadOverhead, overheadSpec } = await import('../app/(app)/admin/setup/overhead/view')
 const { OverheadLifecycleTabSlot } = await import('../app/(app)/admin/setup/overhead/sections')
+test.after(() => hooks.deregister())
 
 function widgetProps(value: unknown, name: string): Record<string, unknown> | undefined {
   if (!value || typeof value !== 'object') return undefined
@@ -53,10 +53,10 @@ function widgetProps(value: unknown, name: string): Record<string, unknown> | un
 test('overhead lifecycle shares one native model read while published rates, feature authority and legal-entity scope remain current',
   { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
     await assertDedicatedFixtureDatabase()
-    const org = await createScratchOrg()
+    const org = await withBypass(() => createScratchOrg())
     const department = randomUUID(), employee = randomUUID(), project = randomUUID(), category = randomUUID()
     try {
-      const actor = await createScratchUser(org.orgId, 'Overhead Controller', 'overhead_controller')
+      const actor = await withBypass(() => createScratchUser(org.orgId, 'Overhead Controller', 'overhead_controller'))
       await withBypass(async () => {
         await db.execute(sql`update app_roles set permissions='["admin.setup.manage"]'::jsonb
           where org_id=${org.orgId} and key='overhead_controller'`)

@@ -53,7 +53,7 @@ export const paymentLinks = pgTable(
   ],
 );
 
-/** Settlement provider kinds, widened by migration 0497 with Shopify Payments and PayPal. */
+/** Settlement provider kinds; the provider checks in the database admit exactly these. */
 export const PSP_SETTLEMENT_PROVIDERS = [
   "stripe",
   "adyen",
@@ -62,6 +62,7 @@ export const PSP_SETTLEMENT_PROVIDERS = [
   "chargebee",
   "shopify_payments",
   "paypal",
+  "square",
 ] as const;
 
 /**

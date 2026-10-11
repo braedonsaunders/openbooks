@@ -107,6 +107,13 @@ export const CONTROL_ACCOUNT_TYPE_POLICY = {
   // it as other income. Both families qualify so one account carries the
   // whole close-out variance.
   cashOverShort: ["income", "income_other", "expense", "expense_other"],
+  // Uncollectible customer balances written off through the invoice write-off
+  // action: the expense debited when no allowance is provisioned.
+  badDebtExpense: ["expense", "expense_other"],
+  // Contra-receivable that a write-off debits in place of bad debt expense when
+  // the organization provisions an allowance. Current-asset types only: it must
+  // never enter the receivable open-item family, so no party is required.
+  allowanceForDoubtfulAccounts: ["asset_current_other", "asset_other"],
 } as const;
 
 export type ControlAccountRole = keyof typeof CONTROL_ACCOUNT_TYPE_POLICY;
@@ -154,6 +161,8 @@ export const CONTROL_ACCOUNT_ROLE_LABELS: Record<ControlAccountRole, string> = {
   tipsPayable: "Tips payable",
   processorFees: "Processor fees",
   cashOverShort: "Cash over/short",
+  badDebtExpense: "Bad debt expense",
+  allowanceForDoubtfulAccounts: "Allowance for doubtful accounts",
 };
 
 /** Operator-facing chart account-type names for control-account refusals. */

@@ -14,7 +14,7 @@ export const BILLING_IMPORT_REPORT_ENTITIES: ReportEntity[] = [
     label: "Billing import reconciliation",
     category: "saas_metrics",
     description:
-      "Per-run billing-platform import reconciliation: MRR by month source vs OpenBooks, open AR by customer, and the differences that block cut-over.",
+      "Import runs: MRR by month against OpenBooks, open AR by customer, and cut-over blockers.",
     from: `(
       select r.org_id, r.id as run_id, r.provider as provider, 'mrr' as section,
              m.value ->> 'month' as ref,

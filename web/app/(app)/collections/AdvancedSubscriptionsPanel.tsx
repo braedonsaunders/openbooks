@@ -26,6 +26,7 @@ import { useBusinessToday } from "@/components/business-date-provider";
 import { useMoney } from "@/components/money-provider";
 import { fetchAction } from "@braedonsaunders/appkit-errors";
 import { useAppAction } from "../../../lib/use-app-action";
+import { amendmentRequestPayload } from "./amendment-payload";
 
 type BasePlan = {
   id: string;
@@ -40,6 +41,8 @@ type BaseSubscription = {
   planId: string;
   planName: string;
   status: string;
+  /** End of the last invoiced period: the earliest effective date for a plan change. */
+  paidThroughOn: string;
 };
 type Component = {
   componentKey: string;
@@ -147,6 +150,7 @@ export function AdvancedSubscriptionsPanel({
     billingTiming: "advance",
     renewalTermMonths: "12",
     anchorSubscriptionId: "",
+    planVersionId: "",
     reason: "",
   });
 
@@ -776,6 +780,13 @@ export function AdvancedSubscriptionsPanel({
                       </option>
                     ))}
                   </Select>
+                  {selectedSubscription && eligibleVersions.length === 0 && (
+                    <p role="note" className="mt-2 text-sm text-muted-foreground">
+                      {t("contractNeedsVersion", {
+                        plan: selectedSubscription.planName,
+                      })}
+                    </p>
+                  )}
                 </Field>
               </InspectorPanel>
               <InspectorPanel title={forms("contractTerm")}>
@@ -904,11 +915,17 @@ export function AdvancedSubscriptionsPanel({
             size="xl"
             headerActions={
               <Button
-                disabled={busy || !amendForm.subscriptionId}
+                disabled={
+                  busy ||
+                  !amendForm.subscriptionId ||
+                  !lifecycleIds.has(amendForm.subscriptionId) ||
+                  (amendForm.type === "change_plan" &&
+                    (!amendForm.planVersionId || !amendForm.reason.trim()))
+                }
                 onClick={async () => {
                   const result = await post({
+                    ...amendmentRequestPayload(amendForm),
                     action: "amend",
-                    ...amendForm,
                     idempotencyKey: crypto.randomUUID(),
                     renewalTermMonths: Number(
                       amendForm.renewalTermMonths || 12,
@@ -936,29 +953,59 @@ export function AdvancedSubscriptionsPanel({
                     <Select
                       searchable
                       value={amendForm.subscriptionId}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        const next = subscriptions.find((row) => row.id === e.target.value);
                         setAmendForm({
                           ...amendForm,
                           subscriptionId: e.target.value,
-                        })
-                      }
+                          planVersionId: "",
+                          effectiveOn:
+                            amendForm.type === "change_plan" && next
+                              ? next.paidThroughOn
+                              : amendForm.effectiveOn,
+                        });
+                      }}
                     >
                       <option value="">{t("choose")}</option>
                       {subscriptions
-                        .filter((s) => lifecycleIds.has(s.id))
-                        .map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.customerName ?? t("customerFallback")} ·{" "}
-                            {s.planName}
-                          </option>
-                        ))}
+                        .filter((s) => s.status !== "canceled")
+                        .map((s) => {
+                          const hasContract = lifecycleIds.has(s.id);
+                          return (
+                            <option
+                              key={s.id}
+                              value={s.id}
+                              disabled={!hasContract}
+                            >
+                              {s.customerName ?? t("customerFallback")} ·{" "}
+                              {s.planName}
+                              {hasContract ? "" : ` · ${t("noContractSuffix")}`}
+                            </option>
+                          );
+                        })}
                     </Select>
+                    {amendmentSubscription &&
+                      !lifecycleIds.has(amendmentSubscription.id) && (
+                        <p role="note" className="mt-2 text-sm text-muted-foreground">
+                          {t("amendNeedsContract")}
+                        </p>
+                      )}
                   </Field>
                   <Field label={t("change")}>
                     <Select
                       value={amendForm.type}
                       onChange={(e) =>
-                        setAmendForm({ ...amendForm, type: e.target.value })
+                        setAmendForm({
+                          ...amendForm,
+                          type: e.target.value,
+                          // A plan change defaults to the paid-through date, the
+                          // only date that never reinterprets invoiced service.
+                          effectiveOn:
+                            e.target.value === "change_plan" && amendmentSubscription
+                              ? amendmentSubscription.paidThroughOn
+                              : amendForm.effectiveOn,
+                          planVersionId: "",
+                        })
                       }
                     >
                       <option value="add_component">{t("changeAdd")}</option>
@@ -972,6 +1019,7 @@ export function AdvancedSubscriptionsPanel({
                       <option value="change_timing">{t("changeTiming")}</option>
                       <option value="renew">{t("changeRenew")}</option>
                       <option value="coterm">{t("changeCoterm")}</option>
+                      <option value="change_plan">{t("changePlan")}</option>
                     </Select>
                   </Field>
                   <Field label={t("effectiveOn")}>
@@ -1100,6 +1148,42 @@ export function AdvancedSubscriptionsPanel({
                         }
                       />
                     </Field>
+                  )}
+                  {amendForm.type === "change_plan" && (
+                    <>
+                      <Field label={t("publishedVersion")} required>
+                        <Select
+                          searchable
+                          value={amendForm.planVersionId}
+                          onChange={(e) =>
+                            setAmendForm({
+                              ...amendForm,
+                              planVersionId: e.target.value,
+                            })
+                          }
+                        >
+                          <option value="">{t("choose")}</option>
+                          {versions
+                            .filter(
+                              (v) =>
+                                v.status === "published" &&
+                                v.planId !== amendmentSubscription?.planId,
+                            )
+                            .map((v) => (
+                              <option key={v.id} value={v.id}>
+                                {v.name} · v{v.versionNumber}
+                              </option>
+                            ))}
+                        </Select>
+                      </Field>
+                      {amendmentSubscription && (
+                        <p className="self-end text-sm text-muted-foreground">
+                          {t("planChangeHint", {
+                            date: amendmentSubscription.paidThroughOn,
+                          })}
+                        </p>
+                      )}
+                    </>
                   )}
                   {amendForm.type === "coterm" && (
                     <Field label={t("anchorSubscription")}>

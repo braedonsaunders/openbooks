@@ -56,7 +56,7 @@ export interface BalanceCandidateLine {
  * the liability class in records/account-types LIABILITY_TYPES; listed here
  * so banking's module boundary (money, organization, platform) stays closed.
  */
-const LIABILITY_STATEMENT_ACCOUNT_TYPES: ReadonlySet<string> = new Set([
+export const LIABILITY_STATEMENT_ACCOUNT_TYPES: ReadonlySet<string> = new Set([
   "liability_payable",
   "liability_card",
   "liability_current_other",

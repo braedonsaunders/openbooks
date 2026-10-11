@@ -268,8 +268,8 @@ export async function applyStandaloneCredits(
     const accounts = new Set(endpoints.map((row) => row.account_id));
     if (accounts.size !== 1) {
       throw new PaymentError(
-        "every credit and open item in one settlement must sit on the same control account; settle each control account separately, " +
-          "or issue the credit memo with the invoice's receivable or payable account chosen on the document",
+        "every credit and open item in one settlement must sit on the same control account; a posted credit keeps the account it posted to, " +
+          "so choose the bill's or invoice's account on the credit before it posts (a vendor credit opened from its bill carries that account)",
       );
     }
     const subsidiaries = new Set(endpoints.map((row) => row.subsidiary_id));

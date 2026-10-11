@@ -30,7 +30,7 @@ registerHooks({
       return virtual("export function cookies() { throw new Error('no cookies in route test') }");
     if (
       specifier.endsWith("/lib/feature-gates") &&
-      context.parentURL?.includes("/api/work-schedules/")
+      (context.parentURL?.includes("/api/work-schedules/") || context.parentURL?.includes("/lib/api/route"))
     ) {
       return virtual(`
         export async function guardFeaturePermission() {

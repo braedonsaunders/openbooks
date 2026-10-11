@@ -30,6 +30,7 @@ export function GlStep({
   approval,
   canAcknowledge,
   stale,
+  approved = false,
   funding,
   busy,
   refusals,
@@ -53,6 +54,8 @@ export function GlStep({
   approval: PayRunApprovalState
   canAcknowledge: boolean
   stale: boolean
+  /** The run is approved: its stale remedy is a recalculation that resubmits it. */
+  approved?: boolean
   funding: Funding
   busy: boolean
   refusals: PayRunCalculationError[]
@@ -193,7 +196,9 @@ export function GlStep({
             {t('run.commit')}
           </Button>
         ) : stale && !committed ? (
-          <span className="text-sm text-amber-600 dark:text-amber-400">{t('wizard.gl.staleBlocked')}</span>
+          <span className="text-sm text-amber-600 dark:text-amber-400">
+            {approved ? t('wizard.gl.staleApprovedBlocked') : t('wizard.gl.staleBlocked')}
+          </span>
         ) : refusals.length > 0 && !refusalsAcked && !committed ? (
           <span className="text-sm text-red-600 dark:text-red-400">{t('wizard.gl.refusedBlocked', { count: refusals.length })}</span>
         ) : anomalyBlocks > 0 && !committed ? (

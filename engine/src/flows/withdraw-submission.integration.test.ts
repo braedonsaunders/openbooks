@@ -268,3 +268,41 @@ test("a stale drawer revision refuses before any mutation", { skip: !DB }, async
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("a pending quote is recalled by its submitter through the same withdraw path back to draft", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actors = await seedFlowActors(org.orgId);
+    await seedApprovalFlow(org.orgId, {
+      subjectKind: "quote",
+      assignees: [{ type: "user", userId: actors.approver1Id }],
+      mode: "any",
+    });
+    const quoteId = await seedDraftDocument(org.orgId, { kind: "quote", createdBy: actors.submitterId });
+    const submitted = await submitForApproval("quote", quoteId, actors.submitterId);
+    assert.equal(submitted.gated, true);
+    const runId = submitted.runId!;
+    assert.equal(await docStatus(org.orgId, quoteId), "pending_approval");
+
+    const reason = "customer asked for a revised scope";
+    const withdrawn = await withdrawDocumentSubmission({
+      documentId: quoteId,
+      orgId: org.orgId,
+      actorId: actors.submitterId,
+      actorIsApprover: false,
+      reason,
+    });
+    assert.deepEqual(withdrawn, { status: "draft", cancelledRunIds: [runId] });
+    assert.equal(await docStatus(org.orgId, quoteId), "draft");
+    assert.equal(await runStatus(org.orgId, runId), "cancelled");
+    assert.deepEqual(await gateStatuses(org.orgId, runId), ["cancelled"]);
+
+    const audit = await latestDocumentAudit(org.orgId, quoteId);
+    assert.equal(audit.action, "update");
+    assert.equal(audit.changes.reason, reason);
+    assert.equal(audit.changes.before.document.status, "pending_approval");
+    assert.equal(audit.changes.after.document.status, "draft");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});

@@ -9,6 +9,7 @@ interface RouteState {
   };
   subjectSubsidiaryId: string | null;
   status: string | null;
+  documentSubmitterId: string | null;
   // Scope is decided by the locking resolver (mock:lib), not
   // the old check-then-read guard seam. The lock stub records every subject
   // subsidiary it evaluates here.
@@ -31,6 +32,7 @@ const routeState: RouteState = {
   },
   subjectSubsidiaryId: "sub-hidden",
   status: "pending_approval",
+  documentSubmitterId: null,
   lockChecks: [],
   statusCalls: [],
   runRows: [],
@@ -51,6 +53,7 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.flow-record-state-route-test')]
       export const db = { execute: async (query) => {
+        if (JSON.stringify(query).includes('from documents')) return { rows: [{ submittedBy: state.documentSubmitterId }] }
         state.flowQueries += 1
         if (JSON.stringify(query).includes('flow_gates')) return { rows: state.gateRows ?? [] }
         if (JSON.stringify(query).includes('flow_runs')) return { rows: state.runRows ?? [] }
@@ -149,6 +152,7 @@ function reset(allowedSubsidiaryIds: Set<string> | null): void {
   routeState.authz.allowedSubsidiaryIds = allowedSubsidiaryIds;
   routeState.subjectSubsidiaryId = "sub-hidden";
   routeState.status = "pending_approval";
+  routeState.documentSubmitterId = null;
   routeState.lockChecks = [];
   routeState.statusCalls = [];
   routeState.runRows = [];
@@ -167,6 +171,18 @@ function request(subjectKind = "vendor_bill"): Request {
     `http://openbooks.test/api/flows/record-state?subjectKind=${subjectKind}&subjectId=${SUBJECT_ID}`,
   );
 }
+
+test("turning Flows off preserves the submitter's pending-document withdrawal fact", async () => {
+  reset(null);
+  routeState.flowsEnabled = false;
+  routeState.documentSubmitterId = routeState.authz.user.id;
+  const response = await GET(request("quote"));
+  assert.equal(response.status, 200);
+  const body = await response.json() as { submittedByViewer: boolean; approvalState: { status: string } };
+  assert.equal(body.submittedByViewer, true);
+  assert.equal(body.approvalState.status, "pending_approval");
+  assert.equal(routeState.flowQueries, 0, "disabled workflows are not queried");
+});
 
 test("a restricted caller cannot read approval state for another subsidiary", async () => {
   reset(new Set(["sub-visible"]));
@@ -294,7 +310,7 @@ test("with Flows off a visible record answers an empty approval state", async ()
     failedRun: null,
     neverSubmitted: false,
     canRetry: false,
-    canWithdraw: false,
+    submittedByViewer: false,
   });
   assert.deepEqual(routeState.statusCalls, [SUBJECT_ID]);
   assert.equal(routeState.flowQueries, 0, "no gate, run or role read may run");
@@ -315,7 +331,7 @@ test("with Flows off a customer payment answers an empty approval state, draft o
       failedRun: null,
       neverSubmitted: false,
       canRetry: false,
-      canWithdraw: false,
+      submittedByViewer: false,
     });
     assert.deepEqual(routeState.readChecks, ["customer_payment"], "the receipt's own read grant is enforced");
     assert.deepEqual(routeState.statusCalls, [SUBJECT_ID], "the empty state carries the record's own status");
@@ -337,7 +353,7 @@ test("with Flows off a vendor payment answers an empty approval state", async ()
     failedRun: null,
     neverSubmitted: false,
     canRetry: false,
-    canWithdraw: false,
+    submittedByViewer: false,
   });
   assert.deepEqual(routeState.readChecks, ["vendor_payment"], "the payment's own read grant is enforced");
   assert.equal(routeState.flowQueries, 0, "no gate, run or role read may run");
@@ -403,7 +419,7 @@ test("a kind no flow can govern answers an empty approval state without reading 
     failedRun: null,
     neverSubmitted: false,
     canRetry: false,
-    canWithdraw: false,
+    submittedByViewer: false,
   });
   assert.deepEqual(routeState.lockChecks, [], "nothing about the named record is resolved");
   assert.deepEqual(routeState.statusCalls, []);
@@ -453,21 +469,23 @@ const PENDING_GATE = {
  * reminder that completed later on the same bill must not hide it from the
  * preparer, and must not grant it to a stranger.
  */
-test("the submitter may withdraw while a later unrelated run exists on the record", async () => {
+test("the submitter is flagged as the viewer of the submission while a later unrelated run exists", async () => {
   reset(new Set(["sub-hidden"]));
+  routeState.documentSubmitterId = "user-1";
   routeState.runRows = [SUBMISSION_RUN, LATER_SCHEDULED_RUN];
   routeState.gateRows = [PENDING_GATE];
 
   const response = await GET(request());
 
   assert.equal(response.status, 200);
-  const body = (await response.json()) as { canWithdraw: boolean; approvalState: { pendingWith: unknown[] } };
+  const body = (await response.json()) as { submittedByViewer: boolean; approvalState: { pendingWith: unknown[] } };
   assert.equal(body.approvalState.pendingWith.length, 1);
-  assert.equal(body.canWithdraw, true);
+  assert.equal(body.submittedByViewer, true);
 });
 
-test("a viewer who neither submitted nor may decide cannot withdraw, even with a later run", async () => {
+test("a viewer who did not submit is not flagged as the submitter, even with a later run", async () => {
   reset(new Set(["sub-hidden"]));
+  routeState.documentSubmitterId = "user-1";
   routeState.authz.user.id = "stranger-1";
   try {
     routeState.runRows = [SUBMISSION_RUN, LATER_SCHEDULED_RUN];
@@ -476,19 +494,44 @@ test("a viewer who neither submitted nor may decide cannot withdraw, even with a
     const response = await GET(request());
 
     assert.equal(response.status, 200);
-    assert.equal(((await response.json()) as { canWithdraw: boolean }).canWithdraw, false);
+    assert.equal(((await response.json()) as { submittedByViewer: boolean }).submittedByViewer, false);
   } finally {
     routeState.authz.user.id = "user-1";
   }
 });
 
-test("a decided submission offers no recall", async () => {
+test("a decided submission has no open submission to flag", async () => {
   reset(new Set(["sub-hidden"]));
+  routeState.status = "approved";
+  routeState.documentSubmitterId = "user-1";
   routeState.runRows = [{ ...SUBMISSION_RUN, status: "completed" }];
   routeState.gateRows = [{ ...PENDING_GATE, status: "approved" }];
 
   const response = await GET(request());
 
   assert.equal(response.status, 200);
-  assert.equal(((await response.json()) as { canWithdraw: boolean }).canWithdraw, false);
+  assert.equal(((await response.json()) as { submittedByViewer: boolean }).submittedByViewer, false);
+});
+
+test("a pending document submitter remains eligible to recall without a live workflow gate", async () => {
+  reset(new Set(["sub-hidden"]));
+  routeState.documentSubmitterId = "user-1";
+  routeState.runRows = [{ ...SUBMISSION_RUN, status: "failed", error: "approval routing failed" }];
+
+  const response = await GET(request());
+
+  assert.equal(response.status, 200);
+  assert.equal(((await response.json()) as { submittedByViewer: boolean }).submittedByViewer, true);
+});
+
+test("a workflow actor cannot claim submission authority owned by another document actor", async () => {
+  reset(new Set(["sub-hidden"]));
+  routeState.documentSubmitterId = "other-submitter";
+  routeState.runRows = [SUBMISSION_RUN];
+  routeState.gateRows = [PENDING_GATE];
+
+  const response = await GET(request());
+
+  assert.equal(response.status, 200);
+  assert.equal(((await response.json()) as { submittedByViewer: boolean }).submittedByViewer, false);
 });

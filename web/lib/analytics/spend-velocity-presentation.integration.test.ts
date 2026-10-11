@@ -31,20 +31,20 @@ const hooks = registerHooks({
     return next(specifier, context)
   },
 })
-test.after(() => hooks.deregister())
-
 const { sql } = await import('drizzle-orm')
 const { db, env, withBypass } = await import('@openbooks/engine/platform/db')
 const { withSimClock: pinClock } = await import('@openbooks/engine/testing/platform/clock')
 const { createScratchOrg, dropScratchOrg, assertDedicatedFixtureDatabase } = await import('@openbooks/engine/testing/fixtures')
 const { compareDecimal } = await import('@openbooks/engine/money/decimal')
 const { spendVelocityData } = await import('./spend-velocity-data')
+const { installTrustedTestDatabaseBypass } = await import('@openbooks/engine/testing/database-bypass')
+test.after(() => hooks.deregister())
+
 // The data layer pulls in web/lib/auth, whose request-org module registers
 // its Next request-store RLS resolver at import time — after the runner's
 // trusted test bypass. Outside a request that resolver denies everything,
 // so scratch reads come back empty. Re-assert the bypass here, after every
 // import, so this file sees its own fixtures.
-const { installTrustedTestDatabaseBypass } = await import('@openbooks/engine/testing/database-bypass')
 installTrustedTestDatabaseBypass()
 
 const D = '2026-07-14'
@@ -278,7 +278,6 @@ test('vendor aggregation preserves per-line pricing, distinct documents, fresh n
     assert.deepEqual(await history(), before, 'analytics must preserve posted journal history')
   } finally { await withBypass(() => dropScratchOrg(org.orgId)) }
 })
-
 
 test('a posted bill spanning accounts counts once in the bucket and once in each account', { skip: !env.OPENBOOKS_DB_URL }, async () => {
   const org = await withBypass(() => createScratchOrg())

@@ -6,10 +6,10 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { ArrowRight, BookMarked, Wand2, X } from 'lucide-react'
 import { Button, Input, Label, cn } from '@openbooks/ui'
-import { cmp as compareMoney } from '@openbooks/engine/money/money'
 import { useBusinessToday } from '@/components/business-date-provider'
 import { useMoney } from '@/components/money-provider'
 import { ApiResponseError, throwApiErrorIfNotOk } from '@/lib/api-error'
+import { confirmDialog } from '@/lib/confirm'
 
 export interface DeptRate {
   id: string
@@ -20,6 +20,25 @@ export interface DeptRate {
 export interface TypeOpt {
   id: string
   name: string
+}
+
+/** A zero the publish would write over a non-zero standard (server 409 body). */
+interface ZeroReplacement {
+  departmentId: string
+  departmentName: string
+  standardRatePerHour: string
+  publishedRatePerHour: string
+}
+
+function zeroReplacementsFrom(body: unknown): ZeroReplacement[] {
+  const list = body !== null && typeof body === 'object' ? (body as { replacements?: unknown }).replacements : undefined
+  if (!Array.isArray(list)) return []
+  return list.filter((row): row is ZeroReplacement => {
+    if (row === null || typeof row !== 'object') return false
+    const r = row as Record<string, unknown>
+    return typeof r.departmentId === 'string' && typeof r.departmentName === 'string'
+      && typeof r.standardRatePerHour === 'string' && typeof r.publishedRatePerHour === 'string'
+  })
 }
 
 
@@ -71,13 +90,60 @@ export function OverheadActions({ departments, projectTypes, autoOpen }: { depar
     await throwApiErrorIfNotOk(res, t('errors.requestFailed'))
   }
 
+  /** A blank cell is not entered; a typed zero is an explicit rate and reaches the server. */
+  function ratePayload() {
+    return Object.entries(rates)
+      .filter(([, v]) => v.trim() !== '')
+      .map(([departmentId, v]) => ({ departmentId, ratePerHour: v.trim() }))
+  }
+
+  /**
+   * Publish the entered rates. The server refuses a zero that would replace a
+   * non-zero standard (409, code overhead_zero_over_standard) until the operator
+   * confirms each replacement, so the zero is never written by accident.
+   * Resolves false when the operator cancels the confirmation.
+   */
+  async function submitRates(): Promise<boolean> {
+    try {
+      await post({ action: 'publish', effectiveFrom, rates: ratePayload() })
+      return true
+    } catch (error) {
+      const replacements = error instanceof ApiResponseError && error.status === 409 && error.code === 'overhead_zero_over_standard'
+        ? zeroReplacementsFrom(error.body)
+        : []
+      if (replacements.length === 0) throw error
+      const confirmed = await confirmDialog({
+        tone: 'danger',
+        title: t('zeroOverStandard.title'),
+        message: (
+          <div className="space-y-2">
+            <p>{t('zeroOverStandard.intro')}</p>
+            <ul className="list-disc space-y-1 pl-5">
+              {replacements.map((r) => (
+                <li key={r.departmentId}>
+                  {t('zeroOverStandard.line', {
+                    department: r.departmentName,
+                    standard: money(r.standardRatePerHour),
+                    published: money(r.publishedRatePerHour),
+                  })}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ),
+        confirmLabel: t('zeroOverStandard.confirm'),
+        cancelLabel: t('cancel'),
+      })
+      if (!confirmed) return false
+      await post({ action: 'publish', effectiveFrom, rates: ratePayload(), acknowledgeZeroOverStandard: true })
+      return true
+    }
+  }
+
   async function publish() {
     setBusy(true)
     try {
-      await post({
-        action: 'publish', effectiveFrom,
-        rates: Object.entries(rates).filter(([, v]) => compareMoney(v || '0', '0') > 0).map(([departmentId, v]) => ({ departmentId, ratePerHour: v })),
-      })
+      if (!(await submitRates())) return
       toast.success(t('publishDone'))
       setOpen(null)
       router.refresh()
@@ -87,12 +153,7 @@ export function OverheadActions({ departments, projectTypes, autoOpen }: { depar
   async function finishWizard() {
     setBusy(true)
     try {
-      if (approach === 'rate_card') {
-        await post({
-          action: 'publish', effectiveFrom,
-          rates: Object.entries(rates).filter(([, v]) => compareMoney(v || '0', '0') > 0).map(([departmentId, v]) => ({ departmentId, ratePerHour: v })),
-        })
-      }
+      if (approach === 'rate_card' && !(await submitRates())) return
       const overhead =
         approach === 'percent' ? { method: 'percent_of_labor', ratePercent: flatRate || '0' }
         : approach === 'per_hour' ? { method: 'per_labor_hour', ratePerHour: flatRate || '0' }

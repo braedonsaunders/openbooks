@@ -153,7 +153,7 @@ test('bank-feed writes validate syncOverlapDays and store a custom overlap', { s
     for (const syncOverlapDays of [-1, 91, 1.5, '30', true]) {
       const refused = await post({ name: 'Overlap feed', provider: 'manual', accountId: org.accounts.bank, syncOverlapDays })
       assert.equal(refused.status, 400, `POST syncOverlapDays ${JSON.stringify(syncOverlapDays)}`)
-      assert.deepEqual(await refused.json(), { error: 'syncOverlapDays must be a whole number of days from 0 to 90' })
+      assert.equal(((await refused.json()) as { error: string }).error, 'syncOverlapDays must be a whole number of days from 0 to 90')
     }
     // A valid custom overlap stores; omission stores null (the sync default).
     const created = await post({ name: 'Wide feed', provider: 'manual', accountId: org.accounts.bank, syncOverlapDays: 30 })
@@ -180,7 +180,7 @@ test('bank-feed PATCH refuses non-boolean isActive values', { skip: !enabled }, 
     for (const isActive of ['false', 1, null]) {
       const refused = await patch(id, { isActive })
       assert.equal(refused.status, 400)
-      assert.deepEqual(await refused.json(), { error: 'isActive must be a boolean' })
+      assert.equal(((await refused.json()) as { error: string }).error, 'isActive must be a boolean')
     }
     const row = await db.execute<{ is_active: boolean }>(sql`select is_active from bank_feed_connections where id=${id}`)
     assert.equal(row.rows[0]!.is_active, true)

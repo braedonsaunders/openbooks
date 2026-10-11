@@ -1267,6 +1267,12 @@ export interface StatutoryHolidayPayInput {
   paidOnCommission?: boolean;
   absentWithoutConsent?: boolean;
   /**
+   * The absence assertion per holiday occurrence (`holidayKey|holidayDate`),
+   * filed one holiday at a time. An occurrence's own answer wins over the
+   * employee-wide `absentWithoutConsent`.
+   */
+  absentWithoutConsentByHoliday?: Readonly<Record<string, boolean>>;
+  /**
    * The presented statutory occupation class (the profile column's raw
    * value). Undefined means the caller never presented the question — probes
    * and tests get the general rule. Null means presented but unrecorded,
@@ -1324,6 +1330,12 @@ export interface StatutoryHolidayPayInput {
 export interface StatutoryHolidayEligibilityFacts {
   paidOnCommission?: boolean;
   absentWithoutConsent?: boolean;
+  /**
+   * The absence assertion per holiday occurrence (`holidayKey|holidayDate`),
+   * filed one holiday at a time. An occurrence's own answer wins over the
+   * employee-wide `absentWithoutConsent`.
+   */
+  absentWithoutConsentByHoliday?: Readonly<Record<string, boolean>>;
   entitledDayAttestations?: Readonly<Record<string, number>>;
   /**
    * Manitoba construction class (CCSM c E110, s. 30): the asserted class
@@ -1641,9 +1653,11 @@ export async function resolveStatutoryHolidayPay(
         + "in whole or in part on commission",
       );
     }
+    const absentWithoutConsent = input.absentWithoutConsentByHoliday?.[`${holiday.key}|${holiday.date}`]
+      ?? input.absentWithoutConsent;
     if (
       rule.qualifying.lastAndFirstScheduledShift
-      && input.absentWithoutConsent === undefined
+      && absentWithoutConsent === undefined
     ) {
       throw new PayrollHolidayError(
         `${input.employeeName}: ${holiday.name} needs an explicit last-and-first-shift `
@@ -1734,7 +1748,7 @@ export async function resolveStatutoryHolidayPay(
       employmentWeeks: hiredOn ? Math.floor(calendarDaysBetween(hiredOn, holiday.date) / 7) : null,
       commissionEarnings: commissionLookback?.earnings,
       paidOnCommission: input.paidOnCommission,
-      absentWithoutConsent: input.absentWithoutConsent,
+      absentWithoutConsent,
       occupationClass: input.occupationClass,
       averagingAgreement: input.averagingAgreement,
       hoursWorked,

@@ -29,7 +29,8 @@
       "operationSeq": "作業順序",
       "scrapPct": "仕損率 %",
       "isByproduct": "明細種別",
-      "outputCostWeight": "相対原価ウェイト"
+      "outputCostWeight": "相対原価ウェイト",
+      "effectiveRequirement": "単位あたりの実効量"
     },
     "values": {
       "component": "構成品",
@@ -44,7 +45,11 @@
       "invalidOperation": "作業順序には正の整数を入力してください。",
       "manufacturingDisabled": "作業順序と副産物の設定を編集するには、会社設定 → 機能で製造を有効にしてください。"
     },
-    "jointOutputNote": "連産品には、数量と基本単位ごとの相対ウェイトに応じて製造原価を配賦します。主製品のウェイトは1です。副産物には正味実現可能価額による個別の評価を適用します。"
+    "jointOutputNote": "連産品には、数量と基本単位ごとの相対ウェイトに応じて製造原価を配賦します。主製品のウェイトは1です。副産物には正味実現可能価額による個別の評価を適用します。",
+    "help": {
+      "scrapPct": "数量あたりにこの割合を上乗せします。数量にすでにロスが含まれている場合は 0 のままにしてください。",
+      "effectiveRequirement": "親品目1単位あたりの必要量：数量 ×（1 + スクラップ率 %）。作業指示も同じ計算を使います。"
+    }
   },
   "labels": {
     "item": "品目",
@@ -280,8 +285,10 @@
       "loadingMore": "読込中…"
     },
     "secondCount": "二次棚卸を保存",
+    "recordedQuantity": "記録済み {quantity}",
     "secondReason": "二次棚卸の実測",
-    "secondReasonHint": "二次棚卸の数量が初回と異なります。差異の理由を5文字以上で入力すると、この棚卸と一緒に記録されます。"
+    "secondReasonHint": "二次棚卸の数量が初回と異なります。差異の理由を5文字以上で入力すると、この棚卸と一緒に記録されます。",
+    "secondNotRecorded": "未記録です。初回と異なる二次棚卸は、保存前に差異の理由（{minLength}文字以上）が必要です。"
   },
   "create": {
     "subsidiary": "所有子会社",

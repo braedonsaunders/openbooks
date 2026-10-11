@@ -120,7 +120,9 @@ test("dashboard AR/AP tiles read the shared open-item reader, not the cached bal
     await withBypass(() => postedDoc(org, { kind: "vendor_bill", amount: "700", staleOpenBalance: "700", dueDate: "2027-12-31", applications: ["200"] }));
 
     const actor = await withBypass(() => createScratchUser(org.orgId, "Tile Reader", "admin"));
-    const metrics = await withOrgContext(org.orgId, () => loadDashboardMetrics(authzFor(org.orgId, actor as unknown as string)));
+    const metrics = await withOrgContext(org.orgId, () => loadDashboardMetrics(authzFor(org.orgId, actor as unknown as string), [
+      "kpi-open-receivables", "kpi-overdue-receivables", "kpi-open-payables", "kpi-overdue-payables",
+    ]));
     // 600 (net of receipt) + 0 (fully applied) — 200 (credit) + 300 (overdue).
     assert.equal(toUnits(metrics.openReceivables), toUnits("700"), "AR tile nets receipts and credits instead of the stale cache");
     assert.equal(toUnits(metrics.overdueReceivables), toUnits("300"), "only the past-due invoice counts as overdue");

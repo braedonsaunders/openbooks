@@ -2547,7 +2547,7 @@ async function processWebhookEvent(
   // runs first, and only an unknown method falls through to the setup claim
   // below instead of stranding a new method as unknown.
   if (event.cardUpdaterRefresh) {
-    const { recordCardUpdaterEvent } = await import("./autopay.ts");
+    const { recordCardUpdaterEvent } = await import("./autopay-methods.ts");
     const outcome = await recordCardUpdaterEvent(orgId, provider, event.cardUpdaterRefresh);
     if (outcome !== "unknown_method" || !event.setupCompleted) return outcome;
   }
@@ -2555,7 +2555,7 @@ async function processWebhookEvent(
   // claims them first, and an unclaimed one stays unknown (a 200 the
   // provider retries) rather than mis-settling as a payment.
   if (event.setupCompleted) {
-    const { recordProviderSetupMethod } = await import("./autopay.ts");
+    const { recordProviderSetupMethod } = await import("./autopay-methods.ts");
     return await recordProviderSetupMethod(orgId, provider, event);
   }
   // Resolve the attempt: by provider object id, by its alternate id (e.g.
@@ -2610,7 +2610,7 @@ async function processWebhookEvent(
     // records the dispute against its collection, and a null outcome falls
     // through to the payment automation below.
     if (event.status === "succeeded" || event.status === "processing" || event.status === "failed" || event.status === "refunded" || event.status === "disputed") {
-      const { settleCollectionAttemptEvent } = await import("./autopay.ts");
+      const { settleCollectionAttemptEvent } = await import("./autopay-settlement.ts");
       const collectionOutcome = await settleCollectionAttemptEvent(orgId, provider, event);
       if (collectionOutcome !== null) return collectionOutcome;
     }

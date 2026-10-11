@@ -32,7 +32,7 @@ import type { SqlExecutor } from "../platform/db.ts";
  * allocators hand the canonical allocator (sources: web/lib/document-kinds.ts
  * DOC_KINDS for the shared AP/AR/bank kinds; web/app/api/estimates,
  * sales-orders and purchase-orders routes for EST-/SO-/PO-;
- * web/app/api/expenses/draft/route.ts for EXP-;
+ * web/app/api/expenses/route.ts for EXP-;
  * engine/src/payables/ap-capture-service.ts for VCRED-;
  * engine/src/payments/payment-documents.ts for PAY-/RCPT-;
  * engine/src/ledger/journal-writes.ts for JE-).

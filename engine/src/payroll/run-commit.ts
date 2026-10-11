@@ -494,7 +494,7 @@ export async function commitPayRun(input: {
     const storedDigest = run.calculation_source_digest ?? null;
     if (!storedSource || !storedDigest
         || payRunCalculationSourceDigest(storedSource) !== storedDigest) {
-      throw new PayrollError(staleCalculationMessage(["selection"]));
+      throw new PayrollError(staleCalculationMessage(["selection"], run.doc_status));
     }
     const currentSource = await payRunCalculationSource(
       orgId,
@@ -517,6 +517,7 @@ export async function commitPayRun(input: {
     if (payRunCalculationSourceDigest(currentSource) !== storedDigest) {
       throw new PayrollError(staleCalculationMessage(
         sourceReasons.length > 0 ? sourceReasons : ["selection"],
+        run.doc_status,
       ));
     }
 
@@ -627,7 +628,7 @@ export async function commitPayRun(input: {
     const expectedClaimIds = [...storedSource.claimEntryIds].sort();
     const actualClaimIds = claimed.rows.map((row) => row.id).sort();
     if (canonicalJson(actualClaimIds) !== canonicalJson(expectedClaimIds)) {
-      throw new PayrollError(staleCalculationMessage(["time"]));
+      throw new PayrollError(staleCalculationMessage(["time"], run.doc_status));
     }
     // Rate writes use the same per-slot and per-point transaction advisory
     // locks. Take every slot used by this schedule (including slots with no

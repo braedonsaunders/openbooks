@@ -4,10 +4,21 @@ import Link from 'next/link'
 import { ArrowRight, Power, Workflow } from 'lucide-react'
 import { getTranslations } from 'next-intl/server'
 import { Button, EmptyState } from '@openbooks/ui'
+import { FEATURE_BY_KEY } from '@openbooks/engine/organization/feature-registry'
 import { RouteStateView } from './route-state'
 
 /** Where to turn an organization feature on: Company Settings → Features. */
 export const FEATURES_SETUP_HREF = '/admin/setup/features'
+
+/**
+ * The Features switchboard opened on the tab that owns the feature. Without the
+ * tab the page opens on its first category, so the switch a refusal points to
+ * is not visible. Unknown keys keep the switchboard's default tab.
+ */
+export function featureSetupHref(featureKey: string): string {
+  const category = FEATURE_BY_KEY.get(featureKey)?.category
+  return category ? `${FEATURES_SETUP_HREF}?tab=${category}` : FEATURES_SETUP_HREF
+}
 
 /**
  * The operator-facing name of a feature, from the Features catalog
@@ -60,7 +71,7 @@ export async function FeatureUnavailable({
           description={description}
           action={canManageFeatures ? (
             <Button asChild size="sm">
-              <Link href={FEATURES_SETUP_HREF}>{t('turnOnFeature')}<ArrowRight aria-hidden="true" className="h-4 w-4" /></Link>
+              <Link href={featureSetupHref(featureKey)}>{t('turnOnFeature')}<ArrowRight aria-hidden="true" className="h-4 w-4" /></Link>
             </Button>
           ) : undefined}
         />
@@ -84,7 +95,7 @@ export async function FeatureUnavailable({
       description={description}
       action={canManageFeatures ? (
         <Button asChild size="lg">
-          <Link href={FEATURES_SETUP_HREF}>{t('turnOnFeature')}<ArrowRight aria-hidden="true" className="h-4 w-4" /></Link>
+          <Link href={featureSetupHref(featureKey)}>{t('turnOnFeature')}<ArrowRight aria-hidden="true" className="h-4 w-4" /></Link>
         </Button>
       ) : dashboard}
       secondaryAction={canManageFeatures ? dashboard : undefined}

@@ -258,7 +258,16 @@ export async function postPaymentWithApplications(
         "this payment applies credits but moves no cash — apply the credit directly from the credit memo instead of through a payment",
       );
     }
-    if (allocs.length === 0) throw new PaymentError("select at least one open item to apply");
+    // A customer receipt may post with no applications when it carries an
+    // on-account amount: the whole receipt then lands as an open AR credit.
+    // Anything else with no applications records nothing and is refused.
+    if (allocs.length === 0 && toUnits(custom.onAccountAmount ?? "0") <= 0n) {
+      throw new PaymentError(
+        doc.kind === "customer_payment"
+          ? "select at least one open item to apply, or enter the amount received so the receipt posts as an on-account credit"
+          : "select at least one open item to apply",
+      );
+    }
     validateAllocationInputs(allocs);
     if (
       allocations !== undefined &&
@@ -410,10 +419,13 @@ export async function postPaymentWithApplications(
       // source and every target to share a control account, so deriving the
       // targets' account is the only way such a payment can post at all;
       // mixed-account allocations keep the default and fail loudly below.
-      const targetAccounts = (await db.execute<{ account_id: string }>(sql`
-        select distinct account_id from journal_lines where org_id = ${doc.orgId} and id in ${allocs.map((a) => a.openLineId)}
-      `));
-      const derived = targetAccounts.rows.length === 1 ? targetAccounts.rows[0]!.account_id : null;
+      // An on-account receipt has no targets: the default control stands.
+      const targetAccounts = allocs.length === 0
+        ? []
+        : (await db.execute<{ account_id: string }>(sql`
+            select distinct account_id from journal_lines where org_id = ${doc.orgId} and id in ${allocs.map((a) => a.openLineId)}
+          `)).rows;
+      const derived = targetAccounts.length === 1 ? targetAccounts[0]!.account_id : null;
       if (derived && derived !== controlAccountId) {
         controlAccountId = derived;
         // Persist the derived control so the posting rule (controlOverride)
@@ -472,21 +484,24 @@ export async function postPaymentWithApplications(
       throw new PaymentError("payment control line does not cross-foot to the transaction-currency applications");
     }
 
-    const targetsResult = (await db.execute<{
-      id: string; amount: string; currency: string; txn_amount: string; account_id: string;
-      party_id: string | null; subsidiary_id: string; book_id: string; open_base: string; open_transaction: string;
-    }>(sql`
-      select jl.id, jl.amount, jl.currency, jl.txn_amount, jl.account_id, jl.party_id, jl.subsidiary_id, je.book_id,
-             abs(jl.amount) - coalesce(sum(a.amount) filter (where a.unapplied_at is null), 0) as open_base,
-             abs(jl.txn_amount) - coalesce(sum(a.target_transaction_amount) filter (where a.unapplied_at is null), 0) as open_transaction
-        from journal_lines jl
-        -- Live entries only: a reversed entry no longer carries a settleable open item.
-        join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
-        left join applications a on a.to_line_id = jl.id and a.org_id = jl.org_id
-       where jl.org_id = ${doc.orgId} and jl.id in ${allocs.map((a) => a.openLineId)}
-       group by jl.id, je.book_id
-    `));
-    const targetById = new Map(targetsResult.rows.map((row) => [row.id, row]));
+    // An on-account receipt settles no targets, so there is nothing to read.
+    const targetsResult = allocs.length === 0
+      ? []
+      : (await db.execute<{
+          id: string; amount: string; currency: string; txn_amount: string; account_id: string;
+          party_id: string | null; subsidiary_id: string; book_id: string; open_base: string; open_transaction: string;
+        }>(sql`
+          select jl.id, jl.amount, jl.currency, jl.txn_amount, jl.account_id, jl.party_id, jl.subsidiary_id, je.book_id,
+                 abs(jl.amount) - coalesce(sum(a.amount) filter (where a.unapplied_at is null), 0) as open_base,
+                 abs(jl.txn_amount) - coalesce(sum(a.target_transaction_amount) filter (where a.unapplied_at is null), 0) as open_transaction
+            from journal_lines jl
+            -- Live entries only: a reversed entry no longer carries a settleable open item.
+            join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
+            left join applications a on a.to_line_id = jl.id and a.org_id = jl.org_id
+           where jl.org_id = ${doc.orgId} and jl.id in ${allocs.map((a) => a.openLineId)}
+           group by jl.id, je.book_id
+        `)).rows;
+    const targetById = new Map(targetsResult.map((row) => [row.id, row]));
 
     let sourceBaseRemaining = fromUnits(toUnits(source.amount) < 0n ? -toUnits(source.amount) : toUnits(source.amount));
     // The source leg carries the applications plus any on-account remainder,
@@ -570,7 +585,9 @@ export async function postPaymentWithApplications(
 
     // `controlAdjustment` clears in the FX entry above; the applications table
     // has no such column, so the insert lists the persisted fields explicitly.
-    await db.insert(schema.applications).values(applicationsToWrite.map((a) => ({
+    // An on-account receipt writes no applications; the open AR credit it
+    // posts is the only settlement evidence it carries.
+    if (applicationsToWrite.length > 0) await db.insert(schema.applications).values(applicationsToWrite.map((a) => ({
       orgId: doc.orgId,
       fromLineId: a.fromLineId,
       toLineId: a.toLineId,
@@ -609,11 +626,13 @@ export async function postPaymentWithApplications(
     }
 
     const targetIds = [...allocs.map((a) => a.openLineId), ...creditAllocs.map((a) => a.toLineId)];
-    const targets = (await db.execute<{ doc_id: string }>(sql`
-      select distinct je.source_document_id as doc_id
-        from journal_lines jl join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
-       where jl.org_id = ${doc.orgId} and jl.id in ${targetIds} and je.source_document_id is not null
-    `));
+    const targets = targetIds.length === 0
+      ? { rows: [] as { doc_id: string }[] }
+      : await db.execute<{ doc_id: string }>(sql`
+          select distinct je.source_document_id as doc_id
+            from journal_lines jl join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
+           where jl.org_id = ${doc.orgId} and jl.id in ${targetIds} and je.source_document_id is not null
+        `);
     if (targets.rows.length > 0) {
       await db.insert(schema.documentLinks).values(targets.rows.map((target) => ({
         orgId: doc.orgId,

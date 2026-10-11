@@ -24,9 +24,20 @@ import {
   validateCustomValues,
   visibleCustomFieldDefs,
 } from "../../../lib/custom-fields";
-import { assetBankHygieneWarning } from "../../../lib/accounts-hygiene";
+import {
+  assetBankHygieneWarning,
+  duplicateAccountNameWarning,
+  type DuplicateAccountNameWarning,
+} from "../../../lib/accounts-hygiene";
 import { isUuid } from "../../../lib/list-params";
-import { loadAccount, orgBaseCurrency, redactAccountCustomFields } from "./_lib";
+import {
+  accountNameLock,
+  duplicateNameRefusal,
+  findNamedAccounts,
+  loadAccount,
+  orgBaseCurrency,
+  redactAccountCustomFields,
+} from "./_lib";
 import { accountInputFields } from "./_input";
 
 import {
@@ -45,6 +56,8 @@ const createBodySchema = z.strictObject({
   ...accountInputFields,
   name: z.string().trim().min(1, "name is required"),
   type: z.enum(ACCOUNT_TYPES),
+  /** Confirms a second active account with an existing name (see duplicate_account_name). */
+  acknowledgeDuplicateName: z.boolean().optional(),
 });
 
 function bad(error: string, field?: string, status = 422, details?: Record<string, unknown>) {
@@ -206,6 +219,7 @@ export const POST = defineRoute({
     const custom = validatedCustom.cleaned;
 
     let created: boolean | NextResponse = false;
+    let duplicateWarning: DuplicateAccountNameWarning | null = null;
     try {
       created = await db.transaction(async (tx) => {
         // The account inherits its parent's subsidiary when the body names
@@ -256,6 +270,27 @@ export const POST = defineRoute({
               const denied = guardSubsidiaryScope(gate, effectiveSubsidiaryId);
               if (denied) return denied;
             }
+          }
+        }
+        // A retry of an existing create replays the stored account; its own
+        // name must not refuse the replay. Any other same-name holder is
+        // checked under the name lock, before the idempotency claim, so a
+        // refusal leaves no claim behind for the operator to retry against.
+        const priorCreate = (await tx.execute(sql`
+          select 1 from accounts where id = ${requestId} and org_id = ${gate.user.orgId}
+        `)).rows[0];
+        if (!priorCreate) {
+          await tx.execute(accountNameLock(gate.user.orgId, name));
+          const holders = await findNamedAccounts(tx, {
+            orgId: gate.user.orgId,
+            name,
+            subsidiaryId: effectiveSubsidiaryId,
+            allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+          });
+          const duplicate = duplicateAccountNameWarning(name, holders);
+          if (duplicate) {
+            if (body.acknowledgeDuplicateName !== true) return duplicateNameRefusal(duplicate);
+            duplicateWarning = duplicate;
           }
         }
         const snapshot = {
@@ -387,7 +422,7 @@ export const POST = defineRoute({
       isSummary,
     });
     return NextResponse.json(
-      { ...payload, warnings: hygiene ? [hygiene] : [] },
+      { ...payload, warnings: [...(hygiene ? [hygiene] : []), ...(duplicateWarning ? [duplicateWarning] : [])] },
       { status: created ? 201 : 200 },
     );
   },

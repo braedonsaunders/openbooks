@@ -971,6 +971,14 @@
         "cashOverShort": {
           "label": "Kassendifferenz",
           "hint": "Gezähltes Kassenbargeld über oder unter dem erwarteten Betrag"
+        },
+        "badDebtExpense": {
+          "label": "Aufwand für uneinbringliche Forderungen",
+          "hint": "Wird belastet, wenn ein uneinbringlicher Rechnungsbetrag ausgebucht wird, sofern kein Wertberichtigungskonto gesetzt ist"
+        },
+        "allowanceForDoubtfulAccounts": {
+          "label": "Wertberichtigung auf Forderungen",
+          "hint": "Gegenkonto zu den Forderungen; Ausbuchungen belasten es statt des Aufwandskontos, sofern es gesetzt ist"
         }
       },
       "defaultsNote": "Dies sind die unternehmensweiten Standards. Jede Tochtergesellschaft kann sie in ihrem eigenen Datensatz überschreiben; leere Überschreibungen fallen auf diese zurück.",
@@ -2355,6 +2363,40 @@
         "trueup": "Lohnabstimmung"
       },
       "docs": "Dokumentation",
+      "catchUp": {
+        "title": "Genehmigte Zeit noch nicht kalkuliert",
+        "hint": "Zeit, die genehmigt wurde, bevor die Buchung aktiviert war oder die Lohnkonten zugeordnet wurden, hat im Hauptbuch keine Lohnkosten. Jeder Beleg wird auf den letzten Tag datiert, den er abdeckt. Positionen in geschlossenen Perioden werden übersprungen und bleiben ungebucht.",
+        "through": "Genehmigt bis",
+        "reason": "Begründung für das Prüfprotokoll",
+        "post": "Lohnkosten buchen",
+        "month": "Monat",
+        "entries": "Einträge",
+        "hours": "Stunden",
+        "cost": "Standardkosten",
+        "period": "Periode",
+        "total": "Summe",
+        "openSetup": "Einrichtung öffnen",
+        "nothingPosted": "Nichts zu buchen. Die genehmigte Zeit ist bereits kalkuliert.",
+        "postedResult": "Gebuchte Einträge: {count}. Gebuchte Standardkosten: {cost}.",
+        "skippedResult": "Ungebuchte Einträge: {count}.",
+        "states": {
+          "open": "Offen",
+          "closed": "Geschlossen",
+          "no_period": "Keine Periode",
+          "partial": "Teilweise geschlossen"
+        },
+        "skipRemedy": {
+          "closed": "Periode im Abschluss wieder öffnen oder so belassen.",
+          "no_period": "Buchungsperiode im Abschluss anlegen oder so belassen."
+        },
+        "blockers": {
+          "projects_disabled": "Projekte ist deaktiviert. Aktivieren Sie es unter Firmeneinstellungen → Funktionen, bevor Lohnkosten gebucht werden.",
+          "mode_off": "Die Lohnkostenrechnung bucht keine Standardkosten auf Aufträge. Wählen Sie oben „Standardkosten auf Aufträge buchen“, speichern Sie und buchen Sie dann die Nachholung.",
+          "accounts_unmapped": "Ordnen Sie oben das Lohn-WIP-Konto und das Lohnverrechnungskonto zu und speichern Sie.",
+          "no_posting_book": "Kein aktives primäres Hauptbuch bucht ins Hauptbuch. Richten Sie eines ein, bevor Sie buchen.",
+          "no_root_subsidiary": "Keine aktive Stammgesellschaft ist eingerichtet. Richten Sie eine ein, bevor Sie buchen."
+        }
+      },
       "posting": {
         "hint": "Bei eingeschalteter Buchung bucht genehmigte Zeit Soll Lohn-WIP (je Projekt) / Haben Lohnverrechnung zum Standardkostensatz. Lohn-Ist-Werte leeren später dasselbe Konto; der Rest ist Ihre Lohnabweichung.",
         "laborClearing": "Lohnverrechnungskonto",
@@ -3247,6 +3289,12 @@
         "noRates": "Noch keine veröffentlichten Sätze – führen Sie den Einrichtungsassistenten aus oder veröffentlichen Sie Sätze.",
         "publish": "Sätze veröffentlichen",
         "publishConfirm": "Veröffentlichen",
+        "zeroOverStandard": {
+          "title": "Standardsätze durch null ersetzen?",
+          "intro": "Die Veröffentlichung schreibt einen Nullsatz über einen von null verschiedenen Standardsatz. Aufträge, die ab dem Startdatum mit diesen Abteilungen kalkuliert werden, hätten dann keinen Gemeinkostenanteil aus dem Standard. Bestätigen Sie nur, wenn der Standard nicht mehr verwendet wird.",
+          "line": "{department}: Standard von {standard} pro Stunde wird durch {published} pro Stunde ersetzt.",
+          "confirm": "Nullsätze veröffentlichen"
+        },
         "publishDone": "Sätze in der Tariftabelle veröffentlicht",
         "publishHint": "Schreibt die berechneten Sätze der Engine als gültigkeitsdatierte Zeilen in die Gemeinkosten-Tariftabelle fest. Projekte kalkulieren Gemeinkosten aus diesen veröffentlichten Sätzen, bis Sie erneut veröffentlichen – frühere Perioden behalten ihre ursprünglichen Sätze.",
         "publishTitle": "In der Tariftabelle veröffentlichen",
@@ -5472,6 +5520,8 @@
       "shopifyName": "Shopify Payments",
       "shopifyDescription": "Auszahlungs- und Saldentransaktions-Exporte importieren. Rückerstattungen und Dispute buchen über die obige Automatisierung.",
       "shopifyChannelsNote": "Verbindet sich nach der Einrichtung über den Channels-Arbeitsbereich.",
+      "squareName": "Square",
+      "squareDescription": "Importiert Auszahlungs- und Auszahlungsbuchungsexporte. Rückerstattungen und Disputes werden über die Automatisierung oben gebucht.",
       "errors": {
         "loadFailed": "Die Zahlungspartner-Einstellungen konnten nicht geladen werden.",
         "saveFailed": "Die Zahlungspartner-Einstellungen konnten nicht gespeichert werden.",

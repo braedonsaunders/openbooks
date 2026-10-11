@@ -11,6 +11,8 @@ type ReconcilableAccount = {
   name: string;
   number: string | null;
   currency: string;
+  /** Account type, which fixes the statement sign convention. */
+  type: string;
 };
 
 export async function loadReconcilableAccount(
@@ -21,7 +23,7 @@ export async function loadReconcilableAccount(
   lock = false,
 ): Promise<ReconcilableAccount> {
   const r = (await executor.execute<ReconcilableAccount & { subsidiary_id: string | null }>(sql`
-    select a.id, a.name, a.number, a.currency_restriction as currency, a.subsidiary_id
+    select a.id, a.name, a.number, a.currency_restriction as currency, a.type, a.subsidiary_id
       from accounts a
      where a.id = ${accountId} and a.org_id = ${orgId}
        and a.reconcilable and a.is_active and not a.is_summary

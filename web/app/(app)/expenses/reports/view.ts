@@ -15,7 +15,7 @@ import { can, requirePermission } from '../../../../lib/authz'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { isUuid, pickString } from '../../../../lib/list-params'
-import { canRecallExpenseReport, loadExpenseReport } from '../../../../lib/expenses'
+import { blankExpenseReport, canRecallExpenseReport, loadExpenseReport } from '../../../../lib/expenses'
 import { loadFieldDefs } from '../../../../lib/custom-fields'
 import { customSegmentOptions } from '../../../../lib/segments'
 import { dimensionOptions } from '../../../../lib/reports/filters'
@@ -34,10 +34,9 @@ import type { ExpenseDrawer } from '../ExpenseDrawer'
  * only the header (title/description/new button) and the ?expense= flyout
  * with its picker + form-layout resolution, copied verbatim from page.tsx.
  *
- * Two page-specific widgets the registry does not have yet (see
- * Two page-specific widgets: `new-expense` (the instant-into-draft button — a
- * POST to /api/expenses/draft, not the NewDocumentButton shape) and
- * `expense-drawer`.
+ * Two page-specific widgets the registry does not have yet: `new-expense`
+ * (a URL-only button that opens the unsaved-create drawer at
+ * `?expense=new`, not the NewDocumentButton shape) and `expense-drawer`.
  *
  * The `_actions` column is a per-row WIDGET ref rather than a callback:
  * `renderRowActions` is a function and a spec can never carry one, so the
@@ -51,6 +50,8 @@ type ExpenseDrawerProps = Parameters<typeof ExpenseDrawer>[0]
 export interface ExpenseReportsDrawer {
   remountKey: string
   report: unknown
+  /** Unsaved create over a blank seed; Save is the first write. */
+  createMode: boolean
   initialMode: 'edit' | 'view'
   employees: unknown
   accounts: unknown
@@ -94,10 +95,14 @@ export async function loadExpenseReports(
   const expenseId = pickString(sp.expense)
 
   // Flyout + pickers + form layout resolve only when a report is open.
-  // The shared reader scopes the document to the caller before its
-  // correlated line query, so a foreign id yields null and the drawer stays
-  // shut — same guard as the native page.
-  const openReport = expenseId && isUuid(expenseId) ? await loadExpenseReport(expenseId, authz.user.orgId, authz.allowedSubsidiaryIds) : null
+  // `expense=new` opens the unsaved-create drawer over a blank seed: nothing
+  // is numbered until its first Save. The shared reader scopes the document to
+  // the caller before its correlated line query, so a foreign id yields null
+  // and the drawer stays shut — same guard as the native page.
+  const createRequested = expenseId === 'new' && canSubmit
+  const openReport = createRequested
+    ? await blankExpenseReport(authz.user.orgId)
+    : expenseId && isUuid(expenseId) ? await loadExpenseReport(expenseId, authz.user.orgId, authz.allowedSubsidiaryIds) : null
   const pickers = openReport
     ? await Promise.all([
         db.execute<{ id: string; display_name: string }>(sql`
@@ -160,9 +165,10 @@ export async function loadExpenseReports(
   const drawer: ExpenseReportsDrawer | null =
     openReport && pickers && resolvedForm
       ? {
-          remountKey: String((openReport.doc as Record<string, unknown>).id),
+          remountKey: createRequested ? 'new' : String((openReport.doc as Record<string, unknown>).id),
           report: openReport as unknown as ExpenseDrawerProps['report'],
-          initialMode: pickString(sp.mode) === 'edit' ? 'edit' : 'view',
+          createMode: createRequested,
+          initialMode: createRequested || pickString(sp.mode) === 'edit' ? 'edit' : 'view',
           employees: (pickers[0] as { rows: unknown }).rows,
           accounts: (pickers[1] as { rows: unknown }).rows,
           cards: pickers[2] as unknown as ExpenseDrawerProps['cards'],

@@ -81,8 +81,9 @@
     "depositRecording": "Recording…",
     "depositNeedsSetup": "No till-drop bank accounts are configured. Ask a bookkeeper to choose them in Company Settings.",
     "depositRequiresPermission": "Recording a bank drop needs the cash_sales.deposit permission, held by roles that post cash sales. Ask your administrator to grant it.",
-    "tillWindow": "Since the till's drop on {after}: {sales} sales tendered {tendered} {currency} cash; {dropped} {currency} dropped so far.",
-    "tillWindowFirst": "No earlier drop from this till: {sales} sales tendered {tendered} {currency} cash; {dropped} {currency} dropped so far.",
+    "tillWindow": "Sales after {after} through {through}: {sales} sales tendered {tendered} {currency} cash; {dropped} {currency} dropped so far.",
+    "tillWindowFirst": "Sales through {through} (no earlier drop from this till): {sales} sales tendered {tendered} {currency} cash; {dropped} {currency} dropped so far.",
+    "tillCoversThrough": "Covers sales through",
     "tillReason": "Count note",
     "tillReasonHint": "Needed when the drop is more than the recorded sales explain (for example, sales not yet entered)",
     "tillDifference": "Till count since {after} through {through}: drops differ from recorded cash by {difference}.",
@@ -152,7 +153,10 @@
     "controlAccountHelp": "The receivable this document posts to. Payments and credits settle it on the same account. Leave empty to use the default.",
     "controlAccountPartyDefault": "Customer default — {account}",
     "controlAccountOrganizationDefault": "Organization default — {account}",
-    "controlAccountUnset": "No receivable account configured — set one in Setup → Company & Accounting → Control accounts"
+    "controlAccountUnset": "No receivable account configured — set one in Setup → Company & Accounting → Control accounts",
+    "createUnconfirmed": "The server did not confirm the new record. Save again: the retry reuses this draft's key, so it cannot create a second record.",
+    "saveUnconfirmed": "The server did not confirm the save. Reload the record to see its saved state before editing again.",
+    "createConflict": "This draft was already saved with different details. Reload the page and open the saved record from the list instead of entering it again."
   },
   "dailySummary": {
     "date": "Date",
@@ -269,6 +273,13 @@
       },
       "recurring": "Recurring inflows (grants, rent received, subscriptions) join the forecast as categories — configure them in the <cashCockpit>Cash cockpit</cashCockpit>.",
       "documentation": "Read the accounts-receivable guide"
+    },
+    "notForecast": {
+      "title": "Not forecast — overdue beyond {days} days",
+      "hint": "{count, plural, one {# item} other {# items}} · {total}",
+      "body": "These receivables are not counted as expected receipts. They stay in the aging figures and remain open for collection.",
+      "daysOverdue": "{days} days overdue",
+      "more": "+{count} more not shown"
     }
   },
   "appliedPayments": {
@@ -376,6 +387,8 @@
       "cancelSubscription": "Cancel subscription",
       "cancelConfirmTitle": "Cancel subscription?",
       "cancelConfirmBody": "Canceling ends recurring billing for this subscription. This cannot be undone.",
+      "cancelEffectiveOn": "Cancellation effective on",
+      "cancelPaidThroughHint": "Billed through {date}. Billing stops on the effective date, and invoices already posted are not changed.",
       "toasts": {
         "prorated": "Proration {adjustment} → {documentNumber}",
         "qtyUpdatedNoProration": "Quantity updated (no proration due)",
@@ -386,6 +399,10 @@
         "loading": "Loading advanced subscriptions",
         "loadFailed": "Could not load advanced subscription lifecycle data",
         "loadFailedFallback": "Could not load advanced subscriptions",
+        "noContractSuffix": "no contract",
+        "amendNeedsContract": "This subscription has no contract yet. Activate one in Contracts, then amend it here.",
+        "planChangeHint": "Invoiced periods keep their plan. The change takes effect on the paid-through date {date} or a later date.",
+        "contractNeedsVersion": "{plan} has no published catalog version. Publish one in Plan versions before activating a contract.",
         "actionFailed": "Action failed",
         "catalogTitle": "Effective-dated catalog",
         "catalogDescription": "Published versions are immutable. Create a new version when commercial terms change.",
@@ -495,6 +512,8 @@
         "changeTiming": "Change billing timing",
         "changeRenew": "Renew",
         "changeCoterm": "Co-term",
+        "changePlan": "Change plan",
+        "changeType_change_plan": "Plan change",
         "name": "Name",
         "newTermEnd": "New term end",
         "timing": "Timing",

@@ -10,8 +10,6 @@
   "compute": "Calcular",
   "computing": "Calculando…",
   "empty": "Escolha uma declaração e um período e depois calcule.",
-  "adjustmentAria": "Ajuste para {label}",
-  "adjustmentPlaceholder": "0,00",
   "columns": {
     "line": "Linha",
     "description": "Descrição",
@@ -102,6 +100,12 @@
       "pdf": "PDF",
       "xlsx": "Excel",
       "csv": "CSV"
+    },
+    "adjustments": {
+      "title": "Ajustes",
+      "reason": "Motivo",
+      "recordedBy": "Registrado por",
+      "noReason": "Nenhum motivo registrado"
     }
   },
   "provisions": {
@@ -326,5 +330,27 @@
       "threshold": "Limite de vendas"
     },
     "contextUnavailable": "Não foi possível carregar as evidências da declaração. Tente novamente antes de se basear nelas."
+  },
+  "adjustments": {
+    "title": "Ajustes",
+    "description": "Informe valores que pertencem a uma linha de ajuste, mas não constam no razão deste sistema, como atividade anterior à conversão. Cada ajuste exige um motivo e é registrado com seu autor ao salvar a declaração.",
+    "entryLabel": "Ajuste",
+    "line": "Linha",
+    "amount": "Valor",
+    "amountPlaceholder": "0.00",
+    "reason": "Motivo",
+    "reasonPlaceholder": "ex.: Atividade anterior à conversão de jan. a ago. 2025 conforme sistema anterior",
+    "add": "Adicionar ajuste",
+    "remove": "Remover",
+    "removeAria": "Remover ajuste: {reason}",
+    "errors": {
+      "lineCode": "Escolha uma linha de ajuste desta declaração.",
+      "amount": "Informe um valor com até quatro casas decimais, por exemplo 3018.84 ou -50.",
+      "reason": "Informe o motivo deste ajuste (até 500 caracteres)."
+    }
+  },
+  "conversion": {
+    "notice": "Este período da declaração começa antes da sua conversão em {date}. Adicione os valores anteriores à conversão do sistema anterior.",
+    "action": "Adicionar valores anteriores à conversão"
   }
 }

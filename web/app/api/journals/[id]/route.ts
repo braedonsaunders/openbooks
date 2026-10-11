@@ -108,7 +108,7 @@ const journalPatchBody = z.object({
   extraDims: z.record(z.string(), z.string().nullable()).optional(),
   custom: z.record(z.string(), z.json()).optional(),
   lines: z.array(journalLineInput).optional(),
-}).refine((body) => Object.keys(body).length > 0, 'At least one field must be provided.')
+})
 
 /**
  * Autosave a manual-journal draft. Once it enters approval or posts, the
@@ -165,6 +165,11 @@ export const PATCH = defineRoute({
         { error: `a ${existing.rows[0].status} journal cannot be edited — create a correcting journal instead` },
         { status: 422 },
       )
+    }
+    // An empty edit is refused only after the existence and scope gates, so a
+    // malformed or unknown id keeps its 404 contract on every verb.
+    if (Object.keys(body).length === 0) {
+      return NextResponse.json({ error: 'At least one field must be provided.' }, { status: 400 })
     }
 
 

@@ -12,20 +12,19 @@ import { DOCUMENT_KINDS } from "../periods/period-policy.ts";
  * The profile is collapsed onto the single `documents` supertype.
  */
 
-export const NON_POSTING_DOC_KINDS = ["sales_order", "purchase_order", "quote", "pick_list", "shipment", "rma"] as const;
+export const NON_POSTING_DOC_KINDS: readonly string[] = ["sales_order", "purchase_order", "quote", "pick_list", "shipment", "rma", "purchase_receipt", "sales_fulfillment", "field_ticket"];
 
 /**
  * Document kinds flows can run over. The posting kinds are derived from the
- * engine kind universe (engine/src/close/close.ts DOCUMENT_KINDS) minus the
- * explicitly non-posting order kinds — never a hand mirror of
- * engine/src/ledger/posting.ts RULES, which drifted before (pay_run and
- * project_charge posted in the kernel with no flow profile). The order kinds
- * live in the same documents table without a posting rule, so their profiles
- * omit `post_document`. A parity test pins POSTING_DOC_KINDS to the RULES
+ * engine kind universe (engine/src/periods/period-policy.ts DOCUMENT_KINDS)
+ * minus the explicitly non-posting kinds — never a hand mirror of
+ * engine/src/ledger/posting-rules.ts RULES, which drifted before (pay_run and
+ * project_charge posted in the kernel with no flow profile). Non-posting kinds
+ * have no kernel posting rule, so their profiles omit `post_document`. A parity test pins POSTING_DOC_KINDS to the RULES
  * keys from both sides.
  */
 export const POSTING_DOC_KINDS: readonly string[] = DOCUMENT_KINDS.filter(
-  (kind) => !(NON_POSTING_DOC_KINDS as readonly string[]).includes(kind),
+  (kind) => !NON_POSTING_DOC_KINDS.includes(kind),
 );
 
 export const DOCUMENT_FLOW_KINDS: readonly string[] = [

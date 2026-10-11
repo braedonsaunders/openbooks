@@ -89,6 +89,8 @@ export interface CashflowData {
     dpo: number | null;
   };
   ar: SideSummary;
+  /** Receivables past the collectability horizon: named, never projected as receipts. */
+  arNotForecast: { horizonDays: number; count: number; total: string };
   ap: SideSummary;
   categories: import("../cash/core").CategoryWeekly[];
   apSettings: { weeklyCap: string; restrictToSafe: boolean };
@@ -141,7 +143,7 @@ export async function cashflowData(
   const startingCash = sumMoney(banks.map((b) => b.balance));
 
   // Predict each open item into a week bucket ().
-  const ar = scheduleForecast(arItems, arStats, grid.asOf, grid.start, grid.end, model);
+  const ar = scheduleForecast(arItems, arStats, grid.asOf, grid.start, grid.end, model, true);
   const ap = scheduleForecast(apItems, apStats, grid.asOf, grid.start, grid.end, model);
   const weekTotals = (byWeek: Map<string, { amount: string }[]>): Record<string, string> =>
     Object.fromEntries([...byWeek.entries()].map(([k, es]) => [k, sumMoney(es.map((e) => e.amount))]));
@@ -229,6 +231,7 @@ export async function cashflowData(
       dpo: apStats.globalAvg,
     },
     ar: arSummary,
+    arNotForecast: { horizonDays: model.collectibilityHorizonDays, count: ar.notForecast.count, total: ar.notForecast.total },
     ap: apSummary,
     categories,
     apSettings: { weeklyCap, restrictToSafe },

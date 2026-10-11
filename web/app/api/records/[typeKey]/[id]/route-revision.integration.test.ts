@@ -19,7 +19,8 @@ const mockAuthz = `
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === '../../../../../lib/authz' && context.parentURL?.includes('/api/records/')) {
+    if ((specifier === '../../../../../lib/authz' && context.parentURL?.includes('/api/records/'))
+      || (specifier === '@/lib/authz' && context.parentURL?.includes('/lib/api/route'))) {
       return { url: 'mock:custom-record-revision-authz', shortCircuit: true }
     }
     if (context.parentURL?.startsWith('mock:') && (specifier.startsWith('@openbooks/') || specifier === 'next/server')) {

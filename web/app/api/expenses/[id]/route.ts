@@ -11,7 +11,7 @@ import { guardSubsidiaryScope } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import { DocumentEditError, requireDocumentEditRevision, runDocumentVersionedTransaction } from "@openbooks/engine/records/document-edit-policy";
 import { documentRevisionCounterSql } from "@openbooks/engine/records/revision";
-import { type ExpenseEditBody, persistExpenseEdit, prepareExpenseEdit } from '../../../../lib/expense-edit'
+import { assertReportEmployee, type ExpenseEditBody, persistExpenseEdit, prepareExpenseEdit } from '../../../../lib/expense-edit'
 import { loadExpenseReport } from '../../../../lib/expenses'
 import { notFound } from "@/lib/api/responses";
 const DELETEBodySchema1 = z.object({
@@ -34,7 +34,7 @@ const PATCHBodySchema1 = z.object({
   extraDims: z.record(z.string(), z.unknown()).optional(),
   custom: z.record(z.string(), z.unknown()).optional(),
   lines: z.array(z.looseObject({})).optional(),
-}).refine((body) => Object.keys(body).length > 0, { message: "At least one field must be provided." });
+});
 
 
 
@@ -107,6 +107,11 @@ export const PATCH = defineRoute({
       }
 
     const body = (routeBody) as ExpenseEditBody
+    // An empty edit is refused only after the existence and scope gates, so a
+    // malformed or unknown id keeps its 404 contract on every verb.
+    if (Object.keys(body).length === 0) {
+      return NextResponse.json({ error: 'At least one field must be provided.' }, { status: 400 })
+    }
     let expectedRevision: string
     try {
         expectedRevision = requireDocumentEditRevision(body.expectedUpdatedAt)
@@ -164,18 +169,12 @@ export const PATCH = defineRoute({
               )
             }
 
-            const employeeId = (body.partyId === undefined ? locked.partyId : body.partyId) ?? null
-            if (employeeId !== null) {
-              const employee = (await tx.execute<{ subsidiaryId: string | null }>(sql`
-                select p.subsidiary_id as "subsidiaryId" from parties p
-                 where p.id = ${employeeId} and p.org_id = ${user.orgId} and p.is_active
-                 for key share of p
-              `)).rows[0]
-              if (!employee || (gate.allowedSubsidiaryIds !== null && employee.subsidiaryId !== null && !gate.allowedSubsidiaryIds.has(employee.subsidiaryId))
-                || (employee.subsidiaryId !== null && employee.subsidiaryId !== locked.subsidiaryId)) {
-                throw new DocumentEditError(404, 'employee not found for this expense report')
-              }
-            }
+            await assertReportEmployee(tx, {
+              orgId: user.orgId,
+              employeeId: (body.partyId === undefined ? locked.partyId : body.partyId) ?? null,
+              reportSubsidiaryId: locked.subsidiaryId,
+              allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+            })
 
             const auditBefore = await captureTransactionAuditSnapshot(tx, id, user.orgId)
             if (!auditBefore) throw new Error(`expense report ${id} disappeared before update`)

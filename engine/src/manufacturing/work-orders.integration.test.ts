@@ -57,7 +57,7 @@ async function setup(): Promise<Fixture> {
   return { org, actorId, departmentId };
 }
 
-async function route(f: Fixture, itemId: string, from = "2026-01-01", to: string | null = null) {
+async function route(f: Fixture, itemId: string, from = "2026-01-01", to: string | null = null, extraOperations: { sequence: number; name: string }[] = []) {
   const code = `WC-${randomUUID()}`;
   const center = await run((tx) => createWorkCenter(tx, f.org.orgId, f.actorId, {
     code, name: code, kind: "machine", capacityHoursPerDay: "8", efficiencyPct: "100", absorbsOverhead: false, departmentId: f.departmentId,
@@ -69,6 +69,11 @@ async function route(f: Fixture, itemId: string, from = "2026-01-01", to: string
   await run((tx) => createRoutingOperation(tx, f.org.orgId, f.actorId, String(routing.id), {
     sequence: 10, name: "Assemble", workCenterId: String(center.id), setupMinutes: "5", runMinutesPerUnit: "1",
   }));
+  for (const extra of extraOperations) {
+    await run((tx) => createRoutingOperation(tx, f.org.orgId, f.actorId, String(routing.id), {
+      sequence: extra.sequence, name: extra.name, workCenterId: String(center.id), setupMinutes: "5", runMinutesPerUnit: "1",
+    }));
+  }
   await approveFixtureRouting(f.org.orgId, f.actorId, String(routing.id));
   return String(routing.id);
 }
@@ -181,6 +186,20 @@ const cases: Case[] = [
     await run((tx) => postManufacturingEntry(tx, { orgId: f.org.orgId, bookId: f.org.bookId, subsidiaryId: f.org.subsidiaryId, actorId: f.actorId, currency: "CAD", periodId: f.org.periodId, date: f.org.date, entryNumber, memo: "Production cost", lines: [{ accountId: f.org.accounts.invAsset, amount: "10" }, { accountId: f.org.accounts.cogs, amount: "-10" }], custom: { workOrderNumber: draft.number, bomRevision: "test-revision", routingVersion: "1" } }));
     await refuse(run((tx) => cancelWorkOrder(tx, f.org.orgId, f.actorId, draft.id, "Cancel")), "work_order_has_postings", entryNumber);
   } },
+  { name: "a later operation cannot start while an earlier one is pending, running or paused", run: async (f) => {
+    await route(f, f.org.items.assembly, "2026-01-01", null, [{ sequence: 20, name: "Pack" }]);
+    const draft = await order(f); await run((tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, draft.id));
+    await run((tx) => startWorkOrder(tx, f.org.orgId, f.actorId, draft.id));
+    const [assemble, pack] = await withBypassContext(async () => (await db.execute<{ id: string; sequence: number }>(sql`select id, sequence from mfg_wo_operations where org_id=${f.org.orgId} and work_order_id=${draft.id} order by sequence`)).rows);
+    const blocked = () => refuse(run((tx) => startWorkOrderOperation(tx, f.org.orgId, f.actorId, draft.id, pack!.id)), "operation_sequence_blocked", "operation 10 (Assemble) is done");
+    await blocked();
+    await run((tx) => startWorkOrderOperation(tx, f.org.orgId, f.actorId, draft.id, assemble!.id));
+    await blocked();
+    await run((tx) => pauseWorkOrderOperation(tx, f.org.orgId, f.actorId, draft.id, assemble!.id, "Oven maintenance"));
+    await blocked();
+    const state = await withBypassContext(async () => (await db.execute<{ status: string }>(sql`select status from mfg_wo_operations where org_id=${f.org.orgId} and id=${pack!.id}`)).rows[0]!);
+    assert.equal(state.status, "pending");
+  } },
   { name: "release, start, and operation start pause resume", run: async (f) => {
     await route(f, f.org.items.assembly);
     const profile = await withBypassContext(async () => db.execute(sql`update item_inventory_profiles set costing_method='standard', standard_cost='12.34' where org_id=${f.org.orgId} and item_id=${f.org.items.assembly} returning item_id`));
@@ -232,6 +251,18 @@ const cases: Case[] = [
       ()=>run(tx=>holdWorkOrder(tx,f.org.orgId,randomUUID(),active.id,"Unknown actor")),
     ]) await assert.rejects(command());
     assert.deepEqual(await state(),before);
+  }},
+  { name: "another role's invalid control account never blocks a work-order read", run: async (f) => {
+    await route(f, f.org.items.assembly);
+    const draft = await order(f);
+    const expenseId = randomUUID();
+    await withBypassContext(async () => {
+      await db.execute(sql`insert into accounts (id,org_id,number,name,type,is_summary,is_active,eliminate,reconcilable,required_dimensions,custom,subsidiary_include_children)
+        values (${expenseId},${f.org.orgId},'6950','Shop wages','expense',false,true,false,false,'[]'::jsonb,'{}'::jsonb,true)`);
+      await db.execute(sql`update orgs set settings=jsonb_set(settings,'{controlAccounts,laborClearing}',to_jsonb(${expenseId}::text),true) where id=${f.org.orgId}`);
+    });
+    const read = await run((tx) => getWorkOrder(tx, f.org.orgId, draft.id));
+    assert.equal(read?.id, draft.id, "the record reads while labor clearing is misconfigured");
   }},
 
 ];

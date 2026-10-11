@@ -5,7 +5,7 @@ import { postInventoryEntry } from "../inventory/journal.ts";
 import {
   CONTROL_ACCOUNT_TYPE_POLICY,
   ControlAccountsIncompleteError,
-  loadControlAccounts,
+  loadControlAccountsForRoles,
   type ControlAccountRole,
 } from "../records/control-accounts.ts";
 import type { SqlExecutor } from "../platform/db.ts";
@@ -134,14 +134,14 @@ export async function manufacturingControlAccount(
   void subsidiaryId;
   const meta = MANUFACTURING_CONTROL_ACCOUNT_META[role];
   const remedy = `Map ${meta.label} under Setup → Company & Accounting → Control accounts.`;
+  // Only this role is validated: another role's misconfiguration refuses
+  // where that role posts, never a read or a posting that does not use it.
   let mappings: Partial<Record<ControlAccountRole, string>>;
   try {
-    mappings = await loadControlAccounts(orgId);
+    mappings = await loadControlAccountsForRoles(tx, orgId, [role]);
   } catch (error) {
-    if (error instanceof ControlAccountsIncompleteError && error.message.startsWith(`${role} control account`)) {
-      throw new ManufacturingError(`The Manufacturing control account role ${role} is not mapped to a valid account.`, {
-        code: meta.invalidCode, remedy,
-      });
+    if (error instanceof ControlAccountsIncompleteError) {
+      throw new ManufacturingError(`${error.message}.`, { code: meta.invalidCode, remedy });
     }
     throw error;
   }

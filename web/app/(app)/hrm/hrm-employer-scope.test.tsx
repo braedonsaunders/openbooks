@@ -8,13 +8,12 @@ import { isUuid } from '@/lib/list-params'
 import { LOCALE_CODES as LOCALES } from "../../../i18n/config"
 
 /**
- * F3: ?requisition=new showed a raw UUID in the Employer field — the loader
+ * ?requisition=new must never show a raw UUID in the Employer field — the loader
  * fell back to [{ value: rootId, label: '' }] and the form rendered
  * `label || value`. The loader now resolves the authorized employer's NAME
  * (the named root for single-entity orgs), and a caller scoped out of every
  * visible entity is refused by name instead of being offered an
  * unauthorized root. The tests below exercise both affected create forms.
- * (Ticket in comment only; the test names state the behaviour.)
  *
  * The first two tests RENDER the recruiting and position create forms:
  * the refusal reads as an alert with submit disabled, and the employer
@@ -80,6 +79,7 @@ function recruitingHtml(employers: Array<{ value: string; label: string }>, empl
         employers={employers}
         employerRefusal={employerRefusal}
         departments={[]}
+        jobDescriptions={[]}
         labels={RECRUITING_LABELS}
       />,
     ),

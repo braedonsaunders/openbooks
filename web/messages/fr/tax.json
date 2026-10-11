@@ -10,8 +10,6 @@
   "compute": "Calculer",
   "computing": "Calcul…",
   "empty": "Choisissez une déclaration et une période, puis calculez.",
-  "adjustmentAria": "Ajustement pour {label}",
-  "adjustmentPlaceholder": "0,00",
   "columns": {
     "line": "Ligne",
     "description": "Description",
@@ -102,6 +100,12 @@
       "pdf": "PDF",
       "xlsx": "Excel",
       "csv": "CSV"
+    },
+    "adjustments": {
+      "title": "Ajustements",
+      "reason": "Motif",
+      "recordedBy": "Enregistré par",
+      "noReason": "Aucun motif enregistré"
     }
   },
   "provisions": {
@@ -326,5 +330,27 @@
       "threshold": "Seuil de ventes"
     },
     "contextUnavailable": "Les justificatifs de déclaration n’ont pas pu être chargés. Réessayez avant de vous y fier."
+  },
+  "adjustments": {
+    "title": "Ajustements",
+    "description": "Saisissez les montants qui relèvent d'une ligne d'ajustement mais ne figurent pas dans le grand livre de ce système, comme l'activité antérieure à votre conversion. Chaque ajustement exige un motif et est enregistré avec son auteur lors de l'enregistrement de la déclaration.",
+    "entryLabel": "Ajustement",
+    "line": "Ligne",
+    "amount": "Montant",
+    "amountPlaceholder": "0.00",
+    "reason": "Motif",
+    "reasonPlaceholder": "p. ex. Activité antérieure à la conversion de janv. à août 2025 selon l'ancien système",
+    "add": "Ajouter un ajustement",
+    "remove": "Retirer",
+    "removeAria": "Retirer l'ajustement : {reason}",
+    "errors": {
+      "lineCode": "Choisissez une ligne d'ajustement de cette déclaration.",
+      "amount": "Saisissez un montant comportant au plus quatre décimales, par exemple 3018.84 ou -50.",
+      "reason": "Saisissez le motif de cet ajustement (500 caractères au maximum)."
+    }
+  },
+  "conversion": {
+    "notice": "Cette période de déclaration commence avant votre conversion du {date}. Ajoutez les montants antérieurs à la conversion issus de votre ancien système.",
+    "action": "Ajouter les montants antérieurs à la conversion"
   }
 }

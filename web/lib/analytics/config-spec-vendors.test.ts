@@ -19,12 +19,15 @@ test("every dashboard's defaults satisfy its own ordered ladders", () => {
     const ladders: readonly (readonly string[])[] = "ordered" in spec && spec.ordered ? spec.ordered : [];
     const defaults: Record<string, number | string> = spec.defaults;
     for (const ladder of ladders) {
-      for (let i = 1; i < ladder.length; i++) {
-        const low = defaults[ladder[i - 1]!];
-        const high = defaults[ladder[i]!];
+      // Money tiers default to unset until the organization names them, so
+      // only the set rungs are ordered, and each must exceed the one before it.
+      const set = ladder.filter((key) => defaults[key] !== undefined && defaults[key] !== "");
+      for (let i = 1; i < set.length; i++) {
+        const low = defaults[set[i - 1]!];
+        const high = defaults[set[i]!];
         assert.ok(
           Number(high) > Number(low),
-          `${name}: default ${ladder[i]} (${high}) must exceed ${ladder[i - 1]} (${low})`,
+          `${name}: default ${set[i]} (${high}) must exceed ${set[i - 1]} (${low})`,
         );
       }
     }

@@ -153,8 +153,12 @@ export function withAuthzTestSurface(source: string): string {
 
 /** Add the transaction helpers shared by platform database test doubles. */
 export function withPlatformDbTestSurface(source: string): string {
+  // A double may declare several exports in one statement
+  // (`export const withOrg = unexpected, orgContext = ...`), so a later
+  // binding in such a list counts as declared too.
   const hasExport = (name: string): boolean =>
-    new RegExp(`\\bexport\\s+(?:(?:async)\\s+)?(?:function|const|let|var|class)\\s+${name}\\b`).test(source);
+    new RegExp(`\\bexport\\s+(?:(?:async)\\s+)?(?:function|const|let|var|class)\\s+${name}\\b`).test(source)
+    || new RegExp(`\\bexport\\s+(?:const|let|var)\\s[^;]*[,\\s]${name}\\s*=`).test(source);
   const sharedExports: Array<[string, string]> = [
     ["inExecutorTransaction", `export async function inExecutorTransaction(executor, fn) { return fn(executor) }`],
     ["ambientTenantOrgId", `export function ambientTenantOrgId() { return null }`],
@@ -163,6 +167,8 @@ export function withPlatformDbTestSurface(source: string): string {
     ["withBypassContext", `export async function withBypassContext(fn) { return fn() }`],
     ["currentRequestOrgResolver", `export function currentRequestOrgResolver() { return null }`],
     ["registerRequestOrgResolver", `export function registerRequestOrgResolver() {}`],
+    ["orgContext", `export const orgContext = { getStore: () => undefined, run: (store, fn) => fn() }`],
+    ["withTransactionSavepoint", `export async function withTransactionSavepoint(runner, name, work) { return work(runner) }`],
   ];
   const additions = sharedExports
     .filter(([name]) => !hasExport(name))

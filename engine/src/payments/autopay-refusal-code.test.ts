@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { AutopayError, MISSING_COLLECTION_POLICY } from "./autopay.ts";
+import { AutopayError, MISSING_COLLECTION_POLICY } from "./autopay-policy.ts";
 
 // The collections page renders the missing-policy refusal as a setup
 // notice by matching this code, never the human message: the constant pins

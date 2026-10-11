@@ -45,7 +45,7 @@ function bill(open = "2500.00") {
     reference_number: null,
     open,
     currency: "USD",
-    has_bank: true,
+    bank_state: 'approved' as 'approved' | 'pending' | 'undated' | 'missing',
   };
 }
 
@@ -168,3 +168,16 @@ test("a duplicate-in-draft rejection persists as a form-level alert", async (t) 
   ) as HTMLButtonElement;
   assert.equal(create.disabled, false, "the button must release after the rejection");
 });
+
+test('a payee whose approval has no date names the state and the re-approval remedy', async (t) => {
+  const undated = { ...bill(), bank_state: 'undated' as const }
+  const { host, root } = await mountBuilder([undated])
+  t.after(async () => {
+    await act(async () => root.unmount())
+    host.remove()
+  })
+
+  const badge = [...document.querySelectorAll('div')].find((el) => el.textContent?.trim() === 'no approval date')
+  assert.ok(badge, 'the undated payee shows its own state instead of a generic missing label')
+  assert.match(badge.getAttribute('title') ?? '', /save them again to re-approve/)
+})

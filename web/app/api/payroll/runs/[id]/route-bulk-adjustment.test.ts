@@ -69,6 +69,7 @@ const mockSources = new Map<string, string>([
     `
       export async function assertPayRunApprovalReleased() { throw new Error('not under test') }
       export async function payRunApprovalState() { throw new Error('not under test') }
+      export async function recalculateStaleApprovedPayRun() { throw new Error('not under test') }
     `,
   ],
   ['mock:flows', `export async function submitForApproval() { throw new Error('not under test') }`],

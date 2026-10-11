@@ -81,8 +81,9 @@
     "depositRecording": "Registrando…",
     "depositNeedsSetup": "No hay cuentas bancarias configuradas para depósitos de caja. Pida a un contable que las elija en los ajustes de la empresa.",
     "depositRequiresPermission": "Registrar un depósito de caja requiere el permiso cash_sales.deposit, que tienen los roles que contabilizan ventas en efectivo. Pida a su administrador que lo conceda.",
-    "tillWindow": "Desde el retiro de caja del {after}: {sales} ventas cobraron {tendered} {currency} en efectivo; {dropped} {currency} retirados hasta ahora.",
-    "tillWindowFirst": "Sin retiros anteriores de esta caja: {sales} ventas cobraron {tendered} {currency} en efectivo; {dropped} {currency} retirados hasta ahora.",
+    "tillWindow": "Ventas después del {after} hasta el {through}: {sales} ventas cobraron {tendered} {currency} en efectivo; {dropped} {currency} retirados hasta ahora.",
+    "tillWindowFirst": "Ventas hasta el {through} (sin retiros anteriores de esta caja): {sales} ventas cobraron {tendered} {currency} en efectivo; {dropped} {currency} retirados hasta ahora.",
+    "tillCoversThrough": "Cubre ventas hasta",
     "tillReason": "Nota del conteo",
     "tillReasonHint": "Necesaria cuando el retiro supera lo que explican las ventas registradas (por ejemplo, ventas aún no ingresadas)",
     "tillDifference": "Conteo de caja desde {after} hasta {through}: los retiros difieren del efectivo registrado en {difference}.",
@@ -152,7 +153,10 @@
     "controlAccountHelp": "La cuenta por cobrar en la que se contabiliza este documento. Los pagos y créditos lo liquidan en la misma cuenta. Déjela vacía para usar la predeterminada.",
     "controlAccountPartyDefault": "Predeterminada del cliente — {account}",
     "controlAccountOrganizationDefault": "Predeterminada de la organización — {account}",
-    "controlAccountUnset": "No hay cuenta por cobrar configurada: defina una en Configuración → Empresa y contabilidad → Cuentas de control"
+    "controlAccountUnset": "No hay cuenta por cobrar configurada: defina una en Configuración → Empresa y contabilidad → Cuentas de control",
+    "createUnconfirmed": "El servidor no confirmó el nuevo documento. Guarde de nuevo: el reintento usa la clave de este borrador, así que no puede crear un segundo documento.",
+    "saveUnconfirmed": "El servidor no confirmó el guardado. Recargue el documento para ver su estado guardado antes de volver a editarlo.",
+    "createConflict": "Este borrador ya se guardó con otros datos. Recargue la página y abra el documento guardado desde la lista en lugar de volver a introducirlo."
   },
   "dailySummary": {
     "date": "Fecha",
@@ -269,6 +273,13 @@
       },
       "recurring": "Los cobros recurrentes (subvenciones, alquileres, suscripciones) se incorporan al pronóstico como categorías; configúrelos en el <cashCockpit>panel de tesorería</cashCockpit>.",
       "documentation": "Leer la guía de cuentas por cobrar"
+    },
+    "notForecast": {
+      "title": "No proyectado — vencido más de {days} días",
+      "hint": "{count, plural, one {# partida} other {# partidas}} · {total}",
+      "body": "Estas cuentas por cobrar no se cuentan como cobros previstos. Permanecen en el envejecimiento y abiertas para cobro.",
+      "daysOverdue": "{days} días vencido",
+      "more": "+{count} más no mostradas"
     }
   },
   "appliedPayments": {
@@ -376,6 +387,8 @@
       "cancelSubscription": "Cancelar suscripción",
       "cancelConfirmTitle": "¿Cancelar la suscripción?",
       "cancelConfirmBody": "Cancelar pone fin a la facturación recurrente de esta suscripción. No se puede deshacer.",
+      "cancelEffectiveOn": "Cancelación efectiva el",
+      "cancelPaidThroughHint": "Facturado hasta {date}. La facturación termina en la fecha efectiva; las facturas ya contabilizadas no cambian.",
       "toasts": {
         "prorated": "Prorrateo {adjustment} → {documentNumber}",
         "qtyUpdatedNoProration": "Cantidad actualizada (sin prorrateo)",
@@ -386,6 +399,10 @@
         "loading": "Cargando suscripciones avanzadas",
         "loadFailed": "No se pudieron cargar los datos del ciclo de vida de suscripciones avanzadas",
         "loadFailedFallback": "No se pudieron cargar las suscripciones avanzadas",
+        "noContractSuffix": "sin contrato",
+        "amendNeedsContract": "Esta suscripción aún no tiene contrato. Active uno en Contratos y luego modifíquela aquí.",
+        "planChangeHint": "Los periodos facturados conservan su plan. El cambio surte efecto desde el {date} (facturado hasta esa fecha) o después.",
+        "contractNeedsVersion": "{plan} no tiene una versión publicada del catálogo. Publique una en Versiones de planes antes de activar un contrato.",
         "actionFailed": "La acción falló",
         "catalogTitle": "Catálogo con vigencia",
         "catalogDescription": "Las versiones publicadas son inmutables. Cree una nueva versión cuando cambien las condiciones comerciales.",
@@ -495,6 +512,8 @@
         "changeTiming": "Cambiar momento de facturación",
         "changeRenew": "Renovar",
         "changeCoterm": "Igualar vigencia",
+        "changePlan": "Cambiar plan",
+        "changeType_change_plan": "Cambio de plan",
         "name": "Nombre",
         "newTermEnd": "Nuevo fin de vigencia",
         "timing": "Momento",

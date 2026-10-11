@@ -15,6 +15,7 @@ export const POST = defineRoute({
   feature: "usageBilling",
   params: Params,
   body: Body,
+  invalidBodyStatus: 422,
   handler: async ({ authz, params, body }) => Response.json(await voidAndRebillRateRun(
     authz.user.orgId,
     authz.user.id,

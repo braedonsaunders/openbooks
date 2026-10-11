@@ -835,7 +835,10 @@ const SOURCES: Record<string, EntityListSource> = {
     sorts: ACCOUNT_SORTS,
     defaultSort: sql`a.number`,
     statusExpr: ACCOUNT_STATUS_EXPR,
-    quickFilters: [{ paramKey: 'class', filterKey: 'class' }],
+    quickFilters: [
+      { paramKey: 'class', filterKey: 'class' },
+      { paramKey: 'type', filterKey: 'type' },
+    ],
     where: accountWhere,
     drawerParam: 'account',
     basePath: '/accounts',
@@ -1863,7 +1866,7 @@ const CHANNEL_EVENT_EXCEPTION_CODES = [
 
 const UNMATCHED_SETTLEMENT_LINE_KINDS = ['charge', 'refund', 'dispute', 'dispute_reversal'];
 
-const UNMATCHED_SETTLEMENT_PROVIDERS = ['stripe', 'recurly', 'chargebee', 'shopify_payments', 'paypal'];
+const UNMATCHED_SETTLEMENT_PROVIDERS = ['stripe', 'recurly', 'chargebee', 'shopify_payments', 'paypal', 'square'];
 
 function settlementLineUnmatchedWhere(view: ListViewConfig, adhoc: EntityAdhoc, orgId: string, allowedSubsidiaryIds?: Set<string> | null) {
   // An unknown scope reads nothing: defaulting it to unrestricted would open

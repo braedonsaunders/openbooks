@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { FlowSubjectProfile } from "@openbooks/forms-core";
 import { db } from "../platform/db.ts";
+import { PAY_RUN_WORKFLOW_PERMISSIONS } from "../records/document-kind-permissions.ts";
 import type { FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
 import { createDocumentsFlowAdapter } from "./documents-adapter.ts";
 import { DOCUMENT_FIELDS, documentSubjectProfile } from "./subject-profiles.ts";
@@ -65,7 +66,7 @@ export const payRunsFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapter(
   profile: payRunSubjectProfile,
   // Pay runs are documents, but their kind-specific surface is payroll, not
   // the GL namespace their posting rule lives under.
-  permissions: { read: "payroll.read", edit: "payroll.manage", approve: "payroll.manage" },
+  permissions: PAY_RUN_WORKFLOW_PERMISSIONS,
 
   async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
     const base = await documentsAdapter.loadContext(subjectId);

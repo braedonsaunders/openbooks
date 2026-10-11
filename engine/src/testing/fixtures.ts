@@ -1110,6 +1110,10 @@ const GUARDED_EVIDENCE: { table: string; trigger: string }[] = [
   // full teardown's org flag, so pooled reset disables it for the one
   // transaction (deleting a card cascades into its entries).
   { table: "stored_value_entries", trigger: "stored_value_entries_immutable_trigger" },
+  // Quota history deletes only inside a native maintenance sandbox wipe, which
+  // requires a superuser or BYPASSRLS login; pooled reset runs as the plain
+  // test login. Disable the guard for the one transaction, as for other evidence.
+  { table: "crm_sales_quotas", trigger: "sales_quota_version_guard" },
 ];
 
 /**

@@ -18,6 +18,8 @@ const mocks = new Map([
       return { rows: [{ baseCurrency: 'CAD' }] }
     } }
   `],
+  // The analytics query helper reads through the public database contract.
+  ['@openbooks/engine/platform/database', 'export { db } from "@openbooks/engine/platform/db"'],
   ['@openbooks/engine/platform/business-date/module', `
     export async function businessToday() { return '2026-08-28' }
     export function addCalendarDays() { return '2026-08-21' }

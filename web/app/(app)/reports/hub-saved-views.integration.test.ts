@@ -58,7 +58,9 @@ async function seedHubOrg(projectsOn: boolean): Promise<{ org: ScratchOrg }> {
   const org: ScratchOrg = await withBypassContext(() => createScratchOrg() as Promise<ScratchOrg>)
   await withBypassContext(async () => {
     const actor: string = await createScratchUser(org.orgId, 'Hub reader', 'admin')
-    await db.execute(sql`update app_roles set permissions='["reports.read"]'::jsonb where org_id=${org.orgId} and key='admin'`)
+    // A saved view lists only when its statement's own grant is held too:
+    // the P&L needs the ledger grant, the true-cost view the projects grant.
+    await db.execute(sql`update app_roles set permissions='["reports.read","gl.read","projects.read"]'::jsonb where org_id=${org.orgId} and key='admin'`)
     if (!projectsOn) {
       await db.execute(sql`update orgs set settings = coalesce(settings, '{}'::jsonb)
         || jsonb_build_object('features', coalesce(settings->'features', '{}'::jsonb) || '{"projects": false}'::jsonb)

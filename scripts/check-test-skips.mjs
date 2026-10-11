@@ -37,6 +37,7 @@ const SKIP_VALUE_ALLOW = [
   /OPENBOOKS_REDIS_URL/,
   /REDIS_URL/,
   /RUNTIME_DB/,
+  /OPENBOOKS_TEST_ADMIN_DB_URL/,
   /OPENBOOKS_TEST_DB_MARKER/,
   /(^|[^A-Za-z0-9_$])DB([^A-Za-z0-9_$]|$)/,
   /(^|[^A-Za-z0-9_$])enabled([^A-Za-z0-9_$]|$)/,
@@ -61,6 +62,10 @@ const TSKIP_ALLOW = [
 // a second, non-infra condition riding on the infra gate.
 const DB_GATE = /OPENBOOKS_DB_URL|RUNTIME_DB|OPENBOOKS_TEST_DB_MARKER|databaseUrl|(^|[^A-Za-z0-9_$])DB([^A-Za-z0-9_$]|$)/;
 const INFRA_STRIP = [
+  // Whole variable names first: stripping a fragment such as RUNTIME_DB would
+  // leave the URL suffix behind and read it as a second, non-infra condition.
+  /OPENBOOKS_RUNTIME_DB_URL/g,
+  /OPENBOOKS_TEST_ADMIN_DB_URL/g,
   /OPENBOOKS_DB_URL/g,
   /OPENBOOKS_REDIS_URL/g,
   /REDIS_URL/g,

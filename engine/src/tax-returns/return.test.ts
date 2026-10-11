@@ -305,3 +305,53 @@ test("computeTaxReturn resolves declared input boxes and refuses a missing provi
   assert.equal(result.boxes[0]?.value, "12.3400");
   assert.deepEqual(result.inputSources, [{ lineCode: "SOURCE", inputKey, value: "12.3400" }]);
 });
+
+// The Canadian annual filer whose ledger starts at conversion: the Sep–Dec
+// activity alone nets to a refund, and the pre-conversion Jan–Aug net tax is
+// entered on line 104 with its reason. Lines 110/111 are filer-entered
+// instalments; 112 totals them, and 113A/114/115 settle the balance.
+const GST34_ANNUAL: TaxReturnBoxDef[] = [
+  { lineCode: "103", label: "GST/HST collected", sign: -1, sequence: 20, formula: null, editable: false, pdfField: null },
+  { lineCode: "104", label: "Adjustments (add)", sign: 1, sequence: 30, formula: null, editable: true, pdfField: null },
+  { lineCode: "105", label: "Total GST/HST", sign: 1, sequence: 40, formula: "103 + 104", editable: false, pdfField: null },
+  { lineCode: "106", label: "ITCs", sign: 1, sequence: 50, formula: null, editable: false, pdfField: null },
+  { lineCode: "107", label: "Adjustments (deduct)", sign: 1, sequence: 60, formula: null, editable: true, pdfField: null },
+  { lineCode: "108", label: "Total ITCs", sign: 1, sequence: 70, formula: "106 + 107", editable: false, pdfField: null },
+  { lineCode: "109", label: "Net tax", sign: 1, sequence: 80, formula: "105 - 108", editable: false, pdfField: null },
+  { lineCode: "110", label: "Instalments", sign: 1, sequence: 90, formula: null, editable: true, pdfField: null },
+  { lineCode: "111", label: "Rebates", sign: 1, sequence: 100, formula: null, editable: true, pdfField: null },
+  { lineCode: "112", label: "Total other credits", sign: 1, sequence: 110, formula: "110 + 111", editable: false, pdfField: null },
+  { lineCode: "113A", label: "Balance", sign: 1, sequence: 120, formula: "109 - 112", editable: false, pdfField: null },
+  { lineCode: "114", label: "Refund claimed", sign: 1, sequence: 170, formula: "max(-113A, 0)", editable: false, pdfField: null },
+  { lineCode: "115", label: "Payment enclosed", sign: 1, sequence: 180, formula: "max(113A, 0)", editable: false, pdfField: null },
+];
+
+test("the annual GST34 net tax includes pre-conversion adjustments (Sep-Dec refund plus Jan-Aug payable)", () => {
+  // Sep–Dec: 500.00 collected, 571.69 in ITCs, so the period nets to a 71.69 refund.
+  const gl = new Map([["103", "-500.0000"], ["106", "571.6900"]]);
+  const v = (boxes: ReturnType<typeof assembleReturn>, code: string) => boxes.find((b) => b.lineCode === code)!.value;
+
+  const unadjusted = assembleReturn(GST34_ANNUAL, gl);
+  assert.equal(v(unadjusted, "109"), "-71.6900");
+  assert.equal(v(unadjusted, "114"), "71.6900");
+  assert.equal(v(unadjusted, "115"), "0.0000");
+
+  // Jan–Aug net tax of 3,018.84 entered on line 104 (adds to the collected side).
+  const adjusted = assembleReturn(GST34_ANNUAL, gl, new Map([["104", "3018.8400"]]));
+  assert.equal(v(adjusted, "105"), "3518.8400");
+  assert.equal(v(adjusted, "109"), "2947.1500");
+  assert.equal(v(adjusted, "113A"), "2947.1500");
+  assert.equal(v(adjusted, "114"), "0.0000");
+  assert.equal(v(adjusted, "115"), "2947.1500");
+});
+
+test("an adjustment on a ledger-mapped or computed line is refused by name, never dropped", () => {
+  const gl = new Map([["103", "-500.0000"], ["106", "571.6900"]]);
+  for (const lineCode of ["103", "105", "109"]) {
+    assert.throws(
+      () => assembleReturn(GST34_ANNUAL, gl, new Map([[lineCode, "10"]])),
+      (error: unknown) => error instanceof TaxReturnError && error.message.includes(`line ${lineCode} is not an adjustment line`),
+      `line ${lineCode} must refuse an adjustment`,
+    );
+  }
+});

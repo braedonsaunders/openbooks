@@ -44,7 +44,7 @@ export class DocumentDraftError extends Error {
 }
 import { canonicalDecimal } from '../money/exact-decimal.ts'
 import { activeStockLocations, profiledItemIds } from '../inventory/stock-locations.ts'
-import { DOC_KIND_FEATURE, docKindConfig, isDocumentCreateKind } from '../records/document-kinds.ts'
+import { DOC_KIND_FEATURE, docKindConfig, documentCreateContentRefusal, isDocumentCreateKind } from '../records/document-kinds.ts'
 import { DOCUMENT_CONTROL_SIDE } from './posting-control-account.ts'
 import { featureEnabled } from '../organization/feature-registry.ts'
 import { isFeatureEnabled, orgFeatureState, checkProjectsWriteEnabled } from '../organization/feature-state.ts'
@@ -1485,8 +1485,9 @@ export async function applyDocumentEdit(
       }
     }
     // A drop recorded by till and date (before its sales post) names the
-    // till cash account it leaves, the drop date and the slip, plus the
-    // count reason when the drop exceeds what the recorded sales explain.
+    // till cash account it leaves, the drop date, the last sale date its cash
+    // covers and the slip, plus the count reason when the drop exceeds what
+    // the recorded sales explain or lands behind a later drop.
     const till = (body.custom as Record<string, unknown>).tillDrop
     if (till !== undefined) {
       if (till === null) {
@@ -1495,12 +1496,15 @@ export async function applyDocumentEdit(
         if (!till || typeof till !== 'object' || Array.isArray(till)) {
           throw new DocumentEditError(422, 'till drop linkage must be an object — record the drop from Cash Sales')
         }
-        const { tillAccountId, dropDate, slipNumber, reason } = till as Record<string, unknown>
+        const { tillAccountId, dropDate, coversThrough, slipNumber, reason } = till as Record<string, unknown>
         if (typeof tillAccountId !== 'string' || !isUuid(tillAccountId)) {
           throw new DocumentEditError(422, 'till drop linkage must name the till cash account — record the drop from Cash Sales')
         }
         if (typeof dropDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(dropDate)) {
           throw new DocumentEditError(422, 'till drop linkage must carry the drop date — record the drop from Cash Sales')
+        }
+        if (coversThrough !== undefined && (typeof coversThrough !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(coversThrough) || coversThrough > dropDate)) {
+          throw new DocumentEditError(422, 'till drop cash cutoff must be a date on or before the drop date — enter the last sale date the counted cash covers')
         }
         if (typeof slipNumber !== 'string' || slipNumber.trim().length === 0 || slipNumber.trim().length > 120) {
           throw new DocumentEditError(422, 'till drop needs the bank slip number — enter it from the deposit slip')
@@ -1511,6 +1515,7 @@ export async function applyDocumentEdit(
         headerCustom.tillDrop = {
           tillAccountId,
           dropDate,
+          ...(typeof coversThrough === 'string' ? { coversThrough } : {}),
           slipNumber: slipNumber.trim(),
           ...(typeof reason === 'string' ? { reason: reason.trim() } : {}),
         }
@@ -2837,6 +2842,9 @@ export async function createDocument(input: DocumentCreateInput): Promise<Docume
   const cfg = docKindConfig(kind)
   if (!cfg) throw new DocumentEditError(422, `kind "${kind}" is not editable`)
   if (!isDocumentCreateKind(kind)) throw new DocumentEditError(422, `kind "${kind}" is not creatable here`)
+  // A Save of an untouched form must not persist a blank numbered draft.
+  const contentRefusal = documentCreateContentRefusal(kind, body.lines)
+  if (contentRefusal) throw new DocumentEditError(422, contentRefusal)
   // Request-controlled idempotency image: kind + full body as parsed.
   // Derived values (number, currency default, totals) and lifecycle state
   // are EXCLUDED — they depend on allocator state or legitimately advance

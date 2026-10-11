@@ -9,6 +9,11 @@ registerHooks({
     return next(specifier)
   },
 })
+// purchasing.ts reads its vendor fallback through next-intl/server; outside a
+// render the React client build refuses getTranslations, so the loader gets the
+// shared key-echo translator, as the other web loader suites do.
+const { stubModules } = await import('../../testing/stub-modules.ts')
+stubModules({ intl: true })
 
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
@@ -53,9 +58,9 @@ test('open purchase-order value converts each order currency before summing', { 
     const home = await withOrgContext(org.orgId, () => purchasingHome(org.orgId, undefined, undefined, { ap: true, orders: true, expenses: true, parties: true }))
     assert.equal(home.ordersEnabled, true, 'orders feature must be on for PO vitals')
     assert.equal(home.openPos, 2)
-    assert.equal(home.openPoValue, 235, 'CAD 100 + USD 100 at 1.35 spot')
+    assert.equal(home.openPoValue, '235.0000', 'CAD 100 + USD 100 at 1.35 spot')
     assert.equal(home.topExposure.length, 1)
-    assert.equal(home.topExposure[0]!.openPoValue, 235, 'hero roster converts too')
+    assert.equal(home.topExposure[0]!.openPoValue, '235.0000', 'hero roster converts too')
   } finally {
     await dropScratchOrg(org.orgId)
   }

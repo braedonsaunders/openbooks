@@ -6,6 +6,7 @@ import { Loader2 } from 'lucide-react'
 import { Button, Label, Select } from '@openbooks/ui'
 import { useTranslations } from 'next-intl'
 import { readApiErrorMessage } from '../../../../../lib/api-error'
+import { confirmDialog } from '../../../../../lib/confirm'
 
 /**
  * Inline attestation controls for statutory-holiday exceptions (migrations
@@ -199,8 +200,79 @@ export function HolidayAttestations(props: {
     }
   }
 
+  // Every absence question still open on this run, one per employee and
+  // holiday occurrence. The common answer can be filed for all of them in
+  // one explicit action instead of one row at a time.
+  const pendingAbsence = new Map<string, { employeePartyId: string; holidayKey: string; holidayDate: string }>()
+  for (const { error, needed } of actionable) {
+    if (needed !== 'absentWithoutConsent') continue
+    const attested = resolveEmployee(error)
+    if (!attested) continue
+    for (const holiday of attested.demanding) {
+      if (!holiday.needsAbsenceAssertion) continue
+      if (attested.assertions.some((filed) => filed.holidayKey === holiday.key && filed.holidayDate === holiday.date)) continue
+      pendingAbsence.set(`${attested.employeePartyId}|${holiday.key}|${holiday.date}`, {
+        employeePartyId: attested.employeePartyId, holidayKey: holiday.key, holidayDate: holiday.date,
+      })
+    }
+  }
+
+  async function fileAllNotAbsent() {
+    const answers = [...pendingAbsence.values()]
+    const ok = await confirmDialog({
+      title: t('bulkNotAbsentTitle'),
+      message: t('bulkNotAbsentConfirm', { count: answers.length }),
+      confirmLabel: t('bulkNotAbsentAction', { count: answers.length }),
+    })
+    if (!ok) return
+    setBusy(true)
+    let filed = 0
+    try {
+      for (const answer of answers) {
+        const res = await fetch(`/api/payroll/runs/${runId}/holiday-assertions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...answer, absentWithoutConsent: false }),
+        })
+        if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed'))
+        filed += 1
+      }
+      toast.success(t('bulkNotAbsentFiled', { count: filed }))
+    } catch (e) {
+      // Answers filed before the refusal stay filed; the refusal names why the
+      // rest did not.
+      toast.error((e as Error).message)
+    } finally {
+      try {
+        const reload = await fetch(`/api/payroll/runs/${runId}/holiday-assertions`)
+        if (!reload.ok) throw new Error(await readApiErrorMessage(reload, 'failed'))
+        const rj = await reload.json()
+        if (Array.isArray(rj.employees)) setEmployees(rj.employees)
+      } catch (e) {
+        toast.error((e as Error).message)
+      } finally {
+        try {
+          if (filed > 0) await onAnswered()
+        } catch (e) {
+          toast.error((e as Error).message)
+        } finally {
+          setBusy(false)
+        }
+      }
+    }
+  }
+
   return (
     <div className="mt-3 space-y-3 border-t border-amber-200/60 pt-3 dark:border-amber-800/40">
+      {pendingAbsence.size > 1 ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white/70 px-3 py-2.5 dark:bg-slate-900/60">
+          <p className="text-sm text-slate-700 dark:text-slate-200">{t('bulkNotAbsentHint', { count: pendingAbsence.size })}</p>
+          <Button size="sm" variant="outline" disabled={busy} onClick={() => void fileAllNotAbsent()}>
+            {busy ? <Loader2 size={14} className="animate-spin" aria-hidden /> : null}
+            {t('bulkNotAbsentAction', { count: pendingAbsence.size })}
+          </Button>
+        </div>
+      ) : null}
       {actionable.map(({ error, needed }, position) => {
         const attested = resolveEmployee(error)
         if (!attested) return null

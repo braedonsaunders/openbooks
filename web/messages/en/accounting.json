@@ -23,12 +23,14 @@
     "vitals": {
       "healthScore": "Health score",
       "netIncome": "Net income",
+      "throughDate": "{label} · through {date}",
       "close": "Close progress",
       "closeSub": "{period}",
       "closeUnavailable": "Unavailable",
       "closeOrgWide": "Close diagnostics are organization-wide — ask an administrator with unrestricted subsidiary visibility to list them",
       "noClose": "—",
       "noCloseSub": "No close run started",
+      "lockedThroughSub": "Locked through {period}",
       "draftJournals": "Draft journals",
       "draftJournalsSub": "{posted} posted this week",
       "openFindings": "Open findings",
@@ -145,7 +147,11 @@
           "removed": "Removed",
           "changed": "Changed",
           "unchanged": "Unchanged",
-          "disposition": "Change"
+          "disposition": "Change",
+          "effectivePerUnit": "Effective per unit",
+          "showUnchanged": "Show {count} unchanged lines",
+          "hideUnchanged": "Hide unchanged lines",
+          "noChanges": "No component lines changed."
       },
       "fields": {
         "existingId": "Existing performance obligation",

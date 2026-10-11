@@ -109,6 +109,12 @@ const mockSources = new Map<string, string>([
           if (text.includes('select * from items') && text.includes('for update')) {
             return { rows: [structuredClone(state.item)] }
           }
+          // The webhook item-updated emitter reads the saved row back in the same unit.
+          if (text.includes('is_active as "isActive"') && text.includes('from items')) {
+            const row = state.item
+            return { rows: [{ id: row.id, code: row.code, name: row.name, kind: row.kind, isActive: row.is_active }] }
+          }
+          if (text.includes('pg_current_xact_id')) return { rows: [{ xact: '1001' }] }
           if (text.includes('select 1 from accounts')) {
             const id = values.find((value) => value === '${INCOME_ID}' || value === '${EXPENSE_ID}')
             return { rows: id ? [{ id }] : [] }

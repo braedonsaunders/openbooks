@@ -71,7 +71,10 @@
     "controlAccountPartyDefault": "Padrão do fornecedor — {account}",
     "controlAccountOrganizationDefault": "Padrão da organização — {account}",
     "controlAccountUnset": "Nenhuma conta a pagar configurada — defina uma em Configuração → Empresa e Contabilidade → Contas de controle",
-    "matchBanner": "Algumas linhas de estoque não estão vinculadas a um pedido de compra — a fatura só pode ser lançada após vinculá-las."
+    "matchBanner": "Algumas linhas de estoque não estão vinculadas a um pedido de compra — a fatura só pode ser lançada após vinculá-las.",
+    "createUnconfirmed": "O servidor não confirmou o novo documento. Salve novamente: a nova tentativa reutiliza a chave deste rascunho, então não pode criar um segundo documento.",
+    "saveUnconfirmed": "O servidor não confirmou o salvamento. Recarregue o documento para ver o estado salvo antes de editar novamente.",
+    "createConflict": "Este rascunho já foi salvo com outros dados. Recarregue a página e abra o documento salvo na lista em vez de digitá-lo novamente."
   },
   "capture": {
     "title": "Captura de contas a pagar",

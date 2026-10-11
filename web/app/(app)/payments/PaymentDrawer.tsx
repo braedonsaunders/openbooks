@@ -321,11 +321,16 @@ export function PaymentDrawer({
   const [bankAccountId, setBankAccountId] = useState<string>(payment.bankAccountId ?? '')
   const [documentDate, setDocumentDate] = useState<string>(doc.document_date ?? '')
   const [referenceNumber, setReferenceNumber] = useState<string>(doc.reference_number ?? '')
-  // Optional target for Auto-apply (AR receipts); does not change the posting —
-  // the payment total is always the sum of what's actually applied.
-  const [receivedAmount, setReceivedAmount] = useState<string>('')
   const [memo, setMemo] = useState<string>(doc.memo ?? '')
   const custom = doc.custom && typeof doc.custom === 'object' ? doc.custom as Record<string, unknown> : {}
+  // What the customer paid (AR receipts). Auto-apply spreads it across open
+  // items, and whatever the applications leave stays on the receipt as an
+  // on-account credit: the amount typed is never silently dropped. A saved
+  // receipt with an on-account residual reopens showing its full cash total.
+  const savedOnAccount = typeof custom.onAccountAmount === 'string' ? custom.onAccountAmount : '0'
+  const [receivedAmount, setReceivedAmount] = useState<string>(
+    side === 'ar' && cmp(savedOnAccount, '0') > 0 && doc.total != null ? String(doc.total) : '',
+  )
   const savedWithholdings = Array.isArray(custom.withholdings) ? custom.withholdings as Array<{ openLineId: string; billDocumentNumber: string; schemeCode: string; bandCode: string; ratePercent: string; base: string; deducted: string; materials: string; vat: string; uncollected: string; reporting?: { currency: string; deducted: string; base: string } }> : []
   const [withholdingAuthorisation, setWithholdingAuthorisation] = useState(typeof custom.withholdingAuthorisation === 'string' ? custom.withholdingAuthorisation : '')
   const [withholdingAuthorisedAmount, setWithholdingAuthorisedAmount] = useState(typeof custom.withholdingAuthorisedAmount === 'string' ? custom.withholdingAuthorisedAmount : '')
@@ -501,7 +506,17 @@ export function PaymentDrawer({
   const displayedOpenItems = editable
     ? openItems
     : openItems.filter((item) => allocs[item.lineId] !== undefined)
-  const total = sum(validAllocations.map((allocation) => allocation.sourceTransactionAmount))
+  const appliedTotal = sum(validAllocations.map((allocation) => allocation.sourceTransactionAmount))
+  const received = (() => {
+    if (side !== 'ar' || receivedAmount.trim() === '') return null
+    try { return normalizeMoney(receivedAmount.trim()) } catch { return null }
+  })()
+  const receivedInvalid = side === 'ar' && receivedAmount.trim() !== '' && received === null
+  // Received less than applied cannot post: the applications would claim
+  // cash the bank never saw.
+  const receivedShort = received !== null && cmp(received, appliedTotal) < 0
+  const onAccount = received !== null && cmp(received, appliedTotal) > 0 ? sum([received, `-${appliedTotal}`]) : '0'
+  const total = sum([appliedTotal, onAccount])
 
   // -- explicit save (no autosave) -----------------------------------------
   const payload = useMemo(
@@ -513,10 +528,11 @@ export function PaymentDrawer({
       referenceNumber,
       memo,
       allocations: validAllocations,
+      ...(side === 'ar' ? { onAccountAmount: onAccount } : {}),
       ...(showWithholding ? { withholdingAuthorisation: withholdingAuthorisation || null, withholdingAuthorisedAmount: withholdingAuthorisedAmount.trim() || null } : {}),
       ...(tenderPatch !== null ? { storedValueTenders: tenderPatch } : {}),
     }),
-    [partyId, bankAccountId, documentDate, referenceNumber, memo, validAllocations, tenderPatch, doc.updated_at, showWithholding, withholdingAuthorisation, withholdingAuthorisedAmount],
+    [partyId, bankAccountId, documentDate, referenceNumber, memo, validAllocations, onAccount, side, tenderPatch, doc.updated_at, showWithholding, withholdingAuthorisation, withholdingAuthorisedAmount],
   )
   // Track unsaved edits (no autosave — Save is an explicit button). Adjusted
   // during render (same committed value, no extra render). `editable` is read
@@ -589,6 +605,7 @@ export function PaymentDrawer({
       referenceNumber,
       memo,
       allocations: validAllocations,
+      ...(side === 'ar' && cmp(onAccount, '0') > 0 ? { onAccountAmount: onAccount } : {}),
       ...(showWithholding ? { withholdingAuthorisation: withholdingAuthorisation || null, withholdingAuthorisedAmount: withholdingAuthorisedAmount.trim() || null } : {}),
       ...(tenderPatch !== null ? { storedValueTenders: tenderPatch } : {}),
     }
@@ -865,10 +882,14 @@ export function PaymentDrawer({
     !busy &&
     !saveSettling &&
     !hasInvalidRow &&
+    !receivedInvalid &&
+    !receivedShort &&
     !dirty &&
     !!partyId &&
     !!bankAccountId &&
-    validAllocations.length > 0 &&
+    // A customer receipt may post on its on-account amount alone (an open AR
+    // credit); a vendor payment must apply at least one bill.
+    (validAllocations.length > 0 || cmp(onAccount, '0') > 0) &&
     cmp(total, '0') > 0
   // Why Post cannot proceed, first blocker first. A disabled button alone
   // never explains itself (in the Actions menu it renders near-invisible),
@@ -881,7 +902,8 @@ export function PaymentDrawer({
     : !partyId ? t('postBlocked.noParty', { side })
     : !bankAccountId ? t('postBlocked.noBankAccount', { side })
     : hasInvalidRow ? t('postBlocked.invalidRows')
-    : validAllocations.length === 0 ? t('postBlocked.noAllocations', { side })
+    : receivedInvalid || receivedShort ? t('receivedShort')
+    : validAllocations.length === 0 && cmp(onAccount, '0') <= 0 ? t('postBlocked.noAllocations', { side })
     : cmp(total, '0') <= 0 ? t('postBlocked.generic')
     : dirty ? t('postBlocked.generic')
     : null
@@ -1130,7 +1152,9 @@ export function PaymentDrawer({
           <div className="space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <Label>{t('openItems', { side })}</Label>
-              {editable && partyId && openItems.length > 0 ? (
+              {/* A customer receipt can be entered with no open invoice: the
+                  whole amount then stays on account as a customer credit. */}
+              {editable && partyId && (side === 'ar' || openItems.length > 0) ? (
                 <div className="flex items-center gap-2">
                   {side === 'ar' ? (
                     <Input
@@ -1138,12 +1162,15 @@ export function PaymentDrawer({
                       value={receivedAmount}
                       onChange={(e) => setReceivedAmount(e.target.value)}
                       placeholder={t('amountReceived')}
+                      aria-label={t('amountReceived')}
                       className="h-8 w-32 text-right tabular-nums"
                     />
                   ) : null}
-                  <Button variant="outline" size="sm" disabled={busy} onClick={autoApply}>
-                    <Wand2 size={14} /> {t('autoApply')}
-                  </Button>
+                  {openItems.length > 0 ? (
+                    <Button variant="outline" size="sm" disabled={busy} onClick={autoApply}>
+                      <Wand2 size={14} /> {t('autoApply')}
+                    </Button>
+                  ) : null}
                 </div>
               ) : null}
             </div>
@@ -1309,6 +1336,11 @@ export function PaymentDrawer({
             )}
             {editable && hasInvalidRow ? (
               <p className="text-xs text-red-600 dark:text-red-400">{t('invalidAllocation')}</p>
+            ) : null}
+            {editable && (receivedInvalid || receivedShort) ? (
+              <p className="text-xs text-red-600 dark:text-red-400">{t('receivedShort')}</p>
+            ) : editable && cmp(onAccount, '0') > 0 ? (
+              <p role="note" className="text-xs text-amber-700 dark:text-amber-300">{t('receivedOnAccount', { amount: onAccount, currency: doc.currency })}</p>
             ) : null}
           </div>
         ) : (

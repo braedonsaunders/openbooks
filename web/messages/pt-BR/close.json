@@ -22,6 +22,8 @@
     "rangeValue": "{start} → {end}",
     "status": "Status",
     "readiness": "Prontidão",
+    "closedBy": "Fechado por",
+    "closedByDetail": "{name} em {date}",
     "action": "Ação",
     "lockedDetail": "{modules} bloqueado · {book}"
   },
@@ -504,8 +506,10 @@
       "endReopenTitle": "Encerrar esta reabertura",
       "endReopenHint": "Encerrar fecha novamente cada módulo que esta janela abriu e libera o período para novas solicitações.",
       "endReopenReasonRequired": "É necessário um motivo com pelo menos 10 caracteres para encerrar a reabertura.",
-      "extendReopenTitle": "Estender ou ampliar",
-      "extendReopenHint": "Adicione tempo ou módulos a esta janela em vez de abrir uma solicitação sobreposta.",
+      "reopenRequestedUntil": "Vencimento solicitado: {date}",
+      "extendReopenTitle": "Solicitar extensão ou ampliação",
+      "extendReopenHint": "Envie uma nova solicitação para um aprovador autorizado decidir. A aprovação substitui esta janela. Deixe as horas adicionais em branco ou informe 0 para manter o vencimento atual.",
+      "extendByApproverOnly": "Para ampliar ou estender sua própria janela, envie uma solicitação de reabertura que inclua todos os módulos desta janela mais os que você precisa. Um aprovador elegível a decide, e a aprovação substitui esta janela.",
       "extendHoursLabel": "Horas adicionais",
       "extendModulesLabel": "Adicionar módulos",
       "extendReopenReasonRequired": "É necessário um motivo com pelo menos 10 caracteres para estender a reabertura.",
@@ -588,7 +592,7 @@
       "addRow": "Adicionar",
       "removeValue": "Remover {value}",
       "endReopen": "Encerrar reabertura",
-      "extendReopen": "Estender reabertura"
+      "extendReopen": "Solicitar extensão"
     },
     "fields": {
       "name": "Nome",
@@ -668,6 +672,7 @@
       "gl": "Razão"
     },
     "reopenStates": {
+      "superseded": "Substituída",
       "requested": "Solicitado",
       "approved": "Aprovado",
       "rejected": "Rejeitado",
@@ -776,7 +781,7 @@
       "automationSaved": "Regra de automação salva",
       "packageSaved": "Pacote de relatórios salvo",
       "reopenEnded": "Janela de reabertura encerrada.",
-      "reopenExtended": "Janela de reabertura estendida."
+      "reopenExtended": "Solicitação de alteração de reabertura enviada."
     },
     "errors": {
       "actionFailed": "Não foi possível salvar a alteração de configuração",

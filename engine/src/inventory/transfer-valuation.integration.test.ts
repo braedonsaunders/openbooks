@@ -20,6 +20,22 @@ import { receiveInventory, issueInventory } from "./movements.ts";
 import { transferInventory } from "./transfers.ts";
 import { reverseInventoryMovement } from "./reversal.ts";
 import { createTransferOrder, receiveTransferOrder, shipTransferOrder } from "./transfer-orders.ts";
+import { InventoryError } from "./contracts.ts";
+import { setPeriodLockState } from "../periods/period-locks.ts";
+
+/** The scratch fixture opens only July 2026; backdated transfers need March. */
+async function openMarch2026ForTransfers(orgId: string, periodId: string): Promise<void> {
+  await db.execute(sql`
+    insert into accounting_periods (org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
+    select org_id, 2026, 3, '2026-03', '2026-03-01', '2026-03-31', false, fiscal_calendar_id
+      from accounting_periods where org_id = ${orgId} and id = ${periodId}`);
+}
+
+async function transferMovementCount(orgId: string, itemId: string): Promise<number> {
+  const r = (await db.execute<{ n: number }>(sql`select count(*)::int as n from inventory_movements
+    where org_id=${orgId} and item_id=${itemId} and kind in ('transfer_out','transfer_in')`));
+  return r.rows[0]!.n;
+}
 
 test("moving-average withdrawal after exhaustion and old issue reversal remains weighted", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await scratchWithWarehousing();
@@ -540,3 +556,83 @@ for (const exhaustPool of [false, true]) {
   });
 }
 }
+
+test("a backdated transfer posts on its own date and moves only the stock held then", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await scratchWithWarehousing();
+  try {
+    await openMarch2026ForTransfers(org.orgId, org.periodId);
+    const item = org.items.fifo;
+    await receiveInventory(org.orgId, null, {
+      itemId: item, stockLocationId: org.stockLocationId, quantity: "10", unitCost: "2.00",
+      subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: "2026-03-10",
+    });
+    const moved = await transferInventory(org.orgId, null, {
+      itemId: item, fromStockLocationId: org.stockLocationId, toStockLocationId: org.stockLocationId2,
+      quantity: "4", subsidiaryId: org.subsidiaryId, date: "2026-03-12",
+    });
+    const legs = (await db.execute<{ moved_on: string }>(sql`
+      select moved_at::date::text as moved_on from inventory_movements
+       where org_id=${org.orgId} and id in (${moved.fromMovementId}, ${moved.toMovementId})`)).rows;
+    assert.deepEqual(legs.map((leg) => leg.moved_on), ["2026-03-12", "2026-03-12"], "both legs carry the transfer date");
+    assert.equal((await getOnHand(org.orgId, item, org.stockLocationId)).quantity, "6.0000");
+    assert.equal((await getOnHand(org.orgId, item, org.stockLocationId2)).quantity, "4.0000");
+  } finally { await dropScratchOrg(org.orgId); }
+});
+
+test("a backdated transfer refuses when the source did not hold the stock on its date", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await scratchWithWarehousing();
+  try {
+    await openMarch2026ForTransfers(org.orgId, org.periodId);
+    const item = org.items.fifo;
+    await receiveInventory(org.orgId, null, {
+      itemId: item, stockLocationId: org.stockLocationId, quantity: "10", unitCost: "2.00",
+      subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: "2026-03-10",
+    });
+    // Ten units are on hand today, but none had arrived on 2026-03-05.
+    await assert.rejects(
+      transferInventory(org.orgId, null, {
+        itemId: item, fromStockLocationId: org.stockLocationId, toStockLocationId: org.stockLocationId2,
+        quantity: "5", subsidiaryId: org.subsidiaryId, date: "2026-03-05",
+      }),
+      (error: unknown) =>
+        error instanceof InventoryError &&
+        /had 0(?:\.0+)? on hand on 2026-03-05 but the transfer needs 5(?:\.0+)?/.test(error.message),
+      "a transfer dated before the source held the stock must refuse",
+    );
+    assert.equal((await getOnHand(org.orgId, item, org.stockLocationId)).quantity, "10.0000", "a refused transfer moves no stock");
+    assert.equal((await getOnHand(org.orgId, item, org.stockLocationId2)).quantity, "0.0000");
+    assert.equal(await transferMovementCount(org.orgId, item), 0, "a refused transfer writes no legs");
+  } finally { await dropScratchOrg(org.orgId); }
+});
+
+test("a transfer dated in a GL-closed period refuses even when it posts no journal", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await scratchWithWarehousing();
+  try {
+    await openMarch2026ForTransfers(org.orgId, org.periodId);
+    const actor = (await seedFlowActors(org.orgId)).adminId;
+    const item = org.items.fifo;
+    // Same business location on both legs, so the transfer posts no journal.
+    const sameLocation = randomUUID();
+    await db.execute(sql`insert into stock_locations(id,org_id,location_id,code,kind,is_active) values (${sameLocation},${org.orgId},${org.locationId},'SAME-DIM','warehouse',true)`);
+    await receiveInventory(org.orgId, actor, {
+      itemId: item, stockLocationId: org.stockLocationId, quantity: "10", unitCost: "2.00",
+      subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: "2026-03-10",
+    });
+    const marchId = (await db.execute<{ id: string }>(sql`select id from accounting_periods
+      where org_id=${org.orgId} and fiscal_year=2026 and period_number=3 and not is_adjustment`)).rows[0]!.id;
+    await setPeriodLockState({
+      orgId: org.orgId, periodId: marchId, bookId: org.bookId, module: "gl", state: "closed",
+      actorId: actor, reason: "Close March before the transfer",
+    });
+    await assert.rejects(
+      transferInventory(org.orgId, actor, {
+        itemId: item, fromStockLocationId: org.stockLocationId, toStockLocationId: sameLocation,
+        quantity: "4", subsidiaryId: org.subsidiaryId, date: "2026-03-12",
+      }),
+      (error: unknown) => error instanceof InventoryError && /closed/i.test(error.message),
+      "a transfer into a closed period must refuse with the closed-period remedy",
+    );
+    assert.equal((await getOnHand(org.orgId, item, org.stockLocationId)).quantity, "10.0000", "a refused transfer moves no stock");
+    assert.equal(await transferMovementCount(org.orgId, item), 0, "a refused transfer writes no legs");
+  } finally { await dropScratchOrg(org.orgId); }
+});

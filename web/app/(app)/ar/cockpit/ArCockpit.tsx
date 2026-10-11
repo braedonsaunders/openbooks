@@ -40,6 +40,7 @@ import { formatExactPercent } from '../../analytics/_ui/format'
 import { EntityDrawer } from "../../analytics/_ui/EntityDrawer";
 import { ArCollectionsInfoDrawer } from "./ArCollectionsInfoDrawer";
 import { CollectionsWorklist } from "./CollectionsWorklist";
+import { NotForecastPanel } from "./NotForecastPanel";
 import { SearchInput } from "../../../../components/search-input";
 import { FilterChips } from "../../../../components/filter-bar";
 import { Pagination } from "../../../../components/pagination";
@@ -203,6 +204,8 @@ export function ArCockpit({
               accent="text-sky-600 dark:text-sky-400"
             />
           </CockpitPanel>
+
+          <NotForecastPanel notForecast={data.notForecast} />
 
           <CockpitPanel
             title={t("panels.schedule")}

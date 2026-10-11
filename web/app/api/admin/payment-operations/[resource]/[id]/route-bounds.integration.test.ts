@@ -80,8 +80,9 @@ test("mandate update refuses a non-calendar signed date without writing", async 
   const { orgId, mandateId, date } = await fixture();
   try {
     const response = await patch(mandateId, { signedOn: "2026-09-31" });
-    const json = (await response.json().catch(() => null)) as { error?: string } | null;
-    assert.equal(response.status, 400, `expected 400, got ${response.status}: ${JSON.stringify(json)}`);
+    const json = (await response.json().catch(() => null)) as { error?: string; issues?: { path: string }[] } | null;
+    assert.equal(response.status, 422, `expected 422, got ${response.status}: ${JSON.stringify(json)}`);
+    assert.ok(json?.issues?.some((issue) => issue.path === "signedOn"), "the refusal names the signedOn field");
     assert.doesNotMatch(json?.error ?? "", /invalid input syntax|Failed query/i);
     assert.equal(await signedOn(orgId, mandateId), date);
   } finally {

@@ -1,10 +1,8 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
 
-// "New expense report" flips to "Creating…" and stays there
-// forever when the draft create throws — NewExpenseButton has no
-// try/catch/finally, so a thrown fetch/json leaves busy=true with zero
-// feedback. A failed create must reset the button and surface the error.
+// "New expense report" is URL-only: it opens the unsaved-create drawer and
+// must never write a numbered draft on click.
 const { bootJsdomEnvironment } = await import('../../../testing/jsdom-env')
 await bootJsdomEnvironment({ url: 'http://localhost:4800/expenses', matchMediaMatches: false, scrollIntoView: false, resizeObserver: false })
 
@@ -94,36 +92,14 @@ async function click(element: HTMLButtonElement): Promise<void> {
   })
 }
 
-test('a thrown create resets the button and surfaces the error', async (t) => {
-  await mountButton(t, (async () => {
-    throw new Error('connection reset')
+test('New opens the unsaved-create drawer and writes nothing', async (t) => {
+  const requests: string[] = []
+  await mountButton(t, (async (input: RequestInfo | URL) => {
+    requests.push(String(input))
+    return Response.json({})
   }) as typeof fetch)
   await click(button())
-  assert.equal(button().disabled, false, 'the button must leave the busy state after a thrown create')
-  assert.ok(
-    (button().textContent ?? '').includes('New expense report'),
-    'the label must flip back from Creating…',
-  )
-  assert.equal(script.toasts.length, 1, 'the failure must surface exactly one error')
-  assert.equal(script.toasts[0]!.kind, 'error')
-  assert.equal(script.pushed.length, 0, 'a failed create must not navigate')
-})
-
-test('a refused create resets the button and surfaces the server error', async (t) => {
-  await mountButton(t, (async () => Response.json({ error: 'expenses are closed' }, { status: 422 })) as typeof fetch)
-  await click(button())
-  assert.equal(button().disabled, false, 'the button must leave the busy state after a refused create')
-  assert.ok(
-    script.toasts.some((toast) => toast.kind === 'error' && toast.message.includes('expenses are closed')),
-    'the server error must surface',
-  )
-  assert.equal(script.pushed.length, 0, 'a refused create must not navigate')
-})
-
-test('a created draft still opens the editor', async (t) => {
-  const id = '019f0000-0000-4000-8000-000000000004'
-  await mountButton(t, (async () => Response.json({ id })) as typeof fetch)
-  await click(button())
-  assert.deepEqual(script.pushed, [`/expenses/reports?expense=${id}&mode=edit`])
-  assert.equal(script.toasts.length, 0, 'a clean create toasts nothing')
+  assert.deepEqual(requests, [], 'opening New must not call the server')
+  assert.deepEqual(script.pushed, ['/expenses/reports?expense=new&mode=edit'])
+  assert.equal(script.toasts.length, 0, 'opening New toasts nothing')
 })

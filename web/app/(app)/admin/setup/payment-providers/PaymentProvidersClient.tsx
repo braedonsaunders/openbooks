@@ -12,7 +12,7 @@ import { StripeBillingImport } from "./StripeBillingImport";
 
 type ProviderKey = "stripe" | "adyen" | "gocardless";
 
-type AutomationProviderKey = "paypal" | "shopify_payments";
+type AutomationProviderKey = "paypal" | "shopify_payments" | "square";
 
 type Config = {
   provider: ProviderKey;
@@ -79,6 +79,7 @@ const PROVIDERS: { key: ProviderKey; label: string; merchantAccount?: boolean }[
 const AUTOMATION_PROVIDERS: { key: AutomationProviderKey; nameKey: string; descriptionKey: string; channelsNote: boolean }[] = [
   { key: "paypal", nameKey: "paypalName", descriptionKey: "paypalDescription", channelsNote: false },
   { key: "shopify_payments", nameKey: "shopifyName", descriptionKey: "shopifyDescription", channelsNote: true },
+  { key: "square", nameKey: "squareName", descriptionKey: "squareDescription", channelsNote: false },
 ];
 
 export function PaymentProvidersClient() {
@@ -480,7 +481,7 @@ function AutomationFields({
 }
 
 /**
- * PayPal and Shopify Payments never take hosted checkout: no keys, no
+ * PayPal, Shopify Payments and Square never take hosted checkout: no keys, no
  * surcharge rules, no webhook URL. Their card owns the settlement-automation
  * half only — enablement, review policy and dispute posting accounts.
  * Shopify settles through the Channels workspace; this card only prepares
@@ -506,8 +507,16 @@ function AutomationProviderCard({
   const [disputedFundsAccountId, setDisputedFundsAccountId] = useState(config?.defaultDisputedFundsAccountId ?? "");
   const [chargebackLossAccountId, setChargebackLossAccountId] = useState(config?.defaultChargebackLossAccountId ?? "");
   const [disputeFeeAccountId, setDisputeFeeAccountId] = useState(config?.defaultDisputeFeeAccountId ?? "");
-  const name = t(providerKey === "paypal" ? "paypalName" : "shopifyName");
-  const description = t(providerKey === "paypal" ? "paypalDescription" : "shopifyDescription");
+  const name = t(
+    providerKey === "paypal" ? "paypalName" : providerKey === "square" ? "squareName" : "shopifyName",
+  );
+  const description = t(
+    providerKey === "paypal"
+      ? "paypalDescription"
+      : providerKey === "square"
+        ? "squareDescription"
+        : "shopifyDescription",
+  );
 
   return (
     <Card>

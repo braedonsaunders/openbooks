@@ -34,7 +34,8 @@ import { receiveInventory } from "../inventory/movements.ts";
 import { getOnHand, getOnHandWith } from "../inventory/position.ts";
 import { assertCostingPolicyChangeAllowed, lockItemInventoryProfile } from "../inventory/profile-policy.ts";
 import { recordNormalScrap } from "./scrap.ts";
-import { executeManufacturingReceipt, executeManufacturingIssue } from "./execution.ts";
+import { executeManufacturingReceipt, executeManufacturingIssue, executeManufacturingCompletionDateCorrection } from "./execution.ts";
+import { correctWorkOrderCompletionDate } from "./completion-redate.ts";
 import { readManufacturingRecord, listManufacturingRecords, searchManufacturingChoices, manufacturingOptions, manufacturingTracking } from "./workspace.ts";
 import { errorChainMatches } from "../testing/error-chain.ts";
 import { add,cmp,normalizeMoney } from "../money/money.ts";
@@ -761,6 +762,24 @@ const cases: Case[] = [
     for(const role of roles)assert.equal((await run(tx=>tx.execute(sql`update app_roles set permissions=${JSON.stringify(role.permissions)}::jsonb where org_id=${f.org.orgId} and id=${role.id} returning id`))).rows.length,1);
     await reverse(newMovement);assert.equal(await wip(f,active.number),'0.0000');
   }},
+  { name: "process balance reads the measured final output before its receipt and does not double count it after", run: async (f) => {
+    const wo = await prepare(f, { qualityGate: "measure", quantity: "1" }); await stock(f, f.org.items.component, "4", "3");
+    await issue(f, wo.id, [{ materialId: wo.materials[0]!.id, quantity: "2" }]);
+    const operation = (await withBypassContext(() => db.execute<{ id: string }>(sql`select id from mfg_wo_operations where org_id=${f.org.orgId} and work_order_id=${wo.id} order by sequence`))).rows[0]!;
+    await run((tx) => startWorkOrderOperation(tx, f.org.orgId, f.actorId, wo.id, operation.id));
+    await run((tx) => completeWorkOrderOperation(tx, f.org.orgId, f.actorId, wo.id, operation.id, { doneQty: "1", measuredQty: "1", actualSetupMinutes: "0", actualRunMinutes: "0", actualLaborMinutes: "0" }));
+    const balance = async () => (await run((tx) => readManufacturingRecord(tx, f.org.orgId, null, "work-orders", wo.id, f.actorId))).sections.materialBalance!;
+    const before = await balance();
+    assert.equal(before.length, 1);
+    assert.equal(before[0]!.inputQuantity, "2.0000"); assert.equal(before[0]!.outputQuantity, "0.0000");
+    assert.equal(before[0]!.measuredOutputQuantity, "1.0000"); assert.equal(before[0]!.difference, "1.0000");
+    assert.equal(before[0]!.differenceKind, "measured_loss");
+    await run((tx) => completeWorkOrder(tx, f.org.orgId, f.actorId, wo.id, { quantity: "1" }));
+    const after = await balance();
+    assert.equal(after[0]!.outputQuantity, "1.0000"); assert.equal(after[0]!.producedOutputQuantity, "1.0000");
+    assert.equal(after[0]!.measuredOutputQuantity, "1.0000"); assert.equal(after[0]!.difference, "1.0000");
+    assert.equal(after[0]!.differenceKind, "measured_loss");
+  } },
   { name: "done refuses unmeasured measure operation", run: async (f) => {
     const wo = await prepare(f, { qualityGate: "measure" }); await stock(f, f.org.items.component, "4", "3");
     await issue(f, wo.id, [{ materialId: wo.materials[0]!.id, quantity: "2" }]); await run((tx) => completeWorkOrder(tx, f.org.orgId, f.actorId, wo.id, { quantity: "1" }));
@@ -1708,6 +1727,126 @@ cases.push({name:'tracked low-value output apportions every ledger unit without 
  const movements=(await run(tx=>tx.execute<{value:string}>(sql`select total_value::text as value from inventory_movements where org_id=${f.org.orgId} and journal_entry_id=${receipt.entryId} and kind='assembly_build' order by id`))).rows;
  assert.equal(movements.length,4);assert.equal(add(add(movements[0]!.value,movements[1]!.value),add(movements[2]!.value,movements[3]!.value)),'0.0002');assert(movements.every(row=>cmp(row.value,'0')>=0));
 }});
+
+// Completion date correction: a finished-goods receipt re-dated to the day production finished.
+async function ensureMonthPeriod(f: Fixture, year: number, month: number) {
+  const name = `${year}-${String(month).padStart(2, "0")}`;
+  await withBypassContext(() => db.execute(sql`insert into accounting_periods (id,org_id,fiscal_year,period_number,name,starts_on,ends_on,is_adjustment,fiscal_calendar_id)
+    select ${randomUUID()},${f.org.orgId},${year},${month},${name},make_date(${year},${month},1),(make_date(${year},${month},1)+interval '1 month - 1 day')::date,false,fiscal_calendar_id
+      from accounting_periods where id=${f.org.periodId}
+       and not exists (select 1 from accounting_periods where org_id=${f.org.orgId} and make_date(${year},${month},1) between starts_on and ends_on and not is_adjustment)`));
+}
+async function stockOn(f: Fixture, itemId: string, quantity: string, unitCost: string, date: string) {
+  await withBypassContext(() => receiveInventory(f.org.orgId, f.actorId, {
+    itemId, stockLocationId: f.org.stockLocationId, quantity, unitCost, subsidiaryId: f.org.subsidiaryId,
+    offsetAccountId: f.org.accounts.clearing, date,
+  }));
+}
+/** A completed order whose materials were issued and whose operations began on 1 February; the receipt is recorded today. */
+async function februaryOrder(f: Fixture) {
+  await ensureMonthPeriod(f, 2026, 2);
+  const wo = await prepare(f);
+  await stockOn(f, f.org.items.component, "4", "3", "2026-01-15");
+  await run((tx) => tx.execute(sql`update mfg_work_orders set started_at='2026-02-01T08:00:00Z'::timestamptz
+    where org_id=${f.org.orgId} and id=${wo.id} returning id`));
+  await run((tx) => issueMaterials(tx, f.org.orgId, f.actorId, wo.id, [{ materialId: wo.materials[0]!.id, quantity: "2" }], { issuedOn: "2026-02-01" }));
+  const receipt = await run((tx) => completeWorkOrder(tx, f.org.orgId, f.actorId, wo.id, { quantity: "1" }));
+  await run((tx) => markWorkOrderDone(tx, f.org.orgId, f.actorId, wo.id));
+  return { wo, receiptEntryId: receipt.entryId };
+}
+function correctTo(f: Fixture, id: string, correctedOn: string, reason = "Production finished on the stated day") {
+  return run((tx) => correctWorkOrderCompletionDate(tx, f.org.orgId, f.actorId, id, { correctedOn, reason }));
+}
+function saleOn(f: Fixture, itemId: string, date: string) {
+  return withBypassContext(() => issueInventory(f.org.orgId, f.actorId, {
+    itemId, stockLocationId: f.org.stockLocationId2, quantity: "1", subsidiaryId: f.org.subsidiaryId,
+    offsetAccountId: f.org.accounts.adjustment, date,
+  }));
+}
+const redateCases: Case[] = [
+  { name: "re-dating a completed receipt earlier makes a previously refused as-of issue possible", run: async (f) => {
+    const { wo } = await februaryOrder(f);
+    await assert.rejects(saleOn(f, f.org.items.assembly, "2026-02-03"), /had 0\.0000 on hand on 2026-02-03/);
+    const result = await correctTo(f, wo.id, "2026-02-03");
+    assert.equal(result.replayed, false);
+    assert.equal(result.corrections.length, 1);
+    await saleOn(f, f.org.items.assembly, "2026-02-03");
+  } },
+  { name: "the correction reverses the original postings and re-posts an identical journal and receipt linked to them", run: async (f) => {
+    const { wo, receiptEntryId } = await februaryOrder(f);
+    const wipBefore = await wip(f, wo.number);
+    const onHandBefore = (await withBypassContext(() => getOnHand(f.org.orgId, f.org.items.assembly, f.org.stockLocationId2))).quantity;
+    const result = await correctTo(f, wo.id, "2026-02-03");
+    const correction = result.corrections[0]!;
+    const entries = (await withBypassContext(() => db.execute<{ id: string; status: string; posted: string; reverses: string | null; redated_from: string | null }>(sql`
+      select id, status, posting_date::text as posted, reverses_entry_id as reverses, custom->>'redated_from_entry_id' as redated_from
+        from journal_entries where org_id=${f.org.orgId} and id in (${receiptEntryId}, ${correction.reversalEntryId!}, ${correction.redatedEntryId!})`))).rows;
+    const byId = new Map(entries.map((row) => [row.id, row]));
+    assert.equal(byId.get(receiptEntryId)?.status, "reversed");
+    assert.equal(byId.get(correction.reversalEntryId!)?.reverses, receiptEntryId);
+    assert.equal(byId.get(correction.reversalEntryId!)?.posted, f.postingDate, "the reversal lands on the original day");
+    assert.equal(byId.get(correction.redatedEntryId!)?.status, "posted");
+    assert.equal(byId.get(correction.redatedEntryId!)?.posted, "2026-02-03");
+    assert.equal(byId.get(correction.redatedEntryId!)?.redated_from, receiptEntryId);
+    const lineTotals = (entryId: string) => withBypassContext(() => db.execute<{ account_id: string; total: string }>(sql`
+      select account_id, sum(amount)::text as total from journal_lines where org_id=${f.org.orgId} and entry_id=${entryId} group by account_id order by account_id`)).then((rows) => rows.rows);
+    assert.deepEqual(await lineTotals(correction.redatedEntryId!), await lineTotals(receiptEntryId), "re-posted lines equal the original lines");
+    const movements = (await withBypassContext(() => db.execute<{ id: string; kind: string; moved: string; quantity: string; unit_cost: string; total_value: string; reverses: string | null; journal_entry_id: string }>(sql`
+      select id, kind, moved_at::date::text as moved, quantity::text, unit_cost::text, total_value::text, reverses_movement_id as reverses, journal_entry_id
+        from inventory_movements where org_id=${f.org.orgId} and item_id=${f.org.items.assembly}
+          and journal_entry_id in (${receiptEntryId}, ${correction.reversalEntryId!}, ${correction.redatedEntryId!})
+        order by moved_at, id`))).rows;
+    const original = movements.find((row) => row.kind === "assembly_build" && row.journal_entry_id === receiptEntryId)!;
+    const reversal = movements.find((row) => row.kind === "return" && row.journal_entry_id === correction.reversalEntryId)!;
+    const redated = movements.find((row) => row.kind === "assembly_build" && row.journal_entry_id === correction.redatedEntryId)!;
+    assert.equal(reversal.reverses, original.id, "the reversal movement links to the original receipt");
+    assert.equal(redated.moved, "2026-02-03");
+    assert.deepEqual([redated.quantity, redated.unit_cost, redated.total_value], [original.quantity, original.unit_cost, original.total_value]);
+    assert.equal(await wip(f, wo.number), wipBefore, "work-order WIP is unchanged by the correction");
+    assert.equal((await withBypassContext(() => getOnHand(f.org.orgId, f.org.items.assembly, f.org.stockLocationId2))).quantity, onHandBefore);
+  } },
+  { name: "a movement of the same item between the corrected and original day refuses the correction", run: async (f) => {
+    const { wo } = await februaryOrder(f);
+    await withBypassContext(() => receiveInventory(f.org.orgId, f.actorId, {
+      itemId: f.org.items.assembly, stockLocationId: f.org.stockLocationId2, quantity: "2", unitCost: "7",
+      subsidiaryId: f.org.subsidiaryId, offsetAccountId: f.org.accounts.clearing, date: "2026-02-10",
+    }));
+    await refuse(correctTo(f, wo.id, "2026-02-03"), "completion_date_valuation_conflict", "would change the cost of", "after 2026-02-10");
+  } },
+  { name: "a correction refuses a future day, a day before the recorded operations, and an order that is not done", run: async (f) => {
+    const { wo } = await februaryOrder(f);
+    await refuse(correctTo(f, wo.id, addCalendarDays(f.postingDate, 1)), "completion_date_in_future", "cannot be dated after today");
+    await refuse(correctTo(f, wo.id, "2026-01-30"), "completion_date_before_floor", "cannot be dated before 2026-02-01", "Use 2026-02-01");
+    const open = await prepare(f);
+    await refuse(correctTo(f, open.id, "2026-02-03"), "completion_date_order_not_done", "only a completed work order");
+  } },
+  { name: "a repeated correction with the same day and reason replays without posting again", run: async (f) => {
+    const { wo } = await februaryOrder(f);
+    const first = await correctTo(f, wo.id, "2026-02-03", "Finished on 3 February");
+    const countsBefore = await counts(f);
+    const second = await correctTo(f, wo.id, "2026-02-03", "Finished on 3 February");
+    assert.equal(second.replayed, true);
+    assert.deepEqual(second.redatedEntryIds, first.redatedEntryIds);
+    assert.deepEqual(await counts(f), countsBefore, "a replay writes no journal entries or movements");
+  } },
+  { name: "the Idempotency-Key path returns the retained correction on retry", run: async (f) => {
+    const { wo } = await februaryOrder(f);
+    const key = randomUUID();
+    const input = { correctedOn: "2026-02-03", reason: "Finished on 3 February" };
+    const first = await withBypassContext(() => executeManufacturingCompletionDateCorrection(f.org.orgId, f.actorId, null, wo.id, key, input));
+    const second = await withBypassContext(() => executeManufacturingCompletionDateCorrection(f.org.orgId, f.actorId, null, wo.id, key, input));
+    assert.equal(first.replayed, false);
+    assert.equal(second.replayed, true);
+    assert.deepEqual(second.value.redatedEntryIds, first.value.redatedEntryIds);
+  } },
+];
+for (const scenario of redateCases) {
+  test(`manufacturing completion date correction: ${scenario.name}`, { skip: !DB, concurrency: false }, async () => {
+    const f = await setup();
+    try { await scenario.run(f); }
+    finally { await withBypassContext(() => dropScratchOrg(f.org.orgId)); }
+  });
+}
 
 for (const scenario of cases) {
   test(`manufacturing completion and reversal: ${scenario.name}`, { skip: !DB, concurrency: false }, async () => {

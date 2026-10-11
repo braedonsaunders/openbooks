@@ -127,9 +127,10 @@ async function legacyGET() {
        where org_id = ${orgId} and provider in ('stripe', 'adyen', 'gocardless')
        order by provider
     `),
-    // PayPal and Shopify Payments never take hosted checkout: their rows
-    // carry only the settlement-automation half (policy, dispute accounts,
-    // pull state), saved through the settlements configuration endpoint.
+    // PayPal, Shopify Payments and Square never take hosted checkout: their
+    // rows carry only the settlement-automation half (policy, dispute
+    // accounts, pull state), saved through the settlements configuration
+    // endpoint.
     db.execute(sql`
       select provider, display_name as "displayName", is_enabled as "isEnabled",
              refund_policy as "refundPolicy", pull_enabled as "pullEnabled",
@@ -137,7 +138,7 @@ async function legacyGET() {
              default_chargeback_loss_account_id as "defaultChargebackLossAccountId",
              default_dispute_fee_account_id as "defaultDisputeFeeAccountId"
         from psp_provider_configs
-       where org_id = ${orgId} and provider in ('paypal', 'shopify_payments')
+       where org_id = ${orgId} and provider in ('paypal', 'shopify_payments', 'square')
        order by provider
     `),
     db.execute(sql`

@@ -10,7 +10,10 @@ registerHooks({
   resolve(specifier, context, next) {
     if (specifier === 'next-intl/server') return virtual("export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}")
     if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return virtual('export async function currentUser(){return null}')
-    if (specifier === '../../../../lib/feature-gates') return virtual(`
+    // defineRoute loads the gate through the `@/` alias, so the double must
+    // intercept that specifier as well as the route's direct import.
+    if (specifier === '../../../../lib/feature-gates' ||
+        (specifier === '@/lib/feature-gates' && context.parentURL?.includes('/lib/api/route'))) return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__regionMessagesState;
         return { user: { orgId: s.orgId, id: s.actorId }, allowedSubsidiaryIds: null };

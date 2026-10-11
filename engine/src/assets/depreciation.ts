@@ -32,3 +32,5 @@ export { assetDepreciationCalendar, buildAllSchedules, buildAllSchedulesWithRunn
 export type { BuildScheduleResult } from "./depreciation-schedule-build.ts";
 export { compareMoney, computeSchedule, computeUnitsOfProductionCharge, resolveAssetAccounts } from "./depreciation-schedule-math.ts";
 export type { AssetAccounts, DepreciationMethod, ScheduleInput, ScheduleLinePlan, UnitsOfProductionChargeInput } from "./depreciation-schedule-math.ts";
+export { ASSET_PLACEMENT_FIELDS, ASSET_PLACEMENT_FIELD_LABELS, assetPlacementMissingFields, assetPlacementShortfall } from "./placement-readiness.ts";
+export type { AssetPlacementAsset, AssetPlacementCategory, AssetPlacementField, AssetPlacementPolicy } from "./placement-readiness.ts";

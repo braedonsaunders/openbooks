@@ -8,7 +8,7 @@ import { receiveInventory } from '@openbooks/engine/inventory/movements'
 import { createScratchOrg, dropScratchOrg, type ScratchOrg } from '@openbooks/engine/testing/fixtures'
 import { PortalRefusal } from '@openbooks/engine/testing/portal/errors'
 import { consumePortalLink, requestPortalLink } from '@openbooks/engine/testing/portal/tokens'
-import { savePortalSettings } from '@openbooks/engine/testing/portal/settings'
+import { readPortalSettings, savePortalSettings } from '@openbooks/engine/testing/portal/settings'
 import { portalReturnableSources, requestPortalReturn } from './returns.ts'
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL)
@@ -122,5 +122,28 @@ test('a portal return outside the configured window refuses by name', { skip: !D
       select count(*)::text as count from documents
        where org_id = ${org.orgId} and kind = 'rma'`))).rows[0]!.count
     assert.equal(rmas, '0')
+  } finally { await withBypassContext(() => dropScratchOrg(org.orgId)) }
+})
+
+test('portal return reasons are required only while portal returns are on', { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg())
+  try {
+    const actorId = org.customerId
+    await withBypassContext(() => savePortalSettings(org.orgId, actorId, { sections: { returns: false }, returnReasons: [] }))
+    const off = await withBypassContext(() => readPortalSettings(org.orgId))
+    assert.equal(off.sections.returns, false)
+    assert.deepEqual(off.returnReasons, [])
+
+    await assert.rejects(
+      withBypassContext(() => savePortalSettings(org.orgId, actorId, { sections: { returns: true }, returnReasons: [] })),
+      (error: unknown) => error instanceof PortalRefusal && error.code === 'invalid_input' && error.status === 422
+        && /return reason/.test(error.message),
+    )
+
+    await withBypassContext(() => savePortalSettings(org.orgId, actorId, { sections: { returns: true }, returnReasons: ['damaged'] }))
+    await withBypassContext(() => savePortalSettings(org.orgId, actorId, { sections: { returns: false }, returnReasons: null }))
+    const kept = await withBypassContext(() => readPortalSettings(org.orgId))
+    assert.equal(kept.sections.returns, false)
+    assert.deepEqual(kept.returnReasons, ['damaged'])
   } finally { await withBypassContext(() => dropScratchOrg(org.orgId)) }
 })

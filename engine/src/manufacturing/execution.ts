@@ -10,6 +10,13 @@ import {
   type CompleteWorkOrderInput,
 } from "./completion.ts";
 import { issueMaterials, type MaterialIssueLine } from "./materials.ts";
+import {
+  correctWorkOrderCompletionDate,
+  type CompletionDateCorrectionInput,
+} from "./completion-redate.ts";
+
+// The web app reaches the completion-date correction through this public contract.
+export { correctWorkOrderCompletionDate, type CompletionDateCorrectionInput } from "./completion-redate.ts";
 /** Native inventory claims store the result atomically with its production postings.
  * Feature and entity authority are checked again before returning a retained result. */
 export async function executeManufacturingReceipt(
@@ -51,6 +58,27 @@ export async function executeManufacturingIssue(
     () => issueMaterials(db, orgId, actorId, id, lines, { issuedOn }),
   );
 }
+/** A retried completion-date correction returns the retained result instead of posting again. */
+export async function executeManufacturingCompletionDateCorrection(
+  orgId: string,
+  actorId: string,
+  scope: ReadonlySet<string> | null,
+  id: string,
+  key: string,
+  input: CompletionDateCorrectionInput,
+) {
+  return execute(
+    orgId,
+    actorId,
+    scope,
+    id,
+    key,
+    "manufacturing.completion-date",
+    input,
+    () => correctWorkOrderCompletionDate(db, orgId, actorId, id, input),
+  );
+}
+
 async function execute<T>(
   orgId: string,
   actorId: string,

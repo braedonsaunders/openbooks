@@ -113,7 +113,12 @@
         "settings": "給与設定",
         "ytd": "他の計算の年累計",
         "openingBalances": "期首残高（繰越）"
-      }
+      },
+      "approvedTitle": "承認済みですが、承認後に入力が変更されました（{reasons}）。再計算すると承認が取り消され、再度承認に提出されます。",
+      "pendingTitle": "この給与計算の計算後に入力が変更されました（{reasons}）。承認待ちのため、承認者がこの依頼を決定するまで再計算できません。",
+      "recalculateApproved": "再計算して再提出",
+      "approvedConfirmTitle": "承認を取り消して再計算しますか？",
+      "approvedConfirmBody": "再計算すると、この給与計算の承認が取り消され、現在の入力で再計算したうえで、再度承認に提出されます。新しい承認が得られるまで確定はできません。"
     },
     "readiness": {
       "blockedTitle": "{count, plural, one {# 件がこの計算をブロックしています} other {# 件がこの計算をブロックしています}}",
@@ -295,7 +300,8 @@
       "ackLabel": "上記の理由により{count, plural, one {この従業員} other {この # 名}}が今回支払われないことを理解しました。",
       "ackRecord": "承認を記録する",
       "ackRecorded": "{count, plural, one {# 名の承認を記録しました} other {# 名の承認を記録しました}}。",
-      "ackRecordedNote": "{date}に承認済み — この判断はこの計算に記録されています。"
+      "ackRecordedNote": "{date}に承認済み — この判断はこの計算に記録されています。",
+      "staleApprovedBlocked": "確定の前に再計算して再提出してください。"
     },
     "finish": {
       "notCommitted": "転記する前に総勘定元帳ステップでその処理をコミットしてください。",
@@ -454,7 +460,10 @@
     "committed": "確定済み",
     "posted": "転記済み",
     "void": "無効",
-    "rejected": "却下"
+    "rejected": "却下",
+    "approved": "承認済み",
+    "approvedStale": "承認済み・再計算が必要",
+    "pendingApproval": "承認待ち"
   },
   "empty": {
     "runs": "給与計算はまだありません。給与スケジュールから作成して開始してください。",
@@ -493,7 +502,8 @@
     "approvalPending": "承認待ち ({count} 件) — 確定と転記はブロックされています",
     "printSet": "印刷セット (印刷配布のみ)",
     "stubsPrintOnly": "{count} 名は印刷のみでメール送信されていません",
-    "calculateRefusedAll": "誰も計算できませんでした — {count, plural, one {# 名が拒否されました} other {# 名が拒否されました}}。入力を修正して再計算するか、確定する前に承認してください。"
+    "calculateRefusedAll": "誰も計算できませんでした — {count, plural, one {# 名が拒否されました} other {# 名が拒否されました}}。入力を修正して再計算するか、確定する前に承認してください。",
+    "recalculateApprovedDone": "承認を取り消しました。給与計算を再計算し、再度承認に提出しました。"
   },
   "profiles": {
     "addEmployee": "プロファイル未登録の従業員",
@@ -1799,6 +1809,11 @@
     }
   },
   "holidayAttestations": {
+    "bulkNotAbsentTitle": "欠勤回答の確認",
+    "bulkNotAbsentConfirm": "この給与計算の未回答の祝日質問 {count} 件に「同意なしの欠勤なし」を登録しますか？各回答は、その従業員と祝日に対するあなたの申告として記録されます。",
+    "bulkNotAbsentAction": "{count} 件すべてに回答：欠勤なし",
+    "bulkNotAbsentFiled": "{count} 件の回答を登録しました。",
+    "bulkNotAbsentHint": "祝日の欠勤に関する質問が {count} 件未回答です。まとめて「同意なしの欠勤なし」と回答するか、下の各行で回答してください。",
     "loadFailed": "この例外への回答が必要な従業員を読み込めませんでした。必要な情報を確認するため、推測で回答せず再試行してください。",
     "retry": "再試行",
     "commissionTitle": "歩合給の状況",

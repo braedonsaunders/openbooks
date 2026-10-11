@@ -76,7 +76,8 @@ const mockSources = new Map<string, string>([
       return state.gates;
     }
     export async function decideGate() { hit('decideGate') }
-    export async function delegateGate() { hit('delegateGate') }`],
+    export async function delegateGate() { hit('delegateGate') }
+    export async function gateDecisionCapability() { hit('gateDecisionCapability'); return { canAct: true, signatureRequired: false, sodBlocked: false } }`],
   ["flows/approval-worklist.ts", `${STATE}
     export async function worklistApprovals() { hit('worklistApprovals'); return [] }
     export async function worklistApprovalsPage() { hit('worklistApprovalsPage'); return { items: [], total: 0, kindCounts: new Map() } }

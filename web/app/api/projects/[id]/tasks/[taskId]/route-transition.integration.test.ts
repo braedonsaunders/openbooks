@@ -36,7 +36,7 @@ test('closed WBS tasks reopen and re-budget only with a reason', async () => {
     const projectId = randomUUID()
     await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active,custom)
       values (${projectId},${org.orgId},${org.subsidiaryId},'WBS-T','Transition job',${org.customerId},'active',true,'{}'::jsonb)`)
-    const input = { code: 'T-1', name: 'Footings', status: 'open' as const, estimatedHours: '10', estimatedCost: '100' }
+    const input = { code: 'T-1', name: 'Footings', status: 'open' as const, estimatedHours: '10', estimatedCost: '100', estimatedPrice: null }
     const created = await withOrgContext(org.orgId, () => createWorkBreakdownTask({
       orgId: org.orgId, projectId, actorId: actor, allowedSubsidiaryIds: null, input,
     }))

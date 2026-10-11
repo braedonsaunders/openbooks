@@ -23,6 +23,7 @@ import { TAX_FILING_WRITE_PERMISSION } from '../../../../lib/tax-filing-permissi
 import { DISPLAY_DOCUMENT_NUMBER_EXPR } from '../../../../lib/customization/list-query'
 import { documentSettlementHref } from '../../../../lib/settlement-href'
 import { creditApplicationsDrawer, type CreditApplicationsDrawer } from '../../../../lib/credit-applications-drawer'
+import { invoiceWriteOffDrawer, type InvoiceWriteOffDrawer } from '../../../../lib/invoice-write-off-drawer'
 
 /**
  * Customer invoices + credits, split into a loader and a spec.
@@ -81,6 +82,8 @@ export interface ArInvoicesDrawer {
   allocationsEntryEnabled: boolean
   appliedPayments: { payments: AppliedPayment[]; currency: string } | null
   creditApplications: CreditApplicationsDrawer | null
+  /** Write off the open balance of this posted invoice; null when none applies. */
+  invoiceWriteOff: InvoiceWriteOffDrawer | null
   returnAuthorizationHref: string | null
   /** Receive payment for this posted invoice (party + invoice preselected). */
   settlementHref: string | null
@@ -309,6 +312,9 @@ export async function loadArInvoices(
             openDoc && drawerKind === 'customer_credit'
               ? creditApplicationsDrawer(openDoc.doc as Record<string, unknown>, { ar: can(authz, 'ar.pay'), ap: false })
               : null,
+          invoiceWriteOff: openDoc && drawerKind === 'customer_invoice'
+            ? invoiceWriteOffDrawer(openDoc.doc as Record<string, unknown>, can(authz, 'ar.post') && can(authz, 'ar.pay'))
+            : null,
           returnAuthorizationHref:
             drawerKind === 'customer_invoice' && featureEnabled(featureState, 'returnAuthorizations') && can(authz, 'orders.fulfill')
               ? '/returns?doc=new&kind=rma'

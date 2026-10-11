@@ -108,7 +108,8 @@
     "applySource": "Jede Zeile in diesem Entwurf durch die Werte des ausgewählten Budgets ersetzen?",
     "submit": "Dieses Budget zur Genehmigung einreichen? Es ist bis zur Entscheidung für die Bearbeitung gesperrt.",
     "approve": "Dieses Budget genehmigen?",
-    "reject": "Dieses Budget in den Entwurf zurückgeben?"
+    "reject": "Dieses Budget in den Entwurf zurückgeben?",
+    "rejectionReason": "Grund für die Ablehnung"
   },
   "feedback": {
     "archived": "Budget archiviert.",

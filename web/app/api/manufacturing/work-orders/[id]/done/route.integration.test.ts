@@ -23,13 +23,15 @@ const hooks = registerHooks({
 
 const { POST } = await import("./route.ts");
 const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 const { createWorkOrder } = await import("@openbooks/engine/manufacturing/work-orders");
+const { createWorkOperator } = await import("@openbooks/engine/testing/manufacturing");
 
 test("work-order completion validates options before applying lifecycle rules", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Work-order operator", "admin"));
+    const grants = ["items.post", "manufacturing.manage"];
+    const actorId = await withBypassContext(() => createWorkOperator(org.orgId, "Work-order operator", grants));
     const feature = await withBypassContext(() => db.execute(sql`
       update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"manufacturing":true,"inventory":true,"warehousing":true}'::jsonb)
       where id=${org.orgId} returning id`));
@@ -39,7 +41,7 @@ test("work-order completion validates options before applying lifecycle rules", 
     })));
     gateState.authz = {
       user: { id: actorId, orgId: org.orgId, roles: [] },
-      permissions: new Set(["items.post", "manufacturing.manage"]),
+      permissions: new Set(grants),
       allowedSubsidiaryIds: null,
     };
     const call = async (body: object) => POST(new Request("http://openbooks.test/api/manufacturing/work-orders/" + order.id + "/done", {

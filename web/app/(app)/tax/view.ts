@@ -4,12 +4,13 @@ import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { redirect } from 'next/navigation'
 import { db } from '@openbooks/engine/platform/db'
+import { readMigrationPlan } from '../../../lib/migration/plan'
 import { page, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../lib/authz'
 import { accessDeniedHref } from '../../../lib/gate-targets'
 import { TAX_FILING_WRITE_PERMISSION } from '../../../lib/tax-filing-permission'
 import { isUuid, mergeHref, parseListParams, pickString } from '../../../lib/list-params'
-import type { FilingHistoryRecord } from './FilingHistoryDrawer'
+import type { FilingAdjustmentRecord, FilingHistoryRecord } from './FilingHistoryDrawer'
 import type { ProviderActivityPayload } from './ProviderActivityDrawer'
 import type { TaxFormOption, TaxHistoryRow } from './sections'
 
@@ -48,7 +49,47 @@ type FormRow = {
   has_official: boolean
 }
 
-type FilingRow = FilingHistoryRecord & { created_at: string }
+type FilingRow = Omit<FilingHistoryRecord, 'adjustments'> & { created_at: string }
+
+/** A stored filing as read: its adjustments are the raw JSON until resolved. */
+type SelectedFilingRow = Omit<FilingHistoryRecord, 'adjustments'> & { adjustments: unknown }
+
+/**
+ * The adjustment entries a stored filing carries, with each author's name.
+ * Prepared v3 filings hold their governed entries; earlier filings hold an
+ * amount per line, which is listed without a reason or author.
+ */
+async function filingAdjustmentRecords(orgId: string, raw: unknown): Promise<FilingAdjustmentRecord[]> {
+  const entries: { lineCode: string; amount: string; reason: string | null; enteredBy: string | null; enteredAt: string | null }[] =
+    Array.isArray(raw)
+      ? raw.map((entry: Record<string, unknown>) => ({
+          lineCode: String(entry.lineCode),
+          amount: String(entry.amount),
+          reason: typeof entry.reason === 'string' ? entry.reason : null,
+          enteredBy: typeof entry.enteredBy === 'string' ? entry.enteredBy : null,
+          enteredAt: typeof entry.enteredAt === 'string' ? entry.enteredAt : null,
+        }))
+      : raw && typeof raw === 'object'
+        ? Object.entries(raw as Record<string, unknown>).map(([lineCode, amount]) => ({
+            lineCode, amount: String(amount), reason: null, enteredBy: null, enteredAt: null,
+          }))
+        : []
+  const authorIds = [...new Set(entries.map((entry) => entry.enteredBy).filter((id): id is string => Boolean(id) && isUuid(id!)))]
+  const names = new Map<string, string>()
+  if (authorIds.length > 0) {
+    const users = await db.execute<{ id: string; name: string }>(sql`
+      select id::text as id, name from users
+       where org_id = ${orgId} and id::text in (${sql.join(authorIds.map((id) => sql`${id}`), sql`, `)})`)
+    for (const user of users.rows) names.set(user.id, user.name)
+  }
+  return entries.map((entry) => ({
+    lineCode: entry.lineCode,
+    amount: entry.amount,
+    reason: entry.reason,
+    enteredByName: entry.enteredBy ? names.get(entry.enteredBy) ?? null : null,
+    enteredAt: entry.enteredAt,
+  }))
+}
 
 export interface TaxHistoryTableData {
   searchPlaceholder: string
@@ -85,6 +126,8 @@ export interface TaxData {
   onActivity: boolean
   tabs: { key: string; href: string; label: string; active: boolean; count: number | null }[]
   forms: TaxFormOption[]
+  /** The organization's conversion date (ISO), null when no migration cutover is recorded. */
+  conversionDate: string | null
   canSave: boolean
   history: TaxHistoryTableData
   currentParams: Record<string, string | string[] | undefined>
@@ -162,11 +205,11 @@ export async function loadTax(
       : Promise.resolve({ rows: [] as FilingRow[] }),
     db.execute<{ count: number }>(sql`select count(*)::int as count from tax_filings ${filters}`),
     filingId && isUuid(filingId)
-      ? db.execute<FilingHistoryRecord>(sql`
+      ? db.execute<SelectedFilingRow>(sql`
           select id, form_name, form_code, country, period_from::text, period_to::text,
-                 version, status, filing_reference, filed_at::text, snapshot_hash, boxes
+                 version, status, filing_reference, filed_at::text, snapshot_hash, boxes, adjustments
             from tax_filings where id = ${filingId} and org_id = ${orgId} limit 1`)
-      : Promise.resolve({ rows: [] as FilingHistoryRecord[] }),
+      : Promise.resolve({ rows: [] as SelectedFilingRow[] }),
     activityId && isUuid(activityId)
       ? db.execute<ProviderActivityPayload>(sql`
           select t.id::text as id, t.document_id::text as "documentId",
@@ -183,7 +226,11 @@ export async function loadTax(
   const failedCount = Number(failedResult.rows[0]?.count ?? 0)
   const history = historyResult.rows
   const total = Number(countResult.rows[0]?.count ?? 0)
-  const selected = selectedResult.rows[0]
+  const selectedRow = selectedResult.rows[0]
+  const selected = selectedRow
+    ? { ...selectedRow, adjustments: await filingAdjustmentRecords(orgId, selectedRow.adjustments) }
+    : undefined
+  const conversionDate = (await readMigrationPlan(orgId)).cutoverDate
   const closeHref = mergeHref('/tax', sp, { filing: undefined })
   const activity = activityResult.rows[0]
   const activityCloseHref = mergeHref('/tax', sp, { activity: undefined })
@@ -221,6 +268,7 @@ export async function loadTax(
     activityEmptyTitle: t('activity.emptyTitle'),
     activityEmptyDescription: t('activity.emptyDescription'),
     forms: forms.map((form) => ({ ...form })),
+    conversionDate,
     canSave: can(authz, TAX_FILING_WRITE_PERMISSION),
     history: {
       searchPlaceholder: t('history.search'),
@@ -294,6 +342,7 @@ export function taxSpec(data: TaxData): PageSpec {
         onHistory: data.onHistory,
         tabs: data.tabs,
         forms: data.forms,
+        conversionDate: data.conversionDate,
         canSave: data.canSave,
         history: data.history,
       }),

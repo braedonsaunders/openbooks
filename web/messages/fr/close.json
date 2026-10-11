@@ -22,6 +22,8 @@
     "rangeValue": "{start} → {end}",
     "status": "Statut",
     "readiness": "Préparation",
+    "closedBy": "Clôturé par",
+    "closedByDetail": "{name} le {date}",
     "action": "Action",
     "lockedDetail": "{modules} verrouillé · {book}"
   },
@@ -504,8 +506,10 @@
       "endReopenTitle": "Terminer cette réouverture",
       "endReopenHint": "La clôture referme chaque module ouvert par cette fenêtre et libère la période pour de nouvelles demandes.",
       "endReopenReasonRequired": "Un motif d'au moins 10 caractères est requis pour terminer la réouverture.",
-      "extendReopenTitle": "Prolonger ou élargir",
-      "extendReopenHint": "Ajoutez du temps ou des modules à cette fenêtre plutôt qu'ouvrir une demande qui chevauche.",
+      "reopenRequestedUntil": "Échéance demandée : {date}",
+      "extendReopenTitle": "Demander une prolongation ou un élargissement",
+      "extendReopenHint": "Soumettez une nouvelle demande à un approbateur habilité. Son approbation remplace cette fenêtre. Laissez les heures supplémentaires vides ou saisissez 0 pour conserver son échéance.",
+      "extendByApproverOnly": "Pour élargir ou prolonger votre propre fenêtre, soumettez une demande de réouverture incluant tous les modules de cette fenêtre plus ceux dont vous avez besoin. Un approbateur habilité la tranche, et son approbation remplace cette fenêtre.",
       "extendHoursLabel": "Heures supplémentaires",
       "extendModulesLabel": "Ajouter des modules",
       "extendReopenReasonRequired": "Un motif d'au moins 10 caractères est requis pour prolonger la réouverture.",
@@ -588,7 +592,7 @@
       "addRow": "Ajouter",
       "removeValue": "Supprimer {value}",
       "endReopen": "Terminer la réouverture",
-      "extendReopen": "Prolonger la réouverture"
+      "extendReopen": "Demander une prolongation"
     },
     "fields": {
       "name": "Nom",
@@ -668,6 +672,7 @@
       "gl": "GL"
     },
     "reopenStates": {
+      "superseded": "Remplacée",
       "requested": "Demandée",
       "approved": "Approuvée",
       "rejected": "Rejetée",
@@ -776,7 +781,7 @@
       "automationSaved": "Règle d’automatisation enregistrée",
       "packageSaved": "Dossier de rapports enregistré",
       "reopenEnded": "Fenêtre de réouverture terminée.",
-      "reopenExtended": "Fenêtre de réouverture prolongée."
+      "reopenExtended": "Demande de modification de réouverture soumise."
     },
     "errors": {
       "actionFailed": "La modification n’a pas pu être enregistrée",

@@ -141,7 +141,8 @@ export const BANK_STATEMENT_BUILT_IN_EXPR: Record<string, SQL> = {
   unmatched_count: sql`coalesce(statement_lines.unmatched_count, 0)::text`,
   opening_balance: sql`bs.opening_balance`,
   closing_balance: sql`bs.closing_balance`,
-  imported: sql`to_char(bs.imported_at, 'YYYY-MM-DD')`,
+  // The import time distinguishes same-day imports of one statement date.
+  imported: sql`to_char(bs.imported_at, 'YYYY-MM-DD HH24:MI')`,
 }
 
 export const BANK_STATEMENT_SORTS: Record<string, SQL> = {

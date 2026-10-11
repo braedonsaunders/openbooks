@@ -42,9 +42,15 @@
     "expense": "费用"
   },
   "hygiene": {
-    "assetBankUncorroborated": "“{name}”被归类为银行科目，但没有银行类名称且不可对账，因此将在所有地方被计入现金。请确认科目类型（清算、准备金和授信科目经常被误分类），或启用对账。"
+    "assetBankUncorroborated": "“{name}”被归类为银行科目，但没有银行类名称且不可对账，因此将在所有地方被计入现金。请确认科目类型（清算、准备金和授信科目经常被误分类），或启用对账。",
+    "duplicateAccountName": "已保存。另有一个启用中的科目也名为“{name}”（{account}）。"
   },
   "drawer": {
+    "duplicateName": {
+      "body": "已存在名为“{name}”的启用科目（{account}）。请使用该科目，或仍然创建此科目。",
+      "useExisting": "使用现有科目",
+      "createAnyway": "仍然创建"
+    },
     "saved": "科目已保存",
     "created": "科目已创建",
     "newTitle": "新建科目",
@@ -85,6 +91,7 @@
       "invalid_custom_fields": "请检查自定义字段的值。",
       "number_in_use": "该科目编号已被使用。",
       "numberInUseBy": "该科目编号已被<account>{number} · {name}</account>使用。",
+      "duplicate_account_name": "已有启用中的科目使用此名称。",
       "account_changed": "您编辑期间该科目已发生变化。请重新打开后再试。",
       "invalid_idempotency_key": "无法安全地重试该科目请求。",
       "save_failed": "无法保存该科目。",

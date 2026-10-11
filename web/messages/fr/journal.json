@@ -68,6 +68,7 @@
     "deleted": "Journal supprimé",
     "deleteFailed": "Échec de la suppression",
     "voidStaleRevision": "Cette écriture a changé depuis son ouverture — la dernière version est chargée. Vérifiez-la puis annulez à nouveau.",
+    "voidRevisionUnavailable": "L’écriture n’a pas pu être rechargée pour l’annuler. Fermez puis rouvrez l’écriture, et annulez-la à nouveau.",
     "totals": "Débits <strong>{debits}</strong> · Crédits <strong>{credits}</strong>",
     "outOfBalance": "Non équilibré · {amount}",
     "balanced": "Équilibré",
@@ -83,6 +84,8 @@
       "credit": "Crédit"
     },
     "budgetaryControlWarning": "Le budget {scenario} dépasse la dotation pour {account}, fonds {fund}, {subsidiary}{dimensions} : disponible {available}, dépassement de {amountOver}.",
-    "budgetaryControlRemedy": "Révisez le budget par son circuit d''approbation : copiez le budget approuvé en brouillon, augmentez le montant de ce compte pour le fonds dans la feuille de calcul, approuvez la copie et archivez le budget remplacé. Ou liez ce montant à l''engagement ouvert qui l''a réservé."
+    "budgetaryControlRemedy": "Révisez le budget par son circuit d''approbation : copiez le budget approuvé en brouillon, augmentez le montant de ce compte pour le fonds dans la feuille de calcul, approuvez la copie et archivez le budget remplacé. Ou liez ce montant à l''engagement ouvert qui l''a réservé.",
+    "voidAwaitingApproval": "L'annulation de ce journal attend une approbation. Le journal reste comptabilisé jusqu'à la décision d'approbation.",
+    "createUnconfirmed": "Le serveur n'a pas confirmé la nouvelle écriture. Enregistrez à nouveau : la nouvelle tentative réutilise la clé de ce brouillon et ne peut pas créer une seconde écriture."
   }
 }

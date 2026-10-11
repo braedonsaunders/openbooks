@@ -108,7 +108,8 @@
     "applySource": "Replace every line in this draft with the selected budget's values?",
     "submit": "Submit this budget for approval? It will lock for editing until a decision is made.",
     "approve": "Approve this budget?",
-    "reject": "Return this budget to draft?"
+    "reject": "Return this budget to draft?",
+    "rejectionReason": "Reason for rejection"
   },
   "feedback": {
     "archived": "Budget archived.",

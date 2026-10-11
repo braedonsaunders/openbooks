@@ -9,7 +9,11 @@ import {
   subsidiaryScopeAllows,
 } from "../organization/subsidiary-scope.ts";
 import { assertManufacturingFeature } from "./gate.ts";
-import { ManufacturingNotFoundError } from "./errors.ts";
+import { ManufacturingError, ManufacturingNotFoundError } from "./errors.ts";
+import { processBalanceRows, type ProcessBalanceSource } from "./process-balance.ts";
+import { stockedItems } from "../inventory/availability.ts";
+import { toExactStockQuantity } from "../inventory/costing.ts";
+import type { Runner } from "../inventory/contracts.ts";
 import { getWorkOrder } from "./work-orders.ts";
 import { getWorkCenter } from "./work-centers.ts";
 import { getRouting } from "./routings.ts";
@@ -212,6 +216,29 @@ export async function manufacturingOptions(
   return result;
 }
 
+/**
+ * The measured output of the work order's last measured operation, in the
+ * produced item's base unit. Operation quantities are stated in the work order's
+ * unit, which is the produced item's base unit at creation; any difference
+ * converts through the item's unit conversions, and a missing conversion refuses.
+ */
+async function measuredOutputByUnit(tx: SqlExecutor, orgId: string, workOrderId: string, producedItemId: string, orderNumber: string): Promise<Map<string, string>> {
+  const measured = (await tx.execute<{ measuredQty: string; unit: string }>(sql`
+    select operation.measured_qty::text as "measuredQty", order_row.unit
+      from mfg_wo_operations operation
+      join mfg_work_orders order_row on order_row.org_id=operation.org_id and order_row.id=operation.work_order_id
+     where operation.org_id=${orgId} and operation.work_order_id=${workOrderId} and operation.measured_qty is not null
+     order by operation.sequence desc limit 1`)).rows[0];
+  if (!measured) return new Map();
+  const profile = (await stockedItems(tx as Runner, orgId, [producedItemId])).get(producedItemId);
+  if (!profile) {
+    throw new ManufacturingError(`Produced item for ${orderNumber} has no inventory profile, so its measured output cannot be read.`, {
+      status: 422, code: "item_not_stocked", remedy: "Add an inventory costing profile to the produced item.",
+    });
+  }
+  return new Map([[profile.baseUnit, toExactStockQuantity(measured.measuredQty, measured.unit, profile.conversions, profile.baseUnit, `Measured output of ${orderNumber}`)]]);
+}
+
 export async function readManufacturingRecord(
   tx: SqlExecutor,
   orgId: string,
@@ -280,17 +307,21 @@ export async function readManufacturingRecord(
       sql`select m.id,i.name as "itemName",(-m.quantity)::text as quantity,p.base_unit as unit,l.code as location,m.lot_id as "lotId",m.serial_id as "serialId",t.lot_number as "lotNumber",s.serial_number as "serialNumber",m.journal_entry_id as "entryId",e.status,(-m.quantity-coalesce((select sum(allocation.quantity) from mfg_completion_inputs allocation join journal_entries receipt on receipt.org_id=allocation.org_id and receipt.id=allocation.completion_entry_id where allocation.org_id=m.org_id and allocation.input_movement_id=m.id and receipt.status='posted' and receipt.reverses_entry_id is null),0))::text as "unassignedQty",
       not exists(select 1 from inventory_movements reversal where reversal.org_id=m.org_id and reversal.reverses_movement_id=m.id and reversal.status='posted') as "liveIssue",m.created_at::text as "createdAt" from inventory_movements m join journal_entries e on e.org_id=m.org_id and e.id=m.journal_entry_id join items i on i.org_id=m.org_id and i.id=m.item_id join item_inventory_profiles p on p.org_id=m.org_id and p.item_id=m.item_id join stock_locations l on l.org_id=m.org_id and l.id=m.stock_location_id left join lots t on t.org_id=m.org_id and t.id=m.lot_id left join serials s on s.org_id=m.org_id and s.id=m.serial_id where m.org_id=${orgId} and e.origin='manufacturing' and e.custom->>'work_order_number'=${record.number} and m.kind='assembly_consume' ${subsidiaryVisibleFilter(sql`e.subsidiary_id`, scope)} order by m.created_at desc,m.id`,
     );
-    await rows('materialBalance',sql`select profile.base_unit as id,profile.base_unit as unit,
+    const balanceSources = (await tx.execute<ProcessBalanceSource>(sql`select profile.base_unit as unit,
       coalesce(sum(-movement.quantity) filter(where movement.kind='assembly_consume'),0)::text as "inputQuantity",
       coalesce(sum(movement.quantity) filter(where movement.kind='assembly_build'),0)::text as "outputQuantity",
-      (-sum(movement.quantity))::text as difference
+      coalesce(sum(movement.quantity) filter(where movement.kind='assembly_build' and movement.item_id=${record.producedItemId}::uuid),0)::text as "producedOutputQuantity"
       from inventory_movements movement join journal_entries entry on entry.org_id=movement.org_id and entry.id=movement.journal_entry_id
       join item_inventory_profiles profile on profile.org_id=movement.org_id and profile.item_id=movement.item_id
       where movement.org_id=${orgId} and entry.origin='manufacturing' and entry.custom->>'work_order_number'=${record.number}
         -- Live entries only: the workspace lists standing production only
         and entry.status='posted' and entry.reverses_entry_id is null and movement.status='posted' and movement.reverses_movement_id is null
         and movement.kind in('assembly_consume','assembly_build') and not exists(select 1 from inventory_movements reversal where reversal.org_id=movement.org_id and reversal.reverses_movement_id=movement.id and reversal.status='posted')
-        ${subsidiaryVisibleFilter(sql`entry.subsidiary_id`,scope)} group by profile.base_unit order by profile.base_unit`);
+        ${subsidiaryVisibleFilter(sql`entry.subsidiary_id`,scope)} group by profile.base_unit order by profile.base_unit`)).rows;
+    sections.materialBalance = processBalanceRows(
+      balanceSources,
+      await measuredOutputByUnit(tx, orgId, id, record.producedItemId as string, record.number as string),
+    );
     await rows(
       "entries",
       sql`select e.id,e.entry_number as number,e.posting_date::text as date,e.status,e.memo,e.custom from journal_entries e where e.org_id=${orgId} and e.origin='manufacturing' and e.custom->>'work_order_number'=${record.number} ${subsidiaryVisibleFilter(sql`e.subsidiary_id`, scope)} order by e.created_at desc,e.id limit 200`,

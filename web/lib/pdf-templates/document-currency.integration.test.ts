@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
+import pg from 'pg'
 
 registerHooks({
   resolve(specifier, context, next) {
@@ -10,7 +11,7 @@ registerHooks({
   },
 })
 const { sql } = await import('drizzle-orm')
-const { db, pool, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
+const { db, pool, withBypassContext, withOrgContext, withBypass} = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { loadPdfRecordValues, MissingPdfOrgError } = await import('./values')
 const DB = !!process.env.OPENBOOKS_DB_URL
@@ -42,8 +43,16 @@ test('a record whose org row is gone is refused, never printed in an invented cu
   // base_currency is NOT NULL, so the only way the org lookup misses is a
   // missing org row — a state the schema forbids. The loader must refuse by
   // name instead of falling back to an invented denomination (it once
-  // printed CAD for a missing org). documents.org_id carries no FK, so the
-  // test orphans the record by pointing it at a uuid with no org row.
+  // printed CAD for a missing org).
+  //
+  // Production writes cannot reach that state: the tenant retirement fence
+  // refuses any write that points a record at an organization without an
+  // active fence. The orphan is therefore planted the way a restored or
+  // hand-repaired database could hold one: the privileged test login moves
+  // the record with trigger enforcement suspended for that one session, and
+  // restores it before teardown so the scratch organization drops cleanly.
+  const admin = new pg.Client({ connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? process.env.OPENBOOKS_DB_URL })
+  await admin.connect()
   const org = await withBypassContext(() => createScratchOrg())
   try {
     const id = randomUUID()
@@ -51,9 +60,10 @@ test('a record whose org row is gone is refused, never printed in an invented cu
     await withBypassContext(() => db.execute(sql`
       insert into documents (id, org_id, kind, document_number, document_date, currency, subtotal, tax_total, total)
       values (${id}, ${org.orgId}, 'customer_invoice', 'INV-ORPHAN-1', '2026-07-15', 'EUR', '100', '0', '100')`))
-    await withBypassContext(() => db.execute(sql`
-      update documents set org_id = ${orphanOrg} where id = ${id}`))
     try {
+      await admin.query("set session_replication_role = 'replica'")
+      await withBypass(() => admin.query('update documents set org_id = $1 where id = $2', [orphanOrg, id]))
+      await admin.query("set session_replication_role = 'origin'")
       await assert.rejects(
         withOrgContext(orphanOrg, () => loadPdfRecordValues('customer_invoice', orphanOrg, id, null)),
         (e: unknown) => {
@@ -63,10 +73,12 @@ test('a record whose org row is gone is refused, never printed in an invented cu
         },
       )
     } finally {
-      await withBypassContext(() => db.execute(sql`
-        update documents set org_id = ${org.orgId} where id = ${id}`))
+      await admin.query("set session_replication_role = 'replica'")
+      await withBypass(() => admin.query('update documents set org_id = $1 where id = $2', [org.orgId, id]))
+      await admin.query("set session_replication_role = 'origin'")
     }
   } finally {
+    await admin.end()
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }
 })

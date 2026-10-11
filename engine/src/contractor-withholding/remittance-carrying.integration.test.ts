@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withOrgContext, withOrgTransaction } from "../platform/db.ts";
+import { db, withOrgContext, withOrgTransaction, withBypass } from "../platform/db.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 import { loadDocument, loadDocumentEditCurrent } from "../ledger/document-service.ts";
 import { applyDocumentEdit } from "../ledger/document-write.ts";
@@ -179,7 +179,7 @@ test('authority remittance clears the original CAD carrying amount and recognize
 
 test('a missing realized FX account refuses atomically and leaves the authority draft and source deduction intact',enabled,async()=>scenario(async(org,f)=>{
   const remittance=await f.remit();
-  await db.execute(sql`update orgs set settings=settings #- '{controlAccounts,fxRealizedGainLoss}' where id=${org.orgId}`);
+  await withBypass(() => db.execute(sql`update orgs set settings=settings #- '{controlAccounts,fxRealizedGainLoss}' where id=${org.orgId}`));
   await assert.rejects(()=>f.post(remittance.documentId),/realized FX gain\/loss account.*Configure/i);
   const state=(await db.execute<{status:string;entry:string|null;count:number}>(sql`select status,posted_entry_id as entry,(select count(*)::int from journal_entries where org_id=d.org_id and source_document_id=d.id) as count from documents d where org_id=${org.orgId} and id=${remittance.documentId}`)).rows[0];
   assert.deepEqual(state,{status:'approved',entry:null,count:0});
@@ -202,7 +202,7 @@ test('a revised negative remittance credits the previous posted carrying amount 
 
 test('equal statutory figures with replacement payment evidence require review and generate only the functional correction journal',enabled,async()=>scenario(async(org,f)=>{
   const first=await f.remit();await f.post(first.documentId);await f.reverse();
-  await db.execute(sql`update fx_rates set rate='1.2' where org_id=${org.orgId} and from_currency='EUR' and to_currency='CAD'`);
+  await withBypass(() => db.execute(sql`update fx_rates set rate='1.2' where org_id=${org.orgId} and from_currency='EUR' and to_currency='CAD'`));
   const replacement=await f.settle();
   const prepared=await f.prepareReturn();
   assert.equal(prepared.revision,2);assert.equal(prepared.unchanged,false);
@@ -246,7 +246,7 @@ test('deposit corrections credit a reversed settled source and release the compl
 test('a replaced deposit source at unchanged statutory tax clears through a reviewable journal without another authority payable',enabled,async()=>scenario(async(org,f)=>{
   const first=await withOrgTransaction(org.orgId,()=>createWithholdingDeposit(db,org.orgId,{enrollmentId:f.enrollment,throughDate:org.date},f.actor));
   await f.post(first.documentId);await f.reverse();
-  await db.execute(sql`update fx_rates set rate='1.2' where org_id=${org.orgId} and from_currency='EUR' and to_currency='CAD'`);
+  await withBypass(() => db.execute(sql`update fx_rates set rate='1.2' where org_id=${org.orgId} and from_currency='EUR' and to_currency='CAD'`));
   await f.settle();
   const correction=await withOrgTransaction(org.orgId,()=>createWithholdingDeposit(db,org.orgId,{enrollmentId:f.enrollment,throughDate:org.date,amendsDocumentId:first.documentId},f.actor));
   assert.equal(correction.kind,'journal');

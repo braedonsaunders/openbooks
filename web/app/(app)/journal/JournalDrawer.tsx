@@ -95,6 +95,10 @@ export interface JournalDoc extends Record<string, unknown> {
   document_date: string | null
   updated_at: string
   entry_id: string | null
+  /** Set while a requested void waits for approval; the journal stays posted. */
+  void_requested_at: string | null
+  /** Posting-effects state; a terminal failure blocks Void until it is retried. */
+  posting_effect_status: string | null
   document_number: string | null
   custom: Record<string, unknown>
   extra_dims: Record<string, string | null>
@@ -116,6 +120,8 @@ export function asJournalDoc(raw: Record<string, unknown>): JournalDoc {
     party_id: text(raw.party_id),
     party_name: text(raw.party_name),
     memo: text(raw.memo),
+    void_requested_at: text(raw.void_requested_at),
+    posting_effect_status: text(raw.posting_effect_status),
     document_date: text(raw.document_date),
     updated_at: text(raw.updated_at) ?? '',
     entry_id: text(raw.entry_id),
@@ -257,6 +263,18 @@ function toRow(l: Record<string, unknown>, lineDefs: CustomFieldDefClient[], seg
   return row
 }
 
+/**
+ * True when revision token `a` is strictly older than `b`. Counter tokens
+ * (revision_seq, decimal text) compare numerically; timestamp tokens are
+ * fixed-width ISO text, so they compare chronologically as text. A server
+ * snapshot read before a post committed carries an older token and must not
+ * overwrite the post's own result.
+ */
+export function revisionIsOlder(a: string, b: string): boolean {
+  if (/^\d+$/.test(a) && /^\d+$/.test(b)) return BigInt(a) < BigInt(b)
+  return a < b
+}
+
 export type JournalDraftSaveInput = {
   documentId: string
   revision: string
@@ -359,8 +377,18 @@ function JournalDrawerBody({
   const tNew = useTranslations('journal.newButton')
   const tc = useTranslations('common')
   const router = useRouter()
-  const doc = asJournalDoc(journal.doc)
+  const propsDoc = asJournalDoc(journal.doc)
+  // The header's status must not rest on the server props alone: a list
+  // refresh that started before a Post committed can deliver the pre-post
+  // draft after the Post's own result. The drawer keeps the newest snapshot
+  // it observed (a post's canonical read, or the post response) and yields
+  // to the props only once they carry a newer revision.
+  const [liveDoc, setLiveDoc] = useState<JournalDoc | null>(null)
+  const doc = liveDoc && !revisionIsOlder(liveDoc.updated_at, propsDoc.updated_at) ? liveDoc : propsDoc
   const isDraft = doc.status === 'draft'
+  // A requested void waits on approval while the journal stays posted: the
+  // drawer names that state and holds Void until the approval is decided.
+  const voidAwaitingApproval = doc.void_requested_at != null
   // Existing records default to read-only; newly created drafts can explicitly
   // request edit mode. Only draft journals are editable. Once a journal enters
   // approval or posts, its accounting evidence is preserved; use the controlled
@@ -521,7 +549,7 @@ function JournalDrawerBody({
   // The loader and API return the exact revision counter. Legacy payloads
   // without one stay fenced until the canonical read supplies it.
   const initialRevision = isDocumentRevisionToken(doc.updated_at) ? doc.updated_at : null
-  const [, setDocumentRevisionState] = useState<string | null>(initialRevision)
+  const [documentRevision, setDocumentRevisionState] = useState<string | null>(initialRevision)
   const documentRevisionRef = useRef<string | null>(initialRevision)
   const seenPersistedRevisions = useRef(new Set<string>())
   const draftBaseline = useRef<PersistedDocumentSnapshot<JournalPayload>>({
@@ -600,15 +628,16 @@ function JournalDrawerBody({
     (incoming: PersistedDocumentSnapshot<JournalPayload>) => applyCanonicalRead(incoming),
   )
 
-  async function refreshFromServer(notifyOnConflict = true): Promise<void> {
+  async function refreshFromServer(notifyOnConflict = true): Promise<PersistedDocumentSnapshot<JournalPayload>> {
     const incoming = await loadDraftDocumentSnapshot(`/api/journals/${doc.id}`, t('postFailed'))
     if (ledgerSnapshot) {
       // Refresh the document fence without replacing immutable ledger lines
       // with the source document's editable transaction-currency lines.
       setDocumentRevision(incoming.revision)
-      return
+      return incoming
     }
     applyCanonicalRead(incoming, notifyOnConflict)
+    return incoming
   }
 
   useEffect(() => {
@@ -654,24 +683,30 @@ function JournalDrawerBody({
     if (refuseMissingAccount()) return
     setSaveState('saving')
     const ok = await execute(
-      () =>
-        fetchAppAction('/api/journals', {
+      async () => {
+        const result = await fetchAppAction('/api/journals', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Idempotency-Key': requestIdRef.current! },
           body: JSON.stringify(payload),
-        }, { fallback: t('postFailed') }),
+        }, { fallback: t('postFailed') })
+        if (!result.ok) return result
+        // A success that names no entry is not a saved journal: refuse and keep
+        // the form. The idempotency key is retained, so a retry replays the same
+        // journal instead of creating a second one.
+        const createdId = (result.data as { doc?: { id?: unknown } } | null)?.doc?.id
+        if (typeof createdId !== 'string' || createdId === '') {
+          return { ok: false, error: new ActionError({ kind: 'refused', serverMessage: t('createUnconfirmed') }) }
+        }
+        return result
+      },
       {
         fallbackMessage: t('postFailed'),
         onOk: (data) => {
-          const createdId = (data as { doc?: { id?: unknown } } | null)?.doc?.id
+          const createdId = (data as { doc: { id: string } }).doc.id
           setSaveState('saved')
           setDirty(false)
-          if (typeof createdId === 'string' && createdId) {
-            const separator = returnHref.includes('?') ? '&' : '?'
-            router.replace(`${returnHref}${separator}entry=${createdId}` as never)
-          } else {
-            router.push(returnHref as never)
-          }
+          const separator = returnHref.includes('?') ? '&' : '?'
+          router.replace(`${returnHref}${separator}entry=${createdId}` as never)
           router.refresh()
         },
         onRefused: () => {
@@ -760,12 +795,21 @@ function JournalDrawerBody({
 
   async function post() {
     setPostWarnings([])
+    // Post fences on the revision this editor holds: the token the last save
+    // returned (or a canonical read). A post that cannot name its revision
+    // refuses rather than posting an unfenced draft.
+    if (documentRevisionRef.current == null) await refreshFromServer(false).catch(() => {})
+    const postRevision = documentRevisionRef.current
+    if (postRevision == null) {
+      refuse(null, t('postFailed'))
+      return
+    }
     const ok = await execute(
       () =>
         fetchAppAction('/api/journals/actions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'post', documentId: doc.id }),
+          body: JSON.stringify({ action: 'post', documentId: doc.id, expectedUpdatedAt: postRevision }),
         }, { fallback: t('postFailed') }),
       {
         fallbackMessage: t('postFailed'),
@@ -797,8 +841,17 @@ function JournalDrawerBody({
           }
           // Posting commits a new documents.revision_seq (migration 0167 bumps it
           // on EVERY update): re-pin the canonical token now, or the next fenced
-          // write in this session (void) 409s on the pre-post revision.
-          await refreshFromServer(false).catch(() => {})
+          // write in this session (void) 409s on the pre-post revision. The
+          // header adopts the post's own result, so a list refresh that predates
+          // the commit cannot show the journal as still a draft.
+          const readBack = await refreshFromServer(false).catch(() => null)
+          setLiveDoc(readBack
+            ? asJournalDoc(readBack.payload.doc)
+            : {
+                ...doc,
+                status: posted.pendingApproval ? 'pending_approval' : 'posted',
+                updated_at: postRevision,
+              })
           if (posted.pendingApproval) toast.success(tc('actions.submitForApproval'))
           else toast.success(t('postedToast'))
           const pinned: string[] = []
@@ -884,6 +937,33 @@ function JournalDrawerBody({
     )
   }
 
+  // A terminal posting-effect failure blocks Void until the effect is replayed
+  // with a review reason. The same governed action the document drawer uses.
+  async function retryPostingEffects() {
+    const reason = await promptDialog({
+      title: tc('postingEffects.retry'),
+      label: tc('postingEffects.reason'),
+      placeholder: tc('postingEffects.reasonHelp'),
+    })
+    if (reason === null) return
+    if (reason.trim().length < 10 || reason.trim().length > 1000) {
+      refuse(tc('postingEffects.reasonHelp'), t('postFailed'))
+      return
+    }
+    await execute(() => fetchAppAction('/api/documents/actions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'retry-effects', documentId: doc.id, reason }),
+    }, { fallback: t('postFailed') }), {
+      fallbackMessage: t('postFailed'),
+      successMessage: tc('postingEffects.queued'),
+      onOk: () => {
+        onLedgerRefresh?.()
+        router.refresh()
+      },
+    })
+  }
+
   async function voidJournal() {
     const reason = await promptDialog({
       title: tc('amendment.voidTitle'),
@@ -911,9 +991,14 @@ function JournalDrawerBody({
         // The void API fences on the exact revision like every other document
         // write: without it every void answers 409 and the button is dead. The
         // token is the editor's canonical revision (never the lossy RSC Date).
-        if (documentRevisionRef.current == null) await refreshFromServer(false).catch(() => {})
-        const voidRevision = documentRevisionRef.current
-        if (voidRevision == null) return { ok: false, error: new ActionError({ kind: 'refused' }) }
+        // The void lookup above returned the revision it priced the reversal
+        // against; it is the token when the editor holds none (a posted
+        // journal opened read-only never loaded one).
+        if (documentRevisionRef.current == null && reversal.revision == null) await refreshFromServer(false).catch(() => {})
+        const voidRevision = documentRevisionRef.current ?? reversal.revision
+        if (voidRevision == null) {
+          return { ok: false, error: new ActionError({ kind: 'refused', serverMessage: t('voidRevisionUnavailable') }) }
+        }
         const result = await fetchAppAction(`/api/documents/${doc.id}/void`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1092,9 +1177,16 @@ function JournalDrawerBody({
             {tc('actions.edit')}
           </Button>
         ) : sourceDocument && canPost && (doc.status === 'approved' || doc.status === 'posted') ? (
-          <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs text-red-600 dark:text-red-400" disabled={busy} onClick={voidJournal}>
-            {tc('actions.void')}
-          </Button>
+          <>
+            {doc.status === 'posted' && doc.posting_effect_status === 'terminal_failed' ? (
+              <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" disabled={busy} onClick={retryPostingEffects}>
+                {tc('postingEffects.retry')}
+              </Button>
+            ) : null}
+            <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs text-red-600 dark:text-red-400" disabled={busy || voidAwaitingApproval} onClick={voidJournal}>
+              {tc('actions.void')}
+            </Button>
+          </>
         ) : currentEntryId ? (
           <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" asChild>
             <JournalEntryLink entryId={currentEntryId}>{t('viewCurrentJournal')}</JournalEntryLink>
@@ -1108,8 +1200,10 @@ function JournalDrawerBody({
               <FlowManualButtons subjectKind="journal" subjectId={String(doc.id)} />
               <ApprovalActions subjectKind="journal" subjectId={String(doc.id)} />
               {!ledgerSnapshot && canPost && (isDraft || doc.status === 'approved') ? (
-                <Button disabled={busy || !balanced || dirty} onClick={post}>
-                  {tc('actions.post')}
+                // Post waits while a save settles and until the editor holds a
+                // revision to fence on; the label says why it is not yet live.
+                <Button disabled={busy || saveState === 'saving' || documentRevision == null || !balanced || dirty} onClick={post}>
+                  {saveState === 'saving' ? tc('actions.saving') : tc('actions.post')}
                 </Button>
               ) : null}
               {doc.entry_id && !ledgerSnapshot ? (
@@ -1168,6 +1262,11 @@ function JournalDrawerBody({
       }
     >
       <div className="space-y-6 p-1">
+        {voidAwaitingApproval ? (
+          <p role="status" className="rounded-md border border-amber-200 bg-amber-50 p-2.5 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+            {t('voidAwaitingApproval')}
+          </p>
+        ) : null}
         <ActionAlert error={refusal} fallbackMessage={t('postFailed')} />
         <PeriodClosedRefusal error={refusal} />
         {postWarnings.map((warning, index) => (

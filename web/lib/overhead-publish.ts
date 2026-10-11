@@ -1,7 +1,12 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db, inDbTransaction } from '@openbooks/engine/platform/db'
-import { overheadPublishBlockers } from '@openbooks/engine/projects/overhead-rates'
+import {
+  overheadPublishBlockers,
+  zeroOverStandardReplacements,
+  type OverheadStandardRateRow,
+  type OverheadZeroOverStandard,
+} from '@openbooks/engine/projects/overhead-rates'
 import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import { lockScopeRows } from '@openbooks/engine/organization/scope'
 import { syncOverheadSystemRule } from '@openbooks/engine/allocations/overhead-sync'
@@ -28,6 +33,30 @@ export interface PublishedRate {
  */
 export class OverheadPublishError extends Error {
   readonly name = 'OverheadPublishError'
+}
+
+/**
+ * A publish that would write a zero rate over a non-zero standard. Refused
+ * unless the caller acknowledges it, so the zero never replaces a standard by
+ * accident; the replacements name each department and the standard it would
+ * remove.
+ */
+export class OverheadZeroOverStandardError extends Error {
+  readonly name = 'OverheadZeroOverStandardError'
+  readonly code = 'overhead_zero_over_standard'
+  readonly replacements: OverheadZeroOverStandard[]
+
+  constructor(replacements: OverheadZeroOverStandard[]) {
+    super(
+      `publishing would replace a non-zero standard rate with zero for ${replacements.map((r) => r.departmentName).join(', ')}`,
+    )
+    this.replacements = replacements
+  }
+}
+
+export interface PublishOverheadOptions {
+  /** Explicit operator confirmation that zero rates may replace non-zero standards. */
+  acknowledgeZeroOverStandard?: boolean
 }
 
 export async function computeLiveOverheadRates(orgId: string): Promise<PublishedRate[]> {
@@ -59,6 +88,7 @@ export async function publishOverheadRates(
   effectiveFrom: string,
   rates?: PublishedRate[],
   allowedSubsidiaryIds: ReadonlySet<string> | null = null,
+  options: PublishOverheadOptions = {},
 ): Promise<{ published: number }> {
   let toPublish = rates ?? []
   if (toPublish.length === 0) toPublish = await computeLiveOverheadRates(orgId)
@@ -77,6 +107,37 @@ export async function publishOverheadRates(
       allowedSubsidiaryIds,
       'share',
     )
+    if (!options.acknowledgeZeroOverStandard) {
+      // The standard rows this publish would close or delete: the per-hour
+      // standard rows still open on or after the start date. Read inside the
+      // same transaction as the writes so a concurrent publish cannot change
+      // the standards between the check and the replacement.
+      const touched = await tx.execute<{
+        department_id: string
+        department_name: string
+        rate_percent: string
+        effective_from: string
+        in_effect_at_start: boolean
+      }>(sql`
+        select r.department_id, d.name as department_name, r.rate_percent,
+               r.effective_from::text as effective_from,
+               (r.effective_from <= ${effectiveFrom}::date) as in_effect_at_start
+          from overhead_rates r
+          join departments d on d.id = r.department_id and d.org_id = r.org_id
+         where r.org_id = ${orgId}
+           and r.department_id = any(${`{${[...new Set(toPublish.map((r) => r.departmentId))].join(',')}}`}::uuid[])
+           and r.rate_kind = 'per_hour' and r.method = 'standard'
+           and (r.effective_to is null or r.effective_to >= ${effectiveFrom}::date)`)
+      const standards: OverheadStandardRateRow[] = touched.rows.map((row) => ({
+        departmentId: row.department_id,
+        departmentName: row.department_name,
+        ratePerHour: String(row.rate_percent),
+        effectiveFrom: row.effective_from,
+        inEffectAtStart: row.in_effect_at_start,
+      }))
+      const replacements = zeroOverStandardReplacements(toPublish, standards)
+      if (replacements.length > 0) throw new OverheadZeroOverStandardError(replacements)
+    }
     for (const r of toPublish) {
       await tx.execute(sql`
         update overhead_rates set effective_to = (${effectiveFrom}::date - 1)

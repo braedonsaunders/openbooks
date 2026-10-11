@@ -2170,6 +2170,10 @@
           "label": "Umbral largo de mora (días)",
           "help": "La mora que supere estos días recibe el desplazamiento largo"
         },
+        "collectibilityHorizonDays": {
+          "label": "Horizonte de cobrabilidad (días)",
+          "help": "Las cuentas por cobrar con más de estos días de vencimiento no se proyectan como cobros; se muestran por separado como no proyectadas"
+        },
         "cardTrajectoryTolerance": {
           "label": "Tolerancia de trayectoria de tarjeta",
           "help": "Variación relativa respecto del pago mediano dentro de la cual rige la trayectoria"
@@ -2203,7 +2207,8 @@
       }
     },
     "unplacedAr": "{count, plural, one {# factura no tiene} other {# facturas no tienen}} fecha de vencimiento ni historial de pagos · {total} sin pronosticar.",
-    "unplacedAp": "{count, plural, one {# factura no tiene} other {# facturas no tienen}} fecha de vencimiento ni historial de pagos · {total} sin pronosticar."
+    "unplacedAp": "{count, plural, one {# factura no tiene} other {# facturas no tienen}} fecha de vencimiento ni historial de pagos · {total} sin pronosticar.",
+    "notForecastAr": "{count, plural, one {# cuenta por cobrar} other {# cuentas por cobrar}} con más de {days} días de vencimiento · {total} no proyectadas como cobros."
   },
   "trueCost": {
     "title": "Costo real",
@@ -4171,7 +4176,12 @@
       "dueDate": "Vencimiento",
       "history": "Historial",
       "pushed": "Aplazado",
-      "deferredFrom": "aplazado desde el {date}"
+      "deferredFrom": "aplazado desde el {date}",
+      "pushedAssumption": "Desplazamiento por vencido: supone que los saldos vencidos se cobran en su fecha prevista",
+      "basisHistory": "Promedio de pago del cliente: {days} días",
+      "basisAverage": "Promedio de pago de la organización: {days} días",
+      "basisDueDate": "Vence {date}",
+      "basisPushed": "{days} días vencido · previsto {date}"
     },
     "netChange": "Cambio neto",
     "pagination": {
@@ -4212,6 +4222,11 @@
       "formula": "Fórmula",
       "info": "Info",
       "note": "Nota"
+    },
+    "overduePush": {
+      "assumption": "Supone que los saldos vencidos se cobran en su fecha prevista.",
+      "basis": "{count, plural, one {# factura} other {# facturas}} · {minDays}–{maxDays} días vencidas · {amount} en total",
+      "basisSameAge": "{count, plural, one {# factura} other {# facturas}} · {days} días vencidas · {amount} en total"
     }
   },
   "categoryManager": {

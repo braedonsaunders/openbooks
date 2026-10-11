@@ -27,9 +27,11 @@ const mockFeatureGates = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
+    // defineRoute resolves the gate lazily per request, so the hook stays
+    // registered for the life of the file.
     if (
-      specifier === "../../../../../lib/feature-gates" &&
-      context.parentURL?.includes("/api/assets/")
+      specifier === "@/lib/feature-gates" &&
+      context.parentURL?.includes("/web/lib/api/route")
     ) {
       return { url: "mock:asset-reverse-event-gates", shortCircuit: true };
     }
@@ -45,10 +47,9 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?asset-reverse-event-test";
 const { GET, POST } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 const { db } = await import("@openbooks/engine/platform/db");
-const { buildSchedule } = await import("@openbooks/engine/assets/depreciation");
+const { buildSchedule, runDepreciation } = await import("@openbooks/engine/assets/depreciation");
 const { disposeAsset, remeasureAsset } = await import("@openbooks/engine/assets/asset-lifecycle");
 const { proposeAssetChange, applyAssetChange } = await import("@openbooks/engine/assets/asset-changes");
 import type { AssetChangeInput } from "@openbooks/engine/assets/asset-changes";
@@ -91,7 +92,18 @@ async function seedAsset(tag: string): Promise<Fixture> {
             'Reverse-route asset', 'in_service', ${org.date}, ${org.date}, '12000.0000',
             '2000.0000', 'straight_line', 12, '{}'::jsonb)`);
   await buildSchedule(assetId, org.orgId, actorId, org.bookId);
-  return { orgId: org.orgId, actorId, assetId, date: org.date };
+  // Lifecycle events date on the period end: posting may not precede the
+  // depreciation already posted through it.
+  return { orgId: org.orgId, actorId, assetId, date: "2026-07-31" };
+}
+
+/**
+ * A full disposal refuses while a held period is still unposted and names the
+ * run that clears it. The scratch org's only period is July 2026; post it so
+ * the disposal ties to the schedule.
+ */
+async function postHeldDepreciation(fixture: Pick<Fixture, "orgId" | "actorId" | "assetId">): Promise<void> {
+  await runDepreciation(fixture.orgId, "2026-07-31", fixture.actorId, fixture.assetId);
 }
 
 function authed(fixture: Fixture, allowedSubsidiaryIds: Set<string> | null = null): void {
@@ -131,6 +143,7 @@ test("reverse-event GET names a posted disposal as the reversible candidate", as
   const fixture = await seedAsset("REVERSE-GET");
   try {
     authed(fixture);
+    await postHeldDepreciation(fixture);
     const disposal = await disposeAsset(fixture.orgId, fixture.assetId, {
       actorId: fixture.actorId,
       date: fixture.date,
@@ -158,6 +171,7 @@ test("reverse-event POST restores a disposed asset and replays exactly once", as
   const fixture = await seedAsset("REVERSE-POST");
   try {
     authed(fixture);
+    await postHeldDepreciation(fixture);
     const disposal = await disposeAsset(fixture.orgId, fixture.assetId, {
       actorId: fixture.actorId,
       date: fixture.date,
@@ -219,6 +233,7 @@ test("reverse-event POST refuses short reasons, bad dates, and malformed bodies 
   const fixture = await seedAsset("REVERSE-REFUSE");
   try {
     authed(fixture);
+    await postHeldDepreciation(fixture);
     const disposal = await disposeAsset(fixture.orgId, fixture.assetId, {
       actorId: fixture.actorId,
       date: fixture.date,
@@ -257,6 +272,7 @@ test("reverse-event POST refuses a foreign asset event and an out-of-scope subsi
   const fixture = await seedAsset("REVERSE-FOREIGN");
   const other = await seedAsset("REVERSE-FOREIGN-OTHER");
   try {
+    await postHeldDepreciation(other);
     const disposal = await disposeAsset(other.orgId, other.assetId, {
       actorId: other.actorId,
       date: other.date,

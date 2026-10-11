@@ -185,7 +185,7 @@ test("updatePayApplication with missing lines is rejected at the body boundary",
   reset();
   const response = await post({ action: "updatePayApplication", payApplicationId: APP_ID, expectedRevision: 1 });
 
-  assert.equal(response.status, 400);
+  assert.equal(response.status, 422);
   const payload = (await response.json()) as { issues?: Array<{ path: string }> };
   assert.equal(payload.issues?.[0]?.path, "lines");
   assert.equal(routeState.updateCalls.length, 0);
@@ -200,7 +200,7 @@ test("updatePayApplication without a revision token is rejected at the body boun
   delete missing.expectedRevision;
   for (const body of [missing, updateBody(lines, 0), updateBody(lines, 1.5), updateBody(lines, "1")]) {
     const response = await post(body);
-    assert.equal(response.status, 400, `expectedRevision=${JSON.stringify(body.expectedRevision)}`);
+    assert.equal(response.status, 422, `expectedRevision=${JSON.stringify(body.expectedRevision)}`);
     const payload = (await response.json()) as { issues?: Array<{ path: string }> };
     assert.equal(payload.issues?.[0]?.path, "expectedRevision");
   }
@@ -213,7 +213,7 @@ test("updatePayApplication with a line missing its identity is rejected at the b
     updateBody([{ workCompletedThisPeriod: "10", materialsStoredCurrent: "0" }]),
   );
 
-  assert.equal(response.status, 400);
+  assert.equal(response.status, 422);
   const payload = (await response.json()) as { issues?: Array<{ path: string }> };
   assert.equal(payload.issues?.[0]?.path, "lines.0.sovLineId");
   assert.equal(routeState.updateCalls.length, 0);

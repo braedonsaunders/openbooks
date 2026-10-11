@@ -1473,6 +1473,7 @@ test("complete source snapshots move a voided payment from bills to its reversin
     assert.equal(repaired.released,3);assert.equal(repaired.releasedAmount,"611.5200");
     assert.equal(repaired.inserted,1);assert.equal(repaired.unallocated,"0.0000");
     const after = await settlementSnapshot(org.orgId);
+    assert.ok(originalApplications.length > 0, "the source snapshot carries applications to retain");
     for (const old of originalApplications) {
       const retained = after.find(row=>row.id===old.id)!;
       assert.ok(retained.unapplied_at);
@@ -1638,6 +1639,7 @@ test("complete snapshots repair journal allocations by their source control acco
       where a.org_id=${org.orgId} and a.unapplied_at is null order by payment,target`)).rows;
     assert.deepEqual(active,current.map(link=>({payment:link.paymentRef,target:link.appliedRef,account:link.paymentAccountRef})).sort((a,b)=>a.payment.localeCompare(b.payment)||a.target.localeCompare(b.target)));
     const correctedRows=await settlementSnapshot(org.orgId);
+    assert.ok(originalRows.length > 0, "the source snapshot carries rows to correct");
     for(const row of originalRows)assert.ok(correctedRows.find(r=>r.id===row.id)?.unapplied_at);
     assert.deepEqual((await db.execute(sql`select id,amount::text,txn_amount::text from journal_lines where org_id=${org.orgId} order by id`)).rows,originalGL);
     const auditBefore=(await db.execute(sql`select id from audit_log where org_id=${org.orgId} and table_name='applications' order by id`)).rows;
@@ -1738,7 +1740,7 @@ test("historical source settlement replay requires the active owning connection 
     assert.equal(grant[0]!.connection_id,snapshot.connectionId);
     assert.equal(grant[0]!.period_from_id,org.periodId);
     assert.equal(grant[0]!.period_to_id,org.periodId);
-    const audit = (await db.execute<{actor_id:string; changes:Record<string,any>}>(sql`
+    const audit = (await db.execute<{actor_id:string; changes:{historicalReplay:{authorizations:{authorizationId:string}[]}}}>(sql`
       select actor_id,changes from audit_log where org_id=${org.orgId} and row_id=${before[0]!.id}`)).rows[0]!;
     assert.equal(audit.actor_id,actorId);
     assert.equal(audit.changes.historicalReplay.authorizations[0].authorizationId,grant[0]!.id);

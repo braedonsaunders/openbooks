@@ -27,10 +27,10 @@ async function postInvoice(org: Org, actor: string, input: { amount: string; doc
 
 test('the AR home overdue count and amount come from the same open-item row set', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   await assertDedicatedFixtureDatabase()
-  const org = await createScratchOrg()
+  const org = await withBypassContext(() => createScratchOrg())
   try {
     const { createScratchUser } = await import('@openbooks/engine/testing/fixtures')
-    const actor = await createScratchUser(org.orgId, 'AR Controller', 'admin')
+    const actor = await withBypassContext(() => createScratchUser(org.orgId, 'AR Controller', 'admin'))
     const secondSub = randomUUID()
     await withBypassContext(async () => {
       const calendarId = (await db.execute(sql`select id from fiscal_calendars where org_id = ${org.orgId} limit 1`)).rows[0]!.id as string

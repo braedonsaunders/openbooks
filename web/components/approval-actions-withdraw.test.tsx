@@ -11,13 +11,14 @@ declare global {
 
 // A pending-approval document shows its submitter a "Withdraw submission"
 // recall beside the pending chip; the click collects the mandatory reason,
-// posts the native withdraw, and toasts. Strangers (canWithdraw false) and
-// surfaces without a document id never see the button — never offered then
-// refused.
+// posts the native withdraw, and toasts. The button renders only where the
+// shared document action rule offers it: a viewer who neither submitted nor
+// holds the approve grant, a document that is no longer pending, and surfaces
+// without a withdraw surface never see it.
 const script = {
   posts: [] as Array<{ url: string; body: unknown }>,
-  canWithdraw: true,
-  withdrawDocumentId: 'doc-1' as string | undefined,
+  submittedByViewer: true,
+  withdraw: undefined as undefined | { documentId: string; status: string; canCreate: boolean; canApprove: boolean },
 }
 Object.assign(globalThis, {
   __withdrawToasts: [],
@@ -56,27 +57,31 @@ const { ApprovalActions } = await import('./approval-actions')
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
 
-async function mount() {
+async function mount(options: { noLiveGate?: boolean; failure?: { status: number; body: string } } = {}) {
   globalThis.__withdrawToasts = []
   script.posts.length = 0
+  const priorFetch = globalThis.fetch
+  let withdrawn = false
   globalThis.fetch = (async (url: unknown, init?: { method?: string; body?: unknown }) => {
     const href = String(url)
     if (href.includes('/api/flows/record-state')) {
       return Response.json({
         approvalState: {
-          status: 'pending_approval',
-          pendingWith: [{ name: 'Alicia Approver', gateId: 'gate-1', since: '2026-10-01T00:00:00.000Z' }],
+          status: withdrawn ? 'draft' : 'pending_approval',
+          pendingWith: withdrawn || options.noLiveGate ? [] : [{ name: 'Alicia Approver', gateId: 'gate-1', since: '2026-10-01T00:00:00.000Z' }],
           myActions: null,
         },
         history: [],
         failedRun: null,
         canRetry: false,
         neverSubmitted: false,
-        canWithdraw: script.canWithdraw,
+        submittedByViewer: script.submittedByViewer,
       })
     }
     if (href === '/api/documents/actions' && (init?.method ?? 'GET') === 'POST') {
       script.posts.push({ url: href, body: JSON.parse(String(init?.body)) })
+      if (options.failure) return new Response(options.failure.body, { status: options.failure.status })
+      withdrawn = true
       return Response.json({ id: 'doc-1', status: 'draft', withdrawn: true })
     }
     throw new Error(`unexpected fetch ${init?.method ?? 'GET'} ${href}`)
@@ -87,13 +92,13 @@ async function mount() {
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-        <ApprovalActions subjectKind="vendor_bill" subjectId="doc-1" withdrawDocumentId={script.withdrawDocumentId} />
+        <ApprovalActions subjectKind="vendor_bill" subjectId="doc-1" withdraw={script.withdraw} />
       </NextIntlClientProvider>,
     )
     await tick()
     await tick()
   })
-  return { host, root }
+  return { host, root, priorFetch }
 }
 
 function withdrawButton(host: HTMLElement) {
@@ -102,16 +107,19 @@ function withdrawButton(host: HTMLElement) {
   ) as HTMLButtonElement | undefined
 }
 
+const pendingSubmission = { documentId: 'doc-1', status: 'pending_approval', canCreate: true, canApprove: false }
+
 test('the submitter sees Withdraw submission and it posts the prompted reason', async (t) => {
-  script.canWithdraw = true
-  script.withdrawDocumentId = 'doc-1'
+  script.submittedByViewer = true
+  script.withdraw = pendingSubmission
   globalThis.__withdrawPrompt = 'billed the wrong vendor'
-  const { host, root } = await mount()
+  const { host, root, priorFetch } = await mount()
   t.after(async () => {
     await act(async () => {
       root.unmount()
     })
     host.remove()
+    globalThis.fetch = priorFetch
   })
   const button = withdrawButton(host)
   assert.ok(button, 'the submitter must see a Withdraw submission button')
@@ -130,38 +138,130 @@ test('the submitter sees Withdraw submission and it posts the prompted reason', 
     (globalThis.__withdrawToasts ?? []).some((toast) => toast.kind === 'success'),
     `the withdraw must toast success, got ${JSON.stringify(globalThis.__withdrawToasts)}`,
   )
+  assert.equal(withdrawButton(host), undefined, 'the refreshed draft must hide withdrawal before its drawer props refresh')
 })
 
-test('no Withdraw submission when the viewer may not withdraw', async (t) => {
-  script.canWithdraw = false
-  script.withdrawDocumentId = 'doc-1'
-  const { host, root } = await mount()
+test('an approver who did not submit may withdraw through the approve grant', async (t) => {
+  script.submittedByViewer = false
+  script.withdraw = { ...pendingSubmission, canCreate: false, canApprove: true }
+  const { host, root, priorFetch } = await mount()
   t.after(async () => {
     await act(async () => {
       root.unmount()
     })
     host.remove()
+    globalThis.fetch = priorFetch
+  })
+  assert.ok(withdrawButton(host), 'an approver must see Withdraw submission for a colleague submission')
+})
+
+test('no Withdraw submission for a viewer who neither submitted nor holds the approve grant', async (t) => {
+  script.submittedByViewer = false
+  script.withdraw = { ...pendingSubmission, canCreate: true, canApprove: false }
+  const { host, root, priorFetch } = await mount()
+  t.after(async () => {
+    await act(async () => {
+      root.unmount()
+    })
+    host.remove()
+    globalThis.fetch = priorFetch
   })
   assert.equal(
     withdrawButton(host),
     undefined,
-    'a viewer who may not withdraw must never see the button',
+    'a create-only colleague must never see a button the engine would refuse',
   )
 })
 
-test('no Withdraw submission without a document id', async (t) => {
-  script.canWithdraw = true
-  script.withdrawDocumentId = undefined
-  const { host, root } = await mount()
+test('no Withdraw submission once the document is no longer pending approval', async (t) => {
+  script.submittedByViewer = true
+  script.withdraw = { ...pendingSubmission, status: 'approved' }
+  const { host, root, priorFetch } = await mount()
   t.after(async () => {
     await act(async () => {
       root.unmount()
     })
     host.remove()
+    globalThis.fetch = priorFetch
+  })
+  assert.equal(withdrawButton(host), undefined, 'a decided submission must not offer a recall')
+})
+
+test('no Withdraw submission without a withdraw surface', async (t) => {
+  script.submittedByViewer = true
+  script.withdraw = undefined
+  const { host, root, priorFetch } = await mount()
+  t.after(async () => {
+    await act(async () => {
+      root.unmount()
+    })
+    host.remove()
+    globalThis.fetch = priorFetch
   })
   assert.equal(
     withdrawButton(host),
     undefined,
     'surfaces without a document withdraw path must stay quiet',
   )
+})
+
+test('a pending submitter may recall even when no live approval gate remains', async (t) => {
+  script.submittedByViewer = true
+  script.withdraw = pendingSubmission
+  const { host, root, priorFetch } = await mount({ noLiveGate: true })
+  t.after(async () => {
+    await act(async () => root.unmount())
+    host.remove()
+    globalThis.fetch = priorFetch
+  })
+  assert.ok(withdrawButton(host), 'the document submission owns recall authority, independently of live gates')
+})
+
+for (const failure of [
+  { status: 403, body: JSON.stringify({ error: 'only the submitter or an approver withdraws this estimate' }), expected: /only the submitter or an approver/ },
+  { status: 502, body: '<html>Bad gateway</html>', expected: /status 502/ },
+]) {
+  test(`withdraw refusal preserves the server cause for HTTP ${failure.status}`, async (t) => {
+    script.submittedByViewer = true
+    script.withdraw = pendingSubmission
+    globalThis.__withdrawPrompt = 'customer requested a revised estimate'
+    const { host, root, priorFetch } = await mount({ failure })
+    t.after(async () => {
+      await act(async () => root.unmount())
+      host.remove()
+      globalThis.fetch = priorFetch
+    })
+    const button = withdrawButton(host)
+    assert.ok(button)
+    await act(async () => {
+      button.click()
+      await tick()
+      await tick()
+    })
+    const toasts = globalThis.__withdrawToasts ?? []
+    assert.equal(toasts.some((toast) => toast.kind === 'success'), false)
+    assert.match(toasts.find((toast) => toast.kind === 'error')?.message ?? '', failure.expected)
+    assert.ok(withdrawButton(host), 'a refused withdrawal must keep the pending submission available')
+  })
+}
+
+test('cancelling the withdrawal reason keeps the submission pending without a write', async (t) => {
+  script.submittedByViewer = true
+  script.withdraw = pendingSubmission
+  globalThis.__withdrawPrompt = null
+  const { host, root, priorFetch } = await mount()
+  t.after(async () => {
+    await act(async () => root.unmount())
+    host.remove()
+    globalThis.fetch = priorFetch
+  })
+  const button = withdrawButton(host)
+  assert.ok(button)
+  await act(async () => {
+    button.click()
+    await tick()
+  })
+  assert.deepEqual(script.posts, [])
+  assert.deepEqual(globalThis.__withdrawToasts, [])
+  assert.ok(withdrawButton(host))
 })

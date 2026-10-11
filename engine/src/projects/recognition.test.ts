@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { groupLaborPostings, type LaborPostingSourceRow } from "./recognition.ts";
+import { groupLaborPostings, laborPostingLines, type LaborPostingSourceRow } from "./recognition.ts";
 
 test("labor postings never mix subsidiaries and remain balanced by group", () => {
   const rows: LaborPostingSourceRow[] = [
@@ -64,4 +64,20 @@ test("a week with no costed entries at all produces no postings", () => {
     { id: "a", project_id: "p1", hours: "8", cost_rate: null as unknown as string, worked_on: "2026-07-10", subsidiary_id: null, cost_rate_currency: "CAD" },
   ]);
   assert.deepEqual(groups, []);
+});
+
+test("an amended week's offset and re-coded time post a balanced reclass with no zero line", () => {
+  const accounts = { laborWip: "wip", laborClearing: "clearing" };
+  const reclass = laborPostingLines({
+    projectCosts: [{ projectId: "lot-15", amount: "-1947.1140" }, { projectId: "lot-12", amount: "1947.1140" }],
+    total: "0.0000",
+  }, accounts);
+  assert.deepEqual(reclass.map((line) => [line.accountId, line.projectId ?? null, line.amount]), [
+    ["wip", "lot-15", "-1947.1140"],
+    ["wip", "lot-12", "1947.1140"],
+  ]);
+  assert.equal(laborPostingLines({ projectCosts: [{ projectId: "lot-15", amount: "0.0000" }], total: "0.0000" }, accounts).length, 0,
+    "a group netting to nothing posts nothing");
+  const ordinary = laborPostingLines({ projectCosts: [{ projectId: "lot-12", amount: "100" }], total: "100" }, accounts);
+  assert.deepEqual(ordinary.map((line) => [line.accountId, line.amount]), [["wip", "100"], ["clearing", "-100.0000"]]);
 });

@@ -51,6 +51,7 @@
     "process": "Exécution de procédé"
   },
   "fields": {
+    "correctedOn": "Date corrigée",
     "number": "Numéro",
     "code": "Code de référence",
     "name": "Nom",
@@ -171,7 +172,9 @@
     "campaignReference": "Référence de campagne",
     "inputQuantity": "Quantité entrante",
     "outputQuantity": "Quantité sortante",
-    "difference": "Écart non rapproché"
+    "difference": "Écart",
+    "measuredOutputQuantity": "Sortie mesurée",
+    "differenceKind": "Type d'écart"
   },
   "actions": {
     "create": "Créer",
@@ -198,6 +201,7 @@
     "resumeOperation": "Reprendre l’opération",
     "pauseOperation": "Suspendre l’opération",
     "correctOperationStart": "Corriger la date de début",
+    "correctCompletionDate": "Corriger la date d’achèvement",
     "completeOperation": "Terminer l’opération",
     "waive": "Dispenser le solde matière",
     "endRate": "Terminer le taux",
@@ -280,6 +284,7 @@
   "mrpNote": "MRP propose l’approvisionnement depuis les données enregistrées. La capacité est indicative ; la surcharge ne décale pas les dates.",
   "issueNote": "Choisir composant et quantité exacte. Les articles suivis exigent lot ou série. La commande vérifie disponibilité et blocages à la sortie.",
   "outputNote": "Cette réception ajoute des produits finis au stock. Saisir quantité reçue maintenant, traçabilité et valorisation des sous-produits requise.",
+  "completionDateNote": "Déplace la réception des produits finis et son écriture d’achèvement au jour où la production s’est terminée. Les écritures d’origine sont annulées à leur propre date et repostées au jour corrigé avec les mêmes quantités, coûts et comptes. La correction est refusée si un mouvement ultérieur du même article changerait son coût, si le jour précède des opérations ou des matières enregistrées, ou si une période est clôturée.",
   "doneNote": "Terminer clôture l’exécution et solde l’encours. Tolérance, mesures et matières sont contrôlées. Une quantité finie inférieure à la commande exige un motif, même avec rebut.",
   "normalScrapNote": "Enregistrer la perte normale avant la première réception finie. Le coût reste dans l’encours pour les bons produits ; aucun stock n’est éliminé. Perte anormale ou après réception : bloquer l’ordre pour examen de valorisation.",
   "activateNote": "Soumettez ce brouillon à approbation. L’application de l’événement approuvé contrôle les dates et clôt la période précédente. Les ordres lancés conservent leurs versions.",
@@ -608,10 +613,15 @@
     "details": "Détails facultatifs",
     "balance": "Bilan matière enregistré",
     "windowNote": "Délimitez une exécution continue avec les dates de début et de fin prévues et une quantité attendue. Les réceptions partielles enregistrent chaque sortie. Une référence de campagne regroupe les exécutions dans la recherche ; elle ne mutualise pas les coûts et ne remplace pas la recette approuvée de chaque exécution.",
-    "balanceNote": "Les quantités sont regroupées par unité de base actuelle du stock. Les unités différentes restent séparées. L’écart correspond aux entrées enregistrées moins toutes les sorties bonnes et secondaires, sans calcul automatique de rebut ni de masse physique. Les mouvements annulés sont exclus.",
+    "balanceNote": "Les quantités sont regroupées par unité de base de stock ; les unités différentes restent séparées. L'entrée est la consommation enregistrée. La sortie correspond aux réceptions enregistrées plus la sortie mesurée de la dernière opération mesurée non encore reçue, si bien qu'un poids mesuré compte avant sa réception sans être compté deux fois ensuite. L'écart est l'entrée moins cette sortie ; avec une sortie mesurée, un écart positif est la perte mesurée. Les mouvements annulés sont exclus.",
     "empty": "Aucun mouvement matière enregistré",
     "emptyNote": "Consommez des composants et réceptionnez la production pour consulter le bilan.",
     "carryover": "Transférer la matière à l’exécution suivante",
-    "carryoverNote": "Réceptionnez la matière intermédiaire conservée comme un article de stock traçable, puis consommez cet article et son lot ou numéro de série dans l’exécution suivante. Les blocages qualité restent applicables. La généalogie suit les réceptions et consommations réelles ; elle ne suppose aucun encours non enregistré ni transfert financier automatique."
+    "carryoverNote": "Réceptionnez la matière intermédiaire conservée comme un article de stock traçable, puis consommez cet article et son lot ou numéro de série dans l’exécution suivante. Les blocages qualité restent applicables. La généalogie suit les réceptions et consommations réelles ; elle ne suppose aucun encours non enregistré ni transfert financier automatique.",
+    "differenceKind": {
+      "balanced": "Équilibré",
+      "measured_loss": "Perte mesurée",
+      "unreconciled": "Non rapproché"
+    }
   }
 }

@@ -34,7 +34,9 @@ registerHooks({
     if (specifier === "next-intl/server") return { shortCircuit: true, format: "module", url: "mock:setup-intl" };
     const entityRoute = context.parentURL?.includes("%5Bentity%5D")
       ?? context.parentURL?.includes("[entity]");
-    if (specifier === "../../../../../lib/authz" && entityRoute) {
+    // The route factory loads the session boundary through the @/ alias.
+    if ((specifier === "../../../../../lib/authz" && entityRoute)
+      || (specifier === "@/lib/authz" && context.parentURL?.includes("/lib/api/route"))) {
       return { url: "mock:authz", shortCircuit: true };
     }
     return nextResolve(specifier, context);
@@ -58,7 +60,7 @@ const { SETUP_ENTITY_BY_KEY, SETUP_PROJECTS_OR_MANUFACTURING_REMEDY, resolveSetu
 const { createSetupRecord, preflightSetupWrite, updateSetupRecord } = await import(
   "../../../../../lib/setup/write.ts"
 );
-const { db } = await import("@openbooks/engine/platform/db");
+const { db, withBypass} = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(
   "@openbooks/engine/testing/fixtures"
 );
@@ -87,7 +89,7 @@ function deleteRequest(id: string): Request {
 const call = () => ({ params: Promise.resolve({ entity: "overhead-rates" }) });
 
 async function setFeatures(orgId: string, features: Record<string, boolean>) {
-  await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}', coalesce(settings->'features', '{}'::jsonb) || ${JSON.stringify(features)}::jsonb, true) where id = ${orgId}`);
+  await withBypass(() => db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}', coalesce(settings->'features', '{}'::jsonb) || ${JSON.stringify(features)}::jsonb, true) where id = ${orgId}`));
 }
 
 async function readRate(orgId: string, id: string): Promise<Record<string, unknown>> {
@@ -101,8 +103,8 @@ async function countRates(orgId: string): Promise<number> {
 }
 
 test("manufacturing-only admits standard basis cards and refuses project cards by name", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const actorId = await createScratchUser(org.orgId, "Overhead Mfg Admin", "admin");
+  const org = await withBypass(() => createScratchOrg());
+  const actorId = await withBypass(() => createScratchUser(org.orgId, "Overhead Mfg Admin", "admin"));
   try {
     authenticate(org.orgId, actorId);
     await setFeatures(org.orgId, { projects: false, manufacturing: true, inventory: true });
@@ -145,9 +147,9 @@ test("manufacturing-only admits standard basis cards and refuses project cards b
     // An allowed edit stores through the same path, and deletes never run the
     // mode gate: preserved history stays manageable.
     const extra = await POST(postRequest({
-      method: "standard", rateKind: "per_unit", ratePercent: "3", effectiveFrom: "2027-01-01",
+      category: "Packaging", method: "standard", rateKind: "per_unit", ratePercent: "3", effectiveFrom: "2027-01-01",
     }), call());
-    assert.equal(extra.status, 200);
+    assert.equal(extra.status, 200, await extra.clone().text());
     const extraId = ((await extra.json()) as { id: string }).id;
     assert.equal((await PATCH(patchRequest({ id: extraId, ratePercent: "3.5" }), call())).status, 200);
     assert.equal(Number((await readRate(org.orgId, extraId)).ratePercent), 3.5);
@@ -159,8 +161,8 @@ test("manufacturing-only admits standard basis cards and refuses project cards b
 });
 
 test("projects-only preserves existing project behavior byte-for-byte", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const actorId = await createScratchUser(org.orgId, "Overhead Projects Admin", "admin");
+  const org = await withBypass(() => createScratchOrg());
+  const actorId = await withBypass(() => createScratchUser(org.orgId, "Overhead Projects Admin", "admin"));
   try {
     authenticate(org.orgId, actorId);
     await setFeatures(org.orgId, { projects: true, manufacturing: false });
@@ -215,8 +217,8 @@ test("projects-only preserves existing project behavior byte-for-byte", { skip: 
 });
 
 test("both-on serves one card to both consumers without reinterpretation", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const actorId = await createScratchUser(org.orgId, "Overhead Both Admin", "admin");
+  const org = await withBypass(() => createScratchOrg());
+  const actorId = await withBypass(() => createScratchUser(org.orgId, "Overhead Both Admin", "admin"));
   try {
     authenticate(org.orgId, actorId);
     await setFeatures(org.orgId, { projects: true, manufacturing: true, inventory: true });
@@ -243,8 +245,8 @@ test("both-on serves one card to both consumers without reinterpretation", { ski
 });
 
 test("neither-on fails closed with the exact remedy and preserves history", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const actorId = await createScratchUser(org.orgId, "Overhead Off Admin", "admin");
+  const org = await withBypass(() => createScratchOrg());
+  const actorId = await withBypass(() => createScratchUser(org.orgId, "Overhead Off Admin", "admin"));
   try {
     authenticate(org.orgId, actorId);
     await setFeatures(org.orgId, { projects: true, manufacturing: false });
@@ -280,8 +282,8 @@ test("neither-on fails closed with the exact remedy and preserves history", { sk
 });
 
 test("manufacturing resolves through inventory, never around it", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const actorId = await createScratchUser(org.orgId, "Overhead Inventory Admin", "admin");
+  const org = await withBypass(() => createScratchOrg());
+  const actorId = await withBypass(() => createScratchUser(org.orgId, "Overhead Inventory Admin", "admin"));
   try {
     authenticate(org.orgId, actorId);
     await setFeatures(org.orgId, { projects: false, manufacturing: true, inventory: false });
@@ -300,8 +302,8 @@ test("manufacturing resolves through inventory, never around it", { skip: !DB },
 });
 
 test("categories stack, overlaps refuse, and audit stamps the actor", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const actorId = await createScratchUser(org.orgId, "Overhead Audit Admin", "admin");
+  const org = await withBypass(() => createScratchOrg());
+  const actorId = await withBypass(() => createScratchUser(org.orgId, "Overhead Audit Admin", "admin"));
   try {
     authenticate(org.orgId, actorId);
     await setFeatures(org.orgId, { projects: true, manufacturing: false });

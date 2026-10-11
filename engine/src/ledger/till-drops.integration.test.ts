@@ -142,3 +142,50 @@ test("till drops fence the till and the destination", { skip: !DB }, async () =>
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }
 });
+
+test("a drop's cash cutoff ends its window, and a late drop behind a later one needs a note", { skip: !DB }, async () => {
+  const { org, actorId, tillId } = await setup();
+  try {
+    await draftSale(org, tillId, "2026-07-10", "120.0000");
+    await draftSale(org, tillId, "2026-07-11", "80.0000");
+    // Sold on the drop day itself, after the counted cash left the till.
+    await draftSale(org, tillId, "2026-07-12", "45.0000");
+    const covering = await recordTillDrop(org.orgId, actorId, {
+      tillAccountId: tillId, amount: "200.0000", date: "2026-07-12", coversThrough: "2026-07-11",
+      bankAccountId: org.accounts.bank, slipNumber: "SLIP-C1",
+    }, { key: randomUUID() });
+    assert.deepEqual(
+      { through: covering.window.through, sales: covering.window.salesCount, tendered: covering.window.tendered, difference: covering.window.difference },
+      { through: "2026-07-11", sales: 2, tendered: "200.0000", difference: "0.0000" },
+      "the drop day's own sale stays out of the window its cash cutoff closes",
+    );
+    const next = await readTillDropWindow(org.orgId, tillId, "2026-07-13");
+    assert.deepEqual(
+      { after: next.after, sales: next.salesCount, tendered: next.tendered, dropped: next.dropped },
+      { after: "2026-07-11", sales: 1, tendered: "45.0000", dropped: "0.0000" },
+      "the next window starts after the cutoff and carries the drop day's sale",
+    );
+
+    await assert.rejects(
+      recordTillDrop(org.orgId, actorId, {
+        tillAccountId: tillId, amount: "120.0000", date: "2026-07-10", bankAccountId: org.accounts.bank, slipNumber: "SLIP-LATE",
+      }, { key: randomUUID() }),
+      (error: unknown) => error instanceof CashDepositError && /later drop from this till already covers sales through 2026-07-11/.test(error.message),
+    );
+    const late = await recordTillDrop(org.orgId, actorId, {
+      tillAccountId: tillId, amount: "120.0000", date: "2026-07-10", bankAccountId: org.accounts.bank, slipNumber: "SLIP-LATE",
+      reason: "Slip found after the later drop was entered",
+    }, { key: randomUUID() });
+    assert.equal(late.posted, true, late.postRefusal ?? "");
+
+    await assert.rejects(
+      recordTillDrop(org.orgId, actorId, {
+        tillAccountId: tillId, amount: "10.0000", date: "2026-07-12", coversThrough: "2026-07-13",
+        bankAccountId: org.accounts.bank, slipNumber: "SLIP-FUTURE",
+      }, { key: randomUUID() }),
+      (error: unknown) => error instanceof CashDepositError && /on or before the drop date/.test(error.message),
+    );
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+  }
+});

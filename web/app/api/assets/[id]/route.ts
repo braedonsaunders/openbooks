@@ -8,7 +8,12 @@ import {
   documentRevisionSql,
   isDocumentRevisionToken,
 } from "@openbooks/engine/records/revision";
-import { buildAllSchedulesWithRunner } from "@openbooks/engine/assets/depreciation";
+import {
+  ASSET_PLACEMENT_FIELD_LABELS,
+  assetPlacementShortfall,
+  buildAllSchedulesWithRunner,
+  type AssetPlacementField,
+} from "@openbooks/engine/assets/depreciation";
 import {
   FixedAssetEquipmentLinkConflict,
   refuseFixedAssetRehomeWithEquipment,
@@ -90,6 +95,7 @@ export const runtime = "nodejs";
 interface ExistingAsset extends Record<string, unknown> {
   id: string;
   subsidiary_id: string;
+  category_id: string;
   status: string;
   custom: Record<string, unknown> | null;
   acquisition_cost: string;
@@ -116,6 +122,23 @@ class AssetDeleteNotFoundError extends Error {}
 
 function bad(error: string) {
   return NextResponse.json({ error }, { status: 422 });
+}
+
+/**
+ * Placement refusal naming every field still missing. `error` is the English
+ * sentence API clients read; `code` and `missing` let the drawer translate
+ * the field names.
+ */
+function placementIncomplete(missing: AssetPlacementField[]) {
+  const names = missing.map((field) => ASSET_PLACEMENT_FIELD_LABELS[field]).join(", ");
+  return NextResponse.json(
+    {
+      error: `Set these required fields: ${names}.`,
+      code: "asset_placement_incomplete",
+      missing,
+    },
+    { status: 422 },
+  );
 }
 
 /**
@@ -271,7 +294,7 @@ export const PATCH = defineRoute({
       return notFound("record");
 
     const existRes = await db.execute<ExistingAsset>(sql`
-    select id, subsidiary_id, status, custom, acquisition_cost, salvage_value, in_service_on,
+    select id, subsidiary_id, category_id, status, custom, acquisition_cost, salvage_value, in_service_on,
            depreciation_method, depreciation_method_id, useful_life_months,
            depreciation_rate_percent, depreciation_units_total, depreciation_convention,
            opening_accumulated_depreciation, opening_accumulated_as_of
@@ -473,54 +496,12 @@ export const PATCH = defineRoute({
     }
 
     // -- status transition (draft ↔ in_service) -----------------------------
-    // Placing an asset in service requires an in-service date and a useful life
-    // so a schedule can be built.
+    // Placement readiness is checked on the effective values below, once the
+    // whole save is known, so the refusal names exactly the missing fields.
     let status: string | undefined;
     if (body.status !== undefined) {
       if (!["draft", "in_service"].includes(body.status))
         return bad("Unsupported status transition");
-      if (body.status === "in_service") {
-        const effInService =
-          body.inServiceOn !== undefined
-            ? strOrNull(body.inServiceOn)
-            : (
-                await db.execute(
-                  sql`select in_service_on from fixed_assets where id = ${id} and org_id = ${user.orgId}`,
-                )
-              ).rows[0]?.in_service_on;
-        const effMethod =
-          method !== undefined ? method : existing.depreciation_method;
-        const effFormula =
-          depreciationMethodId !== undefined
-            ? depreciationMethodId
-            : existing.depreciation_method_id;
-        const effLife =
-          lifeMonths !== undefined ? lifeMonths : existing.useful_life_months;
-        const effUnits =
-          unitsTotal !== undefined
-            ? unitsTotal
-            : existing.depreciation_units_total;
-        if (!effInService)
-          return bad(
-            "Set an in-service date before placing the asset in service",
-          );
-        if (
-          (effFormula ||
-            (effMethod !== "manual" && effMethod !== "units_of_production")) &&
-          (!effLife || effLife <= 0)
-        ) {
-          return bad("Set a useful life before placing the asset in service");
-        }
-        if (
-          !effFormula &&
-          effMethod === "units_of_production" &&
-          (!effUnits || cmp(effUnits, "0") <= 0)
-        ) {
-          return bad(
-            "Set expected lifetime units before placing the asset in service",
-          );
-        }
-      }
       status = body.status;
     }
 
@@ -564,27 +545,24 @@ export const PATCH = defineRoute({
       throw error;
     }
     if (effectiveStatus === "in_service") {
-      if (!effectiveInService)
-        return bad(
-          "Set an in-service date before placing the asset in service",
-        );
-      if (
-        (effectiveFormula ||
-          (effectiveMethod !== "manual" &&
-            effectiveMethod !== "units_of_production")) &&
-        (!effectiveLife || effectiveLife <= 0)
-      ) {
-        return bad("Set a useful life before placing the asset in service");
-      }
-      if (
-        !effectiveFormula &&
-        effectiveMethod === "units_of_production" &&
-        (!effectiveUnits || cmp(effectiveUnits, "0") <= 0)
-      ) {
-        return bad(
-          "Set expected lifetime units before placing the asset in service",
-        );
-      }
+      // The required-field rules are the schedule build's (engine
+      // placement-readiness), so a refusal names the fields that are missing.
+      const missingFields = await assetPlacementShortfall(
+        db,
+        user.orgId,
+        categoryId ?? existing.category_id,
+        {
+          acquisitionCost: effectiveCost,
+          inServiceOn: effectiveInService,
+          depreciationMethod: effectiveMethod,
+          depreciationMethodId: effectiveFormula,
+          usefulLifeMonths: effectiveLife,
+          depreciationUnitsTotal: effectiveUnits,
+          openingAccumulated: effectiveOpening,
+          openingAsOf: effectiveOpeningAsOf,
+        },
+      );
+      if (missingFields.length > 0) return placementIncomplete(missingFields);
     }
 
     // The request fields that participate in computing the schedule, compared

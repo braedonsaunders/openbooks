@@ -96,7 +96,7 @@ test(
         { created: preview.created, failed: preview.failed },
         { created: 1, failed: 1 },
       )
-      assert.match(preview.errors[0]?.message ?? '', /DUP-1.*already exists/)
+      assert.match(preview.errors[0]?.message ?? '', /DUP-1.*appears more than once in this file/)
       assert.equal(preview.errors[0]?.row, 2)
 
       const commit = await writeBills(fx, 'vendor_bill', rows, false)

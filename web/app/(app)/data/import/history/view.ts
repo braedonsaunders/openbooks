@@ -48,6 +48,7 @@ type JobRow = {
   created_at: string
   actor_name: string | null
   transfer_id: string | null
+  failure_message: string | null
 }
 
 export interface ImportHistoryRow {
@@ -55,6 +56,7 @@ export interface ImportHistoryRow {
   when: string
   resourceLabel: string
   fileName: string | null
+  failureMessage: string | null
   format: string
   status: string
   statusVariant: 'outline' | 'success' | 'secondary'
@@ -119,7 +121,8 @@ export async function loadImportHistory(sp: Record<string, string | string[] | u
   const result = await db.execute<JobRow>(sql`
     select j.id, j.resource_key, j.resource_label, j.format, j.file_name, j.status,
            j.total_rows, j.created_count, j.updated_count, j.failed_count, j.created_at,
-           u.name as actor_name, d.id as transfer_id
+           u.name as actor_name, d.id as transfer_id,
+           case when j.status = 'failed' then d.error else null end as failure_message
       from import_jobs j
       left join users u on u.id = j.created_by
       left join data_transfer_jobs d on d.org_id=j.org_id and d.id=j.id and d.actor_id=${authz.user.id}
@@ -153,6 +156,7 @@ export async function loadImportHistory(sp: Record<string, string | string[] | u
       when: dateTime(j.created_at, locale),
       resourceLabel: j.resource_label ?? j.resource_key,
       fileName: j.file_name,
+      failureMessage: j.failure_message,
       format: j.format,
       status:
         j.status === 'committed'
@@ -208,6 +212,7 @@ export function importHistorySpec(): PageSpec {
             widgetCell('resource-cell', {
               label: item('resourceLabel'),
               fileName: item('fileName'),
+              failureMessage: item('failureMessage'),
               href: item('href'),
             }),
             { sort: 'resource' },

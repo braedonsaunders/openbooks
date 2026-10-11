@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { stubModules } from "../../../testing/stub-modules";
+import { stubModules, withPlatformDbTestSurface } from "../../../testing/stub-modules";
 import test from "node:test";
 
 // Canonical unsaved-create contract for fixed assets (exemplar: POST
@@ -167,6 +167,7 @@ const mockDb = `
     if (orgId !== '${ORG_ID}') throw new Error('Asset fixture transaction requires its declared organization')
     return db.transaction(work)
   }
+
   export async function withOrgContext(orgId, work) {
     if (orgId !== '${ORG_ID}') throw new Error('Asset fixture context requires its declared organization')
     return await work()
@@ -178,8 +179,8 @@ stubModules({
   intl: false,
   authz: false,
   features: false,
-  database: `${mockDb}
-     export async function withBypassContext(work) { return work() }`,
+  database: withPlatformDbTestSurface(`${mockDb}
+     export async function withBypassContext(work) { return work() }`),
   extra: {
     "../../../lib/feature-gates": `const state = globalThis[Symbol.for('openbooks.asset-create-route-test')]
      export async function guardFeaturePermission() {

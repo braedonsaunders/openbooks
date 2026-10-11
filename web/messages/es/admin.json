@@ -971,6 +971,14 @@
         "cashOverShort": {
           "label": "Diferencia de caja",
           "hint": "Efectivo contado de más o de menos respecto al total esperado"
+        },
+        "badDebtExpense": {
+          "label": "Gasto por cuentas incobrables",
+          "hint": "Se debita al dar de baja un saldo de factura incobrable, salvo que se configure una cuenta de estimación"
+        },
+        "allowanceForDoubtfulAccounts": {
+          "label": "Estimación para cuentas incobrables",
+          "hint": "Cuenta correctora de cuentas por cobrar; las bajas la debitan en lugar del gasto por cuentas incobrables cuando está configurada"
         }
       },
       "defaultsNote": "Estos son los valores predeterminados de toda la empresa. Cada filial puede reemplazarlos en su propia ficha; los reemplazos vacíos vuelven a estos.",
@@ -3004,6 +3012,12 @@
         "publishTitle": "Publicar en la tarjeta de tasas",
         "publishHint": "Fija las tasas calculadas del motor en filas con fecha de vigencia de la tarjeta de tasas. Los proyectos usan estas tasas publicadas hasta la próxima publicación — los períodos anteriores conservan sus tasas originales.",
         "publishConfirm": "Publicar",
+        "zeroOverStandard": {
+          "title": "¿Reemplazar las tarifas estándar por cero?",
+          "intro": "Publicar escribe una tarifa cero sobre una tarifa estándar distinta de cero. Los trabajos costeados con estos departamentos desde la fecha de inicio no tendrían gastos generales del estándar. Confirma solo si el estándar ya no se usa.",
+          "line": "{department}: el estándar de {standard} por hora se reemplaza por {published} por hora.",
+          "confirm": "Publicar tarifas en cero"
+        },
         "publishDone": "Tasas publicadas en la tarjeta",
         "cancel": "Cancelar",
         "wizardTitle": "Configurar gastos generales de proyecto",
@@ -5383,6 +5397,40 @@
         "newWorkerComp": "Compensación (WSIB)",
         "workerCompHint": "La tarifa proviene del grupo de compensación asignado a cada empleado (Configuración → Personal → Grupos de compensación; se asigna en la ficha del empleado). El valor aquí es solo el % de respaldo cuando un empleado no tiene grupo."
       },
+      "catchUp": {
+        "title": "Tiempo aprobado sin costear",
+        "hint": "El tiempo aprobado antes de activar la contabilización, o antes de asignar las cuentas de control de mano de obra, no tiene costo laboral en el libro mayor. Cada asiento se fecha en el último día que cubre. Las entradas de periodos cerrados se omiten y permanecen sin contabilizar.",
+        "through": "Aprobado hasta",
+        "reason": "Motivo para la pista de auditoría",
+        "post": "Contabilizar costo laboral",
+        "month": "Mes",
+        "entries": "Entradas",
+        "hours": "Horas",
+        "cost": "Costo estándar",
+        "period": "Periodo",
+        "total": "Suma total",
+        "openSetup": "Abrir configuración",
+        "nothingPosted": "Nada que contabilizar. El tiempo aprobado ya está costeado.",
+        "postedResult": "Entradas contabilizadas: {count}. Costo estándar contabilizado: {cost}.",
+        "skippedResult": "Entradas sin contabilizar: {count}.",
+        "states": {
+          "open": "Abierto",
+          "closed": "Cerrado",
+          "no_period": "Sin periodo",
+          "partial": "Parcialmente cerrado"
+        },
+        "skipRemedy": {
+          "closed": "Reabra el periodo desde Cierre, o déjelas así.",
+          "no_period": "Cree el periodo contable en Cierre, o déjelas así."
+        },
+        "blockers": {
+          "projects_disabled": "Proyectos está desactivado. Actívelo en Configuración de la empresa → Funciones antes de contabilizar el costo laboral.",
+          "mode_off": "El costeo laboral no contabiliza el costo estándar en los trabajos. Elija «Contabilizar costo estándar en trabajos» arriba, guarde y luego contabilice el ajuste.",
+          "accounts_unmapped": "Asigne arriba las cuentas de WIP de mano de obra y de compensación de mano de obra, y guarde.",
+          "no_posting_book": "No hay un libro mayor principal activo que contabilice en el libro mayor. Configure uno antes de contabilizar.",
+          "no_root_subsidiary": "No hay una subsidiaria raíz activa configurada. Configure una antes de contabilizar."
+        }
+      },
       "posting": {
         "title": "Contabilización",
         "hint": "Con la contabilización activada, el tiempo aprobado registra DR obra en curso (por proyecto) / CR cuenta puente de mano de obra a la tarifa estándar. La nómina real liquida luego la misma cuenta; el residuo es la variación de nómina.",
@@ -5805,6 +5853,8 @@
       "shopifyName": "Shopify Payments",
       "shopifyDescription": "Importa exportaciones de desembolsos y transacciones de saldo. Reembolsos y disputas mediante la automatización anterior.",
       "shopifyChannelsNote": "Se conecta a través del espacio de Canales una vez vinculado.",
+      "squareName": "Square",
+      "squareDescription": "Importa exportaciones de pagos y de sus movimientos. Los reembolsos y las disputas se contabilizan mediante la automatización indicada arriba.",
       "errors": {
         "loadFailed": "No se pudo cargar la configuración de los proveedores de pago.",
         "saveFailed": "No se pudo guardar la configuración de los proveedores de pago.",

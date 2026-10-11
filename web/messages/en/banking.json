@@ -1,7 +1,10 @@
 {
   "types": {
     "asset_bank": "Bank",
-    "liability_card": "Card"
+    "liability_card": "Card",
+    "liability_payable": "Accounts Payable",
+    "liability_current_other": "Other Current Liabilities",
+    "liability_long_term": "Long-Term Liabilities"
   },
   "reconStatus": {
     "signed_off": "signed off",
@@ -80,7 +83,7 @@
     },
     "vitals": {
       "cash": "Total cash",
-      "cards": "Card balances",
+      "cards": "Card and credit balances",
       "unmatched": "Unmatched lines",
       "unmatchedSub": "waiting in Match",
       "allMatched": "all lines matched",
@@ -95,7 +98,7 @@
       "hint": "Balances from the posted ledger",
       "empty": "No active bank or card accounts yet. Add them in the Chart of Accounts.",
       "bankSection": "Bank accounts",
-      "cardSection": "Credit cards",
+      "cardSection": "Cards and credit lines",
       "reconciledThrough": "Reconciled through {date}",
       "neverReconciled": "Never reconciled",
       "lastStatement": "Statement {date}",
@@ -443,8 +446,8 @@
     "preview": "Preview",
     "importAction": "Import",
     "importCount": "Import {count, plural, one {# line} other {# lines}}",
-    "importedToast": "{imported, plural, one {Imported # line} other {Imported # lines}}{duplicates, plural, =0 {} one { — # duplicate skipped} other { — # duplicates skipped}}{possibleDuplicates, plural, =0 {} one { — # flagged for review} other { — # flagged for review}}",
-    "previewSummary": "{imported, plural, one {# new line} other {# new lines}}{duplicates, plural, =0 {} one { · # duplicate skipped} other { · # duplicates skipped}}{possibleDuplicates, plural, =0 {} one { · # flagged for review} other { · # flagged for review}}",
+    "importedToast": "{imported, plural, one {Imported # line} other {Imported # lines}}{duplicates, plural, =0 {} one { — # duplicate skipped} other { — # duplicates skipped}}{possibleDuplicates, plural, =0 {} one { — # possible duplicate} other { — # possible duplicates}}",
+    "previewSummary": "{imported, plural, one {# new line} other {# new lines}}{duplicates, plural, =0 {} one { · # duplicate skipped} other { · # duplicates skipped}}{possibleDuplicates, plural, =0 {} one { · # possible duplicate} other { · # possible duplicates}}",
     "format": "Format",
     "formatOfx": "OFX / QFX",
     "formatCsv": "CSV",
@@ -491,7 +494,12 @@
     "previewEmpty": "Preview found no transaction lines — check the Amount column and the Date format, then run Preview again.",
     "previewRequired": "Run Preview before Import.",
     "suggestedOpeningFrom": "Opening defaulted from the {date} closing balance — edit as needed.",
-    "openingMismatch": "Opening {supplied} differs from the {date} closing balance {expected} — check for a missing month."
+    "openingMismatch": "Opening {supplied} differs from the {date} closing balance {expected} — check for a missing month.",
+    "closingMismatch": "Opening {opening} plus the statement's lines {lines} is {expected}, not the closing {closing} — check both balances against the bank statement, or leave the closing blank if the file covers only part of it.",
+    "possibleDuplicatesNotice": "{count, plural, one {# line matches a line already on this account and is left out of the import} other {# lines match lines already on this account and are left out of the import}}.",
+    "includePossibleDuplicates": "{count, plural, one {Import this possible duplicate anyway} other {Import these # possible duplicates anyway}}",
+    "possibleDuplicateMatch": "Matches a line already on this account",
+    "onlyPossibleDuplicates": "Every parsed line is already on this account or is a possible duplicate. Include the possible duplicates below to import them."
   },
   "start": {
     "resume": "Resume reconciliation",
@@ -515,7 +523,7 @@
     "reference": "Reference #",
     "card": "Card",
     "selectCardPlaceholder": "Select card…",
-    "cardAccountHelp": "No cards on file — select the reconcilable card account to post against.",
+    "cardAccountHelp": "Select the reconcilable card account this charge posts against.",
     "noCardAccounts": "No reconcilable card accounts yet.",
     "noCardAccountsCta": "Add one in the chart of accounts",
     "toAccount": "To account",
@@ -654,7 +662,11 @@
     "openingConfirm": "Confirm opening",
     "openingConfirmedToast": "Opening {amount} confirmed",
     "openingConfirmedNote": "Opening {amount} confirmed — {reason}",
-    "openingStaleNote": "The confirmed opening no longer matches the book balance carried in — review the ledger and confirm the opening again."
+    "openingStaleNote": "The confirmed opening no longer matches the book balance carried in — review the ledger and confirm the opening again.",
+    "excludeDuplicate": "Exclude duplicate",
+    "clearDuplicate": "Mark as not a duplicate",
+    "excludeDuplicateReason": "Duplicate of the bank line dated {date} for {amount}: {description}",
+    "excludeDuplicateReasonGeneric": "Duplicate of an earlier bank line"
   },
   "sftp": {
     "title": "SFTP",
@@ -1044,7 +1056,8 @@
       "recurly": "Recurly",
       "chargebee": "Chargebee",
       "shopify_payments": "Shopify Payments",
-      "paypal": "PayPal"
+      "paypal": "PayPal",
+      "square": "Square"
     },
     "externalRef": "External ref / payout id",
     "settlementDate": "Settlement date",
@@ -1081,6 +1094,9 @@
     "paypalPayloadHint": "Paste '{\"transactions\": [{\"transaction_info\": {...}}]}' from the Transaction Search API, or paste the settlement report CSV with its header row. Name the export in External ref so the batch stays idempotent.",
     "invalidShopifyPayload": "Shopify payload must be one JSON object with payout and transactions.",
     "csvUpload": "Upload CSV",
+    "squarePayloadLabel": "Payout and payout entries (JSON)",
+    "squarePayloadHint": "One JSON object with payout and entries: '{\"payout\": {\"id\", \"amount_money\"}, \"entries\": [{\"id\", \"type\", \"gross_amount_money\", \"fee_amount_money\", \"net_amount_money\"}]}'. Amounts are integer minor units. Enter the Square payout id as the external ref.",
+    "invalidSquarePayload": "Square payload must be one JSON object with payout and entries.",
     "fxTitle": "Foreign currency",
     "fxNone": "Same currency throughout",
     "fxSourceCurrency": "Charge currency",
@@ -1313,5 +1329,63 @@
   },
   "payoutAssistance": {
     "chipLabel": "Review proposal"
+  },
+  "reconcileEvidence": {
+    "tabs": {
+      "workspace": "Reconciliation",
+      "statements": "Supporting statements",
+      "history": "History"
+    },
+    "statements": {
+      "title": "Supporting statements",
+      "windowAfter": "Statement lines posted after {start} through {end} support this reconciliation.",
+      "windowThrough": "Statement lines posted through {end} support this reconciliation.",
+      "empty": "No bank statement supports this reconciliation's balance.",
+      "sourceEmpty": "This reconciliation stands on source evidence. No bank statement was imported.",
+      "columns": {
+        "date": "Statement date",
+        "source": "Source",
+        "imported": "Imported",
+        "opening": "Opening",
+        "closing": "Closing",
+        "lines": "Lines in period",
+        "matched": "Matched",
+        "excluded": "Excluded",
+        "unmatched": "Unmatched",
+        "total": "Period total",
+        "open": "Open statement"
+      },
+      "excludedBadge": "Excluded",
+      "reason": "Reason: {reason}",
+      "duplicateOf": "Possible duplicate of {date} · {amount}",
+      "excludedByAt": "Excluded {at} by {name}",
+      "excludedAt": "Excluded {at}"
+    },
+    "history": {
+      "title": "History",
+      "description": "Sign-offs, withdrawals, opening confirmations and adjustments for this reconciliation, plus discarded sessions on the same bank account.",
+      "empty": "No sign-off, withdrawal, adjustment or discard is recorded for this bank account.",
+      "columns": {
+        "when": "When",
+        "event": "Event",
+        "by": "By",
+        "details": "Details"
+      },
+      "events": {
+        "sign_off": "Signed off",
+        "withdraw_sign_off": "Sign-off withdrawn",
+        "discard": "Session discarded",
+        "confirm_opening": "Opening confirmed",
+        "session_adjustment": "Session adjusted"
+      },
+      "signOffStatement": "Statement balance {balance} · through {date} · {matched} journal lines stamped · {excluded} statement lines excluded",
+      "signOffSource": "Source evidence · balance {balance} · through {date} · {matched} cleared journal lines",
+      "withdrawReason": "Reason: {reason}",
+      "withdrawPrior": "Prior signed balance {balance} · signed {at} by {by}",
+      "withdrawReleased": "Journal lines released: {count} · session now {status}",
+      "discardDetail": "Through {date} · balance {balance} · {matches} matches and {lines} statement lines released",
+      "confirmDetail": "Opening {amount} from {date} · reason: {reason}",
+      "adjustDetail": "Through {beforeDate} → {afterDate} · balance {beforeBalance} → {afterBalance}"
+    }
   }
 }

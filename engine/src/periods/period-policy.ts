@@ -1,7 +1,59 @@
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import type { SqlExecutor } from "../platform/db.ts";
 
 export class CloseError extends Error {}
+
+/**
+ * Canonical display label for an accounting period.
+ *
+ * Stored period names are free text: generated calendars write this label, but
+ * periods created by an earlier seed or a custom calendar may carry other
+ * names. Lists therefore label every period from its fiscal year and period
+ * number and show the stored name alongside when it differs, so one fiscal
+ * calendar reads in one format. Stored names are never rewritten.
+ */
+export interface PeriodLabelInput {
+  fiscalYear: number;
+  periodNumber: number;
+  adjustment: boolean;
+}
+
+/** `P05 FY2026` for a regular period, `FY2026 adjustment` for the adjustment period. */
+export function canonicalPeriodLabel(input: PeriodLabelInput): string {
+  return input.adjustment
+    ? `FY${input.fiscalYear} adjustment`
+    : `P${String(input.periodNumber).padStart(2, "0")} FY${input.fiscalYear}`;
+}
+
+export interface PeriodDisplayName {
+  /** The canonical label every period in the list shares. */
+  label: string;
+  /** The stored name when it differs from the canonical label, else null. */
+  storedName: string | null;
+}
+
+export function periodDisplayName(input: PeriodLabelInput & { name: string }): PeriodDisplayName {
+  const label = canonicalPeriodLabel(input);
+  const stored = input.name.trim();
+  return { label, storedName: stored && stored !== label ? stored : null };
+}
+
+/**
+ * SQL form of canonicalPeriodLabel over an `accounting_periods` row aliased
+ * `p`, so a label search matches what the list shows as well as the stored name.
+ */
+export function canonicalPeriodLabelSql(): SQL {
+  return sql`(case when p.is_adjustment
+    then concat('FY', p.fiscal_year, ' adjustment')
+    else concat('P', lpad(p.period_number::text, 2, '0'), ' FY', p.fiscal_year::text) end)`;
+}
+
+/** The list text for a period: the canonical label, then the stored name when it differs. */
+export function periodDisplayLabel(input: PeriodLabelInput & { name: string }): string {
+  const { label, storedName } = periodDisplayName(input);
+  return storedName ? `${label} (${storedName})` : label;
+}
+
 
 /**
  * Typed details carried by every refusal to post into a closed

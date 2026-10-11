@@ -164,7 +164,7 @@ export async function apPosition(
 
   const startingCash = sumMoney(banks.map((b) => b.balance));
   const ap = scheduleForecast(apItems, apStats, grid.asOf, grid.start, grid.end, model);
-  const ar = scheduleForecast(arItems, arStats, grid.asOf, grid.start, grid.end, model);
+  const ar = scheduleForecast(arItems, arStats, grid.asOf, grid.start, grid.end, model, true);
   const weekTotals = (byWeek: Map<string, { amount: string }[]>): Record<string, string> =>
     Object.fromEntries([...byWeek.entries()].map(([k, es]) => [k, sumMoney(es.map((e) => e.amount))]));
   const catContext = { arWeekly: weekTotals(ar.byWeek), apWeekly: weekTotals(ap.byWeek), cashStart: startingCash, model, subIds, fiscalStartMonth: fiscalStart, fiscalPeriods: fiscalCalendar?.periods ?? null };

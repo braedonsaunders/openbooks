@@ -1,13 +1,17 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import '../dashboard/_dashboard-render-harness'
-import { act, mountDashboard, scriptFetch, tick } from '../dashboard/_dashboard-render-harness'
+import '../../dashboard/_dashboard-render-harness'
+import { act, mountDashboard, scriptFetch, tick } from '../../dashboard/_dashboard-render-harness'
+
+// The shared Select dispatches its change through the global Event, which
+// must come from the same jsdom realm as the element it fires on.
+Object.assign(globalThis, { Event: window.Event })
 
 // Await-imports (not static imports): module hooks register while the
 // harness above evaluates, so only imports that resolve after that point see
 // the jsdom shims.
 const { ImportWizard } = await import('./ImportWizard')
-const messages = (await import('../../../messages/en')).default
+const messages = (await import('../../../../messages/en')).default
 
 // The "Import into" target picker must keep its selection: picking a target
 // by click or by search+Enter selects it (not the placeholder) and drives
@@ -31,16 +35,15 @@ async function waitForResources(): Promise<void> {
   // The hidden native select mirrors the loaded options synchronously, so it
   // is the load signal — no dropdown needs opening to observe it.
   for (let i = 0; i < 60; i++) {
-    if (document.querySelector('select#import-resource option[value="customers"]')) return
+    if (document.querySelector('select option[value="customers"]')) return
     await tick()
   }
   assert.fail('the resource options never loaded')
 }
 
 function trigger(): HTMLButtonElement {
-  const native = document.querySelector('select#import-resource')
-  assert.ok(native, 'the native select proxy must render')
-  const button = native.closest('span')?.querySelector('button') as HTMLButtonElement | null
+  // The shared Select puts the field id on its visible trigger button.
+  const button = document.getElementById('import-resource') as HTMLButtonElement | null
   assert.ok(button, 'the resource dropdown trigger must render')
   return button
 }

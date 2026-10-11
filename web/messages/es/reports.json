@@ -375,7 +375,12 @@
     "currency": "Moneda",
     "convertFrom": "Convertir desde",
     "baseOption": "Moneda base",
-    "transactionOption": "Moneda de transacción"
+    "transactionOption": "Moneda de transacción",
+    "controlEntries": {
+      "label": "Asientos de cuenta de control sin partida abierta",
+      "hint": "Contabilizados en la cuenta de control sin factura, documento o nota de crédito que los respalde",
+      "more": "+{count} más"
+    }
   },
   "cashFlow": {
     "title": "Estado de flujo de efectivo",

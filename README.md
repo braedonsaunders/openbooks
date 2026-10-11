@@ -256,7 +256,7 @@ SG and US. **A country name is not a universal compliance claim.** Loaded tax
 years, regional calculations, required employer/employee inputs, filing formats,
 corrections and remittance schedules have distinct scopes.
 
-A 51-pack return-workpaper library spans 41 installable country tax packs. Tax
+A 52-pack return-workpaper library spans 41 installable country tax packs. Tax
 packs are configurable preparation workpapers, not a promise of direct
 electronic filing, government approval or complete local coverage.
 

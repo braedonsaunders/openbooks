@@ -91,7 +91,7 @@ test('a list body whose feature is off shows the shared canvas once, by name, an
   assert.equal(page.textContent?.split('Time tracking is turned off').length, 2, 'the refusal reads once')
   assert.ok(canvas.textContent?.includes('This area needs the Time tracking feature.'))
   assert.doesNotMatch(page.textContent ?? '', /timeTracking|feature_disabled|Company Settings/, 'no key, code or remedy text leaks')
-  const features = canvas.querySelector('a[href="/admin/setup/features"]')
+  const features = canvas.querySelector('a[href="/admin/setup/features?tab=projects"]')
   assert.equal(features?.textContent, 'Open Features')
 
   const withdrawn = [...page.querySelectorAll(withdrawnActionsSelector())]
@@ -124,5 +124,13 @@ test('the inline variant explains one unavailable panel with the same copy and r
   assert.equal(panel?.getAttribute('data-feature-key'), 'projects')
   assert.equal(panel?.querySelector('h3')?.textContent, 'Projects & job costing is turned off')
   assert.equal(host.querySelectorAll('[data-route-state]').length, 0, 'a panel never takes over its page')
-  assert.equal(panel?.querySelector('a[href="/admin/setup/features"]')?.textContent, 'Open Features')
+  assert.equal(panel?.querySelector('a[href="/admin/setup/features?tab=projects"]')?.textContent, 'Open Features')
+})
+
+test('a turn-on action opens the Features tab that owns the feature', async () => {
+  const { featureSetupHref } = await import('./feature-unavailable')
+  assert.equal(featureSetupHref('flows'), '/admin/setup/features?tab=platform')
+  assert.equal(featureSetupHref('automations'), '/admin/setup/features?tab=platform')
+  assert.equal(featureSetupHref('timeTracking'), '/admin/setup/features?tab=projects')
+  assert.equal(featureSetupHref('no-such-feature'), '/admin/setup/features')
 })

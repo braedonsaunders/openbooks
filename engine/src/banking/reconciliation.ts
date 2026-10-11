@@ -580,6 +580,11 @@ export interface SignOffBlocker {
   postedOn: string;
   amount: string;
   description: string | null;
+  /** The earlier line this one may duplicate; null when the line is unflagged. */
+  possibleDuplicateOf: string | null;
+  /** The duplicated line's date and amount, so the blocker names what it duplicates. */
+  possibleDuplicateOfPostedOn: string | null;
+  possibleDuplicateOfAmount: string | null;
 }
 
 /**
@@ -596,8 +601,13 @@ export async function listSignOffBlockers(
   return withOrgTransaction(ctx.orgId, async () => {
     const recon = await loadReconciliation(ctx.orgId, reconciliationId, ctx.allowedSubsidiaryIds);
     const lines = (await db.execute<SignOffBlocker>(sql`
-      select l.id, l.posted_on as "postedOn", l.amount::text as amount, l.description
+      select l.id, l.posted_on as "postedOn", l.amount::text as amount, l.description,
+             l.possible_duplicate_of as "possibleDuplicateOf",
+             dup.posted_on::text as "possibleDuplicateOfPostedOn",
+             dup.amount::text as "possibleDuplicateOfAmount"
         from bank_statement_lines l
+        left join bank_statement_lines dup
+          on dup.id = l.possible_duplicate_of and dup.org_id = l.org_id
        where l.org_id = ${ctx.orgId}
          and l.account_id = ${recon.account_id}
          and l.currency = ${recon.currency}

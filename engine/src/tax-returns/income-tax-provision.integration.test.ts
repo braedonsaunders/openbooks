@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import type { PoolClient } from "pg";
 import { sql } from "drizzle-orm";
+import { canonicalJson } from "../platform/canonical-json.ts";
 import { db, pool } from "../platform/db.ts";
 import { isZero, sum } from "../money/money.ts";
 import {
@@ -33,6 +34,7 @@ import {
   TAX_FILING_SNAPSHOT_VERSION,
   buildTaxFilingSnapshot,
   markTaxFilingFiled,
+  prepareTaxFiling,
 } from "./filing.ts";
 import { computeTaxReturn } from "./return.ts";
 import { BUILT_IN_ROLES, PERMISSION_CATALOGUE, permissionSetCovers } from "../organization/permissions.ts";
@@ -1033,7 +1035,8 @@ async function prepareFiling(
   org: ScratchOrg,
   userId: string,
   opts: {
-    snapshotVersion?: 1 | 2;
+    snapshotVersion?: 1 | 2 | 3;
+    adjustments?: Record<string, string>;
     filingEntity?: { subsidiaryIds: string[]; registrationId?: string };
     /**
      * Stored scope override, simulating rows the live route can no longer
@@ -1046,10 +1049,11 @@ async function prepareFiling(
   } = {},
 ): Promise<{ id: string; snapshotHash: string }> {
   const snapshotVersion = opts.snapshotVersion ?? TAX_FILING_SNAPSHOT_VERSION;
-  const result = await computeTaxReturn(org.orgId, 'FP_GST', '2026-07-01', '2026-07-31', {}, {
+  const amounts = opts.adjustments ?? {};
+  const result = await computeTaxReturn(org.orgId, 'FP_GST', '2026-07-01', '2026-07-31', amounts, {
     ...(opts.filingEntity ? { filingEntity: opts.filingEntity } : {}),
   });
-  const { snapshot, snapshotHash } = buildTaxFilingSnapshot(result, {}, snapshotVersion);
+  const { snapshot, snapshotHash } = buildTaxFilingSnapshot(result, snapshotVersion === 3 ? [] : amounts, snapshotVersion);
   const filingId = randomUUID();
   const versions = (await db.execute<{ version: number }>(sql`
     select coalesce(max(version), 0)::int + 1 as version from tax_filings
@@ -1070,7 +1074,7 @@ async function prepareFiling(
        created_by, updated_by)
     values (${filingId}, ${org.orgId}, ${result.formCode}, ${result.formName}, 'CA',
             ${result.from}, ${result.to}, ${versions.version}, 'prepared', ${result.submissionChannel},
-            ${JSON.stringify(snapshot.boxes)}::jsonb, '{}'::jsonb, ${snapshotHash},
+            ${JSON.stringify(snapshot.boxes)}::jsonb, ${JSON.stringify(snapshot.adjustments)}::jsonb, ${snapshotHash},
             ${result.functionalCurrency}, ${result.translation?.presentationCurrency ?? null},
             ${result.translation ? JSON.stringify(result.translation) : null}::jsonb,
             ${storedScope}::uuid[],
@@ -1299,7 +1303,7 @@ test("mark-filed trips stale when the registration changes after preparation", {
     const taxCodeId = await seedFilingFingerprintFixture(org);
     await postTaxJournal(org, userId, taxCodeId, { number: "JE-FP-REG", taxAmount: "13.00" });
     // Prepared while unregistered: registrationId null is the frozen posture.
-    const prepared = await prepareFiling(org, userId);
+    const prepared = await prepareFiling(org, userId, { snapshotVersion: 2 });
 
     // The org registers for this form afterwards. No box moves — the ledger
     // is untouched — but the return's identity changed, so the v2 fingerprint
@@ -2040,6 +2044,65 @@ test("restricted provision projections expose only allowlisted payload and linea
     const stillFull = (await getProvisionRun(org.orgId, runId))!;
     assert.equal((stillFull.payload as Record<string, unknown>).sneakyOrgField, "whole-org");
   } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+
+test("prepared adjustments preserve reasoned audit evidence through filing and later preparation", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const other = await createScratchOrg();
+  try {
+    const userId = await createScratchUser(org.orgId, "Tax preparer", "admin");
+    const taxCodeId = await seedFilingFingerprintFixture(org);
+    await postTaxJournal(org, userId, taxCodeId, { number: "TAX-ADJUSTED", taxAmount: "13.00" });
+    await db.execute(sql`
+      insert into tax_report_lines (id, org_id, report_code, line_code, label, sign, sequence)
+      values (${randomUUID()}, ${org.orgId}, 'FP_GST', '104', 'Adjustments', 1, 3)`);
+    const inputs = [
+      { lineCode: "104", amount: "1000.00", reason: "January to June activity per prior system" },
+      { lineCode: "104", amount: "2018.84", reason: "July and August activity per prior system" },
+    ];
+    const result = await computeTaxReturn(org.orgId, "FP_GST", "2026-07-01", "2026-07-31", { "104": "3018.8400" });
+    const prepared = await prepareTaxFiling(org.orgId, userId, result, inputs);
+    const frozen = (await db.execute<{ adjustments: unknown[]; snapshot_hash: string; snapshot_version: number; boxes: unknown[] }>(sql`
+      select adjustments, snapshot_hash, snapshot_version, boxes from tax_filings
+       where org_id = ${org.orgId} and id = ${prepared.id}`)).rows[0]!;
+    assert.equal(frozen.snapshot_version, 3);
+    assert.equal(frozen.adjustments.length, 2);
+    for (let index = 0; index < inputs.length; index++) {
+      const entry = frozen.adjustments[index] as { lineCode: string; reason: string; enteredBy: string; enteredAt: string };
+      assert.equal(entry.reason, inputs[index]!.reason);
+      assert.equal(entry.enteredBy, userId);
+      assert.ok(!Number.isNaN(Date.parse(entry.enteredAt)));
+    }
+    const audits = (await db.execute<{ actor_id: string; changes: { before?: unknown; after?: unknown; adjustment?: unknown } }>(sql`
+      select actor_id, changes from audit_log
+       where org_id = ${org.orgId} and table_name = 'tax_filings' and row_id = ${prepared.id} and action = 'insert'`)).rows;
+    const adjustmentAudits = audits.filter((audit) => audit.changes.adjustment);
+    assert.equal(adjustmentAudits.length, 2);
+    for (const audit of adjustmentAudits) {
+      assert.equal(audit.actor_id, userId);
+      assert.equal(audit.changes.before, null);
+      assert.ok(frozen.adjustments.some((entry) => canonicalJson(entry) === canonicalJson(audit.changes.after)));
+    }
+    await assert.rejects(() => markTaxFilingFiled(other.orgId, prepared.id, userId, null),
+      (error: unknown) => error instanceof TaxFilingError && error.code === "not-found");
+    await closeCoveredPeriod(org);
+    await markTaxFilingFiled(org.orgId, prepared.id, userId, "GOV-ADJUSTED");
+    const nextResult = await computeTaxReturn(org.orgId, "FP_GST", result.from, result.to, { "104": "3019.0000" });
+    const next = await prepareTaxFiling(org.orgId, userId, nextResult, [{ lineCode: "104", amount: "3019", reason: "Revised prior-system reconciliation" }]);
+    assert.equal(next.version, prepared.version + 1);
+    const preserved = (await db.execute<{ adjustments: unknown[]; snapshot_hash: string; snapshot_version: number; boxes: unknown[] }>(sql`
+      select adjustments, snapshot_hash, snapshot_version, boxes from tax_filings
+       where org_id = ${org.orgId} and id = ${prepared.id}`)).rows[0]!;
+    assert.deepEqual(preserved, frozen);
+    // Earlier amount-map snapshots keep their own replay and fingerprint schema.
+    const legacy = await prepareFiling(org, userId, { snapshotVersion: 2, adjustments: { "104": "3018.8400" } });
+    await markTaxFilingFiled(org.orgId, legacy.id, userId, "GOV-LEGACY-AMOUNTS");
+    assert.equal((await filingState(org.orgId, legacy.id)).status, "filed");
+  } finally {
+    await dropScratchOrg(other.orgId);
     await dropScratchOrg(org.orgId);
   }
 });

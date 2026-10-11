@@ -7,6 +7,7 @@ import test from "node:test";
 // sublines must wrap instead of ellipsis, and the card must yield (min-w-0)
 // so narrow grid columns engage wrapping instead of overflowing the page.
 const React = await import("react");
+Object.assign(globalThis, { React });
 const { renderToString } = await import("react-dom/server");
 const { Users } = await import("lucide-react");
 const { StatTile } = await import("./ui");

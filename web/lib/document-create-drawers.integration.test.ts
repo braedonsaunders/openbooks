@@ -95,7 +95,10 @@ test('every document list New opens its create drawer', { skip: !process.env.OPE
     assert.equal(cash.drawerOpen, true, 'cash sales New opens the create drawer')
     assert.equal((cash.drawer as { createMode?: boolean } | null)?.createMode, true)
     assertNavigable('cash sales', cash.newButton.items)
-    assert.deepEqual(cash.newButton.items.map((item) => item.kind), ['cash_sale', 'cash_refund'])
+    // Create kinds open the drawer; the cashier daily-summary fast path
+    // (0d90039bb2) joins the menu as a navigating item, so it is pinned by href.
+    assert.deepEqual(cash.newButton.items.filter((item) => !item.href).map((item) => item.kind), ['cash_sale', 'cash_refund'])
+    assert.deepEqual(cash.newButton.items.filter((item) => item.href).map((item) => item.href), ['/cash-sales/daily-summary'])
 
     const banking = await load(loadBankingTransactions, { doc: 'new', kind: 'card_charge', mode: 'edit' })
     assert.equal(banking.drawerOpen, true, 'banking New opens the create drawer')

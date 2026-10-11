@@ -115,6 +115,7 @@ function submitButton(): HTMLButtonElement | undefined {
   ) as HTMLButtonElement | undefined
 }
 
+const { BankDetailsDialog } = await import('../islands')
 test('with no employment the dialog names the hire remedy and refuses submit', async (t) => {
   const { unmount } = await renderDialog(dialogWith([]))
   t.after(unmount)
@@ -132,8 +133,6 @@ test('with an employment the dialog files normally with no hire notice', async (
   assert.ok(submit, 'submit renders')
   assert.equal(submit.disabled, false, 'a bound employment submits')
 })
-
-const { BankDetailsDialog } = await import('../islands')
 
 type BankDialog = Parameters<typeof BankDetailsDialog>[0]['dialog']
 

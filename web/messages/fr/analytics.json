@@ -2170,6 +2170,10 @@
           "label": "Seuil long d'échus (jours)",
           "help": "Un retard au-delà de ces jours reçoit le report long"
         },
+        "collectibilityHorizonDays": {
+          "label": "Horizon de recouvrabilité (jours)",
+          "help": "Les créances en retard de plus de ce nombre de jours ne sont pas prévues comme encaissements ; elles sont listées séparément comme non prévues"
+        },
         "cardTrajectoryTolerance": {
           "label": "Tolérance de trajectoire carte",
           "help": "Écart relatif au paiement médian dans lequel la trajectoire s'applique"
@@ -2203,7 +2207,8 @@
       }
     },
     "unplacedAr": "{count, plural, one {# facture n'a} other {# factures n'ont}} ni échéance ni historique de paiement · {total} non prévu.",
-    "unplacedAp": "{count, plural, one {# facture n'a} other {# factures n'ont}} ni échéance ni historique de paiement · {total} non prévu."
+    "unplacedAp": "{count, plural, one {# facture n'a} other {# factures n'ont}} ni échéance ni historique de paiement · {total} non prévu.",
+    "notForecastAr": "{count, plural, one {# créance} other {# créances}} en retard de plus de {days} jours · {total} non prévues comme encaissements."
   },
   "trueCost": {
     "title": "Coût réel",
@@ -4171,7 +4176,12 @@
       "dueDate": "Échéance",
       "history": "Historique",
       "pushed": "Repoussé",
-      "deferredFrom": "reporté depuis le {date}"
+      "deferredFrom": "reporté depuis le {date}",
+      "pushedAssumption": "Report des échéances dépassées : suppose que les soldes échus sont encaissés à leur date prévue",
+      "basisHistory": "Délai moyen de paiement du client : {days} jours",
+      "basisAverage": "Délai moyen de paiement (organisation) : {days} jours",
+      "basisDueDate": "Échéance {date}",
+      "basisPushed": "{days} jours de retard · prévu le {date}"
     },
     "netChange": "Variation nette",
     "pagination": {
@@ -4212,6 +4222,11 @@
       "formula": "Formule",
       "info": "Info",
       "note": "Note"
+    },
+    "overduePush": {
+      "assumption": "Suppose que les soldes échus sont encaissés à leur date prévue.",
+      "basis": "{count, plural, one {# facture} other {# factures}} · {minDays}–{maxDays} jours de retard · {amount} au total",
+      "basisSameAge": "{count, plural, one {# facture} other {# factures}} · {days} jours de retard · {amount} au total"
     }
   },
   "categoryManager": {

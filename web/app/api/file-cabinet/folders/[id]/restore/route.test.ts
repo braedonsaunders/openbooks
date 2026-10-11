@@ -87,7 +87,7 @@ stubModules({
         if (text.includes('insert into audit_log')) {
           if (state.failAudit) throw new Error('forced audit failure')
           target.audit.push(text)
-          return Promise.resolve({ rows: [] })
+          return Promise.resolve({ rows: [{ id: 'audit-row' }] })
         }
         return Promise.resolve({ rows: [] })
       }

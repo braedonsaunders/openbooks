@@ -11,17 +11,10 @@ import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import { postPaymentWithApplications } from "./payment-posting.ts";
 import { sameCurrencyAllocation } from "./settlement-policy.ts";
 import { openItemsForParty } from "./payment-queries.ts";
-import {
-  AutopayError,
-  classifyDecline,
-  enrollAutopay,
-  listPaymentMethods,
-  parseFinalAction,
-  parseRetryOffsetsDays,
-  runAutopayCollectionForOrg,
-  setMethodFallbackPriority,
-  type ChargeFn,
-} from "./autopay.ts";
+import { AutopayError, classifyDecline, parseFinalAction, parseRetryOffsetsDays, type ChargeFn } from "./autopay-policy.ts";
+import { enrollAutopay } from "./autopay-enrollment.ts";
+import { listPaymentMethods, setMethodFallbackPriority } from "./autopay-methods.ts";
+import { runAutopayCollectionForOrg } from "./autopay.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;

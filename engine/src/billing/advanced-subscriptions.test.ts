@@ -6,16 +6,20 @@ import {
   arrearsLinesForInterval,
   assertCotermAllowed,
   assertIdempotentReplay,
+  assertPlanChangeRules,
   assertPlanVersionMutable,
   firstLifecycleBillOn,
   lifecycleAnchorDay,
   lifecycleBillingPeriod,
+  planVersionInForce,
   renewalAction,
   resolveEffectiveLifecycleState,
   subscriptionComponentTotal,
+  subscriptionPaidThrough,
   toEffectiveLifecycleAmendment,
   type ComponentWindow,
   type EffectiveLifecycleAmendment,
+  type PlanVersionTerms,
 } from "./advanced-subscriptions.ts";
 import { prorateDays } from "../money/money.ts";
 
@@ -328,4 +332,91 @@ test('subscription date arithmetic rejects malformed dates, intervals, and fract
   assert.equal(advanceLifecycleDate('0096-02-28', 'weekly'), '0096-03-06');
   assert.equal(advanceLifecycleDate('0096-01-31', 'monthly'), '0096-02-29');
   assert.throws(() => advanceLifecycleDate('9999-12-31', 'monthly'), AdvancedSubscriptionError);
+});
+
+const pinnedPlan: PlanVersionTerms = {
+  planId: "plan-a", status: "published", effectiveFrom: "2026-01-01", effectiveTo: null,
+  interval: "monthly", intervalCount: 1, billingTiming: "advance", currency: "CAD", requiredComponents: 1,
+};
+const targetPlan: PlanVersionTerms = { ...pinnedPlan, planId: "plan-b" };
+const planChangeBase = {
+  effectiveOn: "2026-11-01",
+  paidThrough: "2026-11-01",
+  termStartsOn: "2026-01-01",
+  billingTiming: "advance" as const,
+  pinned: pinnedPlan,
+  target: targetPlan,
+};
+
+test("a plan change on the paid-through date with the same cadence and currency is allowed", () => {
+  assert.doesNotThrow(() => assertPlanChangeRules(planChangeBase));
+});
+
+test("a plan change may be future-dated after the paid-through date when the cadence is unchanged", () => {
+  assert.doesNotThrow(() => assertPlanChangeRules({ ...planChangeBase, effectiveOn: "2026-12-01" }));
+});
+
+test("a plan change before the paid-through date would reprice invoiced service and is refused", () => {
+  assert.throws(
+    () => assertPlanChangeRules({ ...planChangeBase, effectiveOn: "2026-10-15" }),
+    /precedes the paid-through date 2026-11-01/,
+  );
+});
+
+test("a plan change must match the contract's billing currency", () => {
+  assert.throws(
+    () => assertPlanChangeRules({ ...planChangeBase, target: { ...targetPlan, currency: "USD" } }),
+    /billing currency cannot change mid-contract from CAD to USD/,
+  );
+});
+
+test("the new plan must carry the contract's billing timing", () => {
+  assert.throws(
+    () => assertPlanChangeRules({ ...planChangeBase, target: { ...targetPlan, billingTiming: "arrears" } }),
+    /different timing/,
+  );
+});
+
+test("a change of cadence is allowed only on the paid-through date for an advance-billed contract", () => {
+  const annual = { ...targetPlan, interval: "annually" as const };
+  assert.doesNotThrow(() => assertPlanChangeRules({ ...planChangeBase, target: annual }));
+  assert.throws(
+    () => assertPlanChangeRules({ ...planChangeBase, target: annual, effectiveOn: "2026-12-01" }),
+    /takes effect only on the paid-through date 2026-11-01/,
+  );
+});
+
+test("a plan change refuses the same plan, an unpublished or ineffective version, and a version without required components", () => {
+  assert.throws(() => assertPlanChangeRules({ ...planChangeBase, target: { ...targetPlan, planId: "plan-a" } }), /already on this plan/);
+  assert.throws(() => assertPlanChangeRules({ ...planChangeBase, target: { ...targetPlan, status: "draft" } }), /published plan version/);
+  assert.throws(
+    () => assertPlanChangeRules({ ...planChangeBase, target: { ...targetPlan, effectiveFrom: "2026-12-01" } }),
+    /not effective on 2026-11-01/,
+  );
+  assert.throws(
+    () => assertPlanChangeRules({ ...planChangeBase, target: { ...targetPlan, requiredComponents: 0 } }),
+    /no required components/,
+  );
+});
+
+test("the paid-through date is the end of the invoiced service, or the start when nothing is invoiced", () => {
+  assert.equal(subscriptionPaidThrough({ startOn: "2026-01-01", nextBillOn: "2026-11-01", billed: true, guardedThrough: null }), "2026-11-01");
+  assert.equal(subscriptionPaidThrough({ startOn: "2026-01-01", nextBillOn: "2026-02-01", billed: false, guardedThrough: null }), "2026-01-01");
+});
+
+test("the plan in force is the predecessor until a change's date, then its target", () => {
+  const change = { effectiveOn: "2026-12-01", seq: 1, fromVersionId: "v-a", toVersionId: "v-b" };
+  assert.equal(planVersionInForce({ asOf: "2026-11-30", pinnedVersionId: "v-b", changes: [change] }), "v-a");
+  assert.equal(planVersionInForce({ asOf: "2026-12-01", pinnedVersionId: "v-b", changes: [change] }), "v-b");
+  assert.equal(planVersionInForce({ asOf: "2026-11-30", pinnedVersionId: "v-b", changes: [] }), "v-b");
+});
+
+test("successive plan changes fold in effective-date order and a backdated change is read by its date", () => {
+  const changes = [
+    { effectiveOn: "2026-06-01", seq: 2, fromVersionId: "v-b", toVersionId: "v-c" },
+    { effectiveOn: "2026-03-01", seq: 1, fromVersionId: "v-a", toVersionId: "v-b" },
+  ];
+  assert.equal(planVersionInForce({ asOf: "2026-02-01", pinnedVersionId: "v-c", changes }), "v-a");
+  assert.equal(planVersionInForce({ asOf: "2026-04-01", pinnedVersionId: "v-c", changes }), "v-b");
+  assert.equal(planVersionInForce({ asOf: "2026-07-01", pinnedVersionId: "v-c", changes }), "v-c");
 });

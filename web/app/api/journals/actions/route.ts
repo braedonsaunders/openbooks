@@ -6,6 +6,8 @@ import { z } from 'zod'
 import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
 import { postDocument } from "@openbooks/engine/ledger/posting-document";
 import { PostingError } from "@openbooks/engine/journal/contracts";
+import { assertDocumentEditRevision } from "@openbooks/engine/records/document-edit-policy";
+import { documentRevisionCounterSql } from "@openbooks/engine/records/revision";
 import { runPostDocumentEffects } from "@openbooks/engine/ledger/posting-dispatch";
 import { submitAndReleaseIfUngated } from '@openbooks/engine/flows/module'
 import {
@@ -27,6 +29,10 @@ const journalActionBody = z.object({
     (v) => uuidId.safeParse(v).success,
     'documentId required',
   ),
+  // The exact revision the reviewer saw. When present it is checked under the
+  // row lock, so a post after a concurrent edit is refused rather than posting
+  // content nobody reviewed. Optional for other API callers.
+  expectedUpdatedAt: z.string().min(1).optional(),
 })
 
 /**
@@ -41,7 +47,7 @@ export const POST = defineRoute({
   feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
   body: journalActionBody,
   handler: async ({ body }) => {
-    const { documentId } = body;
+    const { documentId, expectedUpdatedAt } = body;
 
 
 
@@ -55,14 +61,21 @@ export const POST = defineRoute({
           const outcome = await withOrgTransaction(gate.user.orgId, async () => {
             // Serialize the lifecycle and posting decision at the aggregate root.
             // If posting fails, the draft→approved release rolls back with it.
-            const owned = (await db.execute<{ id: string; status: string; subsidiaryId: string | null }>(sql`
-              select id, status, subsidiary_id as "subsidiaryId" from documents
+            const owned = (await db.execute<{ id: string; status: string; subsidiaryId: string | null; revision: string }>(sql`
+              select id, status, subsidiary_id as "subsidiaryId",
+                     ${documentRevisionCounterSql(sql.raw('revision_seq'))} as revision
+                from documents
                where id = ${documentId} and kind = 'journal' and org_id = ${gate.user.orgId}
                for update
             `))
             if (!owned.rows[0]) return { kind: 'not_found' as const }
             const scopeDenied = guardSubsidiaryScope(gate, owned.rows[0].subsidiaryId)
             if (scopeDenied) return { kind: 'scope_denied' as const, response: scopeDenied }
+            // Fence on the locked row's exact revision: a mismatch throws before
+            // any flow release or posting write, so the transaction rolls back.
+            if (expectedUpdatedAt !== undefined) {
+              assertDocumentEditRevision(expectedUpdatedAt, owned.rows[0].revision)
+            }
             const previousStatus = owned.rows[0].status
             if (previousStatus === 'draft') {
               const submission = await submitAndReleaseIfUngated(

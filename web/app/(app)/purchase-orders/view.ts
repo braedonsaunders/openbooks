@@ -219,6 +219,8 @@ export async function loadPurchaseOrders(
               .filter((subsidiary) => !authz.allowedSubsidiaryIds || authz.allowedSubsidiaryIds.has(subsidiary.id))
               .map((subsidiary) => ({ id: subsidiary.id, name: `${'  '.repeat(subsidiary.depth)}${subsidiary.name}` })),
             canManage,
+            // Purchase orders approve under the same grant that creates them.
+            canApprove: can(authz, 'purchase_orders.create'),
             // Receiving and billing are granted apart from authoring the
             // order; the drawer offers exactly the conversions the convert
             // endpoint will accept (receiving stock also needs items.post).

@@ -40,7 +40,9 @@ import { isoDate } from "../../../lib/api/json";
 import { notFound } from "@/lib/api/responses";
 
 const projectId = z.string().uuid("projectId must be a valid UUID");
-const rowId = z.string().uuid("id must be a valid UUID");
+// Child row ids resolve through actionProjectScope, where a malformed id and
+// an unknown one answer the same not-found record.
+const rowId = z.string();
 const payApplicationId = z
   .string()
   .uuid("payApplicationId must be a valid UUID");

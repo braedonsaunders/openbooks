@@ -29,7 +29,8 @@
       "operationSeq": "Operation sequence",
       "scrapPct": "Scrap %",
       "isByproduct": "Line type",
-      "outputCostWeight": "Relative cost weight"
+      "outputCostWeight": "Relative cost weight",
+      "effectiveRequirement": "Effective per unit"
     },
     "values": {
       "component": "Component",
@@ -44,7 +45,11 @@
       "invalidOperation": "Operation sequence must be a positive whole number.",
       "manufacturingDisabled": "Turn on Manufacturing in Company Settings → Features to edit operation and by-product settings."
     },
-    "jointOutputNote": "Joint outputs share production cost by their quantity and relative cost weight per base unit. The primary output has weight 1. NRV by-products retain their separate net realizable value treatment."
+    "jointOutputNote": "Joint outputs share production cost by their quantity and relative cost weight per base unit. The primary output has weight 1. NRV by-products retain their separate net realizable value treatment.",
+    "help": {
+      "scrapPct": "Adds this percentage on top of the quantity per unit. Leave 0 if the quantity already includes losses.",
+      "effectiveRequirement": "The requirement for one unit of the parent item: quantity × (1 + scrap %). Work orders use the same calculation."
+    }
   },
   "labels": {
     "item": "Item",
@@ -280,8 +285,10 @@
       "loadingMore": "Loading…"
     },
     "secondCount": "Save second count",
+    "recordedQuantity": "Recorded {quantity}",
     "secondReason": "Second count observation",
-    "secondReasonHint": "The second count differs from the first. Explain the difference (at least 5 characters) so it is recorded with this count."
+    "secondReasonHint": "The second count differs from the first. Explain the difference (at least 5 characters) so it is recorded with this count.",
+    "secondNotRecorded": "Not recorded. A second count that differs from the first needs its reason, at least {minLength} characters, before it is saved."
   },
   "create": {
     "subsidiary": "Owning subsidiary",

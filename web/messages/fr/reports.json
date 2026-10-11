@@ -375,7 +375,12 @@
     "currency": "Devise",
     "convertFrom": "Convertir depuis",
     "baseOption": "Devise de base",
-    "transactionOption": "Devise de transaction"
+    "transactionOption": "Devise de transaction",
+    "controlEntries": {
+      "label": "Écritures du compte de contrôle sans élément ouvert",
+      "hint": "Comptabilisées sur le compte de contrôle sans facture, pièce ou avoir correspondant",
+      "more": "+{count} autres"
+    }
   },
   "cashFlow": {
     "title": "Tableau des flux de trésorerie",

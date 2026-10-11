@@ -15,10 +15,13 @@ import type { Authz } from "../../../../../lib/authz";
 import { notFound } from "@/lib/api/responses";
 const POSTBodySchema1 = z.object({ action: z.enum(['test', 'sync']) });
 
+const SYNC_OVERLAP_DAYS_MESSAGE = 'syncOverlapDays must be a whole number of days from 0 to 90';
 const PATCHBodySchema1 = z.object({
   credentials: z.record(z.string(), z.string()).nullable().optional(), externalAccountId: z.string().nullable().optional(),
-  isActive: z.boolean().optional(), name: z.string().trim().min(1).optional(),
-  syncCadence: z.enum(['manual', 'hourly', 'daily']).optional(), syncOverlapDays: z.number().int().min(0).max(90).nullable().optional(),
+  isActive: z.boolean({ error: 'isActive must be a boolean' }).optional(), name: z.string().trim().min(1).optional(),
+  syncCadence: z.enum(['manual', 'hourly', 'daily']).optional(),
+  syncOverlapDays: z.number({ error: SYNC_OVERLAP_DAYS_MESSAGE }).int({ error: SYNC_OVERLAP_DAYS_MESSAGE })
+    .min(0, { error: SYNC_OVERLAP_DAYS_MESSAGE }).max(90, { error: SYNC_OVERLAP_DAYS_MESSAGE }).nullable().optional(),
 }).refine((body) => Object.keys(body).length > 0, { message: "At least one field must be provided." });
 
 

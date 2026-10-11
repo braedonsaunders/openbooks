@@ -9,6 +9,7 @@ import { sql } from 'drizzle-orm'
 import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import { db } from '@openbooks/engine/platform/db'
 import { paymentRunReadiness } from "@openbooks/engine/payments/run-readiness";
+import { payeeBankStateSql } from "@openbooks/engine/payments/run-readiness";
 import { paymentRunSubjectKind } from '@openbooks/engine/flows'
 import { Alert, AlertDescription, AlertTitle, Badge, UrlDrawer } from '@openbooks/ui'
 import { SearchInput } from '../../../components/search-input'
@@ -150,7 +151,7 @@ export async function RunsSection({
     select d.id, d.document_number, d.document_date, d.due_date, d.reference_number, d.currency,
            p.display_name as vendor,
            abs(jl.amount) - coalesce((select sum(a.amount) from applications a where a.to_line_id = jl.id and a.org_id = ${orgId} and a.unapplied_at is null), 0) as open,
-           exists (select 1 from payment_mandates m where m.org_id = d.org_id and m.party_id = d.party_id and m.status = 'active' and (m.valid_from is null or m.valid_from <= ${today}) and (m.expires_on is null or m.expires_on >= ${today})) as has_bank
+           case when exists (select 1 from payment_mandates m where m.org_id = d.org_id and m.party_id = d.party_id and m.status = 'active' and (m.valid_from is null or m.valid_from <= ${today}) and (m.expires_on is null or m.expires_on >= ${today})) then 'approved' else 'missing' end as bank_state
       from documents d
       join parties p on p.id = d.party_id and p.org_id = d.org_id
       join journal_entries je on je.id = d.posted_entry_id and je.org_id = d.org_id and je.status in ('posted', 'reversed')
@@ -161,10 +162,7 @@ export async function RunsSection({
            abs(jl.amount) - coalesce((
              select sum(a.amount) from applications a
               where a.to_line_id = jl.id and a.org_id = ${orgId} and a.unapplied_at is null), 0) as open,
-           exists (
-             select 1 from party_bank_accounts b
-              where b.party_id = d.party_id and b.org_id = d.org_id and b.is_active and b.approved_at is not null
-           ) as has_bank
+           ${payeeBankStateSql(sql`d.party_id`, sql`d.org_id`)} as bank_state
       from documents d
       join parties p on p.id = d.party_id and p.org_id = d.org_id
       join journal_entries je on je.id = d.posted_entry_id and je.org_id = d.org_id and je.status in ('posted', 'reversed')

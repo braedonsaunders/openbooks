@@ -31,7 +31,7 @@ export const GET = defineRoute({
     const reading = await statutoryHolidayCalendarsOf({
       orgId,
       year,
-      subsidiaryIds: authz.allowedSubsidiaryIds,
+      subsidiaryIds: authz.allowedSubsidiaryIds === null ? null : [...authz.allowedSubsidiaryIds],
     })
     return NextResponse.json({ year, ...reading })
   },

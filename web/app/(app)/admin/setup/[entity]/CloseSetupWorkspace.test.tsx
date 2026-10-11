@@ -744,6 +744,7 @@ test('the period row ends an active reopen window with its reason', async () => 
   props.periods = [{
     id: 'p1',
     name: 'Dec 2025',
+    is_adjustment: false,
     starts_on: '2025-12-01',
     ends_on: '2025-12-31',
     entries: 0,
@@ -798,6 +799,7 @@ test('a refusal deep link arms the reopen form with period, book, entity and mod
   props.periods = [{
     id: 'p1',
     name: 'Dec 2025',
+    is_adjustment: false,
     starts_on: '2025-12-01',
     ends_on: '2025-12-31',
     entries: 0,
@@ -945,4 +947,82 @@ test('closing a module names earlier periods with activity still open', async ()
     await unmount()
     globalThis.fetch = prior
   }
+})
+
+test('the requester sees Withdraw when decision preview fails or omits identity', async () => {
+  const prior = globalThis.fetch
+  try {
+    for (const response of [() => Response.json({ error: 'Preview unavailable' }, { status: 503 }), () => Response.json({ conflicts: [] })]) {
+      globalThis.fetch = (async () => response()) as typeof fetch
+      const props = baseProps({ tab: 'periods', reopen: 'r-own' })
+      props.viewerId = 'u-requester'
+      props.reopenRequests = [{
+        id: 'r-own', period_id: 'p1', book_id: 'b1', status: 'requested',
+        requested_by: 'u-requester', requester_name: 'Rae', reason: 'Correct the closing entry',
+        modules: ['gl'], period_name: 'January', book_name: 'Main', approver_name: null,
+      }] as WorkspaceProps['reopenRequests']
+      const { unmount } = await mountWorkspace(props)
+      try {
+        assert.equal(clickButton(String(closeSetup.periods?.reopenWithdraw)).disabled, false)
+        assert.ok(![...document.querySelectorAll('button')].some((button) => button.textContent?.trim() === closeSetup.actions?.reject))
+      } finally { await unmount() }
+    }
+  } finally { globalThis.fetch = prior }
+})
+
+test('the requester submits module widening with no implicit additional hours and opens its new request', async () => {
+  const prior = globalThis.fetch
+  const bodies: Record<string, unknown>[] = []
+  globalThis.fetch = (async (_input: unknown, init?: { body?: string }) => {
+    bodies.push(JSON.parse(String(init?.body ?? '{}')))
+    return Response.json({ ok: true, requestId: 'new-request' })
+  }) as typeof fetch
+  const props = baseProps({ tab: 'periods', reopen: 'r-window' })
+  props.viewerId = 'u-requester'
+  props.reopenRequests = [{
+    id: 'r-window', period_id: 'p1', book_id: 'b1', status: 'approved',
+    requested_by: 'u-requester', requester_name: 'Rae', reason: 'Correct the closing entry',
+    modules: ['gl'], period_name: 'January', book_name: 'Main', approver_name: 'Ari',
+  }] as WorkspaceProps['reopenRequests']
+  const { pushes, unmount } = await mountWorkspace(props)
+  try {
+    const hours = [...document.querySelectorAll<HTMLInputElement>('input[type="number"]')]
+      .find((input) => input.getAttribute('aria-label') === closeSetup.periods?.extendHoursLabel)
+    assert.ok(hours)
+    assert.equal(hours.value, '', 'module widening starts without an added duration')
+    const check = [...document.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')]
+      .find((input) => input.closest('label')?.textContent?.trim() === 'AP')
+    assert.ok(check)
+    const reasons = [...document.querySelectorAll<HTMLTextAreaElement>('textarea')]
+    assert.equal(reasons.length, 2)
+    await act(async () => {
+      check.click()
+      setNativeValue(reasons[1]!, 'Include AP in the correction scope')
+      await tick()
+    })
+    await act(async () => {
+      clickButton(String(closeSetup.actions?.extendReopen)).click()
+      await tick()
+    })
+    assert.deepEqual(bodies, [{ action: 'extend-reopen', requestId: 'r-window', reason: 'Include AP in the correction scope', addModules: ['ap'] }])
+    assert.equal(pushes.length, 1)
+    assert.match(pushes[0]!, /reopen=new-request/)
+    assert.equal(globalThis.__closeTestToasts?.[0]?.message, closeSetup.messages?.reopenRequested)
+  } finally { await unmount(); globalThis.fetch = prior }
+})
+
+test('a pending widening request shows the requested expiry before its decision', async () => {
+  const prior = globalThis.fetch
+  globalThis.fetch = (async () => Response.json({ ownRequest: false, conflicts: [] })) as typeof fetch
+  const props = baseProps({ tab: 'periods', reopen: 'r-change' })
+  props.reopenRequests = [{
+    id: 'r-change', period_id: 'p1', book_id: 'b1', status: 'requested',
+    requested_by: 'u-requester', requester_name: 'Rae', reason: 'Include AP in the correction scope',
+    modules: ['gl', 'ap'], period_name: 'January', book_name: 'Main', approver_name: null,
+    impact_snapshot: { amendment: { expiresAt: '2026-11-02T10:15:00.000Z' } },
+  }] as WorkspaceProps['reopenRequests']
+  const { unmount } = await mountWorkspace(props)
+  try {
+    assert.ok(document.body.textContent?.includes('Requested expiry: 2026-11-02 10:15'))
+  } finally { await unmount(); globalThis.fetch = prior }
 })

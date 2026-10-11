@@ -69,6 +69,7 @@ async function fixture() {
 test('bulk approval approves every submitted week', async () => {
   const f = await fixture()
   try {
+    assert.ok(f.workers.length > 0, "the fixture submits at least one worker")
     for (const worker of f.workers) {
       assert.equal((await f.save(worker)).status, 200)
       assert.equal((await f.submit(worker)).status, 200)
@@ -86,6 +87,7 @@ test('bulk approval approves every submitted week', async () => {
 test('bulk approval reports per-week refusals without aborting the rest', async () => {
   const f = await fixture()
   try {
+    assert.ok(f.workers.length > 0, "the fixture submits at least one worker")
     for (const worker of f.workers) {
       assert.equal((await f.save(worker)).status, 200)
       assert.equal((await f.submit(worker)).status, 200)

@@ -1,6 +1,5 @@
 import { useTranslations } from "next-intl";
 import {
-  Badge,
   Table,
   TableBody,
   TableCell,
@@ -8,6 +7,8 @@ import {
   TableHeader,
   TableRow,
 } from "@openbooks/ui";
+import { effectiveRequirementPerUnit, pairBomRevisionLines, type BomRevisionField, type BomRevisionPair } from "@/lib/bom-lines";
+import { BomRevisionDiffTable, type BomRevisionDiffRow } from "./BomRevisionDiffTable";
 const fieldKeys = new Set([
   'identity', 'name', 'id', 'subsidiaryId', 'currency', 'expenseAccountId', 'liabilityAccountId', 'presentObligation', 'outflow', 'reliablyEstimable', 'evidence', 'discounting', 'discountEvidence', 'estimate', 'method', 'amount', 'outcomes', 'probability', 'minimum', 'maximum', 'reportingFramework', 'periodId', 'balance', 'events', 'recognized', 'liability', 'estimatedSettlement', 'disclosureRequired', 'priorLiability', 'currentPeriodCharge', 'entryId', 'requiredSubsidiaryIds',
   'existingId', 'existingObligationIds', 'ssp', 'standaloneSellingPrice', 'recognitionRuleId',
@@ -145,20 +146,22 @@ function asLines(value: unknown): RecipeLine[] {
   return Array.isArray(value) ? value.filter((line): line is RecipeLine => !!line && typeof line === "object" && !Array.isArray(line)) : [];
 }
 
-function lineKey(line: RecipeLine): string {
-  return `${String(line.componentItemId ?? "")}|${line.operationSeq == null ? "" : String(line.operationSeq)}|${line.isByproduct === true ? "by" : "in"}`;
-}
-
 function lineText(value: unknown): string {
   if (value === null || value === undefined) return "…";
   if (typeof value === "boolean") return value ? "Yes" : "No";
   return String(value).replaceAll("_", " ");
 }
 
-/** A manufacturing recipe revision as an old-vs-new diff: every proposed
- * line with its disposition, changed lines carrying their old → new values,
- * and removed lines retained below — the approver never decodes component
- * ids by hand. */
+/** Diff cells show an em dash for an absent value. */
+function valueText(value: unknown): string {
+  return value === null || value === undefined || value === "" ? "—" : lineText(value);
+}
+
+/** A manufacturing recipe revision as an old-vs-new diff. Components pair by
+ * item (a repeated item pairs by position), so each component appears once with
+ * its old and new quantity, unit, scrap, effective requirement and window, and
+ * its change kind. Unchanged components stay hidden until the reader shows
+ * them. This is presentation: the frozen snapshots are read, never rewritten. */
 export function BomRevisionEvidence({
   before,
   after,
@@ -172,73 +175,74 @@ export function BomRevisionEvidence({
 }) {
   const t = useTranslations("accounting");
   const label = useFieldLabel();
-  const beforeLines = asLines((before as RecipeLine | null)?.lines);
-  const afterLines = asLines((after as RecipeLine | null)?.components);
-  const beforeByKey = new Map(beforeLines.map((line) => [lineKey(line), line]));
-  const seen = new Set<string>();
-  // Proposed lines first (added / changed / unchanged), then the removed
-  // lines they supersede — the whole recipe stays on one screen.
-  const rows: { line: RecipeLine; disposition: "added" | "changed" | "unchanged" | "removed"; changes: string[] }[] =
-    afterLines.map((line) => {
-      const key = lineKey(line);
-      seen.add(key);
-      const old = beforeByKey.get(key);
-      if (!old) return { line, disposition: "added" as const, changes: [] };
-      const changes: string[] = [];
-      for (const field of ["quantityPer", "quantityBasis", "formulaOutputQuantity", "scrapPct", "outputCostWeight", "effectiveFrom", "effectiveTo"] as const) {
-        if (String(old[field] ?? "") !== String(line[field] ?? "")) {
-          changes.push(`${label(field)}: ${lineText(old[field])} → ${lineText(line[field])}`);
-        }
-      }
-      return { line, disposition: changes.length > 0 ? ("changed" as const) : ("unchanged" as const), changes };
-    });
-  for (const line of beforeLines) {
-    if (!seen.has(lineKey(line))) rows.push({ line, disposition: "removed", changes: [] });
-  }
-  const componentName = (line: RecipeLine): string => {
-    const id = String(line.componentItemId ?? "");
-    return names[id] ?? (id ? id.slice(0, 8) : lineText(null));
+  const pairs = pairBomRevisionLines(
+    asLines((before as RecipeLine | null)?.lines),
+    asLines((after as RecipeLine | null)?.components),
+  );
+  const yesNo = (value: unknown) =>
+    value === true ? t("lifecycle.evidence.yes") : value === false ? t("lifecycle.evidence.no") : valueText(value);
+  const readers = {
+    quantityPer: (line: RecipeLine) => valueText(line.quantityPer),
+    quantityBasis: (line: RecipeLine) => {
+      const basis = valueText(line.quantityBasis ?? "per_unit");
+      return line.quantityBasis === "per_formula" ? `${basis} (${valueText(line.formulaOutputQuantity)})` : basis;
+    },
+    scrapPct: (line: RecipeLine) => valueText(line.scrapPct),
+    effective: (line: RecipeLine) => effectiveRequirementPerUnit(line) ?? "—",
+    operationSeq: (line: RecipeLine) => valueText(line.operationSeq),
+    isByproduct: (line: RecipeLine) => yesNo(line.isByproduct ?? false),
+    window: (line: RecipeLine) => `${valueText(line.effectiveFrom)} – ${valueText(line.effectiveTo)}`,
   };
-  const window = (line: RecipeLine): string =>
-    `${lineText(line.effectiveFrom)} → ${lineText(line.effectiveTo)}`;
+  // The new value, or "old → new" when the field changed; removed and added lines show their one side.
+  const cell = (pair: BomRevisionPair, changed: boolean, read: (line: RecipeLine) => string): string => {
+    const next = pair.after ? read(pair.after) : null;
+    const prior = pair.before ? read(pair.before) : null;
+    if (next === null) return prior ?? "—";
+    if (prior === null || !changed) return next;
+    return `${prior} → ${next}`;
+  };
+  const changedField = (pair: BomRevisionPair, ...fields: BomRevisionField[]) =>
+    fields.some((field) => pair.changedFields.includes(field));
+  const rows: BomRevisionDiffRow[] = pairs.map((pair, index) => {
+    const effectiveChanged =
+      pair.before !== null && pair.after !== null && readers.effective(pair.before) !== readers.effective(pair.after);
+    return {
+      key: `${index}:${pair.componentItemId}`,
+      kind: pair.kind,
+      kindLabel: t(`lifecycle.evidence.bom.${pair.kind}` as never),
+      cells: [
+        names[pair.componentItemId] ?? (pair.componentItemId ? pair.componentItemId.slice(0, 8) : "—"),
+        cell(pair, changedField(pair, "quantityPer"), readers.quantityPer),
+        cell(pair, changedField(pair, "quantityBasis", "formulaOutputQuantity"), readers.quantityBasis),
+        cell(pair, changedField(pair, "scrapPct"), readers.scrapPct),
+        cell(pair, effectiveChanged, readers.effective),
+        cell(pair, changedField(pair, "operationSeq"), readers.operationSeq),
+        cell(pair, changedField(pair, "isByproduct"), readers.isByproduct),
+        cell(pair, changedField(pair, "effectiveFrom", "effectiveTo"), readers.window),
+      ],
+    };
+  });
+  const headers = [
+    label("componentItemId"),
+    label("quantityPer"),
+    label("quantityBasis"),
+    label("scrapPct"),
+    t("lifecycle.evidence.bom.effectivePerUnit"),
+    label("operationSeq"),
+    label("isByproduct"),
+    `${label("effectiveFrom")} – ${label("effectiveTo")}`,
+    t("lifecycle.evidence.bom.disposition"),
+  ];
+  const unchangedCount = pairs.filter((pair) => pair.kind === "unchanged").length;
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>{label("componentItemId")}</TableHead>
-          <TableHead>{label("quantityPer")}</TableHead>
-          <TableHead>{label("quantityBasis")}</TableHead>
-          <TableHead>{label("scrapPct")}</TableHead>
-          <TableHead>{label("operationSeq")}</TableHead>
-          <TableHead>{label("isByproduct")}</TableHead>
-          <TableHead>{label("effectiveFrom")} → {label("effectiveTo")}</TableHead>
-          <TableHead>{t("lifecycle.evidence.bom.disposition")}</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {rows.map((row, i) => (
-          <TableRow key={i}>
-            <TableCell className="break-words">{componentName(row.line)}</TableCell>
-            <TableCell className="tabular-nums">{lineText(row.line.quantityPer)}</TableCell>
-            <TableCell>{lineText(row.line.quantityBasis ?? "per_unit")}</TableCell>
-            <TableCell className="tabular-nums">{lineText(row.line.scrapPct)}</TableCell>
-            <TableCell className="tabular-nums">{row.line.operationSeq == null ? "…" : String(row.line.operationSeq)}</TableCell>
-            <TableCell>{row.line.isByproduct === true ? t("lifecycle.evidence.yes") : t("lifecycle.evidence.no")}</TableCell>
-            <TableCell className="whitespace-nowrap">{window(row.line)}</TableCell>
-            <TableCell>
-              <span className="flex flex-col gap-1">
-                <Badge variant={row.disposition === "unchanged" ? "secondary" : row.disposition === "removed" ? "destructive" : "default"}>
-                  {t(`lifecycle.evidence.bom.${row.disposition}` as never)}
-                </Badge>
-                {row.changes.map((change, j) => (
-                  <span key={j} className="text-xs text-slate-500 dark:text-slate-400">{change}</span>
-                ))}
-              </span>
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+    <BomRevisionDiffTable
+      headers={headers}
+      rows={rows}
+      unchangedCount={unchangedCount}
+      showUnchangedLabel={t("lifecycle.evidence.bom.showUnchanged", { count: unchangedCount })}
+      hideUnchangedLabel={t("lifecycle.evidence.bom.hideUnchanged")}
+      emptyLabel={t("lifecycle.evidence.bom.noChanges")}
+    />
   );
 }
 

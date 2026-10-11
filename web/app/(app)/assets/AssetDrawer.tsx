@@ -5,7 +5,7 @@ import { useMoney } from '@/components/money-provider'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { ChevronDown } from 'lucide-react'
 import { toast } from 'sonner'
 import { fetchAppAction, readApiErrorMessage } from '../../../lib/api-error'
@@ -164,6 +164,7 @@ export function AssetDrawer({
   const { money } = useMoney()
   const t = useTranslations('assets')
   const tCommon = useTranslations('common')
+  const locale = useLocale()
   const pathname = usePathname()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -392,8 +393,11 @@ export function AssetDrawer({
       // The body parses from a clone so the subsidiary code keeps its mapped
       // copy while every other refusal reads through the shared helper with
       // message, remedy and code.
-      const err = (await res.clone().json().catch(() => null))?.error
-      if (err === 'invalid_subsidiary') throw new Error(t('errors.invalidSubsidiary'))
+      const body = (await res.clone().json().catch(() => null)) as { error?: unknown; code?: unknown; missing?: unknown } | null
+      if (body?.error === 'invalid_subsidiary') throw new Error(t('errors.invalidSubsidiary'))
+      if (body?.code === 'asset_placement_incomplete') {
+        throw new Error(t('drawer.placementMissing', { fields: placementFieldNames(body.missing) }))
+      }
       throw new Error(await readApiErrorMessage(res, t('drawer.saveFailed')))
     }
     const saved = await res.json() as AssetPayload
@@ -520,6 +524,23 @@ export function AssetDrawer({
     <Label htmlFor={fieldId(placement)}>{labelFor(placement, fallback)}{editable && requiredFor(placement, required) ? <span className="text-red-500"> *</span> : null}</Label>
   )
   const textValue = (value: unknown) => value == null || value === '' ? '—' : String(value)
+  function placementFieldLabel(field: string): string {
+    switch (field) {
+      case 'category_id': return t('labels.category')
+      case 'acquisition_cost': return t('labels.cost')
+      case 'in_service_on': return t('labels.inServiceOn')
+      case 'useful_life_months': return t('labels.lifeMonths')
+      case 'depreciation_units_total': return t('labels.unitsTotal')
+      case 'opening_accumulated_depreciation': return t('labels.openingAccumulated')
+      case 'opening_accumulated_as_of': return t('labels.openingAsOf')
+      default: return field
+    }
+  }
+  /** Translated, locale-joined names for the placement fields a refusal lists. */
+  function placementFieldNames(value: unknown): string {
+    const fields = Array.isArray(value) ? value.filter((field): field is string => typeof field === 'string') : []
+    return new Intl.ListFormat(locale, { style: 'long', type: 'conjunction' }).format(fields.map(placementFieldLabel))
+  }
 
   function renderAssetField(placement: HeaderFieldPlacement) {
     const key = placement.key
@@ -570,6 +591,13 @@ export function AssetDrawer({
   }
 
   const hasAccountingEvidence = payload.hasAccountingEvidence
+  // The schedule empty state names only the fields still missing, from the
+  // same placement rules the server applies; a complete draft says it is ready.
+  const scheduleEmptyCopy = isDraft
+    ? payload.placement.missing.length > 0
+      ? t('drawer.scheduleMissingFields', { fields: placementFieldNames(payload.placement.missing) })
+      : t('drawer.scheduleReadyToPlace')
+    : t('drawer.scheduleEmpty')
   const displayName = (editable ? name.trim() : a.name) || t('drawer.newAsset')
   const actionClass = 'justify-start'
   const setTaxValue = (regime: string, key: string, value: unknown) => setTaxValues((current) => ({
@@ -591,6 +619,7 @@ export function AssetDrawer({
       <Button size="sm" variant="outline" disabled={busy} onClick={cancel}>{tCommon('actions.cancel')}</Button>
       <Button size="sm" disabled={busy} onClick={save}>{busy ? tCommon('actions.saving') : createMode ? t('create.create') : tCommon('actions.save')}</Button>
     </div> : canManage || canCustomize ? <div className="flex items-center gap-1.5">
+      {!createMode && canManage && isDraft ? <Button size="sm" className="h-8 px-2.5 text-xs" disabled={busy} onClick={placeInService}>{t('drawer.placeInService')}</Button> : null}
       {canManage && canEditStatus ? <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" onClick={() => { resetForm(); setMode('edit') }}>{tCommon('actions.edit')}</Button> : null}
       <Popover open={actionsOpen} onOpenChange={setActionsOpen} align="end" className="w-64 p-1.5" trigger={<Button variant="outline" size="sm" className="h-8 gap-1.5 px-2.5 text-xs" onClick={() => setActionsOpen((open) => !open)} aria-expanded={actionsOpen}>{tCommon('labels.actions')}<ChevronDown className={cn('h-3.5 w-3.5 transition-transform', actionsOpen && 'rotate-180')} aria-hidden /></Button>}>
       {forms.length > 0 ? <div className="mb-1 border-b border-slate-200 p-2 dark:border-slate-800"><Label className="mb-1 block text-xs">{t('drawer.customForm')}</Label><Select value={currentFormId ?? ''} onChange={(event) => selectForm(event.target.value)}>{forms.map((form) => <option key={form.id} value={form.id}>{form.name}</option>)}</Select></div> : null}
@@ -636,7 +665,7 @@ export function AssetDrawer({
           </Button>
         ) : null}
       </div>
-      {payload.schedule.length === 0 ? <p className="text-sm text-slate-500 dark:text-slate-400">{t('drawer.scheduleEmpty')}</p> : <Table>
+      {payload.schedule.length === 0 ? <p className="text-sm text-slate-500 dark:text-slate-400">{scheduleEmptyCopy}</p> : <Table>
       <TableHeader><TableRow><TableHead>{t('run.book')}</TableHead><TableHead>{t('drawer.period')}</TableHead><TableHead className="text-right">{t('drawer.planned')}</TableHead><TableHead className="text-right">{t('drawer.postedAmount')}</TableHead><TableHead>{t('drawer.evidence')}</TableHead><TableHead className="text-right">{t('labels.accumulated')}</TableHead><TableHead className="text-right">{t('labels.nbv')}</TableHead></TableRow></TableHeader>
       <TableBody>{payload.schedule.map((line) => <TableRow key={line.id}>
         <TableCell><Badge variant="outline">{line.bookCode}</Badge></TableCell>

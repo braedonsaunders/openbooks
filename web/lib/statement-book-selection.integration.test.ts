@@ -72,7 +72,7 @@ async function fixture(action: (org: Fixture, book: string, authz: import('./aut
       await db.execute(sql`update subsidiaries set name='000 unrelated statement tenant'
         where org_id=${u.orgId} and id=${u.subsidiaryId}`)
       const uid = await createScratchUser(org.orgId, 'Book reader', 'book_reader')
-      await db.execute(sql`update app_roles set permissions='["reports.read"]'::jsonb where org_id=${org.orgId} and key='book_reader'`)
+      await db.execute(sql`update app_roles set permissions='["reports.read","gl.read"]'::jsonb where org_id=${org.orgId} and key='book_reader'`)
       state.user = { id: uid, orgId: org.orgId, isSuperAdmin: false, name: 'Book reader', email: 'reader@example.test',
         roles: [], envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: uid }
       await db.execute(sql`insert into accounting_books(id,org_id,code,name,is_primary,is_active,posts_gl)
@@ -88,7 +88,7 @@ async function fixture(action: (org: Fixture, book: string, authz: import('./aut
       }
       return u
     })
-    const authz = { user: state.user, permissions: new Set(['reports.read']), allowedSubsidiaryIds: null } as import('./authz').Authz
+    const authz = { user: state.user, permissions: new Set(['reports.read', 'gl.read']), allowedSubsidiaryIds: null } as import('./authz').Authz
     await withOrgTransaction(org.orgId, () => withReportAuthz(authz, () => action(org, book, authz)))
   } finally {
     state.user = null
@@ -172,6 +172,8 @@ test('explicit invalid or unavailable books never fall back to the primary book'
 
 test('budget Actual drills use the scenario book even after that book is retired', enabled, async () => fixture(async (org, book) => {
   await withBypassContext(() => (db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"budgets":true}'::jsonb) where id=${org.orgId}`)))
+  // A budget drill reads the plan as well as the ledger.
+  await withBypassContext(() => (db.execute(sql`update app_roles set permissions='["reports.read","gl.read","budgets.read"]'::jsonb where org_id=${org.orgId} and key='book_reader'`)))
   const scenario = randomUUID()
   await withBypassContext(() => (db.execute(sql`insert into budget_scenarios(id,org_id,book_id,fiscal_year,name)
     select ${scenario},${org.orgId},${book},fiscal_year,'Selected-book plan' from accounting_periods where id=${org.periodId} and org_id=${org.orgId}`)))

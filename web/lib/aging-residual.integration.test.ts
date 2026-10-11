@@ -9,10 +9,11 @@ import { randomUUID } from 'node:crypto'
  * journals, and legacy partyless opening balances post control lines with no
  * invoice/credit document behind them, and settlement dust (a payment line
  * whose stored base differs from the applied amount by a cent) leaves GL
- * balances no open document explains. The aging folds those in as an
- * explicit per-party residual — the "(no party)" row when no party is
- * stamped — so the totals always tie the control. A clean subledger reads
- * exactly as before (no phantom rows).
+ * balances no open document explains. The aging presents those as an explicit
+ * reconciling line per party ("Control-account entries without an open item",
+ * the partyless line when no party is stamped), listing the journal entries
+ * behind it, so the totals always tie the control and no document's open is
+ * inflated. A clean subledger reads exactly as before (no phantom rows).
  */
 const root = pathToFileURL(process.cwd() + '/').href
 const { db, withBypassContext, withOrgContext } = (await import('@openbooks/engine/platform/db')) as typeof import('@openbooks/engine/platform/db')
@@ -161,6 +162,70 @@ test('AP residual presents credit-normal control positive and names the vendor',
   }
 })
 
+
+test('a manual AR credit with no open item reads as a reconciling line that names its journal entry', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypassContext(() => createScratchOrg())
+  try {
+    let manual = ''
+    await withBypassContext(async () => {
+      await postInvoice(org, 'RES-INV-4', '5000.0000')
+      // Dr Bank / Cr AR with no customer and no invoice: the manual journal the bookkeeper posted.
+      manual = await postEntry(org, 'MANUAL-AR', [[org.accounts.bank, '4200.0000', null], [org.accounts.ar, '-4200.0000', null]])
+    })
+    await withOrgContext(org.orgId, async () => {
+      const gl = await controlBalance(org, 'asset_receivable', D)
+      assert.equal(gl, '800.0000')
+      const aging = await agingByParty('ar', D, undefined, org.orgId)
+      assert.equal(aging.totals.total, gl, 'the summary ties the AR control')
+      const customer = aging.rows.find((row) => row.partyId === org.customerId && !row.reconciling)
+      assert.equal(customer?.total, '5000.0000', 'the customer row carries the invoice alone')
+      const reconciling = aging.rows.find((row) => row.reconciling === true)
+      assert.ok(reconciling, 'the manual credit reads as its own reconciling line')
+      assert.equal(reconciling.partyId, null)
+      assert.equal(reconciling.total, '-4200.0000')
+      assert.equal(reconciling.current, '-4200.0000')
+      assert.equal(reconciling.entries?.length, 1, 'the line names the one journal entry behind it')
+      const [listed] = reconciling.entries ?? []
+      assert.equal(listed?.entryId, manual)
+      assert.equal(listed?.amount, '-4200.0000')
+      const number = await db.execute<{ entry_number: string }>(sql`select entry_number from journal_entries where id = ${manual}`)
+      assert.equal(listed?.entryNumber, number.rows[0]?.entry_number)
+      // Detail lists open items only: the manual credit is never an open item.
+      const detail = await agingDetail('ar', D, undefined, org.orgId)
+      assert.equal(detail.totals.total, '5000.0000')
+      assert.ok(detail.rows.every((row) => row.partyId !== null))
+    })
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
+
+test('a receipt journal applied in full to an invoice leaves no reconciling line', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypassContext(() => createScratchOrg())
+  try {
+    await withBypassContext(async () => {
+      const eInv = await postInvoice(org, 'RES-INV-5', '1000.0000')
+      // An unapplied-receipt journal for the customer, applied in full to the invoice.
+      const eReceipt = await postEntry(org, 'RECEIPT', [[org.accounts.bank, '300.0000', null], [org.accounts.ar, '-300.0000', org.customerId]])
+      await db.execute(sql`insert into applications (org_id, from_line_id, to_line_id, amount, source_amount, applied_on,
+          source_transaction_amount, source_transaction_currency, target_transaction_amount, target_transaction_currency,
+          settlement_rate, settlement_rate_source, settlement_rate_reference)
+        values (${org.orgId}, ${await lineId(eReceipt, org.accounts.ar)}, ${await lineId(eInv, org.accounts.ar)},
+          '300.0000', '300.0000', ${D}, '300.0000', 'CAD', '300.0000', 'CAD', 1, 'same_currency', 'RES-PROBE-2')`)
+    })
+    await withOrgContext(org.orgId, async () => {
+      const gl = await controlBalance(org, 'asset_receivable', D)
+      assert.equal(gl, '700.0000')
+      const aging = await agingByParty('ar', D, undefined, org.orgId)
+      assert.equal(aging.totals.total, gl)
+      assert.ok(aging.rows.every((row) => row.reconciling !== true), 'an applied receipt is explained, not reconciling')
+      const customer = aging.rows.find((row) => row.partyId === org.customerId)
+      assert.equal(customer?.total, '700.0000')
+    })
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
 
 const consolidatedRows = [
   { label: "aging cutover open balance", register: async () => {

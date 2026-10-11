@@ -34,7 +34,9 @@ for (const kind of ["production", "preview", "sandbox"] as const) {
           // (org-access-sandbox-permission.integration.test.ts); this suite is about activation.
           if (kind === "sandbox") await db.execute(sql`update app_roles set permissions='["admin.sandboxes.manage"]'::jsonb where org_id=${homeOrg.orgId} and key='member'`);
           await db.execute(sql`update orgs set env_kind='production' where id=${homeOrg.orgId}`);
-          await db.execute(sql`update orgs set env_kind=${kind},sandbox_of=${kind === "sandbox" ? homeOrg.orgId : null} where id=${target.orgId}`);
+          // A sandbox is born with its clone seed (lifecycle.ts); the rebase of every
+          // member id derives from it, so a seedless sandbox has no member to enter.
+          await db.execute(sql`update orgs set env_kind=${kind},sandbox_of=${kind === "sandbox" ? homeOrg.orgId : null},sandbox_seed=${kind === "sandbox" ? randomUUID() : null} where id=${target.orgId}`);
           const seed = (await db.execute<{ seed: string }>(sql`select sandbox_seed::text as seed from orgs where id=${target.orgId}`)).rows[0]!.seed;
           const actingId = await createScratchUser(target.orgId, "Mapped member", "member", kind === "sandbox" ? rebaseUuid(homeId, seed) as ReturnType<typeof randomUUID> : randomUUID());
           if (kind === "sandbox") await db.execute(sql`insert into sandboxes(org_id,production_org_id,name,status) values (${target.orgId},${homeOrg.orgId},'Activation review','ready')`);
@@ -97,7 +99,7 @@ async function seed(): Promise<Fixture> {
   const homeRoleId = (await db.execute<{ id: string }>(sql`
     select id from app_roles where org_id = ${home.orgId} and key = 'member'`)).rows[0]!.id;
   await db.execute(sql`update orgs set env_kind = 'production' where id = ${home.orgId}`);
-  await db.execute(sql`update orgs set env_kind = 'sandbox', sandbox_of = ${home.orgId} where id = ${sandbox.orgId}`);
+  await db.execute(sql`update orgs set env_kind = 'sandbox', sandbox_of = ${home.orgId}, sandbox_seed = ${randomUUID()} where id = ${sandbox.orgId}`);
   const seedValue = (await db.execute<{ seed: string }>(sql`
     select sandbox_seed::text as seed from orgs where id = ${sandbox.orgId}`)).rows[0]!.seed;
   const sandboxUserId = await createScratchUser(

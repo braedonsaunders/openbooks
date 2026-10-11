@@ -17,6 +17,7 @@ import { AP_KINDS, DOC_KINDS, isDocumentCreateKind } from "../../../../lib/docum
 import { accountOptions, createDocumentSeed, dimensionOptions, taxCodeOptions, taxGroupOptions } from "../../../../lib/documents.ts";
 import { listScopedPartyOptionsWithCurrent } from "../../../../lib/scoped-options";
 import { loadDocument } from "@openbooks/engine/ledger/document-service";
+import { postedDocumentControlAccount } from "@openbooks/engine/ledger/posting-control-account";
 import { loadFieldDefs } from '../../../../lib/custom-fields'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isMultiSubsidiary, subsidiaryOptions, subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
@@ -244,6 +245,13 @@ export async function loadApBills(
          limit 1`)).rows[0] ?? null
     : null
   const creditLines = creditFromId && creditSource ? await returnableBillLines(db, authz.user.orgId, creditFromId) : []
+  // The credit settles the bill it corrects, so it carries the bill's payable
+  // account rather than the vendor's current default: posting stamps each
+  // document's account once, and a later default change must not split the
+  // pair (applications refuse a credit and bill on different control accounts).
+  const creditSourceControlAccountId = creditFromId && creditSource
+    ? await postedDocumentControlAccount(db, authz.user.orgId, creditFromId)
+    : null
   if (createSeed && creditSource) {
     const seed = createSeed.doc as Record<string, unknown>
     seed.party_id = creditSource.partyId
@@ -251,6 +259,7 @@ export async function loadApBills(
     // The credit returns this bill's receipts, so it belongs to the bill's
     // legal entity — the receipt scope the save validates against.
     if (creditSource.subsidiaryId) seed.subsidiary_id = creditSource.subsidiaryId
+    if (creditSourceControlAccountId) seed.custom = { controlAccountId: creditSourceControlAccountId }
     ;(createSeed as { lines: Record<string, unknown>[] }).lines = creditLines.map((line) => ({
       item_id: line.itemId,
       account_id: line.accountId,

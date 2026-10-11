@@ -11,6 +11,7 @@ const { bootJsdomEnvironment } = await import("../../../testing/jsdom-env");
 await bootJsdomEnvironment({
   url: "http://localhost:4800/timesheets?timesheet=emp-8:2026-07-12",
   matchMediaMatches: false,
+  event: "jsdom",
 });
 
 Object.assign(globalThis, {

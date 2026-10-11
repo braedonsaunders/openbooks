@@ -327,7 +327,7 @@ const f = ref<NecPreparationData>()
 
 export function necPreparationSpec(data: NecPreparationData): PageSpec {
   return statementReportSpec({
-    route: ROUTE,
+    route: '/reports/1099-preparation',
     header: { title: f('title'), back: { href: f('backHref'), label: f('backLabel') } },
     filters: [{
       controls: { search: true, period: false, subsidiary: false },

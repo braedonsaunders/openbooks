@@ -828,6 +828,7 @@ const agingTool: AssistantToolDef = {
         truncated: ranked.length > limit,
         rows: ranked.slice(0, limit).map((row) => ({
           party: row.partyName,
+          reconciling: row.reconciling === true,
           current: row.current,
           days1to30: row.b1,
           days31to60: row.b2,

@@ -298,7 +298,7 @@ export async function cashPosition(
   const startingCash = sumMoney(banks.map((b) => b.balance));
   const arOutstanding = sumMoney(arItems.map((i) => i.remaining));
   const apOutstanding = sumMoney(apItems.map((i) => i.remaining));
-  const ar = scheduleForecast(arItems, arStats, grid.asOf, grid.start, grid.end, model);
+  const ar = scheduleForecast(arItems, arStats, grid.asOf, grid.start, grid.end, model, true);
   const ap = scheduleForecast(apItems, apStats, grid.asOf, grid.start, grid.end, model);
   const weekTotals = (byWeek: Map<string, { amount: string }[]>): Record<string, string> =>
     Object.fromEntries([...byWeek.entries()].map(([k, es]) => [k, sumMoney(es.map((e) => e.amount))]));

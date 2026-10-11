@@ -33,7 +33,9 @@ const scriptWriteFields = {
   sortOrder: z.number().int().min(-2_147_483_648).max(2_147_483_647).optional(),
 };
 const createScriptBodySchema = z.object(scriptWriteFields);
-const updateScriptBodySchema = z.object({ id: z.string().uuid(), ...scriptWriteFields });
+// The id is checked by the handler, which answers a malformed id with the same
+// 404 as an unknown script; a uuid constraint here would refuse it first with 400.
+const updateScriptBodySchema = z.object({ id: z.string(), ...scriptWriteFields });
 
 
 

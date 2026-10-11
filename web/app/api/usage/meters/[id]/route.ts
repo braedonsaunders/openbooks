@@ -15,6 +15,7 @@ const Body = z.object({
 export const PATCH = defineRoute({
   permission: "usage.manage",
   feature: "usageBilling",
+  invalidBodyStatus: 422,
   scope: "unrestricted",
   params: Params,
   body: Body,

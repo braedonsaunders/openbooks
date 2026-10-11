@@ -218,6 +218,17 @@ const mockSources = new Map<string, string>([
         }
       }
 
+      export function parseSquarePayout(payout, entries, settlementDate) {
+        return {
+          provider: 'square',
+          externalRef: payout.id,
+          settlementDate,
+          currency: 'USD',
+          lines: [{ kind: 'charge', amount: '1.0000' }],
+          raw: { receivedEntries: entries.length },
+        }
+      }
+
       export function summarizeSettlement() {
         return {
           grossAmount: '1.0000',
@@ -681,6 +692,79 @@ test("shopify_payments import dispatches the payout and its balance transactions
   assert.equal(parsed.provider, "shopify_payments");
   assert.equal(parsed.externalRef, "payout-9");
   assert.equal(parsed.raw.receivedTransactions, 1);
+});
+
+test("square import dispatches the payout and its entries under the payout id", async () => {
+  reset(["banking.reconcile"]);
+
+  const response = await post({
+    action: "import",
+    provider: "square",
+    externalRef: "po_2Y8kq3",
+    settlementDate: "2026-08-24",
+    payout: {
+      id: "po_2Y8kq3",
+      status: "PAID",
+      arrival_date: "2026-08-24",
+      amount_money: { amount: 9710, currency: "USD" },
+    },
+    entries: [
+      {
+        id: "pe_charge_1",
+        payout_id: "po_2Y8kq3",
+        type: "CHARGE",
+        gross_amount_money: { amount: 10000, currency: "USD" },
+        fee_amount_money: { amount: -290, currency: "USD" },
+        net_amount_money: { amount: 9710, currency: "USD" },
+        type_charge_details: { payment_id: "pay_Hk3s9Q" },
+      },
+    ],
+  });
+
+  assert.equal(response.status, 200);
+  const parsed = (routeState.domainCalls[0]?.input as { parsed: { provider: string; externalRef: string; raw: { receivedEntries: number } } }).parsed;
+  assert.equal(parsed.provider, "square");
+  assert.equal(parsed.externalRef, "po_2Y8kq3");
+  assert.equal(parsed.raw.receivedEntries, 1);
+});
+
+test("square import refuses an external ref that does not name the payout", async () => {
+  reset(["banking.reconcile"]);
+
+  const response = await post({
+    action: "import",
+    provider: "square",
+    externalRef: "week-34",
+    settlementDate: "2026-08-24",
+    payout: { id: "po_2Y8kq3", amount_money: { amount: 9710, currency: "USD" } },
+    entries: [
+      {
+        id: "pe_charge_1",
+        type: "CHARGE",
+        gross_amount_money: { amount: 10000, currency: "USD" },
+        fee_amount_money: { amount: -290, currency: "USD" },
+        net_amount_money: { amount: 9710, currency: "USD" },
+      },
+    ],
+  });
+
+  assert.equal(response.status, 422);
+  assert.deepEqual(routeState.domainCalls, []);
+});
+
+test("saveConfig accepts Square as a settlement provider", async () => {
+  reset(["admin.setup.manage"]);
+
+  const response = await post({
+    action: "saveConfig",
+    provider: "square",
+    displayName: "Square",
+    isEnabled: true,
+    refundPolicy: "automatic",
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal((routeState.domainCalls[0]?.input as { provider?: string }).provider, "square");
 });
 
 test("paypal import dispatches the Transaction Search export under the operator's reference", async () => {

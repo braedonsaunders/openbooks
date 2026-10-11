@@ -29,7 +29,8 @@ for(const scenario of ['first-rate-book','demote-rate-book','demote-accounting-b
    const resource=setupResource(definition,org.orgId);
    const ctx={orgId:org.orgId,actorId,dryRun:false};
    if(scenario==='first-rate-book'){
-    const outcome=await resource.write([{code:'FIRST',name:'First active book',isDefault:false,isActive:true}],'insert',ctx);
+    // An omitted default flag lets the first active rate book become the default; an explicit false is preserved.
+    const outcome=await resource.write([{code:'FIRST',name:'First active book',isActive:true}],'insert',ctx);
     assert.equal(outcome.created,1);assert.equal((await db.execute(sql`select is_default from item_rate_books where org_id=${org.orgId} and code='FIRST'`)).rows[0]!.is_default,true);
    }else if(scenario==='demote-rate-book'){
     const body={code:'DEFAULT',name:'Default book',isDefault:true,isActive:true};

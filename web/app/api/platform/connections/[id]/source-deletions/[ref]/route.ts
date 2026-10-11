@@ -14,7 +14,7 @@ const deletionBody = z.object({ action: z.enum(["retain", "void"]), note: z.stri
 
 export const POST = defineRoute({
   permission: "admin.setup.manage", feature: { none: "Source-deletion decisions are controlled by connection setup permission and have no separate organization feature gate." },
-  scope: "unrestricted", params: z.object({ id: z.string().uuid(), ref: z.string().min(1) }), body: deletionBody,
+  scope: "unrestricted", params: z.object({ id: z.string(), ref: z.string().min(1) }), body: deletionBody,
   handler: async ({ params: { id, ref }, body, authz: gate }) => {
   try {
     const result = await resolveSourceDeletion({

@@ -43,7 +43,8 @@ async function fixture() {
   const org = await createScratchOrg();
   const actor = (await seedFlowActors(org.orgId)).adminId;
   state.user = { orgId: org.orgId, id: actor };
-  await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"inventory":true}'::jsonb) where id=${org.orgId}`);
+  // Transfer ship and receive are multi-location workflow, gated by Warehousing.
+  await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"inventory":true,"warehousing":true}'::jsonb) where id=${org.orgId}`);
   const hidden = randomUUID();
   await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${hidden},${org.orgId},${org.subsidiaryId},'Hidden entity','CAD','CA')`);
   await db.execute(sql`insert into stock_locations(id,org_id,location_id,code,kind,is_active) values (${randomUUID()},${org.orgId},${org.locationId},'TRANSIT-SCOPE','transit',true)`);

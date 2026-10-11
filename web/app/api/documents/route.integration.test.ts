@@ -268,7 +268,7 @@ test('changed payload on the same key is a 409 and changes nothing', async () =>
       const changed = { ...all.check, referenceNumber: '9999' }
       const conflict = await post(changed, key)
       assert.equal(conflict.status, 409)
-      assert.deepEqual(await conflict.json(), { error: 'invalid_idempotency_key' })
+      assert.deepEqual(await conflict.json(), { code: 'document_create_conflict' })
     })
     const audits = await auditRows(org.orgId, key)
     assert.equal(audits.length, 2, 'conflict writes no audit')
@@ -295,7 +295,7 @@ test('cross-org key collision is a 409 that discloses nothing', async () => {
     await withOrgContext(org.orgId, async () => {
       const response = await post(all.vendor_bill, key)
       assert.equal(response.status, 409)
-      assert.deepEqual(await response.json(), { error: 'invalid_idempotency_key' })
+      assert.deepEqual(await response.json(), { code: 'document_create_conflict' })
     })
     assert.equal(await docCount(org.orgId, key), 0, 'no row claimed in this org')
     assert.equal((await auditRows(org.orgId, key)).length, 0, 'no audit in this org')

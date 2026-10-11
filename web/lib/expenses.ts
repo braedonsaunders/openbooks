@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
 import { documentRevisionCounterSql } from '@openbooks/engine/records/revision'
 import { subsidiaryVisibleFilter } from '@openbooks/engine/organization/scope'
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
 
 /**
  * Recall eligibility for an expense report: a pending_approval
@@ -75,4 +76,38 @@ export async function loadExpenseReport(
   if (!result.rows[0]) return null
   const { __lines: lines, ...doc } = result.rows[0]
   return { doc, lines }
+}
+
+/**
+ * The unsaved-create seed for an expense report: the same `{ doc, lines }`
+ * shape as loadExpenseReport, with no row behind it. Nothing is numbered or
+ * written until the drawer's first Save POSTs /api/expenses.
+ */
+export async function blankExpenseReport(orgId: string) {
+  const [org, today] = await Promise.all([
+    db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${orgId}`),
+    businessToday(orgId),
+  ])
+  const doc: Record<string, unknown> = {
+    id: '',
+    org_id: orgId,
+    kind: 'expense_report',
+    status: 'draft',
+    document_number: null,
+    subsidiary_id: null,
+    party_id: null,
+    payment_card_id: null,
+    employee_name: null,
+    entry_id: null,
+    document_date: today,
+    memo: null,
+    currency: org.rows[0]?.base_currency ?? 'CAD',
+    subtotal: '0',
+    tax_total: '0',
+    total: '0',
+    updated_at: '',
+    custom: {},
+    extra_dims: {},
+  }
+  return { doc, lines: [] as Record<string, unknown>[] }
 }

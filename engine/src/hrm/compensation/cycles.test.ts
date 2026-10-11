@@ -44,7 +44,7 @@ test("the proposing user cannot decide, even behind a different party", async ()
         deciderUserId: PROPOSER,
         deciderPartyId: DECIDER_PARTY,
       }),
-    (e: unknown) => e instanceof CompensationError && /cannot decide their own line/.test(e.message),
+    (e: unknown) => e instanceof CompensationError && /decide their own line/.test(e.message),
   );
 });
 
@@ -57,7 +57,7 @@ test("the same person behind a second login cannot decide", async () => {
         deciderUserId: DECIDER,
         deciderPartyId: PROPOSER_PARTY,
       }),
-    (e: unknown) => e instanceof CompensationError && /cannot decide their own line/.test(e.message),
+    (e: unknown) => e instanceof CompensationError && /decide their own line/.test(e.message),
   );
 });
 

@@ -6,20 +6,25 @@ import type { Authz } from "./authz";
 import { sql } from "drizzle-orm";
 import { db, pool, withBypassContext, withOrgContext } from "@openbooks/engine/platform/db";
 import { laborClearingReconciliation, postPayrollVariance } from "@openbooks/engine/projects/labor-costing/operations";
-import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from "@openbooks/engine/testing/fixtures";
+import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "@openbooks/engine/testing/fixtures";
+import { createWorkOperator } from "@openbooks/engine/testing/manufacturing";
 
 const enabled = !!process.env.OPENBOOKS_DB_URL;
 const periodStart = "2026-07-01";
 const periodEnd = "2026-07-31";
 
 async function configure(org: ScratchOrg) {
+  // Engine-side command authority is re-read from the assigned role on every
+  // labor write (gl.post, admin.setup.manage), so the actor carries the same
+  // unrestricted grant as the mocked route gate.
+  const actorId = await createWorkOperator(org.orgId, "Labor administrator", ["*"]);
   await setProjects(org.orgId, true);
   await db.execute(sql`update orgs set settings = jsonb_set(settings, '{controlAccounts}',
     (settings->'controlAccounts') || ${JSON.stringify({
       laborClearing: org.accounts.clearing,
       payrollVariance: org.accounts.freight,
     })}::jsonb) where id = ${org.orgId}`);
-  return (await seedFlowActors(org.orgId)).adminId;
+  return actorId;
 }
 
 async function postFixtureJournal(org: ScratchOrg, actorId: string, bookId: string,

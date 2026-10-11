@@ -112,11 +112,16 @@ test('mutations hide unreadable bills as missing; readers keep the edit 403', as
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(submit),
       })))
     assert.equal(actionsDenied.status, 404, 'actions without read is 404')
+    // Correction and void bodies carry required concurrency and reason fields,
+    // so the probes send a schema-valid body and the read gate answers.
+    const jsonPost = (path: string, body: unknown) => new Request(`http://documents.test/api/documents/${bill}${path}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    })
     const correctDenied = await withOrgContext(org.orgId, () =>
-      correct(new Request(`http://documents.test/api/documents/${bill}/correct`, { method: 'POST' }), params))
+      correct(jsonPost('/correct', { expectedUpdatedAt: 'probe', amendmentReason: 'Probe for read scope' }), params))
     assert.equal(correctDenied.status, 404, 'correct without read is 404')
     const voidDenied = await withOrgContext(org.orgId, () =>
-      voidDoc(new Request(`http://documents.test/api/documents/${bill}/void`, { method: 'POST' }), params))
+      voidDoc(jsonPost('/void', { expectedUpdatedAt: 'probe' }), params))
     assert.equal(voidDenied.status, 404, 'void without read is 404')
     const deleteDenied = await withOrgContext(org.orgId, () =>
       DELETE(new Request(`http://documents.test/api/documents/${bill}`, { method: 'DELETE' }), params))

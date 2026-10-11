@@ -1,10 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-// F1T-14 (the cash forecast config drawer was fully English: hardcoded
-// labels, notes, values and a raw ISO as-of date): every string resolves
-// through banking.cash.config in the operator locale, counts use ICU
-// plurals, and the as-of date is locale-formatted.
+// The cash forecast config drawer resolves every string through
+// banking.cash.config in the operator locale, counts use ICU plurals, and
+// the as-of date is locale-formatted.
 const { bootJsdomEnvironment } = await import('../../../../testing/jsdom-env')
 await bootJsdomEnvironment({ url: 'http://localhost:4800/banking/cash', scrollIntoView: false, resizeObserver: false })
 
@@ -30,6 +29,7 @@ const { createRoot } = await import('react-dom/client')
 const { act } = await import('react')
 const { NextIntlClientProvider } = await import('next-intl')
 const { MoneyProvider } = await import('../../../../components/money-provider')
+const { BusinessDateProvider } = await import('../../../../components/business-date-provider')
 const { CashForecastConfigDrawer } = await import('./CashForecastConfigDrawer')
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
@@ -59,9 +59,11 @@ async function mount(locale: string) {
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale={locale} messages={messages} timeZone="UTC">
-        <MoneyProvider currency="USD">
-          <CashForecastConfigDrawer {...props} />
-        </MoneyProvider>
+        <BusinessDateProvider today={props.asOf}>
+          <MoneyProvider currency="USD">
+            <CashForecastConfigDrawer {...props} />
+          </MoneyProvider>
+        </BusinessDateProvider>
       </NextIntlClientProvider>,
     )
     await tick()
@@ -70,7 +72,7 @@ async function mount(locale: string) {
   return { host, root }
 }
 
-test('the config drawer translates every label and formats the as-of date (F1T-14)', async () => {
+test('the config drawer translates every label and formats the as-of date', async () => {
   const expectations: Record<string, { labels: string[]; asOf: string; horizon: string }> = {
     en: { labels: ['Forecast horizon', 'Forecast Model', 'Weekly pay cap', 'Unlimited'], asOf: 'Jan 5, 2026', horizon: '6 weeks' },
     de: { labels: ['Prognosehorizont', 'Prognosemodell', 'Wöchentliche Zahlungsobergrenze', 'Unbegrenzt'], asOf: '5. Jan. 2026', horizon: '6 Wochen' },
@@ -96,7 +98,7 @@ test('the config drawer translates every label and formats the as-of date (F1T-1
   }
 })
 
-test('a non-English drawer carries no English config copy (F1T-14)', async (t) => {
+test('a non-English drawer carries no English config copy', async (t) => {
   const { host, root } = await mount('de')
   t.after(async () => {
     await act(async () => {

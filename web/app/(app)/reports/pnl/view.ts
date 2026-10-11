@@ -13,8 +13,8 @@ import { resolveOrgId } from '../../../../lib/org-scope'
 import { reportBookSelection } from '../../../../lib/report-books'
 import { MissingRatesError, reportSubsidiaryView, type RatesBlockedNotice } from '../../../../lib/consolidation'
 import { profitAndLossView } from '../../../../lib/statement-matrix'
-import { resolvePeriod } from '../../../../lib/periods'
-import { parseReportQuery, scaleFactor } from '../../../../lib/report-filters'
+import { resolvePeriod, type ResolvedPeriod } from '../../../../lib/periods'
+import { IncompleteReportPeriodError, parseReportQuery, scaleFactor } from '../../../../lib/report-filters'
 import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
 import { getAuthz } from '@/lib/authz'
 import { dimensionOptionsScope } from '../../../../lib/reports/filters'
@@ -54,9 +54,14 @@ export interface PnlData {
   /** Set when underived consolidated rates block the statement:
    * the page renders a typed banner with a derive link instead of numbers. */
   ratesBlocked: RatesBlockedNotice | null
-  /** False exactly when ratesBlocked is set; the paper hides with it. */
+  /** Set when the custom period has no valid From/To: the page names the
+   * remedy in the filter bar instead of widening to another window. */
+  periodRefusal: string | null
+  /** Title of the period refusal notice: the filter bar's own label. */
+  filterPeriodLabel: string
+  /** False when ratesBlocked or periodRefusal is set; the paper hides with it. */
   ratesReady: boolean
-  /** Null exactly when ratesBlocked is set; never rendered then. */
+  /** Null when ratesBlocked or periodRefusal is set; never rendered then. */
   view: StatementView | null
   scale: string
   currency: string | undefined
@@ -81,7 +86,14 @@ export async function loadPnl(sp: Record<string, string | undefined>): Promise<P
   const tb = await getTranslations('budgets')
   const scheduleDefId = await reportScheduleAnchor('pnl')
   const q = parseReportQuery(sp)
-  const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
+  let period: ResolvedPeriod | null = null
+  let periodRefusal: string | null = null
+  try {
+    period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
+  } catch (e) {
+    if (!(e instanceof IncompleteReportPeriodError)) throw e
+    periodRefusal = e.message
+  }
 
   const labels = {
     revenue: t('pnl.revenue'),
@@ -97,28 +109,30 @@ export async function loadPnl(sp: Record<string, string | undefined>): Promise<P
   let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined
   let view: StatementView | null = null
   let ratesBlocked: RatesBlockedNotice | null = null
-  try {
-    subView = await reportSubsidiaryView(q.subsidiaryId, period.to)
-    view = await profitAndLossView({ from: period.from, to: period.to }, period.label, labels, {
-      breakout: q.breakout,
-      compare: q.compare,
-      basis: q.basis,
-      dims: q.dims,
-      subsidiary: subView.subsidiary,
-      showZero: q.showZero,
-      bookId: selectedBook?.id,
-    })
-  } catch (e) {
-    // Underived consolidated rates must not throw out of SSR:
-    // the page renders a typed banner with a derive link instead of any
-    // numbers. Anything else is a real defect and still throws.
-    if (!(e instanceof MissingRatesError)) throw e
-    ratesBlocked = {
-      code: 'rates-not-derived',
-      title: t('statement.ratesBlockedTitle'),
-      description: (e as Error).message,
-      deriveLabel: t('statement.ratesBlockedAction'),
-      deriveHref: '/close',
+  if (period) {
+    try {
+      subView = await reportSubsidiaryView(q.subsidiaryId, period.to)
+      view = await profitAndLossView({ from: period.from, to: period.to }, period.label, labels, {
+        breakout: q.breakout,
+        compare: q.compare,
+        basis: q.basis,
+        dims: q.dims,
+        subsidiary: subView.subsidiary,
+        showZero: q.showZero,
+        bookId: selectedBook?.id,
+      })
+    } catch (e) {
+      // Underived consolidated rates must not throw out of SSR:
+      // the page renders a typed banner with a derive link instead of any
+      // numbers. Anything else is a real defect and still throws.
+      if (!(e instanceof MissingRatesError)) throw e
+      ratesBlocked = {
+        code: 'rates-not-derived',
+        title: t('statement.ratesBlockedTitle'),
+        description: (e as Error).message,
+        deriveLabel: t('statement.ratesBlockedAction'),
+        deriveHref: '/close',
+      }
     }
   }
   const authz = await getAuthz()
@@ -133,18 +147,22 @@ export async function loadPnl(sp: Record<string, string | undefined>): Promise<P
 
   return {
     title,
-    description: `${selectedBook ? `${selectedBook.name} · ` : ''}${subView?.label ? `${subView.label} · ` : ''}${period.label}${scale.note ? ` · ${scale.note.toLowerCase()}` : ''}`,
+    description: `${selectedBook ? `${selectedBook.name} · ` : ''}${subView?.label ? `${subView.label} · ` : ''}${period?.label ?? ''}${scale.note ? ` · ${scale.note.toLowerCase()}` : ''}`,
     backHref: '/reports',
     backLabel: t('hub.title'),
     hubLabel: t('hub.title'),
     company: org?.name ?? '',
-    periodPhrase: `${selectedBook.name} · ${t('pnl.dateRange', { from: period.from, to: period.to })}`,
+    periodPhrase: period
+      ? `${selectedBook.name} · ${t('pnl.dateRange', { from: period.from, to: period.to })}`
+      : selectedBook.name,
     note: scale.note || '',
     wide: view ? view.columns.length > 4 : false,
     truncated: view?.truncated ?? false,
     truncatedLabel: t('filterBar.truncated'),
     ratesBlocked,
-    ratesReady: ratesBlocked === null,
+    periodRefusal,
+    filterPeriodLabel: t('filterBar.period'),
+    ratesReady: ratesBlocked === null && periodRefusal === null,
     view,
     scale: q.scale,
     currency: subView?.currency ?? org?.base_currency,
@@ -225,6 +243,15 @@ export function pnlSpec(data: PnlData): PageSpec {
           },
         }),
         when: f('ratesBlocked'),
+      },
+      {
+        // The refusal sits under the filter bar so the operator can set the
+        // dates in place; the report stays hidden until the range is complete.
+        ...widgetBlock('empty-state', {
+          title: data.filterPeriodLabel,
+          description: data.periodRefusal ?? '',
+        }),
+        when: f('periodRefusal'),
       },
     ],
     paper: {

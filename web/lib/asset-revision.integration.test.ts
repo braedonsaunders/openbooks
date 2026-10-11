@@ -156,6 +156,10 @@ const assetDisplayCases = [
             }
            }
            if(['disposal','write-off','reversed disposal','reversed write-off','impaired disposal'].includes(scenario)){
+            // The impairment rebuilt the schedule with unposted July lines. A full
+            // disposal refuses until the held periods are depreciated, so post them
+            // through the disposal period first.
+            if(scenario==='impaired disposal')await runDepreciation(org.orgId,'2026-07-31',actorId,assetId,undefined,org.bookId);
             const posted=await disposeAsset(org.orgId,assetId,{...opts,proceeds:scenario.includes('write-off')?'0':'300',proceedsAccountId:org.accounts.bank,writeOff:scenario.includes('write-off')});
             expectedValue='0.0000';expectedAccumulated='0.0000';
             if(scenario.startsWith('reversed')){

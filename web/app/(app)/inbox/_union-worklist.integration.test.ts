@@ -195,15 +195,15 @@ async function postedSubmittedWeek(
   weekStart: string,
 ): Promise<{ weekId: string; employeeId: string }> {
   const employeeId = randomUUID();
-  await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
-    values (${employeeId}, ${org.orgId}, 'person', ${personName}, ${org.subsidiaryId}, true, '{}'::jsonb)`);
+  await withBypass(() => db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
+    values (${employeeId}, ${org.orgId}, 'person', ${personName}, ${org.subsidiaryId}, true, '{}'::jsonb)`));
   const weekId = randomUUID();
-  await db.execute(sql`insert into timesheet_weeks (id, org_id, employee_party_id, week_start, status, submitted_at, created_by, updated_by)
-    values (${weekId}, ${org.orgId}, ${employeeId}, ${weekStart}, 'submitted', now(), ${submittedBy}, ${submittedBy})`);
-  await db.execute(sql`insert into time_entries (id, org_id, employee_party_id, worked_on, hours, status, created_by, updated_by)
-    values (${randomUUID()}, ${org.orgId}, ${employeeId}, ${weekStart}, '8.0000', 'submitted', ${submittedBy}, ${submittedBy})`);
-  await db.execute(sql`insert into labor_cost_rates (id, org_id, employee_party_id, currency, rate, basis, annual_hours, effective_from, is_active)
-    values (${randomUUID()}, ${org.orgId}, ${employeeId}, 'CAD', '30.0000', 'hour', '2080.0000', '2026-01-01', true)`);
+  await withBypass(() => db.execute(sql`insert into timesheet_weeks (id, org_id, employee_party_id, week_start, status, submitted_at, created_by, updated_by)
+    values (${weekId}, ${org.orgId}, ${employeeId}, ${weekStart}, 'submitted', now(), ${submittedBy}, ${submittedBy})`));
+  await withBypass(() => db.execute(sql`insert into time_entries (id, org_id, employee_party_id, worked_on, hours, status, created_by, updated_by)
+    values (${randomUUID()}, ${org.orgId}, ${employeeId}, ${weekStart}, '8.0000', 'submitted', ${submittedBy}, ${submittedBy})`));
+  await withBypass(() => db.execute(sql`insert into labor_cost_rates (id, org_id, employee_party_id, currency, rate, basis, annual_hours, effective_from, is_active)
+    values (${randomUUID()}, ${org.orgId}, ${employeeId}, 'CAD', '30.0000', 'hour', '2080.0000', '2026-01-01', true)`));
   return { weekId, employeeId };
 }
 

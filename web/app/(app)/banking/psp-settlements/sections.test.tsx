@@ -468,6 +468,49 @@ test("a shopify payout posts payout and transactions", async (t) => {
   });
 });
 
+test("a square payout posts payout and entries under the payout id", async (t) => {
+  const seen: unknown[] = [];
+  const prior = globalThis.fetch;
+  globalThis.fetch = (async (_input: unknown, init?: { body?: unknown }) => {
+    if (typeof init?.body === "string") seen.push(JSON.parse(init.body));
+    return Response.json({ batchId: "batch-2", batches: [], subsidiaries: [] }, { status: 200 });
+  }) as typeof fetch;
+  const { host, root } = await mount();
+  t.after(async () => {
+    await act(async () => { root.unmount(); });
+    host.remove();
+    globalThis.fetch = prior;
+  });
+  await tick();
+  const provider = host.querySelectorAll("select")[0]!;
+  await act(async () => setSelectValue(provider, "square"));
+  await tick();
+  setNativeValue(host.querySelector("#psp-external-ref") as HTMLElement, "po_2Y8kq3");
+  setNativeValue(
+    host.querySelector("#psp-payload") as HTMLElement,
+    '{"payout":{"id":"po_2Y8kq3","amount_money":{"amount":9710,"currency":"USD"}},"entries":[{"id":"pe_1","type":"CHARGE","gross_amount_money":{"amount":10000,"currency":"USD"},"fee_amount_money":{"amount":-290,"currency":"USD"},"net_amount_money":{"amount":9710,"currency":"USD"}}]}',
+  );
+  await tick();
+  await importClick(host);
+  assert.equal(seen.length, 1, "the valid import must POST once");
+  assert.deepEqual(seen[0], {
+    action: "import",
+    provider: "square",
+    externalRef: "po_2Y8kq3",
+    settlementDate: "2026-09-23",
+    payout: { id: "po_2Y8kq3", amount_money: { amount: 9710, currency: "USD" } },
+    entries: [
+      {
+        id: "pe_1",
+        type: "CHARGE",
+        gross_amount_money: { amount: 10000, currency: "USD" },
+        fee_amount_money: { amount: -290, currency: "USD" },
+        net_amount_money: { amount: 9710, currency: "USD" },
+      },
+    ],
+  });
+});
+
 /** Pasted PayPal CSV (not JSON) posts as settlement-report text under the
  * operator's reference. */
 test("pasted paypal csv posts report text instead of json", async (t) => {

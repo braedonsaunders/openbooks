@@ -18,6 +18,7 @@ import { documentActionAvailable, type DocumentLifecycleAction } from '../lib/do
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { fetchAppAction, readApiErrorMessage, refusalMessageFromBody } from '../lib/api-error'
+import { ActionError } from '@braedonsaunders/appkit-errors'
 import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
 import { PeriodClosedRefusal } from '@/components/period-closed-refusal'
 import { useAppAction } from '@/lib/use-app-action'
@@ -447,6 +448,24 @@ export function buildDocumentSaveRequest(
 export function revisionFromSuccessfulDocumentSave(data: unknown): string {
   const saved = data as { doc?: { updated_at?: unknown }; revision?: unknown }
   return persistedDocumentRevision(saved?.doc?.updated_at ?? saved?.revision)
+}
+
+/** The record id a successful create names, or null. The drawer navigates
+ *  only to an id it was given: an unnamed success must never be presented
+ *  as a saved document. */
+export function createdDocumentId(payload: unknown): string | null {
+  const id = (payload as { doc?: { id?: unknown } } | null)?.doc?.id
+  return typeof id === 'string' && id !== '' ? id : null
+}
+
+/** Whether a successful edit acknowledges what it changed: a posted
+ *  correction names its replacement, every other edit names its record
+ *  with the exact revision the drawer pins next. */
+export function editedDocumentAcknowledged(payload: unknown): boolean {
+  const data = payload as { doc?: { id?: unknown; updated_at?: unknown }; correctionId?: unknown } | null
+  if (typeof data?.correctionId === 'string' && data.correctionId !== '') return true
+  const doc = data?.doc
+  return typeof doc?.id === 'string' && doc.id !== '' && isDocumentRevisionToken(doc.updated_at)
 }
 
 /** Identity + exact revision of a `{ doc }` draft payload (expenses,
@@ -2048,11 +2067,15 @@ export function DocumentDrawer({
   }, [controlSide, config.kind, partyId, subsidiaryId, controlChoice, doc.id, doc.status])
   const controlLabel = (option: ControlOption | null | undefined): string =>
     option ? `${option.number ? `${option.number} · ` : ''}${option.name}` : ''
-  const controlDefault = controlChoices?.partyDefault
-    ? t('drawer.controlAccountPartyDefault', { account: controlLabel(controlChoices.partyDefault) })
-    : controlChoices?.organizationDefault
-      ? t('drawer.controlAccountOrganizationDefault', { account: controlLabel(controlChoices.organizationDefault) })
-      : t('drawer.controlAccountUnset')
+  // Only open-item documents carry a control-account choice, and only their
+  // catalogs define its copy.
+  const controlDefault = !controlSide
+    ? ''
+    : controlChoices?.partyDefault
+      ? t('drawer.controlAccountPartyDefault', { account: controlLabel(controlChoices.partyDefault) })
+      : controlChoices?.organizationDefault
+        ? t('drawer.controlAccountOrganizationDefault', { account: controlLabel(controlChoices.organizationDefault) })
+        : t('drawer.controlAccountUnset')
   // A vendor credit always offers the choice: even with no returnable
   // receipt in the list the operator can still record the line as an
   // allowance (no goods returned). An allowance moves no stock, so the row
@@ -2536,12 +2559,22 @@ export function DocumentDrawer({
     if (prepared.outcome === 'create') {
       const create = prepared.request
       await execute(
-        () =>
-          fetchAppAction(create.path, {
+        async () => {
+          const result = await fetchAppAction(create.path, {
             method: create.method,
             headers: create.headers,
             body: JSON.stringify(create.body),
-          }, { fallback: t('toasts.actionFailed'), unavailable: unavailableCopy }),
+          }, {
+            fallback: t('toasts.actionFailed'),
+            unavailable: unavailableCopy,
+            codeMessage: (code) => (code === 'document_create_conflict' ? t('drawer.createConflict') : undefined),
+          })
+          // A success that names no record is not a saved document: refuse it
+          // here so the drawer neither toasts nor navigates on it. The key is
+          // kept, so a retry replays the same record instead of duplicating it.
+          if (!result.ok || createdDocumentId(result.data) !== null) return result
+          return { ok: false, error: new ActionError({ kind: 'refused', serverMessage: t('drawer.createUnconfirmed') }) }
+        },
         {
           fallbackMessage: t('toasts.actionFailed'),
           onOk: (payload) => {
@@ -2562,12 +2595,17 @@ export function DocumentDrawer({
     }
     const request = prepared.request
     await execute(
-      () =>
-        fetchAppAction(request.path, {
+      async () => {
+        const result = await fetchAppAction(request.path, {
           method: request.method,
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(request.body),
-        }, { fallback: t('toasts.actionFailed'), unavailable: unavailableCopy }),
+        }, { fallback: t('toasts.actionFailed'), unavailable: unavailableCopy })
+        // An edit that does not name its record and revision cannot be adopted:
+        // refuse it here instead of failing silently inside onOk.
+        if (!result.ok || editedDocumentAcknowledged(result.data)) return result
+        return { ok: false, error: new ActionError({ kind: 'refused', serverMessage: t('drawer.saveUnconfirmed') }) }
+      },
       {
         // A fresh attempt clears the previous refusal: the alert pins until
         // the next action, not past a successful save.
@@ -3039,7 +3077,9 @@ export function DocumentDrawer({
             onChange={(v) => setCustomValues((c) => ({ ...c, controlAccountId: v ?? '' }))}
             placeholder={t('drawer.accountPlaceholder')}
           />
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('drawer.cardAccountHelp')}</p>
+          {customValues.controlAccountId ? null : (
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('drawer.cardAccountHelp')}</p>
+          )}
         </>
       ) : (
         <p className="text-sm text-slate-500 dark:text-slate-400">
@@ -3549,7 +3589,13 @@ export function DocumentDrawer({
       case 'workflow':
         return <FlowManualButtons subjectKind={String(doc.kind)} subjectId={String(doc.id)} />
       case 'approval':
-        return <ApprovalActions subjectKind={String(doc.kind)} subjectId={String(doc.id)} withdrawDocumentId={String(doc.id)} />
+        return (
+          <ApprovalActions
+            subjectKind={String(doc.kind)}
+            subjectId={String(doc.id)}
+            withdraw={{ documentId: String(doc.id), status: doc.status, canCreate, canApprove: canPost }}
+          />
+        )
       case 'submit':
         return lifecycleAction('submit') ? (
           <Button disabled={busy || (config.partyRole ? !partyId : false) || !positiveAmount(effectiveTotals.total)} onClick={() => act('submit')}>
@@ -3767,7 +3813,7 @@ export function DocumentDrawer({
                   ? t('drawer.saveState.error')
                   : saveState === 'unavailable'
                     ? t('drawer.saveState.unavailable')
-                    : dirty
+                    : dirty || saveState === 'dirty'
                       ? t('drawer.saveState.dirty')
                       : null
               : null}

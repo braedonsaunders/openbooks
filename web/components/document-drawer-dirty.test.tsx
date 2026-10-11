@@ -185,7 +185,7 @@ async function click(button: HTMLButtonElement) {
   await tick();
 }
 
-test("edit mode offers Save as a header action without opening the Actions menu", async (t) => {
+test("edit mode offers Save as a header action without an empty Actions menu", async (t) => {
   const { host, root, restoreFetch } = await mountDraftInvoice();
   await enterEdit();
   t.after(async () => {
@@ -197,10 +197,10 @@ test("edit mode offers Save as a header action without opening the Actions menu"
   });
   assert.equal(buttonsNamed("Save").length, 1, "exactly one header Save must render in edit mode");
   assert.equal(buttonsNamed("Cancel").length, 1, "Cancel stays beside Save in edit mode");
+  // While editing, the menu holds only the form-designer shortcut. Without
+  // that entry the shell renders no Actions button at all.
   const actions = [...document.querySelectorAll("button")].find((b) => b.textContent?.includes("Actions"));
-  assert.ok(actions, "the Actions menu still renders");
-  await click(actions as HTMLButtonElement);
-  assert.equal(buttonsNamed("Save").length, 1, "Save must not duplicate inside the Actions menu");
+  assert.equal(actions, undefined, "no empty Actions menu is offered while editing");
 });
 
 test("cancelling a dirty editor asks first; declining keeps the edits", async (t) => {

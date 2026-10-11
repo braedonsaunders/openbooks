@@ -2,16 +2,19 @@ import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
+import { businessToday, isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
 import { db } from '@openbooks/engine/platform/db'
 import { laborCostingSettings, type LaborCostingSettings } from '@openbooks/engine/projects/labor-costing/operations'
+import { previewUnpostedLaborCost, type UnpostedLaborCostPreview } from '@openbooks/engine/projects/labor-costing'
 import { guardRootSubsidiaryScope, requirePermission } from '../../../../../lib/authz'
 import { notFound } from 'next/navigation'
 import { isUuid, mergeHref, parseListParams, pickString } from '../../../../../lib/list-params'
 import { subsidiaryFeatureEnabled } from '../../../../../lib/features'
 import { isFeatureEnabled } from '../../../../../lib/features'
+import { requireAnyFeatureEnabled } from '../../../../../lib/feature-gates'
 import { grid, heading, page, ref, textBlock, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import type { RateRow } from './LaborCostingWorkspace'
+import { CONTROL_ACCOUNT_TYPE_POLICY } from '@openbooks/engine/records/control-accounts'
 
 /**
  * Labor Costing setup — ONE workspace answering "what does an hour of labor
@@ -48,6 +51,11 @@ const BASE = '/admin/setup/labor-costing'
 const VIEWS = ['rates', 'components', 'posting', 'reconciliation'] as const
 export type LaborCostingView = (typeof VIEWS)[number]
 
+/** The control accounts the labor costing save owns. */
+const LABOR_CONTROL_ROLES = ['laborWip', 'laborClearing', 'payrollVariance'] as const
+export type LaborControlRole = (typeof LABOR_CONTROL_ROLES)[number]
+export interface LaborControlAccountOption { id: string; label: string; roles: LaborControlRole[] }
+
 export interface LaborCostingData {
   title: string
   description: string
@@ -72,13 +80,16 @@ export interface LaborCostingData {
   subsidiaries: { id: string; name: string; currency: string }[]
   defaultSubsidiary: { id: string; name: string; currency: string } | null
   jobTitles: string[]
-  accounts: { id: string; label: string }[]
+  /** Postable accounts, each with the labor control roles its type may fill. */
+  accounts: LaborControlAccountOption[]
   currencies: string[]
   orgCurrency: string
   laborWip: string | null
   laborClearing: string | null
   payrollVariance: string | null
   coverage: { employees: number; covered: number; hasOrgDefault: boolean }
+  /** Approved time not yet costed. Computed on the posting tab only. */
+  unposted: UnpostedLaborCostPreview | null
 }
 
 export async function loadLaborCosting(
@@ -89,7 +100,7 @@ export async function loadLaborCosting(
   const orgId = authz.user.orgId
   const today = await businessToday(orgId)
   const projectsEnabled = await isFeatureEnabled(orgId, 'projects')
-  if (!projectsEnabled && !(await isFeatureEnabled(orgId, 'manufacturing'))) notFound()
+  await requireAnyFeatureEnabled(orgId, ['projects', 'manufacturing'])
   const availableViews = projectsEnabled ? VIEWS : VIEWS.filter(item => item !== 'posting')
   const subsidiaryUiEnabled = await subsidiaryFeatureEnabled(orgId)
   const t = await getTranslations('admin')
@@ -162,7 +173,7 @@ export async function loadLaborCosting(
     db.execute(sql`select id, name, base_currency as currency from subsidiaries where org_id = ${orgId} and is_active and not is_elimination order by parent_id nulls first, name`),
     db.execute(sql`select distinct job_title as name from employee_roles where org_id = ${orgId} and is_active and nullif(trim(job_title), '') is not null order by job_title`),
     db.execute(sql`
-      select id, number, name from accounts
+      select id, number, name, type from accounts
        where org_id = ${orgId} and is_active and not is_summary order by number nulls last, name`),
     db.execute(sql`select settings->'controlAccounts' as c, base_currency from orgs where id = ${orgId}`),
     db.execute(sql`
@@ -188,6 +199,14 @@ export async function loadLaborCosting(
         ) as covered,
         exists (select 1 from current_rates where num_nonnulls(employee_party_id, job_title, trade_id, department_id, subsidiary_id) = 0) as has_org_default`),
   ])
+
+  // The catch-up preview is period-scoped by its through date, which lives in
+  // the URL so the server render and the card can never disagree.
+  const rawThrough = pickString(sp.catchUpThrough) ?? ''
+  const catchUpThrough = /^\d{4}-\d{2}-\d{2}$/.test(rawThrough) && isIsoCalendarDate(rawThrough) ? rawThrough : today
+  const unposted = projectsEnabled && view === 'posting'
+    ? await previewUnpostedLaborCost(orgId, { through: catchUpThrough })
+    : null
 
   const org = (
     orgRes as unknown as {
@@ -250,6 +269,7 @@ export async function loadLaborCosting(
     accounts: (accountsRes as unknown as { rows: Record<string, unknown>[] }).rows.map((r) => ({
       id: String(r.id),
       label: r.number ? `${r.number} · ${r.name}` : String(r.name ?? ''),
+      roles: LABOR_CONTROL_ROLES.filter((role) => (CONTROL_ACCOUNT_TYPE_POLICY[role] as readonly string[]).includes(String(r.type))),
     })),
     currencies,
     orgCurrency: org.base_currency,
@@ -261,6 +281,7 @@ export async function loadLaborCosting(
       covered: Number(coverageRow.covered),
       hasOrgDefault: coverageRow.has_org_default === true,
     },
+    unposted,
   }
 }
 
@@ -313,6 +334,7 @@ export function laborCostingSpec(data: LaborCostingData): PageSpec {
           laborClearing: data.laborClearing,
           payrollVariance: data.payrollVariance,
           coverage: data.coverage,
+          unposted: data.unposted,
         }),
       ]),
     ],

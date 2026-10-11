@@ -25,9 +25,21 @@ import {
   validateCustomValues,
   visibleCustomFieldDefs,
 } from "../../../../lib/custom-fields";
-import { assetBankHygieneWarning } from "../../../../lib/accounts-hygiene";
+import {
+  assetBankHygieneWarning,
+  accountNameKey,
+  duplicateAccountNameWarning,
+  type DuplicateAccountNameWarning,
+} from "../../../../lib/accounts-hygiene";
 import { isUuid } from "../../../../lib/list-params";
-import { loadAccount, orgBaseCurrency, redactAccountCustomFields } from "../_lib";
+import {
+  accountNameLock,
+  duplicateNameRefusal,
+  findNamedAccounts,
+  loadAccount,
+  orgBaseCurrency,
+  redactAccountCustomFields,
+} from "../_lib";
 import { accountInputFields } from "../_input";
 
 import { notFound } from "@/lib/api/responses";
@@ -41,8 +53,20 @@ const patchBodySchema = z
   .strictObject({
   ...accountInputFields,
   name: z.string().trim().min(1, "name cannot be empty").optional(),
+  /** Confirms a second active account with an existing name (see duplicate_account_name). */
+  acknowledgeDuplicateName: z.boolean().optional(),
   })
-  .refine((body) => Object.keys(body).length > 0, "provide at least one account field to update");
+  .refine(
+    (body) => Object.keys(body).some((key) => key !== "acknowledgeDuplicateName"),
+    "provide at least one account field to update",
+  );
+
+/** Thrown inside the mutation transaction; rolls back and renders the 409 refusal. */
+class PatchDuplicateName extends Error {
+  constructor(readonly warning: DuplicateAccountNameWarning) {
+    super(warning.code);
+  }
+}
 
 function bad(error: string, field?: string, details?: Record<string, unknown>) {
   return NextResponse.json(
@@ -334,6 +358,7 @@ export const PATCH = defineRoute({
       custom = { ...existingCustom, ...validated.cleaned };
     }
 
+    let duplicateWarning: DuplicateAccountNameWarning | null = null;
     try {
       await db.transaction(async (tx) => {
         // Keep hierarchy serialization before any per-account row lock. Two
@@ -435,6 +460,30 @@ export const PATCH = defineRoute({
               throw new PatchInvalid("parent_cycle", "parentId");
           }
         }
+        // A rename, a subsidiary move, or a reactivation can create a second
+        // active account with the same name where both are visible. Other
+        // edits leave the name identity unchanged and skip the check.
+        const nextActive = body.isActive ?? Boolean(existing.is_active);
+        const nextSubsidiaryId = subsidiaryId !== undefined ? subsidiaryId : ((existing.subsidiary_id as string | null) ?? null);
+        const nameChanged = name !== undefined && accountNameKey(name) !== accountNameKey(String(existing.name));
+        const subsidiaryChanged = subsidiaryId !== undefined && subsidiaryId !== ((existing.subsidiary_id as string | null) ?? null);
+        const reactivated = body.isActive === true && !existing.is_active;
+        if (nextActive && (nameChanged || subsidiaryChanged || reactivated)) {
+          const effectiveName = name ?? String(existing.name);
+          await tx.execute(accountNameLock(gate.user.orgId, effectiveName));
+          const holders = await findNamedAccounts(tx, {
+            orgId: gate.user.orgId,
+            name: effectiveName,
+            subsidiaryId: nextSubsidiaryId,
+            excludeId: id,
+            allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+          });
+          const duplicate = duplicateAccountNameWarning(effectiveName, holders);
+          if (duplicate) {
+            if (body.acknowledgeDuplicateName !== true) throw new PatchDuplicateName(duplicate);
+            duplicateWarning = duplicate;
+          }
+        }
         const updated = await tx.execute<Record<string, unknown>>(sql`
         update accounts set
           number = ${body.number !== undefined ? textOrNull(body.number) : sql`number`},
@@ -471,6 +520,7 @@ export const PATCH = defineRoute({
       if (error instanceof PatchNotFound)
         return notFound("record");
       if (error instanceof PatchInvalid) return bad(error.code, error.field);
+      if (error instanceof PatchDuplicateName) return duplicateNameRefusal(error.warning);
       const cause =
         error && typeof error === "object"
           ? (error as { cause?: unknown }).cause
@@ -539,6 +589,9 @@ export const PATCH = defineRoute({
       isSummary: nextSummary,
       hasStatements: Boolean(backed.rows[0]),
     });
-    return NextResponse.json({ ...saved, warnings: hygiene ? [hygiene] : [] });
+    return NextResponse.json({
+      ...saved,
+      warnings: [...(hygiene ? [hygiene] : []), ...(duplicateWarning ? [duplicateWarning] : [])],
+    });
   },
 });

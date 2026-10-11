@@ -22,6 +22,8 @@
     "rangeValue": "{start} → {end}",
     "status": "ステータス",
     "readiness": "準備状況",
+    "closedBy": "締め担当",
+    "closedByDetail": "{name}（{date}）",
     "action": "アクション",
     "lockedDetail": "{modules}ロック中 · {book}"
   },
@@ -504,8 +506,10 @@
       "endReopenTitle": "この再オープンを終了する",
       "endReopenHint": "終了すると、この期間で開いたすべてのモジュールが再び締められ、新しい再オープン依頼が可能になります。",
       "endReopenReasonRequired": "再オープンを終了するには10文字以上の理由が必要です。",
-      "extendReopenTitle": "延長または拡大",
-      "extendReopenHint": "重複する依頼を開く代わりに、この期間に時間やモジュールを追加してください。",
+      "reopenRequestedUntil": "申請した期限：{date}",
+      "extendReopenTitle": "延長または範囲拡大を申請",
+      "extendReopenHint": "権限のある承認者が判断する新しい申請を送信します。承認されると、この期間が置き換えられます。現在の期限を維持する場合、追加時間は空欄または0にしてください。",
+      "extendByApproverOnly": "自分の期間を拡大・延長するには、この期間のすべてのモジュールと必要なモジュールを含む再オープン申請を1件提出してください。適格な承認者が判断し、承認されるとこの期間が置き換えられます。",
       "extendHoursLabel": "追加時間",
       "extendModulesLabel": "モジュールを追加",
       "extendReopenReasonRequired": "再オープンを延長するには10文字以上の理由が必要です。",
@@ -588,7 +592,7 @@
       "addRow": "追加",
       "removeValue": "{value}を削除",
       "endReopen": "再オープンを終了",
-      "extendReopen": "再オープンを延長"
+      "extendReopen": "延長を申請"
     },
     "fields": {
       "name": "名称",
@@ -668,6 +672,7 @@
       "gl": "総勘定元帳"
     },
     "reopenStates": {
+      "superseded": "置き換え済み",
       "requested": "依頼済み",
       "approved": "承認済み",
       "rejected": "却下",
@@ -776,7 +781,7 @@
       "automationSaved": "自動処理ルールを保存しました",
       "packageSaved": "報告パッケージを保存しました",
       "reopenEnded": "再オープン期間を終了しました。",
-      "reopenExtended": "再オープン期間を延長しました。"
+      "reopenExtended": "再開期間の変更申請を送信しました。"
     },
     "errors": {
       "actionFailed": "設定の変更を保存できませんでした",

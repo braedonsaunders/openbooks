@@ -6,11 +6,14 @@ import { getLocale, getTranslations } from 'next-intl/server'
 import { formatCivilDate } from '@/lib/format'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
-import { reconciliationBookId, reconciliationTotals, reconciliationStaleness, priorPeriodLateEffect, openingPosition, type OpeningPosition } from '@openbooks/engine/banking/banking'
+import { reconciliationBookId, reconciliationTotals, reconciliationStaleness, priorPeriodLateEffect, openingPosition, reconciliationEvidence, type OpeningPosition } from '@openbooks/engine/banking/banking'
+import { businessTimeZone } from '@openbooks/engine/platform/business-date/module'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission, subsidiaryScopeAllows } from '../../../../../../lib/authz'
 import { openingCarryStartDate } from '../../../../../../lib/banking-accounts'
-import { isUuid, parsePrefixedListParams } from '../../../../../../lib/list-params'
+import { isUuid, parsePrefixedListParams, pickString } from '../../../../../../lib/list-params'
+import type { ModuleHomeTab } from '../../../../../../components/module-home/tab-types'
+import { formatHistory, formatStatementEvidence, type EvidenceFormatters, type HistoryRow, type StatementEvidenceRow } from './evidence-format'
 
 /**
  * A single reconciliation session, split into a loader and a spec.
@@ -57,6 +60,19 @@ const M_SORTS = {
 // Known reconciliation statuses — unknown values render as the raw code with
 // underscores spaced out.
 const RECON_STATUS_KEYS = ['signed_off', 'balanced', 'in_progress']
+const STATEMENT_SOURCE_KEYS = ['ofx', 'csv', 'camt053', 'bai2', 'mt940', 'feed_api', 'manual'] as const
+
+/** The body the page shows: the matching workspace, or one evidence tab. */
+export type ReconcileView = 'working' | 'statements' | 'history'
+
+/** Read-only evidence for the statements and history tabs, formatted by the loader. */
+export interface ReconcileEvidenceView {
+  sourceEvidence: boolean
+  windowStart: string | null
+  throughDate: string
+  statements: StatementEvidenceRow[]
+  history: HistoryRow[]
+}
 
 // Connector labels resolve from the tenant's own connections table, never
 // from a hardcoded vendor map (shared with the account page).
@@ -83,6 +99,10 @@ export interface ReconcileStmtRow extends Record<string, unknown> {
   amount: string
   description: string | null
   counterparty_ref: string | null
+  /** The earlier line this one may duplicate (flagged), or null. */
+  possible_duplicate_of: string | null
+  dup_posted_on: string | null
+  dup_amount: string | null
 }
 
 export interface ReconcileGlRow extends Record<string, unknown> {
@@ -196,6 +216,12 @@ export interface ReconciliationData {
    * in, and the confirmation standing behind the cleared balance.
    */
   opening: OpeningPosition | null
+  /** The body the page shows; the workspace is the default. */
+  view: ReconcileView
+  /** Peer concepts of the session, switched in the page header. */
+  tabs: ModuleHomeTab[]
+  /** Supporting statements and history; null while the workspace is shown. */
+  evidence: ReconcileEvidenceView | null
 }
 
 export async function loadReconciliation(
@@ -335,9 +361,11 @@ export async function loadReconciliation(
 
   const [stmtRows, stmtCount, glRows, glCount, mRows, mCount] = (await Promise.all([
     db.execute<ReconcileStmtRow>(sql`
-          select l.id, l.posted_on, l.amount, l.description, l.counterparty_ref
+          select l.id, l.posted_on, l.amount, l.description, l.counterparty_ref,
+                 l.possible_duplicate_of, dup.posted_on::text as dup_posted_on, dup.amount::text as dup_amount
             from bank_statement_lines l
             join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
+            left join bank_statement_lines dup on dup.id = l.possible_duplicate_of and dup.org_id = l.org_id
            where ${stmtWhere}
            order by ${STMT_SORTS[stmtParams.sort]} ${stmtParams.dir === 'asc' ? sql`asc` : sql`desc`} nulls last, l.line_number
            limit ${stmtParams.perPage} offset ${(stmtParams.page - 1) * stmtParams.perPage}
@@ -418,6 +446,48 @@ export async function loadReconciliation(
         }),
       )
 
+  // -- evidence tabs (?view=statements|history) ------------------------------
+  // The matching workspace stays the default body. The evidence tabs replace
+  // it: each reads the session's supporting statements or governed history,
+  // formatted here so the components receive display values only.
+  const requestedView = pickString(sp.view)
+  const view: ReconcileView = requestedView === 'statements' || requestedView === 'history'
+    ? requestedView
+    : 'working'
+  const tabs: ModuleHomeTab[] = [
+    { href: basePath, label: t('reconcileEvidence.tabs.workspace'), active: view === 'working' },
+    { href: `${basePath}?view=statements`, label: t('reconcileEvidence.tabs.statements'), active: view === 'statements' },
+    { href: `${basePath}?view=history`, label: t('reconcileEvidence.tabs.history'), active: view === 'history' },
+  ]
+  let evidence: ReconcileEvidenceView | null = null
+  if (view !== 'working') {
+    const timeZone = await businessTimeZone(ctx.orgId)
+    const timestampFormatter = new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short', timeZone })
+    const countFormatter = new Intl.NumberFormat(locale)
+    const formatters: EvidenceFormatters = {
+      money: (value) => money(value, { maximumFractionDigits: 4 }),
+      count: (value) => countFormatter.format(value),
+      civilDate: (value) => formatCivilDate(value, locale),
+      timestamp: (value) => {
+        const date = new Date(value)
+        return Number.isNaN(date.getTime()) ? value : timestampFormatter.format(date)
+      },
+      source: (value) => {
+        const key = STATEMENT_SOURCE_KEYS.find((candidate) => candidate === value) ?? 'unknown'
+        return t(`statementSources.${key}`)
+      },
+      status: (value) => (RECON_STATUS_KEYS.includes(value) ? t(`reconStatus.${value}`) : value.replace(/_/g, ' ')),
+    }
+    const read = await reconciliationEvidence(reconciliationId, ctx)
+    evidence = {
+      sourceEvidence,
+      windowStart: read.reconciliation.windowStart ? formatCivilDate(read.reconciliation.windowStart, locale) : null,
+      throughDate: formatCivilDate(read.reconciliation.throughDate, locale),
+      statements: formatStatementEvidence(read, formatters),
+      history: formatHistory(read.history, formatters),
+    }
+  }
+
   return {
     backHref: `/banking/${accountId}`,
     backLabel: [recon.account_number, recon.account_name].filter(Boolean).join(' · '),
@@ -489,6 +559,9 @@ export async function loadReconciliation(
     stale,
     priorEffects,
     opening,
+    view,
+    tabs,
+    evidence,
   }
 }
 
@@ -503,10 +576,10 @@ export function reconcileSpec(data: ReconciliationData): PageSpec {
         back: { href: f('backHref'), label: f('backLabel') },
         title: f('headerTitle'),
         description: f('headerDescription'),
-        // One badge, so no actionsClassName: the native header renders the
-        // Badge unwrapped.
+        actionsClassName: 'flex flex-wrap items-center gap-3',
         actions: [
           widget('reconcile-status-badge', { label: data.badgeLabel, variant: data.badgeVariant }),
+          widget('module-home-tabs', { tabs: data.tabs }),
         ],
       }),
       widgetBlock('reconcile-stats', {
@@ -521,34 +594,54 @@ export function reconcileSpec(data: ReconciliationData): PageSpec {
         matchedValue: data.matchedValue,
       }),
     ],
-    body: [
-      // The matching workspace, placed through one widget: it owns selection
-      // state across three paginated panes plus every mutation, so it stays
-      // whole like the match workspace does. The spec supplies only
-      // loader-resolved data; `canReconcile` is a boolean, never an Authz.
-      widgetBlock('reconcile-workspace', {
-        basePath: data.basePath,
-        accountPath: data.accountPath,
-        currentParams: data.currentParams,
-        reconciliation: data.reconciliation,
-        difference: data.difference,
-        canReconcile: data.canReconcile,
-        stmtRows: data.stmtRows,
-        stmtTotal: data.stmtTotal,
-        stmtOutstandingTotal: data.stmtOutstandingTotal,
-        stmtParams: data.stmtParams,
-        glRows: data.glRows,
-        glTotal: data.glTotal,
-        glOutstandingTotal: data.glOutstandingTotal,
-        glParams: data.glParams,
-        matchedRows: data.matchedRows,
-        matchedTotal: data.matchedTotal,
-        mParams: data.mParams,
-        glClearings: data.glClearings,
-        stale: data.stale,
-        priorEffects: data.priorEffects,
-        opening: data.opening,
-      }),
-    ],
+    body: reconcileBody(data),
   })
+}
+
+/**
+ * One concept per body: the matching workspace, or one evidence tab. The
+ * workspace is placed through one widget because it owns selection state
+ * across three paginated panes plus every mutation. The spec supplies only
+ * loader-resolved data; `canReconcile` is a boolean, never an Authz.
+ */
+function reconcileBody(data: ReconciliationData): PageSpec['body'] {
+  if (data.view === 'statements' && data.evidence) {
+    return [
+      widgetBlock('reconcile-supporting-statements', {
+        accountPath: data.accountPath,
+        sourceEvidence: data.evidence.sourceEvidence,
+        windowStart: data.evidence.windowStart,
+        throughDate: data.evidence.throughDate,
+        statements: data.evidence.statements,
+      }),
+    ]
+  }
+  if (data.view === 'history' && data.evidence) {
+    return [widgetBlock('reconcile-history', { rows: data.evidence.history })]
+  }
+  return [
+    widgetBlock('reconcile-workspace', {
+      basePath: data.basePath,
+      accountPath: data.accountPath,
+      currentParams: data.currentParams,
+      reconciliation: data.reconciliation,
+      difference: data.difference,
+      canReconcile: data.canReconcile,
+      stmtRows: data.stmtRows,
+      stmtTotal: data.stmtTotal,
+      stmtOutstandingTotal: data.stmtOutstandingTotal,
+      stmtParams: data.stmtParams,
+      glRows: data.glRows,
+      glTotal: data.glTotal,
+      glOutstandingTotal: data.glOutstandingTotal,
+      glParams: data.glParams,
+      matchedRows: data.matchedRows,
+      matchedTotal: data.matchedTotal,
+      mParams: data.mParams,
+      glClearings: data.glClearings,
+      stale: data.stale,
+      priorEffects: data.priorEffects,
+      opening: data.opening,
+    }),
+  ]
 }

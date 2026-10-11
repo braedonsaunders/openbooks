@@ -1,14 +1,15 @@
 import assert from "node:assert/strict";
-import { sql } from "drizzle-orm";
-import { db, withBypassContext, withOrgContext } from "@openbooks/engine/platform/db";
-import { createScratchOrg, dropScratchOrg } from "@openbooks/engine/testing/fixtures";
 import test from "node:test";
+import { resolveEngineSpecifier } from "../../../../testing/engine-resolve-hooks.ts";
 
 const { registerHooks } = await import("node:module");
 const { stubModules } = await import("../../../../testing/stub-modules");
 stubModules({ navigation: "export function useRouter(){return {push(){},refresh(){},replace(){}}}", intl: true });
 registerHooks({
   resolve(specifier, context, next) {
+    // Engine contracts resolve to this checkout, not a symlinked install.
+    const engineUrl = resolveEngineSpecifier(specifier);
+    if (engineUrl) return next(engineUrl, context);
 
     if (specifier === "next/link") {
       return {
@@ -32,6 +33,7 @@ const { renderToStaticMarkup } = await import("react-dom/server");
 const { NextIntlClientProvider } = await import("next-intl");
 const { ChangeActions } = await import("./ChangeActions");
 const { groupTabs } = await import("../../../../components/module-home/group-tabs.ts");
+const { NAV_MODULES } = await import("@openbooks/engine/navigation");
 
 test("pending accounting events direct their decision to the Inbox", () => {
   const markup = renderToStaticMarkup(
@@ -55,19 +57,16 @@ test("pending accounting events direct their decision to the Inbox", () => {
   assert.doesNotMatch(markup, /Submit for approval|Apply approved event/);
 });
 
-test("accounting event history is not offered as a daily group tab", async (t) => {
-  const org = await withBypassContext(() => createScratchOrg());
-  t.after(() => dropScratchOrg(org.orgId));
-  await withBypassContext(() =>
-    db.execute(sql`update orgs
-      set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,continuousClose}', 'true'::jsonb, true)
-      where id = ${org.orgId}`),
-  );
+test("accounting event history is not offered as a daily group tab", async () => {
+  // The accounting group strip is retired: the cockpit and the main menu own
+  // cross-module discovery. The register is listed beside Period Close in the
+  // accounting menu, so Period Close is where it is opened from.
+  const tabs = await groupTabs("accounting", "/accounting/changes", { orgId: "00000000-0000-4000-8000-000000000000" });
+  assert.deepEqual(tabs, [], "accounting has no daily group strip");
 
-  const tabs = await withOrgContext(org.orgId, () =>
-    groupTabs("accounting", "/accounting/changes", { orgId: org.orgId }),
-  );
-
-  assert.ok(tabs.some((tab) => tab.href === "/close"), "period close remains on the daily accounting strip");
-  assert.ok(!tabs.some((tab) => tab.href === "/accounting/changes"), "accounting event history is opened from Period Close");
+  const register = NAV_MODULES.find((module) => module.key === "accounting-changes");
+  const close = NAV_MODULES.find((module) => module.key === "close");
+  assert.equal(register?.group, "accounting");
+  assert.ok(close, "period close is a registered accounting destination");
+  assert.equal(register?.subgroup, close.subgroup, "accounting events sit with Period Close in the menu");
 });

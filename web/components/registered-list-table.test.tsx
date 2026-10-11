@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import * as React from 'react'
 import { RegisteredListTable } from './registered-list-table'
 import { PreparedPagedTable } from './prepared-paged-table'
 import { ServerPagedTable } from './server-paged-table'
+
+// Component modules render JSX with the automatic runtime; expose React for them.
+Object.assign(globalThis, { React })
 
 test('server windows retain rows and source totals without client slicing', () => {
   const rows = Array.from({ length: 25 }, (_, index) => ({

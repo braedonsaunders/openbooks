@@ -103,7 +103,9 @@ const portalSettingsBody = z.strictObject({
   sectionsReturns: z.boolean().optional(),
   sectionsGiftCards: z.boolean().optional(),
   returnWindowDays: z.number().int().min(0).max(365).optional(),
-  returnReasons: z.array(z.string().min(1).max(40)).min(1).max(20).optional(),
+  // Required only while sectionsReturns is on; the engine enforces that rule
+  // against the effective settings. Null means the field was hidden.
+  returnReasons: z.array(z.string().min(1).max(40)).max(20).nullish(),
   resolutionRefund: z.boolean().optional(),
   resolutionExchange: z.boolean().optional(),
   resolutionStoreCredit: z.boolean().optional(),

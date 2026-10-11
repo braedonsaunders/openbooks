@@ -19,7 +19,8 @@ const messages = {
 };
 
 // Typed custom ranges stage until the operator applies them: typing must not
-// navigate, and Apply (or Enter) commits period=custom with both bounds.
+// navigate, and Apply (or Enter) commits period=custom with both bounds. A
+// range commits only when both bounds are set and From is on or before To.
 
 function recordReplaces(): { replaces: string[] } {
   const replaces: string[] = []
@@ -59,10 +60,12 @@ test('typing a custom bound stages it without navigating until Apply', async () 
   )
   const { replaces } = recordReplaces()
   try {
-    const [from] = dateInputs()
+    const [from, to] = dateInputs()
     assert.ok(from, 'the custom From field renders')
     await typeDate(from!, '2026-02-01')
     assert.equal(replaces.length, 0, 'typing alone must not re-run the report')
+    assert.equal(applyButton()?.disabled, true, 'Apply stays disabled until both bounds are staged')
+    await typeDate(to!, '2026-02-28')
     const apply = applyButton()
     assert.ok(apply, 'an explicit Apply is offered')
     assert.equal(apply.disabled, false, 'Apply enables with a staged range')
@@ -71,6 +74,7 @@ test('typing a custom bound stages it without navigating until Apply', async () 
     const href = replaces[0]!
     assert.ok(href.includes('period=custom'), 'the commit selects the custom period')
     assert.ok(href.includes('from=2026-02-01'), 'the commit carries the typed From')
+    assert.ok(href.includes('to=2026-02-28'), 'the commit carries the typed To')
   } finally {
     await unmount()
   }
@@ -83,11 +87,13 @@ test('Enter in a custom bound applies the staged range', async () => {
   )
   const { replaces } = recordReplaces()
   try {
-    const [, to] = dateInputs()
+    const [from, to] = dateInputs()
     assert.ok(to, 'the custom To field renders')
+    await typeDate(from!, '2026-02-01')
     await typeDate(to!, '2026-02-28')
     await pressEnter(to!)
     assert.equal(replaces.length, 1, 'Enter commits the staged range')
+    assert.ok(replaces[0]!.includes('from=2026-02-01'), 'the commit carries the typed From')
     assert.ok(replaces[0]!.includes('to=2026-02-28'), 'the commit carries the typed To')
   } finally {
     await unmount()
@@ -106,14 +112,34 @@ test('always-visible From/To apply together with the resolved defaults', async (
   try {
     assert.equal(applyButton()?.disabled, true, 'Apply rests disabled with nothing staged')
     const [from] = dateInputs()
-    await typeDate(from!, '2026-02-01')
+    await typeDate(from!, '2026-01-05')
     assert.equal(replaces.length, 0, 'typing alone must not re-run the report')
     await click(applyButton()!)
     assert.equal(replaces.length, 1, 'Apply commits exactly once')
     const href = replaces[0]!
     assert.ok(href.includes('period=custom'), 'the commit selects the custom period')
-    assert.ok(href.includes('from=2026-02-01'), 'the commit carries the typed From')
+    assert.ok(href.includes('from=2026-01-05'), 'the commit carries the typed From')
     assert.ok(href.includes('to=2026-01-31'), 'the untouched To keeps its resolved default')
+  } finally {
+    await unmount()
+  }
+})
+
+test('a staged range that starts after it ends does not commit', async () => {
+  const { unmount } = await mountDashboard(
+    <ReportFilterBar
+      controls={{ period: false, dateRange: true }}
+      dateRange={{ from: '2026-01-01', to: '2026-01-31' }}
+    />,
+    messages,
+  )
+  const { replaces } = recordReplaces()
+  try {
+    const [from] = dateInputs()
+    await typeDate(from!, '2026-02-01')
+    assert.equal(applyButton()?.disabled, true, 'Apply stays disabled for a reversed range')
+    await click(applyButton()!)
+    assert.equal(replaces.length, 0, 'a reversed range never reaches the report or a saved view')
   } finally {
     await unmount()
   }

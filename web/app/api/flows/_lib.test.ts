@@ -18,6 +18,7 @@ export const currentRequestOrgResolver = () => null;
 export const db = new Proxy({}, { get() { ${bomb} } });
 export const env = new Proxy({}, { get() { ${bomb} } });
 export const inDbTransaction = (...args) => fail();
+export const inExecutorTransaction = (...args) => fail();
 export const longPool = new Proxy({}, { get() { ${bomb} } });
 export const orgContext = (...args) => fail();
 export const pool = new Proxy({}, { get() { ${bomb} } });

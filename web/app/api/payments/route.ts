@@ -57,6 +57,9 @@ const paymentCreateBody = z.object({
   withholdingAuthorisation: z.string().trim().max(100).nullable().optional(),
   withholdingAuthorisedAmount: exactMoney().nullable().optional(),
   allocations: z.array(allocationInput).optional(),
+  // Cash received beyond the applications (customer receipts only): it stays
+  // on the receipt as an on-account credit rather than being dropped.
+  onAccountAmount: exactMoney().optional(),
   // Stored-value tenders (customer receipts only): fresh gift-card codes or
   // already-resolved echoes. Resolved and re-verified after insert (never
   // persisted raw); part of the replay match as caller-controlled input.
@@ -226,6 +229,7 @@ async function createPayment(request: Request) {
     ...(body.withholdingAuthorisation !== undefined ? { withholdingAuthorisation: body.withholdingAuthorisation } : {}),
     ...(body.withholdingAuthorisedAmount !== undefined ? { withholdingAuthorisedAmount: body.withholdingAuthorisedAmount } : {}),
     allocations: body.allocations ?? [],
+    ...(body.onAccountAmount !== undefined ? { onAccountAmount: body.onAccountAmount } : {}),
     storedValueTenders: body.storedValueTenders ?? [],
   }
   // The persisted image is the full immutable create snapshot (derived
@@ -310,7 +314,7 @@ async function createPayment(request: Request) {
                 ${user.id}, ${requestId})`)
       await updateDraftPayment(
         requestId,
-        { allocations, withholdingAuthorisation: body.withholdingAuthorisation, withholdingAuthorisedAmount: body.withholdingAuthorisedAmount, storedValueTenders: body.storedValueTenders },
+        { allocations, onAccountAmount: body.onAccountAmount, withholdingAuthorisation: body.withholdingAuthorisation, withholdingAuthorisedAmount: body.withholdingAuthorisedAmount, storedValueTenders: body.storedValueTenders },
         user.id, user.orgId,
         { allowedSubsidiaryIds: gate.allowedSubsidiaryIds },
       )

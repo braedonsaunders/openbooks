@@ -35,8 +35,9 @@ const SETTLEMENT_PROVIDERS = [
   'chargebee',
   'shopify_payments',
   'paypal',
+  'square',
 ] as const
-const IMPORT_PROVIDERS = ['stripe', 'recurly', 'chargebee', 'shopify_payments', 'paypal'] as const
+const IMPORT_PROVIDERS = ['stripe', 'recurly', 'chargebee', 'shopify_payments', 'paypal', 'square'] as const
 const SETTLEMENT_STATUSES = ['draft', 'posted', 'void'] as const
 
 type SettlementProvider = (typeof SETTLEMENT_PROVIDERS)[number]
@@ -522,7 +523,8 @@ export function PspSettlementsWorkspace({
   // Pasted-or-uploaded payloads fail fast on shape, before the POST. Each
   // provider settles a different envelope: Stripe a JSON array of balance
   // transactions, Shopify one object with payout and transactions, PayPal an
-  // export object or raw CSV text. The server re-validates authoritatively.
+  // export object or raw CSV text, Square one object with payout and entries.
+  // The server re-validates authoritatively.
   function payloadShapeError(parsed: unknown, isCsv: boolean): string | null {
     if (provider === 'stripe') {
       return Array.isArray(parsed) ? null : strings.invalidStripePayload
@@ -534,6 +536,14 @@ export function PspSettlementsWorkspace({
         parsed.transactions.length > 0
         ? null
         : t('invalidShopifyPayload')
+    }
+    if (provider === 'square') {
+      return isRecord(parsed) &&
+        isRecord(parsed.payout) &&
+        Array.isArray(parsed.entries) &&
+        parsed.entries.length > 0
+        ? null
+        : t('invalidSquarePayload')
     }
     if (provider === 'paypal') {
       if (isCsv) return null
@@ -601,6 +611,9 @@ export function PspSettlementsWorkspace({
     } else if (provider === 'shopify_payments' && isRecord(parsed)) {
       body.payout = parsed.payout
       body.transactions = parsed.transactions
+    } else if (provider === 'square' && isRecord(parsed)) {
+      body.payout = parsed.payout
+      body.entries = parsed.entries
     } else if (provider === 'paypal') {
       if (isCsv) {
         body.csv = payload
@@ -762,7 +775,9 @@ export function PspSettlementsWorkspace({
         ? t('shopifyPayloadLabel')
         : provider === 'paypal'
           ? t('paypalPayloadLabel')
-          : t('genericPayloadLabel')
+          : provider === 'square'
+            ? t('squarePayloadLabel')
+            : t('genericPayloadLabel')
   const payloadHint =
     provider === 'stripe'
       ? strings.payloadShapeHint
@@ -770,7 +785,9 @@ export function PspSettlementsWorkspace({
         ? t('shopifyPayloadHint')
         : provider === 'paypal'
           ? t('paypalPayloadHint')
-          : strings.genericPayloadHint
+          : provider === 'square'
+            ? t('squarePayloadHint')
+            : strings.genericPayloadHint
   const fxSummary =
     fxSourceCurrency.trim() !== '' && fxRate.trim() !== ''
       ? `${fxSourceCurrency.trim()} @ ${fxRate.trim()}`

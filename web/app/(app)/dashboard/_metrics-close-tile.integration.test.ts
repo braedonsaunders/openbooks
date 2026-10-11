@@ -27,6 +27,10 @@ type ScratchOrg = import("@openbooks/engine/testing/fixtures").ScratchOrg;
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
+// The close tile alone. The default read covers every built-in widget, which
+// now includes the Sentinel risk tiles these fixtures are not granted.
+const CLOSE_WIDGETS = ["list-close-readiness"];
+
 function authzFor(orgId: string, userId: string, permissions: string[]): Authz {
   return {
     user: {
@@ -59,7 +63,7 @@ test("dashboard close widget lists recent runs through the workspace reader", { 
     await withBypass(() => seedRun(org, actors.adminId));
     const actor = await withBypass(() => createScratchUser(org.orgId, "Close Reader", "admin"));
     const metrics = await withOrgContext(org.orgId, () =>
-      loadDashboardMetrics(authzFor(org.orgId, actor as unknown as string, ["close.run"])),
+      loadDashboardMetrics(authzFor(org.orgId, actor as unknown as string, ["close.run"]), CLOSE_WIDGETS),
     );
     assert.equal(metrics.closeRuns.length, 1);
     assert.equal(metrics.closeRuns[0]?.status, "in_progress");
@@ -67,7 +71,7 @@ test("dashboard close widget lists recent runs through the workspace reader", { 
     // A caller without close.run reads no runs — and loadCloseReadiness
     // proves separately (no-DB unit test) that the reader is never called.
     const blind = await withOrgContext(org.orgId, () =>
-      loadDashboardMetrics(authzFor(org.orgId, actor as unknown as string, ["gl.read"])),
+      loadDashboardMetrics(authzFor(org.orgId, actor as unknown as string, ["gl.read"]), CLOSE_WIDGETS),
     );
     assert.deepEqual(blind.closeRuns, []);
   } finally {
@@ -80,7 +84,7 @@ test("dashboard close widget is honest on empty", { skip: !DB }, async () => {
   try {
     const actor = await withBypass(() => createScratchUser(org.orgId, "Close Reader", "admin"));
     const metrics = await withOrgContext(org.orgId, () =>
-      loadDashboardMetrics(authzFor(org.orgId, actor as unknown as string, ["close.run"])),
+      loadDashboardMetrics(authzFor(org.orgId, actor as unknown as string, ["close.run"]), CLOSE_WIDGETS),
     );
     assert.deepEqual(metrics.closeRuns, []);
   } finally {

@@ -10,6 +10,7 @@ type LedgerRow = {
   fx_rate: string;
   base_currency: string;
   amount: string;
+  marketplace_amount: string;
   is_invoice: number;
   as_of: string;
 };
@@ -35,6 +36,7 @@ const visibleSale: LedgerRow = {
   fx_rate: "1.0000000000",
   base_currency: "USD",
   amount: "10000.0000",
+  marketplace_amount: "0",
   is_invoice: 1,
   as_of: "2026-07-10",
 };
@@ -46,11 +48,16 @@ const hiddenSale: LedgerRow = {
   as_of: "2026-07-11",
 };
 
+/** No seeded marketplace-facilitator rules: every state defaults to included. */
+const NO_MARKETPLACE_RULES = "marketplace_nexus_state_rules";
+
 test("restricted nexus aggregation excludes documents from other subsidiaries", async (t) => {
   const visibleSubsidiaryId = "00000000-0000-0000-0000-000000000001";
   let documentQuery = "";
   t.mock.method(db, "execute", async (query: unknown) => {
-    documentQuery = sqlText(query);
+    const text = sqlText(query);
+    if (text.includes(NO_MARKETPLACE_RULES)) return { rows: [] };
+    documentQuery = text;
     // Model the database applying the generated predicate. Without it this
     // mock returns both legal entities, making the regression fail.
     return {
@@ -72,7 +79,8 @@ test("restricted nexus aggregation excludes documents from other subsidiaries", 
 });
 
 test("unrestricted nexus aggregation retains all organization sales", async (t) => {
-  t.mock.method(db, "execute", async () => ({ rows: [visibleSale, hiddenSale] }));
+  t.mock.method(db, "execute", async (query: unknown) =>
+    ({ rows: sqlText(query).includes(NO_MARKETPLACE_RULES) ? [] : [visibleSale, hiddenSale] }));
 
   const result = await computeUsNexusStatus("org-1", "2026-07-01", "2026-07-31");
 

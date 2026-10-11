@@ -13,7 +13,7 @@ export const CONTRACT_COST_REPORT_ENTITIES: ReportEntity[] = [
     key: "contract_cost_rollforward",
     label: "Contract cost roll-forward",
     description:
-      "Capitalized contract costs per asset: capitalized, amortized to date, impaired to date, and closing carrying amount.",
+      "Capitalized contract costs per asset: amortized, impaired and closing carrying amount.",
     from: `contract_cost_assets a
       left join revenue_contracts c on c.org_id = a.org_id and c.id = a.revenue_contract_id
       left join parties customer on customer.id = a.customer_party_id
@@ -74,7 +74,7 @@ export const CONTRACT_COST_REPORT_ENTITIES: ReportEntity[] = [
     key: "contract_cost_postings",
     label: "Contract cost postings",
     description:
-      "Every capitalization, amortization and impairment line by period, from the tagged asset legs of the general ledger.",
+      "Capitalization, amortization and impairment lines by period, from tagged ledger legs.",
     from: `journal_lines jl
       join journal_entries je on je.org_id = jl.org_id and je.id = jl.entry_id
         and je.status in ('posted','reversed')

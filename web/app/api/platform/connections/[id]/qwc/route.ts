@@ -13,7 +13,7 @@ const OWNER_ID = '{E71D62A6-BC4D-4F72-90E8-F797CA478DA0}'
 
 export const GET = defineRoute({
   permission: 'admin.setup.manage', feature: { none: 'QuickBooks Desktop connector files are controlled by setup permission and have no separate organization feature gate.' },
-  scope: 'unrestricted', params: z.object({ id: z.string().uuid() }),
+  scope: 'unrestricted', params: z.object({ id: z.string() }),
   handler: async ({ params: { id }, authz: gate }) => {
   const connection = await getConnection(gate.user.orgId, id).catch((e) => {
     if (storageIdentityError(e)) return null

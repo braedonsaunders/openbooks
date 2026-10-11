@@ -42,7 +42,7 @@ const dataReads: Record<string, { slug: string; exports: string[] }> = {
 }
 const hooks = registerHooks({
   resolve(specifier, context, next) {
-    if ((context.parentURL?.includes('/app/(app)/analytics/') && context.parentURL.endsWith('/view.ts')) || context.parentURL?.endsWith('/lib/analytics/dashboard-reader.ts') || context.parentURL?.endsWith('/lib/analytics/dashboard-access.ts') || context.parentURL?.endsWith('/lib/analytics/preview-cache.ts')) {
+    if ((context.parentURL?.includes('/app/(app)/analytics/') && (context.parentURL.endsWith('/view.ts') || context.parentURL.endsWith('/page.tsx'))) || context.parentURL?.endsWith('/lib/analytics/dashboard-reader.ts') || context.parentURL?.endsWith('/lib/analytics/dashboard-access.ts') || context.parentURL?.endsWith('/lib/analytics/preview-cache.ts')) {
       if (specifier.endsWith('/lib/authz') || specifier === '../authz') {
         return {
           shortCircuit: true,
@@ -73,6 +73,10 @@ const hooks = registerHooks({
       // database reads; the composition under test only needs their values.
       if (specifier.endsWith('/lib/analytics/config')) {
         return { shortCircuit: true, url: 'data:text/javascript,export async function analyticsConfig(){return {}}' }
+      }
+      // The named fiscal-period picker reads the organization's calendars.
+      if (specifier.endsWith('/lib/analytics/fiscal-period-options')) {
+        return { shortCircuit: true, url: 'data:text/javascript,export async function analyticsFiscalPeriodPicker(){return {extraPeriods:[],extraPeriodsLabel:"Fiscal periods"}}' }
       }
       if (specifier.endsWith('/lib/fx-presentation')) {
         return { shortCircuit: true, url: 'data:text/javascript,export async function presentationCurrency(){return "USD"}' }

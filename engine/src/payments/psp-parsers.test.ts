@@ -4,6 +4,7 @@ import {
   parsePaypalSettlementCsv,
   parsePaypalTransactions,
   parseShopifyPaymentsPayout,
+  parseSquarePayout,
   PspSettlementError,
   summarizeSettlement,
 } from "./psp-settlement.ts";
@@ -181,5 +182,311 @@ test("PayPal settlement CSV without the amount column refuses naming it", () => 
     (error) =>
       error instanceof PspSettlementError &&
       error.message.includes("Gross Transaction Amount"),
+  );
+});
+
+const squareMoney = (amount: number | string, currency = "USD") => ({ amount, currency });
+
+const squarePayout = {
+  id: "po_2Y8kq3",
+  status: "PAID",
+  location_id: "LQ9W3K1",
+  created_at: "2026-08-23T04:00:00Z",
+  arrival_date: "2026-08-24",
+  amount_money: squareMoney(10401),
+};
+
+const squareEntries = [
+  {
+    id: "pe_charge_1",
+    payout_id: "po_2Y8kq3",
+    type: "CHARGE",
+    gross_amount_money: squareMoney(10000),
+    fee_amount_money: squareMoney(-290),
+    net_amount_money: squareMoney(9710),
+    type_charge_details: { payment_id: "pay_Hk3s9Q" },
+  },
+  {
+    id: "pe_charge_2",
+    payout_id: "po_2Y8kq3",
+    type: "CHARGE",
+    gross_amount_money: squareMoney(2500),
+    fee_amount_money: squareMoney(-103),
+    net_amount_money: squareMoney(2397),
+    type_charge_details: { payment_id: "pay_Lm7t2R" },
+  },
+  {
+    id: "pe_refund_1",
+    payout_id: "po_2Y8kq3",
+    type: "REFUND",
+    gross_amount_money: squareMoney(-1500),
+    fee_amount_money: squareMoney(44),
+    net_amount_money: squareMoney(-1456),
+    type_refund_details: { payment_id: "pay_Hk3s9Q" },
+  },
+  {
+    id: "pe_adjustment_debit",
+    payout_id: "po_2Y8kq3",
+    type: "ADJUSTMENT",
+    gross_amount_money: squareMoney(-500),
+    fee_amount_money: null,
+    net_amount_money: squareMoney(-500),
+  },
+  {
+    id: "pe_adjustment_credit",
+    payout_id: "po_2Y8kq3",
+    type: "RELEASE_ADJUSTMENT",
+    gross_amount_money: squareMoney(250),
+    fee_amount_money: null,
+    net_amount_money: squareMoney(250),
+  },
+  {
+    id: "pe_dispute_open",
+    payout_id: "po_2Y8kq3",
+    type: "OPEN_DISPUTE",
+    gross_amount_money: squareMoney(-4000),
+    net_amount_money: squareMoney(-4000),
+    type_dispute_details: { dispute_id: "dp_9A1" },
+  },
+  {
+    id: "pe_dispute_close",
+    payout_id: "po_2Y8kq3",
+    type: "CLOSE_DISPUTE",
+    gross_amount_money: squareMoney(4000),
+    net_amount_money: squareMoney(4000),
+    type_dispute_details: { dispute_id: "dp_9A1" },
+  },
+];
+
+test("Square payout maps charges, fees, refunds, adjustments and disputes to the settlement kinds", () => {
+  const parsed = parseSquarePayout(squarePayout, squareEntries, "2026-08-24");
+  assert.equal(parsed.provider, "square");
+  assert.equal(parsed.externalRef, "po_2Y8kq3");
+  assert.equal(parsed.settlementDate, "2026-08-24");
+  assert.equal(parsed.currency, "USD");
+  assert.deepEqual(
+    parsed.lines.map(({ kind, amount, externalRef }) => ({ kind, amount, externalRef })),
+    [
+      { kind: "charge", amount: "100.0000", externalRef: "pe_charge_1" },
+      { kind: "fee", amount: "2.9000", externalRef: "pe_charge_1_fee" },
+      { kind: "charge", amount: "25.0000", externalRef: "pe_charge_2" },
+      { kind: "fee", amount: "1.0300", externalRef: "pe_charge_2_fee" },
+      { kind: "refund", amount: "15.0000", externalRef: "pe_refund_1" },
+      { kind: "fee", amount: "-0.4400", externalRef: "pe_refund_1_fee" },
+      { kind: "adjustment", amount: "5.0000", externalRef: "pe_adjustment_debit" },
+      { kind: "other", amount: "2.5000", externalRef: "pe_adjustment_credit" },
+      { kind: "dispute", amount: "40.0000", externalRef: "pe_dispute_open" },
+      { kind: "dispute_reversal", amount: "40.0000", externalRef: "pe_dispute_close" },
+    ],
+  );
+  // Gross 127.50 − fees 3.49 − refunds 15 − adjustments 5 = 104.01, the payout amount.
+  assert.equal(summarizeSettlement(parsed.lines).netAmount, "104.0100");
+});
+
+test("Square line meta carries the payment and dispute identifiers", () => {
+  const parsed = parseSquarePayout(squarePayout, squareEntries, "2026-08-24");
+  const refund = parsed.lines.find((line) => line.externalRef === "pe_refund_1");
+  const dispute = parsed.lines.find((line) => line.externalRef === "pe_dispute_open");
+  assert.equal(refund?.meta?.squarePaymentId, "pay_Hk3s9Q");
+  assert.equal(refund?.meta?.squareType, "REFUND");
+  assert.equal(dispute?.meta?.squareDisputeId, "dp_9A1");
+});
+
+test("Square amounts convert through the currency's minor units exactly", () => {
+  const parsed = parseSquarePayout(
+    { id: "po_jp_1", amount_money: squareMoney(4820, "JPY"), arrival_date: "2026-08-24" },
+    [
+      {
+        id: "pe_jp_1",
+        type: "CHARGE",
+        gross_amount_money: squareMoney(5000, "JPY"),
+        fee_amount_money: squareMoney(-180, "JPY"),
+        net_amount_money: squareMoney(4820, "JPY"),
+      },
+    ],
+  );
+  assert.deepEqual(
+    parsed.lines.map(({ kind, amount }) => ({ kind, amount })),
+    [
+      { kind: "charge", amount: "5000.0000" },
+      { kind: "fee", amount: "180.0000" },
+    ],
+  );
+});
+
+test("Square FEE and PAID_SERVICE_FEE entries book their whole net as fee", () => {
+  const parsed = parseSquarePayout(
+    { id: "po_fee_1", amount_money: squareMoney(9500), arrival_date: "2026-08-24" },
+    [
+      {
+        id: "pe_charge_3",
+        type: "CHARGE",
+        gross_amount_money: squareMoney("10000"),
+        net_amount_money: squareMoney("10000"),
+      },
+      {
+        id: "pe_fee_1",
+        type: "FEE",
+        gross_amount_money: squareMoney(-300),
+        net_amount_money: squareMoney(-300),
+      },
+      {
+        id: "pe_service_fee_1",
+        type: "PAID_SERVICE_FEE",
+        gross_amount_money: squareMoney(-200),
+        net_amount_money: squareMoney(-200),
+      },
+    ],
+  );
+  assert.deepEqual(
+    parsed.lines.map(({ kind, amount }) => ({ kind, amount })),
+    [
+      { kind: "charge", amount: "100.0000" },
+      { kind: "fee", amount: "3.0000" },
+      { kind: "fee", amount: "2.0000" },
+    ],
+  );
+  assert.equal(summarizeSettlement(parsed.lines).netAmount, "95.0000");
+});
+
+test("Square payout total that the entries do not net to refuses naming the payout", () => {
+  assert.throws(
+    () => parseSquarePayout({ ...squarePayout, amount_money: squareMoney(10400) }, squareEntries),
+    (error) =>
+      error instanceof PspSettlementError &&
+      error.message.includes("po_2Y8kq3 does not reconcile"),
+  );
+});
+
+test("Square entry that does not foot refuses naming the entry", () => {
+  assert.throws(
+    () =>
+      parseSquarePayout(squarePayout, [
+        { ...squareEntries[0]!, net_amount_money: squareMoney(9700) },
+      ]),
+    (error) =>
+      error instanceof PspSettlementError &&
+      error.message.includes("pe_charge_1 does not foot"),
+  );
+});
+
+test("Square positive fee convention refuses rather than inverting the fee", () => {
+  assert.throws(
+    () =>
+      parseSquarePayout(squarePayout, [
+        {
+          id: "pe_charge_positive_fee",
+          type: "CHARGE",
+          gross_amount_money: squareMoney(10000),
+          fee_amount_money: squareMoney(290),
+          net_amount_money: squareMoney(9710),
+        },
+      ]),
+    (error) =>
+      error instanceof PspSettlementError &&
+      error.message.includes("pe_charge_positive_fee does not foot"),
+  );
+});
+
+test("Square unknown entry type refuses by name", () => {
+  assert.throws(
+    () =>
+      parseSquarePayout(squarePayout, [
+        {
+          id: "pe_hold_1",
+          type: "RESERVE_HOLD",
+          gross_amount_money: squareMoney(-900),
+          net_amount_money: squareMoney(-900),
+        },
+      ]),
+    (error) =>
+      error instanceof PspSettlementError &&
+      error.message.includes('"RESERVE_HOLD"'),
+  );
+});
+
+test("Square dispute with the wrong direction refuses naming the entry type", () => {
+  assert.throws(
+    () =>
+      parseSquarePayout(squarePayout, [
+        {
+          id: "pe_open_credit",
+          type: "OPEN_DISPUTE",
+          gross_amount_money: squareMoney(4000),
+          net_amount_money: squareMoney(4000),
+        },
+      ]),
+    (error) =>
+      error instanceof PspSettlementError &&
+      error.message.includes("Square OPEN_DISPUTE entry"),
+  );
+});
+
+test("Square failed and canceled payouts refuse because no funds settled", () => {
+  for (const status of ["FAILED", "CANCELED"]) {
+    assert.throws(
+      () => parseSquarePayout({ ...squarePayout, status }, squareEntries),
+      (error) => error instanceof PspSettlementError && error.message.includes("did not settle"),
+    );
+  }
+});
+
+test("Square entries in another currency refuse as a mixed-currency batch", () => {
+  assert.throws(
+    () =>
+      parseSquarePayout(squarePayout, [
+        {
+          id: "pe_cad_1",
+          type: "CHARGE",
+          gross_amount_money: squareMoney(10000, "CAD"),
+          net_amount_money: squareMoney(10000, "CAD"),
+        },
+      ]),
+    (error) =>
+      error instanceof PspSettlementError &&
+      error.message.includes("mixed-currency Square transactions (USD, CAD)"),
+  );
+});
+
+test("Square entry that belongs to another payout refuses", () => {
+  assert.throws(
+    () =>
+      parseSquarePayout(squarePayout, [
+        { ...squareEntries[0]!, payout_id: "po_other" },
+      ]),
+    (error) =>
+      error instanceof PspSettlementError &&
+      error.message.includes("belongs to payout po_other"),
+  );
+});
+
+test("Square money refuses decimal and non-safe-integer amounts", () => {
+  assert.throws(
+    () =>
+      parseSquarePayout(squarePayout, [
+        { ...squareEntries[0]!, gross_amount_money: squareMoney(100.5) },
+      ]),
+    (error) =>
+      error instanceof PspSettlementError &&
+      error.message.includes("must be an integer amount in Square minor units"),
+  );
+  assert.throws(
+    () =>
+      parseSquarePayout(squarePayout, [
+        { ...squareEntries[0]!, gross_amount_money: squareMoney(Number.MAX_SAFE_INTEGER + 2) },
+      ]),
+    (error) => error instanceof PspSettlementError,
+  );
+});
+
+test("Square entry without an id refuses rather than booking an unidentified line", () => {
+  assert.throws(
+    () =>
+      parseSquarePayout(squarePayout, [
+        { ...squareEntries[0]!, id: null },
+      ]),
+    (error) =>
+      error instanceof PspSettlementError &&
+      error.message.includes("Square payout entry id is required"),
   );
 });

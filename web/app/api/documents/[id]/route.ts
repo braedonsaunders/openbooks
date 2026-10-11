@@ -22,7 +22,10 @@ import { canReadDocumentKind } from "../../../../lib/flow-subject-authz.ts";
 import { lockedDocumentScopeDenied } from "../../../../lib/document-scope.ts";
 import { type DocumentEditCurrent, type DocumentEditInput } from "@openbooks/engine/ledger/document-input";
 import { notFound } from "@/lib/api/responses";
-const PATCHBodySchema1 = documentEditBodySchema.refine((body) => Object.keys(body).length > 0, { message: "At least one field must be provided." });
+// An absent body is an empty edit; it is refused in the handler after the
+// existence, scope and permission gates so an unreadable or unknown id keeps
+// its 404 contract.
+const PATCHBodySchema1 = documentEditBodySchema.default({});
 
 
 
@@ -124,6 +127,9 @@ export const PATCH = defineRoute({
       }
 
     const body = (routeBody) as DocumentEditInput
+    if (Object.keys(body).length === 0) {
+      return NextResponse.json({ error: 'At least one field must be provided.' }, { status: 400 })
+    }
     if (body.subsidiaryId !== undefined && !subsidiariesInScope(authz, [body.subsidiaryId])) {
         return NextResponse.json({ error: 'invalid subsidiary' }, { status: 422 })
       }

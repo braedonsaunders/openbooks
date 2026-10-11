@@ -20,8 +20,21 @@ import { TriangleAlert, Users } from 'lucide-react'
 import { readApiErrorMessage, refusalMessageFromBody } from '../lib/api-error'
 import { promptDialog } from '../lib/prompt'
 import type { RecordApprovalState } from '../app/api/flows/record-state/route'
+import { documentActionAvailable } from '../lib/document-action-availability'
 
 export type { RecordApprovalState }
+
+/**
+ * The document surface's Withdraw inputs: the record id, its lifecycle status,
+ * and the viewer's grants on the kind (create = submit grant, approve = the
+ * grant the withdraw route checks for a submission the viewer did not make).
+ */
+export interface ApprovalWithdrawSurface {
+  documentId: string
+  status: string
+  canCreate: boolean
+  canApprove: boolean
+}
 
 // --- shared record-state store ----------------------------------------------
 
@@ -128,7 +141,7 @@ export function ApprovalActions({
   subjectKind,
   subjectId,
   submitApprovalHref,
-  withdrawDocumentId,
+  withdraw,
 }: {
   subjectKind: string
   subjectId: string
@@ -139,12 +152,13 @@ export function ApprovalActions({
    */
   submitApprovalHref?: string
   /**
-   * Document id for the native "Withdraw submission" recall. Passed only
-   * by document surfaces; the button additionally requires the record
-   * state's canWithdraw flag (viewer submitted it or may decide a live
-   * gate), so strangers never see an action that would refuse them.
+   * Native "Withdraw submission" recall for document surfaces. Passed only
+   * by surfaces whose kind routes withdrawals through the documents action
+   * route. The button renders only where the shared document action rule
+   * offers withdraw for this viewer, so strangers never see an action that
+   * would refuse them.
    */
-  withdrawDocumentId?: string
+  withdraw?: ApprovalWithdrawSurface
 }) {
   const t = useTranslations('common')
   const router = useRouter()
@@ -254,9 +268,10 @@ export function ApprovalActions({
   }, [submitApprovalHref, router, t])
 
   // The submitter's own recall of a submission still awaiting decision
-  // (or a live approver's): collects the mandatory reason, posts the
-  // native withdraw through the documents action route, and refreshes the
-  // approval state so the drawer shows the draft again.
+  // (or a holder of the kind's approve grant): collect the mandatory reason,
+  // withdraw through the documents action route, then refresh the approval
+  // state so the drawer shows the draft again.
+  const withdrawDocumentId = withdraw?.documentId
   const withdrawSubmission = useCallback(async () => {
     if (!withdrawDocumentId) return
     const reason = await promptDialog({
@@ -272,12 +287,8 @@ export function ApprovalActions({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'withdraw', documentId: withdrawDocumentId, reason }),
       })
-      const data = await res.json().catch(() => ({}))
-      // The refusal reads through the shared helper (see the decide branch).
       if (!res.ok) {
-        toast.error(
-          refusalMessageFromBody(data, { fallback: t('approvalFlow.withdrawFailed') }) ?? t('approvalFlow.withdrawFailed'),
-        )
+        toast.error(await readApiErrorMessage(res, t('approvalFlow.withdrawFailed')))
       } else {
         toast.success(t('approvalFlow.withdrawn'))
       }
@@ -290,7 +301,13 @@ export function ApprovalActions({
     router.refresh()
   }, [withdrawDocumentId, router, t])
 
-  const showWithdraw = !!withdrawDocumentId && !!state?.canWithdraw
+  const showWithdraw = !!withdraw && !!state && state.approvalState.status === 'pending_approval' && documentActionAvailable('withdraw', {
+    status: withdraw.status,
+    directPost: false,
+    canCreate: withdraw.canCreate,
+    canPost: withdraw.canApprove,
+    submittedByViewer: state.submittedByViewer,
+  })
 
   const withdrawButton = showWithdraw ? (
     <Button variant="outline" disabled={busy} onClick={withdrawSubmission}>

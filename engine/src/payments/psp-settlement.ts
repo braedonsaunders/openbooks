@@ -11,7 +11,7 @@ import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { ScopeNotFoundError, assertUnrestrictedScope, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
 import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
-import { fromMinorUnits, THREE_DECIMAL_CURRENCIES } from "./acceptance.ts";
+import { fromMinorUnits, THREE_DECIMAL_CURRENCIES } from "./minor-units.ts";
 import { isUuid } from "../platform/uuid.ts";
 
 /**
@@ -21,7 +21,7 @@ import { isUuid } from "../platform/uuid.ts";
  * are evidence-backed settlement_lines. Idempotent on (org, provider, externalRef).
  */
 
-export type PspProvider = "stripe" | "recurly" | "chargebee" | "shopify_payments" | "paypal";
+export type PspProvider = "stripe" | "recurly" | "chargebee" | "shopify_payments" | "paypal" | "square";
 
 /** Every provider the settlement importer accepts. Adding a provider is one entry here, one parser below, and the CHECK widening in the migration. */
 export const PSP_PROVIDERS: readonly PspProvider[] = [
@@ -30,6 +30,7 @@ export const PSP_PROVIDERS: readonly PspProvider[] = [
   "chargebee",
   "shopify_payments",
   "paypal",
+  "square",
 ];
 
 export function isPspProvider(value: string): value is PspProvider {
@@ -1282,6 +1283,264 @@ function splitCsvRecords(csv: string): string[][] {
   return records;
 }
 
+/** Square money: integer minor units of the currency, as the Payouts API reports them. */
+export interface SquareMoney {
+  amount: number | string;
+  currency?: string | null;
+}
+
+/** Square Payout subset. `arrival_date` is the bank deposit day. */
+export interface SquarePayoutInput {
+  id: string;
+  status?: string | null;
+  arrival_date?: string | null;
+  created_at?: string | null;
+  amount_money: SquareMoney;
+}
+
+/**
+ * Square PayoutEntry subset. Net is gross plus the fee, and a fee is reported
+ * as a negative amount, so a charge nets to its gross less its fee.
+ */
+export interface SquarePayoutEntryInput {
+  id?: string | null;
+  payout_id?: string | null;
+  effective_at?: string | null;
+  type: string;
+  gross_amount_money: SquareMoney;
+  fee_amount_money?: SquareMoney | null;
+  net_amount_money: SquareMoney;
+  type_charge_details?: { payment_id?: string | null } | null;
+  type_refund_details?: { payment_id?: string | null } | null;
+  type_dispute_details?: { dispute_id?: string | null } | null;
+}
+
+/**
+ * How one Square entry type books. The gross leg takes the shape named here
+ * and the fee leg is separate; fee-only types book their whole net as fee.
+ * A type outside this map refuses by name, because a new Square entry type
+ * booked as a charge would invent receivables.
+ */
+type SquareEntryShape =
+  | "charge"
+  | "refund"
+  | "fee_only"
+  | "adjustment"
+  | "dispute"
+  | "dispute_reversal";
+
+const SQUARE_ENTRY_SHAPES: ReadonlyMap<string, SquareEntryShape> = new Map([
+  ["CHARGE", "charge"],
+  ["REFUND", "refund"],
+  ["FEE", "fee_only"],
+  ["DEPOSIT_FEE", "fee_only"],
+  ["PAID_SERVICE_FEE", "fee_only"],
+  ["ADJUSTMENT", "adjustment"],
+  ["HOLD_ADJUSTMENT", "adjustment"],
+  ["RELEASE_ADJUSTMENT", "adjustment"],
+  ["OPEN_DISPUTE", "dispute"],
+  ["CLOSE_DISPUTE", "dispute_reversal"],
+]);
+
+function nonEmptyId(value: string | null | undefined): string | null {
+  const trimmed = (value ?? "").trim();
+  return trimmed === "" ? null : trimmed;
+}
+
+/**
+ * Square money to exact minor units. Only integers are accepted: a JSON
+ * number outside the safe range or a decimal string refuses by name rather
+ * than being rounded into a booking.
+ */
+function squareMinorUnits(money: SquareMoney | null | undefined, field: string, currency: string): bigint {
+  if (!money) throw new PspSettlementError(`${field} is required`);
+  const code = requireProviderCurrency(money.currency, "Square", `${field} currency`);
+  if (code !== currency) {
+    throw new PspSettlementError(
+      `mixed-currency Square transactions (${currency}, ${code}) cannot settle as one batch`,
+    );
+  }
+  const raw =
+    typeof money.amount === "number"
+      ? Number.isSafeInteger(money.amount) ? String(money.amount) : ""
+      : typeof money.amount === "string" ? money.amount.trim() : "";
+  if (!/^-?\d+$/.test(raw)) {
+    throw new PspSettlementError(`${field} must be an integer amount in Square minor units`);
+  }
+  return BigInt(raw);
+}
+
+/**
+ * Square payout (Payouts API: Payout with its PayoutEntry objects). One payout
+ * is one settlement batch, idempotent on its id. Each entry must foot
+ * (net = gross + fee), and the entries must total the payout amount, so a
+ * partial entry page refuses instead of posting a short deposit. The payout
+ * movement is the bank leg and is not booked as content. Failed and canceled
+ * payouts never reached the bank, so they refuse.
+ */
+export function parseSquarePayout(
+  payout: SquarePayoutInput,
+  entries: SquarePayoutEntryInput[],
+  fallbackDate?: string,
+): ParsedSettlement {
+  const payoutId = (payout.id ?? "").trim();
+  if (payoutId === "") throw new PspSettlementError("Square payout id is required");
+  const status = (payout.status ?? "").trim().toUpperCase();
+  if (status === "FAILED" || status === "CANCELED") {
+    throw new PspSettlementError(
+      `Square payout ${payoutId} is ${status} and did not settle to the bank account; import the payout that settled instead`,
+    );
+  }
+  const currency = requireProviderCurrency(payout.amount_money?.currency, "Square", "payout currency");
+  const payoutTotal = squareMinorUnits(payout.amount_money, "Square payout amount", currency);
+  const settlementDate = (payout.arrival_date ?? fallbackDate ?? new Date().toISOString()).slice(0, 10);
+  if (entries.length === 0) {
+    throw new PspSettlementError(
+      `settlement batch has no evidence lines: Square payout ${payoutId} carries no entries`,
+    );
+  }
+  const lines: ParsedSettlementLine[] = [];
+  let entryNetTotal = 0n;
+  for (const [index, entry] of entries.entries()) {
+    const entryId = (entry.id ?? "").trim();
+    const label = `entry ${index + 1}${entryId ? ` ${entryId}` : ""}`;
+    if (entryId === "") throw new PspSettlementError(`Square payout entry id is required (${label})`);
+    const entryPayoutId = (entry.payout_id ?? "").trim();
+    if (entryPayoutId !== "" && entryPayoutId !== payoutId) {
+      throw new PspSettlementError(
+        `Square entry ${entryId} belongs to payout ${entryPayoutId}, not ${payoutId}; import only this payout's entries`,
+      );
+    }
+    const type = (entry.type ?? "").trim().toUpperCase();
+    const shape = SQUARE_ENTRY_SHAPES.get(type);
+    if (!shape) {
+      throw new PspSettlementError(
+        `unsupported Square payout entry type "${entry.type}" (${label}): ` +
+          `re-export the payout's entries without it, or extend the importer to map it, before importing payout ${payoutId}`,
+      );
+    }
+    const gross = squareMinorUnits(entry.gross_amount_money, `Square entry gross amount (${label})`, currency);
+    const fee =
+      entry.fee_amount_money == null
+        ? 0n
+        : squareMinorUnits(entry.fee_amount_money, `Square entry fee amount (${label})`, currency);
+    const net = squareMinorUnits(entry.net_amount_money, `Square entry net amount (${label})`, currency);
+    if (gross + fee !== net) {
+      throw new PspSettlementError(
+        `Square entry ${entryId} does not foot: gross ${fromMinorUnits(gross, currency)} plus fee ${fromMinorUnits(fee, currency)} is not net ${fromMinorUnits(net, currency)}; ` +
+          `fees are negative amounts in Square's entry, so confirm this entry came from payout ${payoutId} and import it again`,
+      );
+    }
+    entryNetTotal += net;
+
+    const meta: Record<string, unknown> = { squareType: type };
+    const paymentId =
+      nonEmptyId(entry.type_charge_details?.payment_id) ?? nonEmptyId(entry.type_refund_details?.payment_id);
+    if (paymentId) meta.squarePaymentId = paymentId;
+    const disputeId = nonEmptyId(entry.type_dispute_details?.dispute_id);
+    if (disputeId) meta.squareDisputeId = disputeId;
+    const description = `Square ${type.toLowerCase()}`;
+    const refuseSign = (why: string) =>
+      new PspSettlementError(
+        `Square ${type} entry ${label} ${why}; re-export the payout's entries and import payout ${payoutId} again`,
+      );
+    const entryLines: ParsedSettlementLine[] = [];
+
+    if (shape === "fee_only") {
+      entryLines.push({
+        kind: "fee",
+        amount: fromMinorUnits(-net, currency),
+        externalRef: entryId,
+        description,
+        currency,
+        meta: { ...meta },
+      });
+    } else {
+      let primary: { kind: SettlementLineKind; units: bigint } | null = null;
+      switch (shape) {
+        case "charge":
+          if (gross < 0n) throw refuseSign("has a negative gross amount");
+          primary = { kind: "charge", units: gross };
+          break;
+        case "refund":
+          if (gross > 0n) throw refuseSign("has a positive gross amount");
+          primary = { kind: "refund", units: -gross };
+          break;
+        case "adjustment":
+          // A debit reduces the net as an adjustment. A credit rides the
+          // signed miscellaneous bucket, because the adjustment kind always
+          // reduces the net.
+          primary =
+            gross < 0n
+              ? { kind: "adjustment", units: -gross }
+              : gross > 0n
+                ? { kind: "other", units: gross }
+                : null;
+          break;
+        case "dispute":
+          if (gross > 0n) throw refuseSign("has a positive gross amount");
+          primary = { kind: "dispute", units: -gross };
+          break;
+        case "dispute_reversal":
+          if (gross < 0n) throw refuseSign("has a negative gross amount");
+          primary = { kind: "dispute_reversal", units: gross };
+          break;
+      }
+      if (primary && primary.units !== 0n) {
+        entryLines.push({
+          kind: primary.kind,
+          amount: fromMinorUnits(primary.units, currency),
+          externalRef: entryId,
+          description,
+          currency,
+          meta: { ...meta },
+        });
+      }
+      if (fee !== 0n) {
+        // The fee is a cost when negative in Square's entry, so the leg is
+        // the negated fee; a returned fee on a refund books as a credit.
+        entryLines.push({
+          kind: "fee",
+          amount: fromMinorUnits(-fee, currency),
+          externalRef: `${entryId}_fee`,
+          description: `${description} fee`,
+          currency,
+          meta: { ...meta },
+        });
+      }
+    }
+    // Tripwire: the lines this entry books must reproduce its Square net
+    // exactly, under the same arithmetic the batch totals use.
+    const netMajor = fromMinorUnits(net, currency);
+    if (toUnits(summarizeSettlement(entryLines).netAmount) !== toUnits(netMajor)) {
+      throw new PspSettlementError(
+        `Square entry ${entryId} does not book to its net ${netMajor}; the importer refuses rather than post a different amount`,
+      );
+    }
+    lines.push(...entryLines);
+  }
+  if (lines.length === 0) {
+    throw new PspSettlementError(
+      `settlement batch has no evidence lines: Square payout ${payoutId} carries only zero-amount entries`,
+    );
+  }
+  if (entryNetTotal !== payoutTotal) {
+    throw new PspSettlementError(
+      `Square payout ${payoutId} does not reconcile: its amount is ${fromMinorUnits(payoutTotal, currency)} but its entries net to ${fromMinorUnits(entryNetTotal, currency)}; ` +
+        `fetch every page of the payout's entries and import payout ${payoutId} again`,
+    );
+  }
+  return {
+    provider: "square",
+    externalRef: payoutId,
+    settlementDate,
+    currency,
+    lines,
+    memo: `Square payout ${payoutId}`,
+    raw: { payout: { id: payoutId, status: status || null }, entryCount: entries.length },
+  };
+}
+
 /**
  * Parser registry: adding a provider is one entry here (plus the CHECK
  * widening). The settlements route dispatches through this instead of
@@ -1296,6 +1555,7 @@ export const SETTLEMENT_PARSERS: Record<
   chargebee: { label: "Chargebee", kinds: "settlement payload" },
   shopify_payments: { label: "Shopify Payments", kinds: "payout and balance transactions" },
   paypal: { label: "PayPal", kinds: "transaction search export or settlement CSV" },
+  square: { label: "Square", kinds: "payout and payout entries" },
 };
 
 export async function primaryBookId(orgId: string): Promise<string> {
@@ -2525,6 +2785,9 @@ export async function reverseSettlementBatch(
   });
 }
 
+/** Providers a scheduled payout pull serves; every other provider imports. */
+export const PSP_PULL_PROVIDERS = ["stripe", "paypal", "shopify_payments"] as const satisfies readonly PspProvider[];
+
 export async function savePspProviderConfig(
   orgId: string,
   input: {
@@ -2555,6 +2818,11 @@ export async function savePspProviderConfig(
   }
   if (input.refundPolicy !== undefined && input.refundPolicy !== "automatic" && input.refundPolicy !== "review") {
     throw new PspSettlementError(`unknown refund policy ${String(input.refundPolicy)}`);
+  }
+  // A pull switch on a provider no scheduled pull serves would read as
+  // automated while nothing ever imports.
+  if (input.pullEnabled === true && !(PSP_PULL_PROVIDERS as readonly string[]).includes(input.provider)) {
+    throw new PspSettlementError(`scheduled pull is not available for ${input.provider}; import its payouts instead`);
   }
   // Default posting accounts are validated like any other settlement
   // reference: a foreign or unpostable id must not persist to detonate at

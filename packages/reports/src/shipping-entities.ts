@@ -19,7 +19,7 @@ export const SHIPPING_REPORT_ENTITIES: ReportEntity[] = [
     key: "shipment_labels",
     label: "Shipping labels",
     description:
-      "Bought carrier labels with live cost, tracking state and their cost journal — voided labels stay visible with their reversal, never silently dropped.",
+      "Purchased carrier labels with cost, tracking state and journal; voided ones stay listed.",
     from: `shipment_labels l
       JOIN fulfillment_documents f ON f.document_id = l.shipment_document_id AND f.org_id = l.org_id
       JOIN documents d ON d.id = l.shipment_document_id AND d.org_id = l.org_id
@@ -81,7 +81,7 @@ export const SHIPPING_REPORT_ENTITIES: ReportEntity[] = [
     key: "shipping_adjustments",
     label: "Carrier adjustments",
     description:
-      "Billing corrections the carrier or aggregator applied after purchase — weight, dimension and address corrections with the reason and posting state.",
+      "Carrier weight, dimension and address corrections after purchase, with reason and state.",
     from: `shipping_adjustments a
       JOIN shipment_labels l ON l.id = a.label_id AND l.org_id = a.org_id
       JOIN documents d ON d.id = l.shipment_document_id AND d.org_id = l.org_id

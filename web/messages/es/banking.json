@@ -1,7 +1,10 @@
 {
   "types": {
     "asset_bank": "Banco",
-    "liability_card": "Tarjeta"
+    "liability_card": "Tarjeta",
+    "liability_payable": "Cuentas por pagar",
+    "liability_current_other": "Otros pasivos circulantes",
+    "liability_long_term": "Pasivos a largo plazo"
   },
   "reconStatus": {
     "signed_off": "aprobada",
@@ -80,7 +83,7 @@
     },
     "vitals": {
       "cash": "Efectivo total",
-      "cards": "Saldos de tarjetas",
+      "cards": "Saldos de tarjetas y crédito",
       "unmatched": "Líneas sin conciliar",
       "unmatchedSub": "pendientes en Conciliar",
       "allMatched": "todas las líneas conciliadas",
@@ -95,7 +98,7 @@
       "hint": "Saldos del libro mayor contabilizado",
       "empty": "Aún no hay cuentas bancarias o de tarjeta activas. Añádalas en el plan de cuentas.",
       "bankSection": "Cuentas bancarias",
-      "cardSection": "Tarjetas de crédito",
+      "cardSection": "Tarjetas y líneas de crédito",
       "reconciledThrough": "Conciliado hasta {date}",
       "neverReconciled": "Nunca conciliado",
       "lastStatement": "Extracto {date}",
@@ -436,8 +439,8 @@
     "preview": "Vista previa",
     "importAction": "Importar",
     "importCount": "Importar {count, plural, one {# línea} other {# líneas}}",
-    "importedToast": "{imported, plural, one {Se importó # línea} other {Se importaron # líneas}}{duplicates, plural, =0 {} one { — # duplicado omitido} other { — # duplicados omitidos}}{possibleDuplicates, plural, =0 {} one { — # duplicado marcado para revisión} other { — # duplicados marcados para revisión}}",
-    "previewSummary": "{imported, plural, one {# línea nueva} other {# líneas nuevas}}{duplicates, plural, =0 {} one { · # duplicado omitido} other { · # duplicados omitidos}}{possibleDuplicates, plural, =0 {} one { · # duplicado marcado para revisión} other { · # duplicados marcados para revisión}}",
+    "importedToast": "{imported, plural, one {Se importó # línea} other {Se importaron # líneas}}{duplicates, plural, =0 {} one { — # duplicado omitido} other { — # duplicados omitidos}}{possibleDuplicates, plural, =0 {} one { — # posible duplicado} other { — # posibles duplicados}}",
+    "previewSummary": "{imported, plural, one {# línea nueva} other {# líneas nuevas}}{duplicates, plural, =0 {} one { · # duplicado omitido} other { · # duplicados omitidos}}{possibleDuplicates, plural, =0 {} one { · # posible duplicado} other { · # posibles duplicados}}",
     "format": "Formato",
     "formatOfx": "OFX / QFX",
     "formatCsv": "CSV",
@@ -484,7 +487,12 @@
     "previewEmpty": "La vista previa no encontró líneas de movimientos: revisa la columna de importe y el formato de fecha, y vuelve a ejecutarla.",
     "previewRequired": "Ejecuta la vista previa antes de importar.",
     "suggestedOpeningFrom": "Saldo inicial tomado del saldo final del {date}; modifícalo si hace falta.",
-    "openingMismatch": "El saldo inicial {supplied} difiere del saldo final del {date} ({expected}): revisa si falta un mes."
+    "openingMismatch": "El saldo inicial {supplied} difiere del saldo final del {date} ({expected}): revisa si falta un mes.",
+    "closingMismatch": "El saldo inicial {opening} más las líneas del extracto {lines} da {expected}, no el saldo final {closing}: compara ambos saldos con el extracto bancario o deja vacío el saldo final si el archivo cubre solo una parte.",
+    "possibleDuplicatesNotice": "{count, plural, one {# línea coincide con una línea que ya está en esta cuenta y se deja fuera de la importación} other {# líneas coinciden con líneas que ya están en esta cuenta y se dejan fuera de la importación}}.",
+    "includePossibleDuplicates": "{count, plural, one {Importar igualmente este posible duplicado} other {Importar igualmente estos # posibles duplicados}}",
+    "possibleDuplicateMatch": "Coincide con una línea que ya está en esta cuenta",
+    "onlyPossibleDuplicates": "Cada línea analizada ya está en esta cuenta o es un posible duplicado. Incluya los posibles duplicados de abajo para importarlos."
   },
   "start": {
     "resume": "Reanudar conciliación",
@@ -539,7 +547,7 @@
     "formSetPreferredDone": "Formulario preferido guardado",
     "formPreferredCleared": "Formulario preferido borrado",
     "formPreferredFailed": "No se pudo guardar el formulario preferido",
-    "cardAccountHelp": "Sin tarjetas registradas — selecciona la cuenta de tarjeta conciliable para contabilizar.",
+    "cardAccountHelp": "Selecciona la cuenta de tarjeta conciliable contra la que se contabiliza este cargo.",
     "noCardAccounts": "Aún no hay cuentas de tarjeta conciliables.",
     "noCardAccountsCta": "Añade una en el plan de cuentas",
     "partylessControlWarning": "Contabilizado sin cliente ni proveedor en {accounts}. Estos importes quedan fuera de los submayores de cuentas por cobrar y por pagar, por lo que las facturas abiertas siguen pendientes. Registre los cobros de clientes con Recibir pago y los pagos a proveedores con Pagar facturas, o indique el cliente o proveedor en la línea. Configuración → Empresa y contabilidad → Cuentas de control puede rechazar estos asientos.",
@@ -647,7 +655,11 @@
     "openingConfirm": "Confirmar apertura",
     "openingConfirmedToast": "Apertura {amount} confirmada",
     "openingConfirmedNote": "Apertura {amount} confirmada — {reason}",
-    "openingStaleNote": "La apertura confirmada ya no coincide con el saldo contable arrastrado — revise el libro mayor y confirme de nuevo la apertura."
+    "openingStaleNote": "La apertura confirmada ya no coincide con el saldo contable arrastrado — revise el libro mayor y confirme de nuevo la apertura.",
+    "excludeDuplicate": "Excluir duplicado",
+    "clearDuplicate": "Marcar como no duplicado",
+    "excludeDuplicateReason": "Duplicado de la línea bancaria del {date} por {amount}: {description}",
+    "excludeDuplicateReasonGeneric": "Duplicado de una línea bancaria anterior"
   },
   "sftp": {
     "title": "Servidores SFTP",
@@ -1037,7 +1049,8 @@
       "recurly": "Recurly",
       "chargebee": "Chargebee",
       "shopify_payments": "Shopify Payments",
-      "paypal": "PayPal"
+      "paypal": "PayPal",
+      "square": "Square"
     },
     "externalRef": "Referencia externa / ID de desembolso",
     "settlementDate": "Fecha de liquidación",
@@ -1074,6 +1087,9 @@
     "paypalPayloadHint": "Pegue '{\"transactions\": [{\"transaction_info\": {...}}]}' de la API de búsqueda de transacciones, o el informe de liquidación CSV con su fila de encabezado. Asigne un nombre a la exportación en Referencia externa para que el lote siga siendo idempotente.",
     "invalidShopifyPayload": "La carga de Shopify debe ser un único objeto JSON con payout y transactions.",
     "csvUpload": "Subir CSV",
+    "squarePayloadLabel": "Pago y movimientos del pago (JSON)",
+    "squarePayloadHint": "Un objeto JSON con payout y entries: '{\"payout\": {\"id\", \"amount_money\"}, \"entries\": [{\"id\", \"type\", \"gross_amount_money\", \"fee_amount_money\", \"net_amount_money\"}]}'. Los importes son unidades menores enteras. Escribe el ID del pago de Square como referencia externa.",
+    "invalidSquarePayload": "La carga de Square debe ser un único objeto JSON con payout y entries.",
     "fxTitle": "Moneda extranjera",
     "fxNone": "Misma moneda en todo",
     "fxSourceCurrency": "Moneda de los cargos",
@@ -1313,5 +1329,63 @@
   },
   "payoutAssistance": {
     "chipLabel": "Revisar propuesta"
+  },
+  "reconcileEvidence": {
+    "tabs": {
+      "workspace": "Conciliación",
+      "statements": "Extractos de respaldo",
+      "history": "Historial"
+    },
+    "statements": {
+      "title": "Extractos de respaldo",
+      "windowAfter": "Las líneas de extracto con fecha posterior a {start} y hasta {end} respaldan esta conciliación.",
+      "windowThrough": "Las líneas de extracto con fecha hasta {end} respaldan esta conciliación.",
+      "empty": "Ningún extracto bancario respalda el saldo de esta conciliación.",
+      "sourceEmpty": "Esta conciliación se basa en evidencia de origen. No se importó ningún extracto bancario.",
+      "columns": {
+        "date": "Fecha del extracto",
+        "source": "Origen",
+        "imported": "Importado",
+        "opening": "Saldo inicial",
+        "closing": "Saldo final",
+        "lines": "Líneas del período",
+        "matched": "Conciliadas",
+        "excluded": "Excluidas",
+        "unmatched": "Pendientes",
+        "total": "Total del período",
+        "open": "Abrir extracto"
+      },
+      "excludedBadge": "Excluida",
+      "reason": "Motivo: {reason}",
+      "duplicateOf": "Posible duplicado de {date} · {amount}",
+      "excludedByAt": "Excluida {at} por {name}",
+      "excludedAt": "Excluida {at}"
+    },
+    "history": {
+      "title": "Historial",
+      "description": "Aprobaciones, retiradas, confirmaciones de apertura y ajustes de esta conciliación, además de las sesiones descartadas en la misma cuenta bancaria.",
+      "empty": "No hay aprobaciones, retiradas, ajustes ni descartes registrados para esta cuenta bancaria.",
+      "columns": {
+        "when": "Cuándo",
+        "event": "Evento",
+        "by": "Por",
+        "details": "Detalles"
+      },
+      "events": {
+        "sign_off": "Aprobada",
+        "withdraw_sign_off": "Aprobación retirada",
+        "discard": "Sesión descartada",
+        "confirm_opening": "Apertura confirmada",
+        "session_adjustment": "Sesión ajustada"
+      },
+      "signOffStatement": "Saldo del extracto {balance} · hasta {date} · {matched} líneas de diario marcadas · {excluded} líneas de extracto excluidas",
+      "signOffSource": "Evidencia de origen · saldo {balance} · hasta {date} · {matched} líneas de diario conciliadas",
+      "withdrawReason": "Motivo: {reason}",
+      "withdrawPrior": "Saldo aprobado anterior {balance} · aprobada {at} por {by}",
+      "withdrawReleased": "Líneas de diario liberadas: {count} · sesión ahora {status}",
+      "discardDetail": "Hasta {date} · saldo {balance} · {matches} conciliaciones y {lines} líneas de extracto liberadas",
+      "confirmDetail": "Apertura {amount} desde {date} · motivo: {reason}",
+      "adjustDetail": "Hasta {beforeDate} → {afterDate} · saldo {beforeBalance} → {afterBalance}"
+    }
   }
 }

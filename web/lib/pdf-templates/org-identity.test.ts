@@ -36,21 +36,50 @@ test('an organization with no recorded identity prints its name and empty values
   })
 })
 
-test('invoice and non-invoice starters print the seller address and tax numbers', async () => {
+test('a US seller with an EIN and no VAT registration prints no tax-registration or VAT line', async () => {
   const { compileTemplateHtml, renderTemplate } = await import('@openbooks/pdf')
   const { PDF_RECORD_TYPE_BY_KEY } = await import('./catalog')
   const { starterTemplate } = await import('./starters')
   const identity = orgIdentityMergeValues({
     name: 'Northwind',
-    tax_ids: { us_ein: '12-3456789' },
+    tax_ids: { us_ein: '12-3456789', tax_id: 'TX-998877' },
     company_address: { line1: '1 Main St', city: 'Austin', region: 'TX', postalCode: '78701', country: 'US' },
   })
   for (const kind of ['customer_invoice', 'quote']) {
     const source = starterTemplate(PDF_RECORD_TYPE_BY_KEY[kind]!).sourceHtml
     const printed = renderTemplate(compileTemplateHtml(source).compiledHtml, identity)
     assert.match(printed, /1 Main St, Austin, TX 78701, US/, `${kind} prints the registered address`)
-    assert.match(printed, /EIN 12-3456789/, `${kind} prints the tax number`)
+    assert.doesNotMatch(printed, /Tax registration:/, `${kind} prints no tax-registration line`)
+    assert.doesNotMatch(printed, /\bVAT:/, `${kind} prints no VAT line`)
   }
+})
+
+test('a Canadian seller prints its registrations on the tax-registration line', async () => {
+  const { compileTemplateHtml, renderTemplate } = await import('@openbooks/pdf')
+  const { PDF_RECORD_TYPE_BY_KEY } = await import('./catalog')
+  const { starterTemplate } = await import('./starters')
+  const identity = orgIdentityMergeValues({
+    name: 'Northwind',
+    tax_ids: { ca_gst_hst: '123456782RT0001' },
+  })
+  const source = starterTemplate(PDF_RECORD_TYPE_BY_KEY.customer_invoice!).sourceHtml
+  const printed = renderTemplate(compileTemplateHtml(source).compiledHtml, identity)
+  assert.match(printed, /Tax registration: GST\/HST 123456782RT0001/)
+})
+
+test('an EIN stays in the organization identifiers but never fills the tax-registration value', () => {
+  const values = orgIdentityMergeValues({ name: 'Acme', tax_ids: { us_ein: '12-3456789' } })
+  assert.equal(values.org_tax_ids, 'EIN 12-3456789')
+  assert.equal(values.seller_tax_number, '')
+})
+
+test('a starter design is tinted with the organization brand accent when one is set', async () => {
+  const { PDF_RECORD_TYPE_BY_KEY } = await import('./catalog')
+  const { starterTemplate } = await import('./starters')
+  const meta = PDF_RECORD_TYPE_BY_KEY.customer_invoice!
+  assert.match(starterTemplate(meta, '#123456').sourceHtml, /color:#123456/)
+  assert.doesNotMatch(starterTemplate(meta, '#123456').sourceHtml, /color:#0f766e/)
+  assert.match(starterTemplate(meta, null).sourceHtml, /color:#0f766e/)
 })
 
 test('every catalogued organization field has a merge value', () => {

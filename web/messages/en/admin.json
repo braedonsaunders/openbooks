@@ -972,6 +972,14 @@
         "cashOverShort": {
           "label": "Cash over/short",
           "hint": "Counted till cash over or short against the expected total"
+        },
+        "badDebtExpense": {
+          "label": "Bad debt expense",
+          "hint": "Debited when an uncollectible invoice balance is written off, unless an allowance account is set"
+        },
+        "allowanceForDoubtfulAccounts": {
+          "label": "Allowance for doubtful accounts",
+          "hint": "Contra-receivable that write-offs debit instead of bad debt expense when it is set"
         }
       },
       "partylessPolicy": {
@@ -3136,6 +3144,12 @@
         "publishTitle": "Publish to the rate card",
         "publishHint": "Locks the engine’s computed rates into effective-dated rows on the Overhead Rates card. Projects cost overhead from these published rates until you publish again — prior periods keep their original rates.",
         "publishConfirm": "Publish",
+        "zeroOverStandard": {
+          "title": "Replace standard rates with zero?",
+          "intro": "Publishing writes a zero rate over a non-zero standard. Jobs costed from these departments after the start date would carry no overhead from the standard. Confirm only if the standard is no longer used.",
+          "line": "{department}: standard {standard} per hour is replaced with {published} per hour.",
+          "confirm": "Publish zero rates"
+        },
         "publishDone": "Rates published to the rate card",
         "cancel": "Cancel",
         "wizardTitle": "Set up project overhead",
@@ -5461,6 +5475,40 @@
         "newWorkerComp": "Worker comp (WSIB)",
         "workerCompHint": "Rate comes from each employee's assigned worker-comp group (Setup → Workforce → Worker Comp Groups; assign on the employee record). The value here is only the fallback % when an employee has no group."
       },
+      "catchUp": {
+        "title": "Approved time not yet costed",
+        "hint": "Time approved before posting was on, or before the labor control accounts were mapped, has no labor cost in the ledger. Each journal is dated to the latest day it covers. Entries in closed periods are skipped and stay unposted.",
+        "through": "Approved through",
+        "reason": "Reason for the audit trail",
+        "post": "Post labor cost",
+        "month": "Month",
+        "entries": "Entries",
+        "hours": "Hours",
+        "cost": "Standard cost",
+        "period": "Period",
+        "total": "Total",
+        "openSetup": "Open setup",
+        "nothingPosted": "Nothing to post. The approved time is already costed.",
+        "postedResult": "Entries posted: {count}. Standard cost posted: {cost}.",
+        "skippedResult": "Entries left unposted: {count}.",
+        "states": {
+          "open": "Open",
+          "closed": "Closed",
+          "no_period": "No period",
+          "partial": "Partly closed"
+        },
+        "skipRemedy": {
+          "closed": "Reopen the period through Close, or leave them.",
+          "no_period": "Create the accounting period in Close, or leave them."
+        },
+        "blockers": {
+          "projects_disabled": "Projects is off. Turn it on in Company Settings → Features before posting labor cost.",
+          "mode_off": "Labor costing is not posting standard cost to jobs. Choose Post standard cost to jobs above, save, then post the catch-up.",
+          "accounts_unmapped": "Map both the labor WIP and labor clearing accounts above, then save.",
+          "no_posting_book": "No active primary GL book posts to the ledger. Configure one before posting.",
+          "no_root_subsidiary": "No active root subsidiary is configured. Configure one before posting."
+        }
+      },
       "posting": {
         "title": "Posting",
         "hint": "With posting on, approved time posts DR labor WIP (by project) / CR labor clearing at the standard cost rate. Payroll actuals later clear the same account; the residue is your payroll variance.",
@@ -5890,6 +5938,8 @@
       "shopifyName": "Shopify Payments",
       "shopifyDescription": "Import payout and balance-transaction exports. Refunds and disputes post through the automation above.",
       "shopifyChannelsNote": "Connects through the Channels workspace once connected.",
+      "squareName": "Square",
+      "squareDescription": "Import payout and payout-entry exports. Refunds and disputes post through the automation above.",
       "errors": {
         "loadFailed": "Payment provider settings could not be loaded.",
         "saveFailed": "Payment provider settings could not be saved.",

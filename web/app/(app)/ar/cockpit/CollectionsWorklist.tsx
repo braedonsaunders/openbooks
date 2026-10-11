@@ -13,6 +13,7 @@ import { SearchInput } from "../../../../components/search-input";
 import { FilterChips } from "../../../../components/filter-bar";
 import { Pagination } from "../../../../components/pagination";
 import { InteractiveTableRow } from '@/components/interactive-table-row'
+import { overduePushBasis } from "@/lib/cash/overdue-push";
 
 const PER_PAGE = 10;
 
@@ -83,6 +84,14 @@ export function CollectionsWorklist({
   );
 
   const selectedEntries = collectible.filter((e) => selected.has(e.id));
+  // The assumption describes every item the horizon's forecast pushes, so it
+  // reads the full entry list (the same population as the overdue amounts).
+  const pushBasis = overduePushBasis(entries);
+  const pushDetail = pushBasis === null
+    ? null
+    : pushBasis.minDaysOverdue === pushBasis.maxDaysOverdue
+      ? t("overduePush.basisSameAge", { count: pushBasis.count, days: pushBasis.minDaysOverdue, amount: money(pushBasis.total) })
+      : t("overduePush.basis", { count: pushBasis.count, minDays: pushBasis.minDaysOverdue, maxDays: pushBasis.maxDaysOverdue, amount: money(pushBasis.total) });
   const total = sumMoney(selectedEntries.map((e) => e.amount));
 
   const toggle = (id: string) =>
@@ -143,6 +152,13 @@ export function CollectionsWorklist({
           </p>
         </div>
       </div>
+
+      {pushBasis !== null && pushDetail !== null ? (
+        <div role="note" className="shrink-0 border-b border-amber-100 bg-amber-50/60 px-4 py-2 text-xs text-amber-800 dark:border-amber-950 dark:bg-amber-950/30 dark:text-amber-200">
+          <p className="font-semibold">{t("overduePush.assumption")}</p>
+          <p className="tabular-nums">{pushDetail}</p>
+        </div>
+      ) : null}
 
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-slate-100 px-3 py-2 dark:border-slate-800">
         <SearchInput

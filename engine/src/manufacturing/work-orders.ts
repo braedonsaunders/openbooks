@@ -35,6 +35,7 @@ import { assertInventoryAccountsPostable } from "../inventory/journal.ts";
 import { getOnHandWith,periodForDate, primaryBookId, subsidiaryCurrency } from "../inventory/position.ts";
 import { hourlyPayRate } from "../projects/pay-rate-basis.ts";
 import { explodeBom } from "./bom-explode.ts";
+import { sequenceBlocker } from "./operation-sequence.ts";
 import { assertManufacturingFeature } from "./gate.ts";
 import { ManufacturingError, ManufacturingNotFoundError } from "./errors.ts";
 import { auditChange, compareDecimal, decimalValue, isoDate } from "./master-support.ts";
@@ -1553,13 +1554,35 @@ export async function cancelWorkOrder(tx: SqlExecutor, orgId: string, actorId: s
 async function lockOperation(tx: SqlExecutor, orgId: string, workOrderId: string, operationId: string) {
   const order = await loadOrder(tx, orgId, workOrderId, true);
   const operation = (await tx.execute<{
-    id: string; work_order_id: string; sequence: number; status: string; operator_user_id: string | null;
+    id: string; work_order_id: string; sequence: number; name: string; status: string; operator_user_id: string | null;
     pause_reason: string | null; started_at: Date | null;
   }>(sql`
-    select id, work_order_id, sequence, status, operator_user_id, pause_reason, started_at
+    select id, work_order_id, sequence, name, status, operator_user_id, pause_reason, started_at
       from mfg_wo_operations where org_id=${orgId} and work_order_id=${workOrderId} and id=${operationId} for update`)).rows[0];
   if (!operation) throw new ManufacturingNotFoundError();
   return { order, operation };
+}
+
+/**
+ * An operation starts only after every earlier operation on its work order is
+ * done. Rework operations are appended after the routing to repair an
+ * operation whose inspection failed, so that source operation is still held
+ * open while its rework runs; they are exempt from the sequence.
+ */
+async function assertEarlierOperationsDone(tx: SqlExecutor, orgId: string, workOrderId: string, operation: { id: string; sequence: number; name: string }) {
+  const reworkOf = (await tx.execute(sql`select 1 from inventory_inspections where org_id=${orgId} and rework_operation_id=${operation.id} limit 1`)).rows[0];
+  if (reworkOf) return;
+  const operations = (await tx.execute<{ sequence: number; name: string; status: string }>(sql`
+    select sequence, name, status from mfg_wo_operations where org_id=${orgId} and work_order_id=${workOrderId}`)).rows;
+  const blocker = sequenceBlocker(operations, operation.sequence);
+  if (blocker) {
+    refuse(
+      `Operation ${operation.sequence} (${operation.name}) cannot start until operation ${blocker.sequence} (${blocker.name}) is done.`,
+      "operation_sequence_blocked",
+      `Complete ${blocker.name} (op ${blocker.sequence}) first.`,
+      409,
+    );
+  }
 }
 
 export async function startWorkOrderOperation(tx: SqlExecutor, orgId: string, actorId: string, workOrderId: string, operationId: string, options: { startedOn?: string | null } = {}) {
@@ -1571,6 +1594,7 @@ export async function startWorkOrderOperation(tx: SqlExecutor, orgId: string, ac
   else if (order.status !== "in_progress") refuse(`Start work order ${order.number} before starting an operation.`, "work_order_not_started", "Start the released work order first.", 409);
   if (before.status === "running") return before;
   if (before.status !== "pending") refuse(`Operation ${before.sequence} cannot start from ${before.status}.`, "invalid_operation_transition", "Start a pending operation or resume a paused one.", 409);
+  await assertEarlierOperationsDone(tx, orgId, workOrderId, before);
   // A back-dated start stamps and backflushes on the day production began.
   const startedOn = await operationEventDate(tx, orgId, options.startedOn, null, `Operation ${before.sequence}`);
   const updated = await tx.execute(sql`

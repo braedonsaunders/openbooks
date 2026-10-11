@@ -7,7 +7,7 @@ export const manufacturingOverview: DocArticle = {
   order: 1,
   summary:
     'An introduction to manufacturing concepts, production masters, and the movement of costs from raw materials through work in process to finished goods.',
-  updated: '2026-09-26',
+  updated: '2026-10-11',
   keywords: ['manufacturing', 'work center', 'routing', 'bill of materials', 'BOM', 'WIP', 'scrap', 'effectivity'],
   related: ['overhead-costing', 'labor-costing'],
   body: `# Manufacturing Overview
@@ -39,6 +39,19 @@ their dates and accounting effects can be reviewed.
 cost remains part of the cost of good output. **Abnormal scrap** is unusual or
 avoidable loss; its cost is expensed in the period rather than carried in
 inventory. This treatment follows IAS 2, paragraph 13.
+
+## Correcting a completion date
+
+A completed work order's finished-goods receipt is dated the day production
+finished. If that day was recorded wrongly, use **Correct completion date** on
+the completed order. The receipt and its completion posting are reversed on
+their original date and posted again on the corrected day, with the same
+quantities, costs and accounts. Nothing posted is edited.
+
+The corrected day must be on or after the order's operations and recorded
+material postings, and on or before today. It is refused when a later movement
+of the same item would change cost, or when a period involved is closed; reopen
+a closed period through Close and retry.
 
 ## Production masters
 

@@ -176,3 +176,16 @@ test('aging transaction basis is opt-in and out-of-scope currencies fall back', 
     { basis: 'base', currency: 'CAD' },
   )
 })
+
+test('dates without a named period reopen as that custom window, never the default period', () => {
+  const query = parseReportQuery({ from: '2026-01-01', to: '2026-09-30' })
+  assert.equal(query.period, 'custom')
+  assert.equal(query.from, '2026-01-01')
+  assert.equal(query.to, '2026-09-30')
+  const params = toSearchParams(query)
+  assert.equal(params.get('period'), 'custom')
+  assert.equal(params.get('from'), '2026-01-01')
+  assert.equal(params.get('to'), '2026-09-30')
+  // A named preset still wins over stray dates.
+  assert.equal(parseReportQuery({ period: 'this_month', from: '2026-01-01', to: '2026-09-30' }).period, 'this_month')
+})

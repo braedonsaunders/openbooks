@@ -22,6 +22,7 @@ registerHooks({
           'data:text/javascript,' +
           encodeURIComponent(
             'export async function currentUser(){return globalThis.__reviewState.user;}' +
+              'export async function currentSession(){return null;}' +
               'export const SESSION_COOKIE="ob_session";' +
               'export async function validateSessionToken(){return null;}',
           ),
@@ -187,7 +188,7 @@ test(
           sql`select settings from orgs where id=${oid}`,
         )
         await db.execute(
-          sql`update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{features}','{"projects":false,"timeTracking":true}'::jsonb) where id=${oid}`,
+          sql`update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{features}','{"projects":false,"timeTracking":false}'::jsonb) where id=${oid}`,
         )
         for (const source of ['projects', 'timesheets']) {
           const blocked = await insight(request({ query: { source } }))

@@ -51,6 +51,7 @@
     "process": "Execução de processo"
   },
   "fields": {
+    "correctedOn": "Data corrigida",
     "number": "Número",
     "code": "Código",
     "name": "Nome",
@@ -171,7 +172,9 @@
     "campaignReference": "Referência de campanha",
     "inputQuantity": "Quantidade de entrada",
     "outputQuantity": "Quantidade de saída",
-    "difference": "Diferença não conciliada"
+    "difference": "Diferença",
+    "measuredOutputQuantity": "Saída medida",
+    "differenceKind": "Tipo de diferença"
   },
   "actions": {
     "create": "Criar",
@@ -198,6 +201,7 @@
     "resumeOperation": "Retomar operação",
     "pauseOperation": "Pausar operação",
     "correctOperationStart": "Corrigir data de início",
+    "correctCompletionDate": "Corrigir data de conclusão",
     "completeOperation": "Concluir operação",
     "waive": "Dispensar saldo de material",
     "endRate": "Encerrar taxa",
@@ -280,6 +284,7 @@
   "mrpNote": "MRP sugere suprimento pelos dados salvos. A capacidade é indicativa; sobrecarga não altera datas.",
   "issueNote": "Escolha componente e quantidade exata. Itens rastreados precisam de lote ou série. O comando verifica disponibilidade e bloqueios na origem.",
   "outputNote": "Este recebimento adiciona produtos ao estoque. Informe quantidade recebida agora, rastreabilidade e avaliação necessária de subprodutos.",
+  "completionDateNote": "Move o recebimento de produtos acabados e seu lançamento de conclusão para o dia em que a produção terminou. Os lançamentos originais são estornados na própria data e relançados no dia corrigido, com as mesmas quantidades, custos e contas. A correção é recusada quando uma movimentação posterior do mesmo item alteraria o custo, quando o dia antecede operações ou materiais registrados, ou quando um período está fechado.",
   "doneNote": "Concluir encerra a execução e liquida o saldo em processo. Tolerâncias, medições e materiais são exigidos. Quantidade boa inferior à solicitada exige motivo, mesmo com refugo.",
   "normalScrapNote": "Registre perda normal antes do primeiro recebimento acabado. O custo permanece em processo para os produtos bons; não descarta estoque. Perdas anormais ou após recebimento exigem bloquear a ordem e revisar a avaliação.",
   "activateNote": "Proponha o rascunho para aprovação. Aplicar o evento aprovado controla sua vigência e encerra a revisão anterior sobreposta. Ordens liberadas mantêm suas versões.",
@@ -608,10 +613,15 @@
     "details": "Detalhes opcionais",
     "balance": "Balanço de material registrado",
     "windowNote": "Delimite uma execução contínua com o início e o fim planejados e uma quantidade esperada. Recebimentos parciais registram a saída de cada execução. Uma referência de campanha agrupa execuções relacionadas na busca; não reúne custos nem substitui a receita aprovada de cada execução.",
-    "balanceNote": "As quantidades são agrupadas pela unidade base atual do estoque. Unidades diferentes permanecem separadas. A diferença é a entrada registrada menos toda a saída boa e secundária, não um cálculo automático de perda ou massa física. Movimentos estornados são excluídos.",
+    "balanceNote": "As quantidades são agrupadas pela unidade base de estoque, e unidades diferentes permanecem separadas. A entrada é o consumo registrado. A saída são os recebimentos registrados mais a saída medida da última operação medida ainda não recebida, de modo que um peso medido conta antes do recebimento e não é contado em dobro depois. A diferença é a entrada menos essa saída; com saída medida, uma diferença positiva é a perda medida. Movimentos estornados são excluídos.",
     "empty": "Nenhum movimento de material registrado",
     "emptyNote": "Consuma componentes e receba a produção para visualizar o balanço.",
     "carryover": "Levar material à próxima execução",
-    "carryoverNote": "Receba o material intermediário retido como um item rastreável do estoque e consuma esse item e seu lote ou série na próxima execução. Os bloqueios de qualidade continuam aplicáveis. A genealogia segue o recebimento e o consumo reais; não presume produção em andamento sem registro nem transferência financeira automática."
+    "carryoverNote": "Receba o material intermediário retido como um item rastreável do estoque e consuma esse item e seu lote ou série na próxima execução. Os bloqueios de qualidade continuam aplicáveis. A genealogia segue o recebimento e o consumo reais; não presume produção em andamento sem registro nem transferência financeira automática.",
+    "differenceKind": {
+      "balanced": "Equilibrado",
+      "measured_loss": "Perda medida",
+      "unreconciled": "Não conciliado"
+    }
   }
 }

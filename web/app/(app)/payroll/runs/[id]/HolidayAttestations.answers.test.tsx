@@ -11,6 +11,8 @@ const { act, useState } = await import('react')
 const { NextIntlClientProvider } = await import('next-intl')
 const messages = (await import('../../../../../messages/en')).default
 const { HolidayAttestations } = await import('./HolidayAttestations')
+const { ConfirmRoot } = await import('../../../../../lib/confirm')
+const { toast } = await import('sonner')
 
 const HOLIDAY = { key: 'boxing-day', date: '2026-12-26', name: 'Boxing Day' }
 
@@ -158,3 +160,77 @@ test('answering two employees with the same absence answer files both', async (t
     'both employees are filed with their own answer',
   )
 })
+
+for (const refuseAfter of [null, 1] as const) {
+  test(refuseAfter === null
+    ? 'bulk absence answers require confirmation and file each employee and occurrence once'
+    : 'a refused bulk answer preserves earlier assertions and recalculates the saved answers', async (t) => {
+    type Answer = { employeePartyId: string; holidayKey: string; holidayDate: string; absentWithoutConsent: boolean }
+    const filed: Answer[] = []
+    const errors: string[] = []
+    let recalculations = 0
+    const previousFetch = globalThis.fetch
+    const previousToastError = toast.error
+    toast.error = ((message: unknown) => { errors.push(String(message)); return 'test-toast' }) as typeof toast.error
+    const holidays = [demanding[0]!, { ...demanding[0]!, key: 'new-year', date: '2027-01-01', name: 'New Year' }]
+    globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        if (refuseAfter !== null && filed.length === refuseAfter) {
+          return Response.json({ error: 'The pay run changed; reload before filing another assertion' }, { status: 409 })
+        }
+        filed.push(JSON.parse(String(init.body)) as Answer)
+        return Response.json({ ok: true })
+      }
+      return Response.json({ employees: roster.map((employee) => ({
+        employeePartyId: employee.employee_party_id,
+        name: employee.name,
+        paidOnCommission: null,
+        occupationClass: null,
+        occupationClasses: [],
+        demanding: holidays,
+        assertions: filed.filter((answer) => answer.employeePartyId === employee.employee_party_id),
+      })) })
+    }) as typeof fetch
+    t.after(() => { globalThis.fetch = previousFetch; toast.error = previousToastError })
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const root = createRoot(host)
+    t.after(async () => {
+      await act(async () => root.unmount())
+      host.remove()
+    })
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 50))
+    await act(async () => {
+      root.render(<NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <HolidayAttestations runId="run-1" errors={roster.map((employee) => absenceError(employee.name, employee.employee_party_id))}
+          roster={roster} canAnswer onAnswered={() => { recalculations += 1 }} />
+        <ConfirmRoot />
+      </NextIntlClientProvider>)
+      await settle()
+    })
+    const bulk = [...host.querySelectorAll('button')].find((button) => button.textContent?.includes('Answer all 4 questions'))
+    assert.ok(bulk)
+    await act(async () => { bulk.click(); await settle() })
+    assert.deepEqual(filed, [], 'confirmation precedes every write')
+    const dialog = document.querySelector('[role="dialog"]')
+    assert.ok(dialog)
+    const confirm = [...dialog.querySelectorAll('button')].find((button) => button.textContent?.includes('Answer all 4 questions'))
+    assert.ok(confirm)
+    await act(async () => { confirm.click(); await settle(); await settle() })
+    assert.equal(recalculations, 1, 'saved assertions are reflected by one recalculation')
+    if (refuseAfter === null) {
+      assert.deepEqual(filed, roster.flatMap((employee) => holidays.map((holiday) => ({
+        employeePartyId: employee.employee_party_id,
+        holidayKey: holiday.key,
+        holidayDate: holiday.date,
+        absentWithoutConsent: false,
+      }))))
+      assert.deepEqual(errors, [])
+    } else {
+      assert.equal(filed.length, 1)
+      assert.equal(filed[0]?.employeePartyId, 'employee-1')
+      assert.equal(filed[0]?.absentWithoutConsent, false)
+      assert.ok(errors.some((error) => /pay run changed; reload/.test(error)))
+    }
+  })
+}

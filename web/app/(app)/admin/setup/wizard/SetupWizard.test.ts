@@ -14,6 +14,8 @@ const stubT = (titles: Record<string, string>, descriptions: Record<string, stri
   return t
 }
 
+const wizardCopy = (await import('../../../../../messages/en/admin.json', { with: { type: 'json' } }))
+  .default.setup.wizard as { payroll: { packSummary: Record<string, string> } }
 test('a translated pack reads under its locale title', () => {
   const t = stubT({ 'payroll.packs.ca.title': 'Canada (localisé)' })
   assert.equal(packTitle(t, 'CA', 'Canada Pack'), 'Canada (localisé)')
@@ -49,8 +51,6 @@ test('wizard preselects no pack unless exactly one is installable', () => {
 
 // Every pack in the chooser reads with a subtitle derived from its own
 // declarations — not only the packs with hand-written locale copy.
-const wizardCopy = (await import('../../../../../messages/en/admin.json', { with: { type: 'json' } }))
-  .default.setup.wizard as { payroll: { packSummary: Record<string, string> } }
 const summaryT = (() => {
   const templates = wizardCopy.payroll.packSummary
   const t = ((key: string, params: Record<string, unknown> = {}) => {

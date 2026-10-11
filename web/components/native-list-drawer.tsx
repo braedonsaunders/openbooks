@@ -9,6 +9,8 @@ import { PaymentLinksPanel } from './payment-links-panel'
 import { SupplyEvidencePanel } from './supply-evidence-panel'
 import { AppliedPaymentsPanel, type AppliedPayment } from './applied-payments-panel'
 import { CreditApplicationsPanel } from './credit-applications-panel'
+import { InvoiceWriteOffPanel } from './invoice-write-off-panel'
+import type { InvoiceWriteOffDrawer } from '../lib/invoice-write-off-drawer'
 import { FieldTicketDrawer } from '../app/(app)/field-tickets/FieldTicketDrawer'
 import { FieldTicketCreateDrawer, type FieldTicketCreateDrawerProps } from '../app/(app)/field-tickets/FieldTicketCreateDrawer'
 import { ExpenseDrawer } from '../app/(app)/expenses/ExpenseDrawer'
@@ -34,6 +36,7 @@ const renderers = {
             partyId: string | null
             canApply: boolean
           } | null
+          invoiceWriteOff?: InvoiceWriteOffDrawer | null
           workflow?: ReturnAuthorization | null
           workflowCanInspect?: boolean
           workflowCanManage?: boolean
@@ -50,13 +53,13 @@ const renderers = {
         })
       | null
     if (!drawer) return null
-    const { remountKey, paymentLinks, appliedPayments, creditApplications, workflow, workflowCanInspect, workflowCanManage, workflowCanWaiveFee, workflowCurrency, vendors, supplyEvidence, taxProvider, ...rest } = drawer
+    const { remountKey, paymentLinks, appliedPayments, creditApplications, invoiceWriteOff, workflow, workflowCanInspect, workflowCanManage, workflowCanWaiveFee, workflowCurrency, vendors, supplyEvidence, taxProvider, ...rest } = drawer
     return (
       <DocumentDrawer
         key={remountKey}
         {...rest}
         afterContent={
-          paymentLinks || appliedPayments || creditApplications || workflow || supplyEvidence || taxProvider ? (
+          paymentLinks || appliedPayments || creditApplications || invoiceWriteOff || workflow || supplyEvidence || taxProvider ? (
             <>
               {supplyEvidence ? (
                 <SupplyEvidencePanel
@@ -82,6 +85,13 @@ const renderers = {
                   side={creditApplications.side}
                   partyId={creditApplications.partyId}
                   canApply={creditApplications.canApply}
+                />
+              ) : null}
+              {invoiceWriteOff ? (
+                <InvoiceWriteOffPanel
+                  documentId={invoiceWriteOff.documentId}
+                  currency={invoiceWriteOff.currency}
+                  openBalance={invoiceWriteOff.openBalance}
                 />
               ) : null}
               {paymentLinks ? (

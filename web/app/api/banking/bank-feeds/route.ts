@@ -7,10 +7,14 @@ import { resolveFeedSyncOverlapDays, sealCredentials } from "@openbooks/engine/b
 import { isUuid } from "../../../../lib/list-params";
 import { guardSubsidiaryScope } from "../../../../lib/authz";
 import { subsidiaryVisibleFilter } from "../../../../lib/subsidiaries";
+import { reconcilableBankMembership } from "../../../../lib/banking-accounts";
+const SYNC_OVERLAP_DAYS_MESSAGE = 'syncOverlapDays must be a whole number of days from 0 to 90';
 const POSTBodySchema1 = z.object({
   name: z.string().trim().min(1), provider: z.enum(['manual', 'sftp', 'plaid', 'gocardless', 'truelayer']),
   accountId: z.string().uuid(), externalAccountId: z.string().nullable().optional(),
-  syncCadence: z.enum(['manual', 'hourly', 'daily']).optional(), syncOverlapDays: z.number().int().min(0).max(90).nullable().optional(),
+  syncCadence: z.enum(['manual', 'hourly', 'daily']).optional(),
+  syncOverlapDays: z.number({ error: SYNC_OVERLAP_DAYS_MESSAGE }).int({ error: SYNC_OVERLAP_DAYS_MESSAGE })
+    .min(0, { error: SYNC_OVERLAP_DAYS_MESSAGE }).max(90, { error: SYNC_OVERLAP_DAYS_MESSAGE }).nullable().optional(),
   credentials: z.record(z.string(), z.string()).nullable().optional(),
 });
 
@@ -98,8 +102,8 @@ export const POST = defineRoute({
         return NextResponse.json({ error: "Plaid account id is required" }, { status: 400 });
       }
     const acct = (await db.execute<{ subsidiary_id: string | null }>(sql`
-        select subsidiary_id from accounts where id = ${body.accountId} and org_id = ${authz.user.orgId}
-          and reconcilable and is_active and not is_summary and type in ('asset_bank', 'liability_card')
+        select a.subsidiary_id from accounts a where a.id = ${body.accountId} and a.org_id = ${authz.user.orgId}
+          and ${reconcilableBankMembership()}
       `));
     if (!acct.rows.length) return NextResponse.json({ error: "not a reconcilable account" }, { status: 400 });
     const scoped = guardSubsidiaryScope(authz, acct.rows[0]!.subsidiary_id);

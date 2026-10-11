@@ -20,8 +20,9 @@ const mockAuthz = `
 registerHooks({
   resolve(specifier, context, nextResolve) {
     if (
-      (specifier === '../../../../../lib/authz' || specifier === '../../../../lib/authz') &&
-      context.parentURL?.includes('/api/records/')
+      ((specifier === '../../../../../lib/authz' || specifier === '../../../../lib/authz') &&
+      context.parentURL?.includes('/api/records/'))
+      || (specifier === '@/lib/authz' && context.parentURL?.includes('/lib/api/route'))
     ) {
       return { url: 'mock:custom-record-detail-scope-authz', shortCircuit: true }
     }

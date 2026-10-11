@@ -965,14 +965,9 @@ test.describe("procure-to-pay workflows", () => {
       }), "PATCH employee");
       const empBank = await addBankAccount(page, employeeId, "4005006");
       await approveSubjectViaUi(browser, baseURL, empBank);
-      const expDraft = await api(page, "POST", "/api/expenses/draft", {});
-      const expenseId = str(req(expDraft, "POST expenses/draft").id, "expense id");
-      const expGet = await api(page, "GET", `/api/expenses/${expenseId}`);
-      // No subsidiaryId: the expense PATCH has no such field by product
-      // design. The reimbursement still resolves — the pay-run planner scopes
-      // by the caller's allowance and books root-scoped lines — so the
-      // explicit scoping above covers every document kind that accepts one.
-      req(await api(page, "PATCH", `/api/expenses/${expenseId}`, {
+      // One create carries the header and lines: the report is numbered only
+      // by this Save, so no empty draft precedes it.
+      const expCreate = await api(page, "POST", "/api/expenses", {
         partyId: employeeId,
         documentDate: DAY,
         memo: `P2P site visit ${TAG}`,
@@ -982,8 +977,12 @@ test.describe("procure-to-pay workflows", () => {
         // receivable from the employee. Only out_of_pocket belongs in a
         // reimbursement run — the drawer defaults new lines the same way.
         lines: [{ accountId: acct["6000"], description: "Mileage and meals", amount: "150.0000", settlementType: "out_of_pocket" }],
-        expectedUpdatedAt: revOf(req(expGet, "GET expense draft")),
-      }), "PATCH expense lines");
+      }, { "Idempotency-Key": crypto.randomUUID() });
+      const expenseId = str((req(expCreate, "POST expenses").doc as { id?: unknown }).id, "expense id");
+      // No subsidiaryId: the expense create has no such field by product
+      // design. The reimbursement still resolves — the pay-run planner scopes
+      // by the caller's allowance and books root-scoped lines — so the
+      // explicit scoping above covers every document kind that accepts one.
       req(await api(page, "POST", "/api/expenses/actions", { action: "submit", documentId: expenseId }), "POST expense submit");
       req(await api(page, "POST", "/api/expenses/actions", { action: "post", documentId: expenseId }), "POST expense post");
       await page.goto("/expenses");

@@ -81,7 +81,11 @@ function stateFor(approvalState: Record<string, unknown>) {
   };
 }
 
-async function mount(approvalState: Record<string, unknown>, extra: Record<string, unknown> = {}) {
+async function mount(
+  approvalState: Record<string, unknown>,
+  extra: Record<string, unknown> = {},
+  drawer: { canManage?: boolean; canApprove?: boolean } = {},
+) {
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
@@ -108,7 +112,8 @@ async function mount(approvalState: Record<string, unknown>, extra: Record<strin
             projects={[]}
             subsidiaries={[]}
             segments={[]}
-            canManage={false}
+            canManage={drawer.canManage ?? false}
+            canApprove={drawer.canApprove ?? false}
             closeHref="/purchase-orders"
           />
         </MoneyProvider>
@@ -154,7 +159,7 @@ async function mount(approvalState: Record<string, unknown>, extra: Record<strin
 
 test("PO drawer offers Approve to a read-only gate assignee", async () => {
   const view = await mount({
-    status: "pending",
+    status: "pending_approval",
     pendingWith: [{ name: "Casey Controller", gateId: "gate-1", since: "2026-09-01T10:00:00.000Z" }],
     myActions: { gateId: "gate-1", signatureRequired: false },
   });
@@ -166,12 +171,12 @@ test("PO drawer offers Approve to a read-only gate assignee", async () => {
   }
 });
 
-test("PO drawer offers Withdraw submission to a viewer who may recall it", async () => {
+test("PO drawer offers Withdraw submission to the submitter who holds the create grant", async () => {
   const view = await mount({
-    status: "pending",
+    status: "pending_approval",
     pendingWith: [{ name: "Casey Controller", gateId: "gate-1", since: "2026-09-01T10:00:00.000Z" }],
     myActions: null,
-  }, { canWithdraw: true });
+  }, { submittedByViewer: true }, { canManage: true });
   try {
     assert.ok(view.buttons.includes("Withdraw submission"), "the native document withdraw must render for a pending purchase order");
   } finally {
@@ -181,7 +186,7 @@ test("PO drawer offers Withdraw submission to a viewer who may recall it", async
 
 test("PO drawer withholds Approve from a SoD-blocked viewer", async () => {
   const view = await mount({
-    status: "pending",
+    status: "pending_approval",
     pendingWith: [{ name: "Casey Controller", gateId: "gate-1", since: "2026-09-01T10:00:00.000Z" }],
     myActions: null,
     awaitingAnotherApprover: true,
