@@ -90,13 +90,163 @@ interface FirstReconciliationCarry {
   amount: string;
 }
 
+interface StatementCoverage {
+  openingBalance: string | null;
+  startDate: string;
+}
+
+async function readStatementCoverage(
+  executor: BankingSqlExecutor,
+  recon: ReconciliationRow,
+  ctx: BankingContext,
+): Promise<StatementCoverage | null> {
+  const coverage = (await executor.execute<{ opening_balance: string | null; start_date: string }>(sql`
+    with coverage as (
+      select s.opening_balance,
+             min(l.posted_on)::text as start_date,
+             s.statement_date,
+             s.id
+        from bank_statements s
+        join bank_statement_lines l
+          on l.statement_id = s.id and l.org_id = s.org_id
+       where s.org_id = ${ctx.orgId}
+         and s.account_id = ${recon.account_id}
+         and s.statement_date <= ${recon.through_date}
+         and l.currency = ${recon.currency}
+         and l.posted_on <= ${recon.through_date}
+       group by s.id, s.statement_date, s.opening_balance
+    )
+    select opening_balance, start_date
+      from coverage
+     order by statement_date asc, start_date asc, id asc
+     limit 1
+  `)).rows[0];
+  if (!coverage) return null;
+  return { openingBalance: coverage.opening_balance, startDate: coverage.start_date };
+}
+
+async function readAccountType(
+  executor: BankingSqlExecutor,
+  recon: ReconciliationRow,
+  ctx: BankingContext,
+): Promise<string> {
+  return (await executor.execute<{ type: string }>(sql`
+    select type from accounts where id = ${recon.account_id} and org_id = ${ctx.orgId}
+  `)).rows[0]?.type ?? "";
+}
+
+/**
+ * The pre-coverage ledger proving an opening: book lines on the account
+ * dated before coverage starts, counting each journal once no matter how
+ * many bank lines share it. Lines already matched in this session count
+ * beside the unclaimed ones, so confirming after matching still proves the
+ * same opening the carry will foot.
+ */
+async function readPreCoverageHistory(
+  executor: BankingSqlExecutor,
+  recon: ReconciliationRow,
+  ctx: BankingContext,
+  bookId: string,
+  coverageStart: string,
+): Promise<{ carry: string; matchedOld: string }> {
+  // Opening balances include immutable originals and their dated reversals.
+  // Match eligibility is narrower than the ledger history proving this carry.
+  const history = (await executor.execute<{ carry: string; matched_old: string }>(sql`
+    select
+      coalesce(sum(jl.txn_amount) filter (where m.journal_line_id is null), 0) as carry,
+      coalesce(sum(jl.txn_amount) filter (where m.journal_line_id is not null), 0) as matched_old
+      from journal_lines jl
+      join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status in ('posted', 'reversed')
+      -- Distinct journals: one journal of a many-to-one group joins one row
+      -- here, so its amount counts once no matter how many bank lines share it.
+      left join (
+        select distinct journal_line_id from reconciliation_matches
+         where reconciliation_id = ${recon.id} and org_id = ${ctx.orgId}
+      ) m on m.journal_line_id = jl.id
+     where jl.account_id = ${recon.account_id} and jl.org_id = ${ctx.orgId}
+       and je.book_id = ${bookId}
+       and jl.currency = ${recon.currency}
+       and je.posting_date <= ${recon.through_date}
+       and je.posting_date < ${coverageStart}
+       and (jl.reconciled_at is null or m.journal_line_id is not null)
+       and not exists (
+         select 1 from reconciliation_matches other
+          where other.journal_line_id = jl.id and other.org_id = jl.org_id
+            and other.reconciliation_id <> ${recon.id}
+       )
+  `)).rows[0]!;
+  return { carry: history.carry, matchedOld: history.matched_old };
+}
+
+/**
+ * Pair a statement-side opening with the GL-signed history proving it, in
+ * GL terms. Asset-style accounts require exact equality; liability accounts
+ * accept either pairing (owing-positive CSV vs GL-signed OFX). Null proves
+ * nothing and must stay a refusal, never an invented opening.
+ */
+function pairOpeningToGlTerms(openingAmount: string, historyTotal: string, accountType: string): string | null {
+  const openingUnits = toUnits(openingAmount);
+  const historyUnits = toUnits(historyTotal);
+  if (openingUnits === historyUnits) return fromUnits(openingUnits);
+  if (statementComparisonSign(accountType) === -1 && -openingUnits === historyUnits) {
+    return fromUnits(-openingUnits);
+  }
+  return null;
+}
+
+export interface OpeningConfirmation {
+  /** Confirmed opening in GL terms, matching the cleared sums it joins. */
+  amount: string;
+  /** Coverage start the confirmation was proven against. */
+  startDate: string;
+  reason: string;
+  confirmedAt: string;
+  confirmedByName: string | null;
+}
+
+async function readLatestConfirmation(
+  executor: BankingSqlExecutor,
+  recon: ReconciliationRow,
+  ctx: BankingContext,
+): Promise<OpeningConfirmation | null> {
+  const row = (await executor.execute<{
+    changes: { openingBalance?: unknown; openingBalanceStartDate?: unknown; reason?: unknown };
+    confirmed_at: string;
+    confirmed_by_name: string | null;
+  }>(sql`
+    select al.changes, al.at::text as confirmed_at, u.name as confirmed_by_name
+      from audit_log al
+      left join users u on u.id = al.actor_id and u.org_id = al.org_id
+     where al.org_id = ${ctx.orgId} and al.table_name = 'reconciliations'
+       and al.row_id = ${recon.id} and al.action = 'update'
+       and al.changes->>'operation' = 'confirm_opening'
+     order by al.at desc, al.id desc
+     limit 1
+  `)).rows[0];
+  if (!row) return null;
+  const amount = typeof row.changes.openingBalance === "string" ? row.changes.openingBalance : null;
+  const startDate = typeof row.changes.openingBalanceStartDate === "string" ? row.changes.openingBalanceStartDate : null;
+  const reason = typeof row.changes.reason === "string" ? row.changes.reason : null;
+  if (!amount || !startDate || !reason) return null;
+  return {
+    amount: fromUnits(toUnits(amount)),
+    startDate,
+    reason,
+    confirmedAt: row.confirmed_at,
+    confirmedByName: row.confirmed_by_name,
+  };
+}
+
 /**
  * Opening carry-forward for an account's first reconciliation. The earliest
  * imported statement's opening balance counts only when the ledger that
  * predates its first covered line proves the same amount; nothing on or
- * after coverage starts is carried. The first sign-off persists the proven
- * amount and coverage start in its audit record so later sessions reuse the
- * same opening instead of re-proving (or double-counting) it.
+ * after coverage starts is carried. A balance-less first statement carries
+ * nothing on its own — the operator confirms the book balance carried in
+ * as the opening (see confirmOpeningBalance), and the confirmation counts
+ * only while the ledger still proves it. The first sign-off persists the
+ * carried amount and coverage start in its audit record so later sessions
+ * reuse the same opening instead of re-proving (or double-counting) it.
  */
 export async function firstReconciliationCarry(
   executor: BankingSqlExecutor,
@@ -124,71 +274,195 @@ export async function firstReconciliationCarry(
     return { startDate, amount: fromUnits(toUnits(amount)) };
   }
 
-  const coverage = (await executor.execute<{ opening_balance: string | null; start_date: string }>(sql`
-    with coverage as (
-      select s.opening_balance,
-             min(l.posted_on)::text as start_date,
-             s.statement_date,
-             s.id
-        from bank_statements s
-        join bank_statement_lines l
-          on l.statement_id = s.id and l.org_id = s.org_id
-       where s.org_id = ${ctx.orgId}
-         and s.account_id = ${recon.account_id}
-         and s.statement_date <= ${recon.through_date}
-         and l.currency = ${recon.currency}
-         and l.posted_on <= ${recon.through_date}
-       group by s.id, s.statement_date, s.opening_balance
-    )
-    select opening_balance, start_date
-      from coverage
-     order by statement_date asc, start_date asc, id asc
+  const coverage = await readStatementCoverage(executor, recon, ctx);
+  if (!coverage) return null;
+  const accountType = await readAccountType(executor, recon, ctx);
+
+  // A balance-less first statement states no opening of its own: the
+  // operator's explicit confirmation stands in for the bank's figure, and
+  // only while the pre-coverage ledger still proves the confirmed amount.
+  // A confirmation the ledger has moved away from goes stale — fail closed
+  // to no carry so the moved lines resurface as outstanding items instead
+  // of footing a number nothing proves anymore.
+  if (coverage.openingBalance === null) {
+    const confirmation = await readLatestConfirmation(executor, recon, ctx);
+    if (!confirmation || isZero(confirmation.amount)) return null;
+    const history = await readPreCoverageHistory(executor, recon, ctx, bookId, coverage.startDate);
+    const historyTotal = fromUnits(toUnits(history.carry) + toUnits(history.matchedOld));
+    const stillProven = pairOpeningToGlTerms(confirmation.amount, historyTotal, accountType);
+    if (stillProven === null || toUnits(stillProven) !== toUnits(confirmation.amount)) return null;
+    return { startDate: coverage.startDate, amount: confirmation.amount };
+  }
+
+  const history = await readPreCoverageHistory(executor, recon, ctx, bookId, coverage.startDate);
+  // The imported opening is statement-signed; the proving history is
+  // GL-signed. The carry is stored in GL terms, matching the cleared sums
+  // it joins.
+  const historyTotal = fromUnits(toUnits(history.carry) + toUnits(history.matchedOld));
+  const glCarry = pairOpeningToGlTerms(coverage.openingBalance, historyTotal, accountType);
+  if (glCarry === null) return null;
+  return { startDate: coverage.startDate, amount: glCarry };
+}
+
+async function readPriorSignedOff(
+  executor: BankingSqlExecutor,
+  recon: ReconciliationRow,
+  ctx: BankingContext,
+): Promise<{ id: string; throughDate: string } | null> {
+  const row = (await executor.execute<{ id: string; through_date: string }>(sql`
+    select id, through_date
+      from reconciliations
+     where org_id = ${ctx.orgId} and account_id = ${recon.account_id}
+       and status = 'signed_off' and id <> ${recon.id}
+     order by through_date asc, created_at asc, id asc
      limit 1
   `)).rows[0];
-  if (!coverage || coverage.opening_balance === null) return null;
+  if (!row) return null;
+  return { id: row.id, throughDate: row.through_date };
+}
 
-  const openingUnits = toUnits(coverage.opening_balance);
-  const accountType = (await executor.execute<{ type: string }>(sql`
-    select type from accounts where id = ${recon.account_id} and org_id = ${ctx.orgId}
-  `)).rows[0]?.type ?? "";
-  // Opening balances include immutable originals and their dated reversals.
-  // Match eligibility is narrower than the ledger history proving this carry.
-  const history = (await executor.execute<{ carry: string; matched_old: string }>(sql`
-    select
-      coalesce(sum(jl.txn_amount) filter (where m.journal_line_id is null), 0) as carry,
-      coalesce(sum(jl.txn_amount) filter (where m.journal_line_id is not null), 0) as matched_old
-      from journal_lines jl
-      join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status in ('posted', 'reversed')
-      -- Distinct journals: one journal of a many-to-one group joins one row
-      -- here, so its amount counts once no matter how many bank lines share it.
-      left join (
-        select distinct journal_line_id from reconciliation_matches
-         where reconciliation_id = ${recon.id} and org_id = ${ctx.orgId}
-      ) m on m.journal_line_id = jl.id
-     where jl.account_id = ${recon.account_id} and jl.org_id = ${ctx.orgId}
-       and je.book_id = ${bookId}
-       and jl.currency = ${recon.currency}
-       and je.posting_date <= ${recon.through_date}
-       and je.posting_date < ${coverage.start_date}
-       and (jl.reconciled_at is null or m.journal_line_id is not null)
-       and not exists (
-         select 1 from reconciliation_matches other
-          where other.journal_line_id = jl.id and other.org_id = jl.org_id
-            and other.reconciliation_id <> ${recon.id}
-       )
-  `)).rows[0]!;
-  // The imported opening is statement-signed; the proving history is
-  // GL-signed. Asset-style accounts require exact equality; liability
-  // accounts accept either pairing (owing-positive CSV vs GL-signed OFX).
-  // The carry is stored in GL terms, matching the cleared sums it joins.
-  const historyUnits = toUnits(history.carry) + toUnits(history.matched_old);
-  const glCarryUnits = openingUnits === historyUnits
-    ? openingUnits
-    : statementComparisonSign(accountType) === -1 && -openingUnits === historyUnits
-      ? -openingUnits
-      : null;
-  if (glCarryUnits === null) return null;
-  return { startDate: coverage.start_date, amount: fromUnits(glCarryUnits) };
+export interface OpeningPosition {
+  /** True while the account has no signed-off reconciliation to chain from. */
+  isFirst: boolean;
+  /** The earliest covered statement's own opening balance, when imported. */
+  statementOpening: string | null;
+  /** First imported statement line covered by the session. */
+  coverageStart: string | null;
+  /** Pre-coverage book balance in GL terms: the only confirmable opening. */
+  bookBalance: string;
+  confirmation: OpeningConfirmation | null;
+  /** True while the carry (proven or confirmed) currently foots the session. */
+  carryApplies: boolean;
+  /** Coverage start clearing pre-carry lines from matching, when carrying. */
+  carryStart: string | null;
+}
+
+/** Read-time opening position for a session — what the workspace confirms. */
+export async function openingPosition(
+  reconciliationId: string,
+  ctx: BankingContext,
+): Promise<OpeningPosition | null> {
+  return withOrgTransaction(ctx.orgId, async () => {
+    const recon = await loadReconciliation(ctx.orgId, reconciliationId, ctx.allowedSubsidiaryIds);
+    const bookId = await reconciliationBookId(db, ctx.orgId);
+    const prior = await readPriorSignedOff(db, recon, ctx);
+    const coverage = await readStatementCoverage(db, recon, ctx);
+    const history = coverage
+      ? await readPreCoverageHistory(db, recon, ctx, bookId, coverage.startDate)
+      : { carry: "0", matchedOld: "0" };
+    const historyTotal = fromUnits(toUnits(history.carry) + toUnits(history.matchedOld));
+    const statementOpening = coverage?.openingBalance === null || coverage?.openingBalance === undefined
+      ? null
+      : fromUnits(toUnits(coverage.openingBalance));
+    const confirmation = await readLatestConfirmation(db, recon, ctx);
+    const carry = await firstReconciliationCarry(db, recon, ctx, bookId);
+    return {
+      isFirst: prior === null,
+      statementOpening,
+      coverageStart: coverage?.startDate ?? null,
+      bookBalance: historyTotal,
+      confirmation,
+      carryApplies: carry !== null,
+      carryStart: carry?.startDate ?? null,
+    };
+  });
+}
+
+/**
+ * Confirm the opening position of an account's first reconciliation from a
+ * balance-less statement. The earliest imported statement states no opening
+ * of its own, so the operator names the statement opening explicitly — and
+ * it must equal the book balance carried in (pre-coverage ledger, GL
+ * terms): a confirmation the ledger does not prove is refused, never
+ * carried. The confirmation, its reason and the proven book balance persist
+ * in the session's audit history; the carry re-verifies them on every read,
+ * so a ledger that moves underneath the confirmation fails closed to no
+ * carry instead of footing a stale number. Later sessions chain from this
+ * session's sign-off as before.
+ */
+export async function confirmOpeningBalance(
+  reconciliationId: string,
+  opts: { openingBalance: string; reason: string },
+  ctx: BankingContext,
+): Promise<ReconciliationTotals> {
+  const reason = opts.reason.trim();
+  if (reason.length < 5 || reason.length > 500) {
+    throw new BankingError("Opening confirmation reason must be between 5 and 500 characters");
+  }
+  const openingBalance = normalizeAmount(opts.openingBalance, "Opening balance");
+  if (isZero(openingBalance)) {
+    throw new BankingError(
+      "An opening balance of zero carries nothing — leave the opening unconfirmed and match the period lines",
+    );
+  }
+  return db.transaction(async (tx) => {
+    const account = (await tx.execute<{ account_id: string }>(sql`
+      select account_id from reconciliations where id = ${reconciliationId} and org_id = ${ctx.orgId}
+    `)).rows[0];
+    if (!account) throw new ScopeNotFoundError();
+    await lockReconciliationAccount(tx, ctx.orgId, account.account_id);
+    const reconResult = (await tx.execute<ReconciliationRow & { subsidiary_id: string | null }>(sql`
+      select r.id, r.account_id, r.through_date, r.currency, r.statement_balance, r.status, a.subsidiary_id
+        from reconciliations r
+        join accounts a on a.id = r.account_id and a.org_id = r.org_id
+       where r.id = ${reconciliationId} and r.org_id = ${ctx.orgId} and r.account_id = ${account.account_id}
+       for update of r
+    `));
+    const recon = reconResult.rows[0];
+    requireSessionRowInScope(recon, ctx.allowedSubsidiaryIds);
+    if (recon.status === "signed_off") throw new BankingError("Reconciliation is already signed off");
+    const bookId = await reconciliationBookId(tx, ctx.orgId);
+
+    const prior = await readPriorSignedOff(tx, recon, ctx);
+    if (prior) {
+      throw new BankingError(
+        `Only the first reconciliation of an account confirms an opening balance — later sessions chain from the sign-off through ${prior.throughDate}`,
+      );
+    }
+    const coverage = await readStatementCoverage(tx, recon, ctx);
+    if (!coverage) {
+      throw new BankingError(
+        "Import the statement lines first — there is no covered period to carry an opening into",
+      );
+    }
+    const accountType = await readAccountType(tx, recon, ctx);
+    const history = await readPreCoverageHistory(tx, recon, ctx, bookId, coverage.startDate);
+    const bookBalance = fromUnits(toUnits(history.carry) + toUnits(history.matchedOld));
+    if (coverage.openingBalance !== null) {
+      const proven = pairOpeningToGlTerms(coverage.openingBalance, bookBalance, accountType);
+      if (proven !== null) {
+        throw new BankingError(
+          `The imported statement already carries its opening balance of ${fromUnits(toUnits(coverage.openingBalance))}, proven by the ledger — nothing to confirm`,
+        );
+      }
+      throw new BankingError(
+        `The imported statement states its own opening balance of ${fromUnits(toUnits(coverage.openingBalance))}, but the book balance carried in is ${bookBalance} — post the book entries that prove the statement opening instead of confirming a different one`,
+      );
+    }
+    const glTerms = pairOpeningToGlTerms(openingBalance, bookBalance, accountType);
+    if (glTerms === null) {
+      throw new BankingError(
+        `The confirmed opening ${fromUnits(toUnits(openingBalance))} does not match the book balance carried in (${bookBalance} through ${coverage.startDate}) — correct the amount or post the missing book entries first`,
+      );
+    }
+    await tx.execute(sql`
+      insert into audit_log
+        (org_id, table_name, row_id, action, changes, actor_id)
+      values
+        (${ctx.orgId}, 'reconciliations', ${recon.id}, 'update',
+         ${JSON.stringify({
+           operation: "confirm_opening",
+           reconciliationId: recon.id,
+           confirmedAmount: fromUnits(toUnits(openingBalance)),
+           openingBalance: glTerms,
+           openingBalanceStartDate: coverage.startDate,
+           bookBalance,
+           reason,
+         })}::jsonb,
+         ${ctx.userId})
+    `);
+    return refreshStatus(recon, ctx, tx);
+  });
 }
 
 export interface ReconciliationTotals {
