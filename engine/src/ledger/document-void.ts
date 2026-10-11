@@ -380,10 +380,12 @@ export async function suggestVoidReversalDate(
   const modules = [voidCloseModule(doc.kind)];
   const books = (await runner.execute<{ bookId: string }>(sql`
     select distinct e.book_id as "bookId" from journal_entries e
+     -- Live entries only: a reversed entry cannot be reversed again
      where e.org_id = ${orgId} and e.source_document_id = ${doc.id} and e.status = 'posted'`)).rows;
   const lines = (await runner.execute<{ subsidiaryId: string | null }>(sql`
     select distinct l.subsidiary_id as "subsidiaryId" from journal_lines l
      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+     -- Live entries only: a reversed entry cannot be reversed again
      where e.org_id = ${orgId} and e.source_document_id = ${doc.id} and e.status = 'posted'`)).rows;
   const postedBookIds = [...new Set(books.map((row) => row.bookId))];
   const primaryBookId = postedBookIds.length > 0 ? null : await activePostingPrimaryBookId(orgId, runner);
@@ -723,6 +725,7 @@ async function assertOrderShipmentReversalPeriodOpen(
       join document_lines line on line.id = movement.document_line_id and line.org_id = movement.org_id
       join journal_entries e on e.id = movement.journal_entry_id and e.org_id = movement.org_id
      where movement.org_id = ${input.orgId} and line.document_id = ${input.voidDocumentId}
+       -- Live entries only: a reversed entry cannot be reversed again
        and movement.kind = ${movementKind} and movement.status = 'posted' and e.status = 'posted'`)).rows;
   const bookIds = [...new Set(books.map((row) => row.book_id))];
   if (bookIds.length === 0) return;
@@ -894,6 +897,7 @@ async function reverseBillInventoryReceipts(
     const entryNumber = `INV-PPV-${line.id}`;
     const ppv = (await tx.execute<{ id: string }>(sql`
       select id from journal_entries
+       -- Live entries only: a reversed entry cannot be reversed again
        where org_id = ${input.orgId} and entry_number = ${entryNumber} and status = 'posted'
     `)).rows[0];
     if (!ppv) continue;

@@ -63,10 +63,19 @@ export function validateWithholdingRemittancePolicy(value: unknown): Withholding
 /** Liability accumulation resets in each monthly or semiweekly deposit period. */
 export function withholdingDepositPeriod(scheme: ContractorWithholdingSchemeDefinition, scheduleCode: string, paidOn: string, policy: WithholdingRemittancePolicy): string {
   const weekday = parseIsoDate(paidOn).getUTCDay();
-  if (scheme.returnKind !== "annual_945") return scheduleCode === "IT_ACCUMULATED" ? "accumulated" : paidOn.slice(0, 7);
+  // A schedule the pack declares with an accumulation threshold carries its
+  // liability forward until the threshold or a mandatory cutoff; every other
+  // non-annual schedule resets each calendar month.
+  if (scheme.returnKind !== "annual_945") {
+    const accumulates = (scheme.remittanceSchedules ?? []).some((schedule) =>
+      schedule.code === scheduleCode && schedule.accumulationThreshold !== undefined);
+    return accumulates ? "accumulated" : paidOn.slice(0, 7);
+  }
   const year = Number(paidOn.slice(0, 4));
   const eventYear = policy.nextDayEventOn ? Number(policy.nextDayEventOn.slice(0, 4)) : null;
-  const semiweekly = scheduleCode === "US_SEMIWEEKLY" ||
+  const declaredSemiweekly = (scheme.remittanceSchedules ?? []).some((schedule) =>
+    schedule.code === scheduleCode && schedule.kind === "us_semiweekly");
+  const semiweekly = declaredSemiweekly ||
     (!!policy.nextDayEventOn && policy.nextDayEventOn < paidOn && year <= eventYear! + 1) ||
     (!!policy.lookback && policy.lookback.taxYear === year - 2 && cmp(policy.lookback.totalTax, "50000") > 0);
   if (!semiweekly) return paidOn.slice(0, 7);
@@ -83,6 +92,10 @@ export function resolveWithholdingDepositDeadlines(scheme: ContractorWithholding
   const bucketDates = new Map<string,string[]>();
   let nextDayEventOn = policy.nextDayEventOn;
   const deadlines = new Map<string,string>();
+  // A pack-declared accumulation schedule turns due once the threshold is
+  // reached; that acceleration applies to every deduction still open in it.
+  const accumulatingSchedule = (scheme.remittanceSchedules ?? []).some((schedule) =>
+    schedule.code === scheduleCode && schedule.accumulationThreshold !== undefined);
   for (const [date, amount] of dayAmounts) {
     const effectivePolicy = { ...policy, nextDayEventOn };
     const key = withholdingDepositPeriod(scheme,scheduleCode,date,effectivePolicy);
@@ -91,7 +104,7 @@ export function resolveWithholdingDepositDeadlines(scheme: ContractorWithholding
     bucketDates.set(key,[...(bucketDates.get(key) ?? []),date]);
     const due = resolveSchemeRemittanceDue({ scheme,enrollmentSchedule:scheduleCode,paidOn:date,accumulatedLiability,calendar:policy.calendar,lookback:policy.lookback,finalAnnualLiability:policy.finalAnnualLiability,nextDayEventOn });
     deadlines.set(date,due.dueDate);
-    if (due.reason === "next_business_day" || (scheme.country === "IT" && scheduleCode === "IT_ACCUMULATED" && due.reason === "monthly")) {
+    if (due.reason === "next_business_day" || (accumulatingSchedule && due.reason === "monthly")) {
       // A threshold reached by another category accelerates every outstanding native deduction in its period.
       for (const prior of bucketDates.get(key) ?? []) {
         const previous = deadlines.get(prior);
@@ -245,6 +258,7 @@ export async function assertWithholdingDepositCurrent(executor:SqlExecutor,orgId
   const deductions = source.deductionIds.length ? (await executor.execute<DepositDeduction>(sql`select id,payment_date::text as "paymentDate",period_start::text as "periodStart",deducted_amount::text as deducted,currency from withholding_deductions where org_id=${orgId} and enrollment_id=${source.enrollmentId} and status='posted' and id in (${sql.join(source.deductionIds.map(id=>sql`${id}::uuid`),sql`,`)}) order by payment_date,id for share`)).rows : [];
   let previousTotal='0';
   if(source.carrying?.previousDocumentIds.length) {
+    // Live entries only: a correction carries forward only deposits that still stand
     const prior=(await executor.execute<{amount:string;count:number}>(sql`select coalesce(sum(case when kind='vendor_credit' then -total when kind='journal' then 0 else total end),0)::text as amount,count(*)::int as count from documents where org_id=${orgId} and id in (${sql.join(source.carrying.previousDocumentIds.map(id=>sql`${id}::uuid`),sql`,`)}) and status='posted'`)).rows[0]!;
     if(prior.count!==source.carrying.previousDocumentIds.length) throw new ContractorWithholdingError("An earlier posted deposit changed after this correction was prepared.");
     previousTotal=prior.amount;

@@ -4,6 +4,17 @@ import { useTranslations } from "next-intl";
 import { Button, Label, SearchSelect, Skeleton } from "@openbooks/ui";
 import { readApiErrorMessage } from "@/lib/api-error";
 import { promptDialog } from "@/lib/prompt";
+
+/** Create (or find) a lot or serial through the inventory endpoint; refusals carry the server's message. */
+async function ensureTrackingIdentifier(body: Record<string, unknown>, fallback: string): Promise<{ id: string }> {
+  const response = await fetch("/api/inventory/advanced", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) throw new Error(await readApiErrorMessage(response, fallback));
+  return (await response.json()) as { id: string };
+}
 interface Option {
   id: string;
   label: string;
@@ -98,26 +109,16 @@ export function InventoryTrackingFields({
           })
         : null;
       if (!mounted.current||currentKey.current!==identity) return;
-      let saved:{id:string};
-      if(registerIdentifier) saved=await registerIdentifier(kind,number,expiry?.trim()||null);
-      else {
-      const response = await fetch("/api/inventory/advanced", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(
+      let saved: { id: string };
+      if (registerIdentifier) {
+        saved = await registerIdentifier(kind, number, expiry?.trim() || null);
+      } else {
+        saved = await ensureTrackingIdentifier(
           kind === "lot"
-            ? {
-                action: "ensureLot",
-                itemId,
-                lotNumber: number,
-                expiresOn: expiry?.trim() || null,
-              }
+            ? { action: "ensureLot", itemId, lotNumber: number, expiresOn: expiry?.trim() || null }
             : { action: "ensureSerial", itemId, serialNumber: number },
-        ),
-      });
-      if (!response.ok)
-        throw new Error(await readApiErrorMessage(response, t("saveFailed")));
-      saved = await response.json();
+          t("saveFailed"),
+        );
       }
       if (!mounted.current||currentKey.current!==identity) return;
       onChange(

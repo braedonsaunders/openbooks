@@ -57,6 +57,8 @@ const mockSources = new Map<string, string>([
   [
     "mock:business-date",
     `
+      export function isIsoCalendarDate(value) { return typeof value === 'string' && /^\\d{4}-\\d{2}-\\d{2}$/.test(value) }
+      export function parseIsoDate(value) { return new Date(value + 'T00:00:00Z') }
       export async function businessToday() { return '2026-08-24' }
       export async function businessTimeZone() { return 'America/Toronto' }
     `,

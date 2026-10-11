@@ -93,8 +93,10 @@ export async function verifySampleOperatingHistory(orgId: string, industryKey: s
       with balances as (
         select d.id,d.party_id,d.document_date,abs(l.txn_amount) as amount,
           coalesce((select sum(a.target_transaction_amount) from applications a where a.org_id=l.org_id and a.to_line_id=l.id and a.unapplied_at is null),0) as applied
+        -- Live entries only: sample readiness inspects standing postings
         from documents d join journal_entries e on e.org_id=d.org_id and e.id=d.posted_entry_id and e.status='posted'
         join journal_lines l on l.org_id=e.org_id and l.entry_id=e.id and l.is_open_item
+        -- Live entries only: sample readiness inspects standing postings
         where d.org_id=${orgId} and d.kind=${kind} and d.status='posted'
       ) select count(distinct id)::int as documents,count(distinct party_id)::int as parties,
         count(distinct date_trunc('month',document_date::timestamp))::int as months,

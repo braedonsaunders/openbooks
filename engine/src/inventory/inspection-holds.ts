@@ -6,6 +6,7 @@ export function inspectionSourceActive(inspection: SQL): SQL {
     select 1 from inventory_movements source join journal_entries source_entry
       on source_entry.org_id=source.org_id and source_entry.id=source.journal_entry_id
     where source.org_id=${inspection}.org_id and source.id=${inspection}.receipt_movement_id
+      -- Live entries only: only unreversed receipts hold stock for inspection
       and source.status='posted' and source_entry.status='posted'
       and not exists(select 1 from inventory_movements reversal
         where reversal.org_id=source.org_id and reversal.reverses_movement_id=source.id and reversal.status='posted'))) `;
@@ -19,6 +20,7 @@ export function inspectionReworkAccepted(inspection:SQL):SQL {
         join journal_entries entry on entry.org_id=receipt.org_id and entry.id=receipt.journal_entry_id
       where repair.org_id=${inspection}.org_id and repair.id=${inspection}.rework_work_order_id
         and repair.receipt_rework_inspection_id=${inspection}.id and repair.quantity_completed>=${inspection}.quantity
+        -- Live entries only: only unreversed receipts hold stock for inspection
         and receipt.kind='assembly_build' and receipt.status='posted' and entry.status='posted' and entry.reverses_entry_id is null
         and entry.custom->>'work_order_number'=repair.number and receipt.item_id=${inspection}.item_id
         and receipt.quantity=${inspection}.quantity and receipt.lot_id is not distinct from ${inspection}.lot_id

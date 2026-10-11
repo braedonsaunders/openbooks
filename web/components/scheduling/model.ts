@@ -3,8 +3,8 @@
  * rectangular selection, pattern tiling for paste and fill, the inverse of a
  * saved batch for undo, typed-input parsing and day totals. No React, no I/O.
  */
-import type { BoardChange, BookingFields, ChangeResult, SpanInput } from '@openbooks/engine/src/schedule-boards/entries.ts'
-import type { BoardAbsence, BoardEntry, BoardRow, BoardTarget, BoardWindow } from '@openbooks/engine/src/schedule-boards/window.ts'
+import type { BoardChange, BookingFields, ChangeResult, SpanInput } from '@openbooks/engine/schedule-boards/entries'
+import type { BoardAbsence, BoardEntry, BoardRow, BoardTarget, BoardWindow } from '@openbooks/engine/schedule-boards/window'
 
 export type { BoardChange, BookingFields, ChangeResult, SpanInput, BoardAbsence, BoardEntry, BoardRow, BoardTarget, BoardWindow }
 
@@ -175,8 +175,8 @@ function clock(hours: string, minutes: string | undefined): string | null {
 
 /**
  * Read what a scheduler typed into a cell: the target code or name, an
- * optional detail after a slash ("SUMMIT/kiln 2"), and an optional time range
- * at the end ("SUMMIT 6-14:30") that books those hours instead of the day.
+ * optional detail after a slash ("PLANT/kiln 2"), and an optional time range
+ * at the end ("PLANT 6-14:30") that books those hours instead of the day.
  */
 export function parseCellInput(raw: string): ParsedInput {
   let text = raw.trim()

@@ -71,6 +71,7 @@ export async function withSampleOperator<T>(orgId: string, options: SampleOperat
   if (orgContext.getStore()?.txDb) throw new SampleCompanyError("Start a platform-operated sample command at its native entry point so the selected home identity can remain locked for the complete tenant transaction.");
   // Native authentication admits a home identity outside the target tenant;
   // keep that exact user's active/superadmin state stable until the command ends.
+// bypass: user-keyed-lookup — a platform operator's home identity lives outside the target tenant, so locking it reads the users row across organizations.
   return withBypassContext(() => withMaintenanceTransaction(null, async () => {
     const locked = (await db.execute(sql`select id from users where id=${actorId} for share`)).rows;
     const identity = await actorIdentity(db, orgId, actorId);

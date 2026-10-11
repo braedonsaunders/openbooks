@@ -23,7 +23,7 @@ function pgMessage(error: unknown): string {
 
 const migration = readFileSync(
   new URL(
-    "../../../schema/migrations/generated/0043_sandbox_prebill_wipe_guard.sql",
+    "../../../schema/migrations/generated/0043_sandbox_wip_prebill_wipe_guard.sql",
     import.meta.url,
   ),
   "utf8",

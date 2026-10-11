@@ -67,6 +67,7 @@ export async function retireSampleFixtureCompanies(homeOrgId: string, exactOrgId
   const retireOrgIds = selection.filter(id => state.live.includes(id));
   if (!retireOrgIds.length) return true;
   for (const orgId of retireOrgIds) await drainSampleFixtureFlowEmails(orgId);
+// bypass: identity-bootstrap — the recovery administrator is created in the home organization before any tenant context exists.
   const actorId = await withBypass(() => createScratchUser(homeOrgId, "Sample fixture recovery administrator", "admin"));
   const plan = await sampleRetirementPlan({ version: 1, database: state.database, retainOrgIds: state.live.filter(id => !retireOrgIds.includes(id)),
     retireOrgIds, reason: "Retire the exact sample fixtures after native preservation verification" });

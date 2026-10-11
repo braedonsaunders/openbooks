@@ -19,6 +19,7 @@ export interface SampleRefreshTarget {
 export async function sampleRefreshPlan(industryKey?: string, options: SampleOperatorOptions = {}): Promise<{ operatorActorId: string | null; operatorRequirements: Array<{ industryKey: string; permissions: string[]; requiresLocalAuthor: boolean; authorship: SampleAuthorContract[] }>; version: number; definitionDigest: string; digest: string; targets: SampleRefreshTarget[]; preserved: Array<{ orgId: string; name: string; reason: string }>; excluded: Array<{ orgId: string; name: string; reason: string }> }> {
   const operatorActorId = sampleOperatorId(options) ?? null;
   if (industryKey && !SAMPLE_COMPANY_BY_INDUSTRY.has(industryKey)) throw new SampleCompanyError(`Unknown sample industry: ${industryKey}`);
+// bypass: cross-org-by-design — the refresh plan inventories every sample master and exploration copy across organizations.
   const candidates = await withBypassContext(() => db.execute<{
     id: string; name: string; settings: Record<string, unknown>; env: string;
   }>(sql`select id,name,settings,env_kind as env from orgs

@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
+import { isUuid } from "@openbooks/engine/src/platform/uuid.ts";
 
 // A duplicate account number must refuse with the holding account named:
 // the 422 carries details { existingAccountId, existingAccountName,
@@ -107,7 +108,7 @@ test("renumbering onto another account names the holding account", async () => {
     assert.equal(body.field, "number");
     assert.equal(body.details.existingAccountName, "Cash Over and Short");
     assert.equal(body.details.existingAccountNumber, "6820");
-    assert.match(body.details.existingAccountId, /^[0-9a-f-]{36}$/);
+    assert.ok(isUuid(body.details.existingAccountId), "the refusal names the existing account by id");
   } finally {
     routeState.authz = null;
     await dropScratchOrg(org.orgId);

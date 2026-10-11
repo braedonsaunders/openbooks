@@ -371,6 +371,7 @@ export const GET = defineRoute({
         select e.id, e.entry_number as "entryNumber",
                e.posting_date::text as "postingDate", e.status
           from journal_entries e
+         -- Live entries only: the picker offers standing entries to match
          where e.org_id = ${orgId} and e.status = 'posted'
            and e.entry_number ilike ${query}
            ${subsidiaryVisibleFilter(sql`e.subsidiary_id`, gate.allowedSubsidiaryIds)}

@@ -16,6 +16,7 @@ import {
   receivePurchaseOrder,
 } from "../../../web/lib/order-cycle.ts";
 import { PURCHASE_RECEIPT_KIND } from "../../../web/lib/order-kinds.ts";
+import { endOfMonth } from "../platform/civil-date.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
@@ -65,7 +66,7 @@ async function seedOrg(): Promise<Seed> {
 async function ensureCurrentPeriod(seed: Seed): Promise<void> {
   const today = new Date().toISOString().slice(0, 10);
   const monthStart = today.slice(0, 8) + "01";
-  const monthEnd = new Date(Date.UTC(Number(today.slice(0, 4)), Number(today.slice(5, 7)), 0)).toISOString().slice(0, 10);
+  const monthEnd = endOfMonth(today);
   if (monthStart <= seed.date && seed.date <= monthEnd) return;
   await db.execute(sql`
     insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)

@@ -3198,6 +3198,7 @@ export async function suggestSettlementBatchJournal(
         from journal_entries e
         join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
         join accounts a on a.id = l.account_id and a.org_id = e.org_id
+       -- Live entries only: settlement matches against standing revenue entries
        where e.org_id = ${orgId} and e.status = 'posted'
          and e.reverses_entry_id is null
          and e.id <> coalesce(${batch.journal_entry_id}, '00000000-0000-0000-0000-000000000000'::uuid)

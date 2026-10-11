@@ -118,6 +118,7 @@ export async function reopenApprovalConflicts(
       select d.document_number
         from documents d
        where d.org_id = ${orgId} and d.posting_period_id = ${request.period_id}
+         -- Live entries only: voided documents carry no activity a reopen could unlock
          and d.status in ('draft', 'pending_approval', 'approved', 'posted')
          and ${subsidiaryScope}
          and (d.created_by = ${actorId} or d.submitted_by = ${actorId}
@@ -152,6 +153,7 @@ export async function reopenApprovalConflicts(
       with hits as (
         select d.document_number as ref from documents d
          where d.org_id = ${orgId} and d.posting_period_id = ${request.period_id}
+           -- Live entries only: voided documents carry no activity a reopen could unlock
            and d.status in ('draft', 'pending_approval', 'approved', 'posted')
            and ${subsidiaryScope} and d.party_id = ${party}
         union

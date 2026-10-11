@@ -37,6 +37,7 @@ const BINARY_ASSET_EXTENSIONS = new Set([
   ".gz",
   ".heic",
   ".ico",
+  ".icc",
   ".jar",
   ".jpeg",
   ".jpg",

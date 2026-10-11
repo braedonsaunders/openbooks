@@ -72,6 +72,7 @@ const mockSources = new Map<string, string>([
   [
     'mock:payroll-filing-registry',
     `
+      export function declaredPayrollFilings() { return [] }
       export function filingAccountProblem() { return null }
     `,
   ],

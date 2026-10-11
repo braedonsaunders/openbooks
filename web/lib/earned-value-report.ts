@@ -2,12 +2,13 @@ import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { earnedValueByProject, type ProjectEarnedValue } from '@openbooks/engine/src/projects/earned-value.ts'
-import { roundDecimal } from '@openbooks/engine/src/projects/earned-value-math.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { earnedValueByProject, type ProjectEarnedValue } from '@openbooks/engine/projects/earned-value'
+import { roundDecimal } from '@openbooks/engine/projects/earned-value-math'
 import type { Authz } from './authz'
 import type { ExportData } from './report-pdf'
 import { pgTextArrayLiteral } from './pg-array'
+import { isUuid } from './list-params'
 
 /**
  * The Earned value report: per project and task as of a date — budget at
@@ -116,7 +117,7 @@ export async function earnedValueExportData(
 ): Promise<ExportData> {
   const t = await getTranslations('reports.earnedValue')
   const projectParam = p.get('project')
-  const projectId = projectParam && /^[0-9a-f-]{36}$/i.test(projectParam) ? projectParam : undefined
+  const projectId = projectParam && isUuid(projectParam) ? projectParam : undefined
   const { rows } = await earnedValueReport(authz, { asOf: period.to, projectId, search: p.get('q') ?? undefined })
   return {
     title: t('title'),

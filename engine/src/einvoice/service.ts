@@ -42,6 +42,7 @@ async function singaporeAccountingAmounts(executor: SqlExecutor, actor: EInvoice
   const entries = (await executor.execute<Row>(sql`
     select e.id from journal_entries e join accounting_books b on b.id=e.book_id and b.org_id=e.org_id
     where e.org_id=${actor.orgId} and e.id=${doc.posted_entry_id} and e.source_document_id=${doc.id}
+      -- Live entries only: an e-invoice describes the document's standing posting
       and e.subsidiary_id=${doc.subsidiary_id} and e.origin='document' and e.status='posted'
       and e.reverses_entry_id is null and b.is_primary for share of e, b`)).rows;
   if (entries.length !== 1) throw new EInvoiceConfigurationError('The original primary-book posting is unavailable. Restore its native posting evidence before issuing the e-invoice.');

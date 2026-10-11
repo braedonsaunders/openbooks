@@ -108,6 +108,7 @@ export async function periodFingerprintEvidence(
           -- Period-bounded: a draft dated outside this period (next month's
           -- invoice) is not this review's evidence, so creating it must not
           -- invalidate a completed attestation on revalidation.
+          -- Live entries only: voided documents carry no activity for the period to close
           and d.status in ('draft','pending_approval','approved','posted')
           and d.posting_period_id is null
           and d.document_date between ${period.starts_on}::date and ${period.ends_on}::date

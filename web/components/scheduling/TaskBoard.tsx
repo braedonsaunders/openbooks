@@ -8,7 +8,8 @@ import { Search } from 'lucide-react'
 import { Input, cn } from '@openbooks/ui'
 import { ScheduleTab } from '../../app/(app)/projects/tabs/ScheduleTab'
 import { projectProgress, SchedulingRequestError } from './api'
-import type { ProjectProgress, TaskProgress } from '@openbooks/engine/src/schedule-boards/progress.ts'
+import type { ProjectProgress, TaskProgress } from '@openbooks/engine/schedule-boards/progress'
+import { decimalLabel } from '@/lib/format'
 
 export interface TaskBoardProject {
   readonly id: string
@@ -79,7 +80,7 @@ export function TaskBoard({ boardId, view, projects, selectedProjectId, onSelect
   )
 }
 
-const hours = (value: string | null, digits = 1) => (value === null ? '—' : Number(value).toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits }))
+const hoursIn = (locale: string) => (value: string | null, digits = 1) => (value === null ? '—' : decimalLabel(Number(value), locale, digits, digits))
 const percent = (value: string | null) => (value === null ? '—' : `${Math.round(Number(value) * 100)}%`)
 
 function factorTone(value: string | null): string {
@@ -95,6 +96,7 @@ function factorTone(value: string | null): string {
  */
 function ProgressView({ boardId, projectId, canManage }: { boardId: string; projectId: string; canManage: boolean }) {
   const t = useTranslations('scheduling')
+  const hours = hoursIn(useLocale())
   const [data, setData] = useState<ProjectProgress | null>(null)
   const [error, setError] = useState<{ message: string; remedy: string | null } | null>(null)
   const [saving, setSaving] = useState<string | null>(null)

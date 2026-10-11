@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { setPeriodLockState } from "../periods/period-locks.ts";
 import { assertTemplateTokensKnown, runScheduleCatchUp, runScheduleNow } from "./recurring.ts";
+import { daysInCivilMonth } from "../platform/civil-date.ts";
 import {
   createScratchOrg,
   createScratchUser,
@@ -58,7 +59,7 @@ async function seedSchedule(
 
 async function addPeriod(org: ScratchOrg, year: number, month: number): Promise<void> {
   const mm = String(month).padStart(2, "0");
-  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const lastDay = daysInCivilMonth(year, month);
   await db.execute(sql`
     insert into accounting_periods
       (id, org_id, fiscal_calendar_id, fiscal_year, period_number, name,

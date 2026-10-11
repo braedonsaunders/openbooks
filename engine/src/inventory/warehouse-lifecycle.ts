@@ -232,6 +232,7 @@ export async function ensureDefaultWarehouse(
     const inserted = (await runner.execute<{ id: string }>(sql`
       insert into stock_locations (org_id, location_id, code, kind, is_active, created_by, updated_by)
       values (${orgId}, ${site.id}, ${code}, 'warehouse', true, ${actorId}, ${actorId})
+      -- A code already taken is benign: the loop tries the next suffix.
       on conflict do nothing
       returning id`)).rows[0];
     if (inserted) {

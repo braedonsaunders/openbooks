@@ -101,6 +101,7 @@ const mockSources = new Map<string, string>([
   [
     'mock:payroll-run-adjustments',
     `
+      export async function recordPayRunHolidayHours() { throw new Error('not under test') }
       export { canonicalAdjustmentHours } from ${JSON.stringify(import.meta.resolve('@openbooks/engine/src/payroll/run-adjustments.ts'))}
       const state = globalThis[Symbol.for('openbooks.payroll-run-id-refusals-test')]
       export async function mutatePayRunAdjustment(input) { state.adjustmentCalls.push(input); return { changed: true } }

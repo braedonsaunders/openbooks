@@ -88,6 +88,9 @@ const connectorPaths = [
   // not executable defaults or tenant identity.
   /^README\.md$/,
   /^CHANGELOG\.md$/,
+  // The migration-assistant design note documents how each supported
+  // source system's records are read; it is interoperability documentation.
+  /^docs\/design\/migration-assistant\.md$/,
   /^scripts\/check-product-neutrality\.mjs$/,
   // The gate's own contract test quotes vendor names as fixture data; without
   // this line the prevention control could never describe what it prevents.
@@ -124,6 +127,9 @@ const connectorPaths = [
   // the functional key may name a system.
   /^scripts\/upgrade-rehearsal\/seeders\/perf-1m\.ts$/,
   /^web\/app\/\(app\)\/sync\//,
+  // The connector application layer the sync pages and routes call: its
+  // functions and tests configure a named source system's connection.
+  /^web\/lib\/sync\//,
   /^web\/app\/api\/(?:platform\/connections|qbd)\//,
   /^web\/lib\/docs\/articles\/(?:netsuite-bridge|quickbooks-desktop-connector)\.ts$/,
   // Conformance tests for those connector articles: a test that cannot name

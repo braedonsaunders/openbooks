@@ -286,6 +286,7 @@ export async function completeWorkOrder(
         join journal_entries source on source.org_id=claim.org_id and source.id=claim.source_entry_id
         left join journal_entries cost on cost.org_id=claim.org_id and cost.id=claim.capitalization_entry_id
         where claim.org_id=contract.org_id and claim.subcontract_id=contract.id and claim.reversal_entry_id is null
+          -- Live entries only: only standing service cost counts as recorded
           and bill.status='posted' and bill.posted_entry_id=source.id and source.status='posted' and (claim.amount=0 or cost.status='posted')) limit 1`)).rows.length)
       refuse('A vendor service cost is missing or reversed.','subcontract_service_cost_required','Record the actual posted service bill on its subcontract before receiving finished goods.');
   }

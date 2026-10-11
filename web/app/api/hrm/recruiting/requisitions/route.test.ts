@@ -50,6 +50,7 @@ const mockSources = new Map<string, string>([
     "mock:service",
     `
       const state = globalThis[Symbol.for('openbooks.hrm-recruiting-requisitions-route-test')]
+      export async function reviseRequisition(args) { state.calls.push({ fn: 'revise', args }); if (state.serviceThrow) throw state.serviceThrow; return { id: 'requisition-1', requisitionNumber: 'REQ-00001' } }
       export async function createRequisition(args) {
         state.calls.push({ fn: 'create', args })
         if (state.serviceThrow) throw state.serviceThrow

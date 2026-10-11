@@ -383,6 +383,7 @@ export async function planPostedCorrection(
         join journal_entries entry
           on entry.id = line.entry_id and entry.org_id = line.org_id
        where entry.org_id = ${orgId} and entry.source_document_id = ${sourceId}
+         -- Live entries only: a reversed entry cannot be corrected again
          and entry.status = 'posted'
          and ${sql.raw(`line.${POSTED_DIMENSION_COLUMNS[field]}`)} = ${before}
        limit 1
@@ -719,6 +720,7 @@ async function applyDimensionReclass(
       join journal_entries entry
         on entry.id = line.entry_id and entry.org_id = line.org_id
      where entry.org_id = ${ctx.orgId} and entry.source_document_id = ${plan.sourceId}
+       -- Live entries only: a reversed entry cannot be corrected again
        and entry.status = 'posted'
      order by entry.book_id, line.line_number, line.id
   `)).rows;

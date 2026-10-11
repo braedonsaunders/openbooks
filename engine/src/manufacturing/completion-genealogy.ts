@@ -21,9 +21,11 @@ export async function recordCompletionGenealogy(
       coalesce((select sum(allocation.quantity) from mfg_completion_inputs allocation
         join journal_entries receipt on receipt.org_id=allocation.org_id and receipt.id=allocation.completion_entry_id
         where allocation.org_id=movement.org_id and allocation.input_movement_id=movement.id
+          -- Live entries only: genealogy follows unreversed production only
           and receipt.status='posted' and receipt.reverses_entry_id is null),0)::text as assigned
     from inventory_movements movement join journal_entries entry on entry.org_id=movement.org_id and entry.id=movement.journal_entry_id
     where movement.org_id=${orgId} and movement.kind='assembly_consume' and movement.status='posted'
+      -- Live entries only: genealogy follows unreversed production only
       and movement.reverses_movement_id is null and entry.origin='manufacturing' and entry.status='posted'
       and entry.custom->>'work_order_number'=${input.orderNumber}
       and not exists(select 1 from inventory_movements reversal where reversal.org_id=movement.org_id and reversal.reverses_movement_id=movement.id and reversal.status='posted')

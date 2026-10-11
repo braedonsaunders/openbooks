@@ -133,6 +133,7 @@ export async function resolveWithholdingCarrying(executor: SqlExecutor, input: {
     const legs = (await executor.execute<{ amount: string; transactionAmount: string;currency:string }>(sql`
       select l.currency,sum(l.amount)::text as amount,sum(l.txn_amount)::text as "transactionAmount"
        from journal_lines l join journal_entries e on e.org_id=l.org_id and e.id=l.entry_id
+       -- Live entries only: the carrying amount is read from the payment's standing posting
        where l.org_id=${orgId} and ${input.bookId ? sql`true` : sql`e.id=${first.entryId}`} and e.book_id=${bookId} and e.status='posted' and e.source_document_id=${first.paymentId}
          and l.subsidiary_id=${subsidiaryId} and l.account_id=${first.accountId}
          and l.memo='Contractor withholding' and l.contributor_kind is null group by l.currency`)).rows;
@@ -154,6 +155,7 @@ export async function resolveWithholdingCarrying(executor: SqlExecutor, input: {
     const legs = (await executor.execute<{ accountId: string; amount: string;currency:string;transactionAmount:string }>(sql`
       select l.account_id as "accountId",l.currency,l.amount::text as amount,l.txn_amount::text as "transactionAmount" from journal_lines l
        join journal_entries e on e.org_id=l.org_id and e.id=l.entry_id
+       -- Live entries only: the carrying amount is read from the payment's standing posting
        where l.org_id=${orgId} and ${input.bookId ? sql`true` : sql`e.id=${previous.entryId}`} and e.source_document_id=${documentId} and e.book_id=${bookId} and e.status='posted'
          and l.subsidiary_id=${subsidiaryId} and l.account_id in (${idsSql(accounts)}) order by l.line_number,l.id`)).rows;
     if (!legs.length) return refuse("The previous authority's posted liability movement is missing.");

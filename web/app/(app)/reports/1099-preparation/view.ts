@@ -2,8 +2,8 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { redirect } from 'next/navigation'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import {
   buildNecPreparationRows,
   computeFiling,
@@ -12,7 +12,7 @@ import {
   resolveInformationReturnCurrency,
   type FilingComputation,
   type NecPreparationVendor,
-} from '@openbooks/engine/src/compliance/information-returns.ts'
+} from '@openbooks/engine/compliance/information-returns'
 import {
   field,
   money,
@@ -126,10 +126,12 @@ async function loadCardPaidPayments(orgId: string, taxYear: number): Promise<Car
              where jl.amount < 0 and not jl.is_open_item and funding.type = 'liability_card'
            ), 0) as "cardPaid"
       from documents d
+      -- Live entries only: a voided payment was not paid and is not reportable
       join journal_entries je on je.id = d.posted_entry_id and je.org_id = d.org_id and je.status = 'posted'
       join journal_lines jl on jl.entry_id = je.id and jl.org_id = je.org_id
       join accounts funding on funding.id = jl.account_id and funding.org_id = jl.org_id
       join parties p on p.id = d.party_id and p.org_id = d.org_id
+     -- Live entries only: a voided payment was not paid and is not reportable
      where d.org_id = ${orgId} and d.kind = 'vendor_payment' and d.status = 'posted'
        and d.document_date between ${from} and ${to}
        and d.party_id is not null

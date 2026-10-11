@@ -276,6 +276,7 @@ async function loadBill(
       from journal_lines jl
       join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
       join documents d on d.id = je.source_document_id and d.org_id = je.org_id
+     -- Live entries only: a reversed entry's open item is already closed
      where jl.org_id = ${orgId} and jl.id = ${openLineId} and jl.is_open_item and je.status = 'posted'
        and d.status = 'posted'`)).rows[0];
   if (!bill || bill.kind !== "vendor_bill") throw new ContractorWithholdingError("the subcontractor payment does not reference a posted vendor bill", "Record and post the construction bill before paying it under the scheme.");

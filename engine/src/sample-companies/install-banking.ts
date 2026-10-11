@@ -36,6 +36,7 @@ export async function installOperatingBanking(c: DemoContext): Promise<void> {
         select e.id as "entryId",e.posting_date::text as date,l.txn_amount::text as amount,d.memo as description,d.id as "documentId"
         from journal_lines l join journal_entries e on e.org_id=l.org_id and e.id=l.entry_id
         join documents d on d.org_id=e.org_id and d.posted_entry_id=e.id
+        -- Live entries only: sample banking seeds from standing balances
         where l.org_id=${c.orgId} and l.account_id=${accountId} and e.status='posted'
           and (d.external_source='industry_demo' or (d.kind in ('vendor_payment','customer_payment') and d.memo like 'Demonstration operating %')) order by d.kind,d.document_number
       `)).rows;

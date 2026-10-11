@@ -317,7 +317,7 @@ export const RECORDS_WIDGETS = {
   'assign-party-role': (props) => (
     <AssignPartyRoleButton
       roles={((props.roles as { value: string; label: string }[] | undefined) ?? []).filter((r) => typeof r?.value === 'string' && typeof r?.label === 'string')}
-      total={Number(props.total ?? 0)}
+      total={typeof props.total === 'number' && Number.isInteger(props.total) ? props.total : 0}
       q={str(props, 'q') ?? ''}
       includeInactive={props.includeInactive === true}
     />

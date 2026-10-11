@@ -78,6 +78,7 @@ const mockSources = new Map<string, string>([
   [
     'mock:payroll-run-adjustments',
     `
+      export async function recordPayRunHolidayHours() { throw new Error('not under test') }
       const state = globalThis[Symbol.for('openbooks.payroll-run-bulk-adjustment-test')]
       export function canonicalAdjustmentHours() { throw new Error('not under test') }
       export async function mutatePayRunAdjustment(input) { state.adjustmentCalls.push(input); return { ok: true } }

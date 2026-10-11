@@ -123,6 +123,7 @@ export async function createStatementBatchRun(args: {
         (org_id, run_id, party_id, to_email, balance, overdue, currency_code, status, created_by)
       values (${args.orgId}, ${runId}, ${recipient.partyId}, ${recipient.toEmail},
               ${recipient.balance}, ${recipient.overdue}, ${recipient.currency}, 'queued', ${args.senderId})
+      -- Only a customer listed twice can collide; the empty result refuses below.
       on conflict (run_id, party_id) do nothing
       returning id::text as id`)).rows;
     if (!inserted[0]) refuseBatchWrite("statement batch item was not recorded — the input listed one customer twice; refusing beats sending them two letters");
@@ -133,6 +134,7 @@ export async function createStatementBatchRun(args: {
         (org_id, run_id, party_id, to_email, balance, overdue, status, error, created_by)
       values (${args.orgId}, ${runId}, ${exclusion.partyId}, null,
               ${exclusion.balance}, ${exclusion.overdue}, 'skipped', 'no email on file', ${args.senderId})
+      -- An exclusion listed twice records once; a skipped row sends nothing.
       on conflict (run_id, party_id) do nothing`);
   }
   await args.enqueue(

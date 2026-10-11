@@ -48,5 +48,10 @@
     "path": "web/lib/data-io/record-resources.ts",
     "fn": "(top-level)",
     "reason": "machine canonicalization (useGrouping:false, significant digits) for import comparison against CSV/JSON export vocabulary — localizing breaks the round-trip, not a viewer label"
+  },
+  {
+    "path": "web/app/(app)/admin/setup/wizard/time-zone-default.ts",
+    "fn": "resolve",
+    "reason": "Canonicalizes a time-zone identifier through resolvedOptions().timeZone; nothing is formatted or shown, so no viewer locale applies"
   }
 ]

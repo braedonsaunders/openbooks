@@ -60,6 +60,7 @@ export async function createProductionSubcontract(tx:SqlExecutor,orgId:string,ac
   }
   if(!['released','in_progress'].includes(order.status)) refuse("Subcontracting requires an open released order.","subcontract_order_not_open","Release or resume the work order before assigning an operation to a vendor.");
   if((await tx.execute(sql`select entry.id from journal_entries entry join mfg_work_orders work on work.org_id=entry.org_id and work.number=entry.custom->>'work_order_number'
+    -- Live entries only: subcontract commands act on standing production and service cost
     where work.org_id=${orgId} and work.id=${input.workOrderId} and entry.origin='manufacturing' and entry.status='posted' and entry.reverses_entry_id is null and entry.custom ? 'completion_quantity' limit 1`)).rows.length)
     refuse('This order already has finished-goods receipts.','subcontract_after_receipt','Reverse its native completion receipts before assigning an unfinished operation to a vendor.');
   const operation=(await tx.execute<{quantity:string;status:string;backflushAt:string}>(sql`select quantity_planned::text as quantity,status,backflush_at as "backflushAt" from mfg_wo_operations
@@ -134,12 +135,15 @@ export async function capitalizeSubcontractServiceBill(tx:SqlExecutor,orgId:stri
   }
   if(!['ready','sent','received'].includes(record.status)||!['released','in_progress'].includes(order.status)) refuse('This subcontract is not open for service cost.','subcontract_not_open','Resume the work order before recording its vendor service cost.');
   if((await tx.execute(sql`select id from inventory_movements where org_id=${orgId} and kind='assembly_build' and journal_entry_id in
+    -- Live entries only: subcontract commands act on standing production and service cost
     (select id from journal_entries where org_id=${orgId} and origin='manufacturing' and custom->>'work_order_number'=(select number from mfg_work_orders where org_id=${orgId} and id=${record.workOrderId}) and status='posted' and reverses_entry_id is null) limit 1`)).rows.length) refuse('Finished goods have already been received for this order.','subcontract_service_after_receipt','Reverse the order’s completion receipts through their native reversal action before adding an omitted service bill.');
   const bill=(await tx.execute<{entryId:string;bookId:string;postingDate:string;number:string}>(sql`select entry.id as "entryId",entry.book_id as "bookId",entry.posting_date::text as "postingDate",document.document_number as number
     from documents document join journal_entries entry on entry.org_id=document.org_id and entry.id=document.posted_entry_id and entry.source_document_id=document.id
     where document.org_id=${orgId} and document.id=${billId} and document.kind='vendor_bill' and document.status='posted'
       and document.party_id=${record.vendorId} and document.subsidiary_id=${order.subsidiaryId} and entry.subsidiary_id=${order.subsidiaryId}
+      -- Live entries only: subcontract commands act on standing production and service cost
       and entry.status='posted' and entry.reverses_entry_id is null
+      -- Live entries only: subcontract commands act on standing production and service cost
       and not exists(select 1 from journal_entries reversal where reversal.org_id=entry.org_id and reversal.reverses_entry_id=entry.id and reversal.status='posted')
     for update of document,entry`)).rows[0];
   if(!bill) refuse('Use this vendor’s posted service bill in the work order’s legal entity.','subcontract_service_bill_required','Post the service bill through Payables, then record its service cost on this subcontract.');
@@ -196,6 +200,7 @@ export async function reverseSubcontractServiceCost(tx:SqlExecutor,orgId:string,
   }
   if(!['released','in_progress','on_hold'].includes(order.status)) refuse('This service belongs to a closed work order.','subcontract_service_already_received','Use the work order’s governed completion reversal before correcting its service cost.');
   if(!claim.entryId) refuse('This service bill carried no capitalized value.','subcontract_zero_cost_correction','Correct the zero-value bill through Payables; the retained production evidence has no journal to reverse.');
+  // Live entries only: subcontract commands act on standing production and service cost
   if((await tx.execute(sql`select entry.id from journal_entries entry where entry.org_id=${orgId} and entry.origin='manufacturing' and entry.custom->>'work_order_number'=(select number from mfg_work_orders where org_id=${orgId} and id=${record.workOrderId}) and entry.status='posted' and entry.reverses_entry_id is null and entry.custom ? 'completion_quantity' limit 1`)).rows.length) refuse('Finished goods have already been received for this order.','subcontract_service_after_receipt','Reverse the order’s native completion receipts before reversing its service cost.');
   const entryId=await reverseInventoryJournal(tx,orgId,actorId,claim.entryId,date,reason.trim(),{allowManufacturingOrigin:true});
   if((await tx.execute(sql`update mfg_subcontract_service_bills set reversal_entry_id=${entryId},reversal_reason=${reason.trim()},updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${claimId} and reversal_entry_id is null returning id`)).rows.length!==1) refuse('The service-cost reversal was not recorded.','subcontract_write_failed','Reload and retry; nothing was reversed.');
@@ -239,9 +244,11 @@ export async function recordSubcontractReturn(tx:SqlExecutor,orgId:string,actorI
   if(input.finish&&accounted<toUnits(record.quantityExpected)&&!reason) refuse('Finishing below the expected quantity requires a reason.','subcontract_finish_reason_required','Explain the shortage; the work order retains its original ordered quantity.');
   if(input.finish&&!(await tx.execute(sql`select claim.id from mfg_subcontract_service_bills claim
     join documents bill on bill.org_id=claim.org_id and bill.id=claim.bill_id and bill.status='posted' and bill.posted_entry_id=claim.source_entry_id
+    -- Live entries only: subcontract commands act on standing production and service cost
     join journal_entries source on source.org_id=claim.org_id and source.id=claim.source_entry_id and source.status='posted'
     left join journal_entries cost on cost.org_id=claim.org_id and cost.id=claim.capitalization_entry_id
     where claim.org_id=${orgId} and claim.subcontract_id=${contractId} and claim.reversal_entry_id is null
+      -- Live entries only: subcontract commands act on standing production and service cost
       and (claim.amount=0 or cost.status='posted') for share of claim,bill,source`)).rows.length)
     refuse('The vendor service bill has not been recorded in this order’s WIP.','subcontract_service_cost_required','Post the dedicated service bill in Purchasing, then record its service cost on this subcontract. An explicit zero-value bill records a free service.');
   if(operation.status==='pending') await startWorkOrderOperation(tx,orgId,actorId,record.workOrderId,record.operationId);

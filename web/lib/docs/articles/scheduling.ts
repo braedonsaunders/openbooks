@@ -56,7 +56,7 @@ Every preset only fills the settings; all of them stay editable.
 In the **Grid**, select a cell and type a code. The list offers schedule
 codes, customers, projects and locations; Enter books it. Select a range
 first to book every selected cell at once. Text after a slash becomes the
-booking's detail (SUMMIT/kiln 2), and a trailing range books hours instead
+booking's detail (PLANT/kiln 2), and a trailing range books hours instead
 of the day (SHOP 6-14:30).
 
 The grid works like a spreadsheet: arrow keys and Tab move, Shift extends

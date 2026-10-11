@@ -276,6 +276,7 @@ export async function readManufacturingRecord(
     );
     await rows(
       "issues",
+      // Live entries only: the workspace lists standing production only
       sql`select m.id,i.name as "itemName",(-m.quantity)::text as quantity,p.base_unit as unit,l.code as location,m.lot_id as "lotId",m.serial_id as "serialId",t.lot_number as "lotNumber",s.serial_number as "serialNumber",m.journal_entry_id as "entryId",e.status,(-m.quantity-coalesce((select sum(allocation.quantity) from mfg_completion_inputs allocation join journal_entries receipt on receipt.org_id=allocation.org_id and receipt.id=allocation.completion_entry_id where allocation.org_id=m.org_id and allocation.input_movement_id=m.id and receipt.status='posted' and receipt.reverses_entry_id is null),0))::text as "unassignedQty",
       not exists(select 1 from inventory_movements reversal where reversal.org_id=m.org_id and reversal.reverses_movement_id=m.id and reversal.status='posted') as "liveIssue",m.created_at::text as "createdAt" from inventory_movements m join journal_entries e on e.org_id=m.org_id and e.id=m.journal_entry_id join items i on i.org_id=m.org_id and i.id=m.item_id join item_inventory_profiles p on p.org_id=m.org_id and p.item_id=m.item_id join stock_locations l on l.org_id=m.org_id and l.id=m.stock_location_id left join lots t on t.org_id=m.org_id and t.id=m.lot_id left join serials s on s.org_id=m.org_id and s.id=m.serial_id where m.org_id=${orgId} and e.origin='manufacturing' and e.custom->>'work_order_number'=${record.number} and m.kind='assembly_consume' ${subsidiaryVisibleFilter(sql`e.subsidiary_id`, scope)} order by m.created_at desc,m.id`,
     );
@@ -286,6 +287,7 @@ export async function readManufacturingRecord(
       from inventory_movements movement join journal_entries entry on entry.org_id=movement.org_id and entry.id=movement.journal_entry_id
       join item_inventory_profiles profile on profile.org_id=movement.org_id and profile.item_id=movement.item_id
       where movement.org_id=${orgId} and entry.origin='manufacturing' and entry.custom->>'work_order_number'=${record.number}
+        -- Live entries only: the workspace lists standing production only
         and entry.status='posted' and entry.reverses_entry_id is null and movement.status='posted' and movement.reverses_movement_id is null
         and movement.kind in('assembly_consume','assembly_build') and not exists(select 1 from inventory_movements reversal where reversal.org_id=movement.org_id and reversal.reverses_movement_id=movement.id and reversal.status='posted')
         ${subsidiaryVisibleFilter(sql`entry.subsidiary_id`,scope)} group by profile.base_unit order by profile.base_unit`);

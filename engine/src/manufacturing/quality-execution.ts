@@ -142,6 +142,7 @@ export async function assertWorkOrderQualityForReceipt(tx:SqlExecutor,orgId:stri
     from inventory_movements movement join journal_entries entry on entry.org_id=movement.org_id and entry.id=movement.journal_entry_id
     join mfg_work_orders work on work.org_id=movement.org_id and work.id=${workOrderId}
     where movement.org_id=${orgId} and movement.item_id=work.produced_item_id and movement.kind='assembly_build' and movement.quantity>0
+      -- Live entries only: only unreversed output can be inspected
       and movement.status='posted' and movement.reverses_movement_id is null and entry.status='posted' and entry.reverses_entry_id is null
       and entry.origin='manufacturing' and entry.custom->>'work_order_number'=work.number
     group by movement.lot_id,movement.serial_id`)).rows;

@@ -7,7 +7,7 @@ import { Briefcase, Building2, Clock, CornerDownLeft, MapPin, Tag } from 'lucide
 import { cn } from '@openbooks/ui'
 import { searchTargets } from './api'
 import { parseCellInput, targetHue, type BoardTarget, type ParsedInput } from './model'
-import type { BoardCode } from '@openbooks/engine/src/schedule-boards/window.ts'
+import type { BoardCode } from '@openbooks/engine/schedule-boards/window'
 
 export interface PickedTarget extends ParsedInput {
   readonly target: BoardTarget
@@ -21,7 +21,7 @@ export function codeTarget(code: BoardCode): BoardTarget {
 
 /**
  * The cell editor: type a code or name, pick a native target. A slash adds a
- * detail ("SUMMIT/kiln 2"); a trailing range books hours ("SHOP 6-14:30").
+ * detail ("PLANT/kiln 2"); a trailing range books hours ("SHOP 6-14:30").
  * Positioned over the cell being edited and rendered above the grid.
  */
 export function TargetPicker({

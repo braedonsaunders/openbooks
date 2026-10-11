@@ -75,6 +75,8 @@ const mockSources = new Map<string, string>([
   [
     'mock:db',
     `
+      export function ambientTenantOrgId() { return null }
+      export async function withBypassContext(work) { return work() }
       const state = globalThis[Symbol.for('openbooks.master-data-import-test')]
       const ids = { accounts: 'account-1', items: 'item-1', parties: 'party-1' }
 

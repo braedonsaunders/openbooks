@@ -8,7 +8,7 @@ import { refusalMessageFromBody } from '@/lib/api-error'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { ActionError } from '@braedonsaunders/appkit-errors'
 import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
@@ -44,6 +44,7 @@ import type { FormLayoutConfig, HeaderFieldPlacement } from '@openbooks/customiz
 import { cmp, fromUnits, mul, sum, toUnits } from '@openbooks/engine/src/money/money.ts'
 import { computeLineTaxes, type TaxComponentConfig } from '@openbooks/engine/src/tax/tax.ts'
 import { fromQuantityUnits, toQuantityUnits } from '../../../lib/order-cycle-math'
+import { viewerDateTime } from '@/lib/format'
 type Opt = {
   id: string
   display_name?: string
@@ -741,6 +742,7 @@ export function OrderDrawer({
 }) {
   const { money } = useMoney()
   const t = useTranslations('purchaseOrders.shared')
+  const viewerLocale = useLocale()
   const tEstimates = useTranslations('estimates')
   const tCommon = useTranslations('common')
   const tFulfillment = useTranslations('fulfillment')
@@ -1133,7 +1135,7 @@ export function OrderDrawer({
     if (!snapshot) return
     const restore = await confirmDialog({
       title: t('restoreDraftTitle'),
-      message: t('restoreDraftPrompt', { time: new Date(snapshot.savedAt).toLocaleString() }),
+      message: t('restoreDraftPrompt', { time: viewerDateTime(snapshot.savedAt, viewerLocale, Intl.DateTimeFormat(viewerLocale).resolvedOptions().timeZone) }),
       confirmLabel: t('restoreDraftConfirm'),
     })
     if (!restore) {

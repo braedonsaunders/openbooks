@@ -79,8 +79,10 @@ export async function traceManufacturingGenealogy(
           oi.name as "outputItem",output.lot_id as "outputLotId",output.serial_id as "outputSerialId",
           concat_ws(' / ',ol.lot_number,os.serial_number) as "outputIdentity",output.quantity::text as "outputQuantity"
         from inventory_movements component
+        -- Live entries only: genealogy follows unreversed production only
         join journal_entries ce on ce.org_id=component.org_id and ce.id=component.journal_entry_id and ce.origin='manufacturing' and ce.status='posted'
         join mfg_work_orders work on work.org_id=ce.org_id and work.number=ce.custom->>'work_order_number'
+        -- Live entries only: genealogy follows unreversed production only
         join journal_entries oe on oe.org_id=work.org_id and oe.custom->>'work_order_number'=work.number and oe.origin='manufacturing' and oe.status='posted'
         join inventory_movements output on output.org_id=oe.org_id and output.journal_entry_id=oe.id
         left join mfg_completion_batches batch on batch.org_id=oe.org_id and batch.completion_entry_id=oe.id and batch.work_order_id=work.id

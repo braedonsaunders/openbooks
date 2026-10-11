@@ -24,8 +24,10 @@ export async function readSubcontractWorkspace(tx:SqlExecutor,orgId:string,actor
   const contracts=(await tx.execute<{id:string;operationId:string;operationName:string;laborSource:string;vendorId:string;vendorName:string;custodyName:string;status:string;expected:string;returned:string;serviceRecorded:boolean}>(sql`select contract.id,contract.operation_id as "operationId",operation.name as "operationName",operation.labor_time_source as "laborSource",vendor.id as "vendorId",vendor.display_name as "vendorName",stock.code as "custodyName",contract.status,contract.quantity_expected::text as expected,
     (select coalesce(sum(quantity),0)::text from mfg_subcontract_returns where org_id=contract.org_id and subcontract_id=contract.id) as returned,
     exists(select 1 from mfg_subcontract_service_bills claim join documents bill on bill.org_id=claim.org_id and bill.id=claim.bill_id and bill.status='posted' and bill.posted_entry_id=claim.source_entry_id
+      -- Live entries only: the workspace reports standing production and service cost
       join journal_entries source on source.org_id=claim.org_id and source.id=claim.source_entry_id and source.status='posted'
       left join journal_entries cost on cost.org_id=claim.org_id and cost.id=claim.capitalization_entry_id
+      -- Live entries only: the workspace reports standing production and service cost
       where claim.org_id=contract.org_id and claim.subcontract_id=contract.id and claim.reversal_entry_id is null and (claim.amount=0 or cost.status='posted')) as "serviceRecorded"
     from mfg_subcontracts contract join mfg_wo_operations operation on operation.org_id=contract.org_id and operation.id=contract.operation_id
     join parties vendor on vendor.org_id=contract.org_id and vendor.id=contract.vendor_id join stock_locations stock on stock.org_id=contract.org_id and stock.id=contract.custody_location_id
@@ -64,6 +66,7 @@ export async function readSubcontractWorkspace(tx:SqlExecutor,orgId:string,actor
   }
   const reading=await payablesScope('ap.read'),posting=await payablesScope('ap.post');
   const canReadBills=reading.canUse,canRecordService=posting.canUse;
+  // Live entries only: the workspace reports standing production and service cost
   const hasOutput=(await tx.execute(sql`select id from inventory_movements where org_id=${orgId} and kind='assembly_build' and journal_entry_id in (select id from journal_entries where org_id=${orgId} and origin='manufacturing' and custom->>'work_order_number'=(select number from mfg_work_orders where org_id=${orgId} and id=${workOrderId}) and status='posted' and reverses_entry_id is null) limit 1`)).rows.length>0;
   const services=selected&&canReadBills?(await tx.execute<{id:string;billId:string;number:string;amount:string;entryId:string|null;reversalId:string|null;reason:string|null;date:string}>(sql`select claim.id,claim.bill_id as "billId",bill.document_number as number,claim.amount::text,claim.capitalization_entry_id as "entryId",claim.reversal_entry_id as "reversalId",claim.reversal_reason as reason,claim.created_at::text as date from mfg_subcontract_service_bills claim join documents bill on bill.org_id=claim.org_id and bill.id=claim.bill_id where claim.org_id=${orgId} and claim.subcontract_id=${selected.id} order by claim.created_at,claim.id`)).rows:[];
   const deliveries=selected?(await tx.execute<{id:string;quantity:string;final:boolean;reason:string|null;date:string}>(sql`select id,quantity::text,coalesce((request_snapshot->>'finish')::boolean,false) as final,finish_reason as reason,created_at::text as date from mfg_subcontract_returns where org_id=${orgId} and subcontract_id=${selected.id} order by created_at,id`)).rows:[];

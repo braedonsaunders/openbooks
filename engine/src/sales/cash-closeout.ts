@@ -407,7 +407,9 @@ export async function readTipsPayableExposure(
       join documents d on d.id = e.source_document_id and d.org_id = e.org_id
       left join parties p on p.id = l.party_id and p.org_id = l.org_id
      where l.org_id = ${orgId} and l.account_id = ${mapping}::uuid
-       and e.status = 'posted' and d.kind = 'cash_sale'
+       -- A voided sale's reversal posts against its original, so both statuses
+       -- are read and the pair nets to nothing.
+       and e.status in ('posted', 'reversed') and d.kind = 'cash_sale'
        and (${options.from ?? null}::date is null or d.document_date >= (${options.from ?? null})::date)
        and (${options.to ?? null}::date is null or d.document_date <= (${options.to ?? null})::date)
      group by l.party_id, p.display_name, d.document_date, d.document_number

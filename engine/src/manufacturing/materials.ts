@@ -522,6 +522,7 @@ export async function consumeSubcontractMaterials(
   const prior=(await tx.execute<{id:string;custom:Record<string,unknown>;status:string}>(sql`select id,custom,status from journal_entries where org_id=${orgId} and origin='manufacturing' and reverses_entry_id is null and custom->>'subcontract_consumption_key'=${requestKey} for share`)).rows[0];
   if(prior) {
     if(prior.custom.work_order_number!==original.number || prior.custom.subcontract_id!==subcontractId || canonicalJson(prior.custom.subcontract_consumption)!==canonicalJson(lines)) refuse('This consumption key already belongs to another request.','idempotency_key_conflict','Reload the subcontract or use a new request for a separate consumption.');
+    // Live entries only: a consumption already reversed by a standing entry cannot be reversed again
     if(prior.status!=='posted'||(await tx.execute(sql`select id from journal_entries where org_id=${orgId} and reverses_entry_id=${prior.id} and status='posted' limit 1`)).rows.length) refuse('This vendor consumption was reversed.','subcontract_consumption_reversed','Use a new request for a new vendor consumption; the reversal retains its history.');
     const movementIds=(await tx.execute<{id:string}>(sql`select id from inventory_movements where org_id=${orgId} and journal_entry_id=${prior.id} and kind='assembly_consume' order by id`)).rows.map(row=>row.id);
     return {entryId:prior.id,movementIds,replayed:true};

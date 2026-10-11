@@ -323,6 +323,7 @@ export async function previewDepreciation(
              e.entry_number, e.posting_date::text as posted_on, due.amount::text as amount
         from (values ${sql.join(dueTuples, sql`, `)}) as due(line_id, book_id, period_id, subsidiary_id, expense_id, accum_id, amount)
         join journal_entries e on e.org_id = ${orgId} and e.book_id = due.book_id and e.period_id = due.period_id
+         -- Live entries only: a reversed depreciation entry no longer covers its period
          and e.subsidiary_id = due.subsidiary_id and e.status = 'posted'
          and e.origin <> 'depreciation' and e.reverses_entry_id is null
        where (select coalesce(sum(jl.amount), 0) from journal_lines jl

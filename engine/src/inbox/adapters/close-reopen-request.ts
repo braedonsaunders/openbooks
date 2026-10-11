@@ -16,6 +16,7 @@ import { actorPermissionOn } from "../guard.ts";
 import { InboxError, type InboxAdapter } from "../registry.ts";
 import type { InboxItem, InboxListContext } from "../types.ts";
 import { inboxItemId } from "../types.ts";
+import { isUuid } from "../../platform/uuid.ts";
 
 type ReopenRow = {
   id: string;
@@ -79,7 +80,7 @@ export const closeReopenRequestAdapter: InboxAdapter = {
   },
   async lookup(ctx, sourceId) {
     if (!(await mayDecide(ctx))) return null;
-    if (!/^[0-9a-f-]{36}$/i.test(sourceId)) return null;
+    if (!isUuid(sourceId)) return null;
     const row = (await pendingRequests(ctx, sourceId))[0];
     return row ? toItem(row) : null;
   },

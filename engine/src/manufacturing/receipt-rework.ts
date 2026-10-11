@@ -23,6 +23,7 @@ export async function loadReceiptRework(tx:SqlExecutor,orgId:string,workOrderId:
 
 /** Only a live native issue of the original inspected stock accounts for its repair input. */
 export async function receiptReworkIssuedQuantity(tx:SqlExecutor,orgId:string,workOrderId:string,repair:NonNullable<Awaited<ReturnType<typeof loadReceiptRework>>>) {
+  // Live entries only: rework draws on unreversed receipts only
   return (await tx.execute<{quantity:string}>(sql`select coalesce(sum(-movement.quantity),0)::text as quantity from inventory_movements movement join journal_entries entry on entry.org_id=movement.org_id and entry.id=movement.journal_entry_id where movement.org_id=${orgId} and entry.origin='manufacturing' and entry.custom->>'work_order_number'=(select number from mfg_work_orders where org_id=${orgId} and id=${workOrderId}) and entry.status='posted' and entry.reverses_entry_id is null and movement.kind='assembly_consume' and movement.item_id=${repair.itemId} and movement.lot_id is not distinct from ${repair.lotId}::uuid and movement.serial_id is not distinct from ${repair.serialId}::uuid`)).rows[0]!.quantity;
 }
 
@@ -39,6 +40,7 @@ export async function assertReceiptReworkIssue(tx:SqlExecutor,orgId:string,actor
     and not exists(select 1 from serials where org_id=${orgId} and id=${repair.serialId} and hold_reason is not null)
     and not ${pendingInspectionHold(sql`${orgId}`,sql`${repair.lotId}::uuid`,sql`${repair.serialId}::uuid`,sql`${repair.id}::uuid`)} as allowed`)).rows[0]?.allowed;
   if(!allowed)throw new ManufacturingError('Another stock or inspection hold prevents this repair.',{code:'receipt_rework_other_hold',status:409,remedy:'Resolve the independent hold without clearing this failed inspection’s retained disposition.'});
+  // Live entries only: rework draws on unreversed receipts only
   if((await tx.execute(sql`select movement.id from inventory_movements movement join journal_entries entry on entry.org_id=movement.org_id and entry.id=movement.journal_entry_id where movement.org_id=${orgId} and entry.origin='manufacturing' and entry.custom->>'work_order_number'=(select number from mfg_work_orders where org_id=${orgId} and id=${workOrderId}) and entry.status='posted' and movement.kind='assembly_consume' limit 1`)).rows.length)
     throw new ManufacturingError('The failed receipt has already been issued to this repair.',{code:'receipt_rework_already_issued',status:409,remedy:'Review the retained issue; use its controlled reversal before recording another issue.'});
   return repair;
