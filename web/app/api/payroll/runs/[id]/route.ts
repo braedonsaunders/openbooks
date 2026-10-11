@@ -12,6 +12,7 @@ import { attributePayRunEntity, discardPayRun } from "@openbooks/engine/src/payr
 import { PayrollError } from "@openbooks/engine/src/payroll/error.ts";
 import { recordPayRunPayment } from '@openbooks/engine/src/payroll/payment.ts'
 import { assertPayRunNotStale } from '@openbooks/engine/src/payroll/readiness.ts'
+import { resolvePayrollProfileEmploymentLinks } from '@openbooks/engine/src/payroll/profile-employment.ts'
 import {
   assertPayRunApprovalReleased, payRunApprovalState,
 } from '@openbooks/engine/src/payroll/approval.ts'
@@ -25,6 +26,7 @@ import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import '../../../../../lib/feature-gates';
 import { aiRailsErrorResponse } from '../../../../../lib/ai-rails'
 import { guardSubsidiaryScope } from '../../../../../lib/authz'
+import { guardPayrollEmployees } from '../../subsidiary-scope'
 import { isUuid } from '../../../../../lib/list-params'
 import { canonicalDecimal } from '../../../../../lib/exact-decimal'
 import { decimalNullRefusal, suppliedValue } from '../../../../../lib/payroll-decimal-refusal'
@@ -66,6 +68,7 @@ const requestBodySchema = z.discriminatedUnion('action', [
   z.strictObject({ ...actionBody('submit-approval') }),
   z.strictObject({ ...actionBody('approval-state') }),
   z.strictObject({ ...actionBody('acknowledge-refusals') }),
+  z.strictObject({ ...actionBody('resolve-employment-links'), employeePartyIds: employeeIds('pass the employees to link as a list').optional() }),
   z.strictObject({ ...actionBody('attribute-entity'), subsidiaryId: payrollRunUuid('subsidiaryId', 'a subsidiary id', 'choose a subsidiary to attribute this run to') }),
   z.strictObject({ ...actionBody('commit') }),
 ])
@@ -613,6 +616,26 @@ export const POST = defineRoute({
           },
         })
         return NextResponse.json({ ok: true })
+      }
+      if (body.action === 'resolve-employment-links') {
+        // One-click repair for the readiness "no payroll link" blocker: link
+        // every unlinked profile that has exactly one active employment. The
+        // engine refuses the rest BY NAME (no employment, ended, several),
+        // so the response tells the operator who still needs a manual link.
+        const requested = Array.isArray(body.employeePartyIds) ? body.employeePartyIds.filter((id): id is string => typeof id === 'string') : undefined
+        if (requested?.length) {
+          const deniedEmployees = await guardPayrollEmployees(gate, requested)
+          if (deniedEmployees) return deniedEmployees
+        }
+        const links = await resolvePayrollProfileEmploymentLinks({
+          orgId: gate.user.orgId,
+          actorId: gate.user.id,
+          employeePartyIds: requested?.length ? requested : undefined,
+          reason: 'Pay-run readiness Resolve action',
+          dryRun: false,
+          allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+        })
+        return NextResponse.json({ ok: true, linked: links.linked, unresolved: links.unresolved })
       }
       if (body.action === 'email-stubs') {
         const result = await emailRunStubs(gate.user.orgId, id, gate.allowedSubsidiaryIds)

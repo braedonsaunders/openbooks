@@ -34,6 +34,8 @@ export interface ReadinessItem {
   employees: { partyId: string; name: string }[]
   detail?: string
   href?: string
+  /** One-click engine resolution, posted to the matching run action. */
+  action?: string
 }
 
 export interface Readiness {

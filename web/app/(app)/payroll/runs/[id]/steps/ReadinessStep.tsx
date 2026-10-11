@@ -5,9 +5,12 @@ import { READINESS_CODE_FALLBACK, type ReadinessItem, type Readiness, type Roste
 import { HeaderFact } from '../run-wizard-controls'
 import { useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { AlertTriangle, Beaker, Calculator, CheckCircle2, Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
+import { AlertTriangle, Beaker, Calculator, CheckCircle2, Link2, Loader2 } from 'lucide-react'
 import { Button, cn } from '@openbooks/ui'
+import { readApiErrorMessage } from '../../../../../../lib/api-error'
 import { HolidayAttestations } from '../HolidayAttestations'
 
 /* ------------------------------------------------------------------ */
@@ -53,7 +56,45 @@ export function ReadinessStep({
   fmt: (v: string | number | null | undefined) => string
 }) {
   const t = useTranslations('payroll')
+  const router = useRouter()
   const [acknowledged, setAcknowledged] = useState(false)
+  const [resolving, setResolving] = useState<string | null>(null)
+  const [linkResult, setLinkResult] = useState<{
+    linked: number
+    unresolved: { employeeName: string; reason: string | null }[]
+  } | null>(null)
+
+  /**
+   * One-click repair for the "no payroll link" blocker: link every unlinked
+   * profile with exactly one active employment. The engine refuses the rest
+   * by name, so the unresolved list tells the operator who still needs the
+   * Employees screen or the links import — then the panel refreshes.
+   */
+  const resolveLinks = async (item: ReadinessItem) => {
+    setResolving(item.code)
+    setLinkResult(null)
+    try {
+      const res = await fetch(`/api/payroll/runs/${runId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'resolve-employment-links',
+          employeePartyIds: item.employees.map((e) => e.partyId),
+        }),
+      })
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed'))
+      const j = await res.json()
+      setLinkResult({
+        linked: Array.isArray(j.linked) ? j.linked.length : 0,
+        unresolved: Array.isArray(j.unresolved) ? j.unresolved : [],
+      })
+      router.refresh()
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally {
+      setResolving(null)
+    }
+  }
 
   const blockers = readiness.items.filter((i) => i.severity === 'blocker')
   const warnings = readiness.items.filter((i) => i.severity === 'warning')
@@ -93,11 +134,23 @@ export function ReadinessStep({
               </p>
             )}
           </div>
-          {item.href && (
-            <Button asChild size="sm" variant="outline">
-              <Link href={item.href as never}>{t('wizard.readiness.fix')}</Link>
-            </Button>
-          )}
+          <div className="flex shrink-0 items-center gap-2">
+            {item.action === 'payroll.resolve-employment-links' && (
+              <Button size="sm" variant="outline" disabled={resolving !== null} onClick={() => resolveLinks(item)}>
+                {resolving === item.code ? (
+                  <Loader2 size={14} className="animate-spin" aria-hidden />
+                ) : (
+                  <Link2 size={14} aria-hidden />
+                )}
+                {t('wizard.readiness.linkEmployments')}
+              </Button>
+            )}
+            {item.href && (
+              <Button asChild size="sm" variant="outline">
+                <Link href={item.href as never}>{t('wizard.readiness.fix')}</Link>
+              </Button>
+            )}
+          </div>
         </li>
       ))}
     </ul>
@@ -187,6 +240,26 @@ export function ReadinessStep({
             {t('wizard.readiness.blockersTitle')}
           </h3>
           {list(blockers, 'blocker')}
+        </div>
+      )}
+
+      {linkResult && (
+        <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
+          <p className="text-sm font-medium text-slate-800 dark:text-slate-100">
+            {t('wizard.readiness.linksResolved', { count: linkResult.linked })}
+            {linkResult.unresolved.length > 0 &&
+              ` · ${t('wizard.readiness.linksUnresolved', { count: linkResult.unresolved.length })}`}
+          </p>
+          {linkResult.unresolved.length > 0 && (
+            <ul className="mt-2 ml-5 list-disc space-y-0.5 text-sm text-slate-600 dark:text-slate-300">
+              {linkResult.unresolved.map((entry) => (
+                <li key={entry.employeeName}>
+                  <span className="font-medium">{entry.employeeName}</span>
+                  {entry.reason ? `: ${entry.reason}` : ''}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
 

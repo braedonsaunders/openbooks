@@ -90,6 +90,13 @@ export interface ReadinessItem {
   detail?: string;
   /** Where the operator resolves it, when there is one obvious place. */
   href?: string;
+  /**
+   * A one-click engine resolution the operator can run from the readiness
+   * panel (stable code, e.g. payroll.resolve-employment-links). The UI posts
+   * it to the matching run action; the engine still refuses ambiguity by
+   * name, so the action never guesses.
+   */
+  action?: string;
 }
 
 export interface PayRunReadiness {
@@ -649,7 +656,7 @@ export async function payRunReadiness(
     severity: ReadinessSeverity,
     code: string,
     employees: ScopeRow[] = [],
-    extra: { detail?: string; href?: string } = {},
+    extra: { detail?: string; href?: string; action?: string } = {},
   ) => {
     items.push({
       severity, code,
@@ -869,7 +876,7 @@ export async function payRunReadiness(
 
   const employeesHref = "/entities/employees";
   const noEmployment = people.filter((p) => !p.has_employment_link);
-  if (noEmployment.length) flag("blocker", "employee.noEmployment", noEmployment, { href: employeesHref });
+  if (noEmployment.length) flag("blocker", "employee.noEmployment", noEmployment, { href: employeesHref, action: "payroll.resolve-employment-links" });
   const noWage = people.filter((p) => !p.has_wage);
   if (noWage.length) flag("blocker", "employee.noWage", noWage, { href: employeesHref });
 
