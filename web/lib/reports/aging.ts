@@ -172,6 +172,36 @@ interface OpenDocument {
   openTxn: string;
 }
 
+/**
+ * Document kinds that age as NEGATIVE opens against the side's control: credit
+ * memos plus the settlement documents that relieve them. A payment applied to
+ * a bill must net against it inside this one rebuild, and its unapplied
+ * remainder ages here as its own negative document — never as an unattributed
+ * Current lump through the control residual (which sees only the net) and
+ * never omitted from the detail (which reads documents only). Without this a
+ * settled bill drops out while its payment survives only in the residual, so
+ * the summary shows a negative Current bucket and the detail header reads
+ * bills gross against a smaller closing balance.
+ *
+ * Aging-only scope, deliberately NOT in the shared open-item kinds const: the
+ * operational tiles forecast cash need from collectible/payable lines, and
+ * paid cash is already out the door — a payment remainder there would
+ * double-count the outflow. Aging ties to the CONTROL account, so it must
+ * carry every control leg, including settlement remainders.
+ */
+const AP_NEGATIVE_KINDS = ["vendor_credit", "vendor_payment", "check"] as const;
+const AR_NEGATIVE_KINDS = ["customer_credit", "customer_payment"] as const;
+
+function agingKinds(side: AgingSide): { kinds: readonly string[]; negativeKinds: readonly string[] } {
+  // Population is the shared open-item kinds const (the same doorway as the
+  // tiles/cockpits) plus this side's settlement documents, which post
+  // open-item control legs when they relieve the balances above.
+  const base = side === "ap" ? AP_OPEN_ITEM_KINDS : AR_OPEN_ITEM_KINDS;
+  const negativeKinds = side === "ap" ? AP_NEGATIVE_KINDS : AR_NEGATIVE_KINDS;
+  const extra = negativeKinds.filter((kind) => !(base as readonly string[]).includes(kind));
+  return { kinds: [...base, ...extra], negativeKinds };
+}
+
 function openDocumentsSql(
   side: AgingSide,
   asOf: string,
@@ -179,7 +209,7 @@ function openDocumentsSql(
   orgId: string,
   orgBase: string,
   kinds: readonly string[],
-  creditKind: string,
+  negativeKinds: readonly string[],
   scope?: { partyId?: string; partyIsNull?: boolean; bucket?: AgingBucket; bookId?: string | null },
 ): SQL {
   // Account gate: the AP side admits liability_payable lines plus the
@@ -233,9 +263,13 @@ function openDocumentsSql(
     open_docs as (
       select dl.doc_id, dl.kind, dl.party_id, dl.document_number, dl.due, dl.age_days,
              dl.doc_currency, dl.txn_ccy, dl.func_ccy,
-             (case when dl.kind = ${creditKind} then -1 else 1 end)
+             -- Credits and settlement remainders present negative: a payment's
+             -- open is its UNAPPLIED remainder (gross control leg minus dated
+             -- applications), so a fully applied payment nets to zero and drops
+             -- out alongside the bill it relieved.
+             (case when dl.kind in (${sql.join(negativeKinds.map((kind) => sql`${kind}`), sql`, `)}) then -1 else 1 end)
                * (sum(dl.base_gross) - coalesce(sum(al.applied_base), 0)) as open_base,
-             (case when dl.kind = ${creditKind} then -1 else 1 end)
+             (case when dl.kind in (${sql.join(negativeKinds.map((kind) => sql`${kind}`), sql`, `)}) then -1 else 1 end)
                * (sum(dl.txn_gross) - coalesce(sum(al.applied_txn), 0)) as open_txn
         from doc_lines dl
         left join lateral (
@@ -340,13 +374,14 @@ export async function agingByParty(
   const resolvedOrgId = await resolveOrgId(orgId);
   // Population is the shared open-item kinds const — the same doorway as the
   // tiles/cockpits, so an outstanding expense report ages here instead of
-  // reaching the total only through the control residual (F-u1-P5.1).
-  const kinds = side === "ap" ? AP_OPEN_ITEM_KINDS : AR_OPEN_ITEM_KINDS;
-  const creditKind = side === "ap" ? "vendor_credit" : "customer_credit";
+  // reaching the total only through the control residual (F-u1-P5.1) — plus
+  // this side's settlement documents, whose unapplied remainders age as
+  // negative documents in this same rebuild.
+  const { kinds, negativeKinds } = agingKinds(side);
   const basis: AgingCurrencyBasis = opts?.basis ?? "base";
   const orgBase = await presentationCurrency(resolvedOrgId);
   const target = opts?.reportingCurrency ?? orgBase;
-  const docs = await openDocuments(side, asOf, dims, resolvedOrgId, orgBase, kinds, creditKind, {
+  const docs = await openDocuments(side, asOf, dims, resolvedOrgId, orgBase, kinds, negativeKinds, {
     bookId: opts?.bookId,
   });
   const residuals = await controlResiduals(side, asOf, dims, resolvedOrgId, orgBase, opts?.bookId);
@@ -591,7 +626,8 @@ function agingBucketSql(asOf: string, bucket?: AgingBucket) {
 /**
  * Per-open-item aging: the same canonical document-balance logic as
  * `agingByParty`, but one row per document rather than aggregated per party.
- * Credits are negative open items so the detail and summary always tie.
+ * Credits and settlement remainders are negative open items so the detail
+ * and summary always tie.
  */
 export async function agingDetail(
   side: AgingSide,
@@ -604,16 +640,16 @@ export async function agingDetail(
   // Same shared population as the summary above — detail and summary always tie.
   // The account gate rides inside the shared rebuild, so detail rows inherit
   // it: personal lines never surface here either.
-  const kinds = side === "ap" ? AP_OPEN_ITEM_KINDS : AR_OPEN_ITEM_KINDS
-  const creditKind = side === "ap" ? "vendor_credit" : "customer_credit"
+  const { kinds, negativeKinds } = agingKinds(side)
   const basis: AgingCurrencyBasis = opts?.basis ?? "base";
   const orgBase = await presentationCurrency(resolvedOrgId);
   const target = opts?.reportingCurrency ?? orgBase;
   // The same shared rebuild as the summary — detail rows can never disagree
   // with the summary buckets per document. Deliberately documents-only:
-  // control balances with no open item behind them (unapplied receipts,
-  // direct control journals) surface on the summary residual row, never here.
-  const docs = await openDocuments(side, asOf, dims, resolvedOrgId, orgBase, kinds, creditKind, {
+  // control balances with no open item behind them (direct control journals)
+  // surface on the summary residual row, never here. Settlement remainders
+  // are documents, so they read here as their own negative lines.
+  const docs = await openDocuments(side, asOf, dims, resolvedOrgId, orgBase, kinds, negativeKinds, {
     partyId: opts?.partyId,
     partyIsNull: opts?.partyIsNull,
     bucket: opts?.bucket,
@@ -664,13 +700,15 @@ export async function agingDetailPage(
   const target = opts.reportingCurrency ?? orgBase
   const currency = basis === 'transaction' ? sql`od.txn_ccy` : sql`od.func_ccy`
   const amount = basis === 'transaction' ? sql`od.open_txn` : sql`od.open_base`
+  // The same shared population as every other aging reader — a paged detail
+  // row can never disagree with the summary buckets per document.
+  const { kinds: pageKinds, negativeKinds: pageNegativeKinds } = agingKinds(side)
   const result = await db.execute<{
     rows: AgingDetailRow[] | null; total: string; totals: Record<string, string>; missing: string[] | null
   }>(sql`
     with open_document_rows as materialized (
       ${openDocumentsSql(side, asOf, dims, resolvedOrgId, orgBase,
-        side === 'ap' ? AP_OPEN_ITEM_KINDS : AR_OPEN_ITEM_KINDS,
-        side === 'ap' ? 'vendor_credit' : 'customer_credit', opts)}
+        pageKinds, pageNegativeKinds, opts)}
     ), currencies as (
       select distinct ${currency} as ccy from open_document_rows od where ${currency} <> ${target}
     ), rates as (
@@ -750,12 +788,11 @@ export async function agingSummaryAndDetail(
   opts?: AgingOptions,
 ): Promise<{ summary: AgingResult; detail: AgingDetailResult }> {
   const resolvedOrgId = await resolveOrgId(orgId);
-  const kinds = side === "ap" ? AP_OPEN_ITEM_KINDS : AR_OPEN_ITEM_KINDS;
-  const creditKind = side === "ap" ? "vendor_credit" : "customer_credit";
+  const { kinds, negativeKinds } = agingKinds(side);
   const basis: AgingCurrencyBasis = opts?.basis ?? "base";
   const orgBase = await presentationCurrency(resolvedOrgId);
   const target = opts?.reportingCurrency ?? orgBase;
-  const docs = await openDocuments(side, asOf, dims, resolvedOrgId, orgBase, kinds, creditKind, {
+  const docs = await openDocuments(side, asOf, dims, resolvedOrgId, orgBase, kinds, negativeKinds, {
     bookId: opts?.bookId,
   });
   const residuals = await controlResiduals(side, asOf, dims, resolvedOrgId, orgBase, opts?.bookId);
@@ -824,8 +861,9 @@ export async function agingCurrenciesInScope(
   const resolvedOrgId = await resolveOrgId(orgId);
   // Same shared population: an expense-report-only transaction currency must
   // still be offered by the selector, or the report cannot be read in the
-  // currency the customer actually owes.
-  const kinds = side === "ap" ? AP_OPEN_ITEM_KINDS : AR_OPEN_ITEM_KINDS;
+  // currency the customer actually owes. Settlement documents ride along, so
+  // a payment-only currency is offered too.
+  const { kinds } = agingKinds(side);
   const baseCurrency = await presentationCurrency(resolvedOrgId);
   const r = await db.execute<{ ccy: string }>(sql`
     select distinct d.currency as ccy
