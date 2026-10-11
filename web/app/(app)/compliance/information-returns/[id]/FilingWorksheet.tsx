@@ -24,6 +24,7 @@ import {
 import { filedBoxAmounts } from '@openbooks/engine/src/compliance/information-returns-boxes.ts'
 import type { FormBox } from '@openbooks/engine/src/compliance/information-returns.ts'
 import { promptDialog } from '../../../../../lib/prompt'
+import { readApiErrorMessage } from '../../../../../lib/api-error'
 import type { FilingDetail, RecipientRow } from '../../../../../lib/compliance'
 import { formatBoxAmount } from '../../../../../lib/information-return-format'
 
@@ -93,9 +94,10 @@ export function FilingWorksheet({
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
     })
-    const payload = (await res.json().catch(() => ({}))) as { error?: string }
+    // The refusal reads through the shared helper so message, remedy and
+    // code render instead of a bare fallback.
     if (!res.ok) {
-      setError(payload.error ?? t('errors.saveFailed'))
+      setError(await readApiErrorMessage(res, t('errors.saveFailed')))
       return null
     }
     startTransition(() => router.refresh())
@@ -151,9 +153,10 @@ export function FilingWorksheet({
         }),
       },
     )
+    // The refusal reads through the shared helper so message, remedy and
+    // code render instead of a bare fallback.
     if (!res.ok) {
-      const payload = (await res.json().catch(() => ({}))) as { error?: string }
-      setError(payload.error ?? t('errors.saveFailed'))
+      setError(await readApiErrorMessage(res, t('errors.saveFailed')))
       return
     }
     setEditing(null)

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Button, Input, Label, Select } from "@openbooks/ui";
+import { readApiErrorMessage } from "@/lib/api-error";
 
 /** Compute dialog for a fiscal-year provision: permanent differences, loss
  *  carryforward used, valuation allowance, and manual temporary differences. */
@@ -82,9 +83,11 @@ export function ProvisionComputeButton() {
           valuationAllowance: va || "0",
         }),
       });
+      // The refusal reads through the shared helper: the row mapper still
+      // matches the server text at the start while remedy and code render
+      // instead of a bare fallback.
       if (!res.ok) {
-        const json = (await res.json().catch(() => ({}))) as { error?: string };
-        setError(describeRowError(json.error));
+        setError(describeRowError(await readApiErrorMessage(res, t("computeFailed"))));
         return;
       }
       const json = (await res.json().catch(() => ({}))) as { runId?: unknown };

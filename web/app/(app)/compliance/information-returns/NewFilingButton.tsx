@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Button, Drawer, Input, Label, Select } from '@openbooks/ui'
+import { readApiErrorMessage } from '@/lib/api-error'
 
 /**
  * Open a year's filing. Creating and computing are one click here because the
@@ -25,9 +26,10 @@ export function NewFilingButton({ formTypes, defaultYear }: { formTypes: string[
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ taxYear: Number(form.taxYear), formType: form.formType }),
     })
+    // The refusal reads through the shared helper so message, remedy and
+    // code render instead of a bare fallback.
     if (!res.ok) {
-      const payload = (await res.json().catch(() => ({}))) as { error?: string }
-      setError(payload.error ?? t('errors.saveFailed'))
+      setError(await readApiErrorMessage(res, t('errors.saveFailed')))
       return
     }
     const filing = (await res.json()) as { id: string }

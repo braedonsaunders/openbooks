@@ -19,6 +19,7 @@ import type { RequirementPolicy } from '@openbooks/engine/src/compliance/complia
 import { useBusinessToday } from '../../../../components/business-date-provider'
 import { AttachmentPanel } from '../../../../components/attachment-panel'
 import { promptDialog } from '../../../../lib/prompt'
+import { readApiErrorMessage } from '../../../../lib/api-error'
 import type {
   CertificateRow,
   ComplianceClassRow,
@@ -139,9 +140,10 @@ export function VendorComplianceDrawer({
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
     })
+    // The refusal reads through the shared helper so message, remedy and
+    // code render instead of a bare fallback.
     if (!res.ok) {
-      const payload = (await res.json().catch(() => ({}))) as { error?: string }
-      setError(payload.error ?? t('errors.saveFailed'))
+      setError(await readApiErrorMessage(res, t('errors.saveFailed')))
       return false
     }
     startTransition(() => router.refresh())
@@ -227,8 +229,14 @@ export function VendorComplianceDrawer({
       // The refusal belongs to the row it refused — a request decided
       // elsewhere while this screen was open reads the server's reason
       // here, pinned to its row, rather than as a detached toast.
-      const payload = (await res.json().catch(() => ({}))) as { error?: string }
-      setRowError((prev) => ({ ...prev, [id]: payload.error ?? t('errors.saveFailed') }))
+      setRowError((prev) => {
+        const next = { ...prev }
+        delete next[id]
+        return next
+      })
+      void readApiErrorMessage(res, t('errors.saveFailed')).then((message) =>
+        setRowError((prev) => ({ ...prev, [id]: message })),
+      )
       return
     }
     startTransition(() => router.refresh())

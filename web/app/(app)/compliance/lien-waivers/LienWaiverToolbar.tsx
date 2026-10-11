@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Button, Drawer, Input, Label, Select } from '@openbooks/ui'
 import { useBusinessToday } from '../../../../components/business-date-provider'
+import { readApiErrorMessage } from '../../../../lib/api-error'
 
 const WAIVER_TYPES = [
   'conditional_progress',
@@ -83,9 +84,10 @@ export function LienWaiverToolbar({
         jurisdiction: form.jurisdiction || null,
       }),
     })
+    // The refusal reads through the shared helper so message, remedy and
+    // code render instead of a bare fallback.
     if (!res.ok) {
-      const payload = (await res.json().catch(() => ({}))) as { error?: string }
-      setError(payload.error ?? t('errors.saveFailed'))
+      setError(await readApiErrorMessage(res, t('errors.saveFailed')))
       return
     }
     const created = (await res.json()) as { id: string }

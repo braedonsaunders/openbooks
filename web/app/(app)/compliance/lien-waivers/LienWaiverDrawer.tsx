@@ -7,6 +7,7 @@ import { Alert, AlertDescription, Badge, Button, Input, Label, Select, Textarea,
 import { useBusinessToday } from '../../../../components/business-date-provider'
 import { AttachmentPanel } from '../../../../components/attachment-panel'
 import { promptDialog } from '../../../../lib/prompt'
+import { readApiErrorMessage } from '../../../../lib/api-error'
 import type { LienWaiverRow } from '../../../../lib/compliance'
 import { LienWaiverLegacyNotice } from './LienWaiverLegacyNotice'
 
@@ -62,9 +63,10 @@ export function LienWaiverDrawer({
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
     })
+    // The refusal reads through the shared helper so message, remedy and
+    // code render instead of a bare fallback.
     if (!res.ok) {
-      const payload = (await res.json().catch(() => ({}))) as { error?: string }
-      setError(payload.error ?? t('errors.saveFailed'))
+      setError(await readApiErrorMessage(res, t('errors.saveFailed')))
       return
     }
     startTransition(() => router.refresh())

@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Button } from '@openbooks/ui'
 import { confirmDialog } from '@/lib/confirm'
+import { readApiErrorMessage } from '@/lib/api-error'
 import { promptDialog } from '@/lib/prompt'
 import type { CancelRecognitionRequest } from '@/app/api/revenue/cancel-recognition/route'
 
@@ -51,9 +52,10 @@ export function CancelRecognitionButton({
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(requestBody),
       })
-      const data = await res.json().catch(() => ({}))
+      // The refusal reads through the shared helper so message, remedy and
+      // code render instead of a bare fallback.
       if (!res.ok) {
-        toast.error(typeof data.error === 'string' ? data.error : t('cancel.failed'))
+        toast.error(await readApiErrorMessage(res, t('cancel.failed')))
       } else if (res.status === 202) {
         toast.success(t('cancel.submitted'))
       } else {
