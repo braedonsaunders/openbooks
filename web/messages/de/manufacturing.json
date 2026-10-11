@@ -359,7 +359,10 @@
     "remaining": "Nach erfasstem Ausschuss sind noch {remaining} {unit} zu empfangen.",
     "shortClosed": "Unter der erwarteten Gutmenge abgeschlossen: {remaining} {unit}. Prüfen Sie den Abschlussgrund.",
     "allLoss": "Die gesamte geplante Ausgabe ist als Ausschuss erfasst. Sperren Sie den Auftrag zur Entscheidung; es wird kein Fertigwarenzugang erzeugt.",
-    "disposedLoss": "Arbeit durch genehmigten Verlust abgeschlossen."
+    "disposedLoss": "Arbeit durch genehmigten Verlust abgeschlossen.",
+    "releaseReadinessTitle": "Vor der Freigabe {count, plural, one {fehlt # Einrichtungsschritt} other {fehlen # Einrichtungsschritte}}",
+    "resolve": "Beheben",
+    "releaseBlocked": "Schließen Sie die auf diesem Auftrag aufgeführten Einrichtungsschritte ab, bevor Sie ihn freigeben."
   },
   "cockpit": {
     "work": "Arbeitsvorrat",

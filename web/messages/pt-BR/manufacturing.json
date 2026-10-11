@@ -359,7 +359,10 @@
     "remaining": "Restam {remaining} {unit} a receber após a perda registrada.",
     "shortClosed": "Concluído abaixo da produção boa esperada: {remaining} {unit}. Revise o motivo do encerramento.",
     "allLoss": "Toda a produção planejada foi registrada como refugo. Coloque a ordem em espera para definir a destinação; nenhuma entrada de produtos será criada.",
-    "disposedLoss": "Trabalho encerrado por perda aprovada."
+    "disposedLoss": "Trabalho encerrado por perda aprovada.",
+    "releaseReadinessTitle": "A liberação precisa antes de {count, plural, one {# etapa de configuração} other {# etapas de configuração}}",
+    "resolve": "Resolver",
+    "releaseBlocked": "Conclua as etapas de configuração listadas nesta ordem antes de liberá-la."
   },
   "cockpit": {
     "work": "Fila de trabalho",

@@ -166,6 +166,8 @@
     "./allocations/withholding-cost": "./src/allocations/withholding-cost.ts",
     "./payables/einvoice": "./src/payables/ap-einvoice.ts",
     "./einvoice/dates": "./src/einvoice/xml.ts",
-    "./einvoice/bank": "./src/einvoice/bank.ts"
+    "./einvoice/bank": "./src/einvoice/bank.ts",
+    "./manufacturing": "./src/manufacturing/public.ts",
+    "./hrm/change-requests": "./src/hrm/public-change-requests.ts"
   }
 }

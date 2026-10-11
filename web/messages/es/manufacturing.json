@@ -359,7 +359,10 @@
     "remaining": "Quedan {remaining} {unit} por recibir después de la merma registrada.",
     "shortClosed": "Finalizado por debajo de la producción buena esperada: {remaining} {unit}. Revise el motivo del cierre.",
     "allLoss": "Toda la producción prevista está registrada como merma. Ponga la orden en espera para decidir su disposición; no se creará una recepción de productos.",
-    "disposedLoss": "Trabajo cerrado mediante una pérdida aprobada."
+    "disposedLoss": "Trabajo cerrado mediante una pérdida aprobada.",
+    "releaseReadinessTitle": "La liberación necesita antes {count, plural, one {# paso de configuración} other {# pasos de configuración}}",
+    "resolve": "Resolver",
+    "releaseBlocked": "Complete los pasos de configuración indicados en esta orden antes de liberarla."
   },
   "cockpit": {
     "work": "Cola de trabajo",

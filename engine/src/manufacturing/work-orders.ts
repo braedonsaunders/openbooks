@@ -30,7 +30,7 @@ import { getAvailableToPromise } from "../inventory/availability.ts";
 import { bomRequiredQuantity, type BomQuantityBasis } from "../inventory/bom-scrap.ts";
 import { resolveProfile, assertStockLocationAdmitsSubsidiary } from "../inventory/profile-policy.ts";
 import { inventoryRequestHash } from "../inventory/action-idempotency.ts";
-import type { Runner } from "../inventory/contracts.ts";
+import { InventoryError, type Runner } from "../inventory/contracts.ts";
 import { assertInventoryAccountsPostable } from "../inventory/journal.ts";
 import { getOnHandWith,periodForDate, primaryBookId, subsidiaryCurrency } from "../inventory/position.ts";
 import { hourlyPayRate } from "../projects/pay-rate-basis.ts";
@@ -39,6 +39,7 @@ import { assertManufacturingFeature } from "./gate.ts";
 import { ManufacturingError, ManufacturingNotFoundError } from "./errors.ts";
 import { auditChange, compareDecimal, decimalValue, isoDate } from "./master-support.ts";
 import { getManufacturingPolicies } from "./policies.ts";
+import { setupEditorHref } from "./setup-editors.ts";
 import { backflushOperation } from "./materials.ts";
 import { manufacturingControlAccount, postManufacturingEntry } from "./journal.ts";
 import { checkPinnedOperatingProfileCommand, resolveOperatingProfileForCreate } from "../organization/operating-profiles.ts";
@@ -1158,6 +1159,121 @@ async function releaseOne(
     });
   }
   return { ...after, pendingApproval: false };
+}
+
+export interface ReleaseReadinessFinding {
+  code: string;
+  message: string;
+  remedy: string | null;
+  href: string;
+}
+
+/**
+ * Every prerequisite a draft work order still lacks before it can release,
+ * gathered at once instead of one refusal per attempt. Each check calls the
+ * same resolver the release uses (routing effectivity, locations, recipe,
+ * and each operation's department, labor, FX and overhead snapshot) at the
+ * order's governing date; when those pass, a rolled-back release attempt
+ * confirms the remaining invariants, so "ready" means the release would
+ * succeed now. A current diagnostic only: release re-checks authoritatively.
+ */
+export async function readWorkOrderReleaseReadiness(
+  tx: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  id: string,
+): Promise<{ status: "not_draft" | "ready" | "blocked"; findings: ReleaseReadinessFinding[] }> {
+  await assertManufacturingFeature(tx, orgId, "manufacturing");
+  await lockManufacturingOrderManageAuthority(tx, orgId, actorId, id);
+  const order = await loadOrder(tx, orgId, id);
+  if (order.status !== "draft") return { status: "not_draft", findings: [] };
+  const findings: ReleaseReadinessFinding[] = [];
+  const recorded = new Set<string>();
+  let savepoint = 0;
+  // Each check runs under its own savepoint so a refusal (or a statement
+  // the database rejects) leaves the remaining checks a usable transaction.
+  const attempt = async <T>(fallbackHref: string, work: () => Promise<T>): Promise<T | null> => {
+    const name = sql.raw(`release_readiness_${++savepoint}`);
+    await tx.execute(sql`savepoint ${name}`);
+    try {
+      const value = await work();
+      await tx.execute(sql`release savepoint ${name}`);
+      return value;
+    } catch (error) {
+      await tx.execute(sql`rollback to savepoint ${name}`);
+      const finding = error instanceof ManufacturingError && error.status !== 404
+        ? { code: error.code, message: error.message, remedy: error.remedy ?? null, href: setupEditorHref(error.code, fallbackHref) }
+        : error instanceof InventoryError
+          ? { code: "stock_location_unavailable", message: error.message, remedy: null, href: "/admin/setup/stock-locations" }
+          : null;
+      if (!finding) throw error;
+      const key = `${finding.code}\u0000${finding.message}`;
+      if (!recorded.has(key)) {
+        recorded.add(key);
+        findings.push(finding);
+      }
+      return null;
+    }
+  };
+  const orderHref = `/manufacturing/work-orders?record=${id}`;
+  const subsidiaryId = order.subsidiaryId;
+  if (!subsidiaryId) {
+    await attempt(orderHref, async () => refuse(`Work order ${order.number} has no subsidiary.`, "work_order_subsidiary_required", "Choose an operating subsidiary before release."));
+  }
+  const releaseDate = order.plannedStart ?? await releaseBusinessDate(tx, orgId);
+  const produced = await itemDetails(tx, orgId, order.producedItemId);
+  const routing = await attempt("/manufacturing/routings", () =>
+    activeRouting(tx, orgId, order.producedItemId, produced.code?.trim() || produced.name, releaseDate, order.routingId));
+  const issueLocationId = order.issueLocationId ?? routing?.default_issue_location_id ?? null;
+  const receiptLocationId = order.receiptLocationId ?? routing?.default_receipt_location_id ?? null;
+  if (routing && !issueLocationId) {
+    await attempt(orderHref, async () => refuse(`Work order ${order.number} has no issue location.`, "work_order_issue_location_required", "Choose an active stock location for material issue in the draft work order."));
+  }
+  if (routing && !receiptLocationId) {
+    await attempt(orderHref, async () => refuse(`Work order ${order.number} has no receipt location.`, "work_order_receipt_location_required", "Choose an active stock location for finished goods in the draft work order."));
+  }
+  if (subsidiaryId) {
+    if (issueLocationId) await attempt("/admin/setup/stock-locations", () => validateLocation(tx as Runner, orgId, subsidiaryId, issueLocationId, "outbound"));
+    if (receiptLocationId) await attempt("/admin/setup/stock-locations", () => validateLocation(tx as Runner, orgId, subsidiaryId, receiptLocationId, "inbound"));
+  }
+  await attempt(`/inventory?inventoryView=bom&bom=${order.producedItemId}`, () =>
+    explodeBom(tx, orgId, order.producedItemId, order.quantityOrdered, releaseDate));
+  if (routing && subsidiaryId) {
+    const operations = (await tx.execute<{
+      sequence: number; name: string; work_center_id: string; setup_minutes: string; run_minutes_per_unit: string;
+      backflush_at: string; quality_gate: string; labor_minutes_per_unit: string | null; labor_time_source: string;
+    }>(sql`
+      select sequence, name, work_center_id, setup_minutes::text, run_minutes_per_unit::text,
+             backflush_at, quality_gate, labor_minutes_per_unit::text, labor_time_source
+        from mfg_routing_operations where org_id=${orgId} and routing_id=${routing.id}
+       order by sequence`)).rows;
+    if (!operations.length) {
+      await attempt(`/manufacturing/routings?record=${routing.id}`, async () => refuse(`Routing version ${routing.version} for ${produced.code?.trim() || produced.name} has no operations.`, "routing_operations_required", "Add an operation to the active routing version."));
+    }
+    const functionalCurrency = await attempt("/admin/setup/company", () => releaseFunctionalCurrency(tx, orgId, order));
+    if (functionalCurrency) {
+      for (const operation of operations) {
+        await attempt("/manufacturing/work-centers", () =>
+          resolveOperationReleaseSnapshots(tx, orgId, order, [operation], routing, releaseDate, functionalCurrency));
+      }
+    }
+  }
+  if (!findings.length) {
+    // The itemized checks pass: a release attempt rolled back to a savepoint
+    // confirms everything else the release enforces (approval state,
+    // materials, by-products, inspection plans).
+    const name = sql.raw("release_readiness_attempt");
+    await tx.execute(sql`savepoint ${name}`);
+    try {
+      await releaseOne(tx, orgId, actorId, id, {});
+    } catch (error) {
+      await tx.execute(sql`rollback to savepoint ${name}`);
+      await attempt(orderHref, async () => { throw error; });
+      return { status: "blocked", findings };
+    }
+    await tx.execute(sql`rollback to savepoint ${name}`);
+  }
+  return { status: findings.length ? "blocked" : "ready", findings };
 }
 
 export async function releaseWorkOrder(

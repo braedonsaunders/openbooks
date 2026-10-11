@@ -359,7 +359,10 @@
     "remaining": "扣除已记录的报废后，仍需收货 {remaining} {unit}。",
     "shortClosed": "低于预计合格产出结束：{remaining} {unit}。请检查结单原因。",
     "allLoss": "全部计划产出均已登记为报废。请暂停工单并决定处置方式；不会生成成品入库。",
-    "disposedLoss": "作业已通过获批的损失处置关闭。"
+    "disposedLoss": "作业已通过获批的损失处置关闭。",
+    "releaseReadinessTitle": "下达前需先完成 {count} 个设置步骤",
+    "resolve": "处理",
+    "releaseBlocked": "请先完成此订单上列出的设置步骤，再下达。"
   },
   "cockpit": {
     "work": "工作队列",

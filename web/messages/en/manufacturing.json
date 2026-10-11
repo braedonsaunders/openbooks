@@ -359,7 +359,10 @@
     "remaining": "{remaining} {unit} remain to be received after recorded scrap.",
     "shortClosed": "Finished below expected good output: {remaining} {unit}. Review the recorded completion reason.",
     "allLoss": "All planned output is recorded as scrap. Hold the order for disposition; no goods receipt will be created.",
-    "disposedLoss": "Work disposed through an approved loss."
+    "disposedLoss": "Work disposed through an approved loss.",
+    "releaseReadinessTitle": "Release needs {count, plural, one {# setup step} other {# setup steps}} first",
+    "resolve": "Resolve",
+    "releaseBlocked": "Complete the setup steps listed on this order before releasing it."
   },
   "cockpit": {
     "work": "Work queue",

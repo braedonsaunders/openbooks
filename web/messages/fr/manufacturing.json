@@ -359,7 +359,10 @@
     "remaining": "Il reste {remaining} {unit} à réceptionner après les rebuts enregistrés.",
     "shortClosed": "Clôture avec une quantité manquante de {remaining} {unit}. Vérifiez le motif de clôture.",
     "allLoss": "Toute la production prévue est enregistrée comme rebut. Suspendez l’ordre pour décider de son traitement ; aucune réception de produits finis ne sera créée.",
-    "disposedLoss": "Travail clôturé par une perte approuvée."
+    "disposedLoss": "Travail clôturé par une perte approuvée.",
+    "releaseReadinessTitle": "Le lancement nécessite d’abord {count, plural, one {# étape de configuration} other {# étapes de configuration}}",
+    "resolve": "Résoudre",
+    "releaseBlocked": "Terminez les étapes de configuration indiquées sur cet ordre avant de le lancer."
   },
   "cockpit": {
     "work": "File de travail",

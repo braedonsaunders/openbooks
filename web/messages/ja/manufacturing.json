@@ -359,7 +359,10 @@
     "remaining": "記録した廃棄数量を差し引いた残りの受入数量は {remaining} {unit} です。",
     "shortClosed": "予定良品数量未達で終了：{remaining} {unit}。終了理由を確認してください。",
     "allLoss": "計画数量のすべてが不良として記録されています。処置を判断するため指図を保留してください。製品入庫は作成されません。",
-    "disposedLoss": "承認された損失によって作業を終了しました。"
+    "disposedLoss": "承認された損失によって作業を終了しました。",
+    "releaseReadinessTitle": "リリースの前に {count} 件の設定手順が必要です",
+    "resolve": "解決",
+    "releaseBlocked": "この指図に表示された設定手順を完了してからリリースしてください。"
   },
   "cockpit": {
     "work": "作業キュー",

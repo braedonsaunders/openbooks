@@ -18,6 +18,7 @@ import { resolveOperationReleaseSnapshots } from "./work-orders.ts";
 import { manufacturingControlAccount } from "./journal.ts";
 import { ManufacturingError, ManufacturingNotFoundError } from "./errors.ts";
 import { decimalValue } from './master-support.ts';
+import { setupEditorHref } from "./setup-editors.ts";
 
 export interface SetupFinding { key: string; status: "ready" | "missing" | "choose"; code?: string; message?: string; remedy?: string; href?: string }
 
@@ -45,12 +46,7 @@ export async function readOperatingSetupJourney(tx: SqlExecutor, orgId: string, 
       } else {
         if (!(error instanceof ManufacturingError)) throw error;
         if (error.status===404) throw error;
-        const editor = error.code.startsWith("component_") ? "/items"
-          : error.code.startsWith("machine_rate") ? "/manufacturing/work-centers"
-          : error.code.startsWith("mfg") || error.code.startsWith("laborClearing") ? "/admin/setup/company"
-          : error.code.startsWith("work_center") ? "/manufacturing/work-centers"
-          : error.code.startsWith("standard_overhead") ? "/admin/setup/overhead"
-          : error.code.includes("fx") ? "/admin/setup/fx-provider" : href;
+        const editor = setupEditorHref(error.code, href);
         findings.push({key,status:"missing",href:editor,code:error.code,message:error.message,remedy:error.remedy});
       }
     }
