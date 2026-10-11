@@ -196,6 +196,14 @@ function HealthScoreCard({ summary }: { summary: WidgetCardProps['data']['financ
   )
 }
 
+/** Headline context for the trend tiles. The revenue headline is one month's
+ * figure on a one-month dashboard period, so it names that period beside the
+ * trailing chart span — a bare span reads as a trailing-months headline. The
+ * margin tile carries no headline, so the span alone stays unambiguous. */
+export function trendTileContext({ margin, periodLabel, span }: { margin: boolean; periodLabel: string; span: string }): string {
+  return margin ? span : `${periodLabel} · ${span}`
+}
+
 function TrendTile({ widgetId, trend }: { widgetId: string; trend: WidgetCardProps['data']['financialTrend'] }) {
   const t = useTranslations('dashboard')
   const tf = useTranslations('analytics.financialHealth')
@@ -217,9 +225,7 @@ function TrendTile({ widgetId, trend }: { widgetId: string; trend: WidgetCardPro
       icon={<ChartArea size={14} />}
       href={HREF}
       headline={margin ? undefined : money(last.revenue, { maximumFractionDigits: 0 })}
-      context={margin
-        ? t('analytics.trailingMonths', { count: points.length })
-        : `${trend.value.periodLabel} · ${t('analytics.trailingMonths', { count: points.length })}`}
+      context={trendTileContext({ margin, periodLabel: trend.value.periodLabel, span: t('analytics.trailingMonths', { count: points.length }) })}
     >
       {margin ? (
         <TrendChart
