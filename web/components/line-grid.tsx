@@ -71,8 +71,9 @@ export interface LineGridColumn<Row extends Record<string, unknown>> {
    * Per-row edit gate for editable cells (line warehouse pickers): when
    * present and false for a row, the cell renders empty instead of a
    * control, so a picker never appears on a line it does not apply to
-   * (e.g. a non-stocked item). Read-only grids and readonly columns are
-   * unaffected. Defaults to editable.
+   * (e.g. a non-stocked item). The empty cell keeps its grid position, so
+   * every declared column still renders a cell on every row. Read-only
+   * grids and readonly columns are unaffected. Defaults to editable.
    */
   isCellEditable?: (row: Row, index: number) => boolean
   /** Renderer for readonly columns (computed cells, e.g. line tax). */
@@ -965,6 +966,7 @@ function RowCells<Row extends Record<string, unknown>>({
           return (
             <div
               key={c.key}
+              role="gridcell"
               className={cn(cellBase, 'px-2.5 text-sm', c.align === 'right' && 'justify-end tabular-nums')}
             >
               {display}
@@ -972,9 +974,19 @@ function RowCells<Row extends Record<string, unknown>>({
           )
         }
         // A row the column does not apply to keeps an empty cell — never a
-        // control with one meaningless choice, and never a stale label.
+        // control with one meaningless choice, and never a stale label. The
+        // cell keeps its grid position (role and row/column address) so a
+        // declared column can never render a header with no body cell.
         if (c.isCellEditable && !c.isCellEditable(row, i)) {
-          return <div key={c.key} className={cn(cellBase, 'px-2.5 text-sm')} />
+          return (
+            <div
+              key={c.key}
+              data-lg-row={i}
+              data-lg-col={colIndex}
+              role="gridcell"
+              className={cn(cellBase, 'px-2.5 text-sm')}
+            />
+          )
         }
         return (
             <div

@@ -273,7 +273,32 @@ test("a row edit gate exposes the warehouse picker only on applicable lines", as
   t.after(done);
 
   assert.ok(host.querySelector('[data-lg-row="0"][data-lg-col="4"] button'), "stocked line has an editable warehouse control");
-  assert.equal(host.querySelector('[data-lg-row="1"][data-lg-col="4"]'), null, "non-stocked line has no warehouse control");
+  const gated = host.querySelector('[data-lg-row="1"][data-lg-col="4"]');
+  assert.ok(gated, "the gated row still renders the warehouse cell position");
+  assert.equal(gated.querySelector("button, input, select"), null, "the gated cell offers no control");
+});
+
+test("every declared column renders a cell on every row, gated or read-only", async (t) => {
+  const rows = [
+    { ...line("stocked", "1"), itemId: "stocked-item", stockLocationId: "loc-1" },
+    { ...line("service", "2"), itemId: "service-item", stockLocationId: "" },
+  ];
+  for (const readOnly of [false, true]) {
+    const { host, done } = await mount(rows, false, readOnly);
+    try {
+      const bodyRows = [...host.querySelectorAll('[role="row"]')].slice(1);
+      assert.equal(bodyRows.length, 2, "both lines render");
+      for (const [n, row] of bodyRows.entries()) {
+        assert.equal(
+          row.querySelectorAll(':scope > [role="gridcell"]').length,
+          5,
+          `row ${n} renders a cell for every declared column (readOnly=${readOnly})`,
+        );
+      }
+    } finally {
+      await done();
+    }
+  }
 });
 
 test("Alt+Up keeps the moved line's typed qty off its neighbour", async (t) => {
