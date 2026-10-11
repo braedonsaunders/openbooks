@@ -1,7 +1,7 @@
 import { canonicalConnectionMappingConfig } from '@openbooks/engine/src/sync/connection-settings.ts';
 import "server-only";
 import { buildSource } from '@openbooks/engine/src/sync/connection.ts';
-import { decodeEntityMappings } from '@openbooks/engine/src/sync/entity-mapping-contract.ts';
+import { ConnectionMappingError, decodeEntityMappings } from '@openbooks/engine/src/sync/entity-mapping-contract.ts';
 import { validateConnectionEntityMappings } from '@openbooks/engine/src/sync/entity-mappings.ts';
 import { z } from "zod";
 import { and, eq } from "drizzle-orm";
@@ -102,7 +102,11 @@ export async function updateConnection(
         body.config as Record<string, unknown>,
       );
       try { merged = canonicalConnectionMappingConfig(merged, manifest.mappingGroups ?? [], Object.hasOwn(body.config, 'entityMappings')); }
-      catch (cause) { return { refusal: refused(400, { error: cause instanceof Error ? cause.message : 'Connection mappings are unavailable' }) }; }
+      catch (cause) {
+        if (cause instanceof ConnectionMappingError) return { refusal: refused(400, { error: cause.message }) };
+        console.error('[platform/connections] mapping config validation failed', cause);
+        return { refusal: refused(400, { error: 'Connection mappings are unavailable' }) };
+      }
       const urlError = await connectionConfigUrlRefusal(merged);
       if (urlError) return { refusal: refused(400, { error: urlError, errorCode: "CONNECTOR_URL_REFUSED" }) };
       const configError = validateSourceConfig(manifest, merged, { today });

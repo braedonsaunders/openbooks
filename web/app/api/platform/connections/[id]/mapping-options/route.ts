@@ -29,7 +29,11 @@ export const GET = defineRoute({
       if (!source.mappingOptions) return NextResponse.json({ error: "This connector maps standard records automatically and has no custom-field choices" }, { status: 422 });
       return NextResponse.json(await source.mappingOptions(field.key, query.data.parent));
     } catch (cause) {
-      return NextResponse.json({ error: cause instanceof Error ? cause.message : "Source mapping choices are unavailable; check the connection's read permissions and retry" }, { status: 422 });
+      // Source choices come straight from the connector adapter, so its
+      // errors are untrusted: they answer the static fallback while the
+      // cause stays in the server log.
+      console.error('[platform/connections] mapping options failed', cause);
+      return NextResponse.json({ error: "Source mapping choices are unavailable; check the connection's read permissions and retry" }, { status: 422 });
     }
   },
 });

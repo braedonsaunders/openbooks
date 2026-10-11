@@ -107,6 +107,20 @@ const object = (value: unknown, label: string): Record<string, unknown> => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} must be an object`);
   return value as Record<string, unknown>;
 };
+
+/**
+ * A connection-mapping refusal: saved or supplied mappings fail structural
+ * or catalog validation. It answers 400 with its message, which names only
+ * mapping keys and shapes from the operator's own configuration — never
+ * driver or adapter internals.
+ */
+export class ConnectionMappingError extends Error {
+  readonly status = 400;
+  constructor(message: string) {
+    super(message);
+    this.name = "ConnectionMappingError";
+  }
+}
 const scalar = (value: unknown): value is MappingScalar => typeof value === 'string' || typeof value === 'boolean' || (Array.isArray(value) && value.length <= 500 && value.every(entry => typeof entry === 'string' && entry.length > 0) && new Set(value).size === value.length);
 const identity = (value: unknown) => Array.isArray(value) ? `array:${JSON.stringify([...value].sort())}` : `${typeof value}:${String(value)}`;
 
@@ -114,35 +128,35 @@ const identity = (value: unknown) => Array.isArray(value) ? `array:${JSON.string
 export function decodeEntityMappings(value: unknown): ConnectionEntityMappings {
   if (value == null) return { version: 1, entities: {} };
   const raw = object(value, 'Entity mappings');
-  if (raw.version !== 1 || Object.keys(raw).some(key => !['version', 'entities', 'sourceOptions', 'unavailableRules'].includes(key))) throw new Error('Unsupported entity mapping version');
+  if (raw.version !== 1 || Object.keys(raw).some(key => !['version', 'entities', 'sourceOptions', 'unavailableRules'].includes(key))) throw new ConnectionMappingError('Unsupported entity mapping version');
   if (raw.sourceOptions !== undefined) object(raw.sourceOptions, 'Source options');
   if (raw.unavailableRules !== undefined) {
-    if (!Array.isArray(raw.unavailableRules) || raw.unavailableRules.length > 500) throw new Error('Invalid unavailable mapping rules');
+    if (!Array.isArray(raw.unavailableRules) || raw.unavailableRules.length > 500) throw new ConnectionMappingError('Invalid unavailable mapping rules');
     for (const entry of raw.unavailableRules) {
       const rule = object(entry, 'Unavailable mapping rule');
-      if (Object.keys(rule).some(key => !['key', 'value', 'reason'].includes(key)) || typeof rule.key !== 'string' || !rule.key || typeof rule.reason !== 'string' || !rule.reason || !Object.hasOwn(rule, 'value')) throw new Error('Invalid unavailable mapping rule');
+      if (Object.keys(rule).some(key => !['key', 'value', 'reason'].includes(key)) || typeof rule.key !== 'string' || !rule.key || typeof rule.reason !== 'string' || !rule.reason || !Object.hasOwn(rule, 'value')) throw new ConnectionMappingError('Invalid unavailable mapping rule');
     }
   }
   const entities = object(raw.entities, 'Mapped entities');
-  if (Object.keys(entities).length > 100) throw new Error('Too many mapped entities');
+  if (Object.keys(entities).length > 100) throw new ConnectionMappingError('Too many mapped entities');
   for (const [entity, rows] of Object.entries(entities)) {
-    if (!/^[a-zA-Z][a-zA-Z0-9_]{0,119}$/.test(entity) || !Array.isArray(rows) || rows.length > 200) throw new Error('Invalid entity mapping rows');
+    if (!/^[a-zA-Z][a-zA-Z0-9_]{0,119}$/.test(entity) || !Array.isArray(rows) || rows.length > 200) throw new ConnectionMappingError('Invalid entity mapping rows');
     const targets = new Set<string>();
     for (const row of rows) {
       const mapping = object(row, 'Field mapping');
       if (Object.keys(mapping).some(key => !['source', 'target', 'values', 'defaultValue', 'missing'].includes(key))
         || typeof mapping.target !== 'string' || !mapping.target || targets.has(mapping.target)
         || (mapping.source != null && (typeof mapping.source !== 'string' || !mapping.source))
-        || !['refuse', 'keep', 'default'].includes(String(mapping.missing))) throw new Error(`Invalid or duplicate field mapping in ${entity}`);
+        || !['refuse', 'keep', 'default'].includes(String(mapping.missing))) throw new ConnectionMappingError(`Invalid or duplicate field mapping in ${entity}`);
       targets.add(mapping.target);
-      if (mapping.defaultValue !== undefined && !scalar(mapping.defaultValue)) throw new Error('A mapping default must be a single value');
-      if ((mapping.missing === 'default' || mapping.source == null) && mapping.defaultValue === undefined) throw new Error('Choose a source field or supply a default value');
+      if (mapping.defaultValue !== undefined && !scalar(mapping.defaultValue)) throw new ConnectionMappingError('A mapping default must be a single value');
+      if ((mapping.missing === 'default' || mapping.source == null) && mapping.defaultValue === undefined) throw new ConnectionMappingError('Choose a source field or supply a default value');
       if (mapping.values != null) {
-        if (!Array.isArray(mapping.values) || mapping.values.length > 1000) throw new Error('Invalid value mappings');
+        if (!Array.isArray(mapping.values) || mapping.values.length > 1000) throw new ConnectionMappingError('Invalid value mappings');
         const seen = new Set<string>();
         for (const entry of mapping.values) {
           const pair = object(entry, 'Value mapping');
-          if (Object.keys(pair).some(key => !['source', 'target'].includes(key)) || !scalar(pair.source) || pair.source === '' || !scalar(pair.target) || seen.has(identity(pair.source))) throw new Error('Value mappings need unique, nonempty source values');
+          if (Object.keys(pair).some(key => !['source', 'target'].includes(key)) || !scalar(pair.source) || pair.source === '' || !scalar(pair.target) || seen.has(identity(pair.source))) throw new ConnectionMappingError('Value mappings need unique, nonempty source values');
           seen.add(identity(pair.source));
         }
       }

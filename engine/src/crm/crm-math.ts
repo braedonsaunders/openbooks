@@ -1,6 +1,19 @@
 import { cmp, fromUnits, mul, roundDiv, sum, toUnits } from "../money/money.ts";
 import type { Money } from "../money/brands.ts";
 
+/**
+ * An opportunity-math refusal: a line or contribution input violates its
+ * invariant (negative amounts, a non-100% split). It answers 422 with its
+ * message, which is a fixed literal — no input values are echoed.
+ */
+export class OpportunityMathError extends Error {
+  readonly status = 422;
+  constructor(message: string) {
+    super(message);
+    this.name = "OpportunityMathError";
+  }
+}
+
 export type CrmLifecycleStage = "lead" | "prospect" | "customer";
 
 const LIFECYCLE_RANK: Record<CrmLifecycleStage, number> = { lead: 0, prospect: 1, customer: 2 };
@@ -22,7 +35,7 @@ export function multiplyDecimal(a: string, b: string): Money {
 /** Exact weighted amount at an integer close probability. */
 export function weightAmount(amount: string, probability: number): Money {
   if (!Number.isInteger(probability) || probability < 0 || probability > 100) {
-    throw new Error("probability must be an integer from 0 to 100");
+    throw new OpportunityMathError("probability must be an integer from 0 to 100");
   }
   const product = toUnits(amount) * BigInt(probability);
   const rounded = (product + 50n) / 100n;
@@ -42,7 +55,7 @@ export function weightAmount(amount: string, probability: number): Money {
  */
 function weightSignedAmount(amount: string, probability: number): string {
   if (!Number.isInteger(probability) || probability < 0 || probability > 100) {
-    throw new Error("probability must be an integer from 0 to 100");
+    throw new OpportunityMathError("probability must be an integer from 0 to 100");
   }
   return fromUnits(roundDiv(toUnits(amount) * BigInt(probability), 100n));
 }
@@ -84,14 +97,14 @@ export interface OpportunityLineMathInput {
 export function computeOpportunityTotals(lines: OpportunityLineMathInput[], probability: number) {
   const calculated = lines.map((line) => {
     const amount = multiplyDecimal(line.quantity, line.unitPrice);
-    if (cmp(amount, "0") < 0) throw new Error("opportunity line amount cannot be negative");
+    if (cmp(amount, "0") < 0) throw new OpportunityMathError("opportunity line amount cannot be negative");
     const lineProbability = line.probability ?? probability;
     // Cost is optional and, when present, extends exactly as price does, so a
     // reader reconciling the stored cost_amount reproduces the writer's
     // rounding rather than its own.
     const unitCost = line.unitCost ?? null;
     if (unitCost !== null && cmp(unitCost, "0") < 0) {
-      throw new Error("opportunity line unit cost cannot be negative");
+      throw new OpportunityMathError("opportunity line unit cost cannot be negative");
     }
     const costAmount = unitCost === null ? null : multiplyDecimal(line.quantity, unitCost);
     // Deliberately NOT clamped at zero: a line sold below cost reports a
@@ -205,8 +218,8 @@ export function validateOpportunityStageTransition(
 
 export function validateContributionTotal(contributions: string[]): void {
   if (contributions.length === 0) return;
-  if (sum(contributions) !== "100.0000") throw new Error("sales-team contribution must total exactly 100%");
-  if (contributions.some((value) => cmp(value, "0") <= 0)) throw new Error("sales-team contribution must be positive");
+  if (sum(contributions) !== "100.0000") throw new OpportunityMathError("sales-team contribution must total exactly 100%");
+  if (contributions.some((value) => cmp(value, "0") <= 0)) throw new OpportunityMathError("sales-team contribution must be positive");
 }
 
 export type TerritoryRule = {

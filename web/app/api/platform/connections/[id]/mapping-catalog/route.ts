@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { defineRoute } from '@/lib/api/route';
 import { notFound } from '@/lib/api/responses';
 import { buildSource, getConnection } from '@openbooks/engine/src/sync/connection.ts';
-import { connectionEntityMappingMetadata, mappingReferenceChoices } from '@openbooks/engine/src/sync/entity-mappings.ts';
+import { connectionEntityMappingMetadata, EntityMappingError, mappingReferenceChoices } from '@openbooks/engine/src/sync/entity-mappings.ts';
 import { connectionConfigUrlRefusal } from '../../_connector-guard';
 
 export const runtime = 'nodejs';
@@ -34,7 +34,12 @@ export const GET = defineRoute({
       }
       return NextResponse.json({ entity: { ...entity, sourceFields: [...entity.sourceFields, ...(await source.mappingSourceFields?.(entity.key) ?? [])] } });
     } catch (cause) {
-      return NextResponse.json({ error: cause instanceof Error ? cause.message : 'Mapping metadata is unavailable; check source read access and retry' }, { status: 422 });
+      // Reference pickers refuse typed 422 at their origin; connector
+      // adapters and driver failures are untrusted, so they answer the
+      // static fallback while the cause stays in the server log.
+      if (cause instanceof EntityMappingError) return NextResponse.json({ error: cause.message }, { status: 422 });
+      console.error('[platform/connections] mapping catalog failed', cause);
+      return NextResponse.json({ error: 'Mapping metadata is unavailable; check source read access and retry' }, { status: 422 });
     }
   },
 });

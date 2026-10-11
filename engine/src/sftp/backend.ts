@@ -468,14 +468,28 @@ export function sftpTenantPrefix(orgId: string): string {
  * empty or dot segments. Returns the prefix unchanged — nothing is silently
  * rewritten into validity.
  */
+/**
+ * A root-prefix refusal: the requested prefix is malformed or escapes the
+ * owning tenant's namespace. It answers 400 with its message, which names
+ * only the expected namespace shape — the offending input itself is never
+ * echoed, so a traversal probe cannot be reflected back.
+ */
+export class SftpPrefixError extends Error {
+  readonly status = 400;
+  constructor(message: string) {
+    super(message);
+    this.name = "SftpPrefixError";
+  }
+}
+
 export function assertSafeRootPrefix(rootPrefix: string): string {
   const raw = typeof rootPrefix === "string" ? rootPrefix : "";
-  if (raw === "") throw new Error("sftp root prefix must not be empty");
-  if (raw.includes("\\")) throw new Error("sftp root prefix must not contain backslashes");
-  if (raw.includes("%")) throw new Error("sftp root prefix must not contain percent-encoding");
-  if (raw.startsWith("/")) throw new Error("sftp root prefix must be a relative path");
+  if (raw === "") throw new SftpPrefixError("sftp root prefix must not be empty");
+  if (raw.includes("\\")) throw new SftpPrefixError("sftp root prefix must not contain backslashes");
+  if (raw.includes("%")) throw new SftpPrefixError("sftp root prefix must not contain percent-encoding");
+  if (raw.startsWith("/")) throw new SftpPrefixError("sftp root prefix must be a relative path");
   if (raw.split("/").some((segment) => segment === "" || segment === "." || segment === "..")) {
-    throw new Error("sftp root prefix must not contain empty or dot segments");
+    throw new SftpPrefixError("sftp root prefix must not contain empty or dot segments");
   }
   return raw;
 }
@@ -486,11 +500,11 @@ export function assertSafeRootPrefix(rootPrefix: string): string {
  * prefix is refused exactly like a traversal. Returns the validated prefix.
  */
 export function assertTenantRootPrefix(rootPrefix: string, orgId: string): string {
-  if (!orgId) throw new Error("sftp root prefix requires the owning org id");
+  if (!orgId) throw new SftpPrefixError("sftp root prefix requires the owning org id");
   const safe = assertSafeRootPrefix(rootPrefix);
   const tenantPrefix = sftpTenantPrefix(orgId);
   if (safe !== tenantPrefix && !safe.startsWith(tenantPrefix + "/")) {
-    throw new Error(`sftp root prefix must stay under ${tenantPrefix}/`);
+    throw new SftpPrefixError(`sftp root prefix must stay under ${tenantPrefix}/`);
   }
   return safe;
 }

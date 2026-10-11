@@ -48,12 +48,16 @@ export const PUT = defineRoute({
     } catch(error) {
       // The editor highlights the offending component from the refusal, so
       // the overlap answers with its structured evidence at the top level —
-      // the same body the pre-consolidation route returned.
-      if (error instanceof BomPolicyError && error.code === 'bom_effectivity_overlap' && error.details) {
-        const componentItemId = (error.details as { componentItemId?: unknown }).componentItemId;
-        const windows = (error.details as { windows?: unknown }).windows;
-        if (typeof componentItemId === 'string' && Array.isArray(windows))
-          return NextResponse.json({ error: error.message, code: error.code, componentItemId, windows }, { status: 422 });
+      // the same body the pre-consolidation route returned. The evidence is
+      // the operator's own component and date windows, curated at the
+      // policy origin — never driver text.
+      if (error instanceof BomPolicyError) {
+        if (error.code === 'bom_effectivity_overlap' && error.details) {
+          const componentItemId = (error.details as { componentItemId?: unknown }).componentItemId;
+          const windows = (error.details as { windows?: unknown }).windows;
+          if (typeof componentItemId === 'string' && Array.isArray(windows))
+            return NextResponse.json({ error: error.message, code: error.code, componentItemId, windows }, { status: 422 });
+        }
       }
       return apiErrorResponse(error,{request});
     }

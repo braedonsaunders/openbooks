@@ -17,9 +17,23 @@ function customTarget(def: CustomFieldDef): EntityMappingField | null {
     options: ['choice', 'multi-choice'].includes(kind) ? (def.config.options ?? []).map(value => ({ value, label: value })) : undefined, help: def.config.helpText };
 }
 
+/**
+ * An entity-mapping refusal: the connector contract, reference picker, or
+ * choice lookup cannot serve the request. It answers 422 with its message,
+ * which names only catalog labels from the operator's own configuration —
+ * never driver or adapter internals.
+ */
+export class EntityMappingError extends Error {
+  readonly status = 422;
+  constructor(message: string) {
+    super(message);
+    this.name = "EntityMappingError";
+  }
+}
+
 /** Catalog reads and reference choices are explicitly organization-scoped, including under bypass callers. */
 export async function connectionEntityMappingMetadata(source: MappingSource, orgId: string, entityKey?: string): Promise<EntityMappingMetadata[]> {
-  if (!source.entityMappingMetadata) throw new Error('This connector has not declared its entity mapping contract');
+  if (!source.entityMappingMetadata) throw new EntityMappingError('This connector has not declared its entity mapping contract');
   const definitions = new Map<string, CustomFieldDef[]>();
   const output: EntityMappingMetadata[] = [];
   for (const entity of source.entityMappingMetadata.filter(entity => !entityKey || entity.key === entityKey)) {
@@ -34,7 +48,7 @@ export async function connectionEntityMappingMetadata(source: MappingSource, org
 
 function referenceTable(field: EntityMappingField): string {
   const table = field.referenceTable;
-  if (!table || (!(CUSTOM_FIELD_REFERENCE_TABLES as readonly string[]).includes(table) && !(field.sourceReference && table === 'payment_terms'))) throw new Error('This field has no supported native reference picker');
+  if (!table || (!(CUSTOM_FIELD_REFERENCE_TABLES as readonly string[]).includes(table) && !(field.sourceReference && table === 'payment_terms'))) throw new EntityMappingError('This field has no supported native reference picker');
   return table;
 }
 async function linkedReference(source: MappingSource, orgId: string, field: EntityMappingField, value: unknown): Promise<string> {
@@ -42,7 +56,7 @@ async function linkedReference(source: MappingSource, orgId: string, field: Enti
   const rows = (await db.execute<{ ref: string }>(sql`select custom->>${source.refKey} as ref from ${sql.identifier(table)} where org_id=${orgId}
     and (id::text=${String(value)} or custom->>${source.refKey}=${String(value)})
     ${field.allowedAccountTypes ? sql`and type=any(${field.allowedAccountTypes}::text[]) and is_active` : sql``}`)).rows;
-  if (rows.length !== 1 || !rows[0]!.ref) throw new Error(`Choose an eligible ${field.label} linked to this source in this organization`);
+  if (rows.length !== 1 || !rows[0]!.ref) throw new EntityMappingError(`Choose an eligible ${field.label} linked to this source in this organization`);
   return rows[0]!.ref;
 }
 export async function mappingReferenceChoices(orgId: string, field: EntityMappingField, source?: MappingSource, sourceValues = false, query = '', selected = ''): Promise<{ value: string; label: string }[]> {
@@ -50,8 +64,8 @@ export async function mappingReferenceChoices(orgId: string, field: EntityMappin
   // The native reference table whitelist supplies identifiers; configuration never supplies SQL identifiers.
   const columns = (await db.execute<{ column_name: string }>(sql`select column_name from information_schema.columns where table_schema='public' and table_name=${table}`)).rows.map(row => row.column_name);
   const label = ['display_name', 'name', 'document_number', 'code', 'number'].find(column => columns.includes(column));
-  if (!label || !columns.includes('org_id')) throw new Error('This native reference table has no supported organization-scoped display field');
-  if (sourceValues && (!source || !field.sourceReference)) throw new Error('This field has no source record picker');
+  if (!label || !columns.includes('org_id')) throw new EntityMappingError('This native reference table has no supported organization-scoped display field');
+  if (sourceValues && (!source || !field.sourceReference)) throw new EntityMappingError('This field has no source record picker');
   const choices = (await db.execute<{ value: string; label: string }>(sql`select ${sourceValues ? sql`custom->>${source!.refKey}` : sql`id::text`} as value,${sql.identifier(label)}::text as label from ${sql.identifier(table)} where org_id=${orgId}
     ${field.sourceReference && source ? sql`and nullif(custom->>${source.refKey},'') is not null` : sql``}
     ${field.allowedAccountTypes ? sql`and type=any(${field.allowedAccountTypes}::text[]) and is_active` : sql``}
@@ -62,7 +76,7 @@ export async function mappingReferenceChoices(orgId: string, field: EntityMappin
       and ${sourceValues ? sql`custom->>${source!.refKey}` : sql`id::text`}=${selected}
       ${field.sourceReference && source ? sql`and nullif(custom->>${source.refKey},'') is not null` : sql``}
       ${field.allowedAccountTypes ? sql`and type=any(${field.allowedAccountTypes}::text[]) and is_active` : sql``}`)).rows;
-    if (current.length > 1) throw new Error('The selected source record identity is ambiguous');
+    if (current.length > 1) throw new EntityMappingError('The selected source record identity is ambiguous');
     choices.push(...current);
   }
   return choices;

@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { mutateInsight } from "@/lib/insight-mutations";
 import { UNTITLED_CARD_NAME } from "@/lib/insight-untitled";
-import { validateInsightQuery } from "@openbooks/analytics";
+import { InsightValidationError, validateInsightQuery } from "@openbooks/analytics";
 import { isUuid } from "../../../../../../lib/list-params";
 import { loadCard } from "../../../_lib";
 import { notFound } from "@/lib/api/responses";
@@ -90,11 +90,11 @@ export const POST = defineRoute({
           try {
             validateInsightQuery(card.query);
           } catch (e) {
-            return apiErrorResponse(
-              e instanceof Error
-                ? new InsightPublishValidationRefusal(e.message)
-                : e,
-            );
+            // Query defects are typed at the validator with their message;
+            // the refusal keeps this route's 422 prefix, and anything else
+            // answers through the shared mapping.
+            if (e instanceof InsightValidationError) return apiErrorResponse(new InsightPublishValidationRefusal(e.message));
+            return apiErrorResponse(e);
           }
         }
 

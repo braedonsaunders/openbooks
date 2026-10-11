@@ -1,9 +1,9 @@
 import { z } from 'zod';
 import { defineRoute } from '@/lib/api/route';
+import { apiErrorResponse } from '@/lib/api/error-response';
 import { NextResponse } from 'next/server'
 import { randomUUID } from 'node:crypto'
-import { CashDepositError, recordCashDeposit } from "@openbooks/engine/src/ledger/cash-deposits.ts";
-import { DocumentEditError } from "@openbooks/engine/src/records/document-edit-policy.ts";
+import { recordCashDeposit } from "@openbooks/engine/src/ledger/cash-deposits.ts";
 import { DocumentCreateConflict } from "../../../../../lib/documents.ts";
 import { getAuthz, can } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
@@ -85,16 +85,14 @@ export const POST = defineRoute({
         { status: 201 },
       )
     } catch (error) {
-      if (error instanceof CashDepositError) {
-        return NextResponse.json({ error: error.message, remedy: error.remedy }, { status: error.status })
-      }
+      // Both domain errors are typed 4xx with their remedy at their origin,
+      // so the shared mapping carries them exactly as the branches did; the
+      // idempotency conflict keeps its stable code, and anything unexpected
+      // is logged with a request id instead of escaping as a thrown 500.
       if (error instanceof DocumentCreateConflict) {
         return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 409 })
       }
-      if (error instanceof DocumentEditError) {
-        return NextResponse.json({ error: error.message }, { status: error.status })
-      }
-      throw error
+      return apiErrorResponse(error)
     }
   },
 });

@@ -15,11 +15,24 @@ export function sftpScheduleFolderLockKey(orgId: string, sftpServerId: string): 
   return `sftp-schedule-folders:${orgId}:${sftpServerId}`;
 }
 
+/**
+ * A watch-folder refusal: the requested folder is empty or the server
+ * root itself. It answers 400 with its message, which carries only the
+ * expected shape — the offending input is never echoed.
+ */
+export class SftpWatchFolderError extends Error {
+  readonly status = 400;
+  constructor(message: string) {
+    super(message);
+    this.name = "SftpWatchFolderError";
+  }
+}
+
 /** Canonical root-relative POSIX folder used by both configuration and scans. */
 export function normalizeSftpWatchFolder(folder: string): string {
   const canonical = path.posix.normalize(`/${String(folder ?? "").trim()}`).replace(/^\/+|\/+$/g, "");
   if (!canonical || canonical === ".") {
-    throw new Error("an SFTP import schedule must name a folder below the server root");
+    throw new SftpWatchFolderError("an SFTP import schedule must name a folder below the server root");
   }
   return canonical;
 }

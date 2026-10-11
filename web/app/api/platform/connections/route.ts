@@ -1,6 +1,7 @@
 import { canonicalConnectionMappingConfig } from '@openbooks/engine/src/sync/connection-settings.ts';
 import { parseJsonBody } from "@/lib/api/json";
-import { decodeEntityMappings } from '@openbooks/engine/src/sync/entity-mapping-contract.ts';
+import { ConnectionMappingError, decodeEntityMappings } from '@openbooks/engine/src/sync/entity-mapping-contract.ts';
+import { apiErrorResponse } from '@/lib/api/error-response';
 import { defineRoute } from '@/lib/api/route'
 import { z } from "zod";
 import { NextResponse } from "next/server";
@@ -202,7 +203,13 @@ async function createConnectionRoute(req: Request) {
   }
   let config = declaredSourceConfig(manifest, suppliedConfig);
   try { config = canonicalConnectionMappingConfig(config, manifest.mappingGroups ?? []); }
-  catch (cause) { return NextResponse.json({ error: cause instanceof Error ? cause.message : 'Connection mappings are unavailable' }, { status: 400 }); }
+  catch (cause) {
+    // Mapping defects are typed 400 at their origin with the offending key;
+    // anything else (a corrupt saved shape) answers the static fallback.
+    if (cause instanceof ConnectionMappingError) return apiErrorResponse(cause);
+    console.error('[platform/connections] mapping config validation failed', cause);
+    return NextResponse.json({ error: 'Connection mappings are unavailable' }, { status: 400 });
+  }
   const urlError = await connectionConfigUrlRefusal(config);
   if (urlError) {
     return NextResponse.json(

@@ -21,6 +21,20 @@ import ssh2 from "ssh2";
  * refuses it when key material was supplied, and stores null otherwise).
  */
 
+/**
+ * An authorized-keys refusal: one or more pasted lines do not parse. It
+ * answers 400 naming the bad line numbers with the parser's diagnosis —
+ * the operator's own pasted text described line by line, never server
+ * internals.
+ */
+export class AuthorizedKeysError extends Error {
+  readonly status = 400;
+  constructor(message: string) {
+    super(message);
+    this.name = "AuthorizedKeysError";
+  }
+}
+
 /** Normalized key lines, ready to join with `\n` for storage. */
 export function validateAuthorizedKeys(input: string): string[] {
   const failures: string[] = [];
@@ -39,7 +53,7 @@ export function validateAuthorizedKeys(input: string): string[] {
     lines.push(normalized);
   });
   if (failures.length > 0) {
-    throw new Error(
+    throw new AuthorizedKeysError(
       `invalid authorized_keys (${failures.length} bad line${failures.length === 1 ? "" : "s"}): ${failures.join("; ")} — fix or remove the named lines and save again`,
     );
   }

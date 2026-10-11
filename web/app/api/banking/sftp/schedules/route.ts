@@ -25,16 +25,9 @@ const POSTBodySchema1 = z.object({
 export const runtime = 'nodejs'
 
 /**
- * The watch-folder validator throws a plain Error, so the sanitizer cannot
- * type-refuse it: carry its operator-actionable message in a named 400.
+ * The watch-folder validator is typed 400 at its origin, so the shared
+ * mapping carries its operator-actionable message and logs the rest.
  */
-class SftpScheduleRefusal extends Error {
-  readonly status = 400
-  constructor(message: string) {
-    super(message)
-    this.name = 'SftpScheduleRefusal'
-  }
-}
 const FORMATS = new Set(['auto', 'ofx', 'csv', 'camt053', 'bai2', 'mt940'])
 const requestId = (req: Request) => req.headers.get('x-request-id')?.trim() || randomUUID()
 
@@ -115,7 +108,7 @@ export const POST = defineRoute({
     try {
         folder = normalizeSftpWatchFolder(String(body.folder ?? 'inbound').trim() || 'inbound')
       } catch (error) {
-        return apiErrorResponse(new SftpScheduleRefusal(error instanceof Error ? error.message : String(error)))
+        return apiErrorResponse(error)
       }
     const expectedExternalAccountId = normalizeExternalAccountId(expectedExternalAccountInput)
     try {

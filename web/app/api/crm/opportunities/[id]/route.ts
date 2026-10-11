@@ -114,17 +114,9 @@ class OpportunityRevisionError extends Error {
   }
 }
 /**
- * Opportunity line/team math throws plain Errors (engine crm-math is pure
- * decimal validation with operator-actionable messages), so the sanitizer
- * cannot type-refuse them: carry the message in a named 422 refusal.
+ * Opportunity line/team math is typed 422 at its engine origin, so the
+ * shared mapping carries the operator-actionable message and logs the rest.
  */
-class OpportunityMathRefusal extends Error {
-  readonly status = 422
-  constructor(message: string) {
-    super(message)
-    this.name = 'OpportunityMathRefusal'
-  }
-}
 class OpportunityPermissionDenied extends Error {
   readonly response: NextResponse
   constructor(response: NextResponse) {
@@ -349,7 +341,7 @@ export const PATCH = defineRoute({
         })
         calculated = computeOpportunityTotals(lineMathInputs, probability)
       } catch (error) {
-        return apiErrorResponse(new OpportunityMathRefusal(error instanceof Error ? error.message : String(error)))
+        return apiErrorResponse(error)
       }
       for (const line of lines) {
         if (!line.itemId || !isUuid(line.itemId) || !((await db.execute(sql`select 1 from items where id = ${line.itemId} and org_id = ${user.orgId} and is_active`))).rows[0]) return NextResponse.json({ error: 'a valid item is required for every line' }, { status: 422 })
@@ -416,7 +408,7 @@ export const PATCH = defineRoute({
         if (wholeDigits(contribution) > 15) return NextResponse.json({ error: 'sales-team contributions must fit the ledger (at most 15 whole digits)' }, { status: 422 })
         teamRows.push({ ...member, contributionPercent: normalizeMoney(contribution) })
       }
-      try { validateContributionTotal(teamRows.map((member) => member.contributionPercent)) } catch (error) { return apiErrorResponse(new OpportunityMathRefusal(error instanceof Error ? error.message : String(error))) }
+      try { validateContributionTotal(teamRows.map((member) => member.contributionPercent)) } catch (error) { return apiErrorResponse(error) }
       if (teamRows.filter((member) => member.isPrimary).length !== 1) return NextResponse.json({ error: 'exactly one team member must be primary' }, { status: 422 })
       for (const member of teamRows) if (!await orgUuidExists('parties', member.employeeId, user.orgId)) return NextResponse.json({ error: 'invalid sales team member' }, { status: 422 })
     }

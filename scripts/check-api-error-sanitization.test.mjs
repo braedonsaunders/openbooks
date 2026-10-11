@@ -44,3 +44,10 @@ test('base-Error narrowing and mixed guarded unguarded reads stay refused', () =
   assert.deepEqual(scan('try { work() } catch (error) { if (error instanceof Error) { throw new HrmChangeRequestError("REFUSED", error.message) } throw error }'), [1])
   assert.deepEqual(scan('try { work() } catch (a) { try { work() } catch (b) { if (a instanceof HrmError) { throw new HrmChangeRequestError("REFUSED", a.message + b.message) } } }'), [1])
 })
+
+test('domain-narrowed response reads remain permitted; base-Error narrowed ones stay refused', () => {
+  assert.deepEqual(scan('try { work() } catch (error) { if (error instanceof WarehouseRefusal) { return NextResponse.json({ error: error.message, code: error.code }) } return unexpectedServerError("x", error) }'), [])
+  assert.deepEqual(scan('try { work() } catch (error) { if (error instanceof InventoryError) return NextResponse.json({ error: error.message }, { status: 422 }) }'), [])
+  assert.deepEqual(scan('try { work() } catch (error) { if (error instanceof Error) { return NextResponse.json({ error: error.message }) } throw error }'), [1])
+  assert.deepEqual(scan('try { work() } catch (error) { if (error instanceof InventoryError) { return NextResponse.json({ error: error.message }) } return NextResponse.json({ error: error.message }) }'), [1])
+})

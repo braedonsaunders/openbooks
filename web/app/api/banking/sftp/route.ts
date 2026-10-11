@@ -17,17 +17,10 @@ const POSTBodySchema1 = z.object({ name: z.string().trim().min(1), rootPrefix: z
 export const runtime = 'nodejs'
 
 /**
- * SFTP setup validation travels as plain Errors from the engine validators,
- * so the sanitizer cannot type-refuse them: carry the operator-actionable
- * message (bad key lines, out-of-namespace prefix) in a named 400 refusal.
+ * SFTP setup validation is typed 400 at the engine validators, so the
+ * shared mapping carries the operator-actionable message (bad key lines,
+ * out-of-namespace prefix) and logs anything unexpected.
  */
-class SftpSetupRefusal extends Error {
-  readonly status = 400
-  constructor(message: string) {
-    super(message)
-    this.name = 'SftpSetupRefusal'
-  }
-}
 
 /** List the org's SFTP servers (never returns secrets). */
 export const GET = defineRoute({
@@ -97,7 +90,7 @@ export const POST = defineRoute({
             return NextResponse.json({ error: `sftp root prefix must name a folder under sftp/${user.orgId}/` }, { status: 400 })
           }
         } catch (e) {
-          return apiErrorResponse(new SftpSetupRefusal(e instanceof Error ? e.message : String(e)))
+          return apiErrorResponse(e)
         }
       }
     let authorizedKeys: string | null = null
@@ -106,7 +99,7 @@ export const POST = defineRoute({
         try {
           lines = validateAuthorizedKeys(String(body.authorizedKeys))
         } catch (e) {
-          return apiErrorResponse(new SftpSetupRefusal(e instanceof Error ? e.message : String(e)))
+          return apiErrorResponse(e)
         }
         if (lines.length === 0) {
           return NextResponse.json(

@@ -1,4 +1,4 @@
-import { decodeEntityMappings, type ConnectionEntityMappings } from './entity-mapping-contract.ts';
+import { ConnectionMappingError, decodeEntityMappings, type ConnectionEntityMappings } from './entity-mapping-contract.ts';
 
 /** Serializable connector configuration shared by forms and native commands. */
 export const SYNC_CONTENT_KEYS = ['attachments', 'projectFinancials', 'crm', 'fixedAssets'] as const;
@@ -81,22 +81,22 @@ export function validateConnectionMappings(value: unknown, groups: readonly Mapp
   const fields = new Map(groups.flatMap((group) => group.fields.map((field) => [field.key, field] as const)));
   for (const [key, value] of Object.entries(raw)) {
     const field = fields.get(key);
-    if (!field) throw new Error(`Unsupported field mapping ${key}; this connector cannot apply it`);
+    if (!field) throw new ConnectionMappingError(`Unsupported field mapping ${key}; this connector cannot apply it`);
     if (value == null || value === '') continue;
     if (field.kind === 'identifier') {
-      if (typeof value !== 'string' || !/^[a-z][a-z0-9_]{0,119}$/i.test(value.trim())) throw new Error(`Field mapping ${key} must be a source field or record identifier`);
-      if (field.requires && !raw[field.requires]) throw new Error(`Field mapping ${key} requires ${field.requires}`);
+      if (typeof value !== 'string' || !/^[a-z][a-z0-9_]{0,119}$/i.test(value.trim())) throw new ConnectionMappingError(`Field mapping ${key} must be a source field or record identifier`);
+      if (field.requires && !raw[field.requires]) throw new ConnectionMappingError(`Field mapping ${key} requires ${field.requires}`);
     } else {
       const entries = Object.entries(objectValue(value, `Field mapping ${key}`));
-      if (!entries.length) throw new Error(`Field mapping ${key} needs at least one value`);
+      if (!entries.length) throw new ConnectionMappingError(`Field mapping ${key} needs at least one value`);
       const normalized = new Set<string>();
       for (const [source, target] of entries) {
         const identity = key === 'projectStatuses' ? source.trim().toLowerCase() : source.trim().toUpperCase();
-        if (!identity || normalized.has(identity)) throw new Error(`Field mapping ${key} has an empty or duplicate source value`);
+        if (!identity || normalized.has(identity)) throw new ConnectionMappingError(`Field mapping ${key} has an empty or duplicate source value`);
         normalized.add(identity);
         if (field.kind === 'tax') {
-          if (!field.targets?.includes(source) || typeof target !== 'string' || !/^-?\d+(\.\d+)?$/.test(target.trim())) throw new Error(`Tax fallback ${source} must use sales or purchase and a source tax-code id or rate`);
-        } else if (typeof target !== 'string' || !field.targets?.includes(target)) throw new Error(`Field mapping ${key} has an invalid target for ${source}`);
+          if (!field.targets?.includes(source) || typeof target !== 'string' || !/^-?\d+(\.\d+)?$/.test(target.trim())) throw new ConnectionMappingError(`Tax fallback ${source} must use sales or purchase and a source tax-code id or rate`);
+        } else if (typeof target !== 'string' || !field.targets?.includes(target)) throw new ConnectionMappingError(`Field mapping ${key} has an invalid target for ${source}`);
       }
     }
   }
@@ -136,7 +136,7 @@ export function migrateConnectionEntityMappings(value: unknown, legacy: unknown,
 
 export function validateStructuredConnectionMappings(value: unknown, groups: readonly MappingGroup[]): ConnectionEntityMappings {
   const model = decodeEntityMappings(value);
-  if (model.unavailableRules?.length) throw new Error('Remove or resolve the unavailable saved mapping rules before saving or syncing this connection');
+  if (model.unavailableRules?.length) throw new ConnectionMappingError('Remove or resolve the unavailable saved mapping rules before saving or syncing this connection');
   validateConnectionMappings(model.sourceOptions, groups);
   return model;
 }

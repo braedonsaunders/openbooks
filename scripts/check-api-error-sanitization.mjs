@@ -12,10 +12,12 @@ import { fileURLToPath } from 'node:url'
  * it. Three shapes stay permitted: plumbing built on the base Error class
  * (routes map unknown Errors to a logged 500, and the response rule still
  * guards their serialization); a call through a sanitizer (a callee named
- * *sanitiz*) which washes the taint by contract; and a construction inside
- * the consequent of an `instanceof` narrowing to a named domain error
- * (narrowing to the base Error class exempts nothing, since driver
- * failures are Errors too). */
+ * *sanitiz*) which washes the taint by contract; and a read inside the
+ * consequent of an `instanceof` narrowing to a named domain error —
+ * narrowing proves the message was curated at the class's own throw
+ * sites, whether the read feeds a response or a construction (narrowing
+ * to the base Error class exempts nothing, since driver failures are
+ * Errors too). */
 export function scanText(file, text) {
   const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
   const host = ts.createCompilerHost({ noLib: true, noResolve: true })
@@ -86,9 +88,6 @@ export function scanText(file, text) {
     }
   }
   const lineOf = (node) => source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1
-  const responseLines = responses
-    .filter((response) => response.arguments[0] && rawMessage(response.arguments[0]))
-    .map(lineOf)
   // instanceof-narrowed domain reads: the guard's consequent range per
   // caught binding, for targets other than the base Error class.
   const guards = guardCandidates
@@ -125,6 +124,14 @@ export function scanText(file, text) {
   function isBaseErrorConstruction(node) {
     return ts.isIdentifier(node.expression) && node.expression.text === 'Error'
   }
+  // Responses read through the same guard: a narrowed domain message is
+  // curated at its throw sites, so only unguarded reads are refused.
+  const responseLines = responses
+    .filter((response) => {
+      if (!response.arguments[0] || !rawMessage(response.arguments[0])) return false
+      return rawReads(response.arguments[0]).some((read) => !guarded(read))
+    })
+    .map(lineOf)
   const constructionLines = constructions
     .filter((constructed) => {
       if (!constructed.arguments || isBaseErrorConstruction(constructed)) return false
