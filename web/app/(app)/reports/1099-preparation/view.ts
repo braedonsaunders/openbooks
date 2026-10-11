@@ -14,17 +14,11 @@ import {
   type NecPreparationVendor,
 } from '@openbooks/engine/src/compliance/information-returns.ts'
 import {
-  badge,
-  column,
-  date,
   field,
-  link,
   money,
-  number,
   ref,
   summaryLine,
   table,
-  text,
   textBlock,
   toggleLinks,
   widget,
@@ -39,6 +33,13 @@ import { statementReportSpec } from '@/lib/reports/statement-report-spec'
 import { decimalSum } from '../../../../lib/statement-format'
 import { orgInfo } from '../../../../lib/data'
 import { necEmptyCause } from './empty-cause'
+import {
+  mapNecVendorRow,
+  necPaymentColumns,
+  necVendorColumns,
+  type NecPaymentRow,
+  type NecVendorRow,
+} from './vendor-table'
 
 /**
  * 1099-NEC preparation: per-vendor reportable amounts by box for a calendar
@@ -56,34 +57,7 @@ import { necEmptyCause } from './empty-cause'
 
 const ROUTE = '/reports/1099-preparation'
 
-export interface NecVendorRow {
-  rowKey: string
-  partyId: string
-  vendorName: string
-  /** Masked TIN (•••1234) or the translated missing-TIN message. */
-  tinText: string
-  box1: string
-  withheld: string
-  reportableTotal: string
-  thresholdFlag: 'reportable' | 'below' | 'excluded'
-  thresholdLabel: string
-  thresholdVariant: 'success' | 'secondary' | 'warning'
-  paymentCount: string
-  vendorHref: string
-  /** Formatted card-funded total, excluded by rule. */
-  cardPaid: string
-  /** Corporate, missing-form, unmapped-account and card notes; blank when clean. */
-  exclusionNote: string
-}
-
-export interface NecPaymentRow {
-  rowKey: string
-  paymentId: string
-  paymentDate: string
-  documentNumber: string
-  cash: string
-  paymentHref: string
-}
+export type { NecPaymentRow, NecVendorRow } from './vendor-table'
 
 export interface NecPreparationData {
   title: string
@@ -238,27 +212,18 @@ export async function loadNecPreparation(
   const visibleRows = query
     ? rawRows.filter((row) => row.vendorName.toLowerCase().includes(query))
     : rawRows
-  const rows: NecVendorRow[] = visibleRows.map((row) => {
-    const flag = row.belowThreshold ? 'below' as const : 'reportable' as const
-    const cardNote = Number(row.cardPaid) > 0 ? t('cardExcluded', { amount: m(row.cardPaid) }) : null
-    const notes = [...row.exclusionDetails, ...(cardNote ? [cardNote] : [])]
-    return {
-      rowKey: row.partyId,
-      partyId: row.partyId,
-      vendorName: row.vendorName,
-      tinText: row.tinLast4 ? `•••${row.tinLast4}` : tc('readiness.missingTin'),
-      box1: m(row.box1),
-      withheld: m(row.withheld),
-      reportableTotal: m(row.reportableTotal),
-      thresholdFlag: flag,
-      thresholdLabel: flag === 'below' ? t('thresholdBelow') : t('thresholdReportable'),
-      thresholdVariant: flag === 'below' ? 'secondary' : 'success',
-      paymentCount: String(row.paymentCount),
+  const rows: NecVendorRow[] = visibleRows.map((row) =>
+    mapNecVendorRow(row, {
+      formatMoney: m,
+      missingTinText: tc('readiness.missingTin'),
+      thresholdBelow: t('thresholdBelow'),
+      thresholdReportable: t('thresholdReportable'),
+      cardExcludedText: (amount) => t('cardExcluded', { amount }),
       vendorHref: buildHref(ROUTE, { year: String(year), vendor: row.partyId, q: pickString(sp.q) }),
-      cardPaid: m(row.cardPaid),
-      exclusionNote: notes.length > 0 ? notes.join('; ') : '',
-    }
-  })
+      vendorDrawerHref: `/compliance/vendors?vendor=${row.partyId}`,
+      boxRulesHref: '/admin/setup/information-return-box-rules',
+    }),
+  )
 
   const selected = selectedVendor ? rawRows.find((row) => row.partyId === selectedVendor) : undefined
   const traces = selected && computation
@@ -354,8 +319,6 @@ export async function loadNecPreparation(
 }
 
 const f = ref<NecPreparationData>()
-const row = field
-const payment = field
 
 export function necPreparationSpec(data: NecPreparationData): PageSpec {
   return statementReportSpec({
@@ -411,31 +374,29 @@ export function necPreparationSpec(data: NecPreparationData): PageSpec {
               : [table({
                   variant: 'report',
                   rows: f('rows'),
-                  rowKey: row('rowKey'),
-                  columns: [
-                    column(f('columnVendor'), text(row('vendorName'))),
-                    column(f('columnTin'), text(row('tinText'))),
-                    column(f('columnBox1'), money(row('box1')), { align: 'right' }),
-                    column(f('columnWithheld'), money(row('withheld')), { align: 'right' }),
-                    column(f('columnTotal'), money(row('reportableTotal')), { align: 'right' }),
-                    column(f('columnThreshold'), badge(row('thresholdLabel'), { variant: row('thresholdVariant') })),
-                    column(f('columnPayments'), link(number(row('paymentCount')), row('vendorHref')), { align: 'right' }),
-                    ...(data.hasCardPaid
-                      ? [column(f('columnCardPaid'), money(row('cardPaid')), { align: 'right' })]
-                      : []),
-                    column(f('columnNotes'), text(row('exclusionNote'))),
-                  ],
+                  rowKey: field('rowKey'),
+                  columns: necVendorColumns({
+                    vendor: f('columnVendor'),
+                    tin: f('columnTin'),
+                    box1: f('columnBox1'),
+                    withheld: f('columnWithheld'),
+                    total: f('columnTotal'),
+                    threshold: f('columnThreshold'),
+                    payments: f('columnPayments'),
+                    cardPaid: f('columnCardPaid'),
+                    notes: f('columnNotes'),
+                  }, { hasCardPaid: data.hasCardPaid }),
                 })]),
             ...(data.paymentsTitle
               ? [table({
                   variant: 'report',
                   rows: f('paymentRows'),
-                  rowKey: payment('rowKey'),
-                  columns: [
-                    column(f('columnDate'), date(payment('paymentDate'))),
-                    column(f('columnNumber'), link(text(payment('documentNumber')), payment('paymentHref'))),
-                    column(f('columnCash'), money(payment('cash')), { align: 'right' }),
-                  ],
+                  rowKey: field('rowKey'),
+                  columns: necPaymentColumns({
+                    date: f('columnDate'),
+                    number: f('columnNumber'),
+                    cash: f('columnCash'),
+                  }),
                 })]
               : []),
           ]),
