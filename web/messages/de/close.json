@@ -484,6 +484,7 @@
       "reopenRequests": "Wiedereröffnungsanfragen",
       "requestedBy": "Angefordert von {name}",
       "reopenActiveUntil": "Aktiv bis {date}",
+      "activeReopenWindows": "Aktive Wiedereröffnungen",
       "endReopenTitle": "Diese Wiedereröffnung beenden",
       "endReopenHint": "Das Beenden schließt alle Module, die dieses Fenster geöffnet hat, wieder und gibt die Periode für neue Wiedereröffnungsanfragen frei.",
       "endReopenReasonRequired": "Zum Beenden der Wiedereröffnung ist eine Begründung mit mindestens 10 Zeichen erforderlich.",

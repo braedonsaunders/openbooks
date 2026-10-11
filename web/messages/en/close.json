@@ -484,6 +484,7 @@
       "reopenRequests": "Reopen requests",
       "requestedBy": "Requested by {name}",
       "reopenActiveUntil": "Active until {date}",
+      "activeReopenWindows": "Active reopen windows",
       "endReopenTitle": "End this reopen",
       "endReopenHint": "Ending re-closes every module this window opened and frees the period for new reopen requests.",
       "endReopenReasonRequired": "A reason of at least 10 characters is required to end the reopen.",

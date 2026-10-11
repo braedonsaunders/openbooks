@@ -1411,7 +1411,24 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
     module: string;
     state: string;
   } | null>(null);
-  const [reason, setReason] = useState("");
+  // One reason draft per module: opening another module's close starts
+  // empty instead of prefilling the previous module's text, and a posted
+  // close clears only its own module's draft.
+  const [reasons, setReasons] = useState<Record<string, string>>({});
+  const reason = action ? (reasons[action.module] ?? "") : "";
+  function setReason(value: string) {
+    if (!action) return;
+    const module = action.module;
+    setReasons((prev) => ({ ...prev, [module]: value }));
+  }
+  function clearReason(module: string) {
+    setReasons((prev) => {
+      if (!(module in prev)) return prev;
+      const next = { ...prev };
+      delete next[module];
+      return next;
+    });
+  }
   const [includeGl, setIncludeGl] = useState(true);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -1493,6 +1510,8 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
   }, [action?.module, action?.state]);
   const [closeAllOverrides, setCloseAllOverrides] = useState<Record<string, string>>({});
   const [closeAllResults, setCloseAllResults] = useState<{ module: string; ok: boolean; error?: string }[] | null>(null);
+  // One end-window reason draft per active reopen request on this row.
+  const [endReasons, setEndReasons] = useState<Record<string, string>>({});
   async function generate() {
     setBusy(true);
     setGenerateError(null);
@@ -1615,8 +1634,9 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
               : "messages.lockSaved",
         ),
       );
+      const closedModule = action.module;
       setAction(null);
-      setReason("");
+      clearReason(closedModule);
       setIncludeGl(true);
       setBankingAck("");
       router.refresh();
@@ -1691,6 +1711,50 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
       setBusy(false);
     }
   }
+  // End one active window from the period row: the same audited
+  // reclose-reopen command as the request detail, so a stale window on
+  // already-closed modules can be cleared without opening the detail.
+  async function endActiveWindow(requestId: string) {
+    const windowReason = (endReasons[requestId] ?? "").trim();
+    if (windowReason.length < 10) {
+      const message = t("periods.endReopenReasonRequired");
+      setActionError(message);
+      toast.error(message);
+      return;
+    }
+    if (!row || !selectedBook) {
+      const message = t("periods.closeUnavailable");
+      setActionError(message);
+      toast.error(message);
+      return;
+    }
+    setBusy(true);
+    setActionError(null);
+    try {
+      await post(
+        { action: "reclose-reopen", requestId, reason: windowReason },
+        t("errors.actionFailed"),
+        t("periods.requestTimedOut"),
+      );
+      toast.success(t("messages.reopenEnded"));
+      setEndReasons((prev) => {
+        if (!(requestId in prev)) return prev;
+        const next = { ...prev };
+        delete next[requestId];
+        return next;
+      });
+      router.refresh();
+    } catch (error) {
+      const message =
+        error instanceof ApiResponseError
+          ? error.message
+          : t("errors.actionFailed");
+      setActionError(message);
+      toast.error(message);
+    } finally {
+      setBusy(false);
+    }
+  }
   if (creating)
     return (
       <UrlDrawer
@@ -1752,6 +1816,17 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
       item.period_id === row.id &&
       item.book_id === (selectedBook?.id ?? null) &&
       item.status === "requested",
+  );
+  // Approved windows still open on this period+book, from the same
+  // already-loaded setup-page list: a stale window whose modules were all
+  // re-closed reads approved here with no other user path to end it
+  // (a closed module row offers only Reopen), so the row offers End
+  // directly beside the pending requests.
+  const activeReopen = (props.reopenRequests ?? []).filter(
+    (item) =>
+      item.period_id === row.id &&
+      item.book_id === (selectedBook?.id ?? null) &&
+      item.status === "approved",
   );
   return (
     <UrlDrawer
@@ -1956,6 +2031,56 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
             ))}
           </div>
         ) : null}
+        {activeReopen.length > 0 && props.canReopen ? (
+          <div className="space-y-2">
+            <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+              {t("periods.activeReopenWindows")}
+            </h4>
+            {activeReopen.map((item) => {
+              const windowReason = endReasons[item.id] ?? "";
+              return (
+                <div
+                  key={item.id}
+                  className="space-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-800"
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="success">{t("reopenStates.approved")}</Badge>
+                    <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                      {(item.modules ?? [])
+                        .map((module) => t(`modules.${String(module)}`))
+                        .join(", ")}
+                    </span>
+                  </div>
+                  {typeof item.expires_at === "string" ? (
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      {t("periods.reopenActiveUntil", {
+                        date: String(item.expires_at).slice(0, 16).replace("T", " "),
+                      })}
+                    </p>
+                  ) : null}
+                  <Field label={t("fields.reason")}>
+                    <Textarea
+                      value={windowReason}
+                      onChange={(e) =>
+                        setEndReasons((prev) => ({ ...prev, [item.id]: e.target.value }))
+                      }
+                    />
+                  </Field>
+                  <div className="flex justify-end">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={busy || windowReason.trim().length < 10}
+                      onClick={() => endActiveWindow(item.id)}
+                    >
+                      {t("actions.endReopen")}
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
         {action ? (
           <div className="space-y-3 rounded-lg border border-teal-300 bg-teal-50/50 p-4 dark:border-teal-800 dark:bg-teal-950/20">
             <div>
@@ -2031,8 +2156,9 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
                     setCloseArmed(false);
                     return;
                   }
+                  const cancelledModule = action?.module;
                   setAction(null);
-                  setReason("");
+                  if (cancelledModule) clearReason(cancelledModule);
                   setIncludeGl(true);
                   setBankingAck("");
                 }}
@@ -2182,8 +2308,8 @@ function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
   const selfAttestationReady = selfAttested && selfAttestation.trim().length >= 10;
   // An approved window can be ended early or extended/widened instead of
   // opening an overlapping request. Both carry their own reason and are
-  // audited server-side; the server refuses a third party ending the
-  // window and a requester extending their own.
+  // audited server-side; ending requires the reopen permission and
+  // extending requires an independent approver.
   const [endReason, setEndReason] = useState("");
   const [extendReason, setExtendReason] = useState("");
   const [extendHours, setExtendHours] = useState("24");

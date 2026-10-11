@@ -484,6 +484,7 @@
       "reopenRequests": "Solicitações de reabertura",
       "requestedBy": "Solicitado por {name}",
       "reopenActiveUntil": "Ativo até {date}",
+      "activeReopenWindows": "Reaberturas ativas",
       "endReopenTitle": "Encerrar esta reabertura",
       "endReopenHint": "Encerrar fecha novamente cada módulo que esta janela abriu e libera o período para novas solicitações.",
       "endReopenReasonRequired": "É necessário um motivo com pelo menos 10 caracteres para encerrar a reabertura.",

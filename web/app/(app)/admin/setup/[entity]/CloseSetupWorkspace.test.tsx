@@ -700,3 +700,131 @@ test('sole-approver self-approval posts the attestation', async () => {
     }])
   } finally { await unmount(); globalThis.fetch = prior }
 })
+
+/** A stale approved window on already-closed modules can be ended from the
+ * period row itself: the row lists active windows with their own reason box
+ * and posts the same audited end command as the request detail. */
+test('the period row ends an active reopen window with its reason', async () => {
+  const bodies: unknown[] = []
+  const prior = globalThis.fetch
+  globalThis.fetch = (async (_input: unknown, init?: { body?: string }) => {
+    bodies.push(JSON.parse(String(init?.body ?? '{}')))
+    return Response.json({ ok: true })
+  }) as typeof fetch
+  const props = baseProps({ tab: 'periods', period: 'p1' })
+  props.periods = [{
+    id: 'p1',
+    name: 'Dec 2025',
+    starts_on: '2025-12-01',
+    ends_on: '2025-12-31',
+    entries: 0,
+    locks: { gl: { state: 'closed' }, ap: { state: 'closed' }, ar: { state: 'closed' } },
+    calendar_name: 'Gregorian',
+  }] as WorkspaceProps['periods']
+  props.reopenRequests = [{
+    id: 'r9', period_id: 'p1', book_id: 'b1', status: 'approved',
+    reason: 'stale correction window', modules: ['gl', 'ap', 'ar'],
+    period_name: 'Dec 2025', book_name: 'Main',
+    requester_name: 'Rae', approver_name: 'Ari',
+    expires_at: '2026-01-02T03:04:05.000Z',
+  }] as WorkspaceProps['reopenRequests']
+  const { unmount } = await mountWorkspace(props)
+  try {
+    const body = document.body.textContent ?? ''
+    assert.ok(body.includes(String(closeSetup.periods?.activeReopenWindows)), 'active windows list on the row')
+    assert.ok(body.includes('2026-01-02 03:04'), 'the row window expiry reads in human terms')
+    await act(async () => { clickButton(String(closeSetup.actions?.endReopen)).click(); await tick() })
+    assert.deepEqual(bodies, [], 'no end posts without a reason')
+    const boxes = [...document.querySelectorAll('textarea')]
+    assert.equal(boxes.length, 1, 'the row window asks for its own reason')
+    await act(async () => {
+      setNativeValue(boxes[0]!, 'Stale window; every module already re-closed')
+      await tick()
+    })
+    await act(async () => {
+      clickButton(String(closeSetup.actions?.endReopen)).click()
+      await tick()
+      await tick()
+    })
+    assert.deepEqual(bodies, [{
+      action: 'reclose-reopen',
+      requestId: 'r9',
+      reason: 'Stale window; every module already re-closed',
+    }])
+  } finally { await unmount(); globalThis.fetch = prior }
+})
+
+/** The per-module close reason starts empty for each module: opening
+ * another module's close must not prefill the previous module's text, and
+ * a posted close clears its own module's draft. */
+test('each module close starts with an empty reason', async () => {
+  const bodies: unknown[] = []
+  const prior = globalThis.fetch
+  globalThis.fetch = (async (_input: unknown, init?: { body?: string }) => {
+    bodies.push(JSON.parse(String(init?.body ?? '{}')))
+    return Response.json({ ok: true })
+  }) as typeof fetch
+  const props = {
+    ...baseProps({ tab: 'periods', period: 'p1' }),
+    periods: [partiallyClosedPeriod()],
+  } as unknown as WorkspaceProps
+  const { unmount } = await mountWorkspace(props)
+  try {
+    await act(async () => {
+      moduleRowCloseButton('Banking').click()
+      await tick()
+    })
+    const reasonBox = document.querySelector('[role="dialog"] textarea') as HTMLTextAreaElement | null
+    assert.ok(reasonBox, 'the banking close asks for a reason')
+    await act(async () => {
+      setNativeValue(reasonBox!, 'Banking reconciliations reviewed and signed')
+      await tick()
+    })
+    // Switching modules starts empty instead of prefilling banking's text.
+    await act(async () => {
+      moduleRowCloseButton('GL').click()
+      await tick()
+    })
+    const glBox = document.querySelector('[role="dialog"] textarea') as HTMLTextAreaElement | null
+    assert.ok(glBox, 'the GL close asks for a reason')
+    assert.equal(glBox!.value, '', 'the GL box starts empty after banking')
+    // Each module keeps its own draft while switching back and forth.
+    await act(async () => {
+      moduleRowCloseButton('Banking').click()
+      await tick()
+    })
+    const bankingBox = document.querySelector('[role="dialog"] textarea') as HTMLTextAreaElement | null
+    assert.equal(
+      bankingBox!.value,
+      'Banking reconciliations reviewed and signed',
+      'banking keeps its own draft',
+    )
+    // Posting the banking close clears only banking's draft.
+    await act(async () => {
+      clickButton(String(closeSetup.actions?.confirmClose)).click()
+      await tick()
+    })
+    await act(async () => {
+      clickButton(String(closeSetup.actions?.confirmClose)).click()
+      await tick()
+      await tick()
+    })
+    const locks = bodies.filter(
+      (entry) => (entry as { action?: string }).action === 'set-lock',
+    )
+    assert.deepEqual(locks, [{
+      action: 'set-lock',
+      periodId: 'p1',
+      bookId: 'b1',
+      module: 'banking',
+      state: 'closed',
+      reason: 'Banking reconciliations reviewed and signed',
+    }], 'the banking close posts once armed')
+    await act(async () => {
+      moduleRowCloseButton('Banking').click()
+      await tick()
+    })
+    const clearedBox = document.querySelector('[role="dialog"] textarea') as HTMLTextAreaElement | null
+    assert.equal(clearedBox!.value, '', 'the posted close clears its own draft')
+  } finally { await unmount(); globalThis.fetch = prior }
+})

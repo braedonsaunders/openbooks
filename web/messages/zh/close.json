@@ -484,6 +484,7 @@
       "reopenRequests": "重新开启申请",
       "requestedBy": "申请人 {name}",
       "reopenActiveUntil": "有效期至 {date}",
+      "activeReopenWindows": "有效的重开",
       "endReopenTitle": "结束此次重开",
       "endReopenHint": "结束后，此窗口打开的所有模块将重新关闭，该期间可接受新的重开申请。",
       "endReopenReasonRequired": "结束重开需要至少 10 个字符的理由。",

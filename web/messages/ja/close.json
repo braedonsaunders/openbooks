@@ -484,6 +484,7 @@
       "reopenRequests": "再オープン依頼",
       "requestedBy": "{name}が依頼",
       "reopenActiveUntil": "{date} まで有効",
+      "activeReopenWindows": "有効な再オープン",
       "endReopenTitle": "この再オープンを終了する",
       "endReopenHint": "終了すると、この期間で開いたすべてのモジュールが再び締められ、新しい再オープン依頼が可能になります。",
       "endReopenReasonRequired": "再オープンを終了するには10文字以上の理由が必要です。",

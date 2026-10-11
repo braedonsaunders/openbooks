@@ -484,6 +484,7 @@
       "reopenRequests": "Demandes de réouverture",
       "requestedBy": "Demandée par {name}",
       "reopenActiveUntil": "Actif jusqu'au {date}",
+      "activeReopenWindows": "Réouvertures actives",
       "endReopenTitle": "Terminer cette réouverture",
       "endReopenHint": "La clôture referme chaque module ouvert par cette fenêtre et libère la période pour de nouvelles demandes.",
       "endReopenReasonRequired": "Un motif d'au moins 10 caractères est requis pour terminer la réouverture.",
