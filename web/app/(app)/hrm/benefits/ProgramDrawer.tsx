@@ -47,7 +47,7 @@ export function ProgramDrawer({
   const router = useRouter()
   const [working, setWorking] = useState(false)
   const searchParams = useSearchParams()
-  const [tab, setTab] = useState(() => { const requested=searchParams.get('transactionTab'); return ['participants','activity','delivery','audit'].includes(requested ?? '') ? requested! : 'details' })
+  const [tab, setTab] = useState(() => { const requested=searchParams.get('transactionTab'); return ['participants','activity','audit'].includes(requested ?? '') ? requested! : 'details' })
   const [adding, setAdding] = useState(false)
   const [simulateFrom, setSimulateFrom] = useState(drawer.simulation?.periodFrom ?? '')
   const [simulateTo, setSimulateTo] = useState(drawer.simulation?.periodTo ?? '')
@@ -342,7 +342,6 @@ export function ProgramDrawer({
       )}
     </div>
   )
-  const deliveryRows = drawer.activity.filter(award => ['approved', 'queued', 'delivered'].includes(award.status))
   const memberManageable = canManage && program.status !== 'closed'
 
   const participants = (
@@ -483,11 +482,10 @@ export function ProgramDrawer({
       title={<span className="flex items-center gap-2">{program.name}<Badge variant={program.statusVariant}>{program.statusLabel}</Badge></span>}
       description={program.code} beforeClose={closeGuard.beforeClose}
       primaryAction={headerActions} actions={menuActions}
-      showAttachments={false} detailsLabel={t('programWorkspace.rules')} activeTab={tab} onActiveTabChange={setTab}
+      showAttachments={false} detailsLabel={t('programWorkspace.rules')} activeTab={tab} onActiveTabChange={setTab} mountAllRecordTabs
       detailTabs={[
         { key: 'participants', label: t('programWorkspace.participants'), content: participants },
         { key: 'activity', label: t(program.family === 'incentive' ? 'programWorkspace.calculations' : 'programWorkspace.activity'), content: activity },
-        { key: 'delivery', label: t('programWorkspace.delivery'), content: <div className="space-y-4 p-4"><p className="text-sm text-slate-500">{t('programWorkspace.deliveryHint')}</p>{drawer.activityRefusal ? <Alert variant="destructive">{drawer.activityRefusal.message}</Alert> : <AwardPortfolioTable rows={deliveryRows} text={tableText} total={deliveryRows.length} truncated={drawer.activityTruncated} />}</div> },
       ]}>
       <div className="flex flex-col gap-4 p-4">
         {drawer.drawerRefusal ? (

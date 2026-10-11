@@ -46,6 +46,11 @@ export interface TransactionDrawerProps {
   keepChildrenMounted?: boolean
   /** Retain all or named record panels after their first visit; unvisited panels stay lazy. */
   keepRecordTabsMounted?: boolean | readonly string[]
+  /**
+   * Mount every record panel when the drawer opens. For records whose panels
+   * render data the server already loaded, so switching tabs is immediate.
+   */
+  mountAllRecordTabs?: boolean
   /** Optional controlled tab state for record bodies that render tab-specific content themselves. */
   activeTab?: string
   onActiveTabChange?: (key: string) => void
@@ -111,6 +116,7 @@ function TransactionDrawerFrame({
   detailsLabel,
   keepChildrenMounted = false,
   keepRecordTabsMounted = false,
+  mountAllRecordTabs = false,
   activeTab: controlledActiveTab,
   onActiveTabChange,
   footer,
@@ -159,7 +165,7 @@ function TransactionDrawerFrame({
   } else if (keepRecordTabsMounted && !visitedRecordTabs.keys.has(activeTab)) {
     setVisitedRecordTabs({ recordId, keys: new Set([...visitedRecordTabs.keys, activeTab]) })
   }
-  const shouldMountRecordTab = (key: string) => activeTab === key || (
+  const shouldMountRecordTab = (key: string) => mountAllRecordTabs === true || activeTab === key || (
     visitedRecordTabs.keys.has(key) && (
       keepRecordTabsMounted === true || Array.isArray(keepRecordTabsMounted) && keepRecordTabsMounted.includes(key)
     )
@@ -253,7 +259,7 @@ function TransactionDrawerFrame({
       ) : undefined}
       footer={activeTab !== 'attachments' && activeTab !== 'audit' ? footer : undefined}
     >
-      {keepRecordTabsMounted ? (
+      {keepRecordTabsMounted || mountAllRecordTabs ? (
         <>
           <div hidden={activeTab !== 'details'}>{children}</div>
           {detailTabs.map((tab) => shouldMountRecordTab(tab.key) ? (
