@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { History } from 'lucide-react'
 import { Button, Input, Label, Popover, Select, Textarea } from '@openbooks/ui'
 import { useBusinessToday } from '../../../components/business-date-provider'
+import { readApiErrorMessage } from '../../../lib/api-error'
 
 type EventKindKey = 'revalued' | 'impaired' | 'disposed' | 'written_off' | 'reversed' | 'unknown'
 type BlockReasonKey = 'already_reversed' | 'accounting_change' | 'entry_not_posted' | 'later_event' | 'no_reversal_workflow'
@@ -73,7 +74,9 @@ export function ReverseEventButton({ assetId }: { assetId: string }) {
     setLoadError(false)
     try {
       const res = await fetch(`/api/assets/${encodeURIComponent(assetId)}/reverse-event`)
-      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? t('reverseEvent.loadFailed'))
+      // The refusal reads through the shared helper so message, remedy and
+      // code render instead of a bare fallback.
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, t('reverseEvent.loadFailed')))
       const data = (await res.json()) as { events?: CandidateEvent[] }
       const list = data.events ?? []
       setEvents(list)
@@ -100,7 +103,9 @@ export function ReverseEventButton({ assetId }: { assetId: string }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ eventId: selected.id, date, reason: reason.trim() }),
       })
-      if (!res.ok) { const failure = await res.json().catch(() => ({})); throw new Error(failure.error ?? tCommon('feedback.saveFailed')) }
+      // The refusal reads through the shared helper so message, remedy and
+      // code render instead of a bare fallback.
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, tCommon('feedback.saveFailed')))
       toast.success(t('reverseEvent.done'))
       setOpen(false)
       router.refresh()

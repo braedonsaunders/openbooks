@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Button, Card, CardContent, Input, Label, SearchSelect, Select } from '@openbooks/ui'
 import { useRecordSaveParticipant } from '@/components/record-save-participants'
+import { readApiErrorMessage } from '@/lib/api-error'
 
 interface AccountOpt {
   id: string
@@ -292,9 +293,10 @@ export function ItemCostingEditor({
           ),
         }),
       })
-      const result = (await res.json().catch(() => ({}))) as { error?: string }
+      // The refusal reads through the shared helper so message, remedy and
+      // code render instead of a bare fallback.
       if (!res.ok) {
-        const message = result.error ?? common('feedback.saveFailed')
+        const message = await readApiErrorMessage(res, common('feedback.saveFailed'))
         // A rejected save must persist as an inline error, not only a toast.
         setServerError(message)
         toast.error(message)

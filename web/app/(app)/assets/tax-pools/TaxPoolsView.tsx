@@ -9,6 +9,7 @@ import { Play, Settings2 } from 'lucide-react'
 import { Button, Card, CardContent, Input, Label, Select } from '@openbooks/ui'
 import { decimalCmp } from '../../../../lib/statement-format'
 import { formatDecimal } from '../../../../lib/money-format'
+import { readApiErrorMessage } from '../../../../lib/api-error'
 
 type Line = {
   classCode: string
@@ -62,7 +63,9 @@ export function TaxPoolsView({
         body: JSON.stringify({ regime: submittedRegime, taxYear: submittedTaxYear }),
       })
       const d = (await res.json().catch(() => ({}))) as RunResult & { error?: string }
-      if (!res.ok) throw new Error(d.error)
+      // The refusal reads through the shared helper so a missing reason
+      // renders the fallback instead of a blank throw.
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, tCommon('feedback.saveFailed')))
       if (id !== runId.current) return
       setResult({ ...d, regime: submittedRegime, taxYear: submittedTaxYear })
       toast.success(t('taxPools.done', { count: d.lines.length }))

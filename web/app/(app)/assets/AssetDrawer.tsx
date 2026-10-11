@@ -8,7 +8,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { ChevronDown } from 'lucide-react'
 import { toast } from 'sonner'
-import { fetchAction } from '@braedonsaunders/appkit-errors'
+import { fetchAppAction, readApiErrorMessage } from '../../../lib/api-error'
 import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
 import {
   Badge,
@@ -355,8 +355,12 @@ export function AssetDrawer({
       body: JSON.stringify({ ...(includeForm ? payloadBody : {}), ...extra, expectedUpdatedAt: includeForm ? revision : a.updated_at }),
     })
     if (!res.ok) {
-      const err = (await res.json().catch(() => null))?.error ?? t('drawer.saveFailed')
-      throw new Error(err === 'invalid_subsidiary' ? t('errors.invalidSubsidiary') : err)
+      // The body parses from a clone so the subsidiary code keeps its mapped
+      // copy while every other refusal reads through the shared helper with
+      // message, remedy and code.
+      const err = (await res.clone().json().catch(() => null))?.error
+      if (err === 'invalid_subsidiary') throw new Error(t('errors.invalidSubsidiary'))
+      throw new Error(await readApiErrorMessage(res, t('drawer.saveFailed')))
     }
     const saved = await res.json() as AssetPayload
     setRevision(saved.asset.updated_at)
@@ -380,16 +384,18 @@ export function AssetDrawer({
       body: JSON.stringify({ ...payloadBody, name: name.trim() }),
     })
     if (!res.ok) {
-      const body = await res.json().catch(() => null) as { error?: unknown; remedy?: unknown } | null
+      // The body parses from a clone so the idempotency and create codes
+      // keep their mapped copies while every other refusal reads through
+      // the shared helper with message, remedy and code.
+      const body = await res.clone().json().catch(() => null) as { error?: unknown; remedy?: unknown } | null
       const code = body?.error
       if (code === 'idempotency-conflict' && typeof body?.remedy === 'string' && body.remedy.trim()) {
         throw new Error(body.remedy)
       }
-      throw new Error(
-        typeof code === 'string' && (CREATE_ERROR_CODES as readonly string[]).includes(code)
-          ? t(`create.errors.${code}`)
-          : typeof code === 'string' ? code : t('create.errors.save_failed'),
-      )
+      if (typeof code === 'string' && (CREATE_ERROR_CODES as readonly string[]).includes(code)) {
+        throw new Error(t(`create.errors.${code}`))
+      }
+      throw new Error(await readApiErrorMessage(res, t('create.errors.save_failed')))
     }
     const data = (await res.json()) as { id?: unknown }
     if (typeof data.id !== 'string' || !data.id) throw new Error(t('create.errors.save_failed'))
@@ -456,7 +462,7 @@ export function AssetDrawer({
     }))) return
     setBusy(true)
     try {
-      await deleteAction.execute(() => fetchAction(`/api/assets/${a.id}`, { method: 'DELETE' }), {
+      await deleteAction.execute(() => fetchAppAction(`/api/assets/${a.id}`, { method: 'DELETE' }, { fallback: t('drawer.saveFailed') }), {
         fallbackMessage: t('drawer.saveFailed'),
         successMessage: t('drawer.deleted'),
         onOk: () => { router.push('/assets'); router.refresh() },

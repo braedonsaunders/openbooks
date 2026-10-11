@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { Scale } from 'lucide-react'
 import { Button, Input, Label, Popover } from '@openbooks/ui'
 import { useBusinessToday } from '../../../components/business-date-provider'
+import { readApiErrorMessage } from '../../../lib/api-error'
 
 type RemeasurementKindKey = 'revalued' | 'impaired' | 'unknown'
 
@@ -45,7 +46,9 @@ export function RemeasureButton({ assetId }: { assetId: string }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ newCarryingValue: value.trim(), date }),
       })
-      if (!res.ok) { const error = await res.json().catch(() => ({})); throw new Error(error.error ?? tCommon('feedback.saveFailed')) }
+      // The refusal reads through the shared helper so message, remedy and
+      // code render instead of a bare fallback.
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, tCommon('feedback.saveFailed')))
       const d = (await res.json()) as { kind?: string; delta?: string }
       const kind = t(`remeasure.kinds.${remeasurementKindKey(d.kind)}`)
       toast.success(t('remeasure.done', { kind, delta: d.delta ?? '0' }))

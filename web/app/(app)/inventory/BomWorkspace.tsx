@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { useDirtyClose } from '@/lib/use-dirty-close'
+import { readApiErrorMessage } from '@/lib/api-error'
 import { toast } from 'sonner'
 import { Plus } from 'lucide-react'
 import { Button, Label, SearchSelect, Textarea, UrlDrawer } from '@openbooks/ui'
@@ -197,9 +198,10 @@ export function BomDrawer({
         const targetId = assemblyItemId
         const query = targetId ? `?assemblyItemId=${encodeURIComponent(targetId)}` : ''
         const res = await fetch(`/api/inventory/bom${query}`)
+        // The refusal reads through the shared helper so message, remedy and
+        // code render instead of a bare fallback.
         if (!res.ok) {
-          const data = await res.json().catch(() => ({}))
-          throw new Error(typeof data.error === 'string' ? data.error : tCommon('feedback.loadFailed'))
+          throw new Error(await readApiErrorMessage(res, tCommon('feedback.loadFailed')))
         }
         const data = await res.json() as {
           manufacturingEnabled?: boolean
@@ -368,7 +370,10 @@ export function BomDrawer({
       if (requestRef.current?.body !== body) requestRef.current = {body,key:crypto.randomUUID()}
       const res = await fetch('/api/inventory/bom', {method:'PUT',headers:{'content-type':'application/json','Idempotency-Key':requestRef.current.key},body})
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
+        // The body parses from a clone so the overlap windows keep their
+        // mapped copy while every other refusal reads through the shared
+        // helper with message, remedy and code.
+        const data = await res.clone().json().catch(() => ({})) as { code?: unknown; componentItemId?: unknown; windows?: unknown }
         if (data.code === 'bom_effectivity_overlap' && typeof data.componentItemId === 'string') {
           const component = items.find((item) => item.id === data.componentItemId)
           const windows = Array.isArray(data.windows) ? data.windows.join(' and ') : ''
@@ -377,7 +382,7 @@ export function BomDrawer({
             windows,
           }))
         }
-        throw new Error(typeof data.error === 'string' && data.error.trim() ? data.error : tCommon('feedback.saveFailed'))
+        throw new Error(await readApiErrorMessage(res, tCommon('feedback.saveFailed')))
       }
       const result = await res.json() as {changeId?:string;version?:string|null}
       setOriginalLines(lines)

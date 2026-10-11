@@ -1,6 +1,7 @@
 'use client'
 
 import { useBusinessToday } from '@/components/business-date-provider'
+import { readApiErrorMessage, refusalMessageFromBody } from '@/lib/api-error'
 import { useMoney } from '@/components/money-provider'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
@@ -54,9 +55,13 @@ export function defaultRateTiers(
   }]
 }
 
+/**
+ * A decoded refusal body renders through the shared vocabulary (message,
+ * nested error, remedy, code) instead of only the error field. Callers pass
+ * the already-parsed body; the shared helper never invents locale copy.
+ */
 function errorMessage(payload: unknown, fallback: string): string {
-  if (payload && typeof payload === 'object' && 'error' in payload && typeof payload.error === 'string') return payload.error
-  return fallback
+  return refusalMessageFromBody(payload, { fallback }) ?? fallback
 }
 
 export function ItemRatesEditor({
@@ -108,7 +113,9 @@ export function ItemRatesEditor({
     setLoadError('')
     setData(null)
     return fetch(`/api/items/${itemId}/rates`).then(async (res) => {
-      if (!res.ok) throw new Error(t('loadFailed'))
+      // The refusal reads through the shared helper so the server's reason
+      // renders instead of a bare fallback.
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, t('loadFailed')))
       const next = await res.json() as RateData
       setData(next)
       setLoadState('loaded')

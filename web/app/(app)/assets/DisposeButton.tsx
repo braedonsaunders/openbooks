@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { PackageX } from 'lucide-react'
 import { Button, Input, Label, Popover, Select } from '@openbooks/ui'
 import { useBusinessToday } from '../../../components/business-date-provider'
+import { readApiErrorMessage } from '../../../lib/api-error'
 
 type AccountOpt = { value: string; label: string }
 
@@ -36,7 +37,9 @@ export function DisposeButton({ assetId, accountOptions }: { assetId: string; ac
           proceedsAccountId: writeOff ? undefined : account || undefined,
         }),
       })
-      if (!res.ok) { const failure = await res.json().catch(() => ({})); throw new Error(failure.error ?? tCommon('feedback.saveFailed')) }
+      // The refusal reads through the shared helper so message, remedy and
+      // code render instead of a bare fallback.
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, tCommon('feedback.saveFailed')))
       const d = (await res.json()) as { gainLoss?: string; status?: string }
       toast.success(t('dispose.done', { gainLoss: d.gainLoss ?? '0' }))
       setOpen(false)

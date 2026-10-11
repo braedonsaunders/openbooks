@@ -1,6 +1,7 @@
 'use client'
 
 import { useMoney } from '@/components/money-provider'
+import { refusalMessageFromBody } from '@/lib/api-error'
 import { PagedTable } from '@/components/paged-table'
 import { JournalEntryLink } from '@/components/journal-entry-link'
 import Link from 'next/link'
@@ -224,7 +225,10 @@ export function RunDepreciationDrawer({
       case 'period_not_found':
         return t('review.errScope')
       default:
-        return code ?? `${fallback} (status ${res.status})`
+        // Unmapped refusals render the server's message with remedy and
+        // code instead of the raw code, which names no remedy.
+        return refusalMessageFromBody(body, { fallback: `${fallback} (status ${res.status})` })
+          ?? code ?? `${fallback} (status ${res.status})`
     }
   }
 
