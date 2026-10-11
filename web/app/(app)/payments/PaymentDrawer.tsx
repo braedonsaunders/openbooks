@@ -359,6 +359,17 @@ export function PaymentDrawer({
   }>({ key: '', rates: [] })
   const settlementRates = settlementRateResult.key === settlementRateKey ? settlementRateResult.rates : []
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
+  // The revision token the last successful save was fenced on. The saved
+  // row's new token arrives with the refreshed record seconds later; until
+  // the prop catches up, posting would fire with the pre-save token and
+  // 409 against the row the save just wrote. Post stays disabled across
+  // that settling window with the reason visible, instead of silently
+  // doing nothing on a stale revision.
+  const [saveFromRevision, setSaveFromRevision] = useState<string | null>(null)
+  const saveSettling = saveFromRevision !== null && doc.updated_at === saveFromRevision
+  useEffect(() => {
+    setSaveFromRevision(null)
+  }, [doc.id])
   // A refused save/post must stay visible past its toast: the
   // typed refusal pins as a record-level alert until the next action, and
   // busy always releases through the shared path's finally.
@@ -608,6 +619,9 @@ export function PaymentDrawer({
       await saveNew()
       return
     }
+    // The fence token this save carries: on success the refreshed record
+    // must show a newer token before Post runs again (see saveFromRevision).
+    const fencedRevision = payload.expectedUpdatedAt
     setSaveState('saving')
     const ok = await execute(
       () =>
@@ -621,10 +635,12 @@ export function PaymentDrawer({
         onOk: () => {
           setSaveState('saved')
           setDirty(false)
+          setSaveFromRevision(fencedRevision)
           setMode('view')
         },
         onRefused: () => {
           setSaveState('error')
+          setSaveFromRevision(null)
         },
       },
     )
@@ -642,6 +658,9 @@ export function PaymentDrawer({
     resetForm()
     setDirty(false)
     setSaveState('saved')
+    // Cancelling restores the loaded record, so its token is current again:
+    // a save followed by Cancel must not hold Post disabled.
+    setSaveFromRevision(null)
     clearRefusal()
     setMode('view')
   }
@@ -835,6 +854,7 @@ export function PaymentDrawer({
   const canPost =
     (isDraft || doc.status === 'approved') &&
     !busy &&
+    !saveSettling &&
     !hasInvalidRow &&
     !dirty &&
     !!partyId &&
@@ -844,8 +864,12 @@ export function PaymentDrawer({
   // Why Post cannot proceed, first blocker first. A disabled button alone
   // never explains itself (in the Actions menu it renders near-invisible),
   // so the primary action carries its reason as visible text beside it.
+  // The settling state leads: the save just landed and the refreshed
+  // record has not arrived yet, so firing now would refuse on a stale
+  // revision instead of posting.
   const postBlocker =
-    !partyId ? t('postBlocked.noParty', { side })
+    saveSettling ? tCommon('actions.saving')
+    : !partyId ? t('postBlocked.noParty', { side })
     : !bankAccountId ? t('postBlocked.noBankAccount', { side })
     : hasInvalidRow ? t('postBlocked.invalidRows')
     : validAllocations.length === 0 ? t('postBlocked.noAllocations', { side })
