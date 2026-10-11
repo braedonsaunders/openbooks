@@ -19,6 +19,7 @@ import { toast } from 'sonner'
 import { useTranslations } from 'next-intl'
 import { Button, Drawer, Input, Label, Select } from '@openbooks/ui'
 import type { DelegateOption } from './GateActions'
+import { readApiErrorMessage } from '@/lib/api-error'
 
 const CHANGED_EVENT = 'ob:delegations-changed'
 
@@ -72,8 +73,9 @@ export function OutOfOfficeButton({ users }: { users: DelegateOption[] }) {
       if (res.status === 404) {
         toast.info(t('unavailable'))
       } else if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        toast.error(data.error ?? t('unavailable'))
+        // The refusal reads through the shared helper so message, remedy and
+        // code render instead of a bare fallback.
+        toast.error(await readApiErrorMessage(res, t('unavailable')))
       } else {
         toast.success(t('saved'))
         setOpen(false)
@@ -198,8 +200,9 @@ export function DelegationBanner({ users }: { users: DelegateOption[] }) {
         toast.info(t('unavailable'))
         setActive(null)
       } else if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        toast.error(data.error ?? t('unavailable'))
+        // The refusal reads through the shared helper so message, remedy and
+        // code render instead of a bare fallback.
+        toast.error(await readApiErrorMessage(res, t('unavailable')))
       } else {
         toast.success(t('ended'))
         setActive(null)

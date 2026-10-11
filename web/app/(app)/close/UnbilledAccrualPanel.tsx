@@ -20,6 +20,7 @@ import {
 } from "@openbooks/ui";
 import { AlertTriangle, Check, Play, RefreshCw } from "lucide-react";
 import { useMoney } from "@/components/money-provider";
+import { refusalMessageFromBody } from "../../../lib/api-error";
 
 /** The preview the accrual engine returns for one period. */
 type AccrualPreview = {
@@ -47,8 +48,10 @@ type LoadState =
   | { status: "ready"; preview: AccrualPreview };
 
 async function readError(response: Response, fallback: string): Promise<string> {
-  const data = (await response.json().catch(() => ({}))) as { error?: unknown };
-  return typeof data.error === "string" && data.error.trim() ? data.error : fallback;
+  // The refusal reads through the shared helper so message, remedy and code
+  // render instead of the bare `error` field.
+  const data = await response.json().catch(() => ({}));
+  return refusalMessageFromBody(data, { fallback }) ?? fallback;
 }
 
 const isZero = (value: string) => /^-?0*(\.0*)?$/.test(value.trim());

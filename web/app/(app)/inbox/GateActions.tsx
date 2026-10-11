@@ -11,6 +11,7 @@ import { toast } from 'sonner'
 import { useTranslations } from 'next-intl'
 import { Button, Select } from '@openbooks/ui'
 import { promptDialog } from '../../../lib/prompt'
+import { readApiErrorMessage } from '../../../lib/api-error'
 
 export type DelegateOption = {
   id: string
@@ -69,10 +70,9 @@ export function GateActions({
     // Error bodies are checked before they are parsed: a refusal is a
     // message for the operator, never a parse error.
     if (!res.ok) {
-      const data = await res.json().catch(() => ({} as { error?: unknown }))
-      const message = typeof data.error === 'string' && data.error
-        ? data.error
-        : t('decide.decisionFailed')
+      // The refusal reads through the shared helper so message, remedy and
+      // code pin beside the row instead of a bare fallback.
+      const message = await readApiErrorMessage(res, t('decide.decisionFailed'))
       // Pin the refusal beside the row's actions and do NOT refresh: the
       // decision was not recorded and the approval is still pending, so
       // the explanation must stay where the next attempt happens. It is
@@ -101,10 +101,9 @@ export function GateActions({
       body: JSON.stringify({ gateId, toUserId }),
     })
     if (!res.ok) {
-      const data = await res.json().catch(() => ({} as { error?: unknown }))
-      const message = typeof data.error === 'string' && data.error
-        ? data.error
-        : t('decide.decisionFailed')
+      // The refusal reads through the shared helper so message, remedy and
+      // code pin beside the row instead of a bare fallback.
+      const message = await readApiErrorMessage(res, t('decide.decisionFailed'))
       setRefusal(message)
       toast.error(message)
     } else {

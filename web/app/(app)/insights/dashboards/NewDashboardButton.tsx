@@ -7,6 +7,7 @@ import { Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button, Drawer, Input, Label } from '@openbooks/ui'
 import { UNTITLED_DASHBOARD_NAME } from '../../../../lib/insight-untitled'
+import { refusalMessageFromBody } from '../../../../lib/api-error'
 
 /**
  * Unsaved create: opens a local dialog (name + description, zero writes) and
@@ -44,12 +45,12 @@ export function NewDashboardButton() {
           description: description.trim() || null,
         }),
       })
+      // The refusal reads through the shared helper so message, remedy and
+      // code render instead of the bare `error` field.
       if (!res.ok) {
         const failure = (await res.json().catch(() => null)) as { error?: unknown } | null
         toast.error(
-          typeof failure?.error === 'string' && failure.error
-            ? failure.error
-            : t('createDraftFailed'),
+          refusalMessageFromBody(failure, { fallback: t('createDraftFailed') }) ?? t('createDraftFailed'),
         )
         return
       }

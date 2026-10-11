@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Button, Drawer, Input, Label, Textarea } from "@openbooks/ui";
 import { useBusinessToday } from "@/components/business-date-provider";
 import { useDirtyClose } from "@/lib/use-dirty-close";
+import { refusalMessageFromBody } from "@/lib/api-error";
 import { useTranslations } from "next-intl";
 export function ReverseAssetChange({
   id,
@@ -53,9 +54,11 @@ export function ReverseAssetChange({
           }),
         },
       );
+      // The refusal reads through the shared helper so message, remedy and
+      // code render instead of the bare `error` field.
       if (!r.ok) {
         const refusal = await r.json().catch(() => ({}));
-        throw new Error(refusal.error ?? "Could not propose reversal");
+        throw new Error(refusalMessageFromBody(refusal, { fallback: "Could not propose reversal" }) ?? "Could not propose reversal");
       }
       const value = (await r.json()) as { changeId: string };
       closeDrawer();

@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { useTranslations } from 'next-intl'
 import { Button } from '@openbooks/ui'
 import { confirmDialog } from '@/lib/confirm'
+import { refusalMessageFromBody } from '@/lib/api-error'
 
 /**
  * Row actions for a report definition: run/view, edit in the builder, clone
@@ -79,9 +80,11 @@ export function CustomReportActions({
       const res = await fetch(`/api/reports/definitions/${id}`, { method: 'DELETE' })
       // The error body may not be JSON (proxy 5xx pages): check ok BEFORE
       // parsing, so the refusal survives instead of becoming a parse error.
+      // The refusal reads through the shared helper so message, remedy and
+      // code render instead of the bare `error` field.
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string }
-        toast.error(data.error ?? t('deleteFailed'))
+        toast.error(refusalMessageFromBody(data, { fallback: t('deleteFailed') }) ?? t('deleteFailed'))
       } else toast.success(t('deleted'))
     } catch {
       toast.error(t('deleteFailed'))

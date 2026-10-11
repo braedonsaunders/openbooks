@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import { Badge, Button, DisclosureSection, SearchSelect } from '@openbooks/ui'
 import { TransactionDrawer } from '../../../components/transaction-drawer'
 import { useMoney } from '../../../components/money-provider'
+import { readApiErrorMessage } from '../../../lib/api-error'
 import type { SubscriptionDrawerData } from './subscription-drawer'
 
 function statusVariant(status: SubscriptionDrawerData['status']): 'default' | 'secondary' | 'outline' | 'destructive' | 'warning' | 'success' {
@@ -47,11 +48,10 @@ export function SubscriptionDrawer({ drawer, closeHref }: { drawer: Subscription
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ action: 'updateSubscription', id: drawer.id, billToPartyId: billTo, payerPartyId: payer }),
       })
-      // The refusal names the remedy; parsing the body first would turn it
-      // into a JSON error the operator cannot act on.
+      // The refusal reads through the shared helper so message, remedy and
+      // code render instead of a bare fallback.
       if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as { error?: unknown } | null
-        throw new Error(typeof body?.error === 'string' && body.error ? body.error : t('overrides.saveFailed'))
+        throw new Error(await readApiErrorMessage(res, t('overrides.saveFailed')))
       }
       toast.success(t('overrides.saved'))
       router.refresh()

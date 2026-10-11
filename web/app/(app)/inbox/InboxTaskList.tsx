@@ -18,6 +18,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Badge, Button, Select } from '@openbooks/ui'
 import { promptDialog } from '../../../lib/prompt'
+import { readApiErrorMessage } from '../../../lib/api-error'
 
 export interface InboxTaskAction {
   key: string
@@ -85,9 +86,9 @@ export function InboxTaskList({
       })
       if (!res.ok) {
         // Error bodies are checked before they are parsed: a refusal is a
-        // message for the operator, never a parse error.
-        const data = await res.json().catch(() => ({}))
-        toast.error(t('refused', { message: data.error ?? actionKey }))
+        // message for the operator, never a parse error. It reads through
+        // the shared helper so message, remedy and code render.
+        toast.error(t('refused', { message: await readApiErrorMessage(res, actionKey) }))
         return
       }
       setDone((prev) => new Set(prev).add(itemId))

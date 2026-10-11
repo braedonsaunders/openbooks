@@ -15,7 +15,7 @@ import { ApprovalActions } from '../../../components/approval-actions'
 import { SearchInput } from '../../../components/search-input'
 import { Pagination } from '../../../components/pagination'
 import { mergeHref } from '../../../lib/list-params'
-import { readApiErrorMessage } from '../../../lib/api-error'
+import { readApiErrorMessage, refusalMessageFromBody } from '../../../lib/api-error'
 import { confirmDialog } from '@/lib/confirm'
 import { budgetFromUnits, budgetToUnits, spreadBudgetTotal, upliftBudgetAmount } from '../../../lib/budget-math'
 import type { BudgetDimensions, BudgetStatus, BudgetWorkspace } from '../../../lib/budgets'
@@ -755,9 +755,14 @@ function BudgetImport({ scenarioId, closeHref, revisionRef, execute, onCommitted
       const encoded = await encode(selectedFile)
       if (requestId.current !== request) return
       const response = await fetch(`/api/budgets/${scenarioId}/import`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...encoded, expectedRevision: revisionRef.current }) })
+      // A body with no `error` code still names its refusal through the
+      // shared helper (message, joined errors) instead of the generic
+      // failure; mapped codes keep their copy below.
       if (!response.ok) {
         const body = await response.json().catch(() => null) as { error?: unknown; detail?: unknown; remedy?: unknown } | null
-        const code = typeof body?.error === 'string' ? body.error : t('import.failed')
+        const code = typeof body?.error === 'string' && body.error
+          ? body.error
+          : (refusalMessageFromBody(body, { fallback: t('import.failed') }) ?? t('import.failed'))
         const detail = typeof body?.detail === 'string' && body.detail.trim() ? `: ${body.detail.trim()}` : ''
         const remedy = typeof body?.remedy === 'string' && body.remedy.trim() ? ` — ${body.remedy.trim()}` : ''
         const refusal = code === 'duplicate_columns'

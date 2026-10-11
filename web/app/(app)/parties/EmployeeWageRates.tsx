@@ -14,6 +14,7 @@ import { useMoney } from '../../../components/money-provider'
 import { PagedTable } from '../../../components/paged-table'
 import { canonicalDecimal, compareDecimal } from '../../../lib/exact-decimal'
 import { confirmDialog } from '@/lib/confirm'
+import { refusalMessageFromBody } from '@/lib/api-error'
 import {
   PAY_RATE_BASES,
   annualPayRate,
@@ -132,11 +133,12 @@ export function EmployeeWageRates({ partyId }: { partyId: string }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
+      // The refusal reads through the shared helper so message, remedy and
+      // code render instead of the bare `error` field.
       if (!response.ok) {
         let detail: string | null = null
         try {
-          const body = (await response.json()) as { error?: unknown }
-          if (typeof body.error === 'string' && body.error.trim()) detail = body.error.trim()
+          detail = refusalMessageFromBody(await response.json(), { fallback: t('saveFailed') })
         } catch {
           detail = null
         }

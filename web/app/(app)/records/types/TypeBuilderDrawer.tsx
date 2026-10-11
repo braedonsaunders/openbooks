@@ -34,6 +34,7 @@ import {
 } from '@openbooks/ui'
 import { confirmDialog } from '@/lib/confirm'
 import { promptDialog } from '@/lib/prompt'
+import { refusalMessageFromBody } from '@/lib/api-error'
 import { readApiErrorMessage } from '@/lib/api-error'
 import { ICON_KEYS, NavIcon } from '../../../../components/sidebar-nav'
 import {
@@ -172,12 +173,14 @@ export function TypeBuilderDrawer({
           expectedUpdatedAt: loadedUpdatedAt.current,
         }),
       })
+      // The refusal reads through the shared helper so message, remedy and
+      // code render instead of the bare `error` field.
       if (!res.ok) {
         setSaveState('dirty')
         let message = t('typeBuilder.autosaveFailed')
         try {
-          const data = (await res.json()) as { error?: string }
-          if (typeof data.error === 'string' && data.error) message = data.error
+          const data = await res.json()
+          message = refusalMessageFromBody(data, { fallback: message }) ?? message
         } catch {
           // A parse failure must not hide the refuse or invent a success.
         }
@@ -357,9 +360,11 @@ export function TypeBuilderDrawer({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, reason }),
       })
+      // The refusal reads through the shared helper so message, remedy and
+      // code render instead of the bare `error` field.
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as { error?: string; issues?: Issue[] } | null
-        toast.error(body?.error ?? `${t('typeBuilder.actionFailed')} (status ${res.status})`)
+        toast.error(refusalMessageFromBody(body, { fallback: `${t('typeBuilder.actionFailed')} (status ${res.status})` }) ?? `${t('typeBuilder.actionFailed')} (status ${res.status})`)
         if (Array.isArray(body?.issues)) setIssues(body.issues)
         return
       }
@@ -425,10 +430,12 @@ export function TypeBuilderDrawer({
           fields: sections,
         }),
       })
+      // The refusal reads through the shared helper so message, remedy and
+      // code render instead of the bare `error` field.
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: unknown; issues?: Issue[] }
         if (Array.isArray(data.issues)) setIssues(data.issues)
-        toast.error(typeof data.error === 'string' && data.error ? data.error : t('createFailed'))
+        toast.error(refusalMessageFromBody(data, { fallback: t('createFailed') }) ?? t('createFailed'))
         return
       }
       const data = (await res.json()) as { id?: unknown }

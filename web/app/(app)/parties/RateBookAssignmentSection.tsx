@@ -11,6 +11,7 @@ import { Alert, Badge, Button, Drawer, Input, Label, Select } from '@openbooks/u
 import { DrawerSublist, SublistAddButton, SublistEmpty, SublistPager } from '@/components/drawer-sublist'
 import { useAppAction } from '@/lib/use-app-action'
 import { confirmDialog } from '@/lib/confirm'
+import { refusalMessageFromBody } from '@/lib/api-error'
 
 interface RateBook {
   id: string; name: string; currency: string; is_default: boolean; latest_version_id: string | null
@@ -73,13 +74,20 @@ export function RateBookAssignmentSection({
   async function assignmentAction(url: string, init: RequestInit) {
     try {
       const res = await fetch(url, init)
+      // Mapped codes keep their localized copy; anything else reads through
+      // the shared helper so the server's message, remedy and code reach the
+      // toast instead of the generic save failure.
       if (!res.ok) {
-        const payload = await res.json().catch(() => ({})) as { errorCode?: unknown }
-        const code = typeof payload.errorCode === 'string' ? payload.errorCode : 'save'
-        const key = t.has(`errors.${code}` as never) ? `errors.${code}` : 'errors.save'
+        const payload = await res.json().catch(() => ({}))
+        const code = typeof (payload as { errorCode?: unknown })?.errorCode === 'string'
+          ? (payload as { errorCode?: string }).errorCode
+          : 'save'
+        const serverMessage = t.has(`errors.${code}` as never)
+          ? t(`errors.${code}` as never)
+          : (refusalMessageFromBody(payload, { fallback: t('errors.save') }) ?? t('errors.save'))
         return {
           ok: false as const,
-          error: new ActionError({ kind: kindForStatus(res.status), status: res.status, code, serverMessage: t(key as never) }),
+          error: new ActionError({ kind: kindForStatus(res.status), status: res.status, code, serverMessage }),
         }
       }
       return { ok: true as const, status: res.status, data: await res.json().catch(() => ({})) }

@@ -7,6 +7,7 @@ import { FilePenLine } from 'lucide-react'
 import { fetchAction } from '@braedonsaunders/appkit-errors'
 import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
 import { useAppAction } from '@/lib/use-app-action'
+import { refusalMessageFromBody } from '@/lib/api-error'
 import { Badge, Button, Drawer, Input, Label, Select, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { field } from './party-drawer-model'
 import { DrawerSublist, SublistAddButton, SublistEmpty, SublistLoadError, SublistLoading, SublistPager, useSublistRows } from '../../../components/drawer-sublist'
@@ -132,9 +133,11 @@ export function PartyDebitMandatesPanel({ partyId }: { partyId: string }) {
 
   const reload = useCallback(async (signal?: AbortSignal) => {
     const response = await fetch(`/api/parties/${encodeURIComponent(partyId)}/debit-mandates`, { signal, cache: 'no-store' })
+    // The refusal reads through the shared helper so message, remedy and
+    // code render instead of the bare `error` field.
     if (!response.ok) {
       const body = await response.json().catch(() => null) as { error?: unknown } | null
-      throw new Error(typeof body?.error === 'string' && body.error.trim() ? body.error : t('loadFailed'))
+      throw new Error(refusalMessageFromBody(body, { fallback: t('loadFailed') }) ?? t('loadFailed'))
     }
     const body = await response.json() as { mandates?: MandateRow[]; bankAccounts?: BankAccountOption[] }
     return { mandates: body.mandates ?? [], bankAccounts: body.bankAccounts ?? [] }

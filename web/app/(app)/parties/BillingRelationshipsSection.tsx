@@ -21,6 +21,7 @@ import { DrawerTabStrip } from '../../../components/drawer-tab-strip'
 import { DrawerSublist, SublistAddButton, SublistEmpty } from '../../../components/drawer-sublist'
 import { useAppAction } from '@/lib/use-app-action'
 import { confirmDialog } from '@/lib/confirm'
+import { refusalMessageFromBody } from '@/lib/api-error'
 import { toast } from 'sonner'
 
 type Relationship = {
@@ -124,10 +125,13 @@ export function BillingRelationshipsSection({
   async function relationshipAction(url: string, init: RequestInit) {
     try {
       const res = await fetch(url, init)
+      // Unmapped refusals read through the shared helper so the server's
+      // message, remedy and code reach the toast instead of the generic save
+      // failure; mapped codes keep their localized copy.
       if (!res.ok) {
         const body = await res.json().catch(() => ({})) as { errorCode?: unknown; error?: unknown }
         const code = typeof body.errorCode === 'string' ? body.errorCode : 'save'
-        const serverMessage = typeof body.error === 'string' && body.error ? body.error : t('errors.save')
+        const serverMessage = refusalMessageFromBody(body, { fallback: t('errors.save') }) ?? t('errors.save')
         return {
           ok: false as const,
           error: new ActionError({

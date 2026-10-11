@@ -25,7 +25,7 @@ import { ConnectionMappingWorkspace, ConnectionSyncContent, type MappingDrafts }
 import { decodeEntityMappings } from "@openbooks/engine/src/sync/entity-mapping-contract.ts";
 import { connectorSettings, resolveSyncSelection, migrateConnectionEntityMappings, validateStructuredConnectionMappings, type MappingGroup, type SyncCapabilities, type SyncContentKey } from "@openbooks/engine/src/sync/connection-settings.ts";
 import { RecordTabs } from "@/components/module-home/record-tabs";
-import { readApiErrorMessage } from "../../../lib/api-error";
+import { readApiErrorMessage, refusalMessageFromBody } from "../../../lib/api-error";
 import { confirmDialog } from "@/lib/confirm";
 import { PagedTable, type PagedColumn } from "../../../components/paged-table";
 import { ListPageLayout } from "../../../components/page-layout";
@@ -669,13 +669,14 @@ export function PlatformClient() {
             : t("toast.connected"),
           { id: tid },
         );
+      // The refusal reads through the shared helper so message, remedy and
+      // code render inside the failure toast instead of the bare `error`.
       else
         toast.error(
           t("toast.testFailed", {
             error:
-              typeof body?.error === "string" && body.error
-                ? body.error
-                : t("toast.unknownError"),
+              refusalMessageFromBody(body, { fallback: t("toast.unknownError") }) ??
+              t("toast.unknownError"),
           }),
           { id: tid, duration: 8000 },
         );

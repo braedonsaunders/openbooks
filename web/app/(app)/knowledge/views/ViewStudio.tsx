@@ -16,7 +16,7 @@ import {
   type ReportRunResult,
 } from '@openbooks/reports'
 import { confirmDialog } from '../../../../lib/confirm'
-import { readApiErrorMessage } from '../../../../lib/api-error'
+import { readApiErrorMessage, refusalMessageFromBody } from '../../../../lib/api-error'
 import { RowsConfig, SortConfig, SummarizeConfig } from '../../reports/query-config'
 import { FilterTree } from '../../reports/custom/FilterTree'
 import { ResultView } from '../../reports/custom/ResultView'
@@ -231,8 +231,10 @@ export function ViewStudio({
         router.push('/knowledge/views')
         router.refresh()
       } else {
+        // The refusal reads through the shared helper so message, remedy and
+        // code render instead of the bare `error` field.
         const body = (await res.json().catch(() => null)) as { error?: string } | null
-        const message = typeof body?.error === 'string' && body.error ? body.error : tc('feedback.deleteFailed')
+        const message = refusalMessageFromBody(body, { fallback: tc('feedback.deleteFailed') }) ?? tc('feedback.deleteFailed')
         toast.error(message)
       }
     } catch {
