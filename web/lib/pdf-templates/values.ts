@@ -4,7 +4,7 @@ import { addCalendarDays, businessToday } from '@openbooks/engine/platform/busin
 import { documentBalanceDueLateral } from '@openbooks/engine/records/balance-due'
 import { db } from '@openbooks/engine/platform/db'
 import { orgFeatureEnabled } from '@openbooks/engine/organization/org-feature-lock'
-import { add, cmp, isZero, mul, neg, sum } from '@openbooks/engine/money/money'
+import { add, cmp, formatMoney, isZero, mul, neg, sum } from '@openbooks/engine/money/money'
 import { amountInWords } from '@openbooks/engine/payroll/cheques'
 import { incomeTaxWithholdingSystemKeys } from '@openbooks/engine/payroll/packs'
 import { createMoneyFormatter, type MoneyFormatter } from '../money-format'
@@ -575,20 +575,24 @@ async function loadPayrollChequeValues(
   const { money } = createMoneyFormatter(locale, String(stub.currency_code ?? org.base_currency))
 
   const lines = (await db.execute<Record<string, unknown>>(sql`
-    select l.kind, l.description, l.hours, l.rate, l.amount, l.payment_kind
+    select l.component_id, l.kind, l.description, c.name as component_name,
+           l.hours, l.rate, l.amount, l.payment_kind, c.system_key, c.taxable
       from pay_stub_lines l
+      left join pay_components c on c.org_id=l.org_id and c.id=l.component_id
      where l.stub_id = ${id} and l.org_id = ${orgId}
      order by l.sequence
   `))
-  const byKind = (kind: string) => lines.rows
-    .filter((l) => l.kind === kind)
-    .map((l) => ({
-      description: l.description ?? '',
-      non_cash: l.payment_kind === 'non_cash',
-      hours: l.hours != null ? Number(l.hours).toFixed(2) : '',
-      rate: l.rate != null ? money(String(l.rate)) : '',
-      amount: money(String(l.amount ?? '0')),
-    }))
+  // Cheque remittance includes every non-cash earning already included in
+  // gross. The shared statement groups dated lines without changing amounts.
+  const statement = buildPayStubStatement(lines.rows.map(toStatementLine), [],
+    new Set(incomeTaxWithholdingSystemKeys()), { includeNonTaxableCompanyItems: true })
+  const printRows = (rows: StatementRow[], nonCash: boolean) => rows.map(row => ({
+    description: row.description,
+    non_cash: nonCash,
+    hours: isZero(row.hours) ? '' : formatMoney(row.hours, 2),
+    rate: row.rate === null ? '' : money(row.rate),
+    amount: money(row.current),
+  }))
   const deductionsTotal = sum(
     lines.rows.filter((l) => l.kind === 'deduction').map((l) => String(l.amount ?? '0')),
   )
@@ -627,8 +631,8 @@ async function loadPayrollChequeValues(
     net_pay: money(net),
     ...orgIdentityMergeValues(org),
     printed_date: fmtDate(await businessToday(orgId), locale),
-    earnings: byKind('earning'),
-    deductions: byKind('deduction'),
+    earnings: [...printRows(statement.earnings, false), ...printRows(statement.taxableCompanyItems, true)],
+    deductions: printRows([...statement.withholdings, ...statement.netAdjustments], false),
   }
   return {
     values,

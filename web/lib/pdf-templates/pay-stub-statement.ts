@@ -48,10 +48,10 @@ export type PayStubStatement = {
 
 type Section = keyof PayStubStatement
 
-function sectionOf(line: StatementLine, withholdingKeys: ReadonlySet<string>): Section | null {
+function sectionOf(line: StatementLine, withholdingKeys: ReadonlySet<string>, includeNonTaxableCompanyItems: boolean): Section | null {
   if (line.kind === 'earning') {
     if (line.paymentKind !== 'non_cash') return 'earnings'
-    return line.taxable ? 'taxableCompanyItems' : null
+    return line.taxable || includeNonTaxableCompanyItems ? 'taxableCompanyItems' : null
   }
   if (line.kind === 'deduction') {
     return line.systemKey && withholdingKeys.has(line.systemKey) ? 'withholdings' : 'netAdjustments'
@@ -68,7 +68,7 @@ export function toStatementLine(row: Record<string, unknown>): StatementLine {
     componentId: row.component_id == null ? null : String(row.component_id),
     kind: String(row.kind ?? ''),
     paymentKind: row.payment_kind == null ? null : String(row.payment_kind),
-    description: String(row.description ?? ''),
+    description: String(row.component_name ?? row.description ?? ''),
     systemKey: row.system_key == null ? null : String(row.system_key),
     taxable: row.taxable == null ? null : Boolean(row.taxable),
     amount: String(row.amount ?? '0'),
@@ -87,6 +87,7 @@ export function buildPayStubStatement(
   current: readonly StatementLine[],
   prior: readonly StatementLine[],
   withholdingKeys: ReadonlySet<string>,
+  options: { includeNonTaxableCompanyItems?: boolean } = {},
 ): PayStubStatement {
   const sections: Record<Section, Map<string, StatementRow>> = {
     earnings: new Map(),
@@ -97,7 +98,7 @@ export function buildPayStubStatement(
   const rates = new Map<string, Set<string | null>>()
 
   for (const line of current) {
-    const section = sectionOf(line, withholdingKeys)
+    const section = sectionOf(line, withholdingKeys, options.includeNonTaxableCompanyItems === true)
     if (!section) continue
     const key = rowKey(line)
     const existing = sections[section].get(key)
@@ -125,7 +126,7 @@ export function buildPayStubStatement(
 
   const priorOnly: Array<[Section, StatementRow]> = []
   for (const line of prior) {
-    const section = sectionOf(line, withholdingKeys)
+    const section = sectionOf(line, withholdingKeys, options.includeNonTaxableCompanyItems === true)
     if (!section) continue
     const key = rowKey(line)
     const existing = sections[section].get(key)

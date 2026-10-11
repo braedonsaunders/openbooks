@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { buildPayStubStatement, type StatementLine } from './pay-stub-statement'
+import { buildPayStubStatement, toStatementLine, type StatementLine } from './pay-stub-statement'
 
 const line = (over: Partial<StatementLine>): StatementLine => ({
   componentId: null, kind: 'earning', paymentKind: 'cash', description: '', systemKey: null,
@@ -9,6 +9,33 @@ const line = (over: Partial<StatementLine>): StatementLine => ({
 const WITHHOLDING = new Set(['federal_tax', 'provincial_tax'])
 /** Engine money helpers keep four places; compare at the cent. */
 const c = (value: string | null) => (value == null ? null : Number(value).toFixed(2))
+
+test('printed component labels exclude adjustment provenance while preserving exact grouped values', () => {
+  const rows = [
+    toStatementLine({ component_id: 'allowance', component_name: 'Site allowance', kind: 'earning', payment_kind: 'cash', description: 'Source document reference and digest', amount: '39.0000', hours: '1.0000', rate: '39.0000' }),
+    toStatementLine({ component_id: 'allowance', component_name: 'Site allowance', kind: 'earning', payment_kind: 'cash', description: 'Second source document reference', amount: '39.0000', hours: '1.0000', rate: '39.0000' }),
+  ]
+  const statement = buildPayStubStatement(rows, [], WITHHOLDING)
+  assert.equal(statement.earnings.length, 1)
+  assert.equal(statement.earnings[0]!.description, 'Site allowance')
+  assert.equal(statement.earnings[0]!.current, '78.0000')
+  assert.equal(statement.earnings[0]!.hours, '2.0000')
+  assert.equal(statement.earnings[0]!.rate, '39.0000')
+  assert.equal(toStatementLine({ description: 'Manual earning' }).description, 'Manual earning')
+})
+
+test('cheque remittance retains non-taxable non-cash gross without changing the standard pay statement', () => {
+  const current = [
+    line({ componentId: 'cash', amount: '500.00', hours: '10', rate: '50' }),
+    line({ componentId: 'noncash', paymentKind: 'non_cash', taxable: false, amount: '20.01' }),
+    line({ componentId: 'noncash', paymentKind: 'non_cash', taxable: false, amount: '0.09' }),
+  ]
+  assert.equal(buildPayStubStatement(current, [], WITHHOLDING).taxableCompanyItems.length, 0)
+  const cheque = buildPayStubStatement(current, [], WITHHOLDING, { includeNonTaxableCompanyItems: true })
+  assert.equal(cheque.earnings[0]!.current, '500.00')
+  assert.equal(cheque.taxableCompanyItems.length, 1)
+  assert.equal(cheque.taxableCompanyItems[0]!.current, '20.1000')
+})
 
 test('lines are grouped into the printed sections and carry year-to-date', () => {
   const statement = buildPayStubStatement(
