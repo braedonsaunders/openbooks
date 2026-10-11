@@ -66,6 +66,7 @@
     "startedOn": "Begonnen am",
     "completedOn": "Abgeschlossen am",
     "receivedOn": "Eingegangen am",
+    "issuedOn": "Entnommen am",
     "plannedEnd": "Geplantes Ende",
     "holdReason": "Sperrgrund",
     "cancelReason": "Stornogrund",

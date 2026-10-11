@@ -38,6 +38,7 @@ export async function executeManufacturingIssue(
   id: string,
   key: string,
   lines: MaterialIssueLine[],
+  issuedOn: string | null = null,
 ) {
   return execute(
     orgId,
@@ -46,8 +47,8 @@ export async function executeManufacturingIssue(
     id,
     key,
     "manufacturing.issue",
-    { lines },
-    () => issueMaterials(db, orgId, actorId, id, lines),
+    issuedOn === null ? { lines } : { lines, issuedOn },
+    () => issueMaterials(db, orgId, actorId, id, lines, { issuedOn }),
   );
 }
 async function execute<T>(

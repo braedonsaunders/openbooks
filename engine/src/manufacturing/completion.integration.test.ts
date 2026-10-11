@@ -610,6 +610,15 @@ const cases: Case[] = [
     assert.equal(evidence.overhead, "5.0000", "ten units at six minutes on a 5/h card");
     assert.equal(evidence.stored, 0, "the released snapshot itself stays frozen");
   } },
+  { name: "a material issue consumes stock on its stated day", run: async (f) => {
+    const wo = await prepare(f); await stock(f, f.org.items.component, "4", "3");
+    const issued = await run((tx) => issueMaterials(tx, f.org.orgId, f.actorId, wo.id, [{ materialId: wo.materials[0]!.id, quantity: "2" }], { issuedOn: f.org.date }));
+    const day = await withBypassContext(async () => (await db.execute<{ day: string; posted: string }>(sql`
+      select m.moved_at::date::text as day, e.posting_date::text as posted from inventory_movements m
+        join journal_entries e on e.org_id=m.org_id and e.id=m.journal_entry_id
+       where m.org_id=${f.org.orgId} and m.id=${issued.movementIds[0]!}`)).rows[0]!);
+    assert.deepEqual(day, { day: f.org.date, posted: f.org.date }, "the consumption and its entry carry the stated day");
+  } },
   { name: "output is received on the stated day, never after today", run: async (f) => {
     const wo = await prepare(f); await stock(f, f.org.items.component, "4", "3");
     await issue(f, wo.id, [{ materialId: wo.materials[0]!.id, quantity: "2" }]);

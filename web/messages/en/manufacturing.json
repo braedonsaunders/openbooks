@@ -66,6 +66,7 @@
     "startedOn": "Started on",
     "completedOn": "Completed on",
     "receivedOn": "Received on",
+    "issuedOn": "Issued on",
     "plannedEnd": "Planned finish",
     "holdReason": "Hold reason",
     "cancelReason": "Cancellation reason",

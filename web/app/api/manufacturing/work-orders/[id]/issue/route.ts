@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isoDate } from "@/lib/api/json";
 import { issueMaterials } from "@openbooks/engine/manufacturing/materials";
 import { executeManufacturingIssue } from "@openbooks/engine/manufacturing/execution";
 import { db } from "@openbooks/engine/platform/db";
@@ -13,6 +14,7 @@ const Body = z.object({
     materialId: z.string().uuid(), quantity: z.string(), lotId: z.string().uuid().nullable().optional(),
     serialId: z.string().uuid().nullable().optional(),
   }).strict()).min(1).max(500),
+  issuedOn: isoDate().nullable().optional(),
 }).strict();
 
 export const POST = defineRoute({
@@ -24,7 +26,7 @@ export const POST = defineRoute({
     const result = await loadScopedWorkOrder(authz, params.id);
     if (!result.ok) return result.response;
     const key=request.headers.get('Idempotency-Key');
-    if(key){const result=await executeManufacturingIssue(authz.user.orgId,authz.user.id,authz.allowedSubsidiaryIds,params.id,key,body.lines);return Response.json(result.value,{headers:{'Idempotency-Replayed':String(result.replayed)}});}
-    return Response.json(await issueMaterials(db, authz.user.orgId, authz.user.id, params.id, body.lines));
+    if(key){const result=await executeManufacturingIssue(authz.user.orgId,authz.user.id,authz.allowedSubsidiaryIds,params.id,key,body.lines,body.issuedOn ?? null);return Response.json(result.value,{headers:{'Idempotency-Replayed':String(result.replayed)}});}
+    return Response.json(await issueMaterials(db, authz.user.orgId, authz.user.id, params.id, body.lines, { issuedOn: body.issuedOn ?? null }));
   }),
 });

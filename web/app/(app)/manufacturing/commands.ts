@@ -221,7 +221,7 @@ export function recordCommands(
       if(r.receiptReworkInspectionId) {
         if(repair&&material&&cmp(String(material.issuedQty),"0")===0)
           push("issue", [], { create:true,note:"repairIssueNote",body:{lines:[{materialId:material.id,quantity:repair.quantity,lotId:repair.lotId??null,serialId:repair.serialId??null}]}});
-      } else push("issue", [], { repeat: "issue", create: true, note: "issueNote" });
+      } else push("issue", [date("issuedOn", r.plannedStart ?? null)], { repeat: "issue", create: true, note: "issueNote" });
       push(
         "complete",
         [

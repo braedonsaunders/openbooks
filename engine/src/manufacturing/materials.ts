@@ -491,9 +491,12 @@ export async function issueMaterials(
   actorId: string,
   workOrderId: string,
   lines: MaterialIssueLine[],
+  options: { issuedOn?: string | null } = {},
 ): Promise<{ entryId: string | null; movementIds: string[] }> {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
   await lockManufacturingOrderExecutionAuthority(tx,orgId,actorId,workOrderId);
+  // A back-dated issue consumes stock on the day production drew it.
+  const issuedOn = await operationEventDate(tx, orgId, options.issuedOn, null, "Material issue");
   if (!Array.isArray(lines) || lines.length === 0) refuse("Choose at least one material line to issue.", "issue_lines_required", "Select work-order material lines and enter quantities to issue.");
   const order = await loadOrder(tx, orgId, workOrderId, true);
   heldRefusal(order);
@@ -530,7 +533,7 @@ export async function issueMaterials(
     deltas.set(issue.material.id, delta);
   }
   // The plan was checked before the state transition. postMaterialIssue rechecks under the same row and position locks.
-  return postMaterialIssue(tx, orgId, actorId, updatedOrder, planned, deltas);
+  return postMaterialIssue(tx, orgId, actorId, updatedOrder, planned, deltas, {}, issuedOn ?? undefined);
 }
 
 /** A vendor drawdown consumes only this subcontract's actual transferred layers. */

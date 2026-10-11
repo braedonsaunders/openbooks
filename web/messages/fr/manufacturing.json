@@ -66,6 +66,7 @@
     "startedOn": "Commencée le",
     "completedOn": "Terminée le",
     "receivedOn": "Reçu le",
+    "issuedOn": "Sorti le",
     "plannedEnd": "Fin prévue",
     "holdReason": "Motif de blocage",
     "cancelReason": "Motif d’annulation",

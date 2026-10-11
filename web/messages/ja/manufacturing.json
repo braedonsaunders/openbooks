@@ -66,6 +66,7 @@
     "startedOn": "開始日",
     "completedOn": "完了日",
     "receivedOn": "受入日",
+    "issuedOn": "出庫日",
     "plannedEnd": "終了予定",
     "holdReason": "保留理由",
     "cancelReason": "取消理由",
