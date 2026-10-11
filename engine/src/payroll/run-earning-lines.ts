@@ -60,6 +60,9 @@ export async function appendPeriodicEarnings(
     lines.push({
       componentId: baseComponent.id as string, kind: "earning", description: "Salary",
       amount: periodSalary, sequence: 10,
+      // A salary is earned across the whole pay period: dating it lets later
+      // lookbacks (holiday averages) place it exactly instead of prorating.
+      earnedFrom: run.period_start, earnedTo: run.period_end,
       programApplicability: programApplicabilityFromExclusions(baseComponent.program_exclusions),
     });
   } else {
@@ -162,6 +165,10 @@ export async function appendRetroSettlementLines(
         componentId: line.componentId,
         kind: "earning",
         description: line.description,
+        // Earned in the settled source period, not this run's: the source
+        // span is the honest earned span for later lookbacks.
+        earnedFrom: line.sourcePeriodStart,
+        earnedTo: line.sourcePeriodEnd,
         // Deliberately no `hours`: the source periods already paid every
         // per-hour component and union fringe on those hours, and carrying
         // them here would pay all of them a second time. The hours are on the
@@ -254,6 +261,9 @@ export async function appendDerivedEarningLines(
           description: line.description,
           derivedQuantity: line.quantity,
           derivedRuleCode: line.ruleCode,
+          // Derived rows aggregate the period's own time facts: earned
+          // across the pay period, like the salary beside them.
+          earnedFrom: run.period_start, earnedTo: run.period_end,
           // Deliberately no `hours`: nights and on-call days are not worked
           // hours, and hour-shaped derived quantities are already on the wage
           // lines, so carrying them here would pay per-hour components twice.
@@ -517,6 +527,18 @@ export async function applyAssignedComponentLines(
     lines.push({
       componentId: c.id as string, kind: c.kind as Line["kind"],
       description: c.name as string, amount, sequence: Number(c.sequence),
+      // Recurring rows are earned across their coverage span (the whole
+      // period when the assignment covers it): dating the earning rows lets
+      // later lookbacks place them exactly. Deductions and employer rows
+      // carry no earned span — nothing reads one.
+      ...(c.kind === "earning"
+        ? {
+            earnedFrom: [periodStart, String(c.effective_from)].sort().at(-1)!,
+            earnedTo: c.effective_to == null
+              ? periodEnd
+              : [periodEnd, String(c.effective_to)].sort()[0]!,
+          }
+        : {}),
       sourceProratedByCoverage: c.basis === 'fixed_amount',
       sourceEffectiveFrom: [periodStart, String(c.effective_from)].sort().at(-1)!,
       sourceEffectiveTo: [periodEnd, c.effective_to == null ? periodEnd : String(c.effective_to)].sort()[0]!,

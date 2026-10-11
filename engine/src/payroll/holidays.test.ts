@@ -4,6 +4,7 @@ import {
   addBusinessDays,
   applyOccupationWeeklyCap,
   assertOccupationClass,
+  attributeStubEarningsToWindow,
   businessDaysBetween,
   computeStatutoryHolidayPay,
   countHolidayQualifyingDays,
@@ -663,6 +664,28 @@ test("Alberta: an hourly employee prices the day as transcribed", () => {
   assert.equal(result.premiumPay, "100.0000"); // 8 × 25 × 0.5
 });
 
+test("an undated stub fully inside the window attributes its full amount", () => {
+  const result = attributeStubEarningsToWindow("4000.00", "2026-06-01", "2026-06-27", { from: "2026-06-01", to: "2026-07-01" });
+  assert.equal(result.attributed, "4000.0000");
+  assert.equal(result.overlapDays, 27);
+  assert.equal(result.periodDays, 27);
+});
+
+test("an undated stub straddling the window attributes by calendar-day overlap", () => {
+  // The even spread is the only auditable split without dated evidence:
+  // 4,000 × 25 days in window ÷ 27-day period = 3,703.7037, rounded once.
+  const result = attributeStubEarningsToWindow("4000.00", "2026-06-01", "2026-06-27", { from: "2026-06-03", to: "2026-06-30" });
+  assert.equal(result.attributed, "3703.7037");
+  assert.equal(result.overlapDays, 25);
+  assert.equal(result.periodDays, 27);
+});
+
+test("an undated stub outside the window attributes nothing", () => {
+  const result = attributeStubEarningsToWindow("4000.00", "2026-06-01", "2026-06-27", { from: "2026-06-28", to: "2026-07-25" });
+  assert.equal(result.attributed, "0.0000");
+  assert.equal(result.overlapDays, 0);
+});
+
 test("jurisdictions without a salary treatment price the salaried day as transcribed", () => {
   // The treatment is per-jurisdiction and opt-in: no verified salary
   // simplification is transcribed for Ontario or British Columbia, so a
@@ -1059,7 +1082,12 @@ test("New Brunswick caps a route salesperson's unworked WEEK at the four-week av
     period_start: "2026-06-28", period_end: "2026-07-04",
   }];
   const makeTx = () => {
-    const queued = [trailing, week];
+    // Each lookback read issues two queries in order — the stub-line
+    // evidence, then the retained prior-payroll history (empty here: the
+    // lookback reads that history before pricing, and this fixture keeps
+    // none). A mock that answers every query with stub lines predates that
+    // read and fails its contract instead of pricing the cap.
+    const queued = [trailing, [], week, []];
     return { execute: async () => ({ rows: queued.shift() ?? [] }) };
   };
   const base = {

@@ -6,7 +6,7 @@ import { db } from "../platform/db.ts";
 import { resolveStoredEmployerFact } from "./employer-fact-store.ts";
 import { MB_CONSTRUCTION_HOLIDAY } from "./canada/employment-standards.ts";
 import { addCalendarDays, calendarDaysBetween, isoDateOf, utcDateFromParts } from "../platform/business-date.ts";
-import { add, cmp, fromUnits, mul, mulDecimal, mulPercent, mulRatio, prorateDays, roundDiv, roundMoney, sum, toUnits } from "../money/money.ts";
+import { add, cmp, fromUnits, mul, mulDecimal, mulDecimalFactors, mulPercent, mulRatio, prorateDays, roundDiv, roundMoney, sum, toUnits } from "../money/money.ts";
 import {
   countryOfJurisdiction,
   employmentJurisdictionsOf,
@@ -1381,14 +1381,14 @@ export async function applyOccupationWeeklyCap(
     sum([earnings.regular, earnings.overtime, earnings.vacationPay, earnings.holidayPay]);
   const average = fromUnits(
     roundDiv(
-      toUnits(total(await lookbackEarnings(tx, stubInput, {
+      toUnits(total((await lookbackEarnings(tx, stubInput, {
         from: addCalendarDays(weekStart, -(cap.lookbackWeeks * 7)),
         to: addCalendarDays(weekStart, -1),
-      }))),
+      })).earnings)),
       BigInt(cap.lookbackWeeks),
     ),
   );
-  const committed = total(await lookbackEarnings(tx, stubInput, { from: weekStart, to: weekEnd }));
+  const committed = total((await lookbackEarnings(tx, stubInput, { from: weekStart, to: weekEnd })).earnings);
   const periodDays = calendarDaysBetween(args.periodStart, args.periodEnd) + 1;
   const overlapFrom = args.periodStart > weekStart ? args.periodStart : weekStart;
   const overlapTo = args.periodEnd < weekEnd ? args.periodEnd : weekEnd;
@@ -1485,7 +1485,7 @@ export async function resolveStatutoryHolidayPay(
     }
     const selectedWeekStartsOn = employerWeekStartsOn === null ? undefined : Number(employerWeekStartsOn);
     const window = lookbackWindow(rule, holiday.date, selectedWeekStartsOn);
-    const earnings = await lookbackEarnings(tx, input, window);
+    const { earnings, proratedPeriods } = await lookbackEarnings(tx, input, window);
     // The QUALIFYING window is day-based in every statute that declares one
     // ("the 30 calendar days preceding the statutory holiday"; "30 days worked
     // in the preceding 12 months"), including the jurisdictions whose PAY
@@ -1592,6 +1592,11 @@ export async function resolveStatutoryHolidayPay(
       input.employeeName,
     );
     const hoursWorked = await hoursOn(tx, input, holiday.date);
+    // One read serves both the commission pricing and the trace: any
+    // estimated span behind this stub is named on the day's pay line.
+    const commissionLookback = commissionWindow
+      ? await lookbackEarnings(tx, input, commissionWindow)
+      : undefined;
     const result = computeStatutoryHolidayPay(rule, {
       employee: input.employeeName,
       holiday,
@@ -1603,9 +1608,7 @@ export async function resolveStatutoryHolidayPay(
       daysWorkedInQualifyingWindow,
       employmentDays: hiredOn ? calendarDaysBetween(hiredOn, holiday.date) : null,
       employmentWeeks: hiredOn ? Math.floor(calendarDaysBetween(hiredOn, holiday.date) / 7) : null,
-      commissionEarnings: commissionWindow
-        ? await lookbackEarnings(tx, input, commissionWindow)
-        : undefined,
+      commissionEarnings: commissionLookback?.earnings,
       paidOnCommission: input.paidOnCommission,
       absentWithoutConsent: input.absentWithoutConsent,
       occupationClass: input.occupationClass,
@@ -1634,13 +1637,20 @@ export async function resolveStatutoryHolidayPay(
       periodEnd: input.periodEnd,
       currentLines: input.currentEarningLines,
     });
+    // Estimated lookback spans are named on the day's pay line: with no dated
+    // earning evidence the window sum spreads those stubs evenly across their
+    // pay periods, and the stub must say so.
+    const estimatedSpans = [...new Set([...proratedPeriods, ...(commissionLookback?.proratedPeriods ?? [])])];
+    const estimatedNote = estimatedSpans.length > 0
+      ? `; lookback earnings from ${estimatedSpans.join(", ")} attributed by calendar-day overlap (those stubs carry no dated earning evidence)`
+      : "";
     if (!ownedEntitlementDates.has(holiday.date) && cmp(capped.pay, "0") !== 0) {
       lines.push({
         componentId: input.holidayComponentId, kind: "earning",
         description: `${holiday.name} — statutory holiday pay`,
         amount: capped.pay, sequence: sequence++,
         holidayKey: holiday.key, holidayDate: holiday.date,
-        basis: capped.note ? `${result.basis}; ${capped.note}` : result.basis,
+        basis: `${result.basis}${capped.note ? `; ${capped.note}` : ""}${estimatedNote}`,
       });
     }
     if (cmp(result.premiumPay, "0") !== 0) {
@@ -1691,7 +1701,7 @@ export async function resolveStatutoryHolidayPay(
         statutoryDate: date, date, source: "pack", elected: false, paid: true,
       };
       const window = lookbackWindow(rule, date);
-      const earnings = await lookbackEarnings(tx, input, window);
+      const { earnings, proratedPeriods: workTriggeredProrated } = await lookbackEarnings(tx, input, window);
       const schedule = await resolveWorkSchedule(tx, input.orgId, input.employeePartyId, date);
       const result = computeWorkTriggeredHolidayPay(rule, event, {
         employee: input.employeeName, holiday, earnings, daysWorked: 0,
@@ -1699,12 +1709,15 @@ export async function resolveStatutoryHolidayPay(
         hoursWorked, hourlyRate: input.hourlyRate, schedule,
       });
       if (!result.qualified) continue;
+      const workEstimatedNote = workTriggeredProrated.length > 0
+        ? `; lookback earnings from ${workTriggeredProrated.join(", ")} attributed by calendar-day overlap (those stubs carry no dated earning evidence)`
+        : "";
       if (cmp(result.holidayPay, "0") !== 0) {
         lines.push({
           componentId: input.holidayComponentId, kind: "earning",
           description: `${event.name} — statutory holiday pay`,
           amount: result.holidayPay, sequence: sequence++,
-          holidayKey: event.key, holidayDate: date, basis: result.basis,
+          holidayKey: event.key, holidayDate: date, basis: `${result.basis}${workEstimatedNote}`,
         });
       }
       if (cmp(result.premiumPay, "0") !== 0) {
@@ -1712,7 +1725,7 @@ export async function resolveStatutoryHolidayPay(
           componentId: input.premiumComponentId, kind: "earning",
           description: `${event.name} — work-triggered overtime minimum`,
           amount: result.premiumPay, sequence: sequence++,
-          holidayKey: event.key, holidayDate: date, basis: result.basis,
+          holidayKey: event.key, holidayDate: date, basis: `${result.basis}${workEstimatedNote}`,
         });
       }
     }
@@ -1792,19 +1805,57 @@ const commissionWindowOf = (
   rule: PayrollHolidayPayRule, holidayDate: string, weeks: number, employerWeekStartsOn?: number,
 ) => spanBefore(lookbackWindowEnd(rule, holidayDate, employerWeekStartsOn), weeks * 7);
 
-/** Earnings from committed stubs. A partial pay period is included only when
- *  each earning line carries enough dated evidence to place its whole amount
- *  inside or outside the statutory window. Categories follow component keys,
- *  which makes Ontario's wage exclusions a transcription rather than a guess. */
+/** Earnings from committed stubs. Categories follow component keys, which
+ *  makes Ontario's wage exclusions a transcription rather than a guess. */
+/**
+ * Attribute one undated stub's earnings to the lookback window by
+ * calendar-day overlap with its pay period. Every statute behind the pack
+ * frames the window as a calendar span — Ontario's "regular wages earned in
+ * the four work weeks before the work week" (ESA 2000 s. 24(1)(a)), British
+ * Columbia's "gross earnings in the 30 calendar days before", Alberta's
+ * average over the same four weeks — and none of them gives a daily split
+ * for a stub whose lines carry no earned dates. The even spread is the only
+ * auditable estimate, rounded once to the ledger quantum; each rule's own
+ * averaging basis still governs the divisor, so only the window sum is
+ * estimated, never the average itself. A stub fully inside the window
+ * attributes its full amount, exactly as before.
+ */
+export function attributeStubEarningsToWindow(
+  amount: string,
+  periodStart: string,
+  periodEnd: string,
+  window: { from: string; to: string },
+): { attributed: string; overlapDays: number; periodDays: number } {
+  const overlapFrom = periodStart > window.from ? periodStart : window.from;
+  const overlapTo = periodEnd < window.to ? periodEnd : window.to;
+  const overlapDays = calendarDaysBetween(overlapFrom, overlapTo) + 1;
+  const periodDays = calendarDaysBetween(periodStart, periodEnd) + 1;
+  if (overlapDays <= 0 || periodDays <= 0) {
+    return { attributed: "0.0000", overlapDays: 0, periodDays: Math.max(periodDays, 0) };
+  }
+  if (periodStart >= window.from && periodEnd <= window.to) {
+    return { attributed: roundMoney(amount, 4), overlapDays, periodDays };
+  }
+  return {
+    attributed: mulDecimalFactors(amount, [], {
+      numerator: BigInt(overlapDays),
+      denominator: BigInt(periodDays),
+      decimalPlaces: 4,
+    }),
+    overlapDays,
+    periodDays,
+  };
+}
+
 async function lookbackEarnings(
   tx: Pick<typeof db, "execute">,
   input: Pick<StatutoryHolidayPayInput, "orgId" | "employeePartyId" | "excludeDocumentId">,
   window: { from: string; to: string },
-): Promise<HolidayLookbackEarnings> {
+): Promise<{ earnings: HolidayLookbackEarnings; proratedPeriods: string[] }> {
   const rows = (await tx.execute<{
       system_key: string; amount: string; earned_from: string | Date | null;
       earned_to: string | Date | null;
-      period_start: string | Date; period_end: string | Date;
+      period_start: string | Date | null; period_end: string | Date | null;
     }>(sql`
     select coalesce(c.system_key, '') as system_key, l.amount,
            l.earned_from, l.earned_to,
@@ -1823,25 +1874,41 @@ async function lookbackEarnings(
        and r.period_start <= ${window.to} and r.period_end >= ${window.from}
   `));
 
+  // A stub whose own pay period is unknown cannot be placed in the window at
+  // all: that stays a refusal, because no span exists to attribute across.
+  // Everything else with a period is attributable — dated lines exactly,
+  // undated spans by calendar-day overlap (see
+  // attributeStubEarningsToWindow), so a straddling undated stub estimates
+  // instead of refusing.
+  const unknownPeriod = rows.rows.filter(
+    (row) => row.period_start == null || row.period_end == null,
+  );
+  if (unknownPeriod.length > 0) {
+    throw new PayrollHolidayError(
+      `${input.employeePartyId}: statutory holiday lookback earnings overlap ${window.from} through ${window.to}, but a committed pay stub has no pay period recorded; correct the pay stub before calculating holiday pay`,
+    );
+  }
   const totals = await readPayrollPriorEarnings(tx, input, window);
+  const proratedPeriods: string[] = [];
   for (const row of rows.rows) {
     const day = (value: string | Date) =>
       String(value instanceof Date ? value.toISOString() : value).slice(0, 10);
+    // Refused above when unknown; the guard narrows the type for the rest.
+    if (row.period_start == null || row.period_end == null) continue;
     const periodStart = day(row.period_start);
     const periodEnd = day(row.period_end);
-    const overlapFrom = periodStart > window.from ? periodStart : window.from;
-    const overlapTo = periodEnd < window.to ? periodEnd : window.to;
-    const overlapDays = calendarDaysBetween(overlapFrom, overlapTo) + 1;
-    if (overlapDays <= 0) continue;
     const earnedFrom = row.earned_from == null ? null : day(row.earned_from);
     const earnedTo = row.earned_to == null ? null : day(row.earned_to);
-    const periodIsInside = periodStart >= window.from && periodEnd <= window.to;
+    let amount: string;
     if (earnedFrom === null || earnedTo === null) {
-      if (!periodIsInside) {
-        throw new PayrollHolidayError(
-          `${input.employeePartyId}: statutory holiday lookback earnings overlap ${window.from} through ${window.to}, but a committed pay stub has no dated earning evidence; record the earning dates or correct the pay stub before calculating holiday pay`,
-        );
+      const attributed = attributeStubEarningsToWindow(
+        row.amount, periodStart, periodEnd, window,
+      );
+      if (attributed.overlapDays <= 0) continue;
+      if (!(periodStart >= window.from && periodEnd <= window.to)) {
+        proratedPeriods.push(`${periodStart} through ${periodEnd}`);
       }
+      amount = attributed.attributed;
     } else {
       const earningOverlaps = earnedFrom <= window.to && earnedTo >= window.from;
       if (!earningOverlaps) continue;
@@ -1850,8 +1917,8 @@ async function lookbackEarnings(
           `${input.employeePartyId}: a pay-stub earning dated ${earnedFrom} through ${earnedTo} crosses the statutory holiday lookback boundary; split the earning into day-resolved pay-stub lines before calculating holiday pay`,
         );
       }
+      amount = roundMoney(row.amount, 4);
     }
-    const amount = roundMoney(row.amount, 4);
 
     const bucket: keyof HolidayLookbackEarnings =
       row.system_key === "overtime" ? "overtime"
@@ -1860,7 +1927,7 @@ async function lookbackEarnings(
       : "regular";
     totals[bucket] = add(totals[bucket], amount);
   }
-  return totals;
+  return { earnings: totals, proratedPeriods: [...new Set(proratedPeriods)] };
 }
 
 // ---------------------------------------------------------------------------

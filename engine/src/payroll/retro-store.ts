@@ -813,6 +813,13 @@ export interface RetroStubEarningLine {
   projectId: string | null;
   departmentId: string | null;
   amount: string;
+  /**
+   * The settled source period: a retro difference was earned then, not in
+   * the settling run's period. Dating it lets later lookbacks place it
+   * exactly instead of prorating a span it never belonged to.
+   */
+  sourcePeriodStart: string;
+  sourcePeriodEnd: string;
   /** The component's OWN flag — never a retro-specific hardcode. */
   vacationable: boolean;
   /** The PACK's declared retroactive treatment, resolved by the caller. */
@@ -901,6 +908,8 @@ export async function retroEarningLinesForStub(
       projectId: row.project_id,
       departmentId: row.department_id,
       amount: row.amount,
+      sourcePeriodStart: row.source_period_start,
+      sourcePeriodEnd: row.source_period_end,
       vacationable: row.vacationable === true,
       nonPeriodic: input.nonPeriodic,
       supplementalWageCategory: row.supplemental_wage_category as UsSupplementalWageCategory | null,
