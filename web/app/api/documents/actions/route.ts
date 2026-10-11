@@ -256,19 +256,11 @@ export const POST = defineRoute({
           }
         }
         if (action === 'withdraw') {
-      const data = (await db.execute(sql`
-        select id, kind, status, document_number as number, subsidiary_id as "subsidiaryId",
-               ${documentRevisionSql(sql`updated_at`)} as "updatedAt"
-          from documents where id = ${documentId} and org_id = ${session.orgId}`)).rows[0] as unknown as
-        { id: string; kind: string; status: string; subsidiaryId: string | null; updatedAt: string } | undefined
-      if (!data) return NextResponse.json({ error: 'document not found' }, { status: 404 })
-      const restricted = guardSubsidiaryScope(authz, data.subsidiaryId)
-      if (restricted) return restricted
       try {
         const result = await withdrawDocumentSubmission({
-          documentId,
-          orgId: session.orgId,
-          actorId: session.user.id,
+          documentId: doc.id,
+          orgId: user.orgId,
+          actorId: user.id,
           actorIsApprover: can(authz, approvePerm),
           reason: body.reason,
           expectedUpdatedAt: body.expectedUpdatedAt,

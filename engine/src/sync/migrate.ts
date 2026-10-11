@@ -1,3 +1,4 @@
+import { ensureTimesheetWeeks, timesheetWeekKey, timesheetWeekStart, type TimesheetWeekKey } from "../projects/timesheet-weeks.ts";
 import { stableMappingSnapshot } from "./operational-entity-mappings.ts";
 import { syncSourcePartyPhotos, type PartyPhotoSummary } from "./party-photos.ts";
 import { sql } from "drizzle-orm";
@@ -1347,10 +1348,18 @@ async function loadTimeEntries(records: SourceEntity[], ctx: Ctx, s: ResourceLoa
     s.created += b.length;
   };
 
+  // Every week the source has time in gets its header, including weeks whose
+  // entries are unchanged, so headers missing from earlier loads heal too.
+  const weeks = new Map<string, TimesheetWeekKey>();
   for (const rec of records) {
     const f = rec.fields;
     const empId = ref(ctx.maps.parties, f.employeeRef);
     if (!empId) { s.skipped++; continue; }
+    const workedOn = str(f.workedOn);
+    if (workedOn) {
+      const week = { employeePartyId: empId, weekStart: timesheetWeekStart(workedOn) };
+      weeks.set(timesheetWeekKey(week), week);
+    }
     const prior = existing.get(rec.sourceRef);
     if (prior) {
       const id = prior.id;
@@ -1453,4 +1462,5 @@ async function loadTimeEntries(records: SourceEntity[], ctx: Ctx, s: ResourceLoa
     if (batch.length >= BATCH) await flush();
   }
   await flush();
+  await ensureTimesheetWeeks(orgId, [...weeks.values()]);
 }

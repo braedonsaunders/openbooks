@@ -5,6 +5,7 @@ import { businessToday, isIsoCalendarDate, parseIsoDate } from '@openbooks/engin
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { pinInternalPerson } from '@openbooks/engine/src/organization/internal-person.ts'
 import { add } from '@openbooks/engine/src/money/money.ts'
+import { ensureTimesheetWeeks, timesheetWeekKey } from '@openbooks/engine/src/projects/timesheet-weeks.ts'
 import { subsidiaryScopeAllows } from '../../../lib/authz'
 import { isFeatureEnabled } from '../../../lib/features'
 import { TimeApprovalRefusal } from '../../../lib/time-approval-refusal'
@@ -431,18 +432,8 @@ export async function loadWeek(
 }
 
 /**
- * The week's header row, created on demand.
- *
- * A week becomes a record the first time anyone touches it, so the id an
- * approval flow needs exists before it is needed. Idempotent: concurrent
- * saves race to the same unique (org, employee, week) and the loser reads the
- * winner's row rather than failing.
- *
- * A header created now must inherit the state of the hours it covers, not
- * assume they are new. Time arrives from imports and connectors as well as the
- * editor, so a week can hold approved hours long before anyone opens it — and
- * defaulting such a header to 'draft' would report approved time as unsubmitted
- * and re-offer it for approval.
+ * The week's header row for a timekeeper the caller may act for, created on
+ * demand with the state of the hours it covers (see ensureTimesheetWeeks).
  */
 export async function ensureTimesheetWeek(
   orgId: string,
@@ -454,41 +445,9 @@ export async function ensureTimesheetWeek(
   const ownedEmployee = await pinTimekeeper(orgId, employeePartyId, allowedSubsidiaryIds)
   if (!ownedEmployee) throw new Error('employee not found')
   const week = weekStart(weekStartIso)
-  const inserted = (await db.execute<{ id: string; status: WeekStatus; rejection_reason: string | null }>(sql`
-    insert into timesheet_weeks
-      (org_id, employee_party_id, week_start, status,
-       approved_by, approved_at, rejection_reason, created_by, updated_by)
-    select ${orgId}, ${ownedEmployee}, ${week}::date,
-           coalesce(seed.status, 'draft'), seed.approved_by, seed.approved_at,
-           seed.rejection_reason, ${actorId ?? null}, ${actorId ?? null}
-      from (
-        select case
-                 when count(*) = 0 then null
-                 when bool_and(te.status = 'approved') then 'approved'
-                 when bool_or(te.status = 'submitted') then 'submitted'
-                 when bool_or(te.status = 'rejected') then 'rejected'
-                 else 'draft'
-               end as status,
-               (array_agg(te.approved_by) filter (where te.approved_by is not null))[1] as approved_by,
-               max(te.approved_at) as approved_at,
-               (array_agg(te.rejection_reason) filter (where te.rejection_reason is not null))[1] as rejection_reason
-          from time_entries te
-         where te.org_id = ${orgId}
-           and te.employee_party_id = ${ownedEmployee}
-           and te.worked_on >= ${week}::date
-           and te.worked_on <= ${week}::date + 6
-      ) seed
-    -- A concurrent weekly-header create reuses the organization and employee header resolved below.
-    on conflict (org_id, employee_party_id, week_start) do nothing
-    returning id, status, rejection_reason
-  `))
-  const row = (inserted.rows[0]
-    ?? ((await db.execute<{ id: string; status: WeekStatus; rejection_reason: string | null }>(sql`
-      select id, status, rejection_reason from timesheet_weeks
-       where org_id = ${orgId} and employee_party_id = ${ownedEmployee}
-         and week_start = ${week}
-    `))).rows[0])!
-  return { id: row.id, status: row.status, rejectionReason: row.rejection_reason }
+  const headers = await ensureTimesheetWeeks(orgId, [{ employeePartyId: ownedEmployee, weekStart: week }], actorId ?? null)
+  const row = headers.get(timesheetWeekKey({ employeePartyId: ownedEmployee, weekStart: week }))!
+  return { id: row.id, status: row.status, rejectionReason: row.rejectionReason }
 }
 
 /**

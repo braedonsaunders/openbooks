@@ -53,6 +53,7 @@ export const BENEFIT_PROGRAM_FREQUENCIES = [
   "manual",
 ] as const;
 export const BENEFIT_PROGRAM_PERIOD_BASES = ["calendar", "fiscal"] as const;
+export const BENEFIT_PROGRAM_UNASSIGNED_TIME = ["refuse", "exclude"] as const;
 export const BENEFIT_AWARD_SUBJECT_KIND = "hrm_benefit_award";
 export const BENEFIT_AWARD_STATUSES = [
   "draft",
@@ -104,6 +105,8 @@ export const benefitPrograms = pgTable(
       .default("manual"),
     periodBasis: text("period_basis", { enum: [...BENEFIT_PROGRAM_PERIOD_BASES] }),
     paymentDelayDays: integer("payment_delay_days").notNull().default(0),
+    /** Approved time without the scoped project or department: refuse the measure or exclude it. */
+    unassignedTime: text("unassigned_time", { enum: [...BENEFIT_PROGRAM_UNASSIGNED_TIME] }).notNull().default("refuse"),
     revision: integer("revision").notNull().default(1),
     ...auditColumns,
   },
@@ -130,8 +133,10 @@ export const benefitPrograms = pgTable(
 /**
  * Measurement scope per program (typed child table with composite tenant
  * references). Company scope carries no rows; department scope names
- * departments; project scope names projects. Each row names exactly one
- * scoped entity so every reference resolves through a tenant key.
+ * departments; project scope names projects and/or customers (every project
+ * of the customer), optionally narrowed by department rows to work performed
+ * in those departments. Each row names exactly one scoped entity so every
+ * reference resolves through a tenant key.
  */
 export const benefitProgramScopes = pgTable(
   "hrm_benefit_program_scopes",
@@ -141,6 +146,7 @@ export const benefitProgramScopes = pgTable(
     programId: uuid("program_id").notNull(),
     departmentId: uuid("department_id"),
     projectId: uuid("project_id"),
+    customerId: uuid("customer_id"),
     ...auditColumns,
   },
   (t) => [
@@ -151,9 +157,10 @@ export const benefitProgramScopes = pgTable(
     }).onDelete("restrict"),
     uniqueIndex("hrm_benefit_program_scopes_org_id_id_unique").on(t.orgId, t.id),
     index("hrm_benefit_program_scopes_program").on(t.orgId, t.programId),
+    index("hrm_benefit_program_scopes_customer").on(t.orgId, t.customerId).where(sql`${t.customerId} is not null`),
     check(
       "hrm_benefit_program_scopes_one_entity",
-      sql`(${t.departmentId} is not null)::int + (${t.projectId} is not null)::int = 1`,
+      sql`(${t.departmentId} is not null)::int + (${t.projectId} is not null)::int + (${t.customerId} is not null)::int = 1`,
     ),
   ],
 );
