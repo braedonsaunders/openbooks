@@ -7,6 +7,8 @@ import { resolveProjectActualCosts, resolveProjectFinancials } from "./financial
 import { db, withBypassContext } from "../platform/db.ts";
 import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 
+const DB = !!process.env.OPENBOOKS_DB_URL;
+
 const fixedPrice = BUILTIN_PROJECT_TYPES.find((t) => t.key === "fixed_price")!.financialProfile;
 
 async function seedProject(org: ScratchOrg, contractValue: string): Promise<{ project: string; customer: string }> {
