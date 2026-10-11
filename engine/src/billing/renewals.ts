@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { db, withOrg, withBypassContext } from '../platform/db.ts';
 import { businessToday, civilDayIndex, isIsoCalendarDate } from '../platform/business-date.ts';
+import { lockLedgerSetupFence } from '../organization/ledger-setup-fence.ts';
 import { lockAndCheckOrgFeature } from '../organization/org-feature-lock.ts';
 import { lockActorCommandAuthority } from '../organization/actor-command-authority.ts';
 import { ScopeNotFoundError } from '../organization/subsidiary-scope.ts';
@@ -46,6 +47,7 @@ interface Policy {
 export async function generateRenewalDocument(orgId: string, actorId: string, subscriptionId: string, asOf: string) {
   if (!isIsoCalendarDate(asOf)) throw new AdvancedSubscriptionError('Enter a renewal as-of date');
   const result = await withOrg(orgId, async () => {
+    await lockLedgerSetupFence(db,orgId,'shared');
     await db.execute(sql`select id from subscriptions where org_id=${orgId} and id=${subscriptionId} for update`);
     const subject = (await db.execute<RenewalSubject>(sql`
       select s.id,s.customer_id,s.status,coalesce(p.subsidiary_id,root.id) as subsidiary_id,l.term_ends_on::text,
@@ -152,6 +154,7 @@ export async function runRenewalScan() {
 export async function acceptRenewalDocument(orgId:string,actorId:string,documentId:string,reason:string) {
   if(reason.trim().length<8) throw new AdvancedSubscriptionError('Enter the commercial renewal acceptance reason');
   return withOrg(orgId,async()=>{
+    await lockLedgerSetupFence(db,orgId,'shared');
     const occurrence=(await db.execute<{subscription_id:string;term_ends_on:string;policy_id:string;snapshot:{subject:RenewalSubject;policy:Policy;components:{component_key:string;quantity:string;unit_price:string;income_account_id:string|null;item_id:string|null;tax_code_id:string|null}[];request:{lines:{quantity:string;unitPrice:string;accountId:string;itemId:string|null}[]}}}>(sql`
       select subscription_id,term_ends_on::text,policy_id,snapshot from subscription_renewal_occurrences where org_id=${orgId} and document_id=${documentId} and occurrence='document'
     `)).rows[0];
