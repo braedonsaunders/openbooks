@@ -84,6 +84,7 @@ export const FEATURE_ICONS: Record<string, LucideIcon> = {
   budgets: Target,
   allocations: Split,
   crossBorderTax: Globe,
+  informationReturns: Receipt,
   continuousClose: CalendarCheck,
   advancedClose: ShieldCheck,
   // Sales

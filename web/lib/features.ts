@@ -347,13 +347,12 @@ const FEATURE_DISABLE_CHECKS: Record<string, (orgId: string) => Promise<FeatureD
        where org_id = ${orgId} and schedule_start is not null`)
     return { blocked: false, impacts: n ? [{ labelKey: 'scheduledTasks', count: n }] : [] }
   },
-  // Compliance evidence and information returns are records, not postings, so
-  // switching the module off strands nothing — EXCEPT a finalized information
-  // return that has not been filed yet. That is a statutory obligation in
-  // flight: file it or void it before the module goes dark.
+  // Compliance evidence is records, not postings, so switching the module
+  // off strands nothing — counts only tell the operator what goes dark.
+  // Information-return filings carry their own probe on the tax switch.
   subcontractorCompliance: async (orgId) => {
     const today = await businessToday(orgId)
-    const [trackedVendors, activeRecords, blockingPolicies, openWaiverRequests, pendingFilings, unfiledFinalized] =
+    const [trackedVendors, activeRecords, blockingPolicies, openWaiverRequests] =
       await sequential([
         () => countRows(sql`
           select count(*)::int as n from vendor_roles
@@ -369,18 +368,28 @@ const FEATURE_DISABLE_CHECKS: Record<string, (orgId: string) => Promise<FeatureD
         () => countRows(sql`
           select count(*)::int as n from lien_waivers
            where org_id = ${orgId} and status in ('draft', 'requested', 'received')`),
-        () => countRows(sql`
-          select count(*)::int as n from information_return_filings
-           where org_id = ${orgId} and status in ('draft', 'computed')`),
-        () => countRows(sql`
-          select count(*)::int as n from information_return_filings
-           where org_id = ${orgId} and status = 'finalized'`),
       ])
     const impacts: FeatureImpact[] = []
     if (trackedVendors) impacts.push({ labelKey: 'trackedVendors', count: trackedVendors })
     if (activeRecords) impacts.push({ labelKey: 'activeCertificates', count: activeRecords })
     if (blockingPolicies) impacts.push({ labelKey: 'blockingCompliancePolicies', count: blockingPolicies })
     if (openWaiverRequests) impacts.push({ labelKey: 'openLienWaivers', count: openWaiverRequests })
+    return { blocked: false, impacts }
+  },
+  // Information returns are records, not postings, so switching the tax
+  // switch off strands nothing — EXCEPT a finalized return that has not been
+  // filed yet. That is a statutory obligation in flight: file it or void it
+  // before the switch goes dark.
+  informationReturns: async (orgId) => {
+    const [pendingFilings, unfiledFinalized] = await sequential([
+      () => countRows(sql`
+        select count(*)::int as n from information_return_filings
+         where org_id = ${orgId} and status in ('draft', 'computed')`),
+      () => countRows(sql`
+        select count(*)::int as n from information_return_filings
+         where org_id = ${orgId} and status = 'finalized'`),
+    ])
+    const impacts: FeatureImpact[] = []
     if (pendingFilings) impacts.push({ labelKey: 'draftInformationReturns', count: pendingFilings })
     if (unfiledFinalized) impacts.push({ labelKey: 'unfiledInformationReturns', count: unfiledFinalized })
     return { blocked: unfiledFinalized > 0, impacts }

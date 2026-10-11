@@ -218,7 +218,7 @@ export const CURRENCY_ENTITIES: SetupEntity[] = [
     actorCols: true,
     orderBy: 'form_type, box',
     hasActive: true,
-    featureKey: 'subcontractorCompliance',
+    featureKey: 'informationReturns',
     docSlug: 'subcontractor-compliance',
     columns: [
       { key: 'formType', kind: 'badge', options: INFORMATION_RETURN_FORM_TYPES },

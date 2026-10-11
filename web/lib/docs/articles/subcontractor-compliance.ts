@@ -6,7 +6,7 @@ export const subcontractorCompliance: DocArticle = {
   category: 'projects',
   order: 6,
   summary:
-    'Track certificates of insurance, exchange lien waivers for payment, and file 1099-NEC/MISC and T4A information returns — with payment holds when a subcontractor’s coverage lapses.',
+    'Track certificates of insurance and exchange lien waivers for payment — with payment holds when a subcontractor’s coverage lapses.',
   updated: '2026-10-09',
   keywords: [
     'compliance',
@@ -33,8 +33,9 @@ noncompliant subcontractor cannot enter or be released from a pay run.
 Switch it on in **Company Settings → Features → Subcontractor compliance**. It
 is off by default and is enabled automatically for the Construction and
 Engineering/Architecture industry presets in the setup wizard. Turning it back
-off preserves every certificate, waiver, and filing. The feature cannot be
-disabled while a finalized information return remains unfiled.
+off preserves every certificate and waiver. Year-end information returns are a
+separate switch (**Features → Information returns**); the Information returns
+switch cannot be disabled while a finalized return remains unfiled.
 
 ## Functional areas
 
@@ -182,7 +183,8 @@ release decision.
 
 ## Information returns
 
-**Compliance → Information returns** prepares 1099-NEC, 1099-MISC and T4A.
+**Compliance → Information returns** prepares 1099-NEC, 1099-MISC and T4A
+behind the **Information returns** tax switch in Company Settings → Features.
 
 Open a filing for a completed calendar year and compute it. The figure is
 **cash paid**, not billed: every posted vendor payment in the year is traced
