@@ -368,7 +368,7 @@ async function planAccountMerge(
     party_id: string | null; equipment_unit_id: string | null; payment_card_id: string | null; extra_dims: unknown;
   }>(sql`
     select e.book_id, b.name as book_name, (b.is_active and b.posts_gl) as book_active,
-           l.subsidiary_id, s.name as subsidiary_name, s.base_currency as functional_currency,
+           l.subsidiary_id, s.name as subsidiary_name, public.accounting_book_currency(${orgId}, e.book_id, l.subsidiary_id) as functional_currency,
            l.currency, sum(l.amount)::text as amount, sum(l.txn_amount)::text as txn_amount,
            l.department_id, l.project_id, l.location_id, l.class_id, l.party_id,
            l.equipment_unit_id, l.payment_card_id, l.extra_dims
@@ -379,7 +379,7 @@ async function planAccountMerge(
      where l.org_id = ${orgId} and l.account_id = ${source.id}
        and e.posting_date <= ${request.effectiveDate}
        ${balanceFrom ? sql`and e.posting_date >= ${balanceFrom}` : sql``}
-     group by e.book_id, b.name, b.is_active, b.posts_gl, l.subsidiary_id, s.name, s.base_currency, l.currency,
+     group by e.book_id, b.name, b.is_active, b.posts_gl, l.subsidiary_id, s.name, l.currency,
               l.department_id, l.project_id, l.location_id, l.class_id, l.party_id,
               l.equipment_unit_id, l.payment_card_id, l.extra_dims
     having sum(l.amount) <> 0 or sum(l.txn_amount) <> 0
@@ -813,6 +813,9 @@ async function applyMerge(
         periodId: plan.periodId,
         memo: `Merge of ${accountLabel(source)} into ${accountLabel(target)}`,
         origin: "account_merge",
+        amountBasis: "book",
+        accountBasis: "book",
+        replicate: false,
         actorId: input.actorId,
         idempotencyKey: `account-merge:${input.idempotencyKey}:${entry.bookId}:${entry.subsidiaryId}`,
         custom: { accountMerge: { mergeId, sourceAccountId: source.id, targetAccountId: target.id } },

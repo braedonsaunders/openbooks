@@ -1,3 +1,4 @@
+import { neg } from "../money/money.ts";
 /**
  * Replication of primary-book postings into full accounting books.
  *
@@ -45,6 +46,9 @@ export const BOOK_MEASURED_ORIGINS = [
   "translation",
   "provision",
   "closing",
+  "opening",
+  "expense_amortization",
+  "account_merge",
   "book_opening",
 ] as const;
 
@@ -170,6 +174,18 @@ async function lockFullBooks(executor: SqlExecutor, orgId: string, onlyBookId?: 
     }));
 }
 
+async function loadEntryLines(executor: SqlExecutor, orgId: string, entryId: string): Promise<SourceLine[]> {
+  return (await executor.execute<SourceLine & Record<string, unknown>>(sql`
+    select line_number, account_id, subsidiary_id, amount::text as amount, currency,
+           txn_amount::text as txn_amount, fx_rate::text as fx_rate, memo, party_id, department_id,
+           project_id, location_id, class_id, equipment_unit_id, payment_card_id, tax_code_id,
+           extra_dims, quantity::text as quantity, unit, due_date::text as due_date, custom,
+           contributor_kind, contributor_ref
+      from journal_lines
+     where org_id = ${orgId} and entry_id = ${entryId}
+     order by line_number`)).rows;
+}
+
 /**
  * Replicate one primary entry into every full book that must hold it (or
  * only `onlyBookId`). Joins the caller's transaction. Returns one outcome per
@@ -187,15 +203,7 @@ export async function replicateEntryToBooks(
   if (!source || !source.replicable) return [];
   const books = fullBooks.filter((book) => book.replicationFrom <= source.posting_date);
   if (books.length === 0) return [];
-  const lines = (await executor.execute<SourceLine & Record<string, unknown>>(sql`
-    select line_number, account_id, subsidiary_id, amount::text as amount, currency,
-           txn_amount::text as txn_amount, fx_rate::text as fx_rate, memo, party_id, department_id,
-           project_id, location_id, class_id, equipment_unit_id, payment_card_id, tax_code_id,
-           extra_dims, quantity::text as quantity, unit, due_date::text as due_date, custom,
-           contributor_kind, contributor_ref
-      from journal_lines
-     where org_id = ${args.orgId} and entry_id = ${source.id}
-     order by line_number`)).rows;
+  const lines = await loadEntryLines(executor, args.orgId, source.id);
   if (lines.length === 0) {
     throw new Error(`journal entry ${source.entry_number} has no lines to replicate`);
   }
@@ -243,12 +251,17 @@ export async function replicateEntryToBooks(
           select replica_entry_id from book_entry_replications
            where org_id = ${args.orgId} and book_id = ${book.id} and source_entry_id = ${source.reverses_entry_id}`)).rows[0]?.replica_entry_id ?? null
       : null;
-    const bookLines: PostEntryLineInput[] = carried.map((line) => ({
+    // A governed reversal mirrors the original book copy at its recorded
+    // accounts and rates; a later mapping or quote cannot reinterpret it.
+    const mirrored = reversesReplica ? await loadEntryLines(executor, args.orgId, reversesReplica) : null;
+    if (mirrored?.length === 0) throw new Error(`The original entry in book ${book.code} has no reversal lines`);
+    const bookLines: PostEntryLineInput[] = (mirrored ?? carried).map((line) => ({
+      lineNumber: line.line_number,
       accountId: line.account_id,
       subsidiaryId: line.subsidiary_id,
-      amount: line.amount,
+      amount: mirrored ? neg(line.amount) : line.amount,
       currency: line.currency,
-      txnAmount: line.txn_amount,
+      txnAmount: mirrored ? neg(line.txn_amount) : line.txn_amount,
       fxRate: line.fx_rate,
       memo: line.memo,
       partyId: line.party_id,
@@ -260,7 +273,7 @@ export async function replicateEntryToBooks(
       paymentCardId: line.payment_card_id,
       taxCodeId: line.tax_code_id,
       extraDims: line.extra_dims ?? {},
-      quantity: line.quantity,
+      quantity: mirrored && line.quantity !== null ? neg(line.quantity) : line.quantity,
       unit: line.unit,
       dueDate: line.due_date,
       // Open items settle in the primary book's subledger; a book copy is
@@ -285,7 +298,9 @@ export async function replicateEntryToBooks(
       actorId: args.actorId ?? null,
       idempotencyKey: `book-replica:${book.id}:${source.id}`,
       closeModules,
-      amountBasis: "functional",
+      amountBasis: mirrored ? "book" : "functional",
+      accountBasis: mirrored ? "book" : "source",
+      allowInactiveAccounts: mirrored !== null,
       auditAction: "replicate",
       requestId: args.requestId ?? null,
       auditChanges: { bookReplicaOf: source.id, omittedSubsidiaryIds: [...omitted] },

@@ -9,9 +9,9 @@ export class AmortizationError extends Error {
 
   constructor(
     message: string,
-    options: { status?: AmortizationErrorStatus; code?: string; remedy?: string } = {},
+    options: { status?: AmortizationErrorStatus; code?: string; remedy?: string; cause?: unknown } = {},
   ) {
-    super(message);
+    super(message, { cause: options.cause });
     this.status = options.status ?? 422;
     this.code = options.code ?? "amortization_invalid";
     this.remedy = options.remedy ?? "Correct the amortization input and submit it again.";

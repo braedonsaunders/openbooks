@@ -14,6 +14,7 @@
 import { sql } from "drizzle-orm";
 import { fromUnits, toUnits } from "../money/money.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
+import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
 import { arePeriodModulesOpen } from "../periods/period-policy.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { businessToday } from "../platform/business-date.ts";
@@ -221,6 +222,9 @@ async function runOnRunner(
   cutoff: string,
   scope: { subsidiaryIds: ReadonlySet<string> | null; scheduleIds?: readonly string[] },
 ): Promise<AmortizationRunResult> {
+  // Acquire the setup fence before schedule locks so book activation can
+  // capture schedules and ledger copies without an inverted lock order.
+  await lockLedgerSetupFence(runner, orgId, "shared");
   const result: AmortizationRunResult = { cutoff, posted: 0, totals: {}, entries: [], completed: [], problems: [] };
   const totals = new Map<string, bigint>();
   const blockedSchedules = new Set<string>();

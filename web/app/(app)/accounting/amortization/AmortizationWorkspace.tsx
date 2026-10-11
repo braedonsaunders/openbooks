@@ -266,7 +266,7 @@ export function AmortizationNewScheduleButton({ data, templatesHref }: { data: A
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [form, setForm] = useState({
-    templateId: '', subsidiaryId: data?.subsidiaries[0]?.id ?? '', totalAmount: '', openingAmortizedAmount: '',
+    bookId: data?.books[0]?.id ?? '', templateId: '', subsidiaryId: data?.subsidiaries[0]?.id ?? '', totalAmount: '', openingAmortizedAmount: '',
     serviceStartOn: '', serviceEndOn: '', amortizeFromPeriod: '', destinationAccountId: '', memo: '', reason: '',
   })
   if (!data) return null
@@ -279,6 +279,7 @@ export function AmortizationNewScheduleButton({ data, templatesHref }: { data: A
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          bookId: form.bookId || null,
           templateId: form.templateId,
           subsidiaryId: form.subsidiaryId,
           totalAmount: form.totalAmount,
@@ -319,11 +320,14 @@ export function AmortizationNewScheduleButton({ data, templatesHref }: { data: A
                 <Field label={t('newSchedule.template')}>
                   <SearchSelect value={form.templateId} options={data.templates.map((x) => ({ value: x.id, label: x.label }))} onChange={(v) => set('templateId')(v ?? '')} ariaLabel={t('newSchedule.template')} />
                 </Field>
+                {data.books.length > 1 && <Field label={t('reconciliation.columns.book')}>
+                  <SearchSelect value={form.bookId} options={data.books.map(book => ({ value: book.id, label: book.label }))} onChange={value => set('bookId')(value ?? '')} ariaLabel={t('reconciliation.columns.book')} />
+                </Field>}
                 <Field label={t('newSchedule.subsidiary')}>
                   <SearchSelect value={form.subsidiaryId} options={data.subsidiaries.map((x) => ({ value: x.id, label: x.label }))} onChange={(v) => set('subsidiaryId')(v ?? '')} ariaLabel={t('newSchedule.subsidiary')} />
                 </Field>
                 <div className="grid grid-cols-2 gap-3">
-                  <Field label={t('newSchedule.totalAmount')}>
+                  <Field label={`${t('newSchedule.totalAmount')} (${data.books.find(book => book.id === form.bookId)?.currencies[form.subsidiaryId] ?? '—'})`}>
                     <Input inputMode="decimal" value={form.totalAmount} onChange={(e) => set('totalAmount')(e.target.value)} placeholder="0.00" />
                   </Field>
                   <Field label={t('newSchedule.openingAmortized')}>

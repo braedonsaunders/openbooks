@@ -35,6 +35,7 @@ import { PROVIDER_COMMIT_KINDS, requestProviderVoidTx } from "../tax/provider-co
 import { voidPaymentWithholdings, releaseWithholdingRemittance } from "../contractor-withholding/service.ts";
 import { AmortizationError } from "../amortization/errors.ts";
 import { cancelAmortizationForVoidedSource } from "../amortization/source-void.ts";
+import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
 
 /**
  * Machine-readable void refusal reasons. The human message
@@ -464,6 +465,7 @@ export async function requestDocumentVoid(
 ): Promise<DocumentVoidResult> {
   const reason = validateReason(input.reason);
   return withOrgTransaction(input.orgId, async () => {
+    await lockLedgerSetupFence(db, input.orgId, "shared");
     const current = await loadDocument(input.documentId, input.orgId);
     // Keep the scope decision on the locked source row and hold that lock
     // through reservation, gate creation, and any immediate reversal.
@@ -647,6 +649,7 @@ export async function requestReceiptVoidWithDependents(
   input: DocumentVoidInput,
 ): Promise<DocumentVoidResult> {
   return withOrgTransaction(input.orgId, async () => {
+    await lockLedgerSetupFence(db, input.orgId, "shared");
     const relief = await listReceiptVoidBlockers(db, input.orgId, input.documentId);
     if (relief.blockers.length === 0) return requestDocumentVoid(input);
     if (!relief.allowVoidWithDependents) {
@@ -1317,6 +1320,7 @@ export async function completeRequestedDocumentVoid(
   allowedSubsidiaryIds?: ReadonlySet<string> | null,
 ): Promise<string | null> {
   return withOrgTransaction(orgId, async () => {
+    await lockLedgerSetupFence(db, orgId, "shared");
     const result: {
       reversalEntryId: string | null;
       kind: string;

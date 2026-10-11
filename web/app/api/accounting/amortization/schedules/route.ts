@@ -9,6 +9,7 @@ export const runtime = 'nodejs'
 const createBody = z.object({
   templateId: uuidId,
   subsidiaryId: uuidId,
+  bookId: uuidId.nullable().optional(),
   totalAmount: exactMoney(),
   openingAmortizedAmount: exactMoney().optional(),
   serviceStartOn: isoDate(),
@@ -39,6 +40,7 @@ export const POST = defineRoute({
       actorId: authz.user.id,
       templateId: body.templateId,
       subsidiaryId: body.subsidiaryId,
+      bookId: body.bookId,
       totalAmount: body.totalAmount,
       openingAmortizedAmount: body.openingAmortizedAmount,
       serviceStartOn: body.serviceStartOn,

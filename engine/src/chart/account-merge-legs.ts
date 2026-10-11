@@ -1,3 +1,4 @@
+import { PNL_TYPES } from "../records/account-types.ts";
 import { createHash } from "node:crypto";
 import { canonicalJson } from "../platform/canonical-json.ts";
 import { fromUnits, neg, roundDiv, toUnits } from "../money/money.ts";
@@ -9,13 +10,7 @@ import { fromUnits, neg, roundDiv, toUnits } from "../money/money.ts";
  */
 
 /** Account types whose balance is a period flow (closed to retained earnings each fiscal year). */
-export const PROFIT_AND_LOSS_TYPES: ReadonlySet<string> = new Set([
-  "income",
-  "income_other",
-  "cogs",
-  "expense",
-  "expense_other",
-]);
+export const PROFIT_AND_LOSS_TYPES: ReadonlySet<string> = new Set(PNL_TYPES);
 
 /** The dimension tuple a merged balance keeps on the surviving account. */
 export interface BalanceDimensions {

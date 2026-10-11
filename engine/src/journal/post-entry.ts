@@ -8,7 +8,7 @@ import { PostingError } from "./posting-contracts.ts";
 import { collectBalancingLegs } from "./balancing-hooks.ts";
 import { assertFinalKernelBalance } from "./posting-invariants.ts";
 import { findLiveReplayAuthorization } from "./replay-authorization.ts";
-import { applyBookPostingPolicy, type BookAmountBasis, type BookPostingEvidence } from "./book-posting-policy.ts";
+import { applyBookPostingPolicy, type BookAccountBasis, type BookAmountBasis, type BookPostingEvidence } from "./book-posting-policy.ts";
 import type { BookProfile } from "./book-basis.ts";
 import { BookAccountMapError } from "./book-account-maps.ts";
 import { BookTranslationError } from "./book-translation.ts";
@@ -116,6 +116,8 @@ export interface PostEntryInput {
    * `book` means the caller already measured them in the book currency.
    */
   amountBasis?: BookAmountBasis;
+  /** Legs read from an existing book ledger already name its physical accounts. */
+  accountBasis?: BookAccountBasis;
   /**
    * False marks a primary-book posting as this book's own measurement (a
    * per-book engine also posts its other books), so full books do not
@@ -183,6 +185,7 @@ export async function postEntry(
 ): Promise<PostEntryResult> {
   const { orgId } = input;
   if (input.custom?.postingRequestHash !== undefined) fail("postingRequestHash is reserved posting evidence — remove it from custom input");
+  if (input.custom?.postingRequestBasis !== undefined) fail("postingRequestBasis is reserved posting evidence — remove it from custom input");
   if (!orgId) fail("postEntry requires an organization id");
   if (!input.bookId) fail("postEntry requires a book id");
   if (!input.subsidiaryId) fail("postEntry requires an entry subsidiary id");
@@ -250,6 +253,10 @@ async function writeEntry(
   // New keyed entries retain this identity; legacy entries are compared against
   // their persisted header and lines without rewriting immutable history.
   const requestHash = input.idempotencyKey ? postingRequestHash(input, lines) : null;
+  const requestBasis = {
+    amountBasis: input.amountBasis ?? (input.reversesEntryId ? "book" : "functional"),
+    accountBasis: input.accountBasis ?? (input.reversesEntryId ? "book" : "source"),
+  };
   // A keyed replay must return the winner's full posted entry — header AND
   // lines — in the one shape below, whichever path finds it. One statement
   // reads both, and the winner committed both in one transaction, so a
@@ -260,9 +267,11 @@ async function writeEntry(
     const rows = (await executor.execute<{
       entry_id: string; id: string | null; line_number: number | null;
       request_hash: string | null; header: PostingHeader; line: PostEntryLineInput | null;
+      request_basis?: { amountBasis: BookAmountBasis; accountBasis: BookAccountBasis } | null;
     }>(sql`
       select je.id as entry_id, jl.id as id, jl.line_number as line_number,
              je.custom->>'postingRequestHash' as request_hash,
+             je.custom->'postingRequestBasis' as request_basis,
              jsonb_build_object('orgId', je.org_id, 'bookId', je.book_id, 'subsidiaryId', je.subsidiary_id,
                'postingDate', je.posting_date::text, 'periodId', je.period_id, 'memo', je.memo,
                'origin', je.origin, 'reversesEntryId', je.reverses_entry_id, 'sourceDocumentId', je.source_document_id) as header,
@@ -290,7 +299,8 @@ async function writeEntry(
         `journal entry ${input.entryNumber}: idempotency key ${idempotencyKey} resolves to entry ${entryId}, which has no lines — a keyed posting commits its header and lines together, so this entry is damaged ledger data, not a replay; retrying resolves to the same entry, so have entry ${entryId} investigated before posting again`,
       );
     const storedHash = rows[0]!.request_hash ?? postingRequestHash(rows[0]!.header, rows.flatMap((row) => row.line ? [row.line] : []));
-    if (storedHash !== requestHash) {
+    const storedBasis = rows[0]!.request_basis;
+    if (storedHash !== requestHash || (storedBasis && (storedBasis.amountBasis !== requestBasis.amountBasis || storedBasis.accountBasis !== requestBasis.accountBasis))) {
       fail(`journal entry ${input.entryNumber}: idempotency key ${idempotencyKey} already identifies entry ${entryId} with different posting content — review that journal entry and correct this request; use a new key only for a separate intended posting`);
     }
     return { entryId, lines: replayed };
@@ -348,14 +358,16 @@ async function writeEntry(
     );
 
   if (input.reversesEntryId) {
-    const target = (await executor.execute<{ id: string; status: string }>(sql`
-      select id, status from journal_entries
+    const target = (await executor.execute<{ id: string; status: string; book_id: string }>(sql`
+      select id, status, book_id from journal_entries
        where org_id = ${orgId} and id = ${input.reversesEntryId}
        limit 1`)).rows[0];
     if (!target)
       fail(`journal entry ${input.entryNumber}: reversed entry ${input.reversesEntryId} does not exist in this organization`);
     if (target!.status === "draft")
       fail(`journal entry ${input.entryNumber}: a draft entry cannot be reversed`);
+    if (target!.book_id !== input.bookId)
+      fail(`journal entry ${input.entryNumber}: a reversal must remain in the original accounting book`);
   }
 
   if (input.sourceDocumentId) {
@@ -398,7 +410,8 @@ async function writeEntry(
         book,
         entryLabel: `journal entry ${input.entryNumber}`,
         postingDate: input.postingDate,
-        amountBasis: input.amountBasis ?? "functional",
+        amountBasis: input.amountBasis ?? (input.reversesEntryId ? "book" : "functional"),
+        accountBasis: input.accountBasis ?? (input.reversesEntryId ? "book" : "source"),
         lines,
         nextLineNumber: () => {
           const next = Math.max(0, ...seenNumbers) + 1;
@@ -570,7 +583,7 @@ async function writeEntry(
       ? {
           ...(input.custom ?? {}),
           ...(input.replicate === false ? { bookSpecific: true } : {}),
-          ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey, postingRequestHash: requestHash } : {}),
+          ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey, postingRequestHash: requestHash, postingRequestBasis: requestBasis } : {}),
         }
       : null;
   // With an idempotencyKey the entry insert is ON CONFLICT DO NOTHING on

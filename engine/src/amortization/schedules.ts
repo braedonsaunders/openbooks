@@ -1,3 +1,8 @@
+import { loadBookProfile, resolveBookBases } from "../journal/book-basis.ts";
+import { applyBookAccountMaps, BookAccountMapError } from "../journal/book-account-maps.ts";
+import { BookTranslationError } from "../journal/book-translation.ts";
+import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
+import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
 /**
  * Schedule lifecycle: manual schedules for opening prepaid balances, and the
  * governed changes every schedule takes — activate, hold and resume, change
@@ -69,6 +74,7 @@ async function openScheduleForChange(
   input: { orgId: string; actorId: string; scheduleId: string; expectedRevision?: number },
 ): Promise<StoredSchedule> {
   await assertAmortizationFeature(runner, input.orgId);
+  await lockLedgerSetupFence(runner, input.orgId, "shared");
   const schedule = await loadSchedule(runner, input.orgId, input.scheduleId, { lock: true });
   await requireAmortizationAuthority(runner, input.orgId, input.actorId, schedule.subsidiaryId, "amortization.manage");
   assertExpectedRevision(schedule, input.expectedRevision);
@@ -163,7 +169,8 @@ export interface CreateManualScheduleInput {
   actorId: string;
   templateId: string;
   subsidiaryId: string;
-  /** Deferred amount in the subsidiary's functional currency (ledger decimal). */
+  bookId?: string | null;
+  /** Deferred amount in the selected book's currency (ledger decimal). */
   totalAmount: string;
   /** Already amortized before the schedule (opening balances). */
   openingAmortizedAmount?: string;
@@ -201,6 +208,7 @@ export async function createManualSchedule(input: CreateManualScheduleInput): Pr
   }
   return withOrgTransaction(input.orgId, async () => {
     await assertAmortizationFeature(db, input.orgId);
+    await lockLedgerSetupFence(db, input.orgId, "shared");
     await requireAmortizationAuthority(db, input.orgId, input.actorId, input.subsidiaryId, "amortization.manage");
     const subsidiary = (await db.execute<{ base_currency: string; is_active: boolean | null }>(sql`
       select base_currency, is_active from subsidiaries where org_id = ${input.orgId} and id = ${input.subsidiaryId}`)).rows[0];
@@ -227,23 +235,34 @@ export async function createManualSchedule(input: CreateManualScheduleInput): Pr
       });
     }
     await assertDestinationAccount(db, input.orgId, destinationAccountId, "The schedule");
-    const bookId = await activePostingPrimaryBookId(input.orgId, db);
+    const term = resolveAmortizationTerm(template.policy, {
+      serviceStartOn: input.serviceStartOn,
+      serviceEndOn: input.serviceEndOn ?? null,
+      transactionDate: input.serviceStartOn,
+    });
+    const fromPeriod = input.amortizeFromPeriod ? requirePeriodStart(input.amortizeFromPeriod, "the first period") : term.firstPeriodOn;
+    const bookId = input.bookId ?? await activePostingPrimaryBookId(input.orgId, db);
     if (!bookId) {
       throw new AmortizationError("No active primary posting book.", {
         code: "amortization_book_missing",
         remedy: "Activate a primary posting book in Company Settings → Accounting books.",
       });
     }
-    const term = resolveAmortizationTerm(template.policy, {
-      serviceStartOn: input.serviceStartOn,
-      serviceEndOn: input.serviceEndOn ?? null,
-      transactionDate: input.serviceStartOn,
-    });
-    const exponent = await amortizationCurrencyExponent(db, subsidiary.base_currency);
+    const book = await loadBookProfile(db, input.orgId, bookId);
+    const available = (await db.execute<{ id: string }>(sql`select id from accounting_books where org_id = ${input.orgId} and id = ${bookId} and is_active and posts_gl for share`)).rows[0];
+    if (!book || !available) throw new AmortizationError("The selected accounting book is not an active posting book of this organization.", { status: 404 });
+    if (!book.isPrimary && !await lockAndCheckOrgFeature(db, input.orgId, "multiBookAccounting")) throw new AmortizationError("Multi-book accounting is off.", { remedy: "Turn on Multi-book accounting in Company Settings → Features, or choose the primary book." });
+    const basis = (await resolveBookBases(db, { orgId: input.orgId, book, subsidiaryIds: [input.subsidiaryId], postingDate: fromPeriod })).get(input.subsidiaryId)!;
+    const mapped = book.isPrimary ? { lines: [{ accountId: template.deferralAccountId, subsidiaryId: input.subsidiaryId }, { accountId: destinationAccountId, subsidiaryId: input.subsidiaryId }] }
+      : await applyBookAccountMaps(db, { orgId: input.orgId, bookId, bookLabel: book.code, postingDate: fromPeriod, entryLabel: "Manual amortization schedule", lines: [{ accountId: template.deferralAccountId, subsidiaryId: input.subsidiaryId }, { accountId: destinationAccountId, subsidiaryId: input.subsidiaryId }] });
+    const deferralAccountId = mapped.lines[0]!.accountId;
+    const bookDestinationAccountId = mapped.lines[1]!.accountId;
+    await assertDeferralAccount(db, input.orgId, deferralAccountId);
+    await assertDestinationAccount(db, input.orgId, bookDestinationAccountId, "The schedule");
+    const exponent = await amortizationCurrencyExponent(db, basis.bookCurrency);
     const remaining = total - opening;
     const fullPlan = buildAmortizationPlan(template.policy, term, total, planQuantum(total, exponent));
     const weights = termWeights(template.policy, term);
-    const fromPeriod = input.amortizeFromPeriod ? requirePeriodStart(input.amortizeFromPeriod, "the first period") : term.firstPeriodOn;
     const plan = opening === 0n && fromPeriod === term.firstPeriodOn
       ? fullPlan.map((period, index) => ({ ...period, weight: weights[index]! }))
       : reforecastAmortizationPlan({
@@ -263,9 +282,9 @@ export async function createManualSchedule(input: CreateManualScheduleInput): Pr
          department_id, project_id, location_id, class_id, extra_dims, memo, created_by, updated_by)
       values (${input.orgId}, ${scheduleNumber}, 'draft', 'manual', ${template.id}, ${template.policy.method},
         ${template.policy.termSource}, ${template.policy.periodOffset}, ${input.subsidiaryId}, ${bookId},
-        ${subsidiary.base_currency}, ${fromUnits(total)}::numeric, ${fromUnits(opening)}::numeric,
+        ${basis.bookCurrency}, ${fromUnits(total)}::numeric, ${fromUnits(opening)}::numeric,
         ${term.startOn}, ${term.endOn}, ${plan[0]?.periodStart ?? term.firstPeriodOn},
-        ${template.deferralAccountId}, ${destinationAccountId},
+        ${deferralAccountId}, ${bookDestinationAccountId},
         ${dims.departmentId ?? null}, ${dims.projectId ?? null}, ${dims.locationId ?? null}, ${dims.classId ?? null},
         ${JSON.stringify(dims.extraDims ?? {})}::jsonb, ${input.memo ?? null}, ${input.actorId}, ${input.actorId})
       returning id`)).rows[0];
@@ -275,7 +294,7 @@ export async function createManualSchedule(input: CreateManualScheduleInput): Pr
       scheduleId: row.id,
       planRevision: 1,
       lines: plan,
-      destinationAccountId,
+      destinationAccountId: bookDestinationAccountId,
       actorId: input.actorId,
     });
     await recordScheduleEvent(db, {
@@ -289,14 +308,26 @@ export async function createManualSchedule(input: CreateManualScheduleInput): Pr
         status: "draft",
         totalAmount: fromUnits(total),
         openingAmortized: fromUnits(opening),
+        bookId,
+        currency: basis.bookCurrency,
+        deferralAccountId,
         template: { id: template.id, code: template.code, effectiveFrom: template.effectiveFrom },
         firstPeriodOn: plan[0]?.periodStart ?? null,
         periods: plan.length,
-        destinationAccountId,
+        destinationAccountId: bookDestinationAccountId,
       },
       actorId: input.actorId,
     });
     return { scheduleId: row.id, scheduleNumber };
+  }).catch((error: unknown) => {
+    if (error instanceof BookTranslationError || error instanceof BookAccountMapError) {
+      throw new AmortizationError(error.message, {
+        code: "amortization_book_policy",
+        remedy: "Correct the selected book's currency coverage or account mappings for the first amortization period in Setup → Accounting books, then save the schedule again.",
+        cause: error,
+      });
+    }
+    throw error;
   });
 }
 

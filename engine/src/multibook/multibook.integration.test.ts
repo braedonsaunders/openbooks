@@ -12,6 +12,10 @@ import { setPeriodLockState } from "../periods/period-locks.ts";
 import { closeBookAccountMap, createBookAccountMap, createBookCurrencyVersion } from "./settings.ts";
 import { changeBookReplication } from "./replication-runs.ts";
 import { MultiBookError } from "./errors.ts";
+import { runExpenseAmortization } from "../amortization/run.ts";
+import { reconcileDeferralAccounts } from "../amortization/reconciliation.ts";
+import { AmortizationError } from "../amortization/errors.ts";
+import { createManualSchedule } from "../amortization/schedules.ts";
 
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL };
 
@@ -388,4 +392,166 @@ test("book configuration is isolated to its organization", enabled, () => fixtur
     () => assert.fail("book configuration needs an unrestricted scope"),
     (error: unknown) => assert.ok(error instanceof Error),
   );
+}));
+
+test("a replicated reversal retains the original book accounts and quote after policy changes", enabled, () => fixture(async (f) => {
+  const currency = f.baseCurrency === "EUR" ? "USD" : "EUR";
+  const firstRevenue = await f.account("income");
+  const nextRevenue = await f.account("income");
+  await withOrgContext(f.org.orgId, () => db.execute(sql`
+    insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate)
+    values (${f.org.orgId}, ${f.baseCurrency}, ${currency}, '2026-07-01', 'spot', '0.68')`));
+  await createBookCurrencyVersion({ orgId: f.org.orgId, actorId: f.actor, allowedSubsidiaryIds: null,
+    input: { bookId: f.book, subsidiaryId: f.org.subsidiaryId, currency, rateType: "spot", effectiveFrom: "2026-07-01" }, reason: "Report the book in its measurement currency" });
+  const mapping = await createBookAccountMap({ orgId: f.org.orgId, actorId: f.actor, allowedSubsidiaryIds: null,
+    input: { bookId: f.book, sourceAccountId: f.org.accounts.revenue, targetAccountId: firstRevenue, effectiveFrom: "2026-07-01" }, reason: "Present revenue in the book chart" });
+  await activate(f);
+  const source = await f.post([{ accountId: f.org.accounts.bank, amount: "100" }, { accountId: f.org.accounts.revenue, amount: "-100" }], { postingDate: "2026-07-15" });
+  const original = await replicaOf(f, source);
+  assert.deepEqual(original.lines.map(line => [line.account_id, line.amount]), [[f.org.accounts.bank, "68.0000"], [firstRevenue, "-68.0000"]]);
+  await closeBookAccountMap({ orgId: f.org.orgId, actorId: f.actor, allowedSubsidiaryIds: null, id: mapping.id,
+    effectiveTo: "2026-07-24", reason: "End the previous revenue presentation" });
+  await createBookAccountMap({ orgId: f.org.orgId, actorId: f.actor, allowedSubsidiaryIds: null,
+    input: { bookId: f.book, sourceAccountId: f.org.accounts.revenue, targetAccountId: nextRevenue, effectiveFrom: "2026-07-25" }, reason: "Apply the new revenue presentation prospectively" });
+  await withOrgContext(f.org.orgId, () => db.execute(sql`
+    insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate)
+    values (${f.org.orgId}, ${f.baseCurrency}, ${currency}, '2026-07-31', 'spot', '0.91')`));
+  const reversal = await withOrgTransaction(f.org.orgId, async () => {
+    const id = await f.post([{ accountId: f.org.accounts.bank, amount: "-100" }, { accountId: f.org.accounts.revenue, amount: "100" }], { postingDate: "2026-07-31", reversesEntryId: source });
+    await markEntryReversed(db, { orgId: f.org.orgId, entryId: source, actorId: f.actor });
+    return replicaOf(f, id);
+  });
+  assert.equal(reversal.header?.reverses_entry_id, original.replicaId);
+  assert.deepEqual(reversal.lines.map(line => [line.account_id, line.amount, line.txn_amount, line.fx_rate]), [
+    [f.org.accounts.bank, "-68.0000", "-100.0000", "0.6800000000"],
+    [firstRevenue, "68.0000", "100.0000", "0.6800000000"],
+  ]);
+}));
+
+async function prepaidSource(f: Fixture, currencyEffectiveFrom = "2026-07-01") {
+  const prepaid = await f.account("asset_current_other");
+  const bookPrepaid = await f.account("asset_current_other");
+  const expense = await f.account("expense");
+  const bookExpense = await f.account("expense");
+  const template = randomUUID();
+  const document = randomUUID();
+  const line = randomUUID();
+  const currency = f.baseCurrency === "EUR" ? "USD" : "EUR";
+  await withOrgContext(f.org.orgId, async () => {
+    await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,expenseAmortization}', 'true'::jsonb) where id = ${f.org.orgId}`);
+    await db.execute(sql`insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate)
+      values (${f.org.orgId}, ${f.baseCurrency}, ${currency}, '2026-07-01', 'spot', '0.68')`);
+    await db.execute(sql`insert into expense_amortization_templates
+      (id, org_id, code, name, effective_from, method, term_source, period_count, deferral_account_id, destination_account_id, created_by, updated_by)
+      values (${template}, ${f.org.orgId}, 'PREPAID', 'Prepaid expense', '2026-07-01', 'straight_line', 'template', 1, ${prepaid}, ${expense}, ${f.actor}, ${f.actor})`);
+    await db.execute(sql`insert into documents
+      (id, org_id, kind, status, document_number, party_id, subsidiary_id, document_date, posting_date, currency, fx_rate, subtotal, tax_total, total, created_by)
+      values (${document}, ${f.org.orgId}, 'vendor_bill', 'draft', 'B-PREPAID', ${f.org.vendorId}, ${f.org.subsidiaryId}, ${f.org.date}, ${f.org.date}, ${f.baseCurrency}, 1, 100, 0, 100, ${f.actor})`);
+    await db.execute(sql`insert into document_lines
+      (id, org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount, amortization_template_id, created_by)
+      values (${line}, ${f.org.orgId}, ${document}, 1, ${expense}, 1, 100, 100, 0, ${template}, ${f.actor})`);
+  });
+  await createBookCurrencyVersion({ orgId: f.org.orgId, actorId: f.actor, allowedSubsidiaryIds: null,
+    input: { bookId: f.book, subsidiaryId: f.org.subsidiaryId, currency, rateType: "spot", effectiveFrom: currencyEffectiveFrom }, reason: "Measure prepaid costs in the book currency" });
+  for (const [sourceAccountId, targetAccountId] of [[prepaid, bookPrepaid], [expense, bookExpense]]) {
+    await createBookAccountMap({ orgId: f.org.orgId, actorId: f.actor, allowedSubsidiaryIds: null,
+      input: { bookId: f.book, sourceAccountId: sourceAccountId!, targetAccountId: targetAccountId!, effectiveFrom: "2026-07-01" }, reason: "Present prepaid costs in the book chart" });
+  }
+  const post = () => withOrgTransaction(f.org.orgId, async () => {
+    await submitAndReleaseIfUngated("vendor_bill", document, f.actor);
+    return postDocument(document, { control: { ar: f.org.accounts.ar, ap: f.org.accounts.ap, bank: f.org.accounts.bank } }, { audit: { actorId: f.actor, source: "test" } });
+  });
+  return { prepaid, bookPrepaid, expense, bookExpense, document, line, template, currency, post };
+}
+
+test("a prepaid document creates and releases one reconciled schedule per book without retranslation", enabled, () => fixture(async (f) => {
+  const source = await prepaidSource(f);
+  await activate(f);
+  await source.post();
+  const schedules = await withOrgContext(f.org.orgId, () => db.execute<{
+    book_id: string; currency: string; amount: string; deferral_account_id: string; destination_account_id: string;
+  }>(sql`select book_id, currency, total_amount::text as amount, deferral_account_id, destination_account_id
+    from expense_amortization_schedules where org_id = ${f.org.orgId} and source_line_id = ${source.line}`));
+  assert.equal(schedules.rows.length, 2);
+  assert.deepEqual(schedules.rows.find(row => row.book_id === f.org.bookId), {
+    book_id: f.org.bookId, currency: f.baseCurrency, amount: "100.0000", deferral_account_id: source.prepaid, destination_account_id: source.expense,
+  });
+  assert.deepEqual(schedules.rows.find(row => row.book_id === f.book), {
+    book_id: f.book, currency: source.currency, amount: "68.0000", deferral_account_id: source.bookPrepaid, destination_account_id: source.bookExpense,
+  });
+  await withOrgContext(f.org.orgId, () => db.execute(sql`insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate)
+    values (${f.org.orgId}, ${f.baseCurrency}, ${source.currency}, '2026-07-31', 'spot', '0.91')`));
+  const run = await runExpenseAmortization({ orgId: f.org.orgId, actorId: f.actor, periodId: f.org.periodId });
+  assert.equal(run.posted, 2);
+  assert.deepEqual(run.problems, []);
+  assert.deepEqual(run.totals, { [f.baseCurrency]: "100.0000", [source.currency]: "68.0000" });
+  assert.equal((await runExpenseAmortization({ orgId: f.org.orgId, actorId: f.actor, periodId: f.org.periodId })).posted, 0);
+  await withOrgContext(f.org.orgId, async () => {
+    const rows = await reconcileDeferralAccounts(db, f.org.orgId, { asOf: "2026-07-31" });
+    assert.ok(rows.some(row => row.bookId === f.book && row.currency === source.currency));
+    assert.ok(rows.every(row => row.ledger === "0.0000" && row.subledger === "0.0000" && row.difference === "0.0000"));
+    const releases = (await db.execute<{ book_id: string; amount: string }>(sql`
+      select e.book_id, l.amount::text from journal_entries e join journal_lines l on l.org_id = e.org_id and l.entry_id = e.id
+      where e.org_id = ${f.org.orgId} and e.origin = 'expense_amortization' and l.account_id in (${source.expense}, ${source.bookExpense})`)).rows;
+    assert.equal(releases.length, 2, "each book releases only its own measured schedule");
+    assert.equal(releases.find(row => row.book_id === f.book)?.amount, "68.0000");
+  });
+}));
+
+test("activation refuses already amortized history atomically", enabled, () => fixture(async (f) => {
+  const source = await prepaidSource(f);
+  await source.post();
+  await runExpenseAmortization({ orgId: f.org.orgId, actorId: f.actor, periodId: f.org.periodId });
+  await assert.rejects(activate(f), (error: unknown) => error instanceof AmortizationError && error.code === "amortization_book_history");
+  await withOrgContext(f.org.orgId, async () => {
+    const book = (await db.execute<{ replication_mode: string }>(sql`select replication_mode from accounting_books where org_id = ${f.org.orgId} and id = ${f.book}`)).rows[0]!;
+    assert.equal(book.replication_mode, "adjustment_only");
+    const entries = (await db.execute<{ count: number }>(sql`select count(*)::int as count from journal_entries where org_id = ${f.org.orgId} and book_id = ${f.book}`)).rows[0]!;
+    assert.equal(entries.count, 0, "the refused activation leaves no copies or schedules");
+  });
+}));
+
+test("activation creates the secondary schedule from an untouched source's recorded line attribution", enabled, () => fixture(async (f) => {
+  const source = await prepaidSource(f);
+  await source.post();
+  await activate(f);
+  await withOrgContext(f.org.orgId, async () => {
+    const schedules = (await db.execute<{ amount: string; account_id: string }>(sql`
+      select total_amount::text as amount, deferral_account_id as account_id from expense_amortization_schedules
+      where org_id = ${f.org.orgId} and source_line_id = ${source.line} and book_id = ${f.book}`)).rows;
+    assert.deepEqual(schedules, [{ amount: "68.0000", account_id: source.bookPrepaid }]);
+    assert.ok((await reconcileDeferralAccounts(db, f.org.orgId, { asOf: f.org.date })).every(row => row.difference === "0.0000"));
+  });
+}));
+
+test("opening balances carry completed prepaid releases rather than the original deferral", enabled, () => fixture(async (f) => {
+  const source = await prepaidSource(f);
+  await source.post();
+  const amortization = await runExpenseAmortization({ orgId: f.org.orgId, actorId: f.actor, periodId: f.org.periodId });
+  assert.equal(amortization.posted, 1);
+  await withOrgContext(f.org.orgId, () => db.execute(sql`
+    insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
+    select ${randomUUID()}, org_id, 2026, 8, '2026-08', '2026-08-01', '2026-08-31', false, fiscal_calendar_id
+      from accounting_periods where org_id = ${f.org.orgId} and id = ${f.org.periodId}`));
+  await activate(f, { replicationFrom: "2026-08-01", openingStrategy: "opening_balances" });
+  await withOrgContext(f.org.orgId, async () => {
+    const amounts = (await db.execute<{ account_id: string; amount: string }>(sql`
+      select l.account_id, sum(l.amount)::text as amount from journal_entries e join journal_lines l on l.org_id = e.org_id and l.entry_id = e.id
+      where e.org_id = ${f.org.orgId} and e.book_id = ${f.book} group by l.account_id`)).rows;
+    assert.equal(amounts.find(row => row.account_id === source.bookExpense)?.amount, "68.0000");
+    assert.equal(amounts.find(row => row.account_id === source.bookPrepaid)?.amount ?? "0.0000", "0.0000");
+  });
+}));
+
+test("a manual carried-in schedule uses the selected book's first release period for its measurement policy", enabled, () => fixture(async (f) => {
+  const source = await prepaidSource(f, "2026-07-15");
+  const manual = await createManualSchedule({ orgId: f.org.orgId, actorId: f.actor, bookId: f.book,
+    subsidiaryId: f.org.subsidiaryId, templateId: source.template, totalAmount: "68", serviceStartOn: "2026-07-01",
+    amortizeFromPeriod: "2026-08-01", reason: "Carry the prepaid balance into the new reporting book" });
+  await withOrgContext(f.org.orgId, async () => {
+    const schedule = (await db.execute<{ currency: string; amount: string; deferral_account_id: string; destination_account_id: string }>(sql`
+      select currency, total_amount::text as amount, deferral_account_id, destination_account_id from expense_amortization_schedules
+      where org_id = ${f.org.orgId} and id = ${manual.scheduleId}`)).rows[0]!;
+    assert.deepEqual(schedule, { currency: source.currency, amount: "68.0000", deferral_account_id: source.bookPrepaid, destination_account_id: source.bookExpense });
+  });
 }));

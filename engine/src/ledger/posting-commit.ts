@@ -232,6 +232,7 @@ export async function commitDocumentPosting(prepared: Awaited<ReturnType<typeof 
         paymentCardId: l.paymentCardId ?? null,
         taxCodeId: l.taxCodeId ?? null,
         memo: l.memo ?? null,
+        custom: unionLines[i]?.amortizationSourceLineId ? { amortizationSourceLineId: unionLines[i]!.amortizationSourceLineId } : {},
         dueDate: l.dueDate ?? null,
         isOpenItem: l.isOpenItem ?? false,
         // Kernel lines carry no contributor (null); rule contributions ride

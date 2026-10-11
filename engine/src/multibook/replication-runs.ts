@@ -1,3 +1,4 @@
+import { createSchedulesForReplicatedDocument } from "../amortization/source-posting.ts";
 /**
  * Governed changes to a secondary book's replication: activation of full
  * replication (with its backfill), catch-up, deactivation, and the book's
@@ -10,7 +11,8 @@
  *  - `full_history` replicates every replicable primary entry; it is refused
  *    while the primary book holds replicable entries dated before D.
  *  - `opening_balances` posts one opening entry per subsidiary on D carrying
- *    each account's balance from replicable primary entries dated before D
+ *    each account's balance from primary entries dated before D, including
+ *    prepaid releases and account reclasses,
  *    (by transaction currency), measured at D's rate: balances in the
  *    book's currency carry their amount; foreign balances restate at the
  *    rate the book uses on D. Whatever does not balance after restatement
@@ -200,7 +202,12 @@ export async function changeBookReplication(args: {
             requestId: "book_replication",
           });
           for (const outcome of outcomes) {
-            if (outcome.outcome === "replicated") replicated += 1;
+            if (outcome.outcome === "replicated") {
+              replicated += 1;
+              if (outcome.replicaEntryId) await createSchedulesForReplicatedDocument(db, {
+                orgId: args.orgId, sourceEntryId: entryId, replicaEntryId: outcome.replicaEntryId, actorId: args.actorId,
+              });
+            }
             else if (outcome.outcome === "excluded") excluded += 1;
           }
         }
@@ -231,7 +238,8 @@ export async function changeBookReplication(args: {
 
 /**
  * Post the opening entries of an activation: per subsidiary, every account's
- * balance (by transaction currency) from replicable primary entries dated
+ * balance (by transaction currency), including prepaid releases and account
+ * reclasses, from primary entries dated
  * before `from`, measured in the book currency on `from`.
  */
 async function postOpeningBalances(
@@ -246,7 +254,10 @@ async function postOpeningBalances(
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
      where l.org_id = ${args.orgId} and e.posting_date < ${args.from}::date
-       and ${replicableEntrySql("e")}
+       and (${replicableEntrySql("e")} or (
+         e.book_id in (select id from accounting_books where org_id = ${args.orgId} and is_primary)
+         and e.status in ('posted', 'reversed') and e.origin in ('expense_amortization', 'account_merge')
+       ))
      group by l.subsidiary_id, l.account_id, l.currency
     having sum(l.amount) <> 0 or sum(l.txn_amount) <> 0
      order by l.subsidiary_id, l.account_id, l.currency`)).rows;

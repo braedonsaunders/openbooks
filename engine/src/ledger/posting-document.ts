@@ -16,7 +16,7 @@ import { prepareDocumentPosting } from "./posting-prepare.ts";
 import { commitDocumentPosting } from "./posting-commit.ts";
 import { applyPostedInventoryEffects, runPostDocumentEffects } from "./posting-dispatch.ts";
 import { AmortizationError } from "../amortization/errors.ts";
-import { createSchedulesForPostedDocument } from "../amortization/source-posting.ts";
+import { createSchedulesForDocumentBooks } from "../amortization/source-posting.ts";
 
 /**
  * Public posting coordinator: prepare, atomically commit, then dispatch durable effects.
@@ -112,7 +112,7 @@ export async function postDocument(documentId: string, deps: PostingDeps, option
       // Each deferred line's schedule is created from its posted deferral
       // leg in this same unit: kernel line i posted as journal line i + 1.
       try {
-        await createSchedulesForPostedDocument(db, {
+        await createSchedulesForDocumentBooks(db, {
           orgId: prepared.doc.orgId,
           documentId,
           documentKind: prepared.doc.kind,

@@ -19,6 +19,8 @@ import { isIdentityBasis, translateLinesIntoBook, type BookSubsidiaryBasis, type
  * currency checks.
  */
 export type BookAmountBasis = "functional" | "book";
+/** Ledger-derived legs already name the book's physical accounts; source legs resolve effective mappings. */
+export type BookAccountBasis = "source" | "book";
 
 export interface BookPostingEvidence {
   bookId: string;
@@ -36,6 +38,7 @@ export async function applyBookPostingPolicy<T extends TranslatableLine & { line
     entryLabel: string;
     postingDate: string;
     amountBasis: BookAmountBasis;
+    accountBasis?: BookAccountBasis;
     lines: readonly T[];
     nextLineNumber: () => number;
   },
@@ -47,7 +50,7 @@ export async function applyBookPostingPolicy<T extends TranslatableLine & { line
     postingDate: args.postingDate,
   });
   if (args.book.isPrimary) return { lines: [...args.lines], bases, evidence: null };
-  const mapped = await applyBookAccountMaps(runner, {
+  const mapped = args.accountBasis === "book" ? { lines: [...args.lines], applied: [] as AppliedBookAccountMap[] } : await applyBookAccountMaps(runner, {
     orgId: args.orgId,
     bookId: args.book.id,
     bookLabel: args.book.code,

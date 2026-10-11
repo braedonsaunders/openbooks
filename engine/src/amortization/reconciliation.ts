@@ -1,3 +1,4 @@
+import { excludePeriodEndJournals } from "../records/period-end-origins.ts";
 /**
  * Prepaid expense reconciliation and close readiness.
  *
@@ -6,7 +7,7 @@
  * posting, activation of a carried-in balance, credits, catch-ups, write-
  * offs and cancellations) less the plan lines posted through it. The ledger
  * balance is the account's posted journal lines through the same date. Both
- * group by book, subsidiary, functional currency and deferral account, so a
+ * group by book, subsidiary, book currency and deferral account, so a
  * difference names exactly where the ledger and the schedules disagree.
  */
 import { sql, type SQL } from "drizzle-orm";
@@ -76,7 +77,7 @@ export async function reconcileDeferralAccounts(
        where s.org_id = ${orgId} ${bookFilterS} ${subsidiaryClause(sql`s.subsidiary_id`, scope.subsidiaryIds)}
     ),
     ledger as (
-      select je.book_id, jl.subsidiary_id, sub.base_currency as currency, jl.account_id, sum(jl.amount) as balance
+      select je.book_id, jl.subsidiary_id, public.accounting_book_currency(${orgId}, je.book_id, jl.subsidiary_id) as currency, jl.account_id, sum(jl.amount) as balance
         from journal_lines jl
         join journal_entries je on je.org_id = jl.org_id and je.id = jl.entry_id
         join subsidiaries sub on sub.org_id = jl.org_id and sub.id = jl.subsidiary_id
@@ -84,8 +85,9 @@ export async function reconcileDeferralAccounts(
          and jl.account_id in (select account_id from deferral_accounts)
          and je.status in ('posted', 'reversed')
          and je.posting_date <= ${scope.asOf}
+         and ${excludePeriodEndJournals(sql`je.origin`)}
          ${bookFilterJ} ${subsidiaryClause(sql`jl.subsidiary_id`, scope.subsidiaryIds)}
-       group by je.book_id, jl.subsidiary_id, sub.base_currency, jl.account_id
+       group by je.book_id, jl.subsidiary_id, jl.account_id
     ),
     keys as (
       select book_id, subsidiary_id, currency, account_id from subledger

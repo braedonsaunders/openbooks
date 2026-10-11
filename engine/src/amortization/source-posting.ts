@@ -1,3 +1,5 @@
+import { loadBookProfile, resolveBookBases } from "../journal/book-basis.ts";
+import { applyBookAccountMaps } from "../journal/book-account-maps.ts";
 /**
  * Source-document amortization: vendor bill, journal and expense report
  * lines that name an amortization template post to the template's deferral
@@ -8,7 +10,7 @@
  * The routing is resolved before the posting rule runs (the rule reads it
  * from the posting dependencies); the schedule is created from the posted
  * journal line itself, so its amount, entity, book and dimensions are the
- * ledger's own figures in the entity's functional currency.
+ * ledger's own figures in that book's measurement currency.
  */
 import { sql } from "drizzle-orm";
 import { fromUnits, toUnits } from "../money/money.ts";
@@ -23,7 +25,7 @@ import {
   type TemplateVersion,
 } from "./internal.ts";
 import { buildAmortizationPlan, planQuantum, resolveAmortizationTerm, termWeights } from "./plan.ts";
-import { assertDeferralAccount, assertDestinationAccount, resolveTemplateVersion } from "./templates.ts";
+import { assertDeferralAccount, assertDestinationAccount, loadTemplateVersion, resolveTemplateVersion } from "./templates.ts";
 
 /** Document kinds whose lines can defer through an amortization template. */
 export { AMORTIZABLE_LINE_KINDS as AMORTIZABLE_DOCUMENT_KINDS } from "./source-fields.ts";
@@ -183,7 +185,7 @@ export async function createSchedulesForPostedDocument(
   if (input.routing.size === 0) return [];
   const sourceKind = SOURCE_KINDS[input.documentKind];
   if (!sourceKind) throw new AmortizationError(`Document kind ${input.documentKind} cannot source an amortization schedule.`);
-  if (input.legs.length !== input.routing.size) {
+  if (input.legs.length !== input.routing.size || new Set(input.legs.map(leg => leg.documentLineId)).size !== input.routing.size) {
     throw new AmortizationError(
       `Document ${input.documentNumber} routed ${input.routing.size} line(s) to a deferral account but posted ${input.legs.length} deferral leg(s).`,
       {
@@ -193,17 +195,21 @@ export async function createSchedulesForPostedDocument(
       },
     );
   }
-  const entry = (await runner.execute<{ book_id: string; posting_date: string }>(sql`
-    select book_id, posting_date::text as posting_date from journal_entries
-     where org_id = ${input.orgId} and id = ${input.entryId}`)).rows[0];
+  const entry = (await runner.execute<{ book_id: string; posting_date: string; transaction_date: string }>(sql`
+    select e.book_id, e.posting_date::text as posting_date, d.document_date::text as transaction_date from journal_entries e
+     join documents d on d.org_id = e.org_id and d.id = ${input.documentId}
+     where e.org_id = ${input.orgId} and e.id = ${input.entryId}
+       and e.source_document_id = d.id and e.reverses_entry_id is null`)).rows[0];
   if (!entry) throw new AmortizationError(`The posted entry for ${input.documentNumber} is not readable.`, { status: 409 });
+  const book = await loadBookProfile(runner, input.orgId, entry.book_id);
+  if (!book) throw new AmortizationError("The source accounting book is unavailable.", { status: 409 });
   const created: string[] = [];
   for (const leg of input.legs) {
     const route = input.routing.get(leg.documentLineId);
     if (!route) throw new AmortizationError(`Document line ${leg.documentLineId} has no amortization routing.`, { status: 409 });
     const existing = (await runner.execute<{ id: string }>(sql`
       select id from expense_amortization_schedules
-       where org_id = ${input.orgId} and source_line_id = ${leg.documentLineId}`)).rows[0];
+       where org_id = ${input.orgId} and source_line_id = ${leg.documentLineId} and book_id = ${entry.book_id}`)).rows[0];
     if (existing) continue;
     const posted = (await runner.execute<{
       account_id: string;
@@ -222,8 +228,17 @@ export async function createSchedulesForPostedDocument(
         join subsidiaries sub on sub.org_id = jl.org_id and sub.id = jl.subsidiary_id
        where jl.org_id = ${input.orgId} and jl.entry_id = ${input.entryId}
          and jl.line_number = ${leg.journalLineNumber}`)).rows[0];
-    const amount = posted ? toUnits(posted.amount) : 0n;
-    if (!posted || posted.account_id !== route.deferralAccountId || amount <= 0n) {
+    if (!posted) throw new AmortizationError(`Line ${route.lineNumber} has no posted deferral leg.`, { status: 409 });
+    const basis = (await resolveBookBases(runner, { orgId: input.orgId, book, subsidiaryIds: [posted.subsidiary_id], postingDate: entry.posting_date })).get(posted.subsidiary_id)!;
+    const mapped = book.isPrimary ? { lines: [{ accountId: route.deferralAccountId, subsidiaryId: posted.subsidiary_id }, { accountId: route.destinationAccountId, subsidiaryId: posted.subsidiary_id }] }
+      : await applyBookAccountMaps(runner, { orgId: input.orgId, bookId: book.id, bookLabel: book.code, postingDate: entry.posting_date, entryLabel: input.documentNumber,
+          lines: [{ accountId: route.deferralAccountId, subsidiaryId: posted.subsidiary_id }, { accountId: route.destinationAccountId, subsidiaryId: posted.subsidiary_id }] });
+    const deferralAccountId = mapped.lines[0]!.accountId;
+    const destinationAccountId = mapped.lines[1]!.accountId;
+    await assertDeferralAccount(runner, input.orgId, deferralAccountId);
+    await assertDestinationAccount(runner, input.orgId, destinationAccountId, `Line ${route.lineNumber}`);
+    const amount = toUnits(posted.amount);
+    if (posted.account_id !== deferralAccountId || amount <= 0n) {
       throw new AmortizationError(
         `Line ${route.lineNumber} of ${input.documentNumber} did not post its deferral to the template's prepaid account.`,
         {
@@ -236,9 +251,9 @@ export async function createSchedulesForPostedDocument(
     const term = resolveAmortizationTerm(route.template.policy, {
       serviceStartOn: route.serviceStartOn,
       serviceEndOn: route.serviceEndOn,
-      transactionDate: entry.posting_date,
+      transactionDate: entry.transaction_date,
     });
-    const exponent = await amortizationCurrencyExponent(runner, posted.base_currency);
+    const exponent = await amortizationCurrencyExponent(runner, basis.bookCurrency);
     const plan = buildAmortizationPlan(route.template.policy, term, amount, planQuantum(amount, exponent));
     const weights = termWeights(route.template.policy, term);
     const scheduleNumber = await nextScheduleNumber(runner, input.orgId);
@@ -251,9 +266,9 @@ export async function createSchedulesForPostedDocument(
          extra_dims, memo, created_by, updated_by)
       values (${input.orgId}, ${scheduleNumber}, 'active', ${sourceKind}, ${input.documentId}, ${leg.documentLineId},
         ${input.entryId}, ${route.template.id}, ${route.template.policy.method}, ${route.template.policy.termSource},
-        ${route.template.policy.periodOffset}, ${posted.subsidiary_id}, ${entry.book_id}, ${posted.base_currency},
+        ${route.template.policy.periodOffset}, ${posted.subsidiary_id}, ${entry.book_id}, ${basis.bookCurrency},
         ${fromUnits(amount)}::numeric, ${term.startOn}, ${term.endOn}, ${term.firstPeriodOn},
-        ${route.deferralAccountId}, ${route.destinationAccountId}, ${posted.department_id}, ${posted.project_id},
+        ${deferralAccountId}, ${destinationAccountId}, ${posted.department_id}, ${posted.project_id},
         ${posted.location_id}, ${posted.class_id}, ${JSON.stringify(posted.extra_dims ?? {})}::jsonb,
         ${`${input.documentNumber} line ${route.lineNumber}`}, ${input.actorId}, ${input.actorId})
       returning id`)).rows[0];
@@ -265,7 +280,7 @@ export async function createSchedulesForPostedDocument(
       scheduleId: inserted.id,
       planRevision: 1,
       lines: plan.map((period, index) => ({ ...period, weight: weights[index]! })),
-      destinationAccountId: route.destinationAccountId,
+      destinationAccountId,
       actorId: input.actorId,
     });
     await recordScheduleEvent(runner, {
@@ -279,14 +294,16 @@ export async function createSchedulesForPostedDocument(
         scheduleNumber,
         status: "active",
         totalAmount: fromUnits(amount),
+        bookId: entry.book_id,
+        currency: basis.bookCurrency,
         template: { id: route.template.id, code: route.template.code, effectiveFrom: route.template.effectiveFrom },
         method: route.template.policy.method,
         serviceStartOn: term.startOn,
         serviceEndOn: term.endOn,
         firstPeriodOn: term.firstPeriodOn,
         periods: plan.length,
-        deferralAccountId: route.deferralAccountId,
-        destinationAccountId: route.destinationAccountId,
+        deferralAccountId,
+        destinationAccountId,
       },
       relatedDocumentId: input.documentId,
       journalEntryId: input.entryId,
@@ -295,6 +312,76 @@ export async function createSchedulesForPostedDocument(
     created.push(inserted.id);
   }
   return created;
+}
+
+/** Each posted book copy owns the deferral schedule measured by that copy. */
+export async function createSchedulesForDocumentBooks(
+  runner: SqlExecutor,
+  input: Parameters<typeof createSchedulesForPostedDocument>[1],
+): Promise<string[]> {
+  const replicas = (await runner.execute<{ id: string }>(sql`
+    select replica_entry_id as id from book_entry_replications
+    where org_id = ${input.orgId} and source_entry_id = ${input.entryId} and replica_entry_id is not null
+    order by book_id`)).rows;
+  const created: string[] = [];
+  for (const entryId of [input.entryId, ...replicas.map(row => row.id)]) {
+    created.push(...await createSchedulesForPostedDocument(runner, { ...input, entryId }));
+  }
+  return created;
+}
+
+/** Full-book activation and catch-up retain the source's recorded policy and line attribution. */
+export async function createSchedulesForReplicatedDocument(
+  runner: SqlExecutor,
+  input: { orgId: string; sourceEntryId: string; replicaEntryId: string; actorId: string },
+): Promise<string[]> {
+  const source = (await runner.execute<{ id: string; kind: string; number: string }>(sql`
+    select d.id, d.kind, d.document_number as number from documents d
+    join journal_entries e on e.org_id = d.org_id and e.source_document_id = d.id
+    where e.org_id = ${input.orgId} and e.id = ${input.sourceEntryId} and e.reverses_entry_id is null`)).rows[0];
+  if (!source) return [];
+  const schedules = (await runner.execute<{
+    source_line_id: string; template_id: string; deferral_account_id: string; destination_account_id: string;
+    service_start_on: string; service_end_on: string; line_number: number;
+    status: string; revision: number; hasPosted: boolean;
+  }>(sql`
+    select s.source_line_id, s.template_id, s.deferral_account_id, s.destination_account_id,
+           s.service_start_on::text, s.service_end_on::text, l.line_number, s.status, s.revision,
+           exists (select 1 from expense_amortization_schedule_lines p where p.org_id = s.org_id
+             and p.schedule_id = s.id and p.status = 'posted') as "hasPosted"
+    from expense_amortization_schedules s
+    join document_lines l on l.org_id = s.org_id and l.id = s.source_line_id
+    where s.org_id = ${input.orgId} and s.source_entry_id = ${input.sourceEntryId}
+    order by l.line_number for share of s`)).rows;
+  if (schedules.length === 0) return [];
+  if (schedules.some(schedule => schedule.status !== "active" || schedule.revision !== 1 || schedule.hasPosted)) {
+    throw new AmortizationError(`Document ${source.number} has amortization history that cannot be reconstructed as a new deferral.`, {
+      status: 409,
+      code: "amortization_book_history",
+      remedy: "Activate the book using opening balances from a date after this document and its amortization history, then create manual schedules in that book for the carried-in prepaid balances.",
+    });
+  }
+  const legs = (await runner.execute<{ sourceLineId: string; lineNumber: number }>(sql`
+    select custom->>'amortizationSourceLineId' as "sourceLineId", line_number as "lineNumber"
+    from journal_lines where org_id = ${input.orgId} and entry_id = ${input.replicaEntryId}
+      and custom->>'amortizationSourceLineId' is not null order by line_number`)).rows;
+  const routing = new Map<string, AmortizationRouting>();
+  for (const schedule of schedules) {
+    routing.set(schedule.source_line_id, {
+      documentLineId: schedule.source_line_id,
+      lineNumber: schedule.line_number,
+      template: await loadTemplateVersion(runner, input.orgId, schedule.template_id),
+      deferralAccountId: schedule.deferral_account_id,
+      destinationAccountId: schedule.destination_account_id,
+      serviceStartOn: schedule.service_start_on,
+      serviceEndOn: schedule.service_end_on,
+    });
+  }
+  return createSchedulesForPostedDocument(runner, {
+    orgId: input.orgId, documentId: source.id, documentKind: source.kind, documentNumber: source.number,
+    entryId: input.replicaEntryId, actorId: input.actorId, routing,
+    legs: legs.map(leg => ({ documentLineId: leg.sourceLineId, journalLineNumber: leg.lineNumber })),
+  });
 }
 
 /**
@@ -307,8 +394,10 @@ export async function scheduledDeferralByLine(
   documentId: string,
 ): Promise<Map<string, { deferralAccountId: string }>> {
   const rows = (await runner.execute<{ source_line_id: string; deferral_account_id: string }>(sql`
-    select source_line_id, deferral_account_id from expense_amortization_schedules
-     where org_id = ${orgId} and source_document_id = ${documentId} and source_line_id is not null`)).rows;
+    select s.source_line_id, s.deferral_account_id from expense_amortization_schedules s
+    join documents d on d.org_id = s.org_id and d.id = s.source_document_id
+    join journal_entries e on e.org_id = d.org_id and e.id = d.posted_entry_id and e.book_id = s.book_id
+     where s.org_id = ${orgId} and s.source_document_id = ${documentId} and s.source_line_id is not null`)).rows;
   return new Map(rows.map((row) => [row.source_line_id, { deferralAccountId: row.deferral_account_id }]));
 }
 

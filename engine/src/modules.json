@@ -908,6 +908,7 @@
     "multibook": {
       "description": "Multi-book accounting: a secondary book's currency per subsidiary and account mappings, governed activation, catch-up and deactivation of full replication with opening balances, and replication status.",
       "dependsOn": [
+        "amortization",
         "journal",
         "money",
         "organization",

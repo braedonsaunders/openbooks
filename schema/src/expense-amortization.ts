@@ -141,7 +141,7 @@ export const expenseAmortizationSchedules = pgTable(
     uniqueIndex("expense_amortization_schedules_org_id_id_unique").on(t.orgId, t.id),
     uniqueIndex("expense_amortization_schedules_number_unique").on(t.orgId, t.scheduleNumber),
     uniqueIndex("expense_amortization_schedules_source_line")
-      .on(t.orgId, t.sourceLineId)
+      .on(t.orgId, t.sourceLineId, t.bookId)
       .where(sql`${t.sourceLineId} IS NOT NULL`),
     index("expense_amortization_schedules_status").on(t.orgId, t.status),
     index("expense_amortization_schedules_deferral").on(t.orgId, t.deferralAccountId, t.subsidiaryId),

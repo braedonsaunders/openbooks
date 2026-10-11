@@ -1,3 +1,5 @@
+import { resolveBookBases } from "../journal/book-basis.ts";
+import { BookTranslationError } from "../journal/book-translation.ts";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, withTransactionSavepoint, type SqlExecutor } from "../platform/db.ts";
@@ -181,6 +183,7 @@ export async function loadPeriodEndFiscalYear(
 }
 
 type BookRow = {
+  isPrimary: boolean;
   id: string;
   code: string;
   name: string;
@@ -188,7 +191,7 @@ type BookRow = {
 
 async function resolveBook(executor: SqlExecutor, orgId: string, bookId?: string | null): Promise<BookRow> {
   const row = (await executor.execute<BookRow>(sql`
-    select id, code, name from accounting_books
+    select id, code, name, is_primary as "isPrimary" from accounting_books
      where org_id = ${orgId} and is_active and posts_gl
        and ${bookId ? sql`id = ${bookId}` : sql`is_primary`}
      order by created_at limit 1`)).rows[0];
@@ -694,6 +697,19 @@ async function evaluateEntity(
     return { preview, plan: null, contentHash: null, live };
   }
 
+  try {
+    const bases = await resolveBookBases(executor, { orgId, book, subsidiaryIds: [subsidiary.id], postingDate: closingPeriod.endsOn });
+    preview.currency = bases.get(subsidiary.id)!.bookCurrency;
+    if (policy.balanceSheetJournals) {
+      const openingBases = await resolveBookBases(executor, { orgId, book, subsidiaryIds: [subsidiary.id], postingDate: year.nextYearFirstPeriod!.startsOn });
+      if (openingBases.get(subsidiary.id)!.bookCurrency !== preview.currency) throw new BookTranslationError("Closing and opening balances must use the same book currency.");
+    }
+  } catch (error) {
+    if (!(error instanceof BookTranslationError)) throw error;
+    preview.problems.push({ code: "computation_failed", message: error.message, remedy: "Set the book currency policy to cover the closing and opening dates in Setup → Accounting books." });
+    return { preview, plan: null, contentHash: null, live };
+  }
+
   const dimensions = await dimensionPolicy(executor, orgId, policy);
   const balances = await ledgerBalances(executor, orgId, book.id, subsidiary.id, year, dimensions, live?.id ?? null);
   let plan: PeriodEndPlan;
@@ -1089,6 +1105,7 @@ export async function generatePeriodEndJournals(
             closingPeriod,
             policy,
             subsidiary,
+            currency: preview.currency,
             plan,
             contentHash,
             fiscalYearEarnings: preview.fiscalYearEarnings,
@@ -1155,6 +1172,7 @@ async function postGeneration(
     closingPeriod: { id: string; name: string; endsOn: string };
     policy: PeriodEndPolicy;
     subsidiary: { id: string; name: string; baseCurrency: string };
+    currency: string;
     plan: PeriodEndPlan;
     contentHash: string;
     fiscalYearEarnings: string;
@@ -1185,7 +1203,10 @@ async function postGeneration(
       memo,
       origin: opening ? "opening" : "closing",
       actorId: input.actorId,
-      currency: subsidiary.baseCurrency,
+      currency: input.currency,
+      amountBasis: "book",
+      accountBasis: "book",
+      replicate: false,
       closeModules: ["gl"],
       // Closing reaches every account carrying a balance, including accounts
       // retired from new use since; the equity accounts are validated active.
@@ -1225,7 +1246,7 @@ async function postGeneration(
             ${year.startsOn}::date, ${year.endsOn}::date, ${closingPeriod.id},
             ${entryIds.some((entry) => entry.kind === "opening") ? year.nextYearFirstPeriod!.id : null},
             ${generation}, ${policy.id}, ${JSON.stringify(snapshot)}::jsonb, ${input.contentHash},
-            ${subsidiary.baseCurrency}, ${input.fiscalYearEarnings}, ${input.priorUnclosedEarnings},
+            ${input.currency}, ${input.fiscalYearEarnings}, ${input.priorUnclosedEarnings},
             'posted', ${input.reason}, ${input.actorId}, ${input.actorId}, ${input.actorId})
     returning id`)).rows[0];
   if (!inserted) throw new PeriodEndJournalError("the period-end journal generation was not recorded", "computation_failed", "Generate again.");
@@ -1322,6 +1343,7 @@ async function reverseSet(
       periodId: head.period_id,
       memo: `Reversal of ${head.entry_number} — ${args.reason}`,
       origin: head.origin,
+      replicate: false,
       reversesEntryId: link.entry_id,
       actorId: args.actorId,
       closeModules: ["gl"],

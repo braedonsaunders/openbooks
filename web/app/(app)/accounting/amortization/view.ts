@@ -1,4 +1,5 @@
 import 'server-only'
+import { isFeatureEnabled } from '@/lib/features'
 
 import { getTranslations } from 'next-intl/server'
 import { sql, type SQL } from 'drizzle-orm'
@@ -71,6 +72,7 @@ export interface AmortizationScheduleDrawerData {
 }
 
 export interface AmortizationNewScheduleData {
+  books: { id: string; label: string; currencies: Record<string, string> }[]
   templates: { id: string; label: string }[]
   subsidiaries: { id: string; label: string }[]
   destinationAccounts: { value: string; label: string }[]
@@ -261,6 +263,13 @@ export async function loadAmortization(sp: Record<string, string | string[] | un
 
   const newSchedule: AmortizationNewScheduleData | null = canManage
     ? {
+        books: (await db.execute<{ id: string; label: string; currencies: Record<string, string> }>(sql`
+          select b.id, concat_ws(' · ', b.code, b.name) as label,
+                 coalesce((select jsonb_object_agg(s.id::text, public.accounting_book_currency(${orgId}, b.id, s.id)) from subsidiaries s
+                   where s.org_id = b.org_id and s.is_active and not s.is_elimination ${subsidiaryFilter(sql`s.id`, allowed)}), '{}'::jsonb) as currencies
+          from accounting_books b where b.org_id = ${orgId} and b.is_active and b.posts_gl
+            ${await isFeatureEnabled(orgId, 'multiBookAccounting') ? sql`` : sql`and b.is_primary`}
+          order by b.is_primary desc, b.code`)).rows,
         templates: (await listCurrentTemplates(db, orgId, today)).map((template) => ({ id: template.id, label: `${template.code} · ${template.name}` })),
         subsidiaries: (await db.execute<{ id: string; name: string }>(sql`
           select id, name from subsidiaries

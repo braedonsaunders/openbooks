@@ -21,6 +21,8 @@ import {
   requestAccountMerge,
 } from "./account-merge.ts";
 import { classifyAccountReference, discoverAccountReferenceColumns } from "./account-references.ts";
+import { createBookCurrencyVersion } from "../multibook/settings.ts";
+import { changeBookReplication } from "../multibook/replication-runs.ts";
 
 // Merging a duplicate account into its survivor: the preview names every
 // refusal and consequence, execution moves the balance through the posting
@@ -149,6 +151,48 @@ test("a merge moves the balance by a balanced reclass, moves configuration, and 
     const history = await listAccountMerges(s.org.orgId, { limit: 10, offset: 0, accountId: s.target });
     assert.equal(history.total, 1);
     assert.equal(history.rows[0]!.status, "completed");
+  } finally {
+    await dropScratchOrg(s.org.orgId);
+  }
+});
+
+test("a merge reclasses each book's recorded balance once at its recorded exchange rate", { skip: !DB }, async () => {
+  const s = await scenario();
+  try {
+    const bookId = randomUUID();
+    await withOrgContext(s.org.orgId, async () => {
+      await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,multiBookAccounting}', 'true'::jsonb) where id = ${s.org.orgId}`);
+      await db.execute(sql`insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl)
+        values (${bookId}, ${s.org.orgId}, 'GAAP', 'GAAP', false, true, true)`);
+      await db.execute(sql`insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate)
+        values (${s.org.orgId}, 'CAD', 'EUR', '2026-07-01', 'spot', '0.68'),
+               (${s.org.orgId}, 'CAD', 'EUR', '2026-07-31', 'spot', '0.91')`);
+    });
+    await createBookCurrencyVersion({ orgId: s.org.orgId, actorId: s.actorId, allowedSubsidiaryIds: null,
+      input: { bookId, subsidiaryId: s.org.subsidiaryId, currency: "EUR", rateType: "spot", effectiveFrom: "2026-07-01" }, reason: "Report the secondary book in euros" });
+    await changeBookReplication({ orgId: s.org.orgId, actorId: s.actorId, allowedSubsidiaryIds: null,
+      input: { bookId, kind: "activation", replicationFrom: "2026-07-01", openingStrategy: "full_history" }, reason: "Bring the secondary book into operation" });
+    const preview = await previewAccountMerge(s.org.orgId, { sourceAccountId: s.source, targetAccountId: s.target, effectiveDate: EFFECTIVE }, null);
+    assert.deepEqual(preview.refusals, []);
+    assert.equal(preview.balances.length, 4);
+    assert.ok(preview.balances.filter(row => row.bookId === bookId).every(row => row.functionalCurrency === "EUR"));
+    const outcome = await requestAccountMerge(s.org.orgId, request(s, { expectedDigest: preview.digest }));
+    assert.equal(outcome.status, "completed");
+    if (outcome.status !== "completed") return;
+    assert.equal(outcome.entryIds.length, 2, "one reclass per book, with no extra replicated reclass");
+    await withOrgContext(s.org.orgId, async () => {
+      const balances = (await db.execute<{ book_id: string; account_id: string; amount: string }>(sql`
+        select e.book_id, l.account_id, sum(l.amount)::text as amount from journal_lines l
+        join journal_entries e on e.org_id = l.org_id and e.id = l.entry_id
+        where e.org_id = ${s.org.orgId} and e.status in ('posted', 'reversed') and l.account_id in (${s.source}, ${s.target})
+        group by e.book_id, l.account_id`)).rows;
+      assert.equal(balances.find(row => row.book_id === s.org.bookId && row.account_id === s.target)?.amount, "150.0000");
+      assert.equal(balances.find(row => row.book_id === bookId && row.account_id === s.target)?.amount, "102.0000");
+      assert.ok(balances.filter(row => row.account_id === s.source).every(row => row.amount === "0.0000"));
+      const copies = (await db.execute<{ count: number }>(sql`select count(*)::int as count from journal_entries
+        where org_id = ${s.org.orgId} and origin = 'account_merge'`)).rows[0]!;
+      assert.equal(copies.count, 2);
+    });
   } finally {
     await dropScratchOrg(s.org.orgId);
   }
