@@ -548,6 +548,8 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'spend-velocity-view': { props: ['canConfigure', 'data'] },
   'stale-badge-cell': { props: ['label'] },
   'start-reconciliation': { props: ['accountId', 'glBalance', 'openReconciliationId'] },
+  'statement-batch-run-drawer': { props: ['runId'] },
+  'statement-batch-send': { props: ['body', 'buttonLabel', 'canCreate', 'notAllowed', 'recipientCount', 'sendingLabel'] },
   'statement-delete-cell': { props: ['blockedReason', 'confirmMessage', 'lineCount', 'matchedCount', 'showDelete', 'statementId', 'unmatchAllConfirmMessage'] },
   'statement-drawer': { props: ['drawer'] },
   'statement-matrix': { props: ['currency', 'drill', 'scale', 'view'] },

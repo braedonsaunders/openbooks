@@ -2848,6 +2848,30 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/reports/statements/send': {
+    route: '/reports/statements/send',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/reports/statements/send/view')
+      return {
+        load: (input) => m.loadStatementBatchComposer(input.searchParams ?? {}),
+        spec: (data) => m.statementBatchComposerSpec(data as never),
+      }
+    },
+  },
+  '/reports/statements/sends': {
+    route: '/reports/statements/sends',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/reports/statements/sends/view')
+      return {
+        load: (input) => m.loadStatementBatchRuns(input.searchParams ?? {}),
+        spec: (data) => m.statementBatchRunsSpec(data as never),
+      }
+    },
+  },
   '/reports/trial-balance': {
     route: '/reports/trial-balance',
     segments: [],

@@ -31,7 +31,8 @@
     "newCashSale": "Nova venda à vista",
     "newCashRefund": "Novo reembolso à vista",
     "submitForApproval": "Enviar para aprovação",
-    "receivePayment": "Receber pagamento"
+    "receivePayment": "Receber pagamento",
+    "sendStatements": "Enviar extratos"
   },
   "tenders": {
     "title": "Formas de pagamento",

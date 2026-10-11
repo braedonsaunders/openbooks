@@ -31,7 +31,8 @@
     "newCashSale": "Nouvelle vente au comptant",
     "newCashRefund": "Nouveau remboursement au comptant",
     "submitForApproval": "Soumettre pour approbation",
-    "receivePayment": "Recevoir un paiement"
+    "receivePayment": "Recevoir un paiement",
+    "sendStatements": "Envoyer les relevés"
   },
   "tenders": {
     "title": "Modes de règlement",

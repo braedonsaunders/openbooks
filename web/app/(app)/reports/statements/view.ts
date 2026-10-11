@@ -12,6 +12,7 @@ import {
   pagination,
   ref,
   table,
+  widget,
   widgetBlock,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
@@ -62,6 +63,11 @@ export interface StatementPickerData {
   perPage: number
   emptyTitle: string
   emptyHint: string
+  /** Composer href carrying the picker's period, and its label. */
+  sendHref: string
+  sendLabel: string
+  /** True for senders (ar.create); the entry hides otherwise. */
+  canSend: boolean
   /** True exactly when at least one customer row matched. */
   hasRows: boolean
   subsidiaries: SubsidiaryPicker
@@ -161,6 +167,9 @@ export async function loadStatementPicker(
     perPage: PER_PAGE,
     emptyTitle: tp('emptyTitle'),
     emptyHint: tp('emptyHint'),
+    sendHref: statementQuery ? `/reports/statements/send?${statementQuery}` : '/reports/statements/send',
+    sendLabel: tp('sendAction'),
+    canSend: can(authz, 'ar.create'),
     hasRows: filtered.length > 0,
     subsidiaries: subView?.picker ?? [],
     currencyBasisBlocked,
@@ -185,6 +194,9 @@ export function statementPickerSpec(data: StatementPickerData): PageSpec {
     }],
     // A picker opens statements; it is not itself a schedulable statement.
     saveView: false,
+    actionsBefore: [
+      widget('link-button', { href: f('sendHref'), label: f('sendLabel') }, f('canSend')),
+    ],
     paper: {
       company: f('company'),
       title: f('title'),

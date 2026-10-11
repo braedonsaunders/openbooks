@@ -31,7 +31,8 @@
     "newCashSale": "新建现金销售",
     "newCashRefund": "新建现金退款",
     "submitForApproval": "提交审批",
-    "receivePayment": "收款"
+    "receivePayment": "收款",
+    "sendStatements": "发送对账单"
   },
   "tenders": {
     "title": "结算方式",

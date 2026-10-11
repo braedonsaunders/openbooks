@@ -31,7 +31,8 @@
     "newCashSale": "新規現金販売",
     "newCashRefund": "新規現金返金",
     "submitForApproval": "承認のために提出",
-    "receivePayment": "入金を受け取る"
+    "receivePayment": "入金を受け取る",
+    "sendStatements": "明細を送信"
   },
   "tenders": {
     "title": "支払方法",

@@ -246,6 +246,11 @@ export async function reportsHubFor(
         ...(authz && can(authz, 'ar.read')
           ? [card('statements', '/reports/statements', 'FileText', 'aging')]
           : []),
+        // Statement batches send every balanced customer at once and follow
+        // each run to delivered — the batch counterpart to the picker above.
+        ...(authz && can(authz, 'ar.read')
+          ? [card('statementBatches', '/reports/statements/sends', 'FileText', 'aging')]
+          : []),
         // 1099-NEC preparation reads vendor payments + masked TIN status on
         // AP read: no feature switch, so the accountant reaches it whenever
         // the compliance workspace is off.

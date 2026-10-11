@@ -34,6 +34,8 @@ import { AgingStrip } from '../../app/(app)/reports/statements/[partyId]/section
 import { StatementRows, ReconciliationNote } from '../../app/(app)/reports/StatementRows'
 import { ReportNameCell } from '../../app/(app)/reports/custom/sections'
 import { BalanceCheck } from '../../app/(app)/reports/balance-sheet/sections'
+import { SendBatchButton } from '../../app/(app)/reports/statements/send/sections'
+import { StatementBatchRunDrawer } from '../../app/(app)/reports/statements/sends/sections'
 import { SavedViewHeader, SavedViewMeta } from '../../app/(app)/knowledge/views/[id]/sections'
 import { str, num, stringRecord, type WidgetRenderer } from './widget-props'
 
@@ -113,6 +115,22 @@ export const REPORTING_WIDGETS = {
   ),
   'statement-rows': (props) => (
     <StatementRows rows={(props.rows as ComponentProps<typeof StatementRows>['rows']) ?? []} />
+  ),
+  /* --- batched customer statements ------------------------------------------- */
+  'statement-batch-send': (props) => (
+    <SendBatchButton
+      recipientCount={num(props, 'recipientCount') ?? 0}
+      canCreate={props.canCreate === true}
+      notAllowed={str(props, 'notAllowed') ?? ''}
+      buttonLabel={str(props, 'buttonLabel') ?? ''}
+      sendingLabel={str(props, 'sendingLabel') ?? ''}
+      body={(props.body as ComponentProps<typeof SendBatchButton>['body']) ?? {
+        from: null, toDate: '', overdueOnly: false, subsidiaryId: null, currency: null,
+      }}
+    />
+  ),
+  'statement-batch-run-drawer': (props) => (
+    <StatementBatchRunDrawer runId={str(props, 'runId')} />
   ),
   'reconciliation-note': (props) => (
     <ReconciliationNote

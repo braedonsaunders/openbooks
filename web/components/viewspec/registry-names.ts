@@ -560,6 +560,8 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'spend-velocity-view',
   'stale-badge-cell',
   'start-reconciliation',
+  'statement-batch-run-drawer',
+  'statement-batch-send',
   'statement-delete-cell',
   'statement-drawer',
   'statement-matrix',

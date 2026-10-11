@@ -576,6 +576,8 @@ export const WIDGET_FAMILY: Readonly<Record<string, WidgetFamily>> = {
   'spend-velocity-view': 'reporting',
   'stale-badge-cell': 'banking',
   'start-reconciliation': 'banking',
+  'statement-batch-run-drawer': 'reporting',
+  'statement-batch-send': 'reporting',
   'statement-delete-cell': 'banking',
   'statement-drawer': 'banking',
   'statement-matrix': 'reporting',

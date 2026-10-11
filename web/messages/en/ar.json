@@ -31,7 +31,8 @@
     "newCashSale": "New cash sale",
     "newCashRefund": "New cash refund",
     "submitForApproval": "Submit for approval",
-    "receivePayment": "Receive payment"
+    "receivePayment": "Receive payment",
+    "sendStatements": "Send statements"
   },
   "tenders": {
     "title": "Tenders",

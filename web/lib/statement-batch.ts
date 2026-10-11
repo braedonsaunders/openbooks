@@ -245,6 +245,9 @@ export interface StatementBatchPreview {
   to: string
   recipients: BatchRecipient[]
   excluded: BatchExclusion[]
+  subsidiaries: { id: string; label: string }[]
+  /** Presentation currency of the viewed set (the context node's functional currency). */
+  currency?: string
 }
 
 /**
@@ -272,6 +275,9 @@ export async function buildStatementBatchPreview(
   // Explicit scope from the caller's gate — never the ambient session — so
   // this runs identically in pages, API routes, and the worker's wake.
   const subView = await resolveSubsidiaryScope(query.subsidiaryId ?? undefined, to, allowedSubsidiaryIds)
+  // ratesError (missing consolidated translation rates) does not apply:
+  // open-item lines read through the functional reader, whose census
+  // refuses a multi-currency viewed set with the named remedy instead.
   const viewedIds = subView.subsidiary?.ids
   const subsidiaryIds = allowedSubsidiaryIds === null
     ? viewedIds
@@ -299,5 +305,5 @@ export async function buildStatementBatchPreview(
     },
     allowedSubsidiaryIds,
   })
-  return { from, to, recipients, excluded }
+  return { from, to, recipients, excluded, subsidiaries: subView.picker, currency: subView.currency }
 }

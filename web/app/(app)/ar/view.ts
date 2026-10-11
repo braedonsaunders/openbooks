@@ -25,6 +25,9 @@ export interface ArCockpitData {
   description: string
   canCreate: boolean
   canCollect: boolean
+  canSendStatements: boolean
+  sendStatementsHref: string
+  sendStatementsLabel: string
   newItems: { kind: string; label: string; href?: string }[]
   newBasePath: string
   newTriggerLabel: string
@@ -81,6 +84,9 @@ export async function loadArCockpit(): Promise<ArCockpitData> {
     description: t('cockpit.description'),
     canCreate,
     canCollect: can(authz, 'ar.pay'),
+    canSendStatements: canCreate,
+    sendStatementsHref: '/reports/statements/send',
+    sendStatementsLabel: t('actions.sendStatements'),
     newItems: [
       { kind: 'customer_invoice', label: t('actions.newInvoice') },
       { kind: 'customer_credit', label: t('actions.newCredit') },
@@ -116,6 +122,11 @@ export function arCockpitSpec(data: ArCockpitData): PageSpec {
               triggerLabel: data.newTriggerLabel,
             },
             f('canCreate'),
+          ),
+          widget(
+            'link-button',
+            { href: f('sendStatementsHref'), label: f('sendStatementsLabel'), variant: 'outline' },
+            f('canSendStatements'),
           ),
           widget('module-home-tabs', { tabs: data.tabs }),
         ],

@@ -31,7 +31,8 @@
     "newCashSale": "Neuer Barverkauf",
     "newCashRefund": "Neue Barerstattung",
     "submitForApproval": "Zur Genehmigung einreichen",
-    "receivePayment": "Zahlung erfassen"
+    "receivePayment": "Zahlung erfassen",
+    "sendStatements": "Kontoauszüge senden"
   },
   "tenders": {
     "title": "Zahlungsmittel",
