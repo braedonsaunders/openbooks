@@ -1,11 +1,12 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Button, DisclosureSection, Drawer, Input, Label, Select } from '@openbooks/ui'
+import { Info } from 'lucide-react'
 import { useMoney } from '@/components/money-provider'
 import {
   planQuoteAward,
@@ -71,6 +72,7 @@ export function QuoteAwardAction({ quoteId, docStatus, canAward = true }: { quot
   const [customized, setCustomized] = useState(false)
   const [tasks, setTasks] = useState<AwardTaskSpec[]>([])
   const [mapping, setMapping] = useState<Record<string, string>>({})
+  const submitHintId = useId()
 
   const load = useCallback(async (targetProjectId?: string) => {
     const query = targetProjectId ? `?projectId=${encodeURIComponent(targetProjectId)}` : ''
@@ -235,8 +237,19 @@ export function QuoteAwardAction({ quoteId, docStatus, canAward = true }: { quot
   const missing = plan?.missingCost ?? []
   const lineById = new Map(preview.lines.map((line) => [line.lineId, line]))
   const taskedToQuoteProject = !!preview.quote.projectId
-  const canSubmit = !busy && !preview.blocked && !!plan && missing.every((line) => (costs[line.lineId] ?? '').trim() !== '')
-    && (mode === 'new' ? name.trim() !== '' : projectId !== '')
+  const missingRemaining = missing.filter((line) => (costs[line.lineId] ?? '').trim() === '')
+  const targetNamed = mode === 'new' ? name.trim() !== '' : projectId !== ''
+  const canSubmit = !busy && !preview.blocked && !!plan && missingRemaining.length === 0 && targetNamed
+  // A disabled decisive action names its reason beside itself — the same
+  // inline-hint pattern as the missing-grant PermissionHint below. Every
+  // reason reuses an existing string (the server refusal, the plan error,
+  // or the section title the body already shows), so no new copy ships.
+  const submitHint = !busy && !canSubmit
+    ? (preview.blocked
+      ?? (missingRemaining.length > 0 ? t('missingCostTitle') : null)
+      ?? (!plan ? planResult.error : null)
+      ?? (!targetNamed ? t('projectName') : null))
+    : null
   const taskOptions = [
     ...grouping.specs.filter((task) => !task.existingTaskId).map((task) => ({ value: task.key, label: `${task.code ? `${task.code} · ` : ''}${task.name}` })),
     ...(mode === 'existing' ? preview.existingTasks.map((task) => ({
@@ -259,10 +272,16 @@ export function QuoteAwardAction({ quoteId, docStatus, canAward = true }: { quot
         description={t('description')}
         headerActions={
           <div className="flex items-center gap-1.5">
+            {submitHint ? (
+              <span id={submitHintId} className="flex max-w-56 items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                <Info className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                <span>{submitHint}</span>
+              </span>
+            ) : null}
             <Button variant="outline" size="sm" disabled={busy} onClick={() => setOpen(false)}>
               {tCommon('actions.cancel')}
             </Button>
-            <Button size="sm" disabled={!canSubmit} onClick={() => void submit()}>
+            <Button size="sm" disabled={!canSubmit} aria-describedby={submitHint ? submitHintId : undefined} onClick={() => void submit()}>
               {busy ? t('awarding') : mode === 'existing' ? t('submitExisting') : t('submit')}
             </Button>
           </div>
