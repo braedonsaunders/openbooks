@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   BUILT_IN_ROLES,
   BUILT_IN_ROLE_KEYS,
+  EMPLOYEE_SELF_SERVICE_BASELINE,
   PERMISSION_CATALOGUE,
   PERMISSION_GROUPS,
   permissionLabelKey,
@@ -13,6 +14,8 @@ import {
   ESTIMATE_PERMISSIONS,
   estimateConversionPermission,
   resolveKeyScopeAuthority,
+  roleHasSelfServiceBaseline,
+  withSelfServiceBaseline,
   type CataloguePermission,
 } from "./permissions.ts";
 
@@ -287,8 +290,10 @@ test("hrm permissions are catalogued, grouped, and split between admin-only and 
   }
   // Filing leave is scoped by the service to the employment behind the
   // login, so it is self-service like the hrm.self keys: every role files
-  // its own leave; nobody else's.
-  const everyRoleKeys: CataloguePermission[] = [...selfKeys, "hrm.leave.request"];
+  // its own leave; nobody else's. The trio is the employee self-service
+  // baseline custom roles carry by default.
+  const everyRoleKeys: CataloguePermission[] = [...EMPLOYEE_SELF_SERVICE_BASELINE];
+  assert.deepEqual([...EMPLOYEE_SELF_SERVICE_BASELINE], [...selfKeys, "hrm.leave.request"]);
   for (const perm of everyRoleKeys) {
     for (const role of BUILT_IN_ROLE_KEYS) {
       assert.equal(holds(role, perm), true, `${role} must hold ${perm}: every login is a person`);
@@ -441,6 +446,44 @@ test("the accountant reviews bank and card reconciliations but never performs th
   assert.equal(holds("accountant", "banking.read"), true, "the monthly review opens reconciliations");
   assert.equal(holds("accountant", "banking.reconcile"), false, "reconciling stays with the controller");
   assert.equal(holds("controller", "banking.reconcile"), true);
+});
+
+test("the self-service baseline is catalogue keys every built-in role holds, and time entry stays out of it", () => {
+  for (const key of EMPLOYEE_SELF_SERVICE_BASELINE) {
+    assert.ok((PERMISSION_CATALOGUE as readonly string[]).includes(key), `${key} must be a catalogue key`);
+  }
+  assert.ok(!EMPLOYEE_SELF_SERVICE_BASELINE.includes("time.self" as never), "hourly time entry is role-specific, not baseline");
+  assert.ok(!EMPLOYEE_SELF_SERVICE_BASELINE.includes("time.clock" as never), "clock-in is role-specific, not baseline");
+  for (const role of BUILT_IN_ROLE_KEYS) {
+    assert.equal(
+      roleHasSelfServiceBaseline(BUILT_IN_ROLES[role]!.permissions),
+      true,
+      `${role} carries the employee self-service baseline`,
+    );
+  }
+});
+
+test("baseline detection counts wildcards and partial sets honestly", () => {
+  assert.equal(roleHasSelfServiceBaseline(["hrm.self.read", "hrm.self.request", "hrm.leave.request"]), true);
+  assert.equal(roleHasSelfServiceBaseline(new Set(["hrm.self.read", "hrm.self.request", "hrm.leave.request"])), true);
+  assert.equal(roleHasSelfServiceBaseline(["*"]), true, "a full grant covers the baseline");
+  assert.equal(roleHasSelfServiceBaseline(["hrm.*"]), true, "a module grant covers the baseline");
+  assert.equal(roleHasSelfServiceBaseline(["hrm.self.read", "hrm.self.request"]), false, "a missing leave grant is a broken baseline");
+  assert.equal(roleHasSelfServiceBaseline([]), false, "a custom hourly role starts with no self-service");
+  assert.equal(roleHasSelfServiceBaseline(["hrm.leave.*"]), false, "a leave-only wildcard is not the baseline");
+});
+
+test("the baseline union appends only the missing keys", () => {
+  assert.deepEqual(withSelfServiceBaseline([]), ["hrm.self.read", "hrm.self.request", "hrm.leave.request"]);
+  assert.deepEqual(
+    withSelfServiceBaseline(["ap.read", "hrm.self.request"]),
+    ["ap.read", "hrm.self.request", "hrm.self.read", "hrm.leave.request"],
+  );
+  assert.deepEqual(
+    withSelfServiceBaseline(["hrm.self.read", "hrm.self.request", "hrm.leave.request", "ap.read"]),
+    ["hrm.self.read", "hrm.self.request", "hrm.leave.request", "ap.read"],
+    "a role that already carries the baseline is unchanged",
+  );
 });
 
 test("declared implications decide which grants open each time command", () => {

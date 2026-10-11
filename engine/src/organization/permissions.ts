@@ -908,6 +908,53 @@ export function grantsConferring(permission: CataloguePermission, scope: "all" |
 }
 
 /**
+ * Employee self-service baseline: the self-service grants every built-in
+ * role carries, so seeing one's own record is part of every login, not an
+ * extra permission to request. View own employment summary opens the Me
+ * workspace, File profile changes for own party files profile and
+ * direct-deposit proposals for HR approval, and Request leave for own
+ * employment files the holder's own leave. Each is scoped by the service
+ * to the employment behind the login, never the caller — that structural
+ * scope is what makes them safe on every role.
+ *
+ * Custom roles include the baseline by default (Admin → Roles offers it as
+ * an explicit toggle), and the forward backfill grants it to existing
+ * custom roles whose employee holders carry no self-service grant at all.
+ * Time entry stays role-specific: hourly roles add time.self/time.clock
+ * explicitly, so those grants are deliberately not part of this set.
+ */
+export const EMPLOYEE_SELF_SERVICE_BASELINE = [
+  "hrm.self.read",
+  "hrm.self.request",
+  "hrm.leave.request",
+] as const satisfies readonly CataloguePermission[];
+
+export type EmployeeSelfServiceBaseline = (typeof EMPLOYEE_SELF_SERVICE_BASELINE)[number];
+
+/**
+ * True when `permissions` already carries the whole baseline. Wildcard
+ * grants count (`*` or `hrm.*` covers every baseline key), so a role that
+ * holds everything is never reported as missing self-service.
+ */
+export function roleHasSelfServiceBaseline(permissions: ReadonlySet<string> | readonly string[]): boolean {
+  const set = Array.isArray(permissions) ? new Set(permissions) : permissions;
+  return EMPLOYEE_SELF_SERVICE_BASELINE.every((key) => permissionSetCovers(set, key));
+}
+
+/**
+ * Union the baseline into a permission list, keeping the caller's order
+ * and appending only the missing keys. Callers that persist the result
+ * (the roles API) re-sort into catalogue order on write.
+ */
+export function withSelfServiceBaseline(permissions: readonly string[]): string[] {
+  const out = [...permissions];
+  for (const key of EMPLOYEE_SELF_SERVICE_BASELINE) {
+    if (!out.includes(key)) out.push(key);
+  }
+  return out;
+}
+
+/**
  * Which catalogue key authorizes each state-changing action of the inventory
  * movement API (`web/app/api/inventory/actions`):
  *
