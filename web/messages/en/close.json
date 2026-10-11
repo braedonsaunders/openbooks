@@ -474,7 +474,27 @@
       "reopenConflictNotice": "Conflict of interest: you are recorded on {count} record(s) this reopen would unlock ({examples}). Ask another approver to decide.",
       "lockDescription": "{module} · {period}. A reason is retained in the immutable close history.",
       "reopenRequests": "Reopen requests",
-      "requestedBy": "Requested by {name}"
+      "requestedBy": "Requested by {name}",
+      "reopenActiveUntil": "Active until {date}",
+      "endReopenTitle": "End this reopen",
+      "endReopenHint": "Ending re-closes every module this window opened and frees the period for new reopen requests.",
+      "endReopenReasonRequired": "A reason of at least 10 characters is required to end the reopen.",
+      "extendReopenTitle": "Extend or widen",
+      "extendReopenHint": "Add time or modules to this window instead of opening an overlapping request.",
+      "extendHoursLabel": "Additional hours",
+      "extendModulesLabel": "Add modules",
+      "extendReopenReasonRequired": "A reason of at least 10 characters is required to extend the reopen.",
+      "bankingReconTitle": "Bank reconciliations through this period",
+      "bankingReconEmpty": "No bank accounts need reconciliation for this period.",
+      "bankingReconUnavailable": "Reconciliation statuses could not be loaded; the close still checks them before locking.",
+      "bankingReconSignedOff": "Signed off",
+      "bankingReconInProgress": "In progress",
+      "bankingReconNone": "None",
+      "bankingReconThrough": "through {date}",
+      "bankingReconDifference": "difference {difference}",
+      "bankingReconStale": "stale since {date}, late effect {effect}",
+      "bankingReconAckLabel": "Reconciliation acknowledgement",
+      "bankingReconAckHint": "Name the unsigned or stale reconciliations above and why the close proceeds anyway."
     },
     "blueprints": {
       "title": "Close blueprints",
@@ -539,7 +559,9 @@
       "manageBooks": "Manage books",
       "managePeriod": "Manage {period}",
       "addRow": "Add",
-      "removeValue": "Remove {value}"
+      "removeValue": "Remove {value}",
+      "endReopen": "End reopen",
+      "extendReopen": "Extend reopen"
     },
     "fields": {
       "name": "Name",
@@ -723,7 +745,9 @@
       "blueprintSaved": "Close blueprint version saved",
       "policySaved": "Close policy saved",
       "automationSaved": "Automation rule saved",
-      "packageSaved": "Reporting package saved"
+      "packageSaved": "Reporting package saved",
+      "reopenEnded": "Reopen window ended.",
+      "reopenExtended": "Reopen window extended."
     },
     "errors": {
       "actionFailed": "The setup change could not be saved",

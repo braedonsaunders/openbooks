@@ -184,6 +184,18 @@ export interface ReopenRow extends Record<string, unknown> {
   requester_name: string;
   approver_name: string | null;
 }
+/** One bank account's reconciliation status for the period being closed. */
+export interface BankingReconAccount {
+  accountId: string;
+  number: string | null;
+  name: string;
+  status: string;
+  throughDate: string | null;
+  difference: string | null;
+  stale: boolean;
+  staleSince: string | null;
+  clearedEffect: string | null;
+}
 /** Working copies the drawers edit (camelCase) before saving. */
 export interface CalendarDraft extends Record<string, unknown> {
   id?: string;
@@ -1291,6 +1303,94 @@ function PeriodsTab(props: Props) {
   );
 }
 
+/**
+ * Each bank account's reconciliation status for the period being closed,
+ * with the acknowledgement the close requires when any account is
+ * unsigned or stale. Read-only: the server re-derives the same statuses
+ * when the close posts.
+ */
+function BankingReconPanel({
+  accounts,
+  unavailable,
+  ack,
+  onAck,
+}: {
+  accounts: BankingReconAccount[] | null;
+  unavailable: boolean;
+  ack: string;
+  onAck: (value: string) => void;
+}) {
+  const t = useTranslations("close.setup");
+  const issues = (accounts ?? []).filter(
+    (account) => account.status !== "signed_off" || account.stale,
+  );
+  return (
+    <div className="space-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+      <h4 className="font-medium">{t("periods.bankingReconTitle")}</h4>
+      {unavailable ? (
+        <p className="text-sm text-slate-500">
+          {t("periods.bankingReconUnavailable")}
+        </p>
+      ) : accounts === null ? (
+        <p className="text-sm text-slate-500">…</p>
+      ) : accounts.length === 0 ? (
+        <p className="text-sm text-slate-500">
+          {t("periods.bankingReconEmpty")}
+        </p>
+      ) : (
+        <ul className="space-y-1">
+          {accounts.map((account) => (
+            <li key={account.accountId} className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="font-medium">
+                {[account.number, account.name].filter(Boolean).join(" ")}
+              </span>
+              <Badge
+                variant={
+                  account.status === "signed_off" && !account.stale
+                    ? "success"
+                    : "warning"
+                }
+              >
+                {account.status === "signed_off"
+                  ? t("periods.bankingReconSignedOff")
+                  : account.status === "in_progress"
+                    ? t("periods.bankingReconInProgress")
+                    : t("periods.bankingReconNone")}
+              </Badge>
+              {account.throughDate ? (
+                <span className="text-xs text-slate-500">
+                  {t("periods.bankingReconThrough", { date: account.throughDate })}
+                </span>
+              ) : null}
+              {account.status === "in_progress" && account.difference ? (
+                <span className="text-xs text-slate-500">
+                  {t("periods.bankingReconDifference", { difference: account.difference })}
+                </span>
+              ) : null}
+              {account.stale ? (
+                <span className="text-xs text-amber-700 dark:text-amber-300">
+                  {t("periods.bankingReconStale", {
+                    date: account.staleSince ?? "",
+                    effect: account.clearedEffect ?? "",
+                  })}
+                </span>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
+      {issues.length > 0 ? (
+        <Field label={t("periods.bankingReconAckLabel")}>
+          <Textarea value={ack} onChange={(e) => onAck(e.target.value)} />
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            {t("periods.bankingReconAckHint")}
+          </p>
+        </Field>
+      ) : null}
+    </div>
+  );
+}
+
 function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
   const { date } = useViewerFormat();
   const t = useTranslations("close.setup");
@@ -1320,6 +1420,63 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
   // stay visible until the panel closes so a partial run is explicit.
   const [closeAll, setCloseAll] = useState(false);
   const [closeAllReason, setCloseAllReason] = useState("");
+  // Banking reconciliation coverage for the period, shown whenever a
+  // Banking close is on the table. The server still gates the close; this
+  // is the operator's read of the same statuses plus the acknowledgement
+  // the close requires when any account is unsigned or stale.
+  const [bankingAck, setBankingAck] = useState("");
+  const [bankingStatus, setBankingStatus] = useState<{
+    accounts: {
+      accountId: string;
+      number: string | null;
+      name: string;
+      status: string;
+      throughDate: string | null;
+      difference: string | null;
+      stale: boolean;
+      staleSince: string | null;
+      clearedEffect: string | null;
+    }[];
+    issues: unknown[];
+  } | null>(null);
+  const [bankingUnavailable, setBankingUnavailable] = useState(false);
+  const bankingClosePending =
+    (action?.module === "banking" &&
+      (action.state === "closed" || action.state === "soft_closed")) ||
+    closeAll;
+  useEffect(() => {
+    if (!bankingClosePending || !row || !selectedBook) {
+      setBankingStatus(null);
+      setBankingUnavailable(false);
+      return;
+    }
+    let live = true;
+    post(
+      {
+        action: "banking-close-status",
+        periodId: row.id,
+        bookId: selectedBook.id,
+      },
+      t("errors.actionFailed"),
+    )
+      .then((data) => {
+        if (!live) return;
+        const accounts = (data as { accounts?: BankingReconAccount[] }).accounts;
+        setBankingStatus({
+          accounts: Array.isArray(accounts) ? (accounts as BankingReconAccount[]) : [],
+          issues: [],
+        });
+        setBankingUnavailable(false);
+      })
+      .catch(() => {
+        if (!live) return;
+        setBankingStatus(null);
+        setBankingUnavailable(true);
+      });
+    return () => {
+      live = false;
+    };
+  }, [bankingClosePending, row?.id, selectedBook?.id]);
   const [closeAllOverrides, setCloseAllOverrides] = useState<Record<string, string>>({});
   const [closeAllResults, setCloseAllResults] = useState<{ module: string; ok: boolean; error?: string }[] | null>(null);
   async function generate() {
@@ -1401,6 +1558,9 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
             module: action.module,
             state: action.state,
             reason,
+            ...(bankingAck.trim()
+              ? { bankingAcknowledgement: bankingAck.trim() }
+              : {}),
           },
           t("errors.actionFailed"),
           t("periods.requestTimedOut"),
@@ -1417,6 +1577,7 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
       setAction(null);
       setReason("");
       setIncludeGl(true);
+      setBankingAck("");
       router.refresh();
     } catch (error) {
       const message =
@@ -1458,6 +1619,9 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
           bookId: selectedBook.id,
           reason: closeAllReason.trim(),
           ...(Object.keys(overrides).length > 0 ? { moduleReasons: overrides } : {}),
+          ...(bankingAck.trim()
+            ? { bankingAcknowledgement: bankingAck.trim() }
+            : {}),
         },
         t("errors.actionFailed"),
         t("periods.requestTimedOut"),
@@ -1470,6 +1634,7 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
         setCloseAllReason("");
         setCloseAllOverrides({});
         setCloseAllResults(null);
+        setBankingAck("");
       } else {
         toast.error(t("messages.closeAllPartial"));
       }
@@ -1678,6 +1843,12 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
                 </Field>
               ))}
             </div>
+            <BankingReconPanel
+              accounts={bankingStatus?.accounts ?? null}
+              unavailable={bankingUnavailable}
+              ack={bankingAck}
+              onAck={setBankingAck}
+            />
             {closeAllResults ? (
               <ul className="space-y-1">
                 {closeAllResults.map((result) => (
@@ -1700,6 +1871,7 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
                   setCloseAllReason("");
                   setCloseAllOverrides({});
                   setCloseAllResults(null);
+                  setBankingAck("");
                 }}
               >
                 {t("actions.cancel")}
@@ -1766,6 +1938,15 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
                 onChange={(e) => setReason(e.target.value)}
               />
             </Field>
+            {action.module === "banking" &&
+            (action.state === "closed" || action.state === "soft_closed") ? (
+              <BankingReconPanel
+                accounts={bankingStatus?.accounts ?? null}
+                unavailable={bankingUnavailable}
+                ack={bankingAck}
+                onAck={setBankingAck}
+              />
+            ) : null}
             {offerIncludeGl ? (
               <Check
                 checked={includeGl}
@@ -1781,6 +1962,7 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
                   setAction(null);
                   setReason("");
                   setIncludeGl(true);
+                  setBankingAck("");
                 }}
               >
                 {t("actions.cancel")}
@@ -1896,6 +2078,15 @@ function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
     .flatMap((item) => item.examples)
     .slice(0, 3)
     .join(", ");
+  // An approved window can be ended early or extended/widened instead of
+  // opening an overlapping request. Both carry their own reason and are
+  // audited server-side; the server refuses a third party ending the
+  // window and a requester extending their own.
+  const [endReason, setEndReason] = useState("");
+  const [extendReason, setExtendReason] = useState("");
+  const [extendHours, setExtendHours] = useState("24");
+  const [extendModules, setExtendModules] = useState<string[]>([]);
+  const includedModules = new Set(row.modules.map((module) => String(module)));
   async function decide(approve: boolean) {
     setBusy(true);
     setActionError(null);
@@ -1907,6 +2098,69 @@ function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
       toast.success(
         t(approve ? "messages.reopenApproved" : "messages.reopenRejected"),
       );
+      router.push(closeHref);
+      router.refresh();
+    } catch (error) {
+      const message =
+        error instanceof ApiResponseError
+          ? error.message
+          : t("errors.actionFailed");
+      setActionError(message);
+      toast.error(message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function endReopen() {
+    if (endReason.trim().length < 10) {
+      const message = t("periods.endReopenReasonRequired");
+      setActionError(message);
+      toast.error(message);
+      return;
+    }
+    setBusy(true);
+    setActionError(null);
+    try {
+      await post(
+        { action: "reclose-reopen", requestId: row.id, reason: endReason.trim() },
+        t("errors.actionFailed"),
+      );
+      toast.success(t("messages.reopenEnded"));
+      router.push(closeHref);
+      router.refresh();
+    } catch (error) {
+      const message =
+        error instanceof ApiResponseError
+          ? error.message
+          : t("errors.actionFailed");
+      setActionError(message);
+      toast.error(message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function extendReopen() {
+    if (extendReason.trim().length < 10) {
+      const message = t("periods.extendReopenReasonRequired");
+      setActionError(message);
+      toast.error(message);
+      return;
+    }
+    const hours = Number(extendHours);
+    setBusy(true);
+    setActionError(null);
+    try {
+      await post(
+        {
+          action: "extend-reopen",
+          requestId: row.id,
+          reason: extendReason.trim(),
+          ...(Number.isInteger(hours) && hours >= 1 ? { additionalHours: hours } : {}),
+          ...(extendModules.length > 0 ? { addModules: extendModules } : {}),
+        },
+        t("errors.actionFailed"),
+      );
+      toast.success(t("messages.reopenExtended"));
       router.push(closeHref);
       router.refresh();
     } catch (error) {
@@ -1980,6 +2234,89 @@ function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
         >
           {t(`reopenStates.${row.status}`)}
         </Badge>
+        {row.status === "approved" && typeof row.expires_at === "string" ? (
+          <p className="mt-1 text-sm text-slate-500">
+            {t("periods.reopenActiveUntil", { date: String(row.expires_at).slice(0, 16).replace("T", " ") })}
+          </p>
+        ) : null}
+        {row.status === "approved" && props.canReopen ? (
+          <div className="space-y-3 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+            <div>
+              <h4 className="font-medium">{t("periods.endReopenTitle")}</h4>
+              <p className="text-sm text-slate-500">
+                {t("periods.endReopenHint")}
+              </p>
+            </div>
+            <Field label={t("fields.reason")}>
+              <Textarea
+                value={endReason}
+                onChange={(e) => setEndReason(e.target.value)}
+              />
+            </Field>
+            <div className="flex justify-end">
+              <Button
+                variant="outline"
+                disabled={busy || endReason.trim().length < 10}
+                onClick={endReopen}
+              >
+                {t("actions.endReopen")}
+              </Button>
+            </div>
+          </div>
+        ) : null}
+        {row.status === "approved" && props.canReopen ? (
+          <div className="space-y-3 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+            <div>
+              <h4 className="font-medium">{t("periods.extendReopenTitle")}</h4>
+              <p className="text-sm text-slate-500">
+                {t("periods.extendReopenHint")}
+              </p>
+            </div>
+            <Field label={t("periods.extendHoursLabel")}>
+              <Input
+                type="number"
+                min={1}
+                max={168}
+                value={extendHours}
+                onChange={(e) => setExtendHours(e.target.value)}
+              />
+            </Field>
+            <div className="space-y-1">
+              <Label>{t("periods.extendModulesLabel")}</Label>
+              {MODULES.filter((module) => !includedModules.has(module)).map((module) => (
+                <label key={module} className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={extendModules.includes(module)}
+                    onChange={(e) =>
+                      setExtendModules((prev) =>
+                        e.target.checked
+                          ? [...prev, module]
+                          : prev.filter((item) => item !== module),
+                      )
+                    }
+                  />
+                  {t(`modules.${module}`)}
+                </label>
+              ))}
+            </div>
+            <Field label={t("fields.reason")}>
+              <Textarea
+                value={extendReason}
+                onChange={(e) => setExtendReason(e.target.value)}
+              />
+            </Field>
+            <div className="flex justify-end">
+              <Button
+                variant="outline"
+                disabled={busy || extendReason.trim().length < 10}
+                onClick={extendReopen}
+              >
+                {t("actions.extendReopen")}
+              </Button>
+            </div>
+          </div>
+        ) : null}
       </div>
     </UrlDrawer>
   );

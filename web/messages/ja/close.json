@@ -474,7 +474,27 @@
       "reopenConflictNotice": "利益相反：この再開で変更可能になる {count} 件の記録にあなたが関与しています（{examples}）。別の承認者に決定を依頼してください。",
       "lockDescription": "{module} · {period}。理由は改ざん不可の決算履歴に保持されます。",
       "reopenRequests": "再オープン依頼",
-      "requestedBy": "{name}が依頼"
+      "requestedBy": "{name}が依頼",
+      "reopenActiveUntil": "{date} まで有効",
+      "endReopenTitle": "この再オープンを終了する",
+      "endReopenHint": "終了すると、この期間で開いたすべてのモジュールが再び締められ、新しい再オープン依頼が可能になります。",
+      "endReopenReasonRequired": "再オープンを終了するには10文字以上の理由が必要です。",
+      "extendReopenTitle": "延長または拡大",
+      "extendReopenHint": "重複する依頼を開く代わりに、この期間に時間やモジュールを追加してください。",
+      "extendHoursLabel": "追加時間",
+      "extendModulesLabel": "モジュールを追加",
+      "extendReopenReasonRequired": "再オープンを延長するには10文字以上の理由が必要です。",
+      "bankingReconTitle": "この期間までの銀行照合",
+      "bankingReconEmpty": "この期間に照合が必要な銀行口座はありません。",
+      "bankingReconUnavailable": "照合ステータスを読み込めませんでした。締め処理ではロック前に確認されます。",
+      "bankingReconSignedOff": "照合済み",
+      "bankingReconInProgress": "進行中",
+      "bankingReconNone": "なし",
+      "bankingReconThrough": "{date} まで",
+      "bankingReconDifference": "差異 {difference}",
+      "bankingReconStale": "{date} 以降失効、遅延影響 {effect}",
+      "bankingReconAckLabel": "照合の承認",
+      "bankingReconAckHint": "上記の未照合または失効した照合と、それでも締める理由を記入してください。"
     },
     "blueprints": {
       "title": "決算ブループリント",
@@ -539,7 +559,9 @@
       "manageBooks": "帳簿を管理",
       "managePeriod": "{period}を管理",
       "addRow": "追加",
-      "removeValue": "{value}を削除"
+      "removeValue": "{value}を削除",
+      "endReopen": "再オープンを終了",
+      "extendReopen": "再オープンを延長"
     },
     "fields": {
       "name": "名称",
@@ -723,7 +745,9 @@
       "blueprintSaved": "決算ブループリントバージョンを保存しました",
       "policySaved": "決算ポリシーを保存しました",
       "automationSaved": "自動処理ルールを保存しました",
-      "packageSaved": "報告パッケージを保存しました"
+      "packageSaved": "報告パッケージを保存しました",
+      "reopenEnded": "再オープン期間を終了しました。",
+      "reopenExtended": "再オープン期間を延長しました。"
     },
     "errors": {
       "actionFailed": "設定の変更を保存できませんでした",

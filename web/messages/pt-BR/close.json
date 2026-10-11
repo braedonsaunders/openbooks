@@ -474,7 +474,27 @@
       "reopenConflictNotice": "Conflito de interesse: você está registrado em {count} registro(s) que esta reabertura desbloquearia ({examples}). Peça a outro aprovador que decida.",
       "lockDescription": "{module} · {period}. Um motivo é retido no histórico imutável de fechamento.",
       "reopenRequests": "Solicitações de reabertura",
-      "requestedBy": "Solicitado por {name}"
+      "requestedBy": "Solicitado por {name}",
+      "reopenActiveUntil": "Ativo até {date}",
+      "endReopenTitle": "Encerrar esta reabertura",
+      "endReopenHint": "Encerrar fecha novamente cada módulo que esta janela abriu e libera o período para novas solicitações.",
+      "endReopenReasonRequired": "É necessário um motivo com pelo menos 10 caracteres para encerrar a reabertura.",
+      "extendReopenTitle": "Estender ou ampliar",
+      "extendReopenHint": "Adicione tempo ou módulos a esta janela em vez de abrir uma solicitação sobreposta.",
+      "extendHoursLabel": "Horas adicionais",
+      "extendModulesLabel": "Adicionar módulos",
+      "extendReopenReasonRequired": "É necessário um motivo com pelo menos 10 caracteres para estender a reabertura.",
+      "bankingReconTitle": "Conciliações bancárias até este período",
+      "bankingReconEmpty": "Nenhuma conta bancária precisa de conciliação para este período.",
+      "bankingReconUnavailable": "Não foi possível carregar os status de conciliação; o fechamento os verifica antes de bloquear.",
+      "bankingReconSignedOff": "Conciliado",
+      "bankingReconInProgress": "Em andamento",
+      "bankingReconNone": "Nenhuma",
+      "bankingReconThrough": "até {date}",
+      "bankingReconDifference": "diferença {difference}",
+      "bankingReconStale": "desatualizado desde {date}, efeito tardio {effect}",
+      "bankingReconAckLabel": "Reconhecimento de conciliação",
+      "bankingReconAckHint": "Informe as conciliações pendentes ou desatualizadas acima e por que o fechamento prossegue mesmo assim."
     },
     "blueprints": {
       "title": "Blueprints de fechamento",
@@ -539,7 +559,9 @@
       "manageBooks": "Gerenciar livros",
       "managePeriod": "Gerenciar {period}",
       "addRow": "Adicionar",
-      "removeValue": "Remover {value}"
+      "removeValue": "Remover {value}",
+      "endReopen": "Encerrar reabertura",
+      "extendReopen": "Estender reabertura"
     },
     "fields": {
       "name": "Nome",
@@ -723,7 +745,9 @@
       "blueprintSaved": "Versão do blueprint de fechamento salva",
       "policySaved": "Política de fechamento salva",
       "automationSaved": "Regra de automação salva",
-      "packageSaved": "Pacote de relatórios salvo"
+      "packageSaved": "Pacote de relatórios salvo",
+      "reopenEnded": "Janela de reabertura encerrada.",
+      "reopenExtended": "Janela de reabertura estendida."
     },
     "errors": {
       "actionFailed": "Não foi possível salvar a alteração de configuração",

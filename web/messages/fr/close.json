@@ -474,7 +474,27 @@
       "reopenConflictNotice": "Conflit d’intérêts : vous êtes lié(e) à {count} enregistrement(s) que cette réouverture déverrouillerait ({examples}). Demandez à un autre approbateur de décider.",
       "lockDescription": "{module} · {period}. Le motif est conservé dans l’historique immuable.",
       "reopenRequests": "Demandes de réouverture",
-      "requestedBy": "Demandée par {name}"
+      "requestedBy": "Demandée par {name}",
+      "reopenActiveUntil": "Actif jusqu'au {date}",
+      "endReopenTitle": "Terminer cette réouverture",
+      "endReopenHint": "La clôture referme chaque module ouvert par cette fenêtre et libère la période pour de nouvelles demandes.",
+      "endReopenReasonRequired": "Un motif d'au moins 10 caractères est requis pour terminer la réouverture.",
+      "extendReopenTitle": "Prolonger ou élargir",
+      "extendReopenHint": "Ajoutez du temps ou des modules à cette fenêtre plutôt qu'ouvrir une demande qui chevauche.",
+      "extendHoursLabel": "Heures supplémentaires",
+      "extendModulesLabel": "Ajouter des modules",
+      "extendReopenReasonRequired": "Un motif d'au moins 10 caractères est requis pour prolonger la réouverture.",
+      "bankingReconTitle": "Rapprochements bancaires sur cette période",
+      "bankingReconEmpty": "Aucun compte bancaire à rapprocher sur cette période.",
+      "bankingReconUnavailable": "Statuts de rapprochement introuvables ; la clôture les contrôle avant verrouillage.",
+      "bankingReconSignedOff": "Rapproché",
+      "bankingReconInProgress": "En cours",
+      "bankingReconNone": "Aucun",
+      "bankingReconThrough": "jusqu'au {date}",
+      "bankingReconDifference": "écart {difference}",
+      "bankingReconStale": "périmé depuis {date}, effet tardif {effect}",
+      "bankingReconAckLabel": "Accusé de rapprochement",
+      "bankingReconAckHint": "Nommez les rapprochements non signés ou périmés ci-dessus et pourquoi la clôture se poursuit malgré tout."
     },
     "blueprints": {
       "title": "Modèles de clôture",
@@ -539,7 +559,9 @@
       "manageBooks": "Gérer les livres",
       "managePeriod": "Gérer {period}",
       "addRow": "Ajouter",
-      "removeValue": "Supprimer {value}"
+      "removeValue": "Supprimer {value}",
+      "endReopen": "Terminer la réouverture",
+      "extendReopen": "Prolonger la réouverture"
     },
     "fields": {
       "name": "Nom",
@@ -723,7 +745,9 @@
       "blueprintSaved": "Version du modèle enregistrée",
       "policySaved": "Politique enregistrée",
       "automationSaved": "Règle d’automatisation enregistrée",
-      "packageSaved": "Dossier de rapports enregistré"
+      "packageSaved": "Dossier de rapports enregistré",
+      "reopenEnded": "Fenêtre de réouverture terminée.",
+      "reopenExtended": "Fenêtre de réouverture prolongée."
     },
     "errors": {
       "actionFailed": "La modification n’a pas pu être enregistrée",

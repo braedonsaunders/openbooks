@@ -386,3 +386,46 @@ test('reopen approval preserves an independent-approval refusal and releases the
     assert.deepEqual(pushes, [])
   } finally { await unmount(); globalThis.fetch = prior }
 })
+
+/** An approved reopen offers an audited end action: the requester ends the
+ * window with a reason instead of waiting out the expiry while overlap
+ * blocks new requests. */
+test('an approved reopen offers an end action that posts its reason', async () => {
+  const bodies: unknown[] = []
+  const prior = globalThis.fetch
+  globalThis.fetch = (async (_input: unknown, init?: { body?: string }) => {
+    bodies.push(JSON.parse(String(init?.body ?? '{}')))
+    return Response.json({ ok: true })
+  }) as typeof fetch
+  const props = baseProps({ tab: 'periods', reopen: 'r9' })
+  props.reopenRequests = [{
+    id: 'r9', period_id: 'p1', book_id: 'b1', status: 'approved',
+    reason: 'correction window', modules: ['gl'],
+    period_name: 'Nov 2025', book_name: 'Main',
+    requester_name: 'Rae', approver_name: 'Ari',
+    expires_at: '2026-01-02T03:04:05.000Z',
+  }] as WorkspaceProps['reopenRequests']
+  const { unmount } = await mountWorkspace(props)
+  try {
+    const body = document.body.textContent ?? ''
+    assert.ok(body.includes('2026-01-02 03:04'), 'the window expiry reads in human terms')
+    await act(async () => { clickButton(String(closeSetup.actions?.endReopen)).click(); await tick() })
+    assert.deepEqual(bodies, [], 'no end posts without a reason')
+    const boxes = [...document.querySelectorAll('textarea')]
+    assert.ok(boxes.length >= 1, 'the end action asks for a reason')
+    await act(async () => {
+      setNativeValue(boxes[0]!, 'Correction posted; window no longer needed')
+      await tick()
+    })
+    await act(async () => {
+      clickButton(String(closeSetup.actions?.endReopen)).click()
+      await tick()
+      await tick()
+    })
+    assert.deepEqual(bodies, [{
+      action: 'reclose-reopen',
+      requestId: 'r9',
+      reason: 'Correction posted; window no longer needed',
+    }])
+  } finally { await unmount(); globalThis.fetch = prior }
+})

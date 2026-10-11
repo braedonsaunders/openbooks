@@ -474,7 +474,27 @@
       "reopenConflictNotice": "Interessenkonflikt: Sie sind in {count} Datensätzen erfasst, die diese Wiedereröffnung entsperren würde ({examples}). Bitten Sie eine andere Person um die Entscheidung.",
       "lockDescription": "{module} · {period}. Ein Grund wird in der unveränderlichen Abschlusshistorie aufbewahrt.",
       "reopenRequests": "Wiedereröffnungsanfragen",
-      "requestedBy": "Angefordert von {name}"
+      "requestedBy": "Angefordert von {name}",
+      "reopenActiveUntil": "Aktiv bis {date}",
+      "endReopenTitle": "Diese Wiedereröffnung beenden",
+      "endReopenHint": "Das Beenden schließt alle Module, die dieses Fenster geöffnet hat, wieder und gibt die Periode für neue Wiedereröffnungsanfragen frei.",
+      "endReopenReasonRequired": "Zum Beenden der Wiedereröffnung ist eine Begründung mit mindestens 10 Zeichen erforderlich.",
+      "extendReopenTitle": "Verlängern oder erweitern",
+      "extendReopenHint": "Fügen Sie diesem Fenster Zeit oder Module hinzu, statt eine überlappende Anfrage zu stellen.",
+      "extendHoursLabel": "Zusätzliche Stunden",
+      "extendModulesLabel": "Module hinzufügen",
+      "extendReopenReasonRequired": "Zum Verlängern der Wiedereröffnung ist eine Begründung mit mindestens 10 Zeichen erforderlich.",
+      "bankingReconTitle": "Bankabstimmungen bis zu dieser Periode",
+      "bankingReconEmpty": "Für diese Periode müssen keine Bankkonten abgestimmt werden.",
+      "bankingReconUnavailable": "Abstimmungsstatus konnten nicht geladen werden; der Abschluss prüft sie vor dem Sperren trotzdem.",
+      "bankingReconSignedOff": "Abgestimmt",
+      "bankingReconInProgress": "In Bearbeitung",
+      "bankingReconNone": "Keine",
+      "bankingReconThrough": "bis {date}",
+      "bankingReconDifference": "Differenz {difference}",
+      "bankingReconStale": "veraltet seit {date}, nachträglicher Effekt {effect}",
+      "bankingReconAckLabel": "Bestätigung der Abstimmung",
+      "bankingReconAckHint": "Nennen Sie die oben genannten nicht abgestimmten oder veralteten Abstimmungen und warum der Abschluss trotzdem erfolgt."
     },
     "blueprints": {
       "title": "Abschlussblaupausen",
@@ -539,7 +559,9 @@
       "manageBooks": "Bücher verwalten",
       "managePeriod": "{period} verwalten",
       "addRow": "Hinzufügen",
-      "removeValue": "{value} entfernen"
+      "removeValue": "{value} entfernen",
+      "endReopen": "Wiedereröffnung beenden",
+      "extendReopen": "Wiedereröffnung verlängern"
     },
     "fields": {
       "name": "Name",
@@ -723,7 +745,9 @@
       "blueprintSaved": "Abschlussblaupausenversion gespeichert",
       "policySaved": "Abschlussrichtlinie gespeichert",
       "automationSaved": "Automatisierungsregel gespeichert",
-      "packageSaved": "Berichtspaket gespeichert"
+      "packageSaved": "Berichtspaket gespeichert",
+      "reopenEnded": "Wiedereröffnungsfenster beendet.",
+      "reopenExtended": "Wiedereröffnungsfenster verlängert."
     },
     "errors": {
       "actionFailed": "Die Einrichtungsänderung konnte nicht gespeichert werden",

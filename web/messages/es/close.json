@@ -474,7 +474,27 @@
       "reopenConflictNotice": "Conflicto de interés: usted figura en {count} registro(s) que esta reapertura desbloquearía ({examples}). Pida a otra persona que decida.",
       "lockDescription": "{module} · {period}. El motivo queda en el historial inmutable.",
       "reopenRequests": "Solicitudes de reapertura",
-      "requestedBy": "Solicitada por {name}"
+      "requestedBy": "Solicitada por {name}",
+      "reopenActiveUntil": "Activo hasta {date}",
+      "endReopenTitle": "Terminar esta reapertura",
+      "endReopenHint": "Al terminar se vuelven a cerrar todos los módulos que abrió esta ventana y el período queda libre para nuevas solicitudes.",
+      "endReopenReasonRequired": "Se requiere un motivo de al menos 10 caracteres para terminar la reapertura.",
+      "extendReopenTitle": "Extender o ampliar",
+      "extendReopenHint": "Agregue tiempo o módulos a esta ventana en lugar de abrir una solicitud superpuesta.",
+      "extendHoursLabel": "Horas adicionales",
+      "extendModulesLabel": "Agregar módulos",
+      "extendReopenReasonRequired": "Se requiere un motivo de al menos 10 caracteres para extender la reapertura.",
+      "bankingReconTitle": "Conciliaciones bancarias hasta este período",
+      "bankingReconEmpty": "Ninguna cuenta bancaria requiere conciliación para este período.",
+      "bankingReconUnavailable": "No se pudieron cargar los estados de conciliación; el cierre los verifica antes de bloquear.",
+      "bankingReconSignedOff": "Conciliado",
+      "bankingReconInProgress": "En curso",
+      "bankingReconNone": "Ninguna",
+      "bankingReconThrough": "hasta {date}",
+      "bankingReconDifference": "diferencia {difference}",
+      "bankingReconStale": "desactualizado desde {date}, efecto tardío {effect}",
+      "bankingReconAckLabel": "Confirmación de conciliación",
+      "bankingReconAckHint": "Indique las conciliaciones pendientes o desactualizadas anteriores y por qué el cierre continúa de todos modos."
     },
     "blueprints": {
       "title": "Plantillas de cierre",
@@ -539,7 +559,9 @@
       "manageBooks": "Administrar libros",
       "managePeriod": "Gestionar {period}",
       "addRow": "Agregar",
-      "removeValue": "Quitar {value}"
+      "removeValue": "Quitar {value}",
+      "endReopen": "Terminar reapertura",
+      "extendReopen": "Extender reapertura"
     },
     "fields": {
       "name": "Nombre",
@@ -723,7 +745,9 @@
       "blueprintSaved": "Versión de plantilla guardada",
       "policySaved": "Política guardada",
       "automationSaved": "Regla de automatización guardada",
-      "packageSaved": "Paquete de informes guardado"
+      "packageSaved": "Paquete de informes guardado",
+      "reopenEnded": "Ventana de reapertura terminada.",
+      "reopenExtended": "Ventana de reapertura extendida."
     },
     "errors": {
       "actionFailed": "No se pudo guardar el cambio",

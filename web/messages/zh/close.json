@@ -474,7 +474,27 @@
       "reopenConflictNotice": "利益冲突：您与本次重开将解锁的 {count} 条记录有关（{examples}）。请其他审批人决定。",
       "lockDescription": "{module} · {period}。理由将保留在不可变的结账历史中。",
       "reopenRequests": "重新开启申请",
-      "requestedBy": "申请人 {name}"
+      "requestedBy": "申请人 {name}",
+      "reopenActiveUntil": "有效期至 {date}",
+      "endReopenTitle": "结束此次重开",
+      "endReopenHint": "结束后，此窗口打开的所有模块将重新关闭，该期间可接受新的重开申请。",
+      "endReopenReasonRequired": "结束重开需要至少 10 个字符的理由。",
+      "extendReopenTitle": "延长或扩大",
+      "extendReopenHint": "向此窗口添加时间或模块，而不是新建重叠申请。",
+      "extendHoursLabel": "额外小时数",
+      "extendModulesLabel": "添加模块",
+      "extendReopenReasonRequired": "延长重开需要至少 10 个字符的理由。",
+      "bankingReconTitle": "本期间的银行对账",
+      "bankingReconEmpty": "本期间没有需要对账的银行账户。",
+      "bankingReconUnavailable": "无法加载对账状态；关闭前仍会进行检查。",
+      "bankingReconSignedOff": "已签核",
+      "bankingReconInProgress": "进行中",
+      "bankingReconNone": "无",
+      "bankingReconThrough": "截至 {date}",
+      "bankingReconDifference": "差异 {difference}",
+      "bankingReconStale": "自 {date} 起过期，延迟影响 {effect}",
+      "bankingReconAckLabel": "对账确认",
+      "bankingReconAckHint": "请列出上述未签核或已过期的对账，并说明关闭仍继续的原因。"
     },
     "blueprints": {
       "title": "结账蓝图",
@@ -539,7 +559,9 @@
       "manageBooks": "管理账簿",
       "managePeriod": "管理 {period}",
       "addRow": "添加",
-      "removeValue": "移除{value}"
+      "removeValue": "移除{value}",
+      "endReopen": "结束重开",
+      "extendReopen": "延长重开"
     },
     "fields": {
       "name": "名称",
@@ -723,7 +745,9 @@
       "blueprintSaved": "结账蓝图版本已保存",
       "policySaved": "结账政策已保存",
       "automationSaved": "自动化规则已保存",
-      "packageSaved": "报告包已保存"
+      "packageSaved": "报告包已保存",
+      "reopenEnded": "重开窗口已结束。",
+      "reopenExtended": "重开窗口已延长。"
     },
     "errors": {
       "actionFailed": "无法保存该设置更改",
