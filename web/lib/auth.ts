@@ -825,6 +825,19 @@ async function reauthenticateMfaEnrollment(
   return { email, sessionExpiresAt };
 }
 
+/**
+ * An MFA setup conflict: enrollment is already complete or already pending
+ * in another session. It answers 409 with its remedy; anything else from
+ * setup (a crypto or driver failure) is unexpected and answers 500.
+ */
+export class MfaSetupConflictError extends Error {
+  readonly status = 409;
+  constructor(message: string) {
+    super(message);
+    this.name = "MfaSetupConflictError";
+  }
+}
+
 export async function beginMfaSetup(
   userId: string,
   currentSessionId: string,
@@ -852,11 +865,11 @@ export async function beginMfaSetup(
     `)).rows[0]
     // Password verification and the factor lock may themselves take time.
     if (reauthenticated.sessionExpiresAt.getTime() <= Date.now()) return null;
-    if (existing?.enabledAt) throw new Error("MFA is already enabled");
+    if (existing?.enabledAt) throw new MfaSetupConflictError("MFA is already enabled");
     const pendingExpiry = dateValue(existing?.setupExpiresAt)
     if (existing && pendingExpiry && pendingExpiry.getTime() > Date.now()) {
       if (existing.setupSessionId !== currentSessionId) {
-        throw new Error("MFA setup is already pending in another session; finish setup there or wait for it to expire before starting again")
+        throw new MfaSetupConflictError("MFA setup is already pending in another session; finish setup there or wait for it to expire before starting again")
       }
       let pendingSecret: string;
       try {

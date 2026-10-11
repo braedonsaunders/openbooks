@@ -9,26 +9,13 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { extractNativeInvoice } from '@openbooks/engine/payables/einvoice'
 import { orgFeatureEnabled } from '@openbooks/engine/organization/features'
 import { captureContentMatchesMime } from '@openbooks/engine/src/payables/ap-capture.ts'
+import { EInvoiceParseError } from '@openbooks/engine/src/einvoice/parse.ts'
 import { getDocumentCaptureRuntimeConfig, type DocumentCaptureRuntimeConfig } from '@openbooks/engine/src/payables/ap-capture-config.ts'
 import '../../../lib/authz';
 import { createFile, deleteFile, ensureApCaptureRoot } from '../../../lib/file-cabinet'
 import { enqueueStorageCleanupStandalone, fileCabinetObjectKey } from '../../../lib/file-storage'
 
 export const runtime = 'nodejs'
-
-/**
- * Misconfigured document-capture endpoints refuse with their own actionable
- * message: a typed 4xx refusal so the sanitizer preserves it. Collapsing
- * these throws into capture_not_configured sent operators to reconfigure a
- * correctly configured endpoint, and an untyped throw sanitizes to a
- * requestId 500 that hides the remedy.
- */
-class CaptureConfigRefusal extends Error {
-  constructor(message: string, readonly status = 422) {
-    super(message)
-    this.name = 'CaptureConfigRefusal'
-  }
-}
 
 const MAX_FILES = 50
 const MAX_BYTES = 20 * 1024 * 1024
@@ -60,13 +47,24 @@ export const POST = defineRoute({
       if (!nativeEnabled && (file.type === 'application/xml' || file.type === 'text/xml')) return NextResponse.json({ error: 'Enable E-invoicing in Company Settings → Features to receive XML invoices.' }, { status: 422 });
       let native = false;
       try { native = nativeEnabled && (await extractNativeInvoice(bytes, file.type)) !== null; }
-      catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : 'The e-invoice could not be parsed.' }, { status: 422 }); }
+      catch (error) {
+        // Parse refusals name the defect at 422; a decoder or PDF failure
+        // is unexpected and answers through the shared mapping.
+        if (error instanceof EInvoiceParseError) return apiErrorResponse(error, { safeStatus: 422 });
+        return apiErrorResponse(error);
+      }
       prepared.push({ file, bytes, filename: safeFilename(file.name), hash: createHash('sha256').update(bytes).digest('hex'), native })
     }
     if (prepared.some(upload => !upload.native)) {
       let captureConfig: DocumentCaptureRuntimeConfig | null;
       try { captureConfig = await getDocumentCaptureRuntimeConfig(gate.user.orgId); }
-      catch (error) { return apiErrorResponse(new CaptureConfigRefusal(error instanceof Error ? error.message : 'capture_config_failed')); }
+      catch (error) {
+        // Endpoint misconfiguration is typed 422 at its origin with its
+        // remedy; collapsing it into capture_not_configured sent operators
+        // to reconfigure a correctly configured endpoint. Anything else is
+        // unexpected: the shared mapping logs it and answers 500.
+        return apiErrorResponse(error);
+      }
       if (!captureConfig) return NextResponse.json({ error: 'capture_not_configured' }, { status: 409 });
     }
     const folderId = await ensureApCaptureRoot(gate.user.orgId, gate.user.id)

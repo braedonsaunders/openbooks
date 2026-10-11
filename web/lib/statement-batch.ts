@@ -18,6 +18,19 @@ import { partnerBalances } from './reports/statements'
  * on who owes what.
  */
 
+/**
+ * A batch period refusal: the requested dates are malformed or inverted.
+ * It answers 400 with its message, which carries only the expected shape —
+ * user input is echoed back as a shape, never raw.
+ */
+export class StatementBatchInputError extends Error {
+  readonly status = 400
+  constructor(message: string) {
+    super(message)
+    this.name = 'StatementBatchInputError'
+  }
+}
+
 export interface StatementBatchFilters {
   /** Statement end date (as-of when `from` is absent). */
   to: string
@@ -266,10 +279,10 @@ export async function buildStatementBatchPreview(
   const to = query.to?.trim() || today
   const from = query.from?.trim() || null
   if (!DATE_RE.test(to) || (from !== null && !DATE_RE.test(from))) {
-    throw new Error('statement batch period dates must be YYYY-MM-DD')
+    throw new StatementBatchInputError('statement batch period dates must be YYYY-MM-DD')
   }
   if (from !== null && from > to) {
-    throw new Error('statement batch period starts after it ends — swap the From and To dates')
+    throw new StatementBatchInputError('statement batch period starts after it ends — swap the From and To dates')
   }
   const { selectedBook } = await reportBookSelection(orgId)
   // Explicit scope from the caller's gate — never the ambient session — so

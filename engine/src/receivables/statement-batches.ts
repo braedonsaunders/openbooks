@@ -59,8 +59,30 @@ export type StatementBatchEnqueuer = (
   jobs: { orgId: string; runId: string; partyId: string; senderId: string }[],
 ) => Promise<unknown>;
 
+/**
+ * A batch filing refusal: the request is well-formed but cannot run as
+ * filed (no recipients, a duplicate customer, a vanished run row). It
+ * filed (no recipients, a duplicate customer, an unwritten run row). It
+ * answers 422 with its message, which names no internal identifiers — a
+ * party or item id belongs in the server log, never in a client refusal.
+ */
+export class StatementBatchError extends Error {
+  readonly status = 422;
+  constructor(message: string) {
+    super(message);
+    this.name = "StatementBatchError";
+  }
+}
+
 function refuseZeroRowWrite(label: string): never {
   throw new Error(
+    `${label} — the update matched no row, so nothing was written. ` +
+      "Confirm the row exists and is visible in this organization before treating the write as recorded.",
+  );
+}
+
+function refuseBatchWrite(label: string): never {
+  throw new StatementBatchError(
     `${label} — the update matched no row, so nothing was written. ` +
       "Confirm the row exists and is visible in this organization before treating the write as recorded.",
   );
@@ -78,7 +100,7 @@ export async function createStatementBatchRun(args: {
   enqueue: StatementBatchEnqueuer;
 }): Promise<{ runId: string; queued: number; skipped: number }> {
   if (args.recipients.length === 0) {
-    throw new Error("statement batch has no recipients — adjust the period or filters");
+    throw new StatementBatchError("statement batch has no recipients — adjust the period or filters");
   }
   const runRows = (await db.execute<{ id: string }>(sql`
     insert into statement_batch_runs
@@ -92,7 +114,7 @@ export async function createStatementBatchRun(args: {
     returning id::text as id`)).rows;
   const runId = runRows[0]?.id;
   // A required write matching zero rows is a failure, not a success.
-  if (!runId) refuseZeroRowWrite("statement batch run was not recorded");
+  if (!runId) refuseBatchWrite("statement batch run was not recorded");
   for (const recipient of args.recipients) {
     // A fresh run id cannot collide, so a conflict here means the input
     // listed one customer twice — refusing beats sending them two letters.
@@ -103,7 +125,7 @@ export async function createStatementBatchRun(args: {
               ${recipient.balance}, ${recipient.overdue}, ${recipient.currency}, 'queued', ${args.senderId})
       on conflict (run_id, party_id) do nothing
       returning id::text as id`)).rows;
-    if (!inserted[0]) refuseZeroRowWrite(`statement batch item was not recorded for customer ${recipient.partyId}`);
+    if (!inserted[0]) refuseBatchWrite("statement batch item was not recorded — the input listed one customer twice; refusing beats sending them two letters");
   }
   for (const exclusion of args.excluded) {
     await db.execute(sql`

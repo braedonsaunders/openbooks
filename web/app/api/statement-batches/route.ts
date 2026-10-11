@@ -83,12 +83,10 @@ export const POST = defineRoute({
       },
     )
   } catch (e) {
-    if (e instanceof ReportCurrencyBasisError) {
-      return NextResponse.json({ error: e.message }, { status: 422 })
-    }
-    if (e instanceof Error && /YYYY-MM-DD|starts after it ends/.test(e.message)) {
-      return NextResponse.json({ error: e.message }, { status: 400 })
-    }
+    // The basis refusal carries a fixed message but no status: it answers
+    // 422 here. Period refusals are already typed 400 at their origin; the
+    // shared mapping carries both, and logs anything unexpected.
+    if (e instanceof ReportCurrencyBasisError) return apiErrorResponse(e, { safeStatus: 422 })
     return apiErrorResponse(e)
   }
   if (preview.recipients.length === 0) {
@@ -122,9 +120,8 @@ export const POST = defineRoute({
     })
     return NextResponse.json({ ok: true, runId: run.runId, queued: run.queued, skipped: run.skipped })
   } catch (e) {
-    if (e instanceof Error && /no recipients|was not recorded|listed one customer twice/.test(e.message)) {
-      return NextResponse.json({ error: e.message }, { status: 422 })
-    }
+    // Filing refusals are typed 422 at their origin with identifier-free
+    // messages; the shared mapping carries them and logs the rest.
     return apiErrorResponse(e)
   }
   },

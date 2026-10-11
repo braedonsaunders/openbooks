@@ -267,15 +267,19 @@ function stripSqlNoise(input: string): string {
 }
 
 export function validateUserSql(sqlText: string): string {
+  // Pure pre-validation: every message is a fixed literal (the one
+  // interpolation echoes back a keyword from the fixed forbidden-word list,
+  // never relation or column names), so the refusal is safe to show. It is
+  // typed 400 at this origin: routes carry it through the shared mapping.
   const stripped = stripSqlNoise(sqlText).trim();
-  if (!stripped) throw new Error("empty query");
-  if (stripped.replace(/;\s*$/, "").includes(";")) throw new Error("one statement per query");
-  if (FORBIDDEN_PREFIX.test(stripped)) throw new Error("read-only: queries must be SELECT (or WITH … SELECT)");
+  if (!stripped) throw new UserSqlRefusal("empty query", 400);
+  if (stripped.replace(/;\s*$/, "").includes(";")) throw new UserSqlRefusal("one statement per query", 400);
+  if (FORBIDDEN_PREFIX.test(stripped)) throw new UserSqlRefusal("read-only: queries must be SELECT (or WITH … SELECT)", 400);
   const forbidden = FORBIDDEN_BODY.exec(stripped);
   if (forbidden) {
-    throw new Error(`read-only: ${forbidden[1]!.toLowerCase()}() is not allowed in user SQL`);
+    throw new UserSqlRefusal(`read-only: ${forbidden[1]!.toLowerCase()}() is not allowed in user SQL`, 400);
   }
-  if (!/^\s*(select|with)\b/i.test(stripped)) throw new Error("queries must start with SELECT or WITH");
+  if (!/^\s*(select|with)\b/i.test(stripped)) throw new UserSqlRefusal("queries must start with SELECT or WITH", 400);
   return sqlText.trim().replace(/;\s*$/, "");
 }
 

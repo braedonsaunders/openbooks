@@ -486,12 +486,32 @@ export function validateNormalizedCapture(
   return issues;
 }
 
+/**
+ * A document-provider endpoint refusal: the configured endpoint is missing,
+ * malformed, insecure, or unreachable. It answers 422 with its remedy — the
+ * hostname it names is the operator's own configured endpoint, never a
+ * driver or network internal. Anything else (a driver or DNS failure shaped
+ * differently) stays unexpected.
+ */
+export class DocumentEndpointError extends Error {
+  readonly status = 422;
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "DocumentEndpointError";
+  }
+}
+
 export function validateAzureDocumentEndpoint(value: string): URL {
-  const endpoint = new URL(value);
-  if (endpoint.protocol !== "https:") throw new Error("Document provider endpoint must use HTTPS");
+  let endpoint: URL;
+  try {
+    endpoint = new URL(value);
+  } catch {
+    throw new DocumentEndpointError("Document provider endpoint is not a valid URL — check the endpoint under Platform → AI");
+  }
+  if (endpoint.protocol !== "https:") throw new DocumentEndpointError("Document provider endpoint must use HTTPS");
   const host = endpoint.hostname.toLowerCase();
   if (!(host.endsWith(".cognitiveservices.azure.com") || host.endsWith(".api.cognitive.microsoft.com"))) {
-    throw new Error("Document provider endpoint is not an Azure Document Intelligence endpoint");
+    throw new DocumentEndpointError("Document provider endpoint is not an Azure Document Intelligence endpoint");
   }
   endpoint.pathname = endpoint.pathname.replace(/\/$/, "");
   endpoint.search = "";
@@ -512,7 +532,7 @@ export async function verifyAzureDocumentEndpoint(value: string, lookupAddresses
   try {
     await resolveVerifiedAddresses(endpoint, lookupAddresses);
   } catch (error) {
-    throw new Error(
+    throw new DocumentEndpointError(
       `Document provider endpoint ${endpoint.hostname} did not resolve to a public address — check the endpoint under Platform → AI`,
       { cause: error },
     );

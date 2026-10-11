@@ -38,12 +38,10 @@ export const GET = defineRoute({
     )
     return NextResponse.json(preview)
   } catch (e) {
-    if (e instanceof ReportCurrencyBasisError) {
-      return NextResponse.json({ error: e.message }, { status: 422 })
-    }
-    if (e instanceof Error && /YYYY-MM-DD|starts after it ends/.test(e.message)) {
-      return NextResponse.json({ error: e.message }, { status: 400 })
-    }
+    // The basis refusal carries a fixed message but no status: it answers
+    // 422 here. Period refusals are already typed 400 at their origin; the
+    // shared mapping carries both, and logs anything unexpected.
+    if (e instanceof ReportCurrencyBasisError) return apiErrorResponse(e, { safeStatus: 422 })
     return apiErrorResponse(e)
   }
   },

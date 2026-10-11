@@ -112,6 +112,19 @@ export type StatementBatchAuthorization = Pick<ReportAuthorization, 'version' | 
  * render pair), or the render fails with the remedy (create a new batch
  * run) instead of delivering.
  */
+/**
+ * A revoked sender refusal: the batch creator no longer holds the send
+ * grants. It answers 403 with its remedy; anything else from principal
+ * resolution is unexpected and answers through the shared mapping.
+ */
+export class StatementBatchSenderError extends Error {
+  readonly status = 403
+  constructor(message: string) {
+    super(message)
+    this.name = 'StatementBatchSenderError'
+  }
+}
+
 export async function statementBatchReportAuthz(
   orgId: string,
   snapshot: StatementBatchAuthorization,
@@ -120,7 +133,7 @@ export async function statementBatchReportAuthz(
   const current = await resolveUserAuthz(user)
   for (const permission of ['ar.create', 'ar.read', 'reports.read'] as const) {
     if (!can(current, permission)) {
-      throw new Error(`Statement batch sender no longer holds ${permission} — create a new batch run`)
+      throw new StatementBatchSenderError(`Statement batch sender no longer holds ${permission} — create a new batch run`)
     }
   }
   return narrowToSnapshotScope(current, snapshot as ReportAuthorization)

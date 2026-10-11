@@ -11,19 +11,6 @@ const queryBody = z.object({
   maxRows: z.number().finite().optional(),
 }).strict()
 
-/**
- * Pure pre-validation failures (thrown as plain Errors by validateUserSql)
- * are safe to echo at 400 — the sanitizer needs a named refusal to carry
- * them instead of genericizing them to a 500.
- */
-class UserSqlValidationRefusal extends Error {
-  readonly status = 400;
-  constructor(message: string) {
-    super(message);
-    this.name = "UserSqlValidationRefusal";
-  }
-}
-
 export const POST = defineRoute({
   permission: 'sql.execute',
   feature: 'queryConsole',
@@ -46,7 +33,9 @@ export const POST = defineRoute({
   try {
     validateUserSql(body.sql);
   } catch (e) {
-    return apiErrorResponse(e instanceof Error ? new UserSqlValidationRefusal(e.message) : e);
+    // Validation refusals are typed 400 at their origin; the shared mapping
+    // carries them and logs anything unexpected.
+    return apiErrorResponse(e);
   }
 
   try {

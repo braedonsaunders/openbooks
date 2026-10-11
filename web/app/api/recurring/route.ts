@@ -7,6 +7,7 @@ import {
   assertTemplateTokensKnown,
   CATCH_UP_CHOICE_THRESHOLD,
   pendingOccurrences,
+  RecurringError,
   recurringTemplateScopeFilter,
   remainingOccurrences,
   runScheduleCatchUp,
@@ -115,7 +116,8 @@ export const POST = defineRoute({
   const nextRunOn = body.nextRunOn ?? today;
   try { advanceCadence(nextRunOn, body.cadence, body.cron); }
   catch (error) {
-    return apiErrorResponse(error instanceof Error ? new RecurringInputRefusal(error.message) : error);
+    if (error instanceof RecurringError) return apiErrorResponse(new RecurringInputRefusal(error.message));
+    return apiErrorResponse(error);
   }
   if (body.endsOn && body.endsOn < nextRunOn) {
     return NextResponse.json({ error: "endsOn must not precede nextRunOn" }, { status: 400 });

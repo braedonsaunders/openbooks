@@ -12,10 +12,27 @@ import {
   type Cadence,
 } from "@openbooks/engine/src/billing/recurring.ts";
 import { defineRoute } from "@/lib/api/route";
+import { apiErrorResponse } from "@/lib/api/error-response";
 import { isDocKindEnabled } from "@/lib/documents";
 import { notFound } from "@/lib/api/responses";
+import { RecurringError } from "@openbooks/engine/src/billing/recurring.ts";
 
 export const runtime = "nodejs";
+
+/**
+ * Malformed recurrence input answers 400 on this route (the engine names
+ * these 422 by default, but the route's idiom for bad schedule input is
+ * 400). The message rides in a named refusal so the sanitizer carries it;
+ * anything else answers through the shared mapping, which logs the cause
+ * server-side and sends a generic failure.
+ */
+class RecurringInputRefusal extends Error {
+  readonly status = 400;
+  constructor(message: string) {
+    super(message);
+    this.name = "RecurringInputRefusal";
+  }
+}
 
 /**
  * Catch-up preview for a recurring schedule: the exact missed occurrence
@@ -131,10 +148,8 @@ export const GET = defineRoute({
         asOf,
       );
     } catch (e) {
-      return NextResponse.json(
-        { error: e instanceof Error ? e.message : "invalid recurrence" },
-        { status: 400 },
-      );
+      if (e instanceof RecurringError) return apiErrorResponse(new RecurringInputRefusal(e.message));
+      return apiErrorResponse(e);
     }
     const template = (await db.execute<{ number: string; total: string; currency: string; kind: string }>(sql`
       select document_number as "number", total::text as "total", currency, kind
@@ -156,10 +171,8 @@ export const GET = defineRoute({
             { locale: get("locale") ?? undefined },
           );
     } catch (e) {
-      return NextResponse.json(
-        { error: e instanceof Error ? e.message : "invalid recurrence" },
-        { status: 400 },
-      );
+      if (e instanceof RecurringError) return apiErrorResponse(new RecurringInputRefusal(e.message));
+      return apiErrorResponse(e);
     }
     return NextResponse.json({
       asOf,

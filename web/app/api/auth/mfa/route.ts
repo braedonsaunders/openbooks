@@ -15,19 +15,6 @@ const setupBody = z.object({ password: z.string() });
 const confirmBody = z.object({ code: z.string().max(64) });
 const disableBody = z.object({ password: z.string(), code: z.string() });
 
-/**
- * A second session's pending setup is refused by name at 409 with the
- * remedy intact. beginMfaSetup throws it as a plain Error, which the
- * sanitizer would otherwise genericize to a 500.
- */
-class MfaSetupPendingRefusal extends Error {
-  readonly status = 409;
-  constructor(message: string) {
-    super(message);
-    this.name = "MfaSetupPendingRefusal";
-  }
-}
-
 export const GET = defineRoute({ public: "session", handler: async () => {
   const user = await currentUser();
   if (!user?.sessionId) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -52,14 +39,9 @@ export const POST = defineRoute({ public: "session", body: setupBody, handler: a
     if (!setup) return NextResponse.json({ error: "invalid credentials" }, { status: 401 });
     return NextResponse.json(setup, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
-    if (error instanceof Error && error.message === "MFA is already enabled") {
-      return NextResponse.json({ error: "MFA is already enabled" }, { status: 409 });
-    }
-    if (error instanceof Error && error.message.startsWith("MFA setup is already pending in another session;")) {
-      return apiErrorResponse(new MfaSetupPendingRefusal(error.message));
-    }
-    console.error("[auth] unable to begin MFA setup:", error);
-    return NextResponse.json({ error: "unable to begin MFA setup" }, { status: 500 });
+    // Setup conflicts are typed 409 at their origin; the shared mapping
+    // carries them, and logs anything unexpected with a request id.
+    return apiErrorResponse(error, { request: nextRequest });
   }
 } });
 

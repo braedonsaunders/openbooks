@@ -8,6 +8,7 @@ import { resolvePeriod } from '../../../../../lib/periods'
 import { resolveReport, type ReportKind } from '../../../../../lib/report-run'
 import { exportDataToPdf, orgBranding, resolveLayout, type Translator } from '../../../../../lib/report-pdf'
 import { statementBatchReportAuthz, withReportAuthz } from '../../../../../lib/report-execution-context'
+import { apiErrorResponse } from '../../../../../lib/api/error-response'
 import { internalTokenMatches, parseInternalOrgId } from '../../../../../lib/internal-token'
 import { safeName } from '../../../../../lib/export'
 import { isUuid } from '../../../../../lib/list-params'
@@ -76,7 +77,10 @@ export async function GET(req: Request) {
           allowedSubsidiaryIds: allowed,
         })
       } catch (e) {
-        return NextResponse.json({ error: e instanceof Error ? e.message : 'statement batch sender no longer holds the send grants' }, { status: 403 })
+        // The revoked-sender refusal is typed 403 at its origin; principal
+        // or driver failures answer through the shared mapping instead of
+        // echoing internals with a 403.
+        return apiErrorResponse(e)
       }
 
       const t = (await getTranslations('reports')) as unknown as Translator
