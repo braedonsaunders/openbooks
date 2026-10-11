@@ -3104,7 +3104,8 @@
         "projectLossCap": "Tope de pérdida por proyecto",
         "poolRounding": "Redondeo",
         "includeOpenCommitments": "Contar compromisos de compra abiertos como costo",
-        "excludedProjects": "Proyectos excluidos"
+        "excludedProjects": "Proyectos excluidos",
+        "hourClassifications": "Clasificaciones de tiempo contadas"
       },
       "allEntities": "Elegir entidad jurídica",
       "entityHint": "Una entidad jurídica es responsable del programa y sus obligaciones de nómina. Añada empleados elegibles tras crear el borrador.",
@@ -3182,7 +3183,9 @@
       },
       "searchCustomers": "Buscar clientes…",
       "noCustomers": "No hay clientes con proyectos",
-      "yes": "Sí"
+      "yes": "Sí",
+      "searchClassifications": "Buscar clasificaciones…",
+      "noClassifications": "Sin clasificaciones"
     },
     "awardBuilderTitle": "Nueva recompensa",
     "awardFields": {
@@ -3318,6 +3321,12 @@
     "poolRounding": {
       "share": "Redondear cada parte desde el fondo exacto",
       "pool": "Redondear primero el fondo del proyecto"
+    },
+    "classifications": {
+      "regular": "Normal",
+      "overtime": "Horas extra",
+      "double_time": "Tiempo doble",
+      "other": "Otra"
     }
   },
   "talentWorkspace": {

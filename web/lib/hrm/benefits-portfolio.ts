@@ -141,6 +141,7 @@ export interface ProgramDraft {
   projectLossCap: string
   poolRounding: 'share' | 'pool'
   includeOpenCommitments: boolean
+  hourClassifications: string[]
   allocation: Allocation
   percentRate: string
   fixedAmount: string
@@ -179,6 +180,7 @@ export function emptyProgramDraft(family: ProgramFamily): ProgramDraft {
     projectLossCap: '',
     poolRounding: 'share',
     includeOpenCommitments: false,
+    hourClassifications: [],
     allocation: 'equal',
     percentRate: '',
     fixedAmount: '',
@@ -292,6 +294,7 @@ export interface ProgramEditSeed {
   projectLossCap: string | null
   poolRounding: ProgramDraft['poolRounding']
   includeOpenCommitments: boolean
+  hourClassifications: readonly string[]
   allocation: ProgramDraft['allocation']
   percentRate: string | null
   fixedAmount: string | null

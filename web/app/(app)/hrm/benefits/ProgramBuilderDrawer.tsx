@@ -78,6 +78,7 @@ function seedDraft(family: ProgramFamily, seed: ProgramEditSeed | null): Program
     projectLossCap: text(seed.projectLossCap),
     poolRounding: seed.poolRounding,
     includeOpenCommitments: seed.includeOpenCommitments,
+    hourClassifications: [...seed.hourClassifications],
     allocation: seed.allocation,
     percentRate: text(seed.percentRate),
     fixedAmount: text(seed.fixedAmount),
@@ -201,6 +202,7 @@ function buildPayload(draft: ProgramDraft, mode: 'create' | 'edit', reason: stri
     scopeCustomerIds: draft.family === 'incentive' && draft.metricScope === 'project' ? draft.scopeCustomerIds : [],
     scopeDepartmentIds: draft.family === 'incentive' && draft.metricScope === 'project' ? draft.scopeDepartmentIds : [],
     unassignedTime: draft.family === 'incentive' && draft.metricScope !== 'company' ? draft.unassignedTime : 'refuse',
+    hourClassifications: draft.family === 'incentive' && (draft.metric === 'approved_hours' || draft.allocation === 'hours') ? draft.hourClassifications : [],
     ...(draft.metric === 'project_margin' ? {
       scopeExcludedProjectIds: draft.scopeExcludedProjectIds,
       lossPercentRate: optional(draft.lossPercentRate),
@@ -432,6 +434,7 @@ export function ProgramBuilderDrawer({
       for (const option of departmentOptions.filter((option) => draft.scopeDepartmentIds.includes(option.value))) addSummary(t('portfolio.builder.fields.workDepartments'), option.label)
     }
     if (draft.metricScope !== 'company') addSummary(t('portfolio.builder.fields.unassignedTime'), t(`portfolio.unassignedTime.${draft.unassignedTime}`))
+    for (const value of draft.hourClassifications) addSummary(t('portfolio.builder.fields.hourClassifications'), t(`portfolio.classifications.${value}`))
     if (draft.metric === 'project_margin') {
       if (draft.lossPercentRate) addSummary(t('portfolio.builder.fields.lossPercentRate'), `${draft.lossPercentRate}%`)
       if (draft.projectProfitCap) addSummary(t('portfolio.builder.fields.projectProfitCap'), money(draft.projectProfitCap, { currency: draft.currency }))
@@ -691,6 +694,17 @@ export function ProgramBuilderDrawer({
                   </div>
                 ) : null}
               </>
+            ) : null}
+            {draft.family === 'incentive' && draft.metric === 'approved_hours' ? (
+              <OptionMultiPicker
+                id="program-builder-hour-classifications"
+                label={t('portfolio.builder.fields.hourClassifications')}
+                options={(['regular', 'overtime', 'double_time', 'other'] as const).map((value) => ({ value, label: t(`portfolio.classifications.${value}`) }))}
+                selected={draft.hourClassifications}
+                onChange={(ids) => set('hourClassifications', ids)}
+                searchPlaceholder={t('portfolio.builder.searchClassifications')}
+                emptyLabel={t('portfolio.builder.noClassifications')}
+              />
             ) : null}
             {draft.metric === 'project_margin' ? (
               <>

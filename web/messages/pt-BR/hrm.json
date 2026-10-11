@@ -3104,7 +3104,8 @@
         "projectLossCap": "Teto de prejuízo por projeto",
         "poolRounding": "Arredondamento",
         "includeOpenCommitments": "Contar compromissos de compra em aberto como custo",
-        "excludedProjects": "Projetos excluídos"
+        "excludedProjects": "Projetos excluídos",
+        "hourClassifications": "Classificações de horas contadas"
       },
       "allEntities": "Escolher entidade jurídica",
       "entityHint": "Uma entidade jurídica é responsável pelo programa e suas obrigações de folha. Adicione funcionários elegíveis após criar o rascunho.",
@@ -3182,7 +3183,9 @@
       },
       "searchCustomers": "Buscar clientes…",
       "noCustomers": "Nenhum cliente com projetos",
-      "yes": "Sim"
+      "yes": "Sim",
+      "searchClassifications": "Buscar classificações…",
+      "noClassifications": "Nenhuma classificação"
     },
     "awardBuilderTitle": "Nova recompensa",
     "awardFields": {
@@ -3318,6 +3321,12 @@
     "poolRounding": {
       "share": "Arredondar cada parcela a partir do fundo exato",
       "pool": "Arredondar primeiro o fundo do projeto"
+    },
+    "classifications": {
+      "regular": "Normal",
+      "overtime": "Hora extra",
+      "double_time": "Hora dobrada",
+      "other": "Outra"
     }
   },
   "talentWorkspace": {

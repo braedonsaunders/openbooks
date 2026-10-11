@@ -115,6 +115,8 @@ export const benefitPrograms = pgTable(
     projectLossCap: numeric("project_loss_cap", { precision: 19, scale: 4 }),
     poolRounding: text("pool_rounding", { enum: ["share", "pool"] }).notNull().default("share"),
     includeOpenCommitments: boolean("include_open_commitments").notNull().default(false),
+    /** Approved-hour measures count only these time classifications; null counts all. */
+    hourClassifications: text("hour_classifications").array(),
     revision: integer("revision").notNull().default(1),
     ...auditColumns,
   },

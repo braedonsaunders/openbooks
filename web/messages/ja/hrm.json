@@ -3104,7 +3104,8 @@
         "projectLossCap": "プロジェクトごとの損失上限",
         "poolRounding": "端数処理",
         "includeOpenCommitments": "未決済の購買コミットメントを原価に含める",
-        "excludedProjects": "除外するプロジェクト"
+        "excludedProjects": "除外するプロジェクト",
+        "hourClassifications": "対象の時間区分"
       },
       "allEntities": "責任法人を選択",
       "entityHint": "1つの法人がプログラムと給与義務を担います。下書き作成後に対象従業員を追加してください。",
@@ -3182,7 +3183,9 @@
       },
       "searchCustomers": "顧客を検索…",
       "noCustomers": "プロジェクトのある顧客はありません",
-      "yes": "はい"
+      "yes": "はい",
+      "searchClassifications": "区分を検索…",
+      "noClassifications": "区分なし"
     },
     "awardBuilderTitle": "新規報酬",
     "awardFields": {
@@ -3318,6 +3321,12 @@
     "poolRounding": {
       "share": "正確なプールから各配分を端数処理",
       "pool": "先にプロジェクトのプールを端数処理"
+    },
+    "classifications": {
+      "regular": "通常",
+      "overtime": "残業",
+      "double_time": "2倍時間",
+      "other": "その他"
     }
   },
   "talentWorkspace": {

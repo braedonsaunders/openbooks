@@ -106,6 +106,8 @@ export interface BenefitProgram {
   readonly poolRounding: "share" | "pool";
   /** Project-margin programs: open purchase commitments count as project cost. */
   readonly includeOpenCommitments: boolean;
+  /** Approved-hour measures count only these time classifications (empty counts all). */
+  readonly hourClassifications: readonly ("regular" | "overtime" | "double_time" | "other")[];
   readonly allocation: BenefitAllocation;
   readonly percentRate: string | null;
   readonly fixedAmount: string | null;

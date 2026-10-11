@@ -89,7 +89,7 @@ const PROGRAM_COLUMNS = sql`id, code, name, family,
   frequency, payment_delay_days as "paymentDelayDays", unassigned_time as "unassignedTime",
   loss_percent_rate::text as "lossPercentRate", project_profit_cap::text as "projectProfitCap",
   project_loss_cap::text as "projectLossCap", pool_rounding as "poolRounding",
-  include_open_commitments as "includeOpenCommitments",
+  include_open_commitments as "includeOpenCommitments", hour_classifications as "hourClassifications",
   revision, created_by as "createdBy", updated_by as "updatedBy"`;
 
 function asFamily(value: unknown, field: string): BenefitProgramFamily {
@@ -255,6 +255,7 @@ function toProgram(row: Record<string, unknown>, scopes: ProgramScopeRows = NO_S
     projectLossCap: row.projectLossCap != null ? String(row.projectLossCap) : null,
     poolRounding: row.poolRounding === "pool" ? "pool" : "share",
     includeOpenCommitments: row.includeOpenCommitments === true,
+    hourClassifications: Array.isArray(row.hourClassifications) ? row.hourClassifications.map(String) as BenefitProgram["hourClassifications"][number][] : [],
     allocation: asAllocation(row.allocation),
     percentRate: row.percentRate != null ? String(row.percentRate) : null,
     fixedAmount: row.fixedAmount != null ? String(row.fixedAmount) : null,
@@ -467,6 +468,7 @@ interface ProgramRuleInput {
   readonly projectLossCap: string | null;
   readonly poolRounding: "share" | "pool";
   readonly includeOpenCommitments: boolean;
+  readonly hourClassifications: readonly string[];
   readonly percentRate: string | null;
   readonly fixedAmount: string | null;
   readonly capAmount: string | null;
@@ -480,6 +482,12 @@ interface ProgramRuleInput {
 /** Every advertised rule must resolve: missing pieces refuse by name. */
 function requireResolvableRules(code: string, rules: ProgramRuleInput): void {
   const marginTerms = rules.lossPercentRate !== null || rules.projectProfitCap !== null || rules.projectLossCap !== null || rules.poolRounding !== "share" || rules.includeOpenCommitments || rules.scopeExcludedProjectIds.length > 0;
+  if (rules.hourClassifications.some((c) => !["regular", "overtime", "double_time", "other"].includes(c)) || new Set(rules.hourClassifications).size !== rules.hourClassifications.length) {
+    throw new BenefitsError("INVALID_INPUT", "Time classifications are regular, overtime, double_time or other, each chosen once.");
+  }
+  if (rules.hourClassifications.length && rules.metric !== "approved_hours" && rules.allocation !== "hours") {
+    throw new BenefitsError("INVALID_INPUT", "Time classifications narrow approved hours — measure approved hours or allocate by hours, or clear the classifications.");
+  }
   if (rules.metric !== "project_margin" && marginTerms) {
     throw new BenefitsError("INVALID_INPUT", "Loss rates, project pool caps, pool rounding, open commitments and excluded projects apply to project-margin programs — choose that metric or clear those terms.");
   }
@@ -860,6 +868,7 @@ export interface CreateBenefitProgramQuery {
   readonly projectLossCap?: string | number | null;
   readonly poolRounding?: "share" | "pool";
   readonly includeOpenCommitments?: boolean;
+  readonly hourClassifications?: readonly ("regular" | "overtime" | "double_time" | "other")[];
   readonly allocation?: BenefitAllocation;
   readonly percentRate?: string | number | null;
   readonly fixedAmount?: string | number | null;
@@ -927,6 +936,7 @@ export async function createBenefitProgram(query: CreateBenefitProgramQuery): Pr
     projectLossCap: canonicalAmount(query.projectLossCap ?? null, "projectLossCap"),
     poolRounding: query.poolRounding === "pool" ? "pool" : "share",
     includeOpenCommitments: query.includeOpenCommitments === true,
+    hourClassifications: [...(query.hourClassifications ?? [])],
     percentRate: canonicalAmount(query.percentRate ?? null, "percentRate"),
     fixedAmount: canonicalAmount(query.fixedAmount ?? null, "fixedAmount"),
     capAmount: canonicalAmount(query.capAmount ?? null, "capAmount"),
@@ -964,7 +974,7 @@ export async function createBenefitProgram(query: CreateBenefitProgramQuery): Pr
              valuation, metric, metric_scope, allocation,
              percent_rate, fixed_amount, cap_amount, budget_amount,
              threshold_amount, frequency, period_basis, payment_delay_days, unassigned_time,
-             loss_percent_rate, project_profit_cap, project_loss_cap, pool_rounding, include_open_commitments,
+             loss_percent_rate, project_profit_cap, project_loss_cap, pool_rounding, include_open_commitments, hour_classifications,
              created_by, updated_by)
           values (${orgId}, ${code}, ${name}, ${family}, ${description}, ${legalEntityId},
                   ${currency}, ${effectiveFrom}::date, ${effectiveTo}::date,
@@ -974,6 +984,7 @@ export async function createBenefitProgram(query: CreateBenefitProgramQuery): Pr
                   ${rules.budgetAmount}, ${rules.thresholdAmount}, ${frequency},
                   ${periodBasis}, ${paymentDelayDays}, ${rules.unassignedTime},
                   ${rules.lossPercentRate}, ${rules.projectProfitCap}, ${rules.projectLossCap}, ${rules.poolRounding}, ${rules.includeOpenCommitments},
+                  ${rules.hourClassifications.length ? `{${rules.hourClassifications.join(",")}}` : null}::text[],
                   ${actorId}, ${actorId})
           returning ${PROGRAM_COLUMNS}
         `)
@@ -1035,6 +1046,7 @@ export interface UpdateBenefitProgramQuery {
   readonly projectLossCap?: string | number | null;
   readonly poolRounding?: "share" | "pool";
   readonly includeOpenCommitments?: boolean;
+  readonly hourClassifications?: readonly ("regular" | "overtime" | "double_time" | "other")[];
   readonly allocation?: BenefitAllocation;
   readonly percentRate?: string | number | null;
   readonly fixedAmount?: string | number | null;
@@ -1110,6 +1122,7 @@ export async function updateBenefitProgram(query: UpdateBenefitProgramQuery): Pr
       projectLossCap: query.projectLossCap === undefined ? before.projectLossCap : canonicalAmount(query.projectLossCap, "projectLossCap"),
       poolRounding: query.poolRounding === undefined ? before.poolRounding : query.poolRounding === "pool" ? "pool" as const : "share" as const,
       includeOpenCommitments: query.includeOpenCommitments === undefined ? before.includeOpenCommitments : query.includeOpenCommitments === true,
+      hourClassifications: query.hourClassifications === undefined ? before.hourClassifications : [...query.hourClassifications],
       allocation: query.allocation === undefined ? before.allocation : asAllocation(query.allocation),
       percentRate:
         query.percentRate === undefined ? before.percentRate : canonicalAmount(query.percentRate, "percentRate"),
@@ -1150,6 +1163,7 @@ export async function updateBenefitProgram(query: UpdateBenefitProgramQuery): Pr
       projectLossCap: next.projectLossCap,
       poolRounding: next.poolRounding,
       includeOpenCommitments: next.includeOpenCommitments,
+      hourClassifications: next.hourClassifications,
       percentRate: next.percentRate,
       fixedAmount: next.fixedAmount,
       capAmount: next.capAmount,
@@ -1189,6 +1203,7 @@ export async function updateBenefitProgram(query: UpdateBenefitProgramQuery): Pr
                  loss_percent_rate = ${next.lossPercentRate}, project_profit_cap = ${next.projectProfitCap},
                  project_loss_cap = ${next.projectLossCap}, pool_rounding = ${next.poolRounding},
                  include_open_commitments = ${next.includeOpenCommitments},
+                 hour_classifications = ${next.hourClassifications.length ? `{${next.hourClassifications.join(",")}}` : null}::text[],
                  revision = revision + 1, updated_by = ${actorId}, updated_at = now()
            where org_id = ${orgId} and id = ${programId}
           returning ${PROGRAM_COLUMNS}
@@ -1279,6 +1294,7 @@ async function setProgramStatus(
         projectLossCap: before.projectLossCap,
         poolRounding: before.poolRounding,
         includeOpenCommitments: before.includeOpenCommitments,
+        hourClassifications: before.hourClassifications,
         percentRate: before.percentRate,
         fixedAmount: before.fixedAmount,
         capAmount: before.capAmount,

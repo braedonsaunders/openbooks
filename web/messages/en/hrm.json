@@ -3104,7 +3104,8 @@
         "projectLossCap": "Project loss cap",
         "poolRounding": "Rounding",
         "includeOpenCommitments": "Count open purchase commitments as cost",
-        "excludedProjects": "Excluded projects"
+        "excludedProjects": "Excluded projects",
+        "hourClassifications": "Time classifications counted"
       },
       "allEntities": "Choose legal entity",
       "entityHint": "One legal entity owns the program and its payroll obligations. Add eligible employees after creating the draft.",
@@ -3182,7 +3183,9 @@
       },
       "searchCustomers": "Search customers…",
       "noCustomers": "No customers with projects",
-      "yes": "Yes"
+      "yes": "Yes",
+      "searchClassifications": "Search classifications…",
+      "noClassifications": "No classifications"
     },
     "awardBuilderTitle": "New reward",
     "awardFields": {
@@ -3318,6 +3321,12 @@
     "poolRounding": {
       "share": "Round each share from the exact pool",
       "pool": "Round the project pool first"
+    },
+    "classifications": {
+      "regular": "Regular",
+      "overtime": "Overtime",
+      "double_time": "Double time",
+      "other": "Other"
     }
   },
   "talentWorkspace": {

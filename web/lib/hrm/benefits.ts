@@ -965,6 +965,7 @@ function toPortfolioFields(
         projectLossCap: seed.projectLossCap,
         poolRounding: seed.poolRounding,
         includeOpenCommitments: seed.includeOpenCommitments,
+        hourClassifications: [...seed.hourClassifications],
         allocation: seed.allocation,
         percentRate: seed.percentRate,
         fixedAmount: seed.fixedAmount,

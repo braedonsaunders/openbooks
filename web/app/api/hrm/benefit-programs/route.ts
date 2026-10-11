@@ -83,6 +83,7 @@ export const POST = defineRoute({
         projectLossCap: body.projectLossCap ?? null,
         poolRounding: body.poolRounding ?? "share",
         includeOpenCommitments: body.includeOpenCommitments ?? false,
+        hourClassifications: body.hourClassifications ?? [],
         allocation: body.allocation ?? "equal",
         percentRate: body.percentRate ?? null,
         fixedAmount: body.fixedAmount ?? null,

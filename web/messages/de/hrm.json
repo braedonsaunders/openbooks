@@ -3104,7 +3104,8 @@
         "projectLossCap": "Verlustobergrenze je Projekt",
         "poolRounding": "Rundung",
         "includeOpenCommitments": "Offene Bestellverpflichtungen als Kosten zählen",
-        "excludedProjects": "Ausgeschlossene Projekte"
+        "excludedProjects": "Ausgeschlossene Projekte",
+        "hourClassifications": "Gezählte Zeitklassen"
       },
       "allEntities": "Rechtsträger wählen",
       "entityHint": "Ein Rechtsträger trägt das Programm und seine Abrechnungsverpflichtungen. Fügen Sie berechtigte Beschäftigte nach dem Erstellen des Entwurfs hinzu.",
@@ -3182,7 +3183,9 @@
       },
       "searchCustomers": "Kunden suchen…",
       "noCustomers": "Keine Kunden mit Projekten",
-      "yes": "Ja"
+      "yes": "Ja",
+      "searchClassifications": "Klassen suchen…",
+      "noClassifications": "Keine Klassen"
     },
     "awardBuilderTitle": "Neue Anerkennung",
     "awardFields": {
@@ -3318,6 +3321,12 @@
     "poolRounding": {
       "share": "Jeden Anteil aus dem exakten Pool runden",
       "pool": "Zuerst den Projektpool runden"
+    },
+    "classifications": {
+      "regular": "Normal",
+      "overtime": "Überstunden",
+      "double_time": "Doppelte Zeit",
+      "other": "Sonstige"
     }
   },
   "talentWorkspace": {

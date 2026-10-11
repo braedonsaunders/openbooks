@@ -610,6 +610,7 @@ export async function loadBenefitsPortfolio(
           for (const option of departments.rows.filter((option) => found.scopeDepartmentIds.includes(option.id))) policy('workDepartments', option.name)
         }
         if (found.metricScope && found.metricScope !== 'company') policy('unassignedTime', t(`portfolio.unassignedTime.${found.unassignedTime}`))
+        for (const value of found.hourClassifications) policy('hourClassifications', t(`portfolio.classifications.${value}`))
         if (found.metric === 'project_margin') {
           if (found.lossPercentRate !== null) policy('lossPercentRate', `${found.lossPercentRate}%`)
           if (found.projectProfitCap !== null) policy('projectProfitCap', amountLabel(found.projectProfitCap, found.currency))

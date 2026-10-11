@@ -3104,7 +3104,8 @@
         "projectLossCap": "Plafond de perte par projet",
         "poolRounding": "Arrondi",
         "includeOpenCommitments": "Compter les engagements d’achat ouverts comme coûts",
-        "excludedProjects": "Projets exclus"
+        "excludedProjects": "Projets exclus",
+        "hourClassifications": "Catégories de temps comptées"
       },
       "allEntities": "Choisir l’entité juridique",
       "entityHint": "Une entité juridique porte le programme et ses obligations de paie. Ajoutez les employés admissibles après la création du brouillon.",
@@ -3182,7 +3183,9 @@
       },
       "searchCustomers": "Rechercher des clients…",
       "noCustomers": "Aucun client avec des projets",
-      "yes": "Oui"
+      "yes": "Oui",
+      "searchClassifications": "Rechercher des catégories…",
+      "noClassifications": "Aucune catégorie"
     },
     "awardBuilderTitle": "Nouvelle récompense",
     "awardFields": {
@@ -3318,6 +3321,12 @@
     "poolRounding": {
       "share": "Arrondir chaque part à partir de la réserve exacte",
       "pool": "Arrondir d’abord la réserve du projet"
+    },
+    "classifications": {
+      "regular": "Normal",
+      "overtime": "Heures supplémentaires",
+      "double_time": "Temps double",
+      "other": "Autre"
     }
   },
   "talentWorkspace": {

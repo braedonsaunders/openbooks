@@ -178,6 +178,8 @@ export interface HoursSourceConfig {
   readonly workDepartmentIds?: readonly string[];
   /** Approved time without the scoped dimension: refuse the measure (default) or leave it out of the base. */
   readonly unassignedTime?: "refuse" | "exclude";
+  /** Count only these time classifications (empty or absent counts all). */
+  readonly hourClassifications?: readonly string[];
   readonly legalEntityId: string;
   readonly periodFrom: string;
   readonly periodTo: string;
@@ -674,6 +676,10 @@ export async function measureApprovedHours(
     : config.scope === "department"
       ? sql`t.department_id = any (${uuidList(config.departmentIds, "department id")}::uuid[])`
       : sql`t.project_id = any (${uuidList(config.projectIds, "project id")}::uuid[]) ${workDepartmentFilter}`;
+  const classifications = [...new Set(config.hourClassifications ?? [])];
+  const classificationFilter = classifications.length
+    ? sql`and coalesce((select tt.classification from time_types tt where tt.org_id = t.org_id and tt.id = t.time_type_id), 'regular') = any (${`{${classifications.join(",")}}`}::text[])`
+    : sql``;
 
   if (config.scope !== "company" && config.unassignedTime !== "exclude") {
     const dimColumn = config.scope === "department" ? sql`t.department_id` : sql`t.project_id`;
@@ -728,7 +734,7 @@ export async function measureApprovedHours(
       from time_entries t
      where t.org_id = ${org} and t.status = 'approved'
        and t.worked_on >= ${periodFrom}::date and t.worked_on <= ${periodTo}::date
-       and ${dimFilter}
+       and ${dimFilter} ${classificationFilter}
        and exists (
          select 1 from worker_employments emp
           join worker_employment_versions v on v.org_id=emp.org_id and v.employment_id=emp.id
