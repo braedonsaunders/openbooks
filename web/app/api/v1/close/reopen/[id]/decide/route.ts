@@ -11,6 +11,7 @@ import { decideReopenRequest } from "../../../../../../../lib/application/close"
 const decideReopenBody = z.looseObject({
   approve: z.boolean(),
   hours: z.number().finite().nonnegative().optional(),
+  decisionReason: z.string().max(500).optional(),
 });
 
 export const runtime = "nodejs";
@@ -27,6 +28,7 @@ async function handleV1POST(
       requestId: id,
       approve: body.approve,
       hours: body.hours,
+      decisionReason: body.decisionReason,
       idempotencyKey: requireV1IdempotencyKey(request),
     });
     return { status: 200, body: outcome.result, replayed: outcome.replayed };

@@ -212,7 +212,7 @@ const listPeriodReopenRequests: AssistantToolDef = {
   // the permission-parity audit).
   gate: { mode: "anyOf", perms: ["close.reopen", "periods.manage"] },
   inputSchema: z.object({
-    status: z.enum(["requested", "approved", "rejected", "expired", "reclosed"]).optional().describe("Only requests in this status"),
+    status: z.enum(["requested", "approved", "rejected", "withdrawn", "expired", "reclosed"]).optional().describe("Only requests in this status"),
     periodId: uuidInput.optional(),
     limit: z.number().int().min(1).max(100).optional().describe("Maximum requests to return (default 50)"),
   }),

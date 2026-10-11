@@ -509,7 +509,17 @@ export async function decidePeriodReopen(args: {
    * approver records when no unconflicted eligible approver exists.
    */
   attestation?: string;
+  /**
+   * Required when rejecting (approve false): a 10-500 character reason an
+   * approver records in the decision audit and the close history. Ignored
+   * when approving.
+   */
+  decisionReason?: string;
 }): Promise<void> {
+  const decisionReason = (args.decisionReason ?? "").trim();
+  if (!args.approve && (decisionReason.length < 10 || decisionReason.length > 500)) {
+    throw new CloseError("Rejecting a reopen request requires a 10-500 character reason");
+  }
   // The conflict scan needs no locks — it names the approver's standing
   // relationship to the period's records — but whether it refuses is
   // decided inside the decision transaction (eligibility can change between
@@ -540,6 +550,7 @@ export async function decidePeriodReopen(args: {
     conflictAcknowledged: boolean;
     attestation: string | null;
     conflicts: ReopenApprovalConflict[];
+    decisionReason: string | null;
   } | null = null;
   let conflictRefusal: ReopenApprovalConflict[] | null = null;
   const decide = async () => db.transaction(async (tx) => {
@@ -550,6 +561,13 @@ export async function decidePeriodReopen(args: {
     const row = request.rows[0];
     if (!row) throw new CloseError("pending reopen request not found");
     const selfApproval = row.requested_by === args.actorId;
+    // A requester who no longer wants the reopen withdraws it (withdrawPeriodReopen),
+    // which keeps the history honest: a rejection is always an approver's decision.
+    if (!args.approve && selfApproval) {
+      throw new CloseError(
+        "the requester cannot reject their own reopen request; withdraw it with a reason instead",
+      );
+    }
     // Eligibility resolves here, inside the decision transaction: another
     // approver may have joined (or the last one left) since the request.
     const independence = args.approve || selfApproval
@@ -621,6 +639,7 @@ export async function decidePeriodReopen(args: {
         conflictAcknowledged: false,
         attestation: null,
         conflicts: [],
+        decisionReason,
       };
       return;
     }
@@ -801,6 +820,7 @@ export async function decidePeriodReopen(args: {
       conflictAcknowledged,
       attestation,
       conflicts: selfApproval || conflictAcknowledged ? conflicts : [],
+      decisionReason: null,
     };
   });
   try {
@@ -842,6 +862,7 @@ export async function decidePeriodReopen(args: {
                 after: {
                   status: decided.status,
                   reason: decided.reason,
+                  ...(decided.decisionReason != null ? { decisionReason: decided.decisionReason } : {}),
                   ...(decided.selfApproved
                     ? {
                       selfApproved: true,
@@ -869,6 +890,7 @@ export async function decidePeriodReopen(args: {
                 requestId: args.requestId,
                 decision: decided.status,
                 reason: decided.reason,
+                ...(decided.decisionReason != null ? { decisionReason: decided.decisionReason } : {}),
                 scope,
                 requestedBy: decided.requestedBy,
                 ...(decided.selfApproved
@@ -889,6 +911,68 @@ export async function decidePeriodReopen(args: {
                   : {}),
               })}::jsonb)`);
   }
+}
+
+/**
+ * Withdraw a pending reopen request. Only the requester may withdraw: a
+ * request they no longer need is recorded as withdrawn by them, which keeps
+ * it distinct from an approver's rejection in the history. The transition,
+ * its audit row and its close-history event commit together, and nothing is
+ * written for a refused withdrawal.
+ */
+export async function withdrawPeriodReopen(args: {
+  orgId: string;
+  requestId: string;
+  actorId: string;
+  reason: string;
+}): Promise<void> {
+  const reason = args.reason.trim();
+  if (reason.length < 10 || reason.length > 500) {
+    throw new CloseError("a 10-500 character withdrawal reason is required");
+  }
+  await db.transaction(async (tx) => {
+    const request = (await tx.execute<CloseReopenRequestRow>(sql`
+      select * from close_reopen_requests
+       where id = ${args.requestId} and org_id = ${args.orgId} and status = 'requested'
+       for update`));
+    const row = request.rows[0];
+    if (!row) throw new CloseError("pending reopen request not found");
+    if (row.requested_by !== args.actorId) {
+      throw new CloseError("Only the requester can withdraw a reopen request; an approver rejects it with a reason");
+    }
+    const updated = await tx.execute<{ id: string }>(sql`
+      update close_reopen_requests
+         set status = 'withdrawn', updated_at = now(), updated_by = ${args.actorId}
+       where id = ${args.requestId} and org_id = ${args.orgId} and status = 'requested'
+      returning id`);
+    if (updated.rows.length !== 1) {
+      throw new CloseError("pending reopen request not found");
+    }
+    const scope = {
+      periodId: row.period_id,
+      bookId: row.book_id,
+      subsidiaryId: row.subsidiary_id,
+      modules: row.modules,
+    };
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${args.orgId}, 'close_reopen_requests', ${args.requestId}, 'withdraw',
+              ${JSON.stringify({
+                before: { status: "requested" },
+                after: { status: "withdrawn", reason },
+                scope,
+                requestedBy: row.requested_by,
+              })}::jsonb, ${args.actorId})`);
+    await tx.execute(sql`
+      insert into close_events (org_id, event_type, actor_id, payload)
+      values (${args.orgId}, 'period.reopen_withdrawn', ${args.actorId},
+              ${JSON.stringify({
+                requestId: args.requestId,
+                reason,
+                scope,
+                requestedBy: row.requested_by,
+              })}::jsonb)`);
+  });
 }
 
 async function recloseApprovedReopenRow(args: {

@@ -5,7 +5,7 @@ import { sql } from 'drizzle-orm';
 import { db } from '../platform/db.ts';
 import { createScratchOrg, dropScratchOrg, createScratchUser, seedApprovalFlow } from '../testing/fixtures.ts';
 import { CloseError } from "../periods/period-policy.ts";
-import { decidePeriodReopen, recloseApprovedReopen, reopenDecisionPreview, requestPeriodReopen } from "./reopening.ts";
+import { decidePeriodReopen, recloseApprovedReopen, reopenDecisionPreview, requestPeriodReopen, withdrawPeriodReopen } from "./reopening.ts";
 import { setPeriodLockState } from "../periods/period-locks.ts";
 
 async function grantReopen(orgId: string, roleKey: string): Promise<void> {
@@ -208,5 +208,102 @@ test('the surfaces read decision and end evidence from the stored audit trail', 
     assert.ok((evidence.decision_attestation ?? '').includes('only administrator'));
     assert.equal(evidence.end_actor_name, 'Solo Admin');
     assert.ok((evidence.end_reason ?? '').includes('ending the window'));
+  } finally { await dropScratchOrg(org.orgId); }
+});
+
+test('the requester withdraws a pending reopen with a reason, audited and no longer decidable', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const requesterId = await createScratchUser(org.orgId, 'Requester', 'admin');
+    const approverId = await createScratchUser(org.orgId, 'Second Admin', 'second_admin');
+    await grantReopen(org.orgId, 'admin');
+    await grantReopen(org.orgId, 'second_admin');
+    const requestId = await requestPeriodReopen({ orgId: org.orgId, periodId: org.periodId, bookId: org.bookId, modules: ['gl'], actorId: requesterId, reason: 'Correction window' });
+    await withdrawPeriodReopen({
+      orgId: org.orgId, requestId, actorId: requesterId, reason: 'Changed my mind; the correction is no longer needed',
+    });
+    assert.equal((await db.execute<{ status: string }>(sql`select status from close_reopen_requests where id = ${requestId}`)).rows[0]!.status, 'withdrawn');
+    const audit = (await db.execute<{ action: string; actor_id: string; changes: { before: { status: string }; after: { status: string; reason: string } } }>(sql`
+      select action, actor_id, changes from audit_log
+       where org_id = ${org.orgId} and table_name = 'close_reopen_requests' and row_id = ${requestId}`)).rows;
+    assert.equal(audit.length, 1);
+    assert.equal(audit[0]!.action, 'withdraw');
+    assert.equal(audit[0]!.actor_id, requesterId);
+    assert.equal(audit[0]!.changes.before.status, 'requested');
+    assert.equal(audit[0]!.changes.after.status, 'withdrawn');
+    assert.ok(audit[0]!.changes.after.reason.includes('no longer needed'));
+    const events = (await db.execute<{ payload: { reason?: string } }>(sql`
+      select payload from close_events
+       where org_id = ${org.orgId} and event_type = 'period.reopen_withdrawn' and payload->>'requestId' = ${requestId}`)).rows;
+    assert.equal(events.length, 1);
+    assert.ok((events[0]!.payload.reason ?? '').includes('no longer needed'));
+    // A withdrawn request is no longer pending: neither a second withdrawal nor a decision can land.
+    await assert.rejects(withdrawPeriodReopen({ orgId: org.orgId, requestId, actorId: requesterId, reason: 'Withdrawing a second time' }), /pending reopen request not found/);
+    await assert.rejects(decidePeriodReopen({ orgId: org.orgId, requestId, actorId: approverId, approve: true, hours: 2, attestation: 'Attempting to approve a withdrawn request' }), /pending reopen request not found/);
+    await assert.rejects(decidePeriodReopen({ orgId: org.orgId, requestId, actorId: approverId, approve: false, decisionReason: 'Attempting to reject a withdrawn request' }), /pending reopen request not found/);
+  } finally { await dropScratchOrg(org.orgId); }
+});
+
+test('only the requester can withdraw, and a withdrawal reason must be 10-500 characters', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const requesterId = await createScratchUser(org.orgId, 'Requester', 'admin');
+    const approverId = await createScratchUser(org.orgId, 'Second Admin', 'second_admin');
+    await grantReopen(org.orgId, 'admin');
+    await grantReopen(org.orgId, 'second_admin');
+    const requestId = await requestPeriodReopen({ orgId: org.orgId, periodId: org.periodId, bookId: org.bookId, modules: ['gl'], actorId: requesterId, reason: 'Correction window' });
+    await assert.rejects(
+      withdrawPeriodReopen({ orgId: org.orgId, requestId, actorId: approverId, reason: 'An approver tries to withdraw this' }),
+      /Only the requester can withdraw a reopen request; an approver rejects it with a reason/,
+    );
+    await assert.rejects(
+      withdrawPeriodReopen({ orgId: org.orgId, requestId, actorId: requesterId, reason: 'too short' }),
+      /10-500 character withdrawal reason/,
+    );
+    await assert.rejects(
+      withdrawPeriodReopen({ orgId: org.orgId, requestId, actorId: requesterId, reason: 'x'.repeat(501) }),
+      /10-500 character withdrawal reason/,
+    );
+    const row = (await db.execute<{ status: string }>(sql`select status from close_reopen_requests where id = ${requestId}`)).rows[0]!;
+    assert.equal(row.status, 'requested', 'refused withdrawals leave the request pending');
+    const withdrawals = (await db.execute<{ n: string }>(sql`
+      select count(*) as n from audit_log
+       where org_id = ${org.orgId} and table_name = 'close_reopen_requests' and row_id = ${requestId} and action = 'withdraw'`)).rows[0]!;
+    assert.equal(Number(withdrawals.n), 0, 'refused withdrawals write no audit row');
+  } finally { await dropScratchOrg(org.orgId); }
+});
+
+test('a rejection requires an approver reason that the audit keeps, and the requester cannot reject their own request', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const requesterId = await createScratchUser(org.orgId, 'Requester', 'admin');
+    const approverId = await createScratchUser(org.orgId, 'Second Admin', 'second_admin');
+    await grantReopen(org.orgId, 'admin');
+    await grantReopen(org.orgId, 'second_admin');
+    const requestId = await requestPeriodReopen({ orgId: org.orgId, periodId: org.periodId, bookId: org.bookId, modules: ['gl'], actorId: requesterId, reason: 'Correction window' });
+    const rejectionRefusal = /Rejecting a reopen request requires a 10-500 character reason/;
+    await assert.rejects(decidePeriodReopen({ orgId: org.orgId, requestId, actorId: approverId, approve: false }), rejectionRefusal);
+    await assert.rejects(decidePeriodReopen({ orgId: org.orgId, requestId, actorId: approverId, approve: false, decisionReason: 'too short' }), rejectionRefusal);
+    await assert.rejects(
+      decidePeriodReopen({ orgId: org.orgId, requestId, actorId: requesterId, approve: false, decisionReason: 'I no longer need this window' }),
+      /cannot reject their own reopen request; withdraw it with a reason instead/,
+    );
+    assert.equal((await db.execute<{ status: string }>(sql`select status from close_reopen_requests where id = ${requestId}`)).rows[0]!.status, 'requested');
+    const reason = 'The window is broader than the correction needs';
+    await decidePeriodReopen({ orgId: org.orgId, requestId, actorId: approverId, approve: false, decisionReason: reason });
+    assert.equal((await db.execute<{ status: string }>(sql`select status from close_reopen_requests where id = ${requestId}`)).rows[0]!.status, 'rejected');
+    const audit = (await db.execute<{ action: string; actor_id: string; changes: { after: { decisionReason?: string; reason: string } } }>(sql`
+      select action, actor_id, changes from audit_log
+       where org_id = ${org.orgId} and table_name = 'close_reopen_requests' and row_id = ${requestId}`)).rows;
+    assert.equal(audit.length, 1);
+    assert.equal(audit[0]!.action, 'reject');
+    assert.equal(audit[0]!.actor_id, approverId);
+    assert.equal(audit[0]!.changes.after.decisionReason, reason);
+    assert.equal(audit[0]!.changes.after.reason, 'Correction window', 'the requester reason stays on the audit beside the decision reason');
+    const event = (await db.execute<{ payload: { decision?: string; decisionReason?: string } }>(sql`
+      select payload from close_events
+       where org_id = ${org.orgId} and event_type = 'period.reopen_decision' and payload->>'requestId' = ${requestId}`)).rows[0]!.payload;
+    assert.equal(event.decision, 'rejected');
+    assert.equal(event.decisionReason, reason);
   } finally { await dropScratchOrg(org.orgId); }
 });

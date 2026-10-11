@@ -474,6 +474,13 @@
     "approved": "Wiedereröffnung genehmigt.",
     "rejected": "Wiedereröffnung abgelehnt.",
     "decideFailed": "Über den Wiedereröffnungsantrag konnte nicht entschieden werden.",
+    "withdraw": "Anfrage zurückziehen",
+    "withdrawn": "Wiedereröffnungsanfrage zurückgezogen.",
+    "withdrawFailed": "Die Wiedereröffnungsanfrage konnte nicht zurückgezogen werden.",
+    "withdrawReasonTitle": "Wiedereröffnungsanfrage zurückziehen",
+    "rejectReasonTitle": "Wiedereröffnungsanfrage ablehnen",
+    "reasonHint": "Geben Sie einen Grund mit 10 bis 500 Zeichen ein. Er wird im Prüfprotokoll gespeichert.",
+    "reasonLabel": "Grund",
     "scopedApprover": "Die Wiedereröffnung einer Periode betrifft den Abschluss der gesamten Organisation und wird daher von genehmigenden Personen entschieden, deren Rolle alle Tochtergesellschaften abdeckt. Bitten Sie einen Administrator, den Tochtergesellschaftszugriff Ihrer Rolle zu erweitern oder den Antrag an eine solche Person weiterzuleiten.",
     "columns": {
       "period": "Periode",
@@ -487,6 +494,7 @@
       "requested": "Wartet auf Genehmigung",
       "approved": "Genehmigt",
       "rejected": "Abgelehnt",
+      "withdrawn": "Zurückgezogen",
       "expired": "Abgelaufen",
       "reclosed": "Wieder geschlossen"
     }

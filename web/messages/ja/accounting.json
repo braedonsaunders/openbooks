@@ -474,6 +474,13 @@
     "approved": "再オープンを承認しました。",
     "rejected": "再オープンを却下しました。",
     "decideFailed": "再オープン申請を処理できませんでした。",
+    "withdraw": "依頼を取り下げ",
+    "withdrawn": "再開依頼を取り下げました。",
+    "withdrawFailed": "再開依頼を取り下げられませんでした。",
+    "withdrawReasonTitle": "再開依頼の取り下げ",
+    "rejectReasonTitle": "再開依頼の却下",
+    "reasonHint": "10〜500文字で理由を入力してください。監査証跡に記録されます。",
+    "reasonLabel": "理由",
     "scopedApprover": "期間の再オープンは組織全体の締めに影響するため、すべての子会社を対象とするロールを持つ承認者が判断します。ロールの子会社アクセスを広げるか、その権限を持つ承認者に申請を回すよう管理者に依頼してください。",
     "columns": {
       "period": "期間",
@@ -487,6 +494,7 @@
       "requested": "承認待ち",
       "approved": "承認済み",
       "rejected": "却下",
+      "withdrawn": "取り下げ済み",
       "expired": "期限切れ",
       "reclosed": "再締め済み"
     }

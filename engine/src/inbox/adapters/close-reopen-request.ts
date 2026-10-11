@@ -66,7 +66,7 @@ function toItem(row: ReopenRow): InboxItem {
     subjectHref: `${REOPEN_REQUESTS_HREF}?request=${row.id}`,
     actions: [
       { key: "approve", label: "Approve", style: "primary", needsReason: false },
-      { key: "reject", label: "Reject", style: "danger", needsReason: false },
+      { key: "reject", label: "Reject", style: "danger", needsReason: true },
     ],
     source: { kind: "close_reopen_request", id: row.id },
   };
@@ -84,11 +84,17 @@ export const closeReopenRequestAdapter: InboxAdapter = {
     const row = (await pendingRequests(ctx, sourceId))[0];
     return row ? toItem(row) : null;
   },
-  async act(ctx, sourceId, actionKey) {
+  async act(ctx, sourceId, actionKey, reason) {
     if (actionKey !== "approve" && actionKey !== "reject") {
       throw new InboxError("UNKNOWN_ACTION", `action ${JSON.stringify(actionKey)} is not available on a reopen request`);
     }
     const { decidePeriodReopen } = await import("../../close/reopening.ts");
-    await decidePeriodReopen({ orgId: ctx.orgId, requestId: sourceId, actorId: ctx.actorId, approve: actionKey === "approve" });
+    await decidePeriodReopen({
+      orgId: ctx.orgId,
+      requestId: sourceId,
+      actorId: ctx.actorId,
+      approve: actionKey === "approve",
+      decisionReason: actionKey === "reject" ? (reason ?? undefined) : undefined,
+    });
   },
 };

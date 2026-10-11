@@ -474,6 +474,13 @@
     "approved": "Reopen approved.",
     "rejected": "Reopen rejected.",
     "decideFailed": "The reopen request could not be decided.",
+    "withdraw": "Withdraw request",
+    "withdrawn": "Reopen request withdrawn.",
+    "withdrawFailed": "The reopen request could not be withdrawn.",
+    "withdrawReasonTitle": "Withdraw reopen request",
+    "rejectReasonTitle": "Reject reopen request",
+    "reasonHint": "Enter a reason of 10 to 500 characters. It is kept in the audit trail.",
+    "reasonLabel": "Reason",
     "scopedApprover": "Reopening a period affects the whole organization's close, so it is decided by approvers whose role covers every subsidiary. Ask an administrator to widen your role's subsidiary access or route the request to an approver who has it.",
     "columns": {
       "period": "Period",
@@ -487,6 +494,7 @@
       "requested": "Awaiting approval",
       "approved": "Approved",
       "rejected": "Rejected",
+      "withdrawn": "Withdrawn",
       "expired": "Expired",
       "reclosed": "Reclosed"
     }

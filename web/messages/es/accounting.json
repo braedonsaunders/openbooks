@@ -474,6 +474,13 @@
     "approved": "Reapertura aprobada.",
     "rejected": "Reapertura rechazada.",
     "decideFailed": "No se pudo decidir la solicitud de reapertura.",
+    "withdraw": "Retirar solicitud",
+    "withdrawn": "Solicitud de reapertura retirada.",
+    "withdrawFailed": "No se pudo retirar la solicitud de reapertura.",
+    "withdrawReasonTitle": "Retirar solicitud de reapertura",
+    "rejectReasonTitle": "Rechazar solicitud de reapertura",
+    "reasonHint": "Introduzca un motivo de 10 a 500 caracteres. Se conserva en el registro de auditoría.",
+    "reasonLabel": "Motivo",
     "scopedApprover": "Reabrir un período afecta al cierre de toda la organización, por lo que lo deciden aprobadores cuyo rol abarca todas las filiales. Pida a un administrador que amplíe el acceso a filiales de su rol o que dirija la solicitud a un aprobador que lo tenga.",
     "columns": {
       "period": "Período",
@@ -487,6 +494,7 @@
       "requested": "Pendiente de aprobación",
       "approved": "Aprobada",
       "rejected": "Rechazada",
+      "withdrawn": "Retirada",
       "expired": "Vencida",
       "reclosed": "Cerrada de nuevo"
     }

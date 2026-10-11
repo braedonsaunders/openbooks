@@ -1101,6 +1101,7 @@ test(
         requestId: rejectedId,
         actorId: actors.approver1Id,
         approve: false,
+        decisionReason: "Window is broader than the correction needs",
       });
       const rejection = (await db.execute<{ action: string; actor_id: string }>(sql`
         select action, actor_id from audit_log

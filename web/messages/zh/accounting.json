@@ -474,6 +474,13 @@
     "approved": "已批准重新打开。",
     "rejected": "已拒绝重新打开。",
     "decideFailed": "无法处理该重新打开申请。",
+    "withdraw": "撤回申请",
+    "withdrawn": "已撤回重新开放申请。",
+    "withdrawFailed": "无法撤回重新开放申请。",
+    "withdrawReasonTitle": "撤回重新开放申请",
+    "rejectReasonTitle": "拒绝重新开放申请",
+    "reasonHint": "请输入 10 至 500 个字符的理由，将保存在审计记录中。",
+    "reasonLabel": "理由",
     "scopedApprover": "重新打开期间会影响整个组织的结账，因此由角色覆盖所有子公司的审批人决定。请让管理员扩大您角色的子公司访问权限，或将申请转给具备该权限的审批人。",
     "columns": {
       "period": "期间",
@@ -487,6 +494,7 @@
       "requested": "待批准",
       "approved": "已批准",
       "rejected": "已拒绝",
+      "withdrawn": "已撤回",
       "expired": "已过期",
       "reclosed": "已重新结账"
     }

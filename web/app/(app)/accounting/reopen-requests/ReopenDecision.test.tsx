@@ -4,6 +4,9 @@ import test from 'node:test'
 declare global {
   var __reopenTestRouter: { push(url: string): void; refresh(): void; replace(url: string): void } | undefined
   var __reopenTestToasts: { kind: string; message: string }[] | undefined
+  /** Reason the prompt answers with; null models a cancelled prompt. */
+  var __reopenTestPrompt: string | null | undefined
+  var __reopenTestPromptCalls: { title: string; multiline?: boolean }[] | undefined
 }
 
 // jsdom first: the decision control reads browser globals at render.
@@ -19,6 +22,13 @@ registerHooks({
       return {
         shortCircuit: true,
         url: `data:text/javascript,export const toast={success(m){(globalThis.__reopenTestToasts??=[]).push({kind:'success',message:String(m)})},error(m){(globalThis.__reopenTestToasts??=[]).push({kind:'error',message:String(m)})}};export function Toaster(){return null}`,
+      }
+    }
+    // Shared components import the prompt through "@/lib/prompt"; the suffix match covers that spelling.
+    if (specifier.endsWith('/lib/prompt')) {
+      return {
+        shortCircuit: true,
+        url: `data:text/javascript,export async function promptDialog(options){(globalThis.__reopenTestPromptCalls??=[]).push({title:options.title,multiline:options.multiline});return globalThis.__reopenTestPrompt??null}`,
       }
     }
     return next(specifier, context)
@@ -169,9 +179,9 @@ test('a sole approver self-approves with an attestation', async () => {
   }
 })
 
-/** An own request with another eligible approver stays read-only text:
- * the requester cannot decide it. */
-test('an own request with an available approver shows no decision controls', async () => {
+/** An own request with another eligible approver offers no approve or
+ * reject: the requester cannot decide it and may only withdraw it. */
+test('an own request with an available approver offers no approve or reject controls', async () => {
   const bodies: unknown[] = []
   const prior = stubPreview({
     ok: true,
@@ -243,5 +253,158 @@ test('a conflicted approver with no unconflicted alternative approves with an ac
   } finally {
     await unmount()
     globalThis.fetch = prior
+  }
+})
+
+function buttonNamed(label: string): HTMLButtonElement | undefined {
+  return [...document.querySelectorAll('button')].find(
+    (b) => (b.textContent ?? '').trim() === label,
+  ) as HTMLButtonElement | undefined
+}
+
+function answerPrompt(reason: string | null) {
+  globalThis.__reopenTestPrompt = reason
+  globalThis.__reopenTestPromptCalls = []
+}
+
+/** A requester withdraws their own pending request with a reason. The
+ * request is recorded as withdrawn, so the requester has no reject control. */
+test('the requester withdraws an own pending request with a reason and has no reject control', async () => {
+  const bodies: unknown[] = []
+  const prior = stubPreview({
+    ok: true,
+    conflicts: [],
+    ownRequest: true,
+    independenceRequired: true,
+    selfApprovalAllowed: false,
+    eligibleApprovers: ['Erik Halvorsen'],
+  }, bodies)
+  answerPrompt('Changed my mind; the correction is no longer needed')
+  const { unmount } = await mountDecision('req-6', true)
+  try {
+    assert.equal(buttonNamed('Reject'), undefined, 'the requester cannot reject their own request')
+    const withdraw = buttonNamed('Withdraw request')
+    assert.ok(withdraw, 'the requester sees Withdraw request')
+    await act(async () => {
+      withdraw.click()
+      await tick()
+      await tick()
+    })
+    assert.equal(globalThis.__reopenTestPromptCalls?.[0]?.title, 'Withdraw reopen request', 'withdrawal asks for a reason first')
+    assert.equal(globalThis.__reopenTestPromptCalls?.[0]?.multiline, true)
+    assert.deepEqual(bodies, [{
+      action: 'withdraw-reopen',
+      requestId: 'req-6',
+      reason: 'Changed my mind; the correction is no longer needed',
+    }])
+    assert.ok(
+      (globalThis.__reopenTestToasts ?? []).some((toast) => toast.kind === 'success' && toast.message === 'Reopen request withdrawn.'),
+      'the withdrawal toasts success',
+    )
+  } finally {
+    await unmount()
+    globalThis.fetch = prior
+    answerPrompt(undefined)
+  }
+})
+
+/** Cancelling the withdrawal prompt posts nothing. */
+test('a cancelled withdrawal prompt posts nothing', async () => {
+  const bodies: unknown[] = []
+  const prior = stubPreview({
+    ok: true,
+    conflicts: [],
+    ownRequest: true,
+    independenceRequired: true,
+    selfApprovalAllowed: false,
+  }, bodies)
+  answerPrompt(null)
+  const { unmount } = await mountDecision('req-7', true)
+  try {
+    await act(async () => {
+      buttonNamed('Withdraw request')!.click()
+      await tick()
+      await tick()
+    })
+    assert.equal(globalThis.__reopenTestPromptCalls?.length, 1, 'the prompt opened')
+    assert.deepEqual(bodies, [], 'a cancelled withdrawal posts nothing')
+  } finally {
+    await unmount()
+    globalThis.fetch = prior
+    answerPrompt(undefined)
+  }
+})
+
+/** An approver's rejection records a reason: the prompt gates the post,
+ * and the reason travels as decisionReason. */
+test('an approver rejects with a recorded reason, and a cancelled prompt posts nothing', async () => {
+  const bodies: unknown[] = []
+  const prior = stubPreview({
+    ok: true,
+    conflicts: [],
+    ownRequest: false,
+    independenceRequired: false,
+    selfApprovalAllowed: false,
+  }, bodies)
+  answerPrompt(null)
+  const { unmount } = await mountDecision('req-8', false)
+  try {
+    await act(async () => {
+      buttonNamed('Reject')!.click()
+      await tick()
+      await tick()
+    })
+    assert.deepEqual(bodies, [], 'a cancelled rejection posts nothing')
+    globalThis.__reopenTestPrompt = 'The window is broader than the correction needs'
+    await act(async () => {
+      buttonNamed('Reject')!.click()
+      await tick()
+      await tick()
+    })
+    assert.equal(globalThis.__reopenTestPromptCalls?.[1]?.title, 'Reject reopen request', 'rejection asks for a reason')
+    assert.deepEqual(bodies, [{
+      action: 'decide-reopen',
+      requestId: 'req-8',
+      approve: false,
+      decisionReason: 'The window is broader than the correction needs',
+    }])
+  } finally {
+    await unmount()
+    globalThis.fetch = prior
+    answerPrompt(undefined)
+  }
+})
+
+/** A sole approver deciding their own request withdraws it instead of
+ * rejecting: the attestation form stays for approval only. */
+test('a sole approver with an own request withdraws rather than rejects', async () => {
+  const bodies: unknown[] = []
+  const prior = stubPreview({
+    ok: true,
+    conflicts: [],
+    ownRequest: true,
+    independenceRequired: false,
+    selfApprovalAllowed: true,
+  }, bodies)
+  answerPrompt('Withdrawing: a different correction will be requested')
+  const { unmount } = await mountDecision('req-9', true)
+  try {
+    assert.equal(buttonNamed('Reject'), undefined, 'no reject control for the requester')
+    assert.ok(buttonNamed('Withdraw request'), 'the withdraw control is offered beside approve')
+    assert.ok(document.querySelector('textarea'), 'the sole approver still gets the attestation form for approval')
+    await act(async () => {
+      buttonNamed('Withdraw request')!.click()
+      await tick()
+      await tick()
+    })
+    assert.deepEqual(bodies, [{
+      action: 'withdraw-reopen',
+      requestId: 'req-9',
+      reason: 'Withdrawing: a different correction will be requested',
+    }])
+  } finally {
+    await unmount()
+    globalThis.fetch = prior
+    answerPrompt(undefined)
   }
 })

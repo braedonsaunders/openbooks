@@ -78,7 +78,7 @@ for (const boundary of ['creation', 'actions', 'task', 'evidence', 'binder', 'pa
         }
         if (boundary === 'page') await assert.rejects(page({searchParams:Promise.resolve({run:runId})}), /NEXT_HTTP_ERROR_FALLBACK;404/)
         if (boundary === 'setup') {
-          for (const verb of ['save-calendar','generate-periods','save-blueprint','save-policy','save-automation','save-package','send-package','request-reopen','decide-reopen','reclose-reopen']) {
+          for (const verb of ['save-calendar','generate-periods','save-blueprint','save-policy','save-automation','save-package','send-package','request-reopen','decide-reopen','withdraw-reopen','reclose-reopen']) {
             assert.equal((await setup(request({...target,action:verb,modules:['gl'],reason:'Audit',requestId:randomUUID()}))).status,404,verb)
           }
         }

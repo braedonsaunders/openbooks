@@ -7,7 +7,7 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
 import { CLOSE_MODULES, CloseError, type CloseModule } from "@openbooks/engine/periods/period-policy";
-import { consumeReopenRequestsForClosedModules, decidePeriodReopen, extendReopenRequest, recloseApprovedReopen, reopenDecisionPreview, requestPeriodReopen } from "@openbooks/engine/close/reopening";
+import { consumeReopenRequestsForClosedModules, decidePeriodReopen, extendReopenRequest, recloseApprovedReopen, reopenDecisionPreview, requestPeriodReopen, withdrawPeriodReopen } from "@openbooks/engine/close/reopening";
 import { generateAccountingPeriods } from "@openbooks/engine/close/calendar";
 import { closePeriodAllModules, setPeriodLockState } from "@openbooks/engine/periods/period-locks";
 import { auditBankingModuleClose, bankingCloseStatus, bankingUnmatchedStatementLines, evaluateBankingModuleClose } from "@openbooks/engine/close/banking-close";
@@ -60,7 +60,8 @@ const closeActionSchemas = [
   z.object({ action: z.literal("close-period"), periodId: z.string().uuid(), bookId: z.string().uuid(), subsidiaryId: z.string().uuid().nullable().optional(), state: z.enum(["soft_closed", "closed"]).optional().default("closed"), modules: z.array(z.enum(CLOSE_MODULES)).min(1).optional(), moduleReasons: z.record(z.enum(CLOSE_MODULES), z.string()).optional(), reason: z.string().trim().min(1), bankingAcknowledgement: z.string().max(2000).optional(), }),
   z.object({ action: z.literal("banking-close-status"), periodId: z.string().uuid(), bookId: z.string().uuid(), subsidiaryId: z.string().uuid().nullable().optional() }),
   z.object({ action: z.literal("request-reopen"), periodId: z.string().uuid(), bookId: z.string().uuid(), subsidiaryId: z.string().uuid().nullable().optional(), modules: z.array(z.enum(CLOSE_MODULES)).min(1), reason: z.string().trim().min(1) }),
-  z.object({ action: z.literal("decide-reopen"), requestId: z.string().uuid(), approve: z.boolean(), hours: z.number().positive().max(168).optional(), attestation: z.string().max(500).optional() }),
+  z.object({ action: z.literal("decide-reopen"), requestId: z.string().uuid(), approve: z.boolean(), hours: z.number().positive().max(168).optional(), attestation: z.string().max(500).optional(), decisionReason: z.string().max(500).optional() }),
+  z.object({ action: z.literal("withdraw-reopen"), requestId: z.string().uuid(), reason: z.string().trim().min(10).max(500) }),
   z.object({ action: z.literal("extend-reopen"), requestId: z.string().uuid(), additionalHours: z.number().int().min(1).max(168).optional(), addModules: z.array(z.enum(CLOSE_MODULES)).optional(), reason: z.string().trim().min(1) }),
   z.object({ action: z.literal("reopen-conflicts"), requestId: z.string().uuid() }),
   z.object({ action: z.literal("reclose-reopen"), requestId: z.string().uuid(), reason: z.string().trim().min(1) }),
@@ -620,6 +621,7 @@ export const POST = defineRoute({
     const permission = [
       "request-reopen",
       "decide-reopen",
+      "withdraw-reopen",
       "reclose-reopen",
       "reopen-conflicts",
       "extend-reopen",
@@ -926,6 +928,18 @@ export const POST = defineRoute({
           approve: body.approve === true,
           hours: body.hours == null ? undefined : Number(body.hours),
           attestation: typeof body.attestation === "string" ? body.attestation : undefined,
+          decisionReason: typeof body.decisionReason === "string" ? body.decisionReason : undefined,
+        });
+        return NextResponse.json({ ok: true });
+      }
+      if (action === "withdraw-reopen") {
+        const requestId = text(body, "requestId", true)!;
+        if (!isUuid(requestId)) throw new CloseError("invalid reopen request");
+        await withdrawPeriodReopen({
+          orgId,
+          requestId,
+          actorId,
+          reason: text(body, "reason", true)!,
         });
         return NextResponse.json({ ok: true });
       }

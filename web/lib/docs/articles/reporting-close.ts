@@ -313,7 +313,9 @@ restatement, and a note is required.
 Reopening is a controlled exception requiring the appropriate permission and
 business reason. A reopen is requested on the period in **Settings → Setup →
 Close** and decided by someone else who holds the reopen permission: the
-requester can never approve their own request. Approvers find pending requests
+requester can never approve their own request. An approver rejects a request with
+a recorded reason, and the requester withdraws their own pending request with a
+reason, which is recorded as withdrawn rather than rejected. Approvers find pending requests
 in their **Inbox** under My tasks and at **Accounting → Reopen Requests**, which
 needs only the reopen permission. Because a reopen affects the whole
 organization's close, the approver's role must cover every subsidiary.

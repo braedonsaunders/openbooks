@@ -474,6 +474,13 @@
     "approved": "Réouverture approuvée.",
     "rejected": "Réouverture rejetée.",
     "decideFailed": "La demande de réouverture n’a pas pu être tranchée.",
+    "withdraw": "Retirer la demande",
+    "withdrawn": "Demande de réouverture retirée.",
+    "withdrawFailed": "La demande de réouverture n’a pas pu être retirée.",
+    "withdrawReasonTitle": "Retirer la demande de réouverture",
+    "rejectReasonTitle": "Rejeter la demande de réouverture",
+    "reasonHint": "Saisissez un motif de 10 à 500 caractères. Il est conservé dans la piste d’audit.",
+    "reasonLabel": "Motif",
     "scopedApprover": "Rouvrir une période touche la clôture de toute l’organisation : elle est donc tranchée par des approbateurs dont le rôle couvre toutes les filiales. Demandez à un administrateur d’élargir l’accès aux filiales de votre rôle ou d’acheminer la demande vers un approbateur qui en dispose.",
     "columns": {
       "period": "Période",
@@ -487,6 +494,7 @@
       "requested": "En attente d’approbation",
       "approved": "Approuvée",
       "rejected": "Rejetée",
+      "withdrawn": "Retirée",
       "expired": "Expirée",
       "reclosed": "Reclôturée"
     }

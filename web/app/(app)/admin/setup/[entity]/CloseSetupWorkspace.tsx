@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useViewerFormat } from "@/lib/viewer-format";
 import { toast } from "sonner";
+import { promptDialog } from "@/lib/prompt";
 import {
   Badge,
   Button,
@@ -2378,7 +2379,7 @@ function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
   const [extendHours, setExtendHours] = useState("24");
   const [extendModules, setExtendModules] = useState<string[]>([]);
   const includedModules = new Set(row.modules.map((module) => String(module)));
-  async function decide(approve: boolean) {
+  async function decide(approve: boolean, decisionReason?: string) {
     setBusy(true);
     setActionError(null);
     try {
@@ -2388,12 +2389,58 @@ function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
           requestId: row.id,
           approve,
           ...(approve && attests ? { attestation: selfAttestation.trim() } : {}),
+          ...(decisionReason !== undefined ? { decisionReason } : {}),
         },
         t("errors.actionFailed"),
       );
       toast.success(
         t(approve ? "messages.reopenApproved" : "messages.reopenRejected"),
       );
+      router.push(closeHref);
+      router.refresh();
+    } catch (error) {
+      const message =
+        error instanceof ApiResponseError
+          ? error.message
+          : t("errors.actionFailed");
+      setActionError(message);
+      toast.error(message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  // A rejection is an approver's recorded decision and needs a reason;
+  // cancelling the prompt posts nothing.
+  async function rejectWithReason() {
+    const reason = await promptDialog({
+      title: t("periods.reopenRejectTitle"),
+      message: t("periods.reopenReasonHint"),
+      label: t("fields.reason"),
+      multiline: true,
+      confirmLabel: t("actions.reject"),
+    });
+    if (reason === null) return;
+    await decide(false, reason);
+  }
+  // The requester withdraws their own pending request with a reason. It is
+  // recorded as withdrawn, never as rejected.
+  async function withdraw() {
+    const reason = await promptDialog({
+      title: t("periods.reopenWithdrawTitle"),
+      message: t("periods.reopenReasonHint"),
+      label: t("fields.reason"),
+      multiline: true,
+      confirmLabel: t("periods.reopenWithdraw"),
+    });
+    if (reason === null) return;
+    setBusy(true);
+    setActionError(null);
+    try {
+      await post(
+        { action: "withdraw-reopen", requestId: row.id, reason },
+        t("errors.actionFailed"),
+      );
+      toast.success(t("messages.reopenWithdrawn"));
       router.push(closeHref);
       router.refresh();
     } catch (error) {
@@ -2480,13 +2527,23 @@ function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
       footer={
         row.status === "requested" && props.canReopen ? (
           <div className="flex w-full justify-end gap-2">
-            <Button
-              variant="outline"
-              disabled={busy}
-              onClick={() => decide(false)}
-            >
-              {t("actions.reject")}
-            </Button>
+            {ownRequest ? (
+              <Button
+                variant="outline"
+                disabled={busy}
+                onClick={() => void withdraw()}
+              >
+                {t("periods.reopenWithdraw")}
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                disabled={busy}
+                onClick={() => void rejectWithReason()}
+              >
+                {t("actions.reject")}
+              </Button>
+            )}
             <Button
               disabled={busy || approveBlocked || (attests && !selfAttestationReady)}
               title={

@@ -157,7 +157,7 @@ export async function listPeriodLocks(
   };
 }
 
-const REOPEN_STATUSES = new Set(["requested", "approved", "rejected", "expired", "reclosed"]);
+const REOPEN_STATUSES = new Set(["requested", "approved", "rejected", "withdrawn", "expired", "reclosed"]);
 
 /** Reopen requests — same query shape as `list_period_reopen_requests`. Org-wide diagnostics. */
 export async function listPeriodReopenRequests(
@@ -171,7 +171,7 @@ export async function listPeriodReopenRequests(
   if (input.status && !REOPEN_STATUSES.has(input.status)) {
     throw new ApplicationError(
       "invalid_input",
-      "status must be requested, approved, rejected, expired, or reclosed",
+      "status must be requested, approved, rejected, withdrawn, expired, or reclosed",
       422,
     );
   }
@@ -410,6 +410,7 @@ export async function decideReopenRequest(context: ApplicationContext, input: {
   approve: boolean;
   hours?: number;
   attestation?: string;
+  decisionReason?: string;
   idempotencyKey: string;
 }): Promise<{ replayed: boolean; result: { requestId: string; approved: boolean } }> {
   assertApplicationPermission(context, "close.reopen");
@@ -431,6 +432,7 @@ export async function decideReopenRequest(context: ApplicationContext, input: {
           approve: input.approve,
           hours: input.hours,
           attestation: input.attestation,
+          decisionReason: input.decisionReason,
         });
         return { requestId: input.requestId, approved: input.approve };
       } catch (error) { mapCloseError(error); }

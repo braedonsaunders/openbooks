@@ -7,6 +7,7 @@ import { fetchAction } from '@braedonsaunders/appkit-errors'
 import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
 import { Button } from '@openbooks/ui'
 import { useAppAction } from '@/lib/use-app-action'
+import { promptDialog } from '@/lib/prompt'
 
 interface ConflictPreview {
   kind: string
@@ -31,7 +32,9 @@ interface DecisionPreview {
  * reason, and a sole eligible approver deciding their own request gets the
  * attestation form (required reason plus checkbox) instead of a refusal.
  * The engine re-resolves eligibility inside the decision transaction, so a
- * refusal that still lands surfaces pinned with its reason.
+ * refusal that still lands surfaces pinned with its reason. A rejection
+ * records the approver's reason, and the requester withdraws their own
+ * request (with its own reason) instead of rejecting it.
  */
 export function ReopenDecision({ requestId, ownRequest }: { requestId: string; ownRequest: boolean }) {
   const t = useTranslations('accounting.reopenRequests')
@@ -82,7 +85,7 @@ export function ReopenDecision({ requestId, ownRequest }: { requestId: string; o
     ? t('conflictNoticeNamed', { count: conflictTotal, examples: conflictExamples, approvers: preview.unconflictedApprovers.join(', ') })
     : t('conflictNotice', { count: conflictTotal, examples: conflictExamples })
   const attestationReady = attested && attestation.trim().length >= 10
-  const decide = (approve: boolean) =>
+  const decide = (approve: boolean, decisionReason?: string) =>
     execute(
       () =>
         fetchAction('/api/admin/close', {
@@ -93,6 +96,7 @@ export function ReopenDecision({ requestId, ownRequest }: { requestId: string; o
             requestId,
             approve,
             ...(approve && (selfApproval || conflictAcknowledgement) ? { attestation: attestation.trim() } : {}),
+            ...(decisionReason !== undefined ? { decisionReason } : {}),
           }),
         }),
       {
@@ -101,13 +105,58 @@ export function ReopenDecision({ requestId, ownRequest }: { requestId: string; o
         onOk: () => router.refresh(),
       },
     )
+  // A rejection is an approver's recorded decision, so it needs a reason.
+  // Cancelling the prompt posts nothing.
+  const reject = async () => {
+    const reason = await promptDialog({
+      title: t('rejectReasonTitle'),
+      message: t('reasonHint'),
+      label: t('reasonLabel'),
+      multiline: true,
+      confirmLabel: t('reject'),
+    })
+    if (reason === null) return
+    await decide(false, reason)
+  }
+  // The requester withdraws their own pending request with a reason. The
+  // engine records it as withdrawn, never as rejected.
+  const withdraw = async () => {
+    const reason = await promptDialog({
+      title: t('withdrawReasonTitle'),
+      message: t('reasonHint'),
+      label: t('reasonLabel'),
+      multiline: true,
+      confirmLabel: t('withdraw'),
+    })
+    if (reason === null) return
+    await execute(
+      () =>
+        fetchAction('/api/admin/close', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ action: 'withdraw-reopen', requestId, reason }),
+        }),
+      {
+        fallbackMessage: t('withdrawFailed'),
+        successMessage: t('withdrawn'),
+        onOk: () => router.refresh(),
+      },
+    )
+  }
+  const withdrawButton = (
+    <Button size="sm" variant="outline" disabled={busy} onClick={() => void withdraw()}>{t('withdraw')}</Button>
+  )
   if (isOwn && !selfApproval)
     return (
-      <span className="text-xs text-slate-500 dark:text-slate-400">
-        {preview && preview.eligibleApprovers.length > 0
-          ? t('ownRequestNamed', { approvers: preview.eligibleApprovers.join(', ') })
-          : t('ownRequest')}
-      </span>
+      <div className="flex max-w-xs flex-col items-end gap-2">
+        <span className="text-xs text-slate-500 dark:text-slate-400">
+          {preview && preview.eligibleApprovers.length > 0
+            ? t('ownRequestNamed', { approvers: preview.eligibleApprovers.join(', ') })
+            : t('ownRequest')}
+        </span>
+        <div className="flex justify-end gap-2">{withdrawButton}</div>
+        <ActionAlert error={refusal} fallbackMessage={t('withdrawFailed')} />
+      </div>
     )
   if (selfApproval || conflictAcknowledgement)
     return (
@@ -129,7 +178,9 @@ export function ReopenDecision({ requestId, ownRequest }: { requestId: string; o
         </label>
         {!attestationReady ? <p className="text-xs text-slate-600 dark:text-slate-300">{t('selfAttestationNeeded')}</p> : null}
         <div className="flex justify-end gap-2">
-          <Button size="sm" variant="outline" disabled={busy} onClick={() => void decide(false)}>{t('reject')}</Button>
+          {isOwn
+            ? withdrawButton
+            : <Button size="sm" variant="outline" disabled={busy} onClick={() => void reject()}>{t('reject')}</Button>}
           <Button size="sm" disabled={busy || !attestationReady} title={attestationReady ? undefined : t('selfAttestationNeeded')} onClick={() => void decide(true)}>{t('approve')}</Button>
         </div>
         <ActionAlert error={refusal} fallbackMessage={t('decideFailed')} />
@@ -143,7 +194,7 @@ export function ReopenDecision({ requestId, ownRequest }: { requestId: string; o
         </p>
       ) : null}
       <div className="flex justify-end gap-2">
-        <Button size="sm" variant="outline" disabled={busy} onClick={() => void decide(false)}>{t('reject')}</Button>
+        <Button size="sm" variant="outline" disabled={busy} onClick={() => void reject()}>{t('reject')}</Button>
         <Button
           size="sm"
           disabled={busy || approveBlocked}

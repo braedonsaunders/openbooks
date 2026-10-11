@@ -589,6 +589,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
       requestId: UUID,
       approve: z.boolean().describe("True approves the reopen; false rejects it"),
       hours: z.number().int().min(1).max(168).optional().describe("Approved access window in hours"),
+      decisionReason: z.string().max(500).optional().describe("Required 10-500 character reason when rejecting"),
       idempotencyKey: IDEMPOTENCY_KEY,
     }),
     readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always", visibleTo: hasPermission("close.reopen"),

@@ -474,6 +474,13 @@
     "approved": "Reabertura aprovada.",
     "rejected": "Reabertura rejeitada.",
     "decideFailed": "Não foi possível decidir a solicitação de reabertura.",
+    "withdraw": "Retirar solicitação",
+    "withdrawn": "Solicitação de reabertura retirada.",
+    "withdrawFailed": "Não foi possível retirar a solicitação de reabertura.",
+    "withdrawReasonTitle": "Retirar solicitação de reabertura",
+    "rejectReasonTitle": "Rejeitar solicitação de reabertura",
+    "reasonHint": "Informe um motivo de 10 a 500 caracteres. Ele fica registrado na trilha de auditoria.",
+    "reasonLabel": "Motivo",
     "scopedApprover": "Reabrir um período afeta o fechamento de toda a organização, por isso é decidido por aprovadores cuja função abrange todas as subsidiárias. Peça a um administrador para ampliar o acesso a subsidiárias da sua função ou encaminhar a solicitação a um aprovador que o tenha.",
     "columns": {
       "period": "Período",
@@ -487,6 +494,7 @@
       "requested": "Aguardando aprovação",
       "approved": "Aprovada",
       "rejected": "Rejeitada",
+      "withdrawn": "Retirada",
       "expired": "Expirada",
       "reclosed": "Fechada novamente"
     }
