@@ -31,6 +31,54 @@ const { requireId } = inputGuards((message) => new SelfServiceError("REFUSED", m
  * login carries no linked person (or names no user of this org at all —
  * the caller must not learn which of the two it was).
  */
+/**
+ * Audience-aware setup remedy: administrators who hold the setup
+ * permission keep the remedy that tells them what to configure, while
+ * everyone else is told who can do it. A field technician cannot create
+ * a leave policy or flip a Company Settings toggle, so naming the setup
+ * step without the audience check sends them down a path they cannot
+ * access. Both wordings are full messages; the caller picks the pair.
+ */
+export async function setupRemedyFor(
+  exec: SqlExecutor,
+  args: {
+    orgId: string;
+    actorId: string;
+    setupPermission: string;
+    setupRemedy: string;
+    selfServiceRemedy: string;
+  },
+): Promise<string> {
+  const { actorHasPermission } = await import("../../organization/actor-permissions.ts");
+  if (await actorHasPermission(exec, args.orgId, args.actorId, args.setupPermission)) return args.setupRemedy;
+  return args.selfServiceRemedy;
+}
+
+/**
+ * The HRM feature gate every self-service entry shares. Flipping the
+ * toggle needs admin.setup.manage; callers pass the actor so an employee
+ * without it hears who can turn it on instead of a setup step they
+ * cannot do. The toggle wording stays identical for administrators with
+ * the setup grant.
+ */
+export async function assertHrmFeatureOn(exec: SqlExecutor, orgId: string, actorId?: string): Promise<void> {
+  const { lockAndCheckOrgFeature } = await import("../../organization/org-feature-lock.ts");
+  if (!(await lockAndCheckOrgFeature(exec, orgId, "hrm"))) {
+    const remedy =
+      actorId === undefined
+        ? "hrm feature is disabled: enable it on Company Settings → Features before using self-service"
+        : await setupRemedyFor(exec, {
+            orgId,
+            actorId,
+            setupPermission: "admin.setup.manage",
+            setupRemedy: "hrm feature is disabled: enable it on Company Settings → Features before using self-service",
+            selfServiceRemedy:
+              "human resources (HRM) isn't turned on for your employer — ask your administrator to turn it on under Company Settings → Features before using self-service",
+          });
+    throw new SelfServiceError("FORBIDDEN", remedy);
+  }
+}
+
 export async function actorPartyOf(
   exec: SqlExecutor,
   orgId: string,

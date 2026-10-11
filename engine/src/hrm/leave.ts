@@ -28,6 +28,7 @@ import {
   type CarryoverRule,
 } from "./leave-math.ts";
 import { LeaveError } from "./leave-errors.ts";
+import { setupRemedyFor } from "./self-service/actor.ts";
 import { isUniqueViolation } from "./field-time/errors.ts";
 import {
   applicablePolicy,
@@ -145,9 +146,23 @@ function requireHours(value: unknown, field: string): string {
   }
 }
 
-async function assertHrmEnabled(exec: SqlExecutor, orgId: string): Promise<void> {
+async function assertHrmEnabled(exec: SqlExecutor, orgId: string, actorId?: string): Promise<void> {
   if (!(await lockAndCheckOrgFeature(exec, orgId, HRM_FEATURE_KEY))) {
-    throw new LeaveError("REFUSED", "leave is unavailable while the hrm feature is off — enable it under Company Settings → Features; existing leave data is preserved");
+    // Flipping the toggle needs admin.setup.manage; anyone else gets the
+    // ask-an-administrator wording instead of a setup step they cannot do.
+    const remedy =
+      actorId === undefined
+        ? "leave is unavailable while the hrm feature is off — enable it under Company Settings → Features; existing leave data is preserved"
+        : await setupRemedyFor(exec, {
+            orgId,
+            actorId,
+            setupPermission: "admin.setup.manage",
+            setupRemedy:
+              "leave is unavailable while the hrm feature is off — enable it under Company Settings → Features; existing leave data is preserved",
+            selfServiceRemedy:
+              "leave is unavailable while human resources (HRM) is off for your employer — ask your administrator to turn it on under Company Settings → Features",
+          });
+    throw new LeaveError("REFUSED", remedy);
   }
 }
 
@@ -209,7 +224,7 @@ export async function createLeaveType(query: CreateLeaveTypeQuery): Promise<Leav
   }
   return withOrgTransaction(orgId, async () => {
     await requireHrmLeaveManage(db, orgId, actorId);
-    await assertHrmEnabled(db, orgId);
+    await assertHrmEnabled(db, orgId, actorId);
     const inserted = (await db.execute<LeaveTypeRow>(sql`
       insert into hrm_leave_types (org_id, code, name, paid, value_crossing, requires_attachment, created_by, updated_by)
       values (${orgId}, ${code}, ${name},
@@ -320,7 +335,7 @@ export async function createLeavePolicy(query: CreateLeavePolicyQuery): Promise<
   if (!Number.isInteger(notice) || (notice as number) < 0) throw new LeaveError("INVALID_INPUT", "minimum_notice_days is a non-negative integer of days — record the notice");
   return withOrgTransaction(orgId, async () => {
     await requireHrmLeaveManage(db, orgId, actorId);
-    await assertHrmEnabled(db, orgId);
+    await assertHrmEnabled(db, orgId, actorId);
     const type = await loadLeaveType(db, orgId, leaveTypeId);
     if (!type.is_active) throw new LeaveError("REFUSED", `leave type ${type.code} is inactive — reactivate it before adding a policy`);
     await assertNoSameScopeOverlap(db, orgId, leaveTypeId, appliesTo, effectiveFrom, effectiveTo);
@@ -539,6 +554,7 @@ async function assertNoApprovedOverlap(
 async function assertTimeBalance(
   exec: SqlExecutor,
   orgId: string,
+  actorId: string,
   leaveTypeId: string,
   scope: PolicyScope,
   startsOn: string,
@@ -555,10 +571,18 @@ async function assertTimeBalance(
   for (const day of eachDayOfRange(startsOn, endsOn)) {
     const pick = selectPolicy(candidates, scope, day);
     // No policy declares no entitlement: fail closed by name, never accrue zero.
+    // Creating the missing policy needs hrm.leave.manage; anyone else is
+    // told to ask HR instead of being sent to do setup they cannot access.
     if (!pick) {
       throw new LeaveError(
         "REFUSED",
-        `no active leave policy covers ${day} of the requested ${startsOn} to ${endsOn} — create a policy for this type and scope covering ${day} before filing`,
+        await setupRemedyFor(exec, {
+          orgId,
+          actorId,
+          setupPermission: "hrm.leave.manage",
+          setupRemedy: `no active leave policy covers ${day} of the requested ${startsOn} to ${endsOn} — create a policy for this type and scope covering ${day} before filing`,
+          selfServiceRemedy: `no active leave policy covers ${day} of the requested ${startsOn} to ${endsOn} — your employer hasn't set up a leave policy for these dates; ask HR (or your administrator) to set one up covering ${day} before you file`,
+        }),
       );
     }
     const governing = rows.find((row) => row.id === pick.id);
@@ -653,16 +677,27 @@ export async function fileLeaveRequest(query: FileLeaveRequestQuery): Promise<Le
   }
   return withOrgTransaction(orgId, async () => {
     await requireFileAccess(db, orgId, actorId, employmentId, query.onBehalf === true);
-    await assertHrmEnabled(db, orgId);
+    await assertHrmEnabled(db, orgId, actorId);
     const type = await loadLeaveType(db, orgId, leaveTypeId);
-    if (!type.is_active) throw new LeaveError("REFUSED", `leave type ${type.code} is inactive — reactivate it before filing`);
+    if (!type.is_active) {
+      throw new LeaveError(
+        "REFUSED",
+        await setupRemedyFor(db, {
+          orgId,
+          actorId,
+          setupPermission: "hrm.leave.manage",
+          setupRemedy: `leave type ${type.code} is inactive — reactivate it before filing`,
+          selfServiceRemedy: `leave type ${type.code} is inactive — ask HR (or your administrator) to reactivate it before you file`,
+        }),
+      );
+    }
     await assertLiveEmploymentRange(db, orgId, employmentId, startsOn, endsOn);
     await assertNoApprovedOverlap(db, orgId, employmentId, startsOn, endsOn, null);
     // The gates resolve scope the same way the balance display does —
     // subsidiary from the employment, department from the primary
     // assignment — never a hardcoded null department.
     const scope = await policyScopeForEmployment(db, orgId, employmentId, startsOn);
-    await assertTimeBalance(db, orgId, leaveTypeId, scope, startsOn, endsOn, hours);
+    await assertTimeBalance(db, orgId, actorId, leaveTypeId, scope, startsOn, endsOn, hours);
     await assertNotice(db, orgId, leaveTypeId, scope, startsOn, query.onBehalf === true, reason);
     const inserted = (await db.execute<RequestRow>(sql`
       insert into hrm_leave_requests (org_id, employment_id, leave_type_id, starts_on, ends_on,
@@ -732,7 +767,18 @@ export async function submitLeaveRequest(query: SubmitLeaveRequestQuery): Promis
       throw new LeaveError("BAD_STATE", `a ${current.status} request cannot be submitted — only drafts submit`);
     }
     const type = await loadLeaveType(db, orgId, current.leave_type_id);
-    if (!type.is_active) throw new LeaveError("REFUSED", `leave type ${type.code} is inactive — reactivate it before submitting`);
+    if (!type.is_active) {
+      throw new LeaveError(
+        "REFUSED",
+        await setupRemedyFor(db, {
+          orgId,
+          actorId,
+          setupPermission: "hrm.leave.manage",
+          setupRemedy: `leave type ${type.code} is inactive — reactivate it before submitting`,
+          selfServiceRemedy: `leave type ${type.code} is inactive — ask HR (or your administrator) to reactivate it before you submit`,
+        }),
+      );
+    }
     if (type.requires_attachment && !current.attachment_id) {
       throw new LeaveError("REFUSED", `leave type ${type.code} requires an attachment — attach the evidence before submitting`);
     }
@@ -742,7 +788,7 @@ export async function submitLeaveRequest(query: SubmitLeaveRequestQuery): Promis
     await assertLiveEmploymentRange(db, orgId, current.employment_id, startsOn, endsOn);
     await assertNoApprovedOverlap(db, orgId, current.employment_id, startsOn, endsOn, requestId);
     const scope = await policyScopeForEmployment(db, orgId, current.employment_id, startsOn);
-    await assertTimeBalance(db, orgId, current.leave_type_id, scope, startsOn, endsOn, String(current.hours));
+    await assertTimeBalance(db, orgId, actorId, current.leave_type_id, scope, startsOn, endsOn, String(current.hours));
     await assertNotice(db, orgId, current.leave_type_id, scope, startsOn, onBehalf, current.reason);
 
     // Lazy: engine/src/flows/run.ts → registry → this service's adapter.
@@ -771,9 +817,29 @@ export async function submitLeaveRequest(query: SubmitLeaveRequestQuery): Promis
         `);
       }
       if (flowResult.failed) {
-        throw new LeaveError("FLOW_ERROR", "approval routing failed for this leave — fix the approval flow, then submit again");
+        throw new LeaveError(
+          "FLOW_ERROR",
+          await setupRemedyFor(db, {
+            orgId,
+            actorId,
+            setupPermission: "flows.manage",
+            setupRemedy: "approval routing failed for this leave — fix the approval flow, then submit again",
+            selfServiceRemedy:
+              "approval routing failed for this leave — ask your administrator to fix the approval flow, then submit again",
+          }),
+        );
       }
-      throw new LeaveError("NO_FLOW", "no enabled approval flow produced an approval gate for leave requests — configure a flow for leave requests before submitting");
+      throw new LeaveError(
+        "NO_FLOW",
+        await setupRemedyFor(db, {
+          orgId,
+          actorId,
+          setupPermission: "flows.manage",
+          setupRemedy: "no enabled approval flow produced an approval gate for leave requests — configure a flow for leave requests before submitting",
+          selfServiceRemedy:
+            "no enabled approval flow covers leave requests — ask your administrator to configure one before you submit",
+        }),
+      );
     }
     const submitted = (await db.execute<RequestRow>(sql`
       update hrm_leave_requests
@@ -972,7 +1038,7 @@ export async function releaseLeaveRequest(query: ReleaseLeaveRequestQuery): Prom
       // request itself is excluded structurally — its absences are written
       // after this gate, so there is nothing of its own to count.
       const scope = await policyScopeForEmployment(db, orgId, current.employment_id, startsOn);
-      await assertTimeBalance(db, orgId, current.leave_type_id, scope, startsOn, endsOn, String(current.hours));
+      await assertTimeBalance(db, orgId, actorId, current.leave_type_id, scope, startsOn, endsOn, String(current.hours));
     }
     const decided = (await db.execute<RequestRow>(sql`
       update hrm_leave_requests

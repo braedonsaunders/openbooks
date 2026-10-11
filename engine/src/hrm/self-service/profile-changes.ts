@@ -1,5 +1,4 @@
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
-import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { HrmAuthorizationError, requireHrmSelfRead, requireHrmSelfRequest } from "../authorization.ts";
 import {
   createChangeRequestDraft,
@@ -7,7 +6,7 @@ import {
   submitChangeRequest,
   type ChangeRequestDTO,
 } from "../change-requests.ts";
-import { actorPartyOf, ownEmploymentOrHireRemedy, SelfServiceError } from "./actor.ts";
+import { actorPartyOf, assertHrmFeatureOn, ownEmploymentOrHireRemedy, SelfServiceError } from "./actor.ts";
 
 import {
   profileChangePayloadSchema,
@@ -132,12 +131,7 @@ export async function fileProfileChangeRequest(
   // person's work: the submit below runs outside this transaction, in
   // the transaction submitChangeRequest opens itself.
   const request = await withOrgTransaction(orgId, async () => {
-    if (!(await lockAndCheckOrgFeature(db, orgId, "hrm"))) {
-      throw new SelfServiceError(
-        "FORBIDDEN",
-        "hrm feature is disabled: enable it on Company Settings → Features before using self-service",
-      );
-    }
+    await assertHrmFeatureOn(db, orgId, actorId);
     await requireHrmSelfRequest(db, orgId, actorId);
     await actorPartyOf(db, orgId, actorId);
     // The service re-checks the self.request gate and the own-employment

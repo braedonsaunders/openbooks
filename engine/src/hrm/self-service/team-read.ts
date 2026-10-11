@@ -1,13 +1,12 @@
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { businessToday } from "../../platform/business-date.ts";
-import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import {
   loadOwnEmploymentIds,
   loadTeamEmploymentIdsForManager,
   requireHrmSelfRead,
 } from "../authorization.ts";
-import { actorPartyOf, SelfServiceError } from "./actor.ts";
+import { actorPartyOf, assertHrmFeatureOn, SelfServiceError } from "./actor.ts";
 import { loadMyEmploymentSummaries, type MyEmploymentSummary } from "./self-read.ts";
 import { inputGuards } from "../input-guards.ts";
 
@@ -26,14 +25,7 @@ import { inputGuards } from "../input-guards.ts";
  * and the Team tab itself renders only when the actor holds reports.
  */
 
-async function assertHrmFeatureOn(exec: SqlExecutor, orgId: string): Promise<void> {
-  if (!(await lockAndCheckOrgFeature(exec, orgId, "hrm"))) {
-    throw new SelfServiceError(
-      "FORBIDDEN",
-      "hrm feature is disabled: enable it on Company Settings → Features before using self-service",
-    );
-  }
-}
+/** Shared HRM feature gate (actor.ts): audience-aware when HRM is off. */
 
 const { requireOrgId, requireActorId, requireId } = inputGuards((message) => new SelfServiceError("REFUSED", message));
 
@@ -72,7 +64,7 @@ export async function actorHasTeam(query: {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   return withOrgTransaction(orgId, async () => {
-    await assertHrmFeatureOn(db, orgId);
+    await assertHrmFeatureOn(db, orgId, actorId);
     await requireHrmSelfRead(db, orgId, actorId);
     const today = await businessToday(orgId);
     const reports = await resolveTeamEmploymentIds(db, orgId, actorId, today);
@@ -96,7 +88,7 @@ export async function findTeamEmploymentIdsForParty(query: {
   const actorId = requireActorId(query.actorId);
   const workerPartyId = requireId(query.workerPartyId, "workerPartyId");
   return withOrgTransaction(orgId, async () => {
-    await assertHrmFeatureOn(db, orgId);
+    await assertHrmFeatureOn(db, orgId, actorId);
     await requireHrmSelfRead(db, orgId, actorId);
     const today = await businessToday(orgId);
     const reports = await resolveTeamEmploymentIds(db, orgId, actorId, today);
@@ -358,7 +350,7 @@ export async function getTeamView(query: {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   return withOrgTransaction(orgId, async () => {
-    await assertHrmFeatureOn(db, orgId);
+    await assertHrmFeatureOn(db, orgId, actorId);
     await requireHrmSelfRead(db, orgId, actorId);
     const partyId = await actorPartyOf(db, orgId, actorId);
     const today = await businessToday(orgId);

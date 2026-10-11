@@ -15,6 +15,7 @@ import {
   grantPermissions,
   linkPerson,
   seedFlow,
+  setFeatures,
   setupHarness,
   withHarness,
 } from "../testing/hrm-harness.ts";
@@ -23,7 +24,7 @@ import { HrmAuthorizationError } from "./authorization.ts";
 import {
   createChangeRequestDraft,
 } from "./change-requests.ts";
-import { SelfServiceError } from "./self-service/actor.ts";
+import { assertHrmFeatureOn, SelfServiceError, setupRemedyFor } from "./self-service/actor.ts";
 import { getMyProfile, getMyRequests, getMySteps } from "./self-service/self-read.ts";
 import { actorHasTeam, getTeamView } from "./self-service/team-read.ts";
 import { fileProfileChangeRequest } from "./self-service/profile-changes.ts";
@@ -166,6 +167,49 @@ test("no linked person is a named refusal, never an empty page", { skip: !DB }, 
         return true;
       });
     }
+  });
+});
+
+test("setup remedies are audience-aware: employees hear who can help, setup holders hear the setup step", { skip: !DB }, async () => {
+  await withHarness(() => setupSelfServiceHarness(), async (h) => {
+    const args = {
+      orgId: h.org.orgId,
+      setupPermission: "hrm.leave.manage",
+      setupRemedy: "create a policy for this type and scope",
+      selfServiceRemedy: "ask HR (or your administrator) to set one up",
+    } as const;
+    // Person A holds only the self-service grants: the remedy names who
+    // can do the setup, never a setup step they cannot access.
+    assert.equal(await setupRemedyFor(db, { ...args, actorId: h.personAId }), args.selfServiceRemedy);
+    // HR holds no policy grant yet either, so they hear the same wording.
+    assert.equal(await setupRemedyFor(db, { ...args, actorId: h.hrId }), args.selfServiceRemedy);
+    // With the setup grant the same call keeps the setup wording.
+    await grantPermissions(h.org.orgId, h.hrId, ["hrm.leave.manage"]);
+    assert.equal(await setupRemedyFor(db, { ...args, actorId: h.hrId }), args.setupRemedy);
+  });
+});
+
+test("the HRM feature gate is audience-aware when the toggle is off", { skip: !DB }, async () => {
+  await withHarness(() => setupSelfServiceHarness(), async (h) => {
+    // Toggle on: the gate passes silently for everyone.
+    await assertHrmFeatureOn(db, h.org.orgId, h.personAId);
+    await setFeatures(h.org.orgId, { hrm: false });
+    // An employee without the setup grant hears who can turn it on.
+    await assert.rejects(() => assertHrmFeatureOn(db, h.org.orgId, h.personAId), (error: unknown) => {
+      assert.ok(error instanceof SelfServiceError);
+      assert.equal(error.code, "FORBIDDEN");
+      assert.match(error.message, /ask your administrator to turn it on under Company Settings → Features/);
+      return true;
+    });
+    // With the setup grant the same gate keeps the setup wording.
+    await grantPermissions(h.org.orgId, h.hrId, ["admin.setup.manage"]);
+    await assert.rejects(() => assertHrmFeatureOn(db, h.org.orgId, h.hrId), (error: unknown) => {
+      assert.ok(error instanceof SelfServiceError);
+      assert.equal(error.code, "FORBIDDEN");
+      assert.match(error.message, /enable it on Company Settings → Features/);
+      assert.doesNotMatch(error.message, /ask your administrator/);
+      return true;
+    });
   });
 });
 

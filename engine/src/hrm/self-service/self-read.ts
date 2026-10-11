@@ -1,9 +1,8 @@
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { businessToday } from "../../platform/business-date.ts";
-import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { loadOwnEmploymentIds, requireHrmSelfRead } from "../authorization.ts";
-import { actorPartyOf, SelfServiceError } from "./actor.ts";
+import { actorPartyOf, assertHrmFeatureOn, SelfServiceError } from "./actor.ts";
 import { inputGuards } from "../input-guards.ts";
 
 /**
@@ -21,16 +20,7 @@ import { inputGuards } from "../input-guards.ts";
  * transaction pays for one check.
  */
 
-export const HRM_FEATURE_KEY = "hrm" as const;
-
-async function assertHrmFeatureOn(exec: SqlExecutor, orgId: string): Promise<void> {
-  if (!(await lockAndCheckOrgFeature(exec, orgId, HRM_FEATURE_KEY))) {
-    throw new SelfServiceError(
-      "FORBIDDEN",
-      "hrm feature is disabled: enable it on Company Settings → Features before using self-service",
-    );
-  }
-}
+/** Shared HRM feature gate (actor.ts): audience-aware when HRM is off. */
 
 const { requireOrgId, requireActorId } = inputGuards((message) => new SelfServiceError("REFUSED", message));
 
@@ -267,7 +257,7 @@ export async function getMyProfile(query: {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   return withOrgTransaction(orgId, async () => {
-    await assertHrmFeatureOn(db, orgId);
+    await assertHrmFeatureOn(db, orgId, actorId);
     await requireHrmSelfRead(db, orgId, actorId);
     const partyId = await actorPartyOf(db, orgId, actorId);
     const party = await loadMyParty(db, orgId, partyId);
@@ -376,7 +366,7 @@ export async function getMySteps(query: {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   return withOrgTransaction(orgId, async () => {
-    await assertHrmFeatureOn(db, orgId);
+    await assertHrmFeatureOn(db, orgId, actorId);
     await requireHrmSelfRead(db, orgId, actorId);
     const partyId = await actorPartyOf(db, orgId, actorId);
     const own = await loadOwnEmploymentIds(db, orgId, actorId);
@@ -444,7 +434,7 @@ export async function getMyRequests(query: {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   return withOrgTransaction(orgId, async () => {
-    await assertHrmFeatureOn(db, orgId);
+    await assertHrmFeatureOn(db, orgId, actorId);
     await requireHrmSelfRead(db, orgId, actorId);
     await actorPartyOf(db, orgId, actorId);
     const own = await loadOwnEmploymentIds(db, orgId, actorId);

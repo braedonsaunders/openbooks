@@ -2,9 +2,8 @@ import { enrollmentContributionProjection, type EnrollmentContributionSummary } 
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { businessToday } from "../../platform/business-date.ts";
-import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { loadOwnEmploymentIds, requireHrmSelfRead, requireHrmSelfRequest } from "../authorization.ts";
-import { actorPartyOf, SelfServiceError } from "./actor.ts";
+import { actorPartyOf, assertHrmFeatureOn, SelfServiceError } from "./actor.ts";
 import { resolveTeamEmploymentIds } from "./team-read.ts";
 import {
   listCycleProgress,
@@ -57,16 +56,7 @@ import { inputGuards } from "../input-guards.ts";
  * route boundary maps it with its message (and remedy) intact.
  */
 
-const HRM_FEATURE_KEY = "hrm" as const;
-
-async function assertHrmFeatureOn(exec: SqlExecutor, orgId: string): Promise<void> {
-  if (!(await lockAndCheckOrgFeature(exec, orgId, HRM_FEATURE_KEY))) {
-    throw new SelfServiceError(
-      "FORBIDDEN",
-      "hrm feature is disabled: enable it on Company Settings → Features before using self-service",
-    );
-  }
-}
+/** Shared HRM feature gate (actor.ts): audience-aware when HRM is off. */
 
 const { requireOrgId, requireActorId } = inputGuards((message) => new SelfServiceError("REFUSED", message));
 
@@ -157,7 +147,7 @@ export async function getMyReviewWorkspace(query: {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   return withOrgTransaction(orgId, async () => {
-    await assertHrmFeatureOn(db, orgId);
+    await assertHrmFeatureOn(db, orgId, actorId);
     await requireHrmSelfRead(db, orgId, actorId);
     // NO_LINK before any scoped read: without a person there is no "own".
     await actorPartyOf(db, orgId, actorId);
@@ -239,7 +229,7 @@ export async function submitMySelfAssessment(query: {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   return withOrgTransaction(orgId, async () => {
-    await assertHrmFeatureOn(db, orgId);
+    await assertHrmFeatureOn(db, orgId, actorId);
     await requireHrmSelfRequest(db, orgId, actorId);
     await actorPartyOf(db, orgId, actorId);
     return submitReview({
@@ -261,7 +251,7 @@ export async function acknowledgeMyReview(query: {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   return withOrgTransaction(orgId, async () => {
-    await assertHrmFeatureOn(db, orgId);
+    await assertHrmFeatureOn(db, orgId, actorId);
     await requireHrmSelfRequest(db, orgId, actorId);
     await actorPartyOf(db, orgId, actorId);
     return acknowledgeReview({ orgId, actorId, reviewId: query.reviewId });
@@ -279,7 +269,7 @@ export async function updateMyGoalProgress(query: {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   return withOrgTransaction(orgId, async () => {
-    await assertHrmFeatureOn(db, orgId);
+    await assertHrmFeatureOn(db, orgId, actorId);
     await requireHrmSelfRequest(db, orgId, actorId);
     await actorPartyOf(db, orgId, actorId);
     const goal = await updateGoalProgress({
@@ -321,7 +311,7 @@ export async function loadManagerOwedReviews(query: {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   return withOrgTransaction(orgId, async () => {
-    await assertHrmFeatureOn(db, orgId);
+    await assertHrmFeatureOn(db, orgId, actorId);
     await requireHrmSelfRead(db, orgId, actorId);
     const partyId = await actorPartyOf(db, orgId, actorId);
     const today = await businessToday(orgId);
@@ -474,7 +464,7 @@ export async function getMyBenefitsWorkspace(query: {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   return withOrgTransaction(orgId, async () => {
-    await assertHrmFeatureOn(db, orgId);
+    await assertHrmFeatureOn(db, orgId, actorId);
     await requireHrmSelfRead(db, orgId, actorId);
     await actorPartyOf(db, orgId, actorId);
     const own = await loadOwnEmployments(db, orgId, actorId);
@@ -631,7 +621,7 @@ export async function electMyBenefit(query: {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   return withOrgTransaction(orgId, async () => {
-    await assertHrmFeatureOn(db, orgId);
+    await assertHrmFeatureOn(db, orgId, actorId);
     await requireHrmSelfRequest(db, orgId, actorId);
     await actorPartyOf(db, orgId, actorId);
     const enrollment = await electEnrollment({
@@ -672,7 +662,7 @@ export async function changeMyBenefit(query: {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   return withOrgTransaction(orgId, async () => {
-    await assertHrmFeatureOn(db, orgId);
+    await assertHrmFeatureOn(db, orgId, actorId);
     await requireHrmSelfRequest(db, orgId, actorId);
     await actorPartyOf(db, orgId, actorId);
     const changeDate = typeof query.changeDate === "string" ? query.changeDate.slice(0, 10) : "";

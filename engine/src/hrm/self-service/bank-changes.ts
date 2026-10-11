@@ -1,14 +1,13 @@
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { sealSecret } from "../../platform/secrets.ts";
-import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { requireHrmSelfRead, requireHrmSelfRequest } from "../authorization.ts";
 import {
   createChangeRequestDraft,
   submitChangeRequest,
   type ChangeRequestDTO,
 } from "../change-requests.ts";
-import { actorPartyOf, ownEmploymentOrHireRemedy, SelfServiceError } from "./actor.ts";
+import { actorPartyOf, assertHrmFeatureOn, ownEmploymentOrHireRemedy, SelfServiceError } from "./actor.ts";
 import { escapeHtml } from "../recruiting/depth.ts";
 import {
   bankChangeProposalSchema,
@@ -163,12 +162,7 @@ export async function fileBankDetailsChange(
   const sealedAccount = sealSecret(accountNumber, { orgId, purpose: "payment.counterparty.account" });
   const accountLastFour = accountNumber.slice(-4);
   const result = await withOrgTransaction(orgId, async () => {
-    if (!(await lockAndCheckOrgFeature(db, orgId, "hrm"))) {
-      throw new SelfServiceError(
-        "FORBIDDEN",
-        "hrm feature is disabled: enable it on Company Settings → Features before using self-service",
-      );
-    }
+    await assertHrmFeatureOn(db, orgId, actorId);
     await requireHrmSelfRequest(db, orgId, actorId);
     await actorPartyOf(db, orgId, actorId);
     // Fail fast with the self-service remedy before any draft exists.

@@ -1133,6 +1133,43 @@ test("a request tail past its policy's end refuses naming the first uncovered da
   });
 });
 
+test("the uncovered-day refusal is audience-aware: employees hear ask-HR, policy managers hear the setup step", async () => {
+  await withHarness(() => setupHarness(LEAVE_SPEC), async (h) => {
+    const workerParty = await linkPerson(h.org.orgId, h.employeeId);
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty });
+    const type = await seedType(h.org.orgId, h.managerId, { valueCrossing: "none" });
+    await seedPolicy(h.org.orgId, h.managerId, type.id, {
+      accrualRule: { kind: "per_year", hours: "120" },
+      effectiveFrom: "2026-01-01",
+      effectiveTo: "2026-06-30",
+    });
+    const file = () =>
+      fileLeaveRequest({
+        orgId: h.org.orgId,
+        actorId: h.employeeId,
+        employmentId,
+        leaveTypeId: type.id,
+        startsOn: "2026-06-30",
+        endsOn: "2026-07-02",
+        hours: "24",
+      });
+    const absent = async () => (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from hrm_leave_requests
+         where org_id = ${h.org.orgId} and employment_id = ${employmentId}
+      `)).rows[0]?.n ?? 0;
+    // The filer holds only hrm.leave.request: the remedy names who can
+    // set the policy up, never a setup step they cannot access.
+    const employeeError = await assertLeaveRefusal(file, /no active leave policy covers 2026-07-01/, absent);
+    assert.match(employeeError.message, /ask HR \(or your administrator\)/);
+    assert.doesNotMatch(employeeError.message, /create a policy for this/);
+    // With the policy grant the same filer hears the setup step instead.
+    await grantPermissions(h.org.orgId, h.employeeId, ["hrm.leave.manage"]);
+    const managerError = await assertLeaveRefusal(file, /no active leave policy covers 2026-07-01/, absent);
+    assert.match(managerError.message, /create a policy for this/);
+    assert.doesNotMatch(managerError.message, /ask HR/);
+  });
+});
+
 test("a stricter successor prices the tail it governs, not the first day's grant", async () => {
   await withHarness(() => setupHarness(LEAVE_SPEC), async (h) => {
     const workerParty = await linkPerson(h.org.orgId, h.employeeId);
