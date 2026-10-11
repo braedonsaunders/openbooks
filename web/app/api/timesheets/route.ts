@@ -180,7 +180,9 @@ export const GET = defineRoute({
 /**
  * Save the week: replace this employee+week's editable time_entries from the
  * submitted grid. For each grid row × day with hours > 0 we upsert one entry;
- * entries in the week no longer represented are deleted. Only draft/rejected
+ * a row carrying a memo but no hours is an explicit no-hours declaration and
+ * persists as one zero-hour entry on the week's Sunday; entries in the week
+ * no longer represented are deleted. Only draft/rejected
  * entries are ever touched — approved and submitted entries are left intact so
  * a save never silently overwrites an approval (or an in-flight submission).
  */
@@ -281,14 +283,9 @@ const save = defineRoute({
       let ownedRefs:
         Awaited<ReturnType<typeof pinTimesheetLineRefs>> | undefined;
 
-      for (let i = 0; i < 7; i++) {
-        const h = hoursOrNull(cells[i]);
-        if (h === "invalid") return bad("Hours must be a non-negative number");
-        if (h === null) continue;
-        if (projectId === null && isBillable)
-          return bad("Billable hours need a project; select the customer project or mark this work nonbillable");
+      const pinRowRefs = async () => {
         if (ownedRefs === undefined) {
-          ownedRefs = await pinTimesheetLineRefs(
+          const pinned = await pinTimesheetLineRefs(
             orgId,
             {
               projectId,
@@ -298,22 +295,62 @@ const save = defineRoute({
             },
             gate.allowedSubsidiaryIds,
           );
-          if (!ownedRefs) {
-            return bad("Invalid project, item, time type, or department");
-          }
+          if (!pinned) return null;
+          ownedRefs = pinned;
         }
-        if (!ownedRefs) {
+        return ownedRefs;
+      };
+
+      let rowHasHours = false;
+      for (let i = 0; i < 7; i++) {
+        const h = hoursOrNull(cells[i]);
+        if (h === "invalid") return bad("Hours must be a non-negative number");
+        if (h === null) continue;
+        rowHasHours = true;
+        if (projectId === null && isBillable)
+          return bad("Billable hours need a project; select the customer project or mark this work nonbillable");
+        const pinned = await pinRowRefs();
+        if (!pinned) {
           return bad("Invalid project, item, time type, or department");
         }
         toPersist.push({
           workedOn: days[i]!,
           hours: h,
-          projectId: ownedRefs.projectId,
+          projectId: pinned.projectId,
           workOrderId,
           woOperationId,
-          itemId: ownedRefs.itemId,
-          timeTypeId: ownedRefs.timeTypeId,
-          departmentId: ownedRefs.departmentId,
+          itemId: pinned.itemId,
+          timeTypeId: pinned.timeTypeId,
+          departmentId: pinned.departmentId,
+          isBillable,
+          memo,
+          custom,
+        });
+      }
+      if (!rowHasHours && memo !== null) {
+        // A memo with no hours in any day cell is an explicit no-hours
+        // declaration for the week (leave, no work), not an empty line: it
+        // persists as one zero-hour entry anchored on the week's Sunday so
+        // the declaration survives a reload, reads back with its memo, and
+        // submits like any draft line. It names no time type and costs
+        // nothing — approval skips zero-hour lines — so an org with no
+        // leave/vacation time type declares against its approved leave,
+        // which the declaration audit records for the approver.
+        if (projectId === null && isBillable)
+          return bad("Billable hours need a project; select the customer project or mark this work nonbillable");
+        const pinned = await pinRowRefs();
+        if (!pinned) {
+          return bad("Invalid project, item, time type, or department");
+        }
+        toPersist.push({
+          workedOn: days[0]!,
+          hours: "0",
+          projectId: pinned.projectId,
+          workOrderId,
+          woOperationId,
+          itemId: pinned.itemId,
+          timeTypeId: pinned.timeTypeId,
+          departmentId: pinned.departmentId,
           isBillable,
           memo,
           custom,
@@ -615,7 +652,9 @@ const save = defineRoute({
         // Effects run only for freshly inserted lines: replayed lines already
         // carry theirs.
         if (newStatus === "approved")
-          await runTimeApprovalEffects(orgId, user.id, savedIds, 'time.manage');
+          // Zero-hour declaration lines cost nothing: they approve with the
+          // week but never enter costing, billing or payroll effects.
+          await runTimeApprovalEffects(orgId, user.id, savedIds.filter((_, index) => compareDecimal(toInsert[index]!.hours, "0") !== 0), 'time.manage');
         return false;
       });
     } catch (error) {

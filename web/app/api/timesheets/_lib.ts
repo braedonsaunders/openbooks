@@ -492,11 +492,14 @@ export async function assertWeekSubmittable(
     // An explicit "no hours" week submits a week with nothing recorded in it
     // at all, and only from draft or rejected — never over a submitted or
     // approved week, and never as a way to skip hours that were recorded.
+    // Saved zero-hour declaration lines are not recorded hours: they carry
+    // the week's memo and flip with the declaration instead of blocking it.
     const header = (await db.execute<{ status: string; entries: number }>(sql`
       select w.status,
              (select count(*)::int from time_entries te
                where te.org_id = w.org_id and te.employee_party_id = w.employee_party_id
-                 and te.worked_on >= w.week_start and te.worked_on <= w.week_start + 6) as entries
+                 and te.worked_on >= w.week_start and te.worked_on <= w.week_start + 6
+                 and te.hours <> 0) as entries
         from timesheet_weeks w where w.org_id = ${orgId} and w.id = ${headerId}
     `)).rows[0]
     if (!header || (header.status !== 'draft' && header.status !== 'rejected')) {

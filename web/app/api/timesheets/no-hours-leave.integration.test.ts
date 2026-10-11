@@ -13,10 +13,16 @@ const state = { user: { orgId: "", id: "" } };
 Object.assign(globalThis, { __noHoursLeaveState: state });
 registerHooks({
   resolve(specifier, context, next) {
+    // The route authorizes through the time workspace, which imports its
+    // gate relatively ('./feature-gates'), not only through the "@/lib/…"
+    // spelling the route factory uses — stub both spellings or the real
+    // session gate loads and the declaration submit cannot be reached.
     if (
-      specifier.endsWith("/lib/feature-gates") &&
-      (context.parentURL?.includes("/api/timesheets/submit/") ||
-        context.parentURL?.includes("/web/lib/api/route.ts"))
+      (specifier.endsWith("/lib/feature-gates") &&
+        (context.parentURL?.includes("/api/timesheets/submit/") ||
+          context.parentURL?.includes("/web/lib/api/route.ts"))) ||
+      (specifier === "./feature-gates" &&
+        context.parentURL?.endsWith("/web/lib/time-workspace.ts"))
     ) {
       return {
         shortCircuit: true,
@@ -50,6 +56,12 @@ const WEEK = "2026-07-12";
 async function seedLeaveCover() {
   const org = await withBypassContext(() => createScratchOrg());
   const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
+  // The shared time authority lock runs for real: the actor holds time.manage.
+  await withBypassContext(async () => {
+    await db.execute(sql`
+      update app_roles set permissions = '["time.read", "time.manage"]'::jsonb
+       where org_id = ${org.orgId} and key = 'admin'`);
+  });
   const employeeId = randomUUID();
   const employmentId = randomUUID();
   const leaveTypeId = randomUUID();

@@ -247,7 +247,7 @@ export async function approveSubmittedTimeEntries(
       }
     }
 
-    const approved = (await db.execute<{ id: string }>(sql`
+    const approved = (await db.execute<{ id: string; substantive: boolean }>(sql`
       update time_entries
          set status = 'approved',
              approved_by = ${options.actorId},
@@ -259,22 +259,28 @@ export async function approveSubmittedTimeEntries(
          and worked_on >= ${days[0]}
          and worked_on <= ${days[6]}
          and status = 'submitted'
-       returning id
+       returning id, (hours <> 0) as substantive
     `))
+    // Zero-hour declaration lines flip with the week but cost nothing: only
+    // lines with real hours enter costing, billing and payroll effects, so a
+    // leave-week declaration never demands a wage row for hours nobody worked.
+    const substantiveIds = approved.rows.filter((row) => row.substantive).map((row) => row.id)
 
     // The conditional UPDATE is the claim: zero flipped rows means there was
     // nothing submitted to approve (a draft or empty week), and the header
     // must not be stamped approved over it. This also closes the concurrent
     // double-approval race — the loser flips nothing and fails closed.
     // A week declared as having no hours (leave, no work) is submitted with
-    // no entries at all: approving it approves the declaration — the header
-    // is stamped and audited, and there is no time to cost.
-    const declaredNoHours = approved.rows.length === 0 && header?.status === 'submitted' && ((await db.execute<{ n: number }>(sql`
+    // no entries at all, or only with its saved zero-hour declaration lines:
+    // approving it approves the declaration — the header is stamped and
+    // audited, and there is no time to cost.
+    const declaredNoHours = substantiveIds.length === 0 && header?.status === 'submitted' && ((await db.execute<{ n: number }>(sql`
       select count(*)::int as n from time_entries
        where org_id = ${options.orgId} and employee_party_id = ${options.employeePartyId}
          and worked_on >= ${days[0]} and worked_on <= ${days[6]}
+         and hours <> 0
     `)).rows[0]?.n ?? 0) === 0
-    if (approved.rows.length === 0 && !declaredNoHours) {
+    if (substantiveIds.length === 0 && approved.rows.length === 0 && !declaredNoHours) {
       // Zero flips over already-approved entries is a re-approval, not an
       // unsubmitted week: name the prior approval (who/when) and the way
       // back (reopen/amend) instead of misreporting it.
@@ -307,7 +313,7 @@ export async function approveSubmittedTimeEntries(
       )
     }
     const ids = approved.rows.map((row) => row.id)
-    if (ids.length > 0) await runTimeApprovalEffects(options.orgId, options.actorId, ids)
+    if (substantiveIds.length > 0) await runTimeApprovalEffects(options.orgId, options.actorId, substantiveIds)
     await setTimesheetWeekStatus(
       options.orgId,
       options.employeePartyId,
