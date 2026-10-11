@@ -16,7 +16,7 @@ import { documentDrawerHref } from '../lib/document-drawer-navigation'
 import { displayDocumentNumber, displayFormName } from '../lib/document-display'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { fetchAction } from '@braedonsaunders/appkit-errors'
+import { fetchAppAction } from '../lib/api-error'
 import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
 import { useAppAction } from '@/lib/use-app-action'
 import { Badge, Button, FieldLabel, Input, SearchSelect, Select } from '@openbooks/ui'
@@ -63,6 +63,7 @@ import { add, cmp, fromUnits, normalizeMoney, roundDiv, sum } from '@openbooks/e
 import { computeLineTaxes, type TaxComponentConfig } from '@openbooks/engine/src/tax/tax.ts'
 import { confirmDialog } from '../lib/confirm'
 import { previewPostedCorrection } from '../lib/posted-correction-preview'
+import { postedCorrectionFieldClass } from '@openbooks/engine/src/ledger/posted-correction-fields.ts'
 import { promptDialog } from '../lib/prompt'
 import { promptVoidReversalPeriod } from '../lib/void-reversal-period'
 import { runClientScripts } from '../lib/client-scripts'
@@ -2420,11 +2421,11 @@ export function DocumentDrawer({
       const create = prepared.request
       await execute(
         () =>
-          fetchAction(create.path, {
+          fetchAppAction(create.path, {
             method: create.method,
             headers: create.headers,
             body: JSON.stringify(create.body),
-          }),
+          }, { fallback: t('toasts.actionFailed') }),
         {
           fallbackMessage: t('toasts.actionFailed'),
           onOk: (payload) => {
@@ -2446,11 +2447,11 @@ export function DocumentDrawer({
     const request = prepared.request
     await execute(
       () =>
-        fetchAction(request.path, {
+        fetchAppAction(request.path, {
           method: request.method,
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(request.body),
-        }),
+        }, { fallback: t('toasts.actionFailed') }),
       {
         // A fresh attempt clears the previous refusal: the alert pins until
         // the next action, not past a successful save.
@@ -2594,11 +2595,11 @@ export function DocumentDrawer({
     setPostWarnings([])
     await execute(
       () =>
-        fetchAction('/api/documents/actions', {
+        fetchAppAction('/api/documents/actions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action, documentId: doc.id }),
-        }),
+        }, { fallback: t('toasts.actionFailed') }),
       {
         fallbackMessage: t('toasts.actionFailed'),
         onOk: (data) => {
@@ -2643,10 +2644,10 @@ export function DocumentDrawer({
       refuse(tPostingEffects('reasonHelp'), t('toasts.actionFailed'))
       return
     }
-    await execute(() => fetchAction('/api/documents/actions', {
+    await execute(() => fetchAppAction('/api/documents/actions', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'retry-effects', documentId: doc.id, reason }),
-    }), { fallbackMessage: t('toasts.actionFailed'),
+    }, { fallback: t('toasts.actionFailed') }), { fallbackMessage: t('toasts.actionFailed'),
       successMessage: tPostingEffects('queued'), onOk: () => router.refresh() })
   }
 
@@ -2666,10 +2667,10 @@ export function DocumentDrawer({
       refuse(tCommon('amendment.returnToDraftPlaceholder'), t('toasts.actionFailed'))
       return
     }
-    await execute(() => fetchAction('/api/documents/actions', {
+    await execute(() => fetchAppAction('/api/documents/actions', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'return_to_draft', documentId: doc.id, reason, expectedUpdatedAt: documentRevision }),
-    }), { fallbackMessage: t('toasts.actionFailed'),
+    }, { fallback: t('toasts.actionFailed') }), { fallbackMessage: t('toasts.actionFailed'),
       successMessage: tCommon('status.draft'), onOk: () => router.refresh() })
   }
 
@@ -2685,11 +2686,11 @@ export function DocumentDrawer({
       return
     await execute(
       () =>
-        fetchAction(`/api/documents/${doc.id}`, {
+        fetchAppAction(`/api/documents/${doc.id}`, {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ expectedUpdatedAt: documentRevision }),
-        }),
+        }, { fallback: t('toasts.deleteFailed') }),
       {
         fallbackMessage: t('toasts.deleteFailed'),
         successMessage: t('toasts.deleted'),
@@ -2725,7 +2726,10 @@ export function DocumentDrawer({
     if (reversal.cancelled) return
     await execute(
       () =>
-        fetchAction(`/api/documents/${doc.id}/void`, {
+        // The enriched read keeps the server's remedy and code on the
+        // refusal: a void the periods or approvals refuse pins its reason
+        // and next step, never a bare fallback.
+        fetchAppAction(`/api/documents/${doc.id}/void`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -2734,7 +2738,7 @@ export function DocumentDrawer({
             ...(reversal.reversalDate ? { reversalDate: reversal.reversalDate } : {}),
             ...(reversal.reversalPeriodId ? { reversalPeriodId: reversal.reversalPeriodId } : {}),
           }),
-        }),
+        }, { fallback: t('toasts.actionFailed') }),
       {
         fallbackMessage: t('toasts.actionFailed'),
         onOk: (data) => {
@@ -3183,15 +3187,23 @@ export function DocumentDrawer({
             ) : (<p className="text-sm">{doc.memo ?? '—'}</p>)}
           </>
         )
-      case 'posting_date':
+      case 'posting_date': {
+        // Posting dates place the document in its period: the posted
+        // correction classification treats them as financial, so the
+        // posted-document edit form shows the stored date without offering
+        // it. A posted date changes only through void-and-reissue, and
+        // offering the input here used to record no-change corrections.
+        const canOfferPostingDate =
+          isEditable && (!isPosted || postedCorrectionFieldClass('postingDate') !== 'financial')
         return (
           <>
             <FieldLabel fieldName={label}>{label}</FieldLabel>
-            {isEditable ? (
+            {canOfferPostingDate ? (
               <Input type="date" value={postingDate} onChange={(e) => setPostingDate(e.target.value)} />
             ) : (<p className="text-sm">{doc.posting_date ?? '—'}</p>)}
           </>
         )
+      }
       case 'expected_pay_date':
         return (
           <>
@@ -3350,10 +3362,10 @@ export function DocumentDrawer({
     if (!recordType) return
     await execute(
       () =>
-        fetchAction('/api/customization/form-preferences', {
+        fetchAppAction('/api/customization/form-preferences', {
           method: 'PUT', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ recordType, layoutId }),
-        }),
+        }, { fallback: t('drawer.formPreferredFailed') }),
       {
         fallbackMessage: t('drawer.formPreferredFailed'),
         successMessage: layoutId ? t('drawer.formSetPreferredDone') : t('drawer.formPreferredCleared'),

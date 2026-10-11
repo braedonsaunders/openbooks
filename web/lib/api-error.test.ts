@@ -4,10 +4,13 @@ import {
   ApiResponseError,
   apiJson,
   chunkArray,
+  fetchAppAction,
   readApiBulkFailures,
   readApiErrorMessage,
+  readAppActionResult,
   reconcileBulkResults,
   throwApiErrorIfNotOk,
+  type RefusalCopy,
 } from './api-error.ts'
 
 // The latent client defect: every error path parsed the body BEFORE checking
@@ -222,3 +225,130 @@ test("a schema refusal names the field the operator must correct", async () => {
   const second = new Response(JSON.stringify(nested), { status: 400, headers: { "content-type": "application/json" } });
   assert.equal(await readApiErrorMessage(second, "Save failed"), "Tax code id: Required");
 });
+
+// The shared ActionResult read must render every refusal envelope the API
+// produces (see web/lib/api/* response helpers): a refusal the server
+// explained — under any key, with remedy and code — pins verbatim, and a
+// body that names nothing still pins the fallback with its HTTP status, so
+// a refusal can never render blank.
+const COPY: RefusalCopy = { fallback: 'Action failed' }
+
+function refusalResponse(body: unknown, status: number): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  })
+}
+
+async function pinnedMessage(body: unknown, status: number, copy: RefusalCopy = COPY) {
+  const result = await readAppActionResult(refusalResponse(body, status), copy)
+  assert.equal(result.ok, false)
+  if (result.ok) throw new Error('unreachable')
+  return result.error.displayMessage(copy.fallback)
+}
+
+test('readAppActionResult renders the plain error envelope', async () => {
+  assert.equal(await pinnedMessage({ error: 'not_found' }, 404), 'not_found')
+})
+
+test('readAppActionResult keeps the code beside the message', async () => {
+  const result = await readAppActionResult(refusalResponse({ error: 'changed after opening', code: 'stale-revision' }, 409), COPY)
+  assert.equal(result.ok, false)
+  if (result.ok) throw new Error('unreachable')
+  assert.equal(result.error.code, 'stale-revision')
+  assert.equal(result.error.displayMessage(COPY.fallback), 'changed after opening')
+})
+
+test('readAppActionResult appends the remedy to the refusal', async () => {
+  assert.equal(
+    await pinnedMessage(
+      { error: 'AR is closed for this period', code: 'posting_refused', remedy: 'request a controlled reopen' },
+      422,
+    ),
+    'AR is closed for this period — request a controlled reopen',
+  )
+})
+
+test('readAppActionResult renders message-only and detail-only envelopes', async () => {
+  assert.equal(await pinnedMessage({ message: 'capture is not operational' }, 409), 'capture is not operational')
+  assert.equal(await pinnedMessage({ ok: false, detail: 'connection timed out' }, 422), 'connection timed out')
+})
+
+test('readAppActionResult renders a nested error body', async () => {
+  assert.equal(await pinnedMessage({ error: { message: 'filing is locked' } }, 422), 'filing is locked')
+})
+
+test('readAppActionResult joins an errors array and pins schema issues', async () => {
+  assert.equal(await pinnedMessage({ errors: ['name required', 'bad edge'] }, 400), 'name required; bad edge')
+  const result = await readAppActionResult(
+    refusalResponse({ error: 'must be a valid id', issues: [{ path: 'adjustmentAccountId', message: 'must be a valid id' }] }, 400),
+    COPY,
+  )
+  assert.equal(result.ok, false)
+  if (result.ok) throw new Error('unreachable')
+  assert.equal(result.error.displayMessage(COPY.fallback), 'Adjustment account id: must be a valid id')
+  assert.deepEqual(result.error.issues, [{ path: 'adjustmentAccountId', message: 'must be a valid id' }])
+})
+
+test('readAppActionResult maps a code-only body through the caller copy', async () => {
+  const mapped = await pinnedMessage({ code: 'number_in_use' }, 422, {
+    fallback: 'Action failed',
+    codeMessage: (code) => (code === 'number_in_use' ? 'That number is already in use.' : undefined),
+  })
+  assert.equal(mapped, 'That number is already in use.')
+})
+
+test('readAppActionResult never renders blank: fallback carries status and code', async () => {
+  assert.equal(await pinnedMessage({ code: 'stale-revision' }, 409), 'Action failed (HTTP 409, stale-revision)')
+  assert.equal(await pinnedMessage({ ok: false }, 422), 'Action failed (HTTP 422)')
+  assert.equal(await pinnedMessage({ error: '   ' }, 422), 'Action failed (HTTP 422)')
+  const proxy = await readAppActionResult(
+    new Response('<html>Bad Gateway</html>', { status: 502, headers: { 'content-type': 'text/html' } }),
+    COPY,
+  )
+  assert.equal(proxy.ok, false)
+  if (proxy.ok) throw new Error('unreachable')
+  assert.equal(proxy.error.displayMessage(COPY.fallback), 'Action failed (HTTP 502)')
+  const empty = await readAppActionResult(new Response(null, { status: 500 }), COPY)
+  assert.equal(empty.ok, false)
+  if (empty.ok) throw new Error('unreachable')
+  assert.equal(empty.error.displayMessage(COPY.fallback), 'Action failed (HTTP 500)')
+})
+
+test('readAppActionResult trusts the status, never the body', async () => {
+  const result = await readAppActionResult<{ id: string }>(refusalResponse({ error: 'stale' }, 200), COPY)
+  assert.equal(result.ok, true)
+  if (!result.ok) throw new Error('unreachable')
+  assert.equal(result.data.error, 'stale')
+})
+
+test('fetchAppAction turns a rejected fetch into a transport refusal, never a throw', async () => {
+  const prior = globalThis.fetch
+  globalThis.fetch = (async () => { throw new TypeError('Failed to fetch') }) as typeof fetch
+  try {
+    const result = await fetchAppAction('/api/documents/actions', { method: 'POST' }, COPY)
+    assert.equal(result.ok, false)
+    if (result.ok) throw new Error('unreachable')
+    assert.equal(result.error.kind, 'transport')
+    assert.equal(result.error.displayMessage(COPY.fallback), 'Action failed')
+  } finally {
+    globalThis.fetch = prior
+  }
+})
+
+test('fetchAppAction renders the enriched refusal for a lived refusal body', async () => {
+  const prior = globalThis.fetch
+  globalThis.fetch = (async () =>
+    refusalResponse({ error: 'void reason is required', code: 'invalid', remedy: 'enter at least 5 characters' }, 422)) as typeof fetch
+  try {
+    const result = await fetchAppAction('/api/documents/x/void', { method: 'POST' }, COPY)
+    assert.equal(result.ok, false)
+    if (result.ok) throw new Error('unreachable')
+    assert.equal(
+      result.error.displayMessage(COPY.fallback),
+      'void reason is required — enter at least 5 characters',
+    )
+  } finally {
+    globalThis.fetch = prior
+  }
+})

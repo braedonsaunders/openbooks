@@ -1,5 +1,13 @@
 'use client'
 
+import {
+  ActionError,
+  kindForStatus,
+  transportError,
+  type ActionResult,
+  type FieldIssue,
+} from '@braedonsaunders/appkit-errors'
+
 /**
  * Reading a failed API response in the browser. The status is checked FIRST:
  * a non-JSON error body (a proxy page, an empty 502) must surface the
@@ -198,6 +206,157 @@ export async function apiJson<T>(url: string, init?: RequestInit, fallbackMessag
   } catch {
     throw new ApiResponseError(messageFromBody(null, res.status, fallbackMessage), res.status)
   }
+}
+
+/**
+ * Caller copy for the ActionResult refusal path. The fallback is the
+ * already-localized per-action string (the same value the caller passes as
+ * `fallbackMessage` to `execute`); it renders only when the body names
+ * nothing usable. `codeMessage` maps a stable server `code` to localized
+ * copy for code-only bodies — it wins over the fallback but loses to any
+ * usable server message, which always renders verbatim.
+ */
+export type RefusalCopy = {
+  fallback: string
+  codeMessage?: (code: string) => string | undefined
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null
+}
+
+function firstUsableString(...values: unknown[]): string | null {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim() !== '') return value.trim()
+  }
+  return null
+}
+
+/**
+ * The enriched refusal text for an ActionError's `serverMessage`, read from
+ * a decoded refusal body. It covers every envelope the API produces: the
+ * `error`/`message`/`detail` keys, a nested `{ error: { message } }` body,
+ * a joined `errors` array, the schema `issues` field prefix, and the
+ * `remedy`, which is appended so the toast carries both the refusal and
+ * what to do about it. A code-only body resolves through the caller's
+ * `codeMessage` map. Null when the body names nothing usable — the caller
+ * (usually `execute` with its localized fallback) owns the last word, so
+ * this helper never invents locale copy itself.
+ */
+export function refusalMessageFromBody(body: unknown, copy: RefusalCopy): string | null {
+  const record = asRecord(body)
+  if (!record) return null
+  const nested = asRecord(record.error)
+  const unnamed = firstUsableString(
+    record.error,
+    record.message,
+    record.detail,
+    nested?.message,
+  ) ?? listedErrors(record.errors)
+  const field = issueField(record.issues)
+  const refusal = unnamed && field && !unnamed.includes(field) ? `${field}: ${unnamed}` : unnamed
+  if (refusal) {
+    const remedy =
+      typeof record.remedy === 'string' && record.remedy.trim() !== '' ? record.remedy.trim() : null
+    return remedy ? `${refusal} — ${remedy}` : refusal
+  }
+  const code = readRefusalCode(body)
+  if (code) return copy.codeMessage?.(code) ?? null
+  return null
+}
+
+function listedErrors(errors: unknown): string | null {
+  if (!Array.isArray(errors)) return null
+  const entries = errors
+    .filter((entry): entry is string => typeof entry === 'string' && entry.trim() !== '')
+    .map((entry) => entry.trim())
+  return entries.length > 0 ? entries.join('; ') : null
+}
+
+/** The stable machine code when the server sent one; ActionErrors carry it for copy mapping. */
+export function readRefusalCode(body: unknown): string | undefined {
+  const record = asRecord(body)
+  const code = record?.code
+  return typeof code === 'string' && code.trim() !== '' ? code.trim() : undefined
+}
+
+/** Field-level failures from a 400 body, defensively decoded: malformed entries are dropped. */
+export function readRefusalIssues(body: unknown): FieldIssue[] {
+  const raw = asRecord(body)?.issues
+  if (!Array.isArray(raw)) return []
+  const issues: FieldIssue[] = []
+  for (const entry of raw) {
+    const item = asRecord(entry)
+    if (item && typeof item.path === 'string' && typeof item.message === 'string') {
+      issues.push({ path: item.path, message: item.message })
+    }
+  }
+  return issues
+}
+
+/**
+ * The ActionResult read for browser clients that pin refusals through
+ * `useAppAction().execute`. Like the package's `readActionResult` it cannot
+ * throw and trusts the status, not the body — but the refusal keeps the
+ * full server vocabulary (remedy, nested error, detail, error list, code)
+ * instead of only `error`/`message`, so a refusal the server explained can
+ * never pin as a bare fallback. A body that names nothing usable falls back
+ * to the caller's localized copy with the HTTP status (and code when the
+ * server sent one), so the pin can never render blank. Pass the same
+ * localized string here as `fallbackMessage` to `execute`.
+ */
+export async function readAppActionResult<T = unknown>(
+  res: Response,
+  copy: RefusalCopy,
+): Promise<ActionResult<T>> {
+  let body: unknown = null
+  try {
+    body = await res.json()
+  } catch {
+    body = null
+  }
+  if (res.ok) return { ok: true, status: res.status, data: body as T }
+  const code = readRefusalCode(body)
+  const safeFallback = copy.fallback.trim() !== '' ? copy.fallback : 'request failed'
+  return {
+    ok: false,
+    error: new ActionError({
+      kind: kindForStatus(res.status),
+      status: res.status,
+      code,
+      issues: readRefusalIssues(body),
+      serverMessage:
+        refusalMessageFromBody(body, copy) ??
+        (code ? `${safeFallback} (HTTP ${res.status}, ${code})` : `${safeFallback} (HTTP ${res.status})`),
+    }),
+  }
+}
+
+/**
+ * `fetch` plus the enriched read, as one step that cannot throw. A rejected
+ * fetch becomes a `transport` refusal instead of an unhandled rejection past
+ * the busy reset; a resolved fetch goes through {@link readAppActionResult}.
+ * Drop-in for the package's `fetchAction` wherever the refusal must carry
+ * the server's remedy and code vocabulary.
+ */
+export async function fetchAppAction<T = unknown>(
+  url: string,
+  init: RequestInit | undefined,
+  copy: RefusalCopy,
+): Promise<ActionResult<T>> {
+  let res: Response
+  try {
+    res = await fetch(url, init)
+  } catch (thrown) {
+    const detail = thrown instanceof Error ? `${thrown.name}: ${thrown.message}` : String(thrown)
+    return {
+      ok: false,
+      error: transportError(detail, thrown instanceof DOMException && thrown.name === 'AbortError'),
+    }
+  }
+  return readAppActionResult<T>(res, copy)
 }
 
 function issueField(issues: unknown): string | null {

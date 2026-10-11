@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useTranslations } from 'next-intl'
 import { Button, FieldLabel, Input, Textarea } from '@openbooks/ui'
-import { fetchAction } from '@braedonsaunders/appkit-errors'
+import { fetchAppAction } from '@/lib/api-error'
 import { PermissionHint } from '../../../components/permission-hint'
 import {
   formatReversalSummary,
@@ -55,7 +55,7 @@ export function VoidReceiptDialog({
   React.useEffect(() => {
     let cancelled = false
     async function load() {
-      const result = await fetchAction(`/api/documents/${receiptId}/void`)
+      const result = await fetchAppAction(`/api/documents/${receiptId}/void`, undefined, { fallback: t('voidReceiptFailed') })
       if (cancelled) return
       if (!result.ok) {
         setLoadError({
@@ -116,7 +116,7 @@ export function VoidReceiptDialog({
     setBusy(true)
     setPostError(null)
     try {
-      const result = await fetchAction(`/api/documents/${receiptId}/void`, {
+      const result = await fetchAppAction(`/api/documents/${receiptId}/void`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -125,7 +125,7 @@ export function VoidReceiptDialog({
           ...(reversalDate ? { reversalDate } : {}),
           ...(reversalPeriodId ? { reversalPeriodId } : {}),
         }),
-      })
+      }, { fallback: t('voidReceiptFailed') })
       if (result.ok) {
         onVoided()
         return

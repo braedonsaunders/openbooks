@@ -9,7 +9,8 @@ import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { ActionError, fetchAction } from '@braedonsaunders/appkit-errors'
+import { ActionError } from '@braedonsaunders/appkit-errors'
+import { fetchAppAction } from '@/lib/api-error'
 import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
 import { useAppAction } from '@/lib/use-app-action'
 import { Badge, Button, Input, Label, SearchSelect } from '@openbooks/ui'
@@ -649,11 +650,11 @@ function JournalDrawerBody({
     setSaveState('saving')
     const ok = await execute(
       () =>
-        fetchAction('/api/journals', {
+        fetchAppAction('/api/journals', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Idempotency-Key': requestIdRef.current! },
           body: JSON.stringify(payload),
-        }),
+        }, { fallback: t('postFailed') }),
       {
         fallbackMessage: t('postFailed'),
         onOk: (data) => {
@@ -756,11 +757,11 @@ function JournalDrawerBody({
     setPostWarnings([])
     const ok = await execute(
       () =>
-        fetchAction('/api/journals/actions', {
+        fetchAppAction('/api/journals/actions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'post', documentId: doc.id }),
-        }),
+        }, { fallback: t('postFailed') }),
       {
         fallbackMessage: t('postFailed'),
         onOk: async (data) => {
@@ -861,11 +862,11 @@ function JournalDrawerBody({
         if (documentRevisionRef.current == null) await refreshFromServer(false).catch(() => {})
         const deleteRevision = documentRevisionRef.current
         if (deleteRevision == null) return { ok: false, error: new ActionError({ kind: 'refused' }) }
-        return fetchAction(`/api/journals/${doc.id}`, {
+        return fetchAppAction(`/api/journals/${doc.id}`, {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ expectedUpdatedAt: deleteRevision }),
-        })
+        }, { fallback: t('deleteFailed') })
       },
       {
         fallbackMessage: t('deleteFailed'),
@@ -908,7 +909,7 @@ function JournalDrawerBody({
         if (documentRevisionRef.current == null) await refreshFromServer(false).catch(() => {})
         const voidRevision = documentRevisionRef.current
         if (voidRevision == null) return { ok: false, error: new ActionError({ kind: 'refused' }) }
-        const result = await fetchAction(`/api/documents/${doc.id}/void`, {
+        const result = await fetchAppAction(`/api/documents/${doc.id}/void`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -917,7 +918,7 @@ function JournalDrawerBody({
             ...(reversal.reversalDate ? { reversalDate: reversal.reversalDate } : {}),
             ...(reversal.reversalPeriodId ? { reversalPeriodId: reversal.reversalPeriodId } : {}),
           }),
-        })
+        }, { fallback: t('postFailed') })
         if (!result.ok && result.error.code === 'stale-revision') {
           // A stale revision means the re-pin raced a concurrent write:
           // reload the canonical revision and say so in translated copy.

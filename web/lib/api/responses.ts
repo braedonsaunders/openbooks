@@ -26,6 +26,12 @@ export interface ApiErrorBody {
   field?: string;
   fieldErrors?: Record<string, string[]>;
   remedy?: string;
+  /**
+   * Structured evidence for the refusal (never internals): e.g. the
+   * conflicting account's id/name/number on a duplicate-number refusal so
+   * the client can link it. Plain data only.
+   */
+  details?: Record<string, unknown>;
 }
 
 /**

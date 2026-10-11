@@ -9,9 +9,9 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { ActionError, fetchAction, readActionResult } from '@braedonsaunders/appkit-errors'
+import { ActionError } from '@braedonsaunders/appkit-errors'
 import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
-import { readApiErrorMessage } from '@/lib/api-error'
+import { readApiErrorMessage, readAppActionResult, fetchAppAction } from '@/lib/api-error'
 import { useAppAction } from '@/lib/use-app-action'
 import { basisForResolvedRow, parsePriceBasis, type PriceBasis } from '@/lib/price-basis'
 import { Badge, Button, FieldLabel, Input, Label, SearchSelect } from '@openbooks/ui'
@@ -932,7 +932,7 @@ export function OrderDrawer({
       return next
     })
     clearRefusal()
-    void fetchAction<{ price: {
+    void fetchAppAction<{ price: {
       unitPrice: string
       source: PriceBasis['kind']
       scheduleId: string | null
@@ -942,7 +942,7 @@ export function OrderDrawer({
     } | null }>('/api/items/price', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: priceInputs,
-    }).then((result) => {
+    }, { fallback: t('actionFailed') }).then((result) => {
       if (priceRequestRef.current.get(rowKey) !== requestIdentity) return
       setPriceLookupPending((current) => {
         if (!current.has(rowKey)) return current
@@ -1391,11 +1391,11 @@ export function OrderDrawer({
           expectedUpdatedAt: revisionRef.current,
         }),
       })
-      const result = await readActionResult<{
+      const result = await readAppActionResult<{
         doc?: { updated_at?: unknown }
         approvalPending?: boolean
         voidPending?: boolean
-      }>(res)
+      }>(res, { fallback: t('actionFailed') })
       if (
         !result.ok
         && result.error.code === 'CUSTOMER_CREDIT_LIMIT_EXCEEDED'
@@ -1481,11 +1481,11 @@ export function OrderDrawer({
 
   async function setDropShipRoute(salesOrderLineId: string, routed: boolean) {
     await execute(
-      () => fetchAction(`/api/sales-orders/${doc.id}/drop-ship`, {
+      () => fetchAppAction(`/api/sales-orders/${doc.id}/drop-ship`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ salesOrderLineId, routed }),
-      }),
+      }, { fallback: t('actionFailed') }),
       {
         fallbackMessage: t('actionFailed'),
         onOk: () => {
@@ -1506,11 +1506,11 @@ export function OrderDrawer({
     if (!dropShipVendorId) return
     const key = crypto.randomUUID()
     await execute<{ id: string; documentNumber: string }>(
-      () => fetchAction(`/api/sales-orders/${doc.id}/drop-ship/purchase-orders`, {
+      () => fetchAppAction(`/api/sales-orders/${doc.id}/drop-ship/purchase-orders`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key },
         body: JSON.stringify({ vendorId: dropShipVendorId }),
-      }),
+      }, { fallback: t('actionFailed') }),
       {
         fallbackMessage: t('actionFailed'),
         onOk: (created) => {
@@ -1541,11 +1541,11 @@ export function OrderDrawer({
       confirmLabel: t('dropShip.confirm'),
     }))) return
     await execute<{ salesFulfillment: { documentNumber: string } }>(
-      () => fetchAction(`/api/purchase-orders/${doc.id}/drop-ship-confirmation`, {
+      () => fetchAppAction(`/api/purchase-orders/${doc.id}/drop-ship-confirmation`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
         body: JSON.stringify({ lines }),
-      }),
+      }, { fallback: t('actionFailed') }),
       {
         fallbackMessage: t('actionFailed'),
         onOk: (result) => {
@@ -1577,7 +1577,7 @@ export function OrderDrawer({
       // Clone reads run before the action reader consumes the body.
       const remedy = await readRnbRemedyTarget(res)
       const refusalMessage = !res.ok ? await readReceiptRefusalMessage(res, t('receive.receiptFailed')) : null
-      const result = await readActionResult<ConvertedDocument>(res)
+      const result = await readAppActionResult<ConvertedDocument>(res, { fallback: t('receive.receiptFailed') })
       if (!result.ok && remedy) setRnbRemedy(remedy)
       outcome = result.ok || refusalMessage === null
         ? { ok: true }
@@ -1624,11 +1624,11 @@ export function OrderDrawer({
       return
     await execute(
       () =>
-        fetchAction(`${apiBase}/${doc.id}`, {
+        fetchAppAction(`${apiBase}/${doc.id}`, {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ expectedUpdatedAt: revisionRef.current }),
-        }),
+        }, { fallback: t('actionFailed') }),
       {
         fallbackMessage: t('actionFailed'),
         successMessage: t('toastDeleted'),
@@ -1661,7 +1661,7 @@ export function OrderDrawer({
         }),
       })
       const remedy = await readRnbRemedyTarget(res)
-      const result = await readActionResult<ConvertedDocument>(res)
+      const result = await readAppActionResult<ConvertedDocument>(res, { fallback: t('convertFailed') })
       if (!result.ok && remedy) setRnbRemedy(remedy)
       if (
         !result.ok
