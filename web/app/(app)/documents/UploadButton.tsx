@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { useTranslations } from 'next-intl'
 import { Loader2, UploadCloud } from 'lucide-react'
 import { Button } from '@openbooks/ui'
+import { readApiErrorMessage } from '@/lib/api-error'
 
 const MAX_BYTES = 25 * 1024 * 1024
 const ACCEPT =
@@ -41,8 +42,9 @@ export function UploadButton({ folderId }: { folderId?: string }) {
         toast.success(t('toasts.uploaded', { name: file.name }))
         router.refresh()
       } else {
-        const err = (await res.json().catch(() => ({}))) as { error?: string }
-        toast.error(err.error ?? t('toasts.uploadFailed', { name: file.name }))
+        // The refusal reads through the shared helper so message, remedy and
+        // code render instead of a bare fallback.
+        toast.error(await readApiErrorMessage(res, t('toasts.uploadFailed', { name: file.name })))
       }
     } catch {
       toast.error(t('toasts.uploadFailed', { name: file.name }))

@@ -18,6 +18,7 @@ import { toast } from 'sonner'
 import { useTranslations } from 'next-intl'
 import { Badge, Button, cn } from '@openbooks/ui'
 import { dateTime } from '../lib/format'
+import { readApiErrorMessage } from '../lib/api-error'
 import { SearchInput } from './search-input'
 import { FilterChips } from './filter-bar'
 import { Pagination } from './pagination'
@@ -184,8 +185,9 @@ export function AttachmentPanel({
           setSelectedId(data.attachment.id)
           toast.success(t('attached', { name: file.name }))
         } else {
-          const err = (await res.json().catch(() => ({}))) as { error?: string }
-          toast.error(err.error ?? t('attachFailed', { name: file.name }))
+          // The refusal reads through the shared helper so message, remedy and
+          // code render instead of a bare fallback.
+          toast.error(await readApiErrorMessage(res, t('attachFailed', { name: file.name })))
         }
       } catch {
         toast.error(t('attachFailed', { name: file.name }))
@@ -216,8 +218,9 @@ export function AttachmentPanel({
         }
         toast.success(t('removed', { name }))
       } else {
-        const err = (await res.json().catch(() => ({}))) as { error?: string }
-        toast.error(err.error ?? t('removeFailed'))
+        // The refusal reads through the shared helper so message, remedy and
+        // code render instead of a bare fallback.
+        toast.error(await readApiErrorMessage(res, t('removeFailed')))
       }
     } catch {
       toast.error(t('removeFailed'))

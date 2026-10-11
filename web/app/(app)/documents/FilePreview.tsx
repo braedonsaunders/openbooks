@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Download, FileQuestion, Loader2, Pencil, Save, X } from 'lucide-react'
 import { Button, cn } from '@openbooks/ui'
+import { refusalMessageFromBody } from '@/lib/api-error'
 
 /** Byte ceiling for loading a text file into the editor (keeps the flyout snappy). */
 const TEXT_PREVIEW_LIMIT = 1024 * 1024 // 1 MB
@@ -142,8 +143,10 @@ export function FilePreview({ file, canManage }: { file: PreviewFile; canManage:
         setEditing(false)
         router.refresh()
       } else {
+        // The refusal reads through the shared helper so message, remedy and
+        // code render instead of the bare `error` field.
         const err = (await res.json().catch(() => ({}))) as { error?: string }
-        toast.error(err.error ?? tt('fileReplaceFailed'))
+        toast.error(refusalMessageFromBody(err, { fallback: tt('fileReplaceFailed') }) ?? tt('fileReplaceFailed'))
       }
     } catch {
       // Transport failure: fetch rejects, so the !res.ok branch above

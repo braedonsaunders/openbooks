@@ -41,7 +41,7 @@ import {
 import { SortTh } from '../../../components/sortable-th'
 import { confirmDialog } from '../../../lib/confirm'
 import { promptDialog } from '../../../lib/prompt'
-import { readApiBulkFailures, readApiErrorMessage } from '../../../lib/api-error'
+import { readApiBulkFailures, readApiErrorMessage, refusalMessageFromBody } from '../../../lib/api-error'
 
 export interface FolderRow {
   id: string
@@ -393,8 +393,10 @@ export function FileList({
         toast.success(tt('fileReplaced'))
         router.refresh()
       } else {
+        // The refusal reads through the shared helper so message, remedy and
+        // code render instead of the bare `error` field.
         const err = (await res.json().catch(() => ({}))) as { error?: string }
-        toast.error(err.error ?? tt('fileReplaceFailed'))
+        toast.error(refusalMessageFromBody(err, { fallback: tt('fileReplaceFailed') }) ?? tt('fileReplaceFailed'))
       }
     } catch {
       toast.error(tt('fileReplaceFailed'))

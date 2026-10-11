@@ -16,7 +16,7 @@ import { documentDrawerHref } from '../lib/document-drawer-navigation'
 import { displayDocumentNumber, displayFormName } from '../lib/document-display'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { fetchAppAction } from '../lib/api-error'
+import { fetchAppAction, readApiErrorMessage, refusalMessageFromBody } from '../lib/api-error'
 import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
 import { useAppAction } from '@/lib/use-app-action'
 import { Badge, Button, FieldLabel, Input, SearchSelect, Select } from '@openbooks/ui'
@@ -603,9 +603,11 @@ export async function readDocumentSaveFailure(
   response: Pick<Response, 'status' | 'json'>,
   fallbackMessage: string,
 ): Promise<{ message: string; isConflict: boolean }> {
-  const data = await response.json().catch(() => ({})) as { error?: unknown }
+  const data = await response.json().catch(() => ({}))
+  // The refusal reads through the shared helper so message, remedy and code
+  // render instead of the bare `error` field.
   return {
-    message: typeof data.error === 'string' && data.error ? data.error : fallbackMessage,
+    message: refusalMessageFromBody(data, { fallback: fallbackMessage }) ?? fallbackMessage,
     isConflict: response.status === 409,
   }
 }
@@ -620,10 +622,12 @@ export async function readDocumentSaveFailure(
 export async function readDocumentActionResult(
   response: Pick<Response, 'ok' | 'json'>,
 ): Promise<{ ok: boolean; message: string | null; pendingApproval: boolean }> {
-  const data = await response.json().catch(() => ({})) as { error?: unknown; pendingApproval?: unknown }
+  const data = (await response.json().catch(() => ({}))) as { pendingApproval?: unknown }
+  // The refusal reads through the shared helper so message, remedy and code
+  // render instead of the bare `error` field.
   return {
     ok: response.ok,
-    message: typeof data.error === 'string' && data.error ? data.error : null,
+    message: refusalMessageFromBody(data, { fallback: '' }) ?? null,
     pendingApproval: data.pendingApproval === true,
   }
 }
@@ -1509,9 +1513,10 @@ export function DocumentDrawer({
       toast.error(tCommon('documentDefaults.failed'))
       return null
     }
+    // The refusal reads through the shared helper so the server's reason
+    // renders instead of a bare fallback.
     if (!response.ok) {
-      const body = (await response.json().catch(() => null)) as { error?: unknown } | null
-      toast.error(typeof body?.error === 'string' && body.error ? body.error : tCommon('documentDefaults.failed'))
+      toast.error(await readApiErrorMessage(response, tCommon('documentDefaults.failed')))
       return null
     }
     const body = (await response.json().catch(() => null)) as { terms?: { dueDate?: unknown } | null; lines?: unknown } | null

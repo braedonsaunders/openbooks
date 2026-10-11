@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import { Badge, Button } from '@openbooks/ui'
 import { confirmDialog } from '../../../../lib/confirm'
+import { refusalMessageFromBody } from '../../../../lib/api-error'
 
 export interface TrashRow {
   kind: 'folder' | 'file'
@@ -50,11 +51,13 @@ export function TrashList({ items }: { items: TrashRow[] }) {
         router.refresh()
       } else {
         const err = (await res.json().catch(() => ({}))) as { error?: string }
+        // Mapped codes keep their copy; anything else reads through the
+        // shared helper so message, remedy and code render instead of the
+        // generic fallback.
         const key =
-          (err.error &&
-            TRASH_REFUSAL_KEYS[err.error as keyof typeof TRASH_REFUSAL_KEYS]) ??
-          'restoreFailed'
-        toast.error(t(key))
+          err.error &&
+          TRASH_REFUSAL_KEYS[err.error as keyof typeof TRASH_REFUSAL_KEYS]
+        toast.error(key ? t(key) : (refusalMessageFromBody(err, { fallback: t('restoreFailed') }) ?? t('restoreFailed')))
       }
     } catch {
       toast.error(t('restoreFailed'))
@@ -78,11 +81,11 @@ export function TrashList({ items }: { items: TrashRow[] }) {
         router.refresh()
       } else {
         const err = (await res.json().catch(() => ({}))) as { error?: string }
+        // Mapped codes keep their copy (see restore above).
         const key =
-          (err.error &&
-            TRASH_REFUSAL_KEYS[err.error as keyof typeof TRASH_REFUSAL_KEYS]) ??
-          'purgeFailed'
-        toast.error(t(key))
+          err.error &&
+          TRASH_REFUSAL_KEYS[err.error as keyof typeof TRASH_REFUSAL_KEYS]
+        toast.error(key ? t(key) : (refusalMessageFromBody(err, { fallback: t('purgeFailed') }) ?? t('purgeFailed')))
       }
     } catch {
       toast.error(t('purgeFailed'))
