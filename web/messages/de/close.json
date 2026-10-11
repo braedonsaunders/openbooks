@@ -488,6 +488,7 @@
       "closeConfirmTitle": "{module} für {period} schließen?",
       "closeConfirmBody": "Neue Buchungen auf {module} werden abgelehnt, bis eine kontrollierte Wiedereröffnung genehmigt wurde. Der Grund bleibt in der unveränderlichen Abschlusshistorie erhalten.",
       "bankingCloseConfirmDetail": "Abstimmungen in Arbeit: {inProgress}. Nicht zugeordnete Kontoauszugspositionen: {unmatched}.",
+      "earlierOpenWarning": "{count, plural, one {Eine frühere Periode} other {# frühere Perioden}} mit Buchungen {count, plural, one {hat} other {haben}} {module} noch offen: {periods}. Ein Abschluss außer der Reihe lässt dort weiterhin Buchungen zu.",
       "lockDescription": "{module} · {period}. Ein Grund wird in der unveränderlichen Abschlusshistorie aufbewahrt.",
       "reopenRequests": "Wiedereröffnungsanfragen",
       "requestedBy": "Angefordert von {name}",

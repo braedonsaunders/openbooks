@@ -488,6 +488,7 @@
       "closeConfirmTitle": "Clore {module} pour {period} ?",
       "closeConfirmBody": "Les nouvelles écritures sur {module} seront rejetées jusqu'à l'approbation d'une réouverture contrôlée. Le motif est conservé dans l'historique immuable de la clôture.",
       "bankingCloseConfirmDetail": "Rapprochements en cours : {inProgress}. Lignes de relevé non rapprochées : {unmatched}.",
+      "earlierOpenWarning": "{count, plural, one {Une période antérieure} other {# périodes antérieures}} avec activité {count, plural, one {a} other {ont}} encore {module} ouvert : {periods}. Clôturer dans le désordre laisse ces périodes ouvertes aux écritures.",
       "lockDescription": "{module} · {period}. Le motif est conservé dans l’historique immuable.",
       "reopenRequests": "Demandes de réouverture",
       "requestedBy": "Demandée par {name}",

@@ -488,6 +488,7 @@
       "closeConfirmTitle": "Fechar {module} para {period}?",
       "closeConfirmBody": "Novos lançamentos em {module} serão rejeitados até que uma reabertura controlada seja aprovada. O motivo é mantido no histórico imutável do fechamento.",
       "bankingCloseConfirmDetail": "Conciliações em andamento: {inProgress}. Linhas de extrato sem conciliação: {unmatched}.",
+      "earlierOpenWarning": "{count, plural, one {Um período anterior} other {# períodos anteriores}} com movimento ainda {count, plural, one {tem} other {têm}} {module} aberto: {periods}. Fechar fora de ordem deixa esses períodos abertos a lançamentos.",
       "lockDescription": "{module} · {period}. Um motivo é retido no histórico imutável de fechamento.",
       "reopenRequests": "Solicitações de reabertura",
       "requestedBy": "Solicitado por {name}",

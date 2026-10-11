@@ -488,6 +488,7 @@
       "closeConfirmTitle": "¿Cerrar {module} para {period}?",
       "closeConfirmBody": "Las nuevas contabilizaciones en {module} serán rechazadas hasta que se apruebe una reapertura controlada. El motivo queda registrado en el historial inmutable del cierre.",
       "bankingCloseConfirmDetail": "Conciliaciones en curso: {inProgress}. Líneas de extracto sin conciliar: {unmatched}.",
+      "earlierOpenWarning": "{count, plural, one {Un período anterior} other {# períodos anteriores}} con actividad aún {count, plural, one {tiene} other {tienen}} {module} abierto: {periods}. Cerrar fuera de orden deja esos períodos abiertos a contabilizaciones.",
       "lockDescription": "{module} · {period}. El motivo queda en el historial inmutable.",
       "reopenRequests": "Solicitudes de reapertura",
       "requestedBy": "Solicitada por {name}",

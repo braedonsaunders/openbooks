@@ -488,6 +488,7 @@
       "closeConfirmTitle": "关闭{period}的{module}?",
       "closeConfirmBody": "在受控重开获得批准之前，{module}的新过账将被拒绝。原因将保留在不可变的结账历史记录中。",
       "bankingCloseConfirmDetail": "进行中的对账: {inProgress}。未匹配的对账单行: {unmatched}。",
+      "earlierOpenWarning": "有 {count} 个包含业务的较早期间的 {module} 仍处于开启状态：{periods}。不按顺序结账会使这些期间仍可过账。",
       "lockDescription": "{module} · {period}。理由将保留在不可变的结账历史中。",
       "reopenRequests": "重新开启申请",
       "requestedBy": "申请人 {name}",

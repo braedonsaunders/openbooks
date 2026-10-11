@@ -488,6 +488,7 @@
       "closeConfirmTitle": "Close {module} for {period}?",
       "closeConfirmBody": "New postings to {module} will be rejected until a controlled reopening is approved. The reason is retained in the immutable close history.",
       "bankingCloseConfirmDetail": "Reconciliations in progress: {inProgress}. Unmatched statement lines: {unmatched}.",
+      "earlierOpenWarning": "{count, plural, one {An earlier period} other {# earlier periods}} with activity still {count, plural, one {has} other {have}} {module} open: {periods}. Closing out of order leaves those periods open to postings.",
       "lockDescription": "{module} · {period}. A reason is retained in the immutable close history.",
       "reopenRequests": "Reopen requests",
       "requestedBy": "Requested by {name}",

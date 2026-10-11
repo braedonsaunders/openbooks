@@ -913,3 +913,36 @@ test('each module close starts with an empty reason', async () => {
     assert.equal(clearedBox!.value, '', 'the posted close clears its own draft')
   } finally { await unmount(); globalThis.fetch = prior }
 })
+
+/** Closing ahead of an earlier period with activity is allowed, but the
+ * armed summary names the earlier periods whose module is still open. */
+test('closing a module names earlier periods with activity still open', async () => {
+  const prior = globalThis.fetch
+  globalThis.fetch = (async () => Response.json({ ok: true })) as typeof fetch
+  const earlier = { ...partiallyClosedPeriod(), id: 'p0', name: 'Nov 2025', starts_on: '2025-11-01', ends_on: '2025-11-30' }
+  const props = {
+    ...baseProps({ tab: 'periods', period: 'p1' }),
+    periods: [earlier, partiallyClosedPeriod()],
+  } as unknown as WorkspaceProps
+  const { unmount } = await mountWorkspace(props)
+  try {
+    await act(async () => {
+      moduleRowCloseButton('GL').click()
+      await tick()
+    })
+    const reasonBox = document.querySelector('[role="dialog"] textarea')
+    await act(async () => {
+      setNativeValue(reasonBox as HTMLTextAreaElement, 'December books reviewed and ready')
+      await tick()
+    })
+    await act(async () => {
+      clickButton(String(closeSetup.actions?.reviewClose)).click()
+      await tick()
+    })
+    const summary = document.querySelector('div[role="alertdialog"]')
+    assert.ok((summary?.textContent ?? '').includes('Nov 2025'), 'the earlier open period is named before closing')
+  } finally {
+    await unmount()
+    globalThis.fetch = prior
+  }
+})

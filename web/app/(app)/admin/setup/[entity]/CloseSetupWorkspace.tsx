@@ -1591,6 +1591,19 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
         unmatched: bankingUnmatched ?? 0,
       })
       : null;
+  // Closing out of order is allowed but never silent: the armed summary
+  // names earlier periods with activity whose same module is still open.
+  const earlierOpenPeriods =
+    row && action && (action.state === "closed" || action.state === "soft_closed")
+      ? props.periods
+        .filter((period) =>
+          period.calendar_name === row.calendar_name &&
+          period.starts_on < row.starts_on &&
+          Number(period.entries ?? 0) > 0 &&
+          (period.locks?.[action.module]?.state ?? "open") === "open")
+        .sort((left, right) => left.starts_on.localeCompare(right.starts_on))
+        .map((period) => period.name)
+      : [];
   // The first Confirm click arms the summary (module, consequences, live
   // Banking counts); only the second posts. A tap on the wrong module row
   // still cancels here instead of closing the wrong books.
@@ -2189,6 +2202,15 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
                 {bankingConfirmDetail ? (
                   <p className="text-sm font-medium text-amber-900 dark:text-amber-100">
                     {bankingConfirmDetail}
+                  </p>
+                ) : null}
+                {earlierOpenPeriods.length > 0 ? (
+                  <p className="text-sm font-medium text-amber-900 dark:text-amber-100">
+                    {t("periods.earlierOpenWarning", {
+                      module: t(`modules.${action.module}`),
+                      count: earlierOpenPeriods.length,
+                      periods: earlierOpenPeriods.slice(0, 4).join(", ") + (earlierOpenPeriods.length > 4 ? ", …" : ""),
+                    })}
                   </p>
                 ) : null}
               </div>

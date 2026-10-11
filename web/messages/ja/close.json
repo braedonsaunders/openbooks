@@ -488,6 +488,7 @@
       "closeConfirmTitle": "{period}の{module}を締めますか?",
       "closeConfirmBody": "{module}への新しい記帳は、管理された再オープンが承認されるまで拒否されます。理由は不変の締め履歴に保持されます。",
       "bankingCloseConfirmDetail": "進行中の照合: {inProgress}。未照合の明細行: {unmatched}。",
+      "earlierOpenWarning": "取引のある以前の期間 {count} 件で {module} がまだ開いています：{periods}。順序どおりに締めないと、それらの期間は引き続き計上可能なままです。",
       "lockDescription": "{module} · {period}。理由は改ざん不可の決算履歴に保持されます。",
       "reopenRequests": "再オープン依頼",
       "requestedBy": "{name}が依頼",
