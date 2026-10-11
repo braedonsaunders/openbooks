@@ -80,6 +80,8 @@
     "depositFailed": "Le dépôt n’a pas été enregistré.",
     "depositRecording": "Enregistrement…",
     "depositNeedsSetup": "Aucun compte bancaire n’est configuré pour les dépôts de caisse. Demandez à un comptable de les choisir dans les paramètres de la société.",
+    "depositRequiresPermission": "L’enregistrement d’un dépôt de caisse exige la permission cash_sales.deposit, détenue par les rôles qui comptabilisent les ventes au comptant. Demandez à votre administrateur de l’accorder.",
+    "depositHistory": "Dépôts enregistrés",
     "refundAction": "Rembourser",
     "postTitle": "Comptabiliser ce reçu ?",
     "postBody": "{number} : encaisser {total}.\n{tenders}",

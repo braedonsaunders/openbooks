@@ -80,6 +80,8 @@
     "depositFailed": "O depósito não foi registrado.",
     "depositRecording": "Registrando…",
     "depositNeedsSetup": "Nenhuma conta bancária configurada para depósitos de caixa. Peça a um contador para escolhê-las nas configurações da empresa.",
+    "depositRequiresPermission": "Registrar um depósito de caixa exige a permissão cash_sales.deposit, detida pelos papéis que lançam vendas em dinheiro. Peça ao seu administrador para concedê-la.",
+    "depositHistory": "Depósitos registrados",
     "refundAction": "Reembolsar",
     "postTitle": "Lançar este recibo?",
     "postBody": "{number}: receber {total}.\n{tenders}",

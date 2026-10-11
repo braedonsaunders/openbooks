@@ -80,6 +80,8 @@
     "depositFailed": "The drop was not recorded.",
     "depositRecording": "Recording…",
     "depositNeedsSetup": "No till-drop bank accounts are configured. Ask a bookkeeper to choose them in Company Settings.",
+    "depositRequiresPermission": "Recording a bank drop needs the cash_sales.deposit permission, held by roles that post cash sales. Ask your administrator to grant it.",
+    "depositHistory": "Recorded drops",
     "refundAction": "Refund",
     "postTitle": "Post this receipt?",
     "postBody": "{number}: receive {total}.\n{tenders}",

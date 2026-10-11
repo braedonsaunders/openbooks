@@ -80,6 +80,8 @@
     "depositFailed": "Die Einzahlung wurde nicht erfasst.",
     "depositRecording": "Wird erfasst…",
     "depositNeedsSetup": "Es sind keine Bankkonten für Bareinzahlungen konfiguriert. Eine Kontenführungskraft wählt sie in den Firmeneinstellungen.",
+    "depositRequiresPermission": "Für Bareinzahlungen ist die Berechtigung „cash_sales.deposit“ erforderlich, die Rollen mit Kassenbuchungen besitzen. Bitten Sie Ihre Administration um Freischaltung.",
+    "depositHistory": "Erfasste Einzahlungen",
     "refundAction": "Erstatten",
     "postTitle": "Diesen Beleg buchen?",
     "postBody": "{number}: {total} einnehmen.\n{tenders}",

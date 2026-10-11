@@ -80,6 +80,8 @@
     "depositFailed": "入金は記録されませんでした。",
     "depositRecording": "記録中…",
     "depositNeedsSetup": "レジ入金用の銀行口座が設定されていません。経理担当者に会社設定で選択してもらってください。",
+    "depositRequiresPermission": "現金の銀行入金を記録するにはcash_sales.deposit権限が必要です（現金売上を計上するロールが保有）。管理者に付与を依頼してください。",
+    "depositHistory": "記録済みの入金",
     "refundAction": "返金",
     "postTitle": "このレシートを記帳しますか？",
     "postBody": "{number}: {total} を受領します。\n{tenders}",

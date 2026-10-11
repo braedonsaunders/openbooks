@@ -80,6 +80,8 @@
     "depositFailed": "存款未能记录。",
     "depositRecording": "记录中…",
     "depositNeedsSetup": "尚未配置收银存款银行账户。请让记账人员在公司设置中选择。",
+    "depositRequiresPermission": "记录收银存款需要 cash_sales.deposit 权限（过账现金销售的角色持有）。请联系管理员授予。",
+    "depositHistory": "已记录的存款",
     "refundAction": "退款",
     "postTitle": "过账这张小票？",
     "postBody": "{number}：收款 {total}。\n{tenders}",
