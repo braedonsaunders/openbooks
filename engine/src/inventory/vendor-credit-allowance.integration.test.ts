@@ -374,3 +374,71 @@ test(
     }
   },
 );
+
+test(
+  "a warehouseless allowance line takes the single-warehouse default and posts with no stock movement",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await withOrgContext(org.orgId, async () => {
+        const actor = await createScratchUser(org.orgId, "AP clerk", "admin");
+        await receiveStock(org);
+        // A single-warehouse org: the drawer offers no warehouse picker on a
+        // vendor credit, so the draft line arrives with no location and the
+        // save stamps the org's only warehouse onto the stocked line.
+        await db.execute(sql`
+          update stock_locations set is_active = false
+           where org_id = ${org.orgId} and id = ${org.stockLocationId2}`);
+        const created = await createDocument({
+          orgId: org.orgId,
+          userId: actor,
+          kind: "vendor_credit",
+          key: randomUUID(),
+          body: {
+            partyId: org.vendorId,
+            documentDate: org.date,
+            lines: [
+              {
+                accountId: org.accounts.adjustment,
+                itemId: org.items.fifo,
+                quantity: "4",
+                unitPrice: "2.5",
+                amount: "10",
+                stockLocationId: null,
+                inventoryAllowance: true,
+              },
+            ],
+          },
+          subsidiaryId: org.subsidiaryId,
+          requestBody: { kind: "vendor_credit" },
+        });
+        assert.equal(created.status, "created");
+        const stored = (await db.execute<{ stockLocationId: string | null; custom: unknown }>(sql`
+          select stock_location_id as "stockLocationId", custom
+            from document_lines
+           where org_id = ${org.orgId} and document_id = ${created.id}`)).rows;
+        assert.equal(stored.length, 1);
+        assert.equal(stored[0]!.stockLocationId, org.stockLocationId);
+        assert.equal((stored[0]!.custom as { inventoryAllowance?: unknown }).inventoryAllowance, true);
+        await db.execute(sql`
+          update documents set status = 'approved'
+           where id = ${created.id} and org_id = ${org.orgId}`);
+        await postDocument(created.id, depsFor(org));
+        // No stock moved: no return movement, layers and on-hand untouched.
+        assert.equal(await returnMovements(org.orgId, created.id), 0);
+        assert.equal(toUnits(await layerValue(org.orgId, org.items.fifo)), toUnits("20"));
+        const onHand = await getOnHand(org.orgId, org.items.fifo, org.stockLocationId);
+        assert.equal(toUnits(onHand.quantity), toUnits("10"));
+        assert.equal(toUnits(onHand.value), toUnits("20"));
+        // The full commercial amount settles to the policy account while AP
+        // reflects the credit — with no return journal debiting it back.
+        assert.equal(toUnits(await glBalance(org.orgId, org.accounts.adjustment)), toUnits("-10"));
+        assert.equal(toUnits(await glBalance(org.orgId, org.accounts.ap)), toUnits("10"));
+        assert.equal(toUnits(await glBalance(org.orgId, org.accounts.invAsset)), toUnits("20"));
+      });
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

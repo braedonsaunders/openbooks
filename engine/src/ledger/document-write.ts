@@ -1086,6 +1086,34 @@ async function planDocumentEntryAllocations(args: {
  * (memo, reference #) leave this unchanged and never touch the ledger.
  */
 /**
+ * Silent single-warehouse default: a stocked line with no explicit warehouse
+ * takes the org's only active location, so nobody answers a question with
+ * one possible answer. Several locations (or a non-stocked item) leave the
+ * line blank for the picker, and the stamped id flows through the same
+ * ownership checks as an explicitly chosen one. This only ever fills blanks,
+ * matching what the posting reader would resolve the line to. Runs before
+ * the totals preflight on creates (whose precomputed lines the writer reuses
+ * verbatim) and again on every edit; filling blanks twice is idempotent.
+ */
+async function stampSingleWarehouseDefault<
+  Line extends { itemId?: string | null; stockLocationId?: string | null },
+>(orgId: string, lines: Line[]): Promise<Line[]> {
+  if (!lines.some((l) => (l.stockLocationId ?? "") === "")) return lines;
+  const active = await activeStockLocations(orgId);
+  const singleDefault = active.length === 1 ? active[0]!.id : null;
+  if (!singleDefault) return lines;
+  const profiled = await profiledItemIds(
+    orgId,
+    lines.map((l) => l.itemId).filter((v): v is string => typeof v === "string" && v.length > 0),
+  );
+  return lines.map((l) =>
+    (l.stockLocationId ?? "") === "" && l.itemId && profiled.has(l.itemId)
+      ? { ...l, stockLocationId: singleDefault }
+      : l,
+  );
+}
+
+/**
  * Apply a header + lines edit to a draft posting document. Approval snapshots
  * and posted history are immutable; rejected records return to draft before
  * editing, and posted corrections use controlled reversals/adjustments.
@@ -1718,28 +1746,9 @@ export async function applyDocumentEdit(
       }
       return line
     })
-    // Silent single-warehouse default: a stocked line
-    // with no explicit warehouse takes the org's only active location, so
-    // nobody answers a question with one possible answer. Several locations
-    // (or a non-stocked item) leave the line blank for the picker, and the
-    // stamped id flows through the same ownership checks below as an
-    // explicitly chosen one. This only ever fills blanks, matching what the
-    // posting reader would resolve the line to.
-    if (body.lines.some((l) => (l.stockLocationId ?? '') === '')) {
-      const active = await activeStockLocations(orgId)
-      const singleDefault = active.length === 1 ? active[0]!.id : null
-      if (singleDefault) {
-        const profiled = await profiledItemIds(
-          orgId,
-          body.lines.map((l) => l.itemId).filter((v): v is string => typeof v === 'string' && v.length > 0),
-        )
-        body.lines = body.lines.map((l) =>
-          (l.stockLocationId ?? '') === '' && l.itemId && profiled.has(l.itemId)
-            ? { ...l, stockLocationId: singleDefault }
-            : l,
-        )
-      }
-    }
+    // Silent single-warehouse default (also stamped on creates before the
+    // totals preflight — see stampSingleWarehouseDefault).
+    body.lines = await stampSingleWarehouseDefault(orgId, body.lines)
     // Line accounts are the tenant's chart of accounts. The lines FK is
     // tenant-coherent, so a foreign account dies at the re-insert as an
     // unhandled storage error; refuse it here with a domain 404 that
@@ -2831,6 +2840,14 @@ export async function createDocument(input: DocumentCreateInput): Promise<Docume
       if (error instanceof DocumentDefaultsError) throw new DocumentEditError(422, error.message)
       throw error
     }
+  }
+  // The writer reuses these precomputed lines verbatim, so the
+  // single-warehouse default must land before the preflight — a stocked
+  // line saved without a warehouse would otherwise keep no location all
+  // the way to posting. The edit path stamps again; filling blanks twice
+  // is idempotent.
+  if (effectiveBody.lines) {
+    effectiveBody.lines = await stampSingleWarehouseDefault(orgId, effectiveBody.lines);
   }
   const precomputedTotals = effectiveBody.lines
     ? await precomputeDocumentTotalsForCreate(orgId, kind, {
