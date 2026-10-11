@@ -96,6 +96,7 @@ export const SCHEDULER_OUTBOX_SCAN_KINDS = [
   "consolidated_billing",
   "signature_reminder",
   "psp_payout_pull",
+  "expense_amortization",
 ] as const;
 
 export type SchedulerOutboxScanKind = (typeof SCHEDULER_OUTBOX_SCAN_KINDS)[number];
@@ -692,6 +693,23 @@ async function runOutboxWork(row: OutboxRow): Promise<void> {
       noticeKind: "stored_value_breakage_scan_failed",
       href: "/stored-value",
       remedy: "Review stored-value programs and account configuration in Stored value; the scan retries automatically.",
+      problems,
+      unattributed: [],
+    });
+    return;
+  }
+  if (row.kind === "expense_amortization") {
+    const { runDueExpenseAmortization } = await import("../amortization/run.ts");
+    const result = await runDueExpenseAmortization();
+    const problems = new Map<string, string[]>();
+    for (const failure of result.orgErrors) {
+      problems.set(failure.orgId, [...(problems.get(failure.orgId) ?? []), failure.error]);
+    }
+    await surfaceScanOrgFailures({
+      scan: "expense amortization",
+      noticeKind: "expense_amortization_scan_failed",
+      href: "/accounting/amortization",
+      remedy: "Review the schedules in Accounting → Amortization and run amortization there; the scan retries automatically.",
       problems,
       unattributed: [],
     });

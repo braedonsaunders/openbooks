@@ -74,6 +74,10 @@ export interface EntryLineInput {
   /** Work period the line bills; every exploded child bills the same work. */
   workFrom?: string | null;
   workTo?: string | null;
+  /** Amortization template and service window; every exploded child defers alike. */
+  amortizationTemplateId?: string | null;
+  amortizationStartOn?: string | null;
+  amortizationEndOn?: string | null;
   /**
    * Marketplace collecting this line's tax. Explosion splits one sale across
    * dimensions, so every child inherits the parent's collector verbatim.
@@ -127,6 +131,9 @@ export interface PlannedEntryLine {
   /** Absent preserves the stored work period of the line being re-saved. */
   workFrom?: string | null;
   workTo?: string | null;
+  amortizationTemplateId?: string | null;
+  amortizationStartOn?: string | null;
+  amortizationEndOn?: string | null;
   distributionGroupId: string | null;
   distributionRuleId: string | null;
   distributionVersionId: string | null;
@@ -513,6 +520,9 @@ export function explodeDocumentLine(
     isBillable: line.isBillable ?? null,
     workFrom: line.workFrom,
     workTo: line.workTo,
+    amortizationTemplateId: line.amortizationTemplateId ?? null,
+    amortizationStartOn: line.amortizationStartOn ?? null,
+    amortizationEndOn: line.amortizationEndOn ?? null,
     distributionGroupId: groupId,
     distributionRuleId: ruleInEffect.rule.id,
     distributionVersionId: version.id,
@@ -556,6 +566,9 @@ function plainLine(line: EntryLineInput): PlannedEntryLine {
     isBillable: line.isBillable ?? null,
     workFrom: line.workFrom,
     workTo: line.workTo,
+    amortizationTemplateId: line.amortizationTemplateId ?? null,
+    amortizationStartOn: line.amortizationStartOn ?? null,
+    amortizationEndOn: line.amortizationEndOn ?? null,
     distributionGroupId: null,
     distributionRuleId: null,
     distributionVersionId: null,

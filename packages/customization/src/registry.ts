@@ -521,6 +521,7 @@ const JOURNAL: RecordTypeMeta = {
         ["revaluation", "revaluation"], ["labor_burden", "laborBurden"],
         ["depreciation", "depreciation"], ["revenue_recognition", "revenueRecognition"],
         ["fx_settlement", "fxSettlement"], ["translation", "translation"],
+        ["expense_amortization", "expenseAmortization"],
         // Standalone migration true-ups remain visible in the journal list.
         ["migration", "migration"],
       ].map(([value, key]) => ({ value: value!, labelKey: `journal.origins.${key}` })),

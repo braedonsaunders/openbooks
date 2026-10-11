@@ -32,6 +32,8 @@ import { reverseStoredValueForVoidedDocument } from "../stored-value/void-revers
 import { isUuid } from "../platform/uuid.ts";
 import { PROVIDER_COMMIT_KINDS, requestProviderVoidTx } from "../tax/provider-commit.ts";
 import { voidPaymentWithholdings, releaseWithholdingRemittance } from "../contractor-withholding/service.ts";
+import { AmortizationError } from "../amortization/errors.ts";
+import { cancelAmortizationForVoidedSource } from "../amortization/source-void.ts";
 
 /**
  * Machine-readable void refusal reasons. The human message
@@ -1835,6 +1837,21 @@ export async function completeRequestedDocumentVoid(
         };
 
         reversalEntryId = await reverseEntry(entryId, "VOID");
+        // Amortization schedules sourced by this document cancel with it:
+        // their posted amortization returns to the deferral account on the
+        // reversal date, so expense and the deferral both net to zero.
+        try {
+          await cancelAmortizationForVoidedSource(tx, {
+            orgId,
+            documentId,
+            reversalDate,
+            actorId: String(doc.void_requested_by),
+            reason: String(doc.void_reason),
+          });
+        } catch (error) {
+          if (error instanceof AmortizationError) throw new DocumentVoidError(`${error.message} ${error.remedy}`, 422, "invalid");
+          throw error;
+        }
         for (const fx of outgoingFx.rows) {
           await reverseEntry(fx.id, "VOID");
         }

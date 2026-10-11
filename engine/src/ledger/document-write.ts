@@ -392,6 +392,28 @@ type DocumentTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
  *
  * Pure — unit-tested directly in documents.test.ts.
  */
+/** Kinds whose lines may name an amortization template. */
+const AMORTIZABLE_LINE_KINDS = new Set(['vendor_bill', 'journal', 'expense_report'])
+
+/**
+ * Shape of a line's amortization fields: only amortizable kinds take a
+ * template, service dates need a template, and the window is ordered. The
+ * template, its version and the term are resolved again at posting.
+ */
+function amortizationLineRefusal(kind: string, line: DocumentLineInput): string | null {
+  const templateId = line.amortizationTemplateId ?? null
+  const start = line.amortizationStartOn ?? null
+  const end = line.amortizationEndOn ?? null
+  if (templateId === null) {
+    return start !== null || end !== null ? 'choose an amortization template for the service dates, or clear the dates' : null
+  }
+  if (!AMORTIZABLE_LINE_KINDS.has(kind)) return 'only vendor bill, journal and expense report lines can amortize'
+  if (start !== null && !isIsoCalendarDate(start)) return 'the service start date must be a valid YYYY-MM-DD date'
+  if (end !== null && !isIsoCalendarDate(end)) return 'the service end date must be a valid YYYY-MM-DD date'
+  if (start !== null && end !== null && end < start) return 'the service end date is before the service start date'
+  return null
+}
+
 export function validateEditableDocumentLines(lines: DocumentLineInput[]): DocumentLineInput[] {
   const amounts: string[] = []
   const out = lines.map((l, i) => {
@@ -1062,6 +1084,9 @@ async function planDocumentEntryAllocations(args: {
     isBillable: null,
     workFrom: l.workFrom,
     workTo: l.workTo,
+    amortizationTemplateId: l.amortizationTemplateId ?? null,
+    amortizationStartOn: l.amortizationStartOn ?? null,
+    amortizationEndOn: l.amortizationEndOn ?? null,
     distributionKey: l.distributionKey ?? null,
     distributionGroupId: l.distributionGroupId ?? null,
     distributionLocked: l.distributionLocked ?? null,
@@ -1700,7 +1725,7 @@ export async function applyDocumentEdit(
   // distribution stamps rely on). Null = new line.
   let submittedLineKeys: (string | null)[] | null = null
   let preparedLines:
-    | { accountId: string; itemId: string | null; description: string | null; quantity: string | null; unit: string | null; unitPrice: string | null; amount: string; taxCodeId: string | null; taxGroupId: string | null; taxInputAmount: string; taxAmount: string; taxOverridden: boolean; withholdingTreatment: "labour" | "materials" | "excluded" | null; withholdingMaterialsCost: string | null; taxComponents: ReturnType<typeof computeBillTotals>['lines'][number]['taxComponents']; nativeGoodsTax?: GoodsTaxSnapshot; providerQuote?: ReturnType<typeof computeBillTotals>['lines'][number]['providerQuote']; marketplaceFacilitator: string | null; partyId: string | null; departmentId: string | null; projectId: string | null; locationId: string | null; classId: string | null; workFrom?: string | null; workTo?: string | null; stockLocationId: string | null; extraDims: Record<string, string | null>; custom: Record<string, unknown>; distributionGroupId: string | null; distributionRuleId: string | null; distributionVersionId: string | null; distributionLocked: boolean }[]
+    | { accountId: string; itemId: string | null; description: string | null; quantity: string | null; unit: string | null; unitPrice: string | null; amount: string; taxCodeId: string | null; taxGroupId: string | null; taxInputAmount: string; taxAmount: string; taxOverridden: boolean; withholdingTreatment: "labour" | "materials" | "excluded" | null; withholdingMaterialsCost: string | null; taxComponents: ReturnType<typeof computeBillTotals>['lines'][number]['taxComponents']; nativeGoodsTax?: GoodsTaxSnapshot; providerQuote?: ReturnType<typeof computeBillTotals>['lines'][number]['providerQuote']; marketplaceFacilitator: string | null; partyId: string | null; departmentId: string | null; projectId: string | null; locationId: string | null; classId: string | null; workFrom?: string | null; workTo?: string | null; amortizationTemplateId: string | null; amortizationStartOn: string | null; amortizationEndOn: string | null; stockLocationId: string | null; extraDims: Record<string, string | null>; custom: Record<string, unknown>; distributionGroupId: string | null; distributionRuleId: string | null; distributionVersionId: string | null; distributionLocked: boolean }[]
     | null = null
   if (body.lines) {
     // Charge lines are NOT editable through the generic line editor, and this
@@ -1822,6 +1847,7 @@ export async function applyDocumentEdit(
       { key: 'classId', label: 'class', table: 'classes' },
       { key: 'itemId', label: 'item', table: 'items' },
       { key: 'stockLocationId', label: 'stock location', table: 'stock_locations' },
+      { key: 'amortizationTemplateId', label: 'amortization template', table: 'expense_amortization_templates' },
     ] as const
     for (let i = 0; i < body.lines.length; i++) {
       const line = body.lines[i]!
@@ -1831,6 +1857,8 @@ export async function applyDocumentEdit(
           throw new DocumentEditError(422, `Line ${i + 1}: invalid ${def.key}`)
         }
       }
+      const amortizationRefusal = amortizationLineRefusal(current.kind, line)
+      if (amortizationRefusal) throw new DocumentEditError(422, `Line ${i + 1}: ${amortizationRefusal}`)
     }
     for (const def of lineRefDefs) {
       const ids = [...new Set(body.lines.map((l) => l[def.key]).filter((v): v is string => typeof v === 'string' && v.length > 0))]
@@ -1984,6 +2012,9 @@ export async function applyDocumentEdit(
         classId: l.classId ?? null,
         workFrom: l.workFrom,
         workTo: l.workTo,
+        amortizationTemplateId: l.amortizationTemplateId ?? null,
+        amortizationStartOn: l.amortizationStartOn ?? null,
+        amortizationEndOn: l.amortizationEndOn ?? null,
         stockLocationId: l.stockLocationId ?? null,
         extraDims: lineDims.cleaned,
         custom: lv.cleaned,
@@ -2503,7 +2534,8 @@ export async function applyDocumentEdit(
                                         distribution_locked,
                                         time_entry_id, employee_id, time_type_id,
                                         equipment_unit_id, rate_version_id, bill_rate, bill_amount, promotion_id,
-                                        work_from, work_to)
+                                        work_from, work_to,
+                                        amortization_template_id, amortization_start_on, amortization_end_on)
             values (${orgId}, ${id}, ${i + 1}, ${l.accountId}, ${l.itemId}, ${l.description},
                     ${l.quantity ?? '1'}, ${l.unit}, ${l.unitPrice ?? l.amount}, ${l.amount},
                     ${l.taxCodeId}, ${l.taxGroupId}, ${l.taxInputAmount}, ${l.taxAmount}, ${l.taxOverridden}, ${l.withholdingTreatment}, ${l.withholdingMaterialsCost}, ${l.marketplaceFacilitator},
@@ -2515,7 +2547,8 @@ export async function applyDocumentEdit(
                     ${carry?.equipmentUnitId ?? null}, ${carry?.rateVersionId ?? null}, ${billRate}, ${billAmount},
                     ${promotionsByLine.get(submittedLineKeys?.[i] ?? '') ?? null},
                     ${workPeriodSubmitted ? l.workFrom ?? null : carry?.workFrom ?? null},
-                    ${workPeriodSubmitted ? l.workTo ?? null : carry?.workTo ?? null})
+                    ${workPeriodSubmitted ? l.workTo ?? null : carry?.workTo ?? null},
+                    ${l.amortizationTemplateId}, ${l.amortizationStartOn}, ${l.amortizationEndOn})
             returning id
           `))
           insertedLineIds.push(inserted.rows[0]!.id)

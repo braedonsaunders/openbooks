@@ -46,6 +46,8 @@ import { DocumentDefaultsError, resolveTermsDueDate } from "./document-defaults.
 import { docKindConfig } from "../records/document-kinds.ts";
 
 import { postingEffectSubsidiaryId } from "./posting-dispatch.ts";
+import { AmortizationError } from "../amortization/errors.ts";
+import { resolveAmortizationRouting, type AmortizationRouting } from "../amortization/source-posting.ts";
 import type { PostDocumentOptions } from "../journal/posting-contracts.ts";
 
 /**
@@ -546,6 +548,28 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
     }
   }
 
+  // -- expense amortization -------------------------------------------------
+  // Lines naming an amortization template debit the template's deferral
+  // account; commit creates their schedules from the posted legs. Resolved
+  // on the final header, so the template version follows the posting date.
+  let amortizationRouting: Map<string, AmortizationRouting> = new Map();
+  if (!deps.amortizationByLine) {
+    try {
+      amortizationRouting = await resolveAmortizationRouting(
+        db,
+        { orgId: doc.orgId, kind: doc.kind, transactionDate: effectivePostingDate(effectiveDoc) },
+        postingLines,
+        { inventoryLineIds: new Set([...(deps.inventoryAssetByLine?.keys() ?? []), ...(deps.agencyByLine?.keys() ?? [])]) },
+      );
+    } catch (error) {
+      if (error instanceof AmortizationError) {
+        throw carryRefusalIdentity(new PostingError(`${error.message} ${error.remedy}`), error);
+      }
+      throw error;
+    }
+    if (amortizationRouting.size > 0) deps = { ...deps, amortizationByLine: amortizationRouting };
+  }
+
   // -- build + validate kernel lines --------------------------------------
   const kernelLines = rule(effectiveDoc, postingLines, deps).filter(
     (l) => !isZero(l.amount),
@@ -768,5 +792,5 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
     : await resolveShipToSnapshot(effectiveDoc, postingLines);
 
   const postingDate = effectivePostingDate(effectiveDoc);
-  return { documentId, deps, doc, postingLines, effectiveDoc, kernelLines, postContrib, primaryContrib, unionLines, subApplied, scriptLines, postingDate, shipToSnapshot, controlAccountStamp, dueDateFromTerms };
+  return { documentId, deps, doc, postingLines, effectiveDoc, kernelLines, postContrib, primaryContrib, unionLines, subApplied, scriptLines, postingDate, shipToSnapshot, controlAccountStamp, dueDateFromTerms, amortizationRouting };
 }

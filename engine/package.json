@@ -87,6 +87,7 @@
     "./webhooks": "./src/webhooks/public.ts",
     "./inventory/contracts": "./src/inventory/public-contracts.ts",
     "./revenue": "./src/revenue/public.ts",
+    "./amortization": "./src/amortization/public.ts",
     "./projects/header-controls": "./src/projects/header-controls.ts",
     "./projects/labor-costing": "./src/projects/public-labor-costing.ts",
     "./projects/pay-rate-basis": "./src/projects/pay-rate-basis.ts",
