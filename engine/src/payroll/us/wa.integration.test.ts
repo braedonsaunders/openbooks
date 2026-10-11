@@ -272,4 +272,47 @@ describe("washington-obligation-derived-mappings", { skip: !DB }, () => {
       await dropScratchOrgReporting(fx.orgId);
     }
   });
+
+  test("the accounts view follows a baseline mapping the run already resolves", async () => {
+    const fx = await waPayrollOrg();
+    try {
+      // A levy mapped on the shared NULL-country baseline before the pack
+      // seeded its country-scoped row: the run prices it, so the view must
+      // show it — never UNSET beside a run that already clears.
+      const baselineAccount = randomUUID();
+      const scopedAccount = randomUUID();
+      for (const [id, number, name] of [
+        [baselineAccount, "2380", "Baseline payroll liabilities"],
+        [scopedAccount, "2381", "Scoped payroll liabilities"],
+      ] as const) {
+        await db.execute(sql`
+          insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
+                                reconcilable, required_dimensions, custom, subsidiary_include_children)
+          values (${id}, ${fx.orgId}, ${number}, ${name}, 'liability_current', false, true, false, false,
+                  '[]'::jsonb, '{}'::jsonb, true)`);
+      }
+      for (const code of ["WA-PFML", "WA-CARES"]) {
+        await db.execute(sql`
+          insert into pay_components (org_id, code, name, kind, system_key, country, basis, taxable,
+                                      pensionable, insurable, vacationable, non_periodic, sequence,
+                                      liability_account_id, created_by, updated_by)
+          select ${fx.orgId}, code, name, kind, system_key, null, basis, taxable,
+                 pensionable, insurable, vacationable, non_periodic, sequence,
+                 ${baselineAccount}, ${fx.actorId}, ${fx.actorId}
+            from pay_components where org_id = ${fx.orgId} and country = 'US' and code = ${code}`);
+      }
+      const shown = await packSlotState(fx.orgId, ["US"], {});
+      const us = shown.find((pack) => pack.country === "US")!;
+      assert.equal(us.slots.find((slot) => slot.key === "wa_pfml")?.accountId, baselineAccount);
+      assert.equal(us.slots.find((slot) => slot.key === "wa_cares")?.accountId, baselineAccount);
+      // The country-scoped row wins once the operator maps it there.
+      await setPackSlotAccount(fx.orgId, fx.actorId, "US", "wa_pfml", scopedAccount);
+      const reshown = await packSlotState(fx.orgId, ["US"], {});
+      const reus = reshown.find((pack) => pack.country === "US")!;
+      assert.equal(reus.slots.find((slot) => slot.key === "wa_pfml")?.accountId, scopedAccount);
+      assert.equal(reus.slots.find((slot) => slot.key === "wa_cares")?.accountId, baselineAccount);
+    } finally {
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  });
 });

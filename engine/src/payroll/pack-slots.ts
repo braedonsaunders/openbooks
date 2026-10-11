@@ -93,8 +93,21 @@ export async function packSlotState(
     slots: pack.statutorySlots
       .filter((slot) => packSlotAppliesToPopulation(slot, pack.country, regionsByCountry))
       .map((slot) => {
+        // The pay run resolves its own pack's rows plus the shared
+        // NULL-country baseline (run-calculation): a levy mapped on a
+        // baseline component before the pack seeded its country-scoped row
+        // still prices, so the setup view must show that same mapping —
+        // never UNSET beside a run that already clears. The country-scoped
+        // row wins when it names an account; the baseline only fills a gap.
+        // The pay run resolves its own pack's rows plus the shared
+        // NULL-country baseline (run-calculation): a levy mapped on a
+        // baseline component before the pack seeded its country-scoped row
+        // still prices, so the setup view must show that same mapping —
+        // never UNSET beside a run that already clears. The country-scoped
+        // row wins when it names an account; the baseline only fills a gap.
         const fromComponents = slot.components
-          .map((component) => byCountryCode.get(`${pack.country}:${component.code}`))
+          .map((component) => byCountryCode.get(`${pack.country}:${component.code}`)
+            ?? byCountryCode.get(`:${component.code}`))
           .find((accountId) => accountId != null);
         const legacy = slot.legacySettingsKey
           ? ((legacySettings[slot.legacySettingsKey] as string | null | undefined) ?? null)
