@@ -9,6 +9,9 @@ import { SwitchField } from "../../../../../components/switch";
 import { useAppAction } from "../../../../../lib/use-app-action";
 import { useBusinessToday } from "../../../../../components/business-date-provider";
 import { StripeBillingImport } from "./StripeBillingImport";
+import { usePathname, useSearchParams } from 'next/navigation';
+import { ModuleHomeTabs } from '@/components/module-home/tabs';
+import { ProcessorReceiptPolicies } from './ProcessorReceiptPolicies';
 
 type ProviderKey = "stripe" | "adyen" | "gocardless";
 
@@ -62,6 +65,8 @@ type Rule = {
 };
 
 type Data = {
+  featureEnabled?: boolean;
+  bankingEnabled?: boolean;
   configs: Config[];
   automationConfigs: AutomationConfig[];
   bankAccounts: Account[];
@@ -84,6 +89,10 @@ const AUTOMATION_PROVIDERS: { key: AutomationProviderKey; nameKey: string; descr
 
 export function PaymentProvidersClient() {
   const t = useTranslations("admin.setup.paymentProviders");
+  const tFunding = useTranslations('processorReceipts');
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const fundingView = searchParams.get('view') === 'processor_receipts';
   const tc = useTranslations("common");
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -166,10 +175,16 @@ export function PaymentProvidersClient() {
     <div className="space-y-6">
       <div>
         <h1 className="text-lg font-semibold text-slate-900 dark:text-white">{t("title")}</h1>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{t("description")}</p>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{fundingView ? tFunding('description') : t("description")}</p>
       </div>
       {error ? <p className="text-sm text-red-600" role="alert">{error}</p> : null}
       {notice ? <p className="text-sm text-teal-700 dark:text-teal-400">{notice}</p> : null}
+
+      <ModuleHomeTabs placement="local" tabs={[
+        ...(data.featureEnabled !== false ? [{ label: tFunding('providersTab'), href: pathname, active: !fundingView }] : []),
+        ...(data.bankingEnabled !== false ? [{ label: tFunding('accountsTab'), href: `${pathname}?view=processor_receipts`, active: fundingView }] : []),
+      ]} />
+      {fundingView ? <ProcessorReceiptPolicies /> : <>
 
       {PROVIDERS.map((p) => (
         <ProviderCard
@@ -204,6 +219,7 @@ export function PaymentProvidersClient() {
         busy={busy}
         t={t}
       />
+      </>}
     </div>
   );
 }

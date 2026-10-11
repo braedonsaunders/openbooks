@@ -1,0 +1,22 @@
+{
+  "title": "決済処理業者の入金口座",
+  "description": "顧客からの入金を決済処理業者の清算口座に借方計上できる期間を設定します。業者の支払金を照合する前に、承認済みの入金を転記してください。",
+  "receiptAccount": "入金口座",
+  "providersTab": "業者",
+  "accountsTab": "決済処理業者の入金",
+  "provider": "業者",
+  "clearingAccount": "決済処理業者の清算口座",
+  "legalEntity": "法人",
+  "currency": "通貨",
+  "effectiveFrom": "適用開始日",
+  "effectiveTo": "適用終了日",
+  "reason": "理由",
+  "newPolicy": "新規方針",
+  "empty": "入金口座の方針はありません。",
+  "openEnded": "終了日なし",
+  "readOnly": "設定には法人への無制限のアクセス権が必要です。",
+  "choose": "選択…",
+  "loadFailed": "入金口座の方針を読み込めませんでした。",
+  "saveFailed": "入金口座の方針を保存できませんでした。",
+  "selectReceiptAccount": "入金口座を選択してください。"
+}

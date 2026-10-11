@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
+import { db, withBypassContext } from "../platform/db.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg, grantScratchPermissions, seedApprovalFlow, seedPostingAccount } from "../testing/fixtures.ts";
 import { ScopeNotFoundError, UnrestrictedScopeError } from "../organization/subsidiary-scope.ts";
 import { resolveReceiptFunding } from "../payments-core/receipt-funding.ts";
@@ -16,18 +16,19 @@ import { sameCurrencyAllocation } from "./settlement-policy.ts";
 import { receiptFundingAccountOptions, saveProcessorReceiptPolicy } from "./processor-receipts.ts";
 import { importSettlementBatch, postSettlementBatch } from "./psp-settlement.ts";
 import { settleHarness, invoiceOpen } from "./refund-test-support.integration.ts";
+import { saveAcceptanceConfig } from "./acceptance.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
-async function fixture(org: Awaited<ReturnType<typeof createScratchOrg>>) {
-  const h = await settleHarness(org, { invoiceTotal: "459.96" });
-  await grantScratchPermissions(org.orgId, h.userId, ["ar.pay", "admin.setup.manage"]);
+async function fixture(org: Awaited<ReturnType<typeof createScratchOrg>>, currency = "CAD") {
+  const h = await settleHarness(org, { invoiceTotal: "459.96", currency });
+  await grantScratchPermissions(org.orgId, h.userId, ["ar.pay", "ap.pay", "admin.setup.manage"]);
   const clearing = await seedPostingAccount(org.orgId, "1040", "Processor clearing", "asset_current_other");
   await db.execute(sql`update accounts set reconcilable = false where org_id = ${org.orgId} and id = ${clearing}`);
-  const policy = { id: randomUUID(), accountId: clearing, subsidiaryId: org.subsidiaryId, currency: "CAD", effectiveFrom: org.date, effectiveTo: null };
+  const policy = { id: randomUUID(), accountId: clearing, subsidiaryId: org.subsidiaryId, currency, effectiveFrom: org.date, effectiveTo: null };
   await saveProcessorReceiptPolicy(org.orgId, "stripe", policy, h.userId, "Collect card receipts into the provider clearing pool", null);
   const receipt = await createPaymentDocument({ orgId: org.orgId, kind: "customer_payment", createdBy: h.userId,
-    allowedSubsidiaryIds: null, partyId: org.customerId, bankAccountId: clearing, subsidiaryId: org.subsidiaryId, currency: "CAD", documentDate: org.date });
+    allowedSubsidiaryIds: null, partyId: org.customerId, bankAccountId: clearing, subsidiaryId: org.subsidiaryId, currency, documentDate: org.date });
   const item = (await withOrgTransaction(org.orgId, () => openItemsForParty(org.customerId, "ar", org.orgId, null))).find(row => row.documentId === h.invoiceId)!;
   const save = () => updateDraftPayment(receipt.id, { allocations: [sameCurrencyAllocation(item.lineId, "459.96")] }, h.userId, org.orgId, { allowedSubsidiaryIds: null });
   return { h, clearing, policy, receipt, save };
@@ -65,11 +66,37 @@ test("a scoped processor receipt applies the invoice and the native payout clear
   } finally { await dropScratchOrg(org.orgId); }
 });
 
+test("a foreign-currency processor receipt refuses missing quotes and retains its approved functional basis on posting replay", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const { h, clearing, receipt, save } = await fixture(org, "USD");
+    await assert.rejects(save(), /No spot exchange rate converts USD to CAD/);
+    assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count from document_lines
+      where org_id = ${org.orgId} and document_id = ${receipt.id}`)).rows[0]!.count, 0);
+    await db.execute(sql`insert into fx_rates (org_id, from_currency, to_currency, rate, as_of, source)
+      values (${org.orgId}, 'USD', 'CAD', '1.25', ${org.date}, 'manual')`);
+    const saved = await save();
+    assert.equal(saved!.doc.fx_rate, "1.2500000000");
+    const custom = saved!.doc.custom as { paymentCurrencyEvidence: { rate: string; observations: { storedRate: string }[] } };
+    assert.equal(custom.paymentCurrencyEvidence.observations[0]!.storedRate, "1.2500000000");
+    await submitAndReleaseIfUngated("customer_payment", receipt.id, h.userId);
+    await db.execute(sql`update fx_rates set rate = '1.4' where org_id = ${org.orgId} and from_currency = 'USD' and to_currency = 'CAD'`);
+    const posted = await postPaymentWithApplications(receipt.id, undefined, h.userId);
+    assert.deepEqual(await postPaymentWithApplications(receipt.id, undefined, h.userId), posted);
+    assert.equal(await invoiceOpen(org.orgId, h.invoiceId), "0.0000");
+    const amount = (await db.execute<{ amount: string }>(sql`select jl.amount::text as amount from journal_lines jl
+      join journal_entries e on e.id = jl.entry_id and e.org_id = jl.org_id
+      where jl.org_id = ${org.orgId} and e.source_document_id = ${receipt.id} and jl.account_id = ${clearing}`)).rows[0]!.amount;
+    assert.equal(amount, "574.9500");
+  } finally { await dropScratchOrg(org.orgId); }
+});
+
 test("processor receipt policy refuses overlap, foreign scope, currency and unauthorized configuration", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   const other = await createScratchOrg();
   try {
     const { h, clearing, policy } = await fixture(org);
+    assert.deepEqual(await saveProcessorReceiptPolicy(org.orgId, "stripe", policy, h.userId, "Retry the original receipt policy", null), policy);
     await assert.rejects(saveProcessorReceiptPolicy(org.orgId, "stripe", { ...policy, id: randomUUID() }, h.userId, "Duplicate effective policy", null), /overlap/);
     await assert.rejects(saveProcessorReceiptPolicy(org.orgId, "stripe", policy, h.userId, "Restricted setup authority", new Set()), UnrestrictedScopeError);
     await assert.rejects(saveProcessorReceiptPolicy(org.orgId, "stripe", { ...policy, subsidiaryId: other.subsidiaryId }, h.userId, "Wrong legal entity", null), ScopeNotFoundError);
@@ -85,6 +112,43 @@ test("processor receipt policy refuses overlap, foreign scope, currency and unau
       and changes->>'mode' = 'processor_receipt_policy'`)).rows[0]!.count;
     assert.equal(count, 1, "refusals and an identical configuration retry cannot write new financial policy");
   } finally { await dropScratchOrg(org.orgId); await dropScratchOrg(other.orgId); }
+});
+
+test("a refused receipt policy rolls back provider initialization when its caller retains the transaction", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = await createScratchUser(org.orgId, "Receipt administrator", "receipt_administrator");
+    await grantScratchPermissions(org.orgId, actorId, ["admin.setup.manage"]);
+    await withOrgTransaction(org.orgId, async () => {
+      await assert.rejects(saveProcessorReceiptPolicy(org.orgId, "square", {
+        id: randomUUID(), accountId: org.accounts.bank, subsidiaryId: org.subsidiaryId,
+        currency: "CAD", effectiveFrom: org.date, effectiveTo: null,
+      }, actorId, "Configure processor-funded customer receipts", null), /other-current-asset/);
+      assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count from psp_provider_configs
+        where org_id = ${org.orgId} and provider = 'square'`)).rows[0]!.count, 0);
+      assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count from audit_log
+        where org_id = ${org.orgId} and changes->>'mode' = 'processor_receipt_policy'`)).rows[0]!.count, 0);
+    });
+  } finally { await dropScratchOrg(org.orgId); }
+});
+
+test("concurrent native provider edits preserve dated receipt funding and its independent settings", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const { h, policy } = await fixture(org);
+    const next = { ...policy, id: randomUUID(), currency: "USD" };
+    await Promise.all([
+      withBypassContext(() => saveAcceptanceConfig(org.orgId, h.userId, { provider: "stripe", isEnabled: true,
+        acceptanceEnabled: true, defaultBankAccountId: org.accounts.bank, settings: { statementDescriptor: "NATIVE RECEIPTS" } }, null)),
+      withBypassContext(() => saveProcessorReceiptPolicy(org.orgId, "stripe", next, h.userId, "Admit USD receipts into the processor pool", null)),
+    ]);
+    const config = (await db.execute<{ settings: Record<string, unknown> }>(sql`select settings from psp_provider_configs
+      where org_id = ${org.orgId} and provider = 'stripe'`)).rows[0]!;
+    assert.equal(config.settings.statementDescriptor, "NATIVE RECEIPTS");
+    assert.deepEqual((config.settings.processorReceiptPolicies as { id: string }[]).map(row => row.id).sort(), [policy.id, next.id].sort());
+    await assert.rejects(saveAcceptanceConfig(org.orgId, h.userId, { provider: "stripe", isEnabled: true,
+      acceptanceEnabled: true, settings: { processorReceiptPolicies: [] } }, null), /native processor receipt funding command/);
+  } finally { await dropScratchOrg(org.orgId); }
 });
 
 test("processor receipts retain native approval gates and refuse revoked funding or actor duty before posting", { skip: !DB }, async () => {

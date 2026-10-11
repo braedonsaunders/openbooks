@@ -12,10 +12,18 @@ import type { Authz } from "../../../lib/authz";
  */
 const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, dropScratchOrg } = await import(
+const { createScratchOrg, createScratchUser, grantScratchPermissions, dropScratchOrg } = await import(
   "@openbooks/engine/testing/fixtures"
 );
 const { loadPaymentFlyout } = await import("./payment-flyout");
+
+async function receiptActor(orgId: string) {
+  return withBypassContext(async () => {
+    const id = await createScratchUser(orgId, "Receipt accountant", "receipt_accountant");
+    await grantScratchPermissions(orgId, id, ["ar.pay"]);
+    return id;
+  });
+}
 
 function authzFor(orgId: string, userId: string): Authz {
   const user: SessionUser = {
@@ -83,7 +91,7 @@ async function governedFlag(orgId: string, userId: string): Promise<boolean | un
 test("a kind with no flow resolves ungoverned", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
-    const userId = randomUUID();
+    const userId = await receiptActor(org.orgId);
     assert.equal(await governedFlag(org.orgId, userId), false);
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
@@ -95,7 +103,7 @@ test("an enabled on_submit flow governs its kind", async () => {
   try {
     await setFlowsFeature(org.orgId, true);
     await seedFlow(org.orgId, "on_submit");
-    const userId = randomUUID();
+    const userId = await receiptActor(org.orgId);
     assert.equal(await governedFlag(org.orgId, userId), true);
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
@@ -107,7 +115,7 @@ test("a flow without an on_submit trigger does not govern posting", async () => 
   try {
     await setFlowsFeature(org.orgId, true);
     await seedFlow(org.orgId, "manual");
-    const userId = randomUUID();
+    const userId = await receiptActor(org.orgId);
     assert.equal(await governedFlag(org.orgId, userId), false);
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));

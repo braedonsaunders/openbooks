@@ -2,7 +2,8 @@ import 'server-only'
 
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/database'
-import { loadPaymentDocument, openItemsForParty, PAYMENT_KIND_SIDE, type PaymentKind } from '@openbooks/engine/payments/documents'
+import { loadPaymentDocument, openItemsForParty, receiptFundingSubsidiaryOptions, PAYMENT_KIND_SIDE, type PaymentKind } from '@openbooks/engine/payments/documents'
+import { receiptAccountOptions } from '@/lib/documents'
 import { businessToday } from '@openbooks/engine/platform/business-date'
 import { paymentSharedSubsidiaryFilter } from '@/lib/payment-run-access'
 import { resolveFormLayout } from '@/lib/customization/resolve'
@@ -85,15 +86,11 @@ export async function loadPaymentFlyout({
     side === 'ap'
       ? sql`exists (select 1 from vendor_roles vr where vr.org_id = p.org_id and vr.party_id = p.id and vr.is_active)`
       : sql`exists (select 1 from customer_roles cr where cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active)`
-  const [parties, banks, defaults] = await Promise.all([
-    db.execute<{ id: string; display_name: string }>(sql`
-      select id, display_name from parties p
+  const [parties, defaults] = await Promise.all([
+    db.execute<{ id: string; display_name: string; subsidiary_id: string | null }>(sql`
+      select id, display_name, subsidiary_id from parties p
        where p.org_id = ${orgId} and ${partyFilter} and is_active ${paymentSharedSubsidiaryFilter(sql`p.subsidiary_id`, authz)}
        order by display_name limit 2000`),
-    db.execute<{ id: string; number: string | null; name: string }>(sql`
-      select id, number, name from accounts
-       where org_id = ${orgId} and type = 'asset_bank' and is_active and not is_summary
-       order by number nulls last, name`),
     // Unsaved-create defaults: today's date plus the org currency.
     // Read-only lookups — opening the drawer still writes nothing.
     creating
@@ -104,9 +101,29 @@ export async function loadPaymentFlyout({
         ])
       : null,
   ])
+  const selectedParty = creating && prefill?.partyId ? parties.rows.find(party => party.id === prefill.partyId) : null
+  const prefillSubject = selectedParty && prefill?.documentId
+    ? (await db.execute<{ subsidiary_id: string | null; currency: string }>(sql`
+      select coalesce(d.subsidiary_id, e.subsidiary_id) as subsidiary_id, d.currency from documents d
+        join journal_entries e on e.id = d.posted_entry_id and e.org_id = d.org_id
+       where d.org_id = ${orgId} and d.id = ${prefill.documentId} and d.party_id = ${selectedParty.id}
+         and d.status = 'posted' ${paymentSharedSubsidiaryFilter(sql`coalesce(d.subsidiary_id, e.subsidiary_id)`, authz)}`)).rows[0]
+    : null
+  const needsFundingOptions = creating || (openPayment?.doc.status === 'draft' && can(authz, side === 'ar' ? 'ar.pay' : 'ap.pay'))
+  const fundingSubsidiaries = needsFundingOptions
+    ? await receiptFundingSubsidiaryOptions(orgId, userId, kind, authz.allowedSubsidiaryIds) : []
+  const root = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id = ${orgId} and parent_id is null`)).rows[0]?.id
+  const proposedSubsidiaryId = (openPayment?.doc.subsidiary_id as string | null | undefined) ?? prefillSubject?.subsidiary_id
+    ?? selectedParty?.subsidiary_id ?? root
+  const fundingSubsidiaryId = !needsFundingOptions ? proposedSubsidiaryId : fundingSubsidiaries.some(sub => sub.id === proposedSubsidiaryId) ? proposedSubsidiaryId
+    : fundingSubsidiaries.length === 1 ? fundingSubsidiaries[0]!.id : undefined
+  const fundingCurrency = (openPayment?.doc.currency as string | undefined) ?? prefillSubject?.currency ?? defaults?.[1].rows[0]?.base_currency ?? ''
+  const fundingDate = (openPayment?.doc.document_date as string | undefined) ?? defaults?.[0] ?? await businessToday(orgId)
+  const banks = { rows: needsFundingOptions && fundingSubsidiaryId ? await receiptAccountOptions({ orgId, actorId: userId, kind,
+    subsidiaryId: fundingSubsidiaryId, currency: fundingCurrency, onDate: fundingDate, allowedSubsidiaryIds: authz.allowedSubsidiaryIds }) : [] }
   const initialOpenItems: OpenItemClient[] =
     openPayment && openPayment.doc.status === 'draft' && openPayment.doc.party_id
-      ? await openItemsForParty(openPayment.doc.party_id as string, side, orgId, authz.allowedSubsidiaryIds, { paymentDocumentId: String(openPayment.doc.id) })
+      ? await openItemsForParty(openPayment.doc.party_id as string, side, orgId, fundingSubsidiaryId ? new Set([fundingSubsidiaryId]) : new Set(), { paymentDocumentId: String(openPayment.doc.id) })
       : []
   // Stored-value tenders (receipts only): already-saved snapshots from the
   // draft plus the receipt party's verified credit for the picker. Null
@@ -156,12 +173,12 @@ export async function loadPaymentFlyout({
     // account, and applications start empty for the operator to fill —
     // unless another record opened the drawer for a known party (and
     // document), which preselects them. Opening still writes nothing.
-    const currency = defaults?.[1].rows[0]?.base_currency ?? ''
+    const currency = fundingCurrency
     const prefillParty = prefill?.partyId
       ? parties.rows.find((party) => party.id === prefill.partyId) ?? null
       : null
     const prefillItems: OpenItemClient[] = prefillParty
-      ? await openItemsForParty(prefillParty.id, side, orgId, authz.allowedSubsidiaryIds)
+      ? await openItemsForParty(prefillParty.id, side, orgId, fundingSubsidiaryId ? new Set([fundingSubsidiaryId]) : new Set())
       : []
     // Same-currency items of the named document, unreserved, on one control
     // account: exactly the selection the drawer itself would accept.
@@ -188,6 +205,8 @@ export async function loadPaymentFlyout({
           kind,
           status: 'draft',
           currency,
+          subsidiary_id: fundingSubsidiaryId ?? null,
+          funding_subsidiaries: fundingSubsidiaries,
           total: '0',
           document_number: null,
           party_id: prefillParty?.id ?? null,
@@ -218,7 +237,7 @@ export async function loadPaymentFlyout({
   }
   return {
     mode: 'record',
-    payment: { ...openPayment!, governedByFlow },
+    payment: { ...openPayment!, doc: { ...openPayment!.doc, subsidiary_id: fundingSubsidiaryId ?? openPayment!.doc.subsidiary_id }, governedByFlow },
     initialOpenItems,
     parties: parties.rows,
     bankAccounts: banks.rows,

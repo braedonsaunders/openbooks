@@ -16,6 +16,7 @@ async function listOpenItems(req: Request) {
   const url = new URL(req.url)
   const partyId = url.searchParams.get('partyId') ?? ''
   const side = url.searchParams.get('side')
+  const subsidiaryId = url.searchParams.get('subsidiaryId')
   if (side !== 'ap' && side !== 'ar') {
     return NextResponse.json({ error: 'side must be ap or ar' }, { status: 400 })
   }
@@ -31,9 +32,15 @@ async function listOpenItems(req: Request) {
   if (!party.rows[0]) return notFound("record")
   const scopeDenied = guardSubsidiaryScope(gate, party.rows[0].subsidiaryId, { orgWideNull: true })
   if (scopeDenied) return scopeDenied
+  if (subsidiaryId) {
+    if (!isUuid(subsidiaryId)) return notFound('record')
+    const entityDenied = guardSubsidiaryScope(gate, subsidiaryId)
+    if (entityDenied) return entityDenied
+    if (!(await db.execute(sql`select id from subsidiaries where org_id = ${gate.user.orgId} and id = ${subsidiaryId} and is_active`)).rows[0]) return notFound('record')
+  }
 
   try {
-    const items = await openItemsForParty(partyId, side, gate.user.orgId, gate.allowedSubsidiaryIds)
+    const items = await openItemsForParty(partyId, side, gate.user.orgId, subsidiaryId ? new Set([subsidiaryId]) : gate.allowedSubsidiaryIds)
     return NextResponse.json({ items })
   } catch (e) {
     return paymentErrorResponse(e)

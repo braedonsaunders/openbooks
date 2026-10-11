@@ -189,6 +189,7 @@ stubModules({
        return { doc: { id, kind, org_id: orgId, document_number: 'PAY-000003' }, bankAccountId: null, allocations: [], applied: [] }
      }`,
     "@openbooks/engine/payments/payment-documents": `const state = globalThis[Symbol.for('openbooks.payments-route-test')]
+     export async function resolvePaymentCurrencyBasis() { throw new Error('unexpected explicit currency request') }
      export async function updateDraftPayment(_id, patch) { state.savedPatch = patch; return null }`,
     "@openbooks/engine/platform/business-date/module": `export async function businessToday() { return globalThis[Symbol.for('openbooks.payments-route-test')].clockDate }`,
   },
@@ -374,7 +375,7 @@ test("a foreign party and a foreign bank account are refused", async () => {
   state.bankExists = false;
   const foreignBank = await post("00000000-0000-4000-8000-00000000d015", SIMPLE);
   assert.equal(foreignBank.status, 404);
-  assert.deepEqual(await foreignBank.json(), { error: "bank account not found in this organization" });
+  assert.deepEqual(await foreignBank.json(), { error: "payment funding account not found in this organization" });
 
   assert.equal(state.sequenceAllocations, 0, "no number may be allocated for refused references");
 });

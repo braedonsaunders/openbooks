@@ -18,7 +18,8 @@ import { loadPaymentDocument, openItemsForParty } from '@openbooks/engine/paymen
 import { can, getAuthz, guardSubsidiaryScope } from '../../../lib/authz'
 import { isUuid } from '../../../lib/list-params'
 import { exactMoney, isoDate, nullableUuidId, parseJsonBody, uuidId } from '../../../lib/api/json'
-import { updateDraftPayment } from '@openbooks/engine/payments/payment-documents'
+import { updateDraftPayment, resolvePaymentCurrencyBasis } from '@openbooks/engine/payments/payment-documents'
+import { isIso4217CurrencyCode } from '@openbooks/engine/fx/currencies'
 import { assertAllocationTargetsInScope, isPaymentKind, paymentErrorResponse, paymentPermission } from './lib'
 
 export const runtime = 'nodejs'
@@ -51,6 +52,8 @@ const paymentCreateBody = z.object({
   }),
   partyId: nullableUuidId.optional(),
   bankAccountId: nullableUuidId.optional(),
+  subsidiaryId: nullableUuidId.optional(),
+  currency: z.string().refine(isIso4217CurrencyCode, 'must be an ISO currency').optional(),
   documentDate: isoDate().optional(),
   referenceNumber: z.string().nullable().optional(),
   memo: z.string().nullable().optional(),
@@ -144,22 +147,16 @@ async function createPayment(request: Request) {
     return bad('select a party before applying open items', 'partyId')
   }
 
-  // -- bank account: an active bank-type account of this org -------------------
-  if (bankAccountId) {
-    const bank = (await db.execute<{ id: string }>(sql`
-      select id from accounts
-       where id = ${bankAccountId} and org_id = ${user.orgId}
-         and type = 'asset_bank' and is_active and not is_summary`))
-    if (!bank.rows[0]) {
-      return NextResponse.json({ error: 'bank account not found in this organization' }, { status: 404 })
-    }
+  if (bankAccountId && !(await db.execute(sql`select id from accounts
+    where org_id = ${user.orgId} and id = ${bankAccountId} and is_active and not is_summary`)).rows[0]) {
+    return NextResponse.json({ error: 'payment funding account not found in this organization' }, { status: 404 })
   }
 
   // -- legal entity + currency --------------------------------------------------
   // The payment inherits the party's subsidiary, else the org root — the
   // same derivation the legacy draft factory used, minus the write. A
   // restricted caller outside that entity sees the tenant-opaque 404.
-  let subsidiaryId: string | null = partySubsidiaryId
+  let subsidiaryId: string | null = body.subsidiaryId ?? partySubsidiaryId
   if (!subsidiaryId) {
     const root = (await db.execute<{ id: string }>(sql`
       select id from subsidiaries where org_id = ${user.orgId} and parent_id is null`))
@@ -168,10 +165,14 @@ async function createPayment(request: Request) {
   }
   const denied = guardSubsidiaryScope(gate, subsidiaryId)
   if (denied) return denied
+  const entity = (await db.execute<{ id: string }>(sql`
+    select id from subsidiaries where org_id = ${user.orgId} and id = ${subsidiaryId}
+      and is_active and not is_elimination`)).rows[0]
+  if (!entity) return NextResponse.json({ error: 'record not found' }, { status: 404 })
   const org = (await db.execute<{ baseCurrency: string }>(sql`
     select base_currency as "baseCurrency" from orgs where id = ${user.orgId}`)).rows[0]
   if (!org) return bad('org not found', undefined, 500)
-  const currency = org.baseCurrency
+  const currency = body.currency ?? org.baseCurrency
 
   // -- allocations: real open items of this party, within open balance --------
   try {
@@ -223,6 +224,8 @@ async function createPayment(request: Request) {
     kind,
     partyId,
     bankAccountId,
+    ...(body.subsidiaryId !== undefined ? { subsidiaryId: body.subsidiaryId } : {}),
+    ...(body.currency !== undefined ? { currency: body.currency } : {}),
     documentDate: body.documentDate ?? null,
     referenceNumber: body.referenceNumber ?? null,
     memo: body.memo ?? null,
@@ -276,6 +279,10 @@ async function createPayment(request: Request) {
         if (replay !== 'replay') throw new Error('idempotency_key_conflict')
         return false
       }
+      const currencyBasis = body.currency !== undefined
+        ? await resolvePaymentCurrencyBasis(user.orgId, subsidiaryId, currency, documentDate) : null
+      const fxRate = currencyBasis?.fxRate ?? '1'
+      const fundedCustom = { ...custom, ...(currencyBasis ? { paymentCurrencyEvidence: currencyBasis.evidence } : {}) }
       // First write for this key: the number is allocated here, inside the
       // locked save transaction — opening the drawer never consumed one.
       const documentNumber = await allocateDocumentNumber(tx, user.orgId, kind, NUMBER_PREFIX[kind])
@@ -286,8 +293,8 @@ async function createPayment(request: Request) {
            subtotal, tax_total, total, created_by, updated_by)
         values
           (${requestId}, ${user.orgId}, ${kind}, 'draft', ${subsidiaryId}, ${documentNumber},
-           ${documentDate}, ${currency}, '1', ${partyId}, ${referenceNumber}, ${memo},
-           ${JSON.stringify(custom)}::jsonb, ${total}, '0', ${total}, ${user.id}, ${user.id})
+           ${documentDate}, ${currency}, ${fxRate}, ${partyId}, ${referenceNumber}, ${memo},
+           ${JSON.stringify(fundedCustom)}::jsonb, ${total}, '0', ${total}, ${user.id}, ${user.id})
         -- A retry is accepted only after the existing audited create payload is verified below.
         on conflict (id) do nothing
         returning id`))
@@ -310,7 +317,7 @@ async function createPayment(request: Request) {
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
         values (${user.orgId}, 'documents', ${requestId}, 'insert',
-                ${JSON.stringify({ before: null, after: snapshot })}::jsonb,
+                ${JSON.stringify({ before: null, after: { ...snapshot, fx_rate: fxRate, custom: fundedCustom } })}::jsonb,
                 ${user.id}, ${requestId})`)
       await updateDraftPayment(
         requestId,

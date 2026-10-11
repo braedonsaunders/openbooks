@@ -8,6 +8,7 @@ import { resolveOrgId } from './org-scope'
 import { bankAccountMembership } from './banking-accounts'
 import type { DocKindConfig } from './document-kinds'
 import { taxProfileMap } from '@openbooks/engine/documents/totals'
+import { receiptFundingAccountOptions } from '@openbooks/engine/payments/documents'
 
 export * from '@openbooks/engine/documents/write'
 
@@ -167,6 +168,15 @@ export async function bankAccountOptions(orgId?: string): Promise<Opt[]> {
      order by number nulls last
   `))
   return r.rows
+}
+
+/** Customer receipts add only the provider's explicitly scoped processor
+ * pool. The ordinary bank option contract remains unchanged. */
+export async function receiptAccountOptions(input: {
+  orgId: string; actorId: string; kind: 'customer_payment' | 'vendor_payment';
+  subsidiaryId: string; currency: string; onDate: string; allowedSubsidiaryIds: ReadonlySet<string> | null;
+}) {
+  return receiptFundingAccountOptions(input)
 }
 
 /**

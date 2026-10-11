@@ -25,6 +25,7 @@ export type SetupRailFlags = {
   crmEnabled?: boolean
   bankFeedsEnabled?: boolean
   onlinePaymentsEnabled?: boolean
+  bankingEnabled?: boolean
   shippingEnabled?: boolean
   payrollEnabled?: boolean
   hrmEnabled?: boolean
@@ -88,6 +89,7 @@ export function setupRail({
   crmEnabled = true,
   bankFeedsEnabled = false,
   onlinePaymentsEnabled = false,
+  bankingEnabled = false,
   shippingEnabled = false,
   payrollEnabled = false,
   hrmEnabled = false,
@@ -131,8 +133,8 @@ export function setupRail({
             ...(bankFeedsEnabled
               ? [{ href: '/admin/setup/bank-feeds', labelKey: 'admin.setup.bankFeeds.navTitle', iconKey: 'landmark' }]
               : []),
-            ...(onlinePaymentsEnabled
-              ? [{ href: '/admin/setup/payment-providers', labelKey: 'admin.setup.paymentProviders.navTitle', iconKey: 'payments' }]
+            ...(onlinePaymentsEnabled || bankingEnabled
+              ? [{ href: onlinePaymentsEnabled ? '/admin/setup/payment-providers' : '/admin/setup/payment-providers?view=processor_receipts', labelKey: 'admin.setup.paymentProviders.navTitle', iconKey: 'payments' }]
               : []),
             ...PAYMENT_SETUP_PAGES.map(({ view, iconKey }) => ({ href: paymentSetupHref(view), labelKey: `admin.setup.paymentOperations.tabs.${view}`, iconKey })),
             ...entities(group.key),

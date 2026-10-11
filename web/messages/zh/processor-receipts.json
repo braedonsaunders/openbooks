@@ -1,0 +1,22 @@
+{
+  "title": "支付处理商收款资金账户",
+  "description": "配置客户收款何时可借记支付处理商清算账户。请先过账已批准的收款，再核对服务商结算款。",
+  "receiptAccount": "收款账户",
+  "providersTab": "服务商",
+  "accountsTab": "处理商收款",
+  "provider": "服务商",
+  "clearingAccount": "支付处理商清算账户",
+  "legalEntity": "法律实体",
+  "currency": "币种",
+  "effectiveFrom": "生效日期",
+  "effectiveTo": "截止日期",
+  "reason": "原因",
+  "newPolicy": "新建政策",
+  "empty": "暂无收款资金账户政策。",
+  "openEnded": "无截止日期",
+  "readOnly": "配置收款资金账户需要对所有法律实体的访问权限。",
+  "choose": "选择…",
+  "loadFailed": "无法加载收款资金账户政策。",
+  "saveFailed": "无法保存收款资金账户政策。",
+  "selectReceiptAccount": "请选择收款账户。"
+}

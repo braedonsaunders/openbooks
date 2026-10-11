@@ -183,6 +183,11 @@ async function legacyGET() {
   let automationRows = automationConfigs.rows as Array<Record<string, unknown>>;
   let surchargeRows = rules.rows as Array<Record<string, unknown>>;
   if (scope !== null) {
+    configRows = configRows.map(row => {
+      const settings = { ...(row.settings as Record<string, unknown> ?? {}) };
+      delete settings.processorReceiptPolicies;
+      return { ...row, settings };
+    });
     const referenced = [...new Set([
       ...configRows.map((c) => c.defaultBankAccountId),
       ...configRows.flatMap((c) => disputeAccountKeys.map((key) => c[key])),
@@ -228,6 +233,7 @@ async function legacyGET() {
     incomeAccounts: incomeAccounts.rows,
     postingAccounts: postingAccounts.rows,
     featureEnabled: await isFeatureEnabled(orgId, "onlinePayments"),
+    bankingEnabled: await isFeatureEnabled(orgId, "banking"),
   });
 }
 

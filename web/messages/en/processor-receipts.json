@@ -1,0 +1,22 @@
+{
+  "title": "Processor receipt funding",
+  "description": "Configure when customer receipts may debit a processor clearing pool. Post approved receipts before reconciling provider payouts.",
+  "receiptAccount": "Receipt account",
+  "providersTab": "Providers",
+  "accountsTab": "Processor receipts",
+  "provider": "Provider",
+  "clearingAccount": "Processor clearing account",
+  "legalEntity": "Legal entity",
+  "currency": "Currency",
+  "effectiveFrom": "Effective from",
+  "effectiveTo": "Effective to",
+  "reason": "Reason",
+  "newPolicy": "New policy",
+  "empty": "No receipt funding policies.",
+  "openEnded": "No end date",
+  "readOnly": "Unrestricted legal-entity access is required to configure receipt funding.",
+  "choose": "Choose…",
+  "loadFailed": "Receipt funding could not be loaded.",
+  "saveFailed": "Receipt funding could not be saved.",
+  "selectReceiptAccount": "Select a receipt account."
+}

@@ -62,6 +62,7 @@ import pdfTemplates from './pdfTemplates.json'
 import planning from './planning.json'
 import platform from './platform.json'
 import portal from './portal.json'
+import processorReceipts from './processor-receipts.json'
 import projectTypes from './projectTypes.json'
 import projects from './projects.json'
 import purchaseOrders from './purchaseOrders.json'
@@ -145,6 +146,7 @@ export default {
   planning,
   platform,
   portal,
+  processorReceipts,
   projectTypes,
   projects,
   purchaseOrders,

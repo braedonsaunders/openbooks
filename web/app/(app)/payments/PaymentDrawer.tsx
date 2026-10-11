@@ -10,7 +10,7 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Wand2 } from 'lucide-react'
-import { Badge, Button, FieldLabel, Input, Label, SearchSelect } from '@openbooks/ui'
+import { Badge, Button, FieldLabel, Input, Label, SearchSelect, Select } from '@openbooks/ui'
 import { TransactionDrawer } from '../../../components/transaction-drawer'
 import { DocTypeBadge, docTypeMeta } from '../../../components/doc-type-badge'
 import { JournalEntryLink } from '../../../components/journal-entry-link'
@@ -42,6 +42,7 @@ type Opt = {
   display_name?: string
   number?: string | null
   name?: string
+  provider?: string | null
 };
 
 export interface OpenItemClient {
@@ -294,6 +295,15 @@ export function PaymentDrawer({
   const tWithholding = useTranslations('ap.withholding')
   const router = useRouter()
   const doc = asPaymentDoc(payment.doc)
+  const tFunding = useTranslations('processorReceipts')
+  const [fundingAccounts, setFundingAccounts] = useState(bankAccounts)
+  const [fundingError, setFundingError] = useState<string | null>(null)
+  const [fundingRetry, setFundingRetry] = useState(0)
+  const [fundingSubsidiaryId, setFundingSubsidiaryId] = useState(typeof doc.subsidiary_id === 'string' ? doc.subsidiary_id : '')
+  const fundingSubsidiaries = (Array.isArray(doc.funding_subsidiaries) ? doc.funding_subsidiaries : []) as { id: string; name: string; currency: string }[]
+  const fundingLabel = side === 'ar' ? tFunding('receiptAccount') : t('bankAccount')
+  const fundingPlaceholder = side === 'ar' ? tFunding('selectReceiptAccount') : t('selectBankAccountPlaceholder')
+  const fundingOptionLabel = (account: Opt) => `${account.number ?? ''} ${account.name ?? ''}${account.provider ? ` · ${account.provider}` : ''}`.trim()
   const applied = payment.applied.map(asPaymentAppliedRow)
   const isDraft = doc.status === 'draft'
   // Existing records default to read-only; newly created drafts can explicitly
@@ -393,9 +403,9 @@ export function PaymentDrawer({
   // Reset the allocations (and enter the loading state) when the party
   // selection changes, during render (same committed values, no extra
   // render). Keyed on the fetch inputs below.
-  const [prevPartyKeys, setPrevPartyKeys] = useState(() => ({ partyId, side, isDraft }))
-  if (prevPartyKeys.partyId !== partyId || prevPartyKeys.side !== side || prevPartyKeys.isDraft !== isDraft) {
-    setPrevPartyKeys({ partyId, side, isDraft })
+  const [prevPartyKeys, setPrevPartyKeys] = useState(() => ({ partyId, side, isDraft, fundingSubsidiaryId }))
+  if (prevPartyKeys.partyId !== partyId || prevPartyKeys.side !== side || prevPartyKeys.isDraft !== isDraft || prevPartyKeys.fundingSubsidiaryId !== fundingSubsidiaryId) {
+    setPrevPartyKeys({ partyId, side, isDraft, fundingSubsidiaryId })
     if (isDraft) {
       setAllocs({})
       setOpenItems([])
@@ -412,9 +422,9 @@ export function PaymentDrawer({
       partyFetchArmed.current = true
       return
     }
-    if (!partyId) return
+    if (!partyId || !fundingSubsidiaryId) { setLoadingItems(false); return }
     let cancelled = false
-    fetch(`/api/payments/open-items?partyId=${partyId}&side=${side}`)
+    fetch(`/api/payments/open-items?partyId=${partyId}&side=${side}&subsidiaryId=${fundingSubsidiaryId}`)
       .then(async (res) => {
         if (cancelled) return
         if (!res.ok) {
@@ -433,7 +443,26 @@ export function PaymentDrawer({
     return () => {
       cancelled = true
     }
-  }, [partyId, side, isDraft, t])
+  }, [partyId, side, isDraft, fundingSubsidiaryId, t])
+
+  useEffect(() => {
+    if (!editable || !fundingSubsidiaryId || !documentDate) return
+    const controller = new AbortController()
+    setFundingAccounts([])
+    setFundingError(null)
+    const query = new URLSearchParams({ kind: side === 'ar' ? 'customer_payment' : 'vendor_payment',
+      subsidiaryId: fundingSubsidiaryId, currency: doc.currency, date: documentDate })
+    fetch(`/api/payments/funding-accounts?${query}`, { signal: controller.signal }).then(async response => {
+      if (!response.ok) {
+        const message = await readApiErrorMessage(response, tFunding('loadFailed'))
+        if (!controller.signal.aborted) setFundingError(message)
+        return
+      }
+      const data = await response.json() as { accounts: Opt[] }
+      if (!controller.signal.aborted) setFundingAccounts(data.accounts)
+    }).catch(() => { if (!controller.signal.aborted) setFundingError(tFunding('loadFailed')) })
+    return () => controller.abort()
+  }, [editable, fundingSubsidiaryId, doc.currency, documentDate, side, fundingRetry, tFunding])
 
   // Results are scoped to the submitted inputs, so old evidence disappears
   // immediately on a date/currency/party-side change. Effect cleanup prevents
@@ -522,6 +551,7 @@ export function PaymentDrawer({
   const payload = useMemo(
     () => ({
       expectedUpdatedAt: doc.updated_at,
+      ...(createMode ? { subsidiaryId: fundingSubsidiaryId || null } : {}),
       partyId: partyId || null,
       bankAccountId: bankAccountId || null,
       documentDate: documentDate || undefined,
@@ -532,7 +562,7 @@ export function PaymentDrawer({
       ...(showWithholding ? { withholdingAuthorisation: withholdingAuthorisation || null, withholdingAuthorisedAmount: withholdingAuthorisedAmount.trim() || null } : {}),
       ...(tenderPatch !== null ? { storedValueTenders: tenderPatch } : {}),
     }),
-    [partyId, bankAccountId, documentDate, referenceNumber, memo, validAllocations, onAccount, side, tenderPatch, doc.updated_at, showWithholding, withholdingAuthorisation, withholdingAuthorisedAmount],
+    [partyId, bankAccountId, documentDate, referenceNumber, memo, validAllocations, onAccount, side, tenderPatch, doc.updated_at, showWithholding, withholdingAuthorisation, withholdingAuthorisedAmount, createMode, fundingSubsidiaryId],
   )
   // Track unsaved edits (no autosave — Save is an explicit button). Adjusted
   // during render (same committed value, no extra render). `editable` is read
@@ -578,7 +608,7 @@ export function PaymentDrawer({
     // Restoring the party must not trip the party-change reset on the next
     // render: sync its tracking and bring back the loaded open items, or the
     // wipe clears the restored applications and a later save deletes them.
-    setPrevPartyKeys({ partyId: restoredParty, side, isDraft })
+    setPrevPartyKeys({ partyId: restoredParty, side, isDraft, fundingSubsidiaryId })
     setOpenItems(initialOpenItems)
     setLoadingItems(false)
   }
@@ -601,6 +631,8 @@ export function PaymentDrawer({
       kind: side === 'ap' ? 'vendor_payment' : 'customer_payment',
       partyId: partyId || null,
       bankAccountId: bankAccountId || null,
+      subsidiaryId: fundingSubsidiaryId || undefined,
+      currency: doc.currency,
       documentDate: documentDate || undefined,
       referenceNumber,
       memo,
@@ -859,14 +891,14 @@ export function PaymentDrawer({
   }
 
   const field = 'space-y-1.5'
-  const soleSelectedBank = bankAccounts.length === 1 && bankAccounts[0]!.id === bankAccountId ? bankAccounts[0] : null
+  const soleSelectedBank = fundingAccounts.length === 1 && fundingAccounts[0]!.id === bankAccountId ? fundingAccounts[0] : null
   const renderHeaderField = (placement: HeaderFieldPlacement, isEditable: boolean) => {
     const label = placement.labelOverride?.trim()
     switch (placement.key) {
       case 'party_id':
         return <><FieldLabel fieldName={label || partyLabel}>{label || partyLabel}{isEditable ? <span className="text-red-500"> *</span> : null}</FieldLabel>{isEditable ? <SearchSelect options={parties.map((party) => ({ value: party.id, label: party.display_name ?? '' }))} value={partyId} onChange={(value) => setPartyId(value ?? '')} placeholder={t('selectPartyPlaceholder', { side })} /> : <p className="text-sm">{doc.party_name}</p>}</>
       case 'bank_account_id':
-        return <><FieldLabel fieldName={label || t('bankAccount')}>{label || t('bankAccount')}{isEditable ? <span className="text-red-500"> *</span> : null}</FieldLabel>{isEditable && !soleSelectedBank ? <SearchSelect options={bankAccounts.map((account) => ({ value: account.id, label: `${account.number ?? ''} ${account.name ?? ''}`.trim() }))} value={bankAccountId} onChange={(value) => setBankAccountId(value ?? '')} placeholder={t('selectBankAccountPlaceholder')} /> : <p className="text-sm">{soleSelectedBank ? `${soleSelectedBank.number ?? ''} ${soleSelectedBank.name ?? ''}`.trim() : `${doc.bank_account_number ?? ''} ${doc.bank_account_name ?? ''}`.trim() || '—'}</p>}</>
+        return <><FieldLabel fieldName={label || fundingLabel}>{label || fundingLabel}{isEditable ? <span className="text-red-500"> *</span> : null}</FieldLabel>{isEditable && !soleSelectedBank ? <SearchSelect options={fundingAccounts.map((account) => ({ value: account.id, label: fundingOptionLabel(account) }))} value={bankAccountId} onChange={(value) => setBankAccountId(value ?? '')} placeholder={fundingPlaceholder} /> : <p className="text-sm">{soleSelectedBank ? `${soleSelectedBank.number ?? ''} ${soleSelectedBank.name ?? ''}`.trim() : `${doc.bank_account_number ?? ''} ${doc.bank_account_name ?? ''}`.trim() || '—'}</p>}</>
       case 'document_date':
         return <><FieldLabel fieldName={label || tCommon('labels.date')}>{label || tCommon('labels.date')}</FieldLabel>{isEditable ? <Input type="date" value={documentDate} onChange={(event) => setDocumentDate(event.target.value)} /> : <p className="text-sm">{doc.document_date}</p>}</>
       case 'reference_number':
@@ -900,7 +932,7 @@ export function PaymentDrawer({
   const postBlocker =
     saveSettling ? tCommon('actions.saving')
     : !partyId ? t('postBlocked.noParty', { side })
-    : !bankAccountId ? t('postBlocked.noBankAccount', { side })
+    : !bankAccountId ? side === 'ar' ? tFunding('selectReceiptAccount') : t('postBlocked.noBankAccount', { side })
     : hasInvalidRow ? t('postBlocked.invalidRows')
     : receivedInvalid || receivedShort ? t('receivedShort')
     : validAllocations.length === 0 && cmp(onAccount, '0') <= 0 ? t('postBlocked.noAllocations', { side })
@@ -1078,6 +1110,14 @@ export function PaymentDrawer({
     >
       <div className="space-y-6 p-1">
         <ActionAlert error={refusal} fallbackMessage={t('toasts.postFailed')} />
+        {fundingError && editable ? <div role="alert" className="text-sm text-red-600">
+          {fundingError} <Button variant="outline" size="sm" onClick={() => setFundingRetry(value => value + 1)}>{tCommon('actions.retry')}</Button>
+        </div> : null}
+        {createMode && fundingSubsidiaries.length > 1 ? <div className={field}>
+          <Label>{tFunding('legalEntity')}</Label><Select value={fundingSubsidiaryId} onChange={event => {
+            setFundingSubsidiaryId(event.target.value); setBankAccountId(''); setAllocs({}); setOpenItems([])
+          }}><option value="">{tFunding('choose')}</option>{fundingSubsidiaries.map(sub => <option key={sub.id} value={sub.id}>{sub.name}</option>)}</Select>
+        </div> : null}
         {layout ? <HeaderFields layout={layout} editable={editable} renderField={renderHeaderField} expandDetails={!createMode} /> : <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className={`${field} lg:col-span-2`}>
             <Label>
@@ -1097,18 +1137,18 @@ export function PaymentDrawer({
           </div>
           <div className={`${field} lg:col-span-2`}>
             <Label>
-              {t('bankAccount')}
+              {fundingLabel}
               {editable ? <span className="text-red-500"> *</span> : null}
             </Label>
             {editable ? (
               <SearchSelect
-                options={bankAccounts.map((a) => ({
+                options={fundingAccounts.map((a) => ({
                   value: a.id,
-                  label: `${a.number ?? ''} ${a.name ?? ''}`.trim(),
+                  label: fundingOptionLabel(a),
                 }))}
                 value={bankAccountId}
                 onChange={(v) => setBankAccountId(v ?? '')}
-                placeholder={t('selectBankAccountPlaceholder')}
+                placeholder={fundingPlaceholder}
               />
             ) : (
               <p className="text-sm">

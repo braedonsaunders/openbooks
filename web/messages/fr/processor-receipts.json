@@ -1,0 +1,22 @@
+{
+  "title": "Financement des encaissements par processeur",
+  "description": "Configurez quand les encaissements clients peuvent débiter un compte de compensation du processeur. Comptabilisez les encaissements approuvés avant de rapprocher les versements.",
+  "receiptAccount": "Compte d’encaissement",
+  "providersTab": "Prestataires",
+  "accountsTab": "Encaissements par processeur",
+  "provider": "Prestataire",
+  "clearingAccount": "Compte de compensation du processeur",
+  "legalEntity": "Entité juridique",
+  "currency": "Devise",
+  "effectiveFrom": "Applicable à partir du",
+  "effectiveTo": "Applicable jusqu’au",
+  "reason": "Motif",
+  "newPolicy": "Nouvelle politique",
+  "empty": "Aucune politique de financement des encaissements.",
+  "openEnded": "Sans date de fin",
+  "readOnly": "Un accès sans restriction aux entités juridiques est nécessaire pour configurer le financement.",
+  "choose": "Choisir…",
+  "loadFailed": "Impossible de charger le financement des encaissements.",
+  "saveFailed": "Impossible d’enregistrer le financement des encaissements.",
+  "selectReceiptAccount": "Sélectionnez un compte d’encaissement."
+}

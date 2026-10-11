@@ -35,7 +35,7 @@ export async function loadProcessorReceiptConfiguration(orgId: string, actorId: 
         ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, requested, { orgWideNull: true })} order by number nulls last, name`)).rows;
     const accountIds = new Set(accounts.map(account => account.id));
     const subsidiaries = (await db.execute<{ id: string; name: string; currency: string }>(sql`
-      select id, name, base_currency as currency from subsidiaries where org_id = ${orgId} and is_active order by name`)).rows.filter(row => visible(row.id));
+      select id, name, base_currency as currency from subsidiaries where org_id = ${orgId} and is_active and not is_elimination order by name`)).rows.filter(row => visible(row.id));
     return { accounts, subsidiaries, canManage: live === null && requested === null,
       providers: PSP_PROVIDERS.map(provider => {
         const config = providers.find(row => row.provider === provider);
@@ -110,14 +110,16 @@ export async function saveProcessorReceiptPolicy(orgId: string, provider: string
     const account = (await db.execute<{ type: string }>(sql`select type from accounts where org_id = ${orgId} and id = ${policy!.accountId}
       and is_active and not is_summary and (currency_restriction is null or currency_restriction = ${policy!.currency}) for share`)).rows[0];
     if (account?.type !== "asset_current_other") throw new PaymentError("Processor receipts require an active nonsummary other-current-asset clearing account.");
-    const subsidiary = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id = ${orgId} and id = ${policy!.subsidiaryId} and is_active for share`)).rows[0];
+    const subsidiary = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id = ${orgId} and id = ${policy!.subsidiaryId} and is_active and not is_elimination for share`)).rows[0];
     if (!subsidiary) throw new ScopeNotFoundError();
     const policies = processorReceiptPolicies(config.settings);
     const prior = policies.find(row => row.id === policy!.id);
     if (prior && canonicalJson(prior) === canonicalJson(policy)) return prior;
     if (prior) {
+      const today = await businessToday(orgId);
       if (canonicalJson({ ...prior, effectiveTo: null }) !== canonicalJson({ ...policy, effectiveTo: null })
-          || policy!.effectiveTo === null || policy!.effectiveTo < await businessToday(orgId)) {
+          || (prior.effectiveTo !== null && prior.effectiveTo < today)
+          || policy!.effectiveTo === null || policy!.effectiveTo < today) {
         throw new PaymentError("A receipt funding mapping is immutable. Close it prospectively and create a new dated policy.");
       }
     }

@@ -15,7 +15,9 @@ import { isPaymentKind, lockEditablePaymentDocument } from "../payments-core/pay
 import { isUuid } from "../platform/uuid.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
+import { loadSubsidiaryContext, validateSubsidiaryRestrictions, SubsidiaryError } from "../organization/subsidiaries.ts";
 import { resolveReceiptFunding } from "../payments-core/receipt-funding.ts";
+import { resolvePaymentCurrencyBasis } from "./payment-currency.ts";
 import { loadStoredValueTenderAccount, resolveStoredValueTender, storedValueLiabilityControlAccount } from "../stored-value/accounts.ts";
 import {
   computePaymentWithholdings,
@@ -24,6 +26,7 @@ import {
   type PaymentWithholding,
 } from "../contractor-withholding/service.ts";
 export { isPaymentKind, lockEditablePaymentDocument };
+export { resolvePaymentCurrencyBasis };
 const NUMBER_PREFIX: Record<PaymentKind, string> = {
   vendor_payment: "PAY-",
   customer_payment: "RCPT-",
@@ -190,6 +193,7 @@ export async function updateDraftPayment(
       feeAmount?: string;
       feeIncomeAccountId?: string;
       onAccountAmount?: string;
+      paymentCurrencyEvidence?: unknown;
       storedValueTenders?: StoredValueTenderSnapshot[];
       withholdingAuthorisation?: string | null;
       withholdingAuthorisedAmount?: string | null;
@@ -309,7 +313,17 @@ export async function updateDraftPayment(
     if (processorFunding) {
       if (!userId) throw new PaymentError("Processor receipts require an authorized receipt actor.");
       await lockActorCommandAuthority(db, doc.orgId, userId, doc.subsidiaryId, "ar.pay");
+      try {
+        await validateSubsidiaryRestrictions(db, { orgId: doc.orgId, ctx: await loadSubsidiaryContext(db, doc.orgId),
+          docSubsidiaryId: processorFunding.subsidiaryId, partyId, lines: [] });
+      } catch (error) {
+        if (error instanceof SubsidiaryError) throw new PaymentError(error.message, { cause: error });
+        throw error;
+      }
     }
+    const currencyEntityId = processorFunding?.subsidiaryId ?? doc.subsidiaryId;
+    const currencyBasis = (processorFunding || custom.paymentCurrencyEvidence) && currencyEntityId
+      ? await resolvePaymentCurrencyBasis(doc.orgId, currencyEntityId, doc.currency, patch.documentDate ?? doc.documentDate) : null;
     if (discountAccountId || controlAccountId || feeIncomeAccountId) {
       const refs = [discountAccountId, controlAccountId, feeIncomeAccountId].filter(Boolean) as string[];
       const uniqueRefs = [...new Set(refs)];
@@ -488,7 +502,8 @@ export async function updateDraftPayment(
           document_date = coalesce(${patch.documentDate ?? null}, document_date),
           reference_number = ${patch.referenceNumber !== undefined ? patch.referenceNumber : sql`reference_number`},
           memo = ${patch.memo !== undefined ? patch.memo : sql`memo`},
-          custom = ${JSON.stringify({ ...custom, bankAccountId, processorFunding, allocations, creditAllocations, discountAmount, discountAccountId, controlAccountId, feeAmount, feeIncomeAccountId, onAccountAmount, storedValueTenders, withholdings, withholdingAmount, withholdingAuthorisation, withholdingAuthorisedAmount })}::jsonb,
+          fx_rate = ${currencyBasis?.fxRate ?? doc.fxRate},
+          custom = ${JSON.stringify({ ...custom, bankAccountId, processorFunding, ...(currencyBasis ? { paymentCurrencyEvidence: currencyBasis.evidence } : {}), allocations, creditAllocations, discountAmount, discountAccountId, controlAccountId, feeAmount, feeIncomeAccountId, onAccountAmount, storedValueTenders, withholdings, withholdingAmount, withholdingAuthorisation, withholdingAuthorisedAmount })}::jsonb,
           subtotal = ${total}, tax_total = '0', total = ${total},
           updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'), updated_by = ${userId}
         where id = ${id} and org_id = ${orgId}
@@ -498,8 +513,8 @@ export async function updateDraftPayment(
         await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
           values (${orgId}, 'documents', ${id}, 'update',
             ${JSON.stringify({ mode: "processor_receipt_funding", reason: "Receipt funding selected during native draft save",
-              before: { bankAccountId: custom.bankAccountId ?? null, processorFunding: (doc.custom as { processorFunding?: unknown } | null)?.processorFunding ?? null },
-              after: { bankAccountId, processorFunding, total, documentDate: patch.documentDate ?? doc.documentDate } })}::jsonb, ${userId})`);
+              before: { bankAccountId: custom.bankAccountId ?? null, processorFunding: (doc.custom as { processorFunding?: unknown } | null)?.processorFunding ?? null, fxRate: doc.fxRate },
+              after: { bankAccountId, processorFunding, total, fxRate: currencyBasis?.fxRate ?? doc.fxRate, currencyEvidence: currencyBasis?.evidence ?? null, documentDate: patch.documentDate ?? doc.documentDate } })}::jsonb, ${userId})`);
       }
     });
     return loadPaymentDocument(id, doc.kind, orgId);

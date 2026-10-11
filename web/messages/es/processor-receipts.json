@@ -1,0 +1,22 @@
+{
+  "title": "Financiación de cobros del procesador",
+  "description": "Configure cuándo los cobros de clientes pueden cargar una cuenta de compensación del procesador. Contabilice los cobros aprobados antes de conciliar los pagos del proveedor.",
+  "receiptAccount": "Cuenta de cobro",
+  "providersTab": "Proveedores",
+  "accountsTab": "Cobros del procesador",
+  "provider": "Proveedor",
+  "clearingAccount": "Cuenta de compensación del procesador",
+  "legalEntity": "Entidad jurídica",
+  "currency": "Moneda",
+  "effectiveFrom": "Vigente desde",
+  "effectiveTo": "Vigente hasta",
+  "reason": "Motivo",
+  "newPolicy": "Nueva política",
+  "empty": "No hay políticas de financiación de cobros.",
+  "openEnded": "Sin fecha de finalización",
+  "readOnly": "Se requiere acceso sin restricciones a las entidades jurídicas para configurar la financiación.",
+  "choose": "Elegir…",
+  "loadFailed": "No se pudo cargar la financiación de cobros.",
+  "saveFailed": "No se pudo guardar la financiación de cobros.",
+  "selectReceiptAccount": "Seleccione una cuenta de cobro."
+}

@@ -21,10 +21,10 @@ import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
 export type PaymentProvidersData = Record<string, never>
 
 export async function loadPaymentProviders(
-  _sp?: Record<string, string | string[] | undefined>,
+  sp?: Record<string, string | string[] | undefined>,
 ): Promise<PaymentProvidersData> {
   const authz = await requirePermission('admin.setup.manage')
-  await requireFeatureEnabled(authz.user.orgId, 'onlinePayments')
+  await requireFeatureEnabled(authz.user.orgId, sp?.view === 'processor_receipts' ? 'banking' : 'onlinePayments')
   return {}
 }
 

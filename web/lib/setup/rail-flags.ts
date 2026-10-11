@@ -35,6 +35,7 @@ export async function setupRailFlags(authz: Authz, features: FeatureState): Prom
     crmEnabled: featureEnabled(features, 'crm'),
     bankFeedsEnabled: featureEnabled(features, 'bankFeeds'),
     onlinePaymentsEnabled: featureEnabled(features, 'onlinePayments'),
+    bankingEnabled: featureEnabled(features, 'banking'),
     shippingEnabled: featureEnabled(features, 'shippingHub'),
     payrollEnabled: featureEnabled(features, 'payroll'),
     hrmEnabled: featureEnabled(features, 'hrm'),

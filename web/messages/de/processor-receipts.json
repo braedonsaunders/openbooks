@@ -1,0 +1,22 @@
+{
+  "title": "Zahlungseingänge über Zahlungsdienstleister",
+  "description": "Legen Sie fest, wann Kundenzahlungen ein Verrechnungskonto des Zahlungsdienstleisters belasten dürfen. Buchen Sie genehmigte Zahlungseingänge vor der Abstimmung der Auszahlungen.",
+  "receiptAccount": "Konto für Zahlungseingänge",
+  "providersTab": "Anbieter",
+  "accountsTab": "Zahlungseingänge über Dienstleister",
+  "provider": "Anbieter",
+  "clearingAccount": "Verrechnungskonto des Zahlungsdienstleisters",
+  "legalEntity": "Rechtsträger",
+  "currency": "Währung",
+  "effectiveFrom": "Gültig ab",
+  "effectiveTo": "Gültig bis",
+  "reason": "Begründung",
+  "newPolicy": "Neue Richtlinie",
+  "empty": "Keine Richtlinien für Zahlungseingänge.",
+  "openEnded": "Kein Enddatum",
+  "readOnly": "Zur Konfiguration ist uneingeschränkter Zugriff auf Rechtsträger erforderlich.",
+  "choose": "Auswählen…",
+  "loadFailed": "Die Richtlinien konnten nicht geladen werden.",
+  "saveFailed": "Die Richtlinie konnte nicht gespeichert werden.",
+  "selectReceiptAccount": "Wählen Sie ein Zahlungseingangskonto."
+}

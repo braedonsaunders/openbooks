@@ -15,6 +15,7 @@ export const PAYMENT_SYSTEM_CUSTOM_FIELDS = [
   "withholdingAuthorisedAmount",
   "providerReturn",
   "processorFunding",
+  "paymentCurrencyEvidence",
 ] as const;
 
 export const PAYMENT_SYSTEM_CUSTOM_FIELD_SET: ReadonlySet<string> =

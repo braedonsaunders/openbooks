@@ -3285,6 +3285,9 @@ export async function saveAcceptanceConfig(
     throw new PaymentAcceptanceError(e instanceof Error ? e.message : String(e));
   }
   await db.transaction(async (tx) => {
+    // Settings share the provider row with dated receipt funding policies.
+    // Serialize their read/merge/write so neither native editor loses policy.
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`processor-receipt-policy:${orgId}`}, 0))`);
     // Serialize creates and saves for this org/provider before reading, so
     // overlapping merges cannot drop each other's explicit changes.
     await tx.execute(sql`

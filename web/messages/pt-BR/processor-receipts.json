@@ -1,0 +1,22 @@
+{
+  "title": "Recebimentos via processador",
+  "description": "Configure quando os recebimentos de clientes podem debitar uma conta de compensação do processador. Contabilize os recebimentos aprovados antes de conciliar os repasses.",
+  "receiptAccount": "Conta de recebimento",
+  "providersTab": "Provedores",
+  "accountsTab": "Recebimentos via processador",
+  "provider": "Provedor",
+  "clearingAccount": "Conta de compensação do processador",
+  "legalEntity": "Entidade jurídica",
+  "currency": "Moeda",
+  "effectiveFrom": "Vigente a partir de",
+  "effectiveTo": "Vigente até",
+  "reason": "Motivo",
+  "newPolicy": "Nova política",
+  "empty": "Nenhuma política de financiamento de recebimentos.",
+  "openEnded": "Sem data de término",
+  "readOnly": "É necessário acesso irrestrito às entidades jurídicas para configurar o financiamento.",
+  "choose": "Escolher…",
+  "loadFailed": "Não foi possível carregar o financiamento de recebimentos.",
+  "saveFailed": "Não foi possível salvar o financiamento de recebimentos.",
+  "selectReceiptAccount": "Selecione uma conta de recebimento."
+}
