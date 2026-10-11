@@ -309,3 +309,125 @@ test("readers get no bank capture control on the Employment tab", async (t) => {
   t.after(unmount);
   assert.equal(buttonsNamed("Add bank account").length, 0, "no grant must mean no control");
 });
+
+// A 1099-reportable vendor read by an accountant: lifecycle and settlement
+// entries the role cannot use stay out, while the readable entries — the
+// statement and the 1099 settings on the Compliance tab — must be in the
+// menu, never a button that opens an empty one.
+const VENDOR_1099_PAYLOAD = {
+  ...PAYLOAD,
+  vendor: { ...PAYLOAD.vendor, is_t4a: true },
+};
+
+async function renderVendorAsAccountant() {
+  globalThis.__partyToasts = [];
+  globalThis.__partyPromptReason = "test reason";
+  globalThis.__partyRouter = { push() {}, refresh() {} };
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  await act(async () => {
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <MoneyProvider currency="USD">
+          <BusinessDateProvider today="2026-10-01">
+            <PartyDrawer
+              payload={VENDOR_1099_PAYLOAD as never}
+              paymentTerms={[]}
+              departments={[]}
+              trades={[]}
+              fieldDefs={[]}
+              subsidiaries={[]}
+              canManage={false}
+              role="vendor"
+              recordType="vendor"
+              initialMode={"view" as never}
+              complianceEnabled
+              compliance={{ classId: null, classes: [] }}
+            />
+          </BusinessDateProvider>
+        </MoneyProvider>
+      </NextIntlClientProvider>,
+    );
+    await tick();
+  });
+  await tick();
+  await tick();
+  return {
+    unmount: async () => {
+      await act(async () => {
+        root.unmount();
+      });
+      host.remove();
+    },
+  };
+}
+
+function openMenuText(): string {
+  return [...document.querySelectorAll("[data-ui-overlay]")].map((el) => el.textContent ?? "").join("\n");
+}
+
+test("a 1099 vendor offers its statement and compliance to a read-only accountant", async (t) => {
+  const restoreFetch = scriptFetch(() => null);
+  t.after(restoreFetch);
+  const { unmount } = await renderVendorAsAccountant();
+  t.after(unmount);
+  const menu = buttonsNamed("Actions")[0];
+  assert.ok(menu, "readable record actions must live behind the Actions menu");
+  await click(menu);
+  const entries = openMenuText();
+  assert.match(entries, /View statement/, "the statement stays readable without the manage grant");
+  assert.match(entries, /Compliance/, "the 1099 settings ride the same predicate as the Compliance tab");
+  const compliance = [...document.querySelectorAll("[data-ui-overlay] button")].find(
+    (b) => b.textContent?.trim() === "Compliance",
+  ) as HTMLButtonElement | undefined;
+  assert.ok(compliance, "the compliance entry must be a real control");
+  await click(compliance!);
+  assert.match(
+    document.body.textContent ?? "",
+    /Subcontractor compliance/,
+    "the entry lands on the Compliance tab without discarding the drawer",
+  );
+});
+
+test("an unsaved record with no configured forms hides Actions instead of an empty menu", async (t) => {
+  const restoreFetch = scriptFetch(() => null);
+  t.after(restoreFetch);
+  globalThis.__partyToasts = [];
+  globalThis.__partyRouter = { push() {}, refresh() {} };
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  await act(async () => {
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <MoneyProvider currency="USD">
+          <BusinessDateProvider today="2026-10-01">
+            <PartyDrawer
+              payload={PAYLOAD as never}
+              paymentTerms={[]}
+              departments={[]}
+              trades={[]}
+              fieldDefs={[]}
+              subsidiaries={[]}
+              canManage
+              role="vendor"
+              recordType="vendor"
+              createMode
+            />
+          </BusinessDateProvider>
+        </MoneyProvider>
+      </NextIntlClientProvider>,
+    );
+    await tick();
+  });
+  await tick();
+  await tick();
+  t.after(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  });
+  assert.equal(buttonsNamed("Actions").length, 0, "no visible entry must mean no Actions button");
+});

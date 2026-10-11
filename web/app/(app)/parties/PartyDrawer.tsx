@@ -1323,6 +1323,20 @@ export function PartyDrawer({
   ]
   const tabs = allTabs.filter((item) => !createMode || CREATE_TABS.has(item.key))
 
+  /**
+   * The Actions menu carries exactly these entries: lifecycle activation
+   * for managers of a persisted record, form customization for holders of
+   * the customization grant, settlement links outside edit mode, and the
+   * Compliance tab for vendors in a compliance-enabled org. The slot takes
+   * the menu only when at least one entry renders — a viewer whose grants
+   * and mode resolve every entry to null gets no button instead of a
+   * button that opens an empty menu.
+   */
+  const showLifecycleAction = !createMode && canManage
+  const showManageFormsAction = (canCustomize ?? false) && recordType != null
+  const showSettlementActions = mode !== 'edit' && (payload.customer != null || payload.vendor != null)
+  const hasRecordActions = showLifecycleAction || showManageFormsAction || showSettlementActions || showComplianceTab
+
   const selectForm = (formId: string) => {
     const next = new URLSearchParams(searchParams.toString())
     if (formId) next.set('partyForm', formId)
@@ -1381,19 +1395,19 @@ export function PartyDrawer({
           </Select>
         </div>
       ) : undefined}
-      actions={canManage || canCustomize || payload.customer || payload.vendor ? (
+      actions={hasRecordActions ? (
         <>
           {/* Activation targets a persisted row: unsaved-create carries its
               active default into the create POST instead. */}
-          {!createMode && canManage ? isActive ? (
+          {showLifecycleAction ? isActive ? (
             <Button disabled={busy} onClick={() => setActiveState(false)}>{t('deactivate')}</Button>
           ) : (
             <Button disabled={busy || !nameValid} onClick={() => setActiveState(true)}>{t('activate')}</Button>
           ) : null}
-          {canCustomize && recordType ? (
+          {showManageFormsAction ? (
             <Button asChild><Link href={`/admin/customization?recordType=${recordType}&tab=forms`}>{t('manageForms')}</Link></Button>
           ) : null}
-          {mode !== 'edit' && (payload.customer || payload.vendor) ? (
+          {showSettlementActions ? (
             <>
               {settlementHrefs?.receivePayment ? (
                 <Button asChild variant="outline">
@@ -1416,6 +1430,12 @@ export function PartyDrawer({
                 />
               ) : null}
             </>
+          ) : null}
+          {/* 1099 settings live on the Compliance tab behind the same
+              predicate as the tab, so a read-only viewer still reaches
+              them from Actions; switching tabs keeps unsaved edits. */}
+          {showComplianceTab ? (
+            <Button variant="outline" onClick={() => showTab('compliance')}>{t('tabs.compliance')}</Button>
           ) : null}
         </>
       ) : undefined}
