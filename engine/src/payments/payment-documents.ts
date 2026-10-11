@@ -14,6 +14,8 @@ import { validateCreditAllocations } from "./credit-allocation.ts";
 import { isPaymentKind, lockEditablePaymentDocument } from "../payments-core/payment-document-lock.ts";
 import { isUuid } from "../platform/uuid.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
+import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
+import { resolveReceiptFunding } from "../payments-core/receipt-funding.ts";
 import { loadStoredValueTenderAccount, resolveStoredValueTender, storedValueLiabilityControlAccount } from "../stored-value/accounts.ts";
 import {
   computePaymentWithholdings,
@@ -300,13 +302,13 @@ export async function updateDraftPayment(
       }
     }
 
-    if (bankAccountId) {
-      const bank = (await db.execute<{ id: string }>(sql`
-        select id from accounts
-         where id = ${bankAccountId} and org_id = ${doc.orgId}
-           and type = 'asset_bank' and is_active and not is_summary
-      `));
-      if (!bank.rows[0]) throw new PaymentError("bank account must be an active bank-type account");
+    const processorFunding = bankAccountId ? await resolveReceiptFunding(db, {
+      orgId: doc.orgId, accountId: bankAccountId, kind: doc.kind, subsidiaryId: doc.subsidiaryId,
+      currency: doc.currency, onDate: patch.documentDate ?? doc.documentDate, allowedSubsidiaryIds: actorScope, lock: true,
+    }) : null;
+    if (processorFunding) {
+      if (!userId) throw new PaymentError("Processor receipts require an authorized receipt actor.");
+      await lockActorCommandAuthority(db, doc.orgId, userId, doc.subsidiaryId, "ar.pay");
     }
     if (discountAccountId || controlAccountId || feeIncomeAccountId) {
       const refs = [discountAccountId, controlAccountId, feeIncomeAccountId].filter(Boolean) as string[];
@@ -480,17 +482,25 @@ export async function updateDraftPayment(
           taxAmount: "0",
         });
       }
-      await tx.execute(sql`
+      const written = await tx.execute(sql`
         update documents set
           party_id = ${partyId ?? null},
           document_date = coalesce(${patch.documentDate ?? null}, document_date),
           reference_number = ${patch.referenceNumber !== undefined ? patch.referenceNumber : sql`reference_number`},
           memo = ${patch.memo !== undefined ? patch.memo : sql`memo`},
-          custom = ${JSON.stringify({ ...custom, bankAccountId, allocations, creditAllocations, discountAmount, discountAccountId, controlAccountId, feeAmount, feeIncomeAccountId, onAccountAmount, storedValueTenders, withholdings, withholdingAmount, withholdingAuthorisation, withholdingAuthorisedAmount })}::jsonb,
+          custom = ${JSON.stringify({ ...custom, bankAccountId, processorFunding, allocations, creditAllocations, discountAmount, discountAccountId, controlAccountId, feeAmount, feeIncomeAccountId, onAccountAmount, storedValueTenders, withholdings, withholdingAmount, withholdingAuthorisation, withholdingAuthorisedAmount })}::jsonb,
           subtotal = ${total}, tax_total = '0', total = ${total},
           updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'), updated_by = ${userId}
         where id = ${id} and org_id = ${orgId}
       `);
+      if (written.rowCount !== 1) throw new PaymentError("Payment draft could not be saved.");
+      if (processorFunding || (doc.custom as { processorFunding?: unknown } | null)?.processorFunding) {
+        await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+          values (${orgId}, 'documents', ${id}, 'update',
+            ${JSON.stringify({ mode: "processor_receipt_funding", reason: "Receipt funding selected during native draft save",
+              before: { bankAccountId: custom.bankAccountId ?? null, processorFunding: (doc.custom as { processorFunding?: unknown } | null)?.processorFunding ?? null },
+              after: { bankAccountId, processorFunding, total, documentDate: patch.documentDate ?? doc.documentDate } })}::jsonb, ${userId})`);
+      }
     });
     return loadPaymentDocument(id, doc.kind, orgId);
   });

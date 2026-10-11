@@ -27,6 +27,8 @@ import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
 import { assertUnrestrictedScope, ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 import { isUuid } from "../platform/uuid.ts";
+import { canonicalJson } from "../platform/canonical-json.ts";
+import { PROCESSOR_RECEIPT_POLICY_KEY } from "../payments-core/receipt-funding.ts";
 
 /**
  * Customer payment acceptance — hosted checkout links on posted invoices.
@@ -3297,6 +3299,9 @@ export async function saveAcceptanceConfig(
     // canonical endpoint normalizer.
     const mergedSettings = { ...(existing?.settings ?? {}) };
     for (const [key, value] of Object.entries(input.settings ?? {})) {
+      if (key === PROCESSOR_RECEIPT_POLICY_KEY && canonicalJson(value) !== canonicalJson(existing?.settings?.[key] ?? [])) {
+        throw new PaymentAcceptanceError("Use the native processor receipt funding command with a reason to change receipt policy.");
+      }
       mergedSettings[key] = value;
     }
     const settings = normalizeAcceptanceProviderSettings(input.provider, mergedSettings);

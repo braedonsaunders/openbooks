@@ -8,6 +8,7 @@ import { resolveAgencyPosting,AgencyError } from '../inventory/drop-ship-agency.
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db, schema } from "../platform/db.ts";
 import { assertProviderReturnPosting } from "../payments-core/provider-return-posting.ts";
+import { assertReceiptFundingPosting } from "../payments-core/receipt-funding.ts";
 import { PaymentError } from "../payments-core/payment-errors.ts";
 import { assertExpenseEmployee, assertExpenseSettlement } from "../records/expense-validation.ts";
 import { assertGeneratedBillingPostable, BillingSourceIntegrityError } from "../projects/billing-source-integrity.ts";
@@ -316,6 +317,14 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
     .from(schema.documentLines)
     .where(and(eq(schema.documentLines.documentId, documentId), eq(schema.documentLines.orgId, doc.orgId)))
     .orderBy(asc(schema.documentLines.lineNumber));
+
+  if (!deps.migration) {
+    const custom = (doc.custom ?? {}) as { storedValueTenders?: { accountId: string }[] };
+    const storedValueAccounts = new Set((custom.storedValueTenders ?? []).map(tender => tender.accountId));
+    const fundingLine = lines.find(line => line.accountId && !storedValueAccounts.has(line.accountId));
+    try { await assertReceiptFundingPosting(db, doc, options.audit?.actorId ?? null, fundingLine?.accountId); }
+    catch (error) { if (error instanceof PaymentError) throw new PostingError(error.message); throw error; }
+  }
 
   if (doc.kind === "internal_billing" && !deps.internalBilling) {
     deps = {
