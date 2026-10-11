@@ -29,7 +29,7 @@
 import { sql, type SQL } from "drizzle-orm";
 import type { SqlExecutor } from "../platform/db.ts";
 import { nextFreeEntryNumber } from "../records/entry-number.ts";
-import { closeModuleForDocument, type CloseModule } from "../periods/period-policy.ts";
+import { closeModuleForDocument, DOCUMENT_KINDS, type CloseModule } from "../periods/period-policy.ts";
 import { resolveBookBases, type BookProfile } from "./book-basis.ts";
 import { isIdentityBasis } from "./book-translation.ts";
 import type { PostEntryInput, PostEntryLineInput, PostEntryResult } from "./post-entry.ts";
@@ -199,7 +199,11 @@ export async function replicateEntryToBooks(
   if (lines.length === 0) {
     throw new Error(`journal entry ${source.entry_number} has no lines to replicate`);
   }
-  const closeModules: CloseModule[] = source.document_kind ? [closeModuleForDocument(source.document_kind)] : [];
+  // The book's GL lock always applies; a source document's own module lock
+  // applies too, exactly as it did to the primary posting.
+  const closeModules: CloseModule[] = source.document_kind && (DOCUMENT_KINDS as readonly string[]).includes(source.document_kind)
+    ? [closeModuleForDocument(source.document_kind)]
+    : [];
   const outcomes: ReplicationOutcome[] = [];
   for (const book of books) {
     const existing = (await executor.execute<{ replica_entry_id: string | null; outcome: string }>(sql`
