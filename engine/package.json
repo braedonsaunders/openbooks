@@ -164,6 +164,7 @@
     "./payroll/business-calendars": "./src/payroll/business-calendars.ts",
     "./documents/posting-effects-errors": "./src/ledger/posting-effects-errors.ts",
     "./internal-billing": "./src/internal-billing/public.ts",
+    "./multibook": "./src/multibook/public.ts",
     "./einvoice": "./src/einvoice/public.ts",
     "./contractor-withholding": "./src/contractor-withholding/public.ts",
     "./country-tax-packs": "./src/country-tax-packs/index.ts",

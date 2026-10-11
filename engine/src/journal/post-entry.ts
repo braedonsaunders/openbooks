@@ -8,6 +8,11 @@ import { PostingError } from "./posting-contracts.ts";
 import { collectBalancingLegs } from "./balancing-hooks.ts";
 import { assertFinalKernelBalance } from "./posting-invariants.ts";
 import { findLiveReplayAuthorization } from "./replay-authorization.ts";
+import { applyBookPostingPolicy, type BookAmountBasis, type BookPostingEvidence } from "./book-posting-policy.ts";
+import type { BookProfile } from "./book-basis.ts";
+import { BookAccountMapError } from "./book-account-maps.ts";
+import { BookTranslationError } from "./book-translation.ts";
+import { liveReplicaEntryIds, replicateEntryToBooks } from "./book-replication.ts";
 
 /**
  * The ONE journal-write API for direct (non-document) postings. Every
@@ -105,6 +110,18 @@ export interface PostEntryInput {
   requestId?: string | null;
   /** Merged into the audit changes alongside the standard posting fields. */
   auditChanges?: Record<string, unknown>;
+  /**
+   * How amounts are stated for a non-primary book (see BookAmountBasis):
+   * `functional` (the default) translates into the book's currency;
+   * `book` means the caller already measured them in the book currency.
+   */
+  amountBasis?: BookAmountBasis;
+  /**
+   * False marks a primary-book posting as this book's own measurement (a
+   * per-book engine also posts its other books), so full books do not
+   * replicate it. Recorded on the entry as custom.bookSpecific.
+   */
+  replicate?: boolean;
   lines: PostEntryLineInput[];
 }
 
@@ -286,12 +303,27 @@ async function writeEntry(
   }
 
   // Book guard: the book belongs to this org and is an active posting book.
-  const book = (await executor.execute<{ id: string }>(sql`
-    select id from accounting_books
+  const bookRow = (await executor.execute<{
+    id: string; code: string; name: string; is_primary: boolean;
+    replication_mode: "adjustment_only" | "full"; replication_from: string | null;
+    currency_difference_account_id: string | null;
+  }>(sql`
+    select id, code, name, is_primary, replication_mode, replication_from::text as replication_from,
+           currency_difference_account_id
+      from accounting_books
      where org_id = ${orgId} and id = ${input.bookId} and is_active and posts_gl
      for share`)).rows[0];
-  if (!book)
+  if (!bookRow)
     fail(`journal entry ${input.entryNumber}: book ${input.bookId} is not an active posting book of this organization`);
+  const book: BookProfile = {
+    id: bookRow!.id,
+    code: bookRow!.code,
+    name: bookRow!.name,
+    isPrimary: bookRow!.is_primary,
+    replicationMode: bookRow!.replication_mode,
+    replicationFrom: bookRow!.replication_from,
+    currencyDifferenceAccountId: bookRow!.currency_difference_account_id,
+  };
 
   // Period guard: the period belongs to this org (a write matching zero rows
   // is a failure, not a success — prove the row first).
@@ -355,6 +387,34 @@ async function writeEntry(
     await executor.execute<{ allowed: boolean }>(sql`
       select connector_historical_replay_authorized(${orgId}) as allowed`)
   ).rows[0]?.allowed === true;
+  // A non-primary book carries the posting through its account mappings
+  // and, where it measures a subsidiary in another currency, translates it.
+  let bookEvidence: BookPostingEvidence | null = null;
+  const bookCurrencyBySub = new Map<string, string>();
+  if (!book.isPrimary) {
+    try {
+      const policy = await applyBookPostingPolicy(executor, {
+        orgId,
+        book,
+        entryLabel: `journal entry ${input.entryNumber}`,
+        postingDate: input.postingDate,
+        amountBasis: input.amountBasis ?? "functional",
+        lines,
+        nextLineNumber: () => {
+          const next = Math.max(0, ...seenNumbers) + 1;
+          seenNumbers.add(next);
+          return next;
+        },
+      });
+      lines.splice(0, lines.length, ...policy.lines);
+      bookEvidence = policy.evidence;
+      for (const [subsidiaryId, basis] of policy.bases) bookCurrencyBySub.set(subsidiaryId, basis.bookCurrency);
+    } catch (error) {
+      if (error instanceof BookTranslationError || error instanceof BookAccountMapError)
+        fail(error.message.startsWith("journal entry") ? error.message : `journal entry ${input.entryNumber}: ${error.message}`);
+      throw error;
+    }
+  }
   const segmentLegs = await collectBalancingLegs(
     executor,
     {
@@ -407,7 +467,9 @@ async function writeEntry(
   // state its transaction amount and rate. Defaulting them to the base amount
   // at rate 1 would record a foreign-currency balance equal to the functional
   // amount — a fabricated exposure that revaluation would then remeasure.
-  const functionalBySub = new Map(foundSubs.map((row) => [row.id, row.base_currency]));
+  // In a non-primary book the measurement currency is the book's currency
+  // for that subsidiary (its functional currency unless configured).
+  const functionalBySub = new Map(foundSubs.map((row) => [row.id, bookCurrencyBySub.get(row.id) ?? row.base_currency]));
   for (const line of lines) {
     const functional = functionalBySub.get(line.subsidiaryId);
     if (functional && line.currency !== functional && !line.fxStated)
@@ -500,8 +562,12 @@ async function writeEntry(
   }
 
   const custom =
-    input.idempotencyKey || input.custom
-      ? { ...(input.custom ?? {}), ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey, postingRequestHash: requestHash } : {}) }
+    input.idempotencyKey || input.custom || input.replicate === false
+      ? {
+          ...(input.custom ?? {}),
+          ...(input.replicate === false ? { bookSpecific: true } : {}),
+          ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey, postingRequestHash: requestHash } : {}),
+        }
       : null;
   // With an idempotencyKey the entry insert is ON CONFLICT DO NOTHING on
   // the partial (org_id, custom->>'idempotencyKey') index and a conflicting
@@ -605,6 +671,7 @@ async function writeEntry(
               periodId: input.periodId,
               lineCount: lines.length,
               ...(input.auditChanges ?? {}),
+              ...(bookEvidence ? { bookPosting: bookEvidence } : {}),
               ...(replayEvidence
                 ? {
                     historicalReplay: {
@@ -616,6 +683,24 @@ async function writeEntry(
                   }
                 : {}),
             })}::jsonb, ${input.actorId ?? null}, ${input.requestId ?? null})`);
+
+  // Full books receive the primary posting in this same transaction, so the
+  // posting and its book copies commit or roll back together.
+  if (book.isPrimary && input.replicate !== false) {
+    try {
+      await replicateEntryToBooks(executor, postEntry, {
+        orgId,
+        sourceEntryId: entryId,
+        actorId: input.actorId ?? null,
+        requestId: input.requestId ?? null,
+      });
+    } catch (error) {
+      if (error instanceof PostingError) throw error;
+      if (error instanceof BookTranslationError || error instanceof BookAccountMapError)
+        fail(`journal entry ${input.entryNumber}: ${error.message}`);
+      throw error;
+    }
+  }
 
   return { entryId, lines: orderedLines };
 }
@@ -633,16 +718,23 @@ export async function markEntryReversed(
   executor: SqlExecutor,
   input: { orgId: string; entryId: string; actorId?: string | null },
 ): Promise<void> {
-  const updated = (await executor.execute<{ id: string }>(sql`
-    update journal_entries
-       set status = 'reversed', updated_at = now(), updated_by = ${input.actorId ?? null}
-     -- Live entries only: an entry already reversed cannot be marked again.
-     where org_id = ${input.orgId} and id = ${input.entryId} and status = 'posted'
-     returning id`)).rows[0];
-  if (!updated)
-    throw new LedgerPostError(
-      `journal entry ${input.entryId} is not a posted entry of this organization — only a posted entry can be marked reversed; corrections append a reversal through the ledger API instead of editing history`,
-    );
+  // The entry and its book copies change state together or not at all.
+  await inExecutorTransaction(executor, async (tx) => {
+    const updated = (await tx.execute<{ id: string }>(sql`
+      update journal_entries
+         set status = 'reversed', updated_at = now(), updated_by = ${input.actorId ?? null}
+       -- Live entries only: an entry already reversed cannot be marked again.
+       where org_id = ${input.orgId} and id = ${input.entryId} and status = 'posted'
+       returning id`)).rows[0];
+    if (!updated)
+      throw new LedgerPostError(
+        `journal entry ${input.entryId} is not a posted entry of this organization — only a posted entry can be marked reversed; corrections append a reversal through the ledger API instead of editing history`,
+      );
+    // A primary entry's book copies follow it into the reversed state.
+    for (const replicaId of await liveReplicaEntryIds(tx, input.orgId, input.entryId)) {
+      await markEntryReversed(tx, { orgId: input.orgId, entryId: replicaId, actorId: input.actorId });
+    }
+  });
 }
 
 /**

@@ -179,6 +179,19 @@ async function unrealizedAccount(orgId: string): Promise<string> {
   return acct;
 }
 
+/** The currency `bookId` carries `subsidiaryId` in (see accounting_book_currency). */
+async function bookMeasurementCurrency(
+  orgId: string,
+  bookId: string,
+  subsidiaryId: string,
+  functionalCurrency: string,
+  runner: Pick<typeof db, "execute"> = db,
+): Promise<string> {
+  const row = (await runner.execute<{ currency: string | null }>(sql`
+    select public.accounting_book_currency(${orgId}, ${bookId}, ${subsidiaryId}) as currency`)).rows[0];
+  return row?.currency ?? functionalCurrency;
+}
+
 async function primaryBookId(orgId: string): Promise<string> {
   const r = (await db.execute<{ id: string }>(
     sql`select id from accounting_books where org_id = ${orgId} and is_primary = true limit 1`,
@@ -421,7 +434,8 @@ export async function revaluationReadiness(
   let positionsMissingSpotRate = 0;
   for (const subsidiary of ctx.byId.values()) {
     if (allowedSubsidiaryIds && !allowedSubsidiaryIds.includes(subsidiary.id)) continue;
-    const exposures = await loadExposures(orgId, bookId, subsidiary.id, subsidiary.baseCurrency, period.ends_on, scope);
+    const measurement = await bookMeasurementCurrency(orgId, bookId, subsidiary.id, subsidiary.baseCurrency);
+    const exposures = await loadExposures(orgId, bookId, subsidiary.id, measurement, period.ends_on, scope);
     const positions: RevaluationPosition[] = [];
     const missingAccounts = new Set<string>();
     for (const exposure of exposures) {
@@ -515,7 +529,9 @@ async function postRevaluationEntry(
     const ctx = await loadSubsidiaryContext(tx, orgId);
     const subsidiary = ctx.byId.get(subsidiaryId);
     if (!subsidiary) throw new RevaluationError("revaluation subsidiary is missing");
-    const functionalCurrency = subsidiary.baseCurrency;
+    // A book measures each subsidiary in its own currency for it: the
+    // functional currency unless the book is configured otherwise.
+    const functionalCurrency = await bookMeasurementCurrency(orgId, bookId, subsidiaryId, subsidiary.baseCurrency, tx);
     // Freeze account policy before computing exposure membership and validating
     // the configured offset. Historical accounts with obsolete monetary policy
     // also need locking when clearing their residual adjustment.
@@ -622,6 +638,8 @@ async function postRevaluationEntry(
         reversesEntryId,
         actorId,
         currency: functionalCurrency,
+        // Already measured in the book's currency for this subsidiary.
+        amountBasis: "book",
         closeModules: ["gl"],
         auditAction: "insert",
         requestId: "fx_revaluation",

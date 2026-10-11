@@ -8,6 +8,8 @@ import { type Doc, type KernelLine, PostingError, effectivePostingDate } from ".
 import { collectBalancingLegs } from "../journal/balancing-hooks.ts";
 import { applyWithholdingCarrying, stampPaymentWithholdingCurrency } from "../contractor-withholding/remittance-carrying.ts";
 import { ContractorWithholdingError } from "../contractor-withholding/scheme.ts";
+import { loadBookProfile, resolveBookBases, resolveBookRates } from "../journal/book-basis.ts";
+import { BookTranslationError, isIdentityBasis, rateKey, type BookSubsidiaryBasis } from "../journal/book-translation.ts";
 /**
  * Application-layer proof for the storage trigger `jl_check_account`:
  * every final line inserts in its line currency, so a target
@@ -82,6 +84,30 @@ export async function applySubsidiaries(
       throw new SubsidiaryError(`subsidiary ${docSubId} does not exist`);
     const postingDate = effectivePostingDate(doc);
     const rateCache = new Map<string, string>();
+    // A posting into a non-primary book measures each subsidiary in the
+    // book's currency for it (its functional currency unless the book is
+    // configured otherwise) at the book's rate type.
+    const bookBases = await documentBookBases(runner, doc, options.bookId, [docSubId, ...kernelLines.map((line) => line.subsidiaryId ?? docSubId)], postingDate);
+    const measurementCurrency = (subsidiaryId: string, baseCurrency: string): string =>
+      bookBases?.get(subsidiaryId)?.bookCurrency ?? baseCurrency;
+    const bookRate = async (subsidiaryId: string): Promise<string | null> => {
+      const basis = bookBases?.get(subsidiaryId);
+      if (!basis || isIdentityBasis(basis)) return null;
+      if (doc.currency === basis.bookCurrency) return "1";
+      const key = rateKey(subsidiaryId, doc.currency);
+      const cached = rateCache.get(`book:${key}`);
+      if (cached) return cached;
+      const { rates } = await resolveBookRates(runner, {
+        orgId: doc.orgId,
+        bookCode: bookBases!.code,
+        postingDate,
+        bases: new Map([[subsidiaryId, basis]]),
+        lines: [{ subsidiaryId, currency: doc.currency }],
+      });
+      const rate = rates.get(key)!;
+      rateCache.set(`book:${key}`, rate);
+      return rate;
+    };
 
     const functionalRate = async (targetCurrency: string): Promise<string> => {
       if (doc.currency === targetCurrency) return "1";
@@ -137,7 +163,7 @@ export async function applySubsidiaries(
       const subsidiary = ctx.byId.get(subsidiaryId);
       if (!subsidiary)
         throw new SubsidiaryError(`subsidiary ${subsidiaryId} does not exist`);
-      const fxRate = await functionalRate(subsidiary.baseCurrency);
+      const fxRate = (await bookRate(subsidiaryId)) ?? await functionalRate(subsidiary.baseCurrency);
       stamped.push({
         ...line,
         subsidiaryId,
@@ -154,7 +180,7 @@ export async function applySubsidiaries(
     // documents get no intercompany legs at all, and the kernel asserts
     // exact balance.
     absorbFxRoundingResidual(stamped);
-    const originFxRate = await functionalRate(origin.baseCurrency);
+    const originFxRate = (await bookRate(docSubId)) ?? await functionalRate(origin.baseCurrency);
     const legs = await intercompanyBalancingLegs(runner, {
       orgId: doc.orgId,
       ctx,
@@ -218,12 +244,33 @@ export async function applySubsidiaries(
       lines: all,
       docSubId,
       multi: new Set(all.map((l) => l.subsidiaryId)).size > 1,
-      originBaseCurrency: origin.baseCurrency,
+      originBaseCurrency: measurementCurrency(docSubId, origin.baseCurrency),
       originFxRate,
     };
   } catch (err) {
     if (err instanceof SubsidiaryError) throw new PostingError(err.message);
+    if (err instanceof BookTranslationError) throw new PostingError(err.message);
     if (err instanceof ContractorWithholdingError) throw new PostingError(err.remedy ? `${err.message} ${err.remedy}` : err.message);
     throw err;
   }
+}
+
+/**
+ * Each subsidiary's basis in a non-primary target book, or null for the
+ * primary book (and when no book is named), where every subsidiary is
+ * measured in its functional currency.
+ */
+async function documentBookBases(
+  runner: Pick<typeof db, "execute">,
+  doc: Doc,
+  bookId: string | null,
+  subsidiaryIds: string[],
+  postingDate: string,
+): Promise<(Map<string, BookSubsidiaryBasis> & { code: string }) | null> {
+  if (!bookId) return null;
+  const book = await loadBookProfile(runner, doc.orgId, bookId);
+  if (!book) throw new PostingError(`accounting book ${bookId} does not exist in this organization`);
+  if (book.isPrimary) return null;
+  const bases = await resolveBookBases(runner, { orgId: doc.orgId, book, subsidiaryIds, postingDate });
+  return Object.assign(bases, { code: book.code });
 }

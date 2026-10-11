@@ -9,6 +9,7 @@ import { commerceCloseChecks, type CommerceCloseCheck } from "./commerce-close.t
 import { sourceEvidencePolicyActive } from "../banking/banking.ts";
 import { defaultPostingSubsidiaryId, loadSubsidiaryContext } from "../organization/subsidiaries.ts";
 import { unbilledAccrualReadiness } from "../projects/unbilled-accrual.ts";
+import { bookReplicationReadiness } from "../journal/book-replication.ts";
 const nonPostingKindList = () => sql.join(NON_POSTING_DOCUMENT_KINDS.map((k) => sql`${k}`), sql`, `);
 
 type ReadinessCheck = {
@@ -484,6 +485,19 @@ export async function readinessChecks(
     unbilledAccrual = await unbilledAccrualReadiness(orgId, ctx.period_id, scoped ? subsidiaryIds : undefined);
   }
 
+  // Full books must hold every replicable primary entry through period end.
+  let bookReplication: Awaited<ReturnType<typeof bookReplicationReadiness>> = { missing: 0, books: [] };
+  const bookReplicationTask = (
+    await db.execute<{ id: string }>(sql`
+      select id from close_run_tasks
+       where run_id = ${runId} and org_id = ${orgId} and key = 'book-replication-complete' limit 1`)
+  ).rows[0];
+  if (bookReplicationTask) {
+    bookReplication = await bookReplicationReadiness(db, {
+      orgId, bookId: ctx.book_id, through: ctx.ends_on, subsidiaryIds: scoped ? subsidiaryIds : undefined,
+    });
+  }
+
   const threshold = variancePolicy.rows[0] ?? {
     amount: "10000.0000",
     percent: 20,
@@ -623,6 +637,16 @@ export async function readinessChecks(
       title: "close.diagnostics.fx-reversal-period-missing.title",
       message: "close.diagnostics.fx-reversal-period-missing.message",
       count: fxReval.reversalPeriodMissing ? 1 : 0,
+    },
+    {
+      code: "book-replication-incomplete",
+      taskKey: "book-replication-complete",
+      category: "readiness",
+      severity: "critical",
+      title: "close.diagnostics.book-replication-incomplete.title",
+      message: "close.diagnostics.book-replication-incomplete.message",
+      count: bookReplication.missing,
+      details: { books: bookReplication.books },
     },
     {
       code: "intercompany-residual",

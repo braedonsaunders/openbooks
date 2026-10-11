@@ -13,6 +13,7 @@ export type DefaultCloseFeatureContext = {
   multiSubsidiary: boolean;
   salesChannels: boolean;
   unbilledRevenueAccrual: boolean;
+  multiBookAccounting?: boolean;
 };
 
 /**
@@ -45,6 +46,7 @@ export async function defaultCloseFeatureContext(
     multiSubsidiary: await dataDependentFeatureDefault(executor, orgId, "multiSubsidiary", features),
     salesChannels: featureEnabled(features, "salesChannels"),
     unbilledRevenueAccrual: featureEnabled(features, "unbilledRevenueAccrual"),
+    multiBookAccounting: featureEnabled(features, "multiBookAccounting"),
   };
 }
 
@@ -61,6 +63,7 @@ export function defaultCloseStepEnabled(
   if (key === "depreciation-posted") return features.fixedAssets;
   if (key === "recognition-posted") return features.revenueRecognition;
   if (key === "unbilled-revenue-accrued") return features.unbilledRevenueAccrual;
+  if (key === "book-replication-complete") return features.multiBookAccounting === true;
   if (["fx-ready", "fx-revalued"].includes(key)) return features.multiCurrency;
   if (["intercompany-balanced", "consolidation"].includes(key)) return features.multiSubsidiary;
   return true;
