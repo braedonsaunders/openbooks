@@ -37,6 +37,7 @@ export const recordAbsenceBody = z.object({
   leaveTypeId: uuid,
   onDate: civilDate,
   hours: exactHours,
+  reason: z.string().trim().min(1).max(2000).nullish(),
 });
 
 /**

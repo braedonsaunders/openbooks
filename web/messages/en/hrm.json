@@ -829,7 +829,8 @@
       "pending": "Pending approval",
       "upcoming": "Upcoming",
       "today": "On leave today",
-      "history": "History"
+      "history": "History",
+      "recorded": "Recorded"
     },
     "columns": {
       "employee": "Employee",
@@ -848,6 +849,16 @@
     "fileButton": "New request",
     "recordTitle": "Record an absence",
     "recordButton": "Record absence",
+    "recordReasonLabel": "Reason for recording",
+    "recordReasonHint": "Why this absence is recorded — required for back-dated days or days recorded for another employee.",
+    "recordSaved": "Absence recorded for {name} on {date}.",
+    "recordBalanceRemaining": "{code} remaining: {remaining} h",
+    "recordBalanceEffect": "{code} remaining: {remaining} h → {remainingAfter} h after recording",
+    "absenceTitle": "Recorded absence",
+    "balanceEntitlement": "Entitlement",
+    "balanceTaken": "Taken",
+    "balancePending": "Pending",
+    "balanceRemaining": "Remaining",
     "calendarTitle": "Calendar",
     "calendarDepartmentLabel": "Department",
     "calendarAllDepartments": "All departments",
@@ -902,7 +913,8 @@
       "approved": "Approved",
       "rejected": "Rejected",
       "withdrawn": "Withdrawn",
-      "cancelled": "Cancelled"
+      "cancelled": "Cancelled",
+      "recorded": "Recorded"
     }
   },
   "myLeave": {

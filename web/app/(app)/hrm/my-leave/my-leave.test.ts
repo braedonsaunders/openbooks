@@ -100,9 +100,11 @@ registerHooks({
               return (s && s.rows) || [];
             }
             export async function listOrgLeaveRequests() { return { requests: [], truncated: false }; }
-            export async function listLeaveTypes() { return globalThis.__myLeaveTypes ?? []; }
-            export async function payrollBankBalances(...args) { (globalThis.__myLeaveBankCalls ??= []).push(args); return globalThis.__myLeaveBanks ?? []; }
-            export async function timeBalanceAsOf(...args) { (globalThis.__myLeaveTimeCalls ??= []).push(args); return { balance: String(args[2]), unlimited: false }; }`,
+            export async function leaveEmploymentBalances(exec, orgId, employmentId, asOf) {
+              (globalThis.__myLeaveBalanceCalls ??= []).push([orgId, employmentId, asOf]);
+              return (globalThis.__myLeaveBalanceRows ?? []).map((row) => ({ ...row }));
+            }
+            export async function payrollBankBalances(...args) { (globalThis.__myLeaveBankCalls ??= []).push(args); return globalThis.__myLeaveBanks ?? []; }`,
           ),
       };
     }
@@ -164,9 +166,9 @@ function stubInbox(rows: Array<Record<string, unknown>> | { error: unknown }) {
   gap.__myLeaveArgs = [];
   gap.__myLeaveEmployments = [];
   gap.__myLeaveEmploymentRows = [];
-  gap.__myLeaveTypes = [];
+  gap.__myLeaveBalanceRows = [];
   gap.__myLeaveBanks = [];
-  gap.__myLeaveTimeCalls = [];
+  gap.__myLeaveBalanceCalls = [];
   gap.__myLeaveBankCalls = [];
 }
 
@@ -210,19 +212,27 @@ test("my leave resolves time balances for each employment and value banks once a
     { employmentId: "employment-a", employmentNumber: "A-17", employerName: "North Entity", partyId: "party-mine" },
     { employmentId: "employment-b", employmentNumber: "B-24", employerName: "South Entity", partyId: "party-mine" },
   ];
-  gap.__myLeaveTypes = [{ id: "type-vac", code: "VAC", isActive: true }];
+  gap.__myLeaveBalanceRows = [
+    { leaveTypeId: "type-vac", code: "VAC", name: "Vacation", entitlement: "120", taken: "8", pending: "16", remaining: "96", balance: "112", unlimited: false },
+  ];
   gap.__myLeaveBanks = [{ planCode: "BANK", balance: "12.50" }];
-  gap.__myLeaveTimeCalls = [];
+  gap.__myLeaveBalanceCalls = [];
   gap.__myLeaveBankCalls = [];
 
   const data = await loadMyLeave(authzWith(), {});
 
-  assert.deepEqual((gap.__myLeaveTimeCalls as Array<unknown[]>).map((call) => call[2]), ["employment-a", "employment-b"]);
+  assert.deepEqual((gap.__myLeaveBalanceCalls as Array<unknown[]>).map((call) => call[1]), ["employment-a", "employment-b"]);
   assert.equal(data.balances.length, 3, "each employment has a time balance and the party bank appears once");
   assert.deepEqual(data.balances.map((row) => row.employmentId), ["employment-a", "employment-b", null]);
   assert.match(data.balances[0]!.scopeLabel, /North Entity.*A-17/);
   assert.match(data.balances[1]!.scopeLabel, /South Entity.*B-24/);
   assert.match(data.balances[2]!.scopeLabel, /Person/);
+  const vac = data.balances[0]!;
+  assert.equal(vac.balance, "112", "the headline stays the time balance");
+  assert.equal(vac.entitlement, "120", "the breakdown rides the same engine read");
+  assert.equal(vac.taken, "8");
+  assert.equal(vac.pending, "16");
+  assert.equal(vac.remaining, "96");
   assert.equal((gap.__myLeaveBankCalls as unknown[]).length, 1, "party-level banks are not repeated per employment");
 });
 

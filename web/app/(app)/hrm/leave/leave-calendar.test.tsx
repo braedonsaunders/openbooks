@@ -65,12 +65,14 @@ test('a populated calendar renders every employee and exact hours inside the dat
           workerName: 'Ada Lovelace',
           hours: '7.50',
           leaveTypeCode: 'VAC',
+          absenceHref: null,
         },
         {
           employmentId: 'operations',
           workerName: 'Grace Hopper',
           hours: '4.00',
           leaveTypeCode: 'SICK',
+          absenceHref: null,
         },
       ],
     },
@@ -81,6 +83,33 @@ test('a populated calendar renders every employee and exact hours inside the dat
   assert.match(html, /4.00 h/)
   assert.match(html, /2 employees on leave/)
   assert.doesNotMatch(html, /No absences in this window/)
+})
+
+test('a linked calendar entry opens its record while an unlinked day stays plain text', () => {
+  const html = render([
+    {
+      date: '2026-09-22',
+      entries: [
+        {
+          employmentId: 'sales',
+          workerName: 'Ada Lovelace',
+          hours: '8.00',
+          leaveTypeCode: 'VAC',
+          absenceHref: '/hrm/leave?view=calendar&absence=absence-1',
+        },
+        {
+          employmentId: 'operations',
+          workerName: 'Grace Hopper',
+          hours: '4.00',
+          leaveTypeCode: 'SICK',
+          absenceHref: null,
+        },
+      ],
+    },
+  ])
+  assert.match(html, /<a[^>]*aria-label="Ada Lovelace VAC 8\.00 h"[^>]*href="\/hrm\/leave\?view=calendar&amp;absence=absence-1"/)
+  assert.match(html, /<a[^>]*href="\/hrm\/leave\?view=calendar&amp;absence=absence-1"/)
+  assert.equal((html.match(/<a /g) ?? []).length, 1, "only the linked day renders an anchor")
 })
 
 test('calendar months retain leap days and dates on either side of a year boundary', () => {

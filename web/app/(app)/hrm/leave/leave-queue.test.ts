@@ -94,7 +94,7 @@ registerHooks({
               return { requests: (s && s.rows) || [], truncated: false };
             }
             export async function myLeaveRequests() { return []; }
-            export async function listLeaveTypes() { return []; }
+            export async function leaveEmploymentBalances() { return []; }
             export async function payrollBankBalances() { return []; }
             export async function timeBalanceAsOf() { return null; }`,
           ),
@@ -165,7 +165,13 @@ function stubReads(rows: Array<Record<string, unknown>> | { error: unknown }, on
   gap.__leaveQueueDepartments = [];
 }
 
-function leaveRow(id: string, status: string, startsOn: string, endsOn: string): Record<string, unknown> {
+function leaveRow(
+  id: string,
+  status: string,
+  startsOn: string,
+  endsOn: string,
+  extra: Record<string, unknown> = {},
+): Record<string, unknown> {
   return {
     id,
     employmentId: "emp-1",
@@ -180,6 +186,9 @@ function leaveRow(id: string, status: string, startsOn: string, endsOn: string):
     decidedBy: null,
     decidedAt: null,
     decisionReason: null,
+    source: "request",
+    absenceId: null,
+    ...extra,
   };
 }
 
@@ -206,7 +215,7 @@ test("the queue counts per segment and filters to the active one", async () => {
   assert.equal(all.refusal, null, "a known state carries no refusal");
   assert.deepEqual(
     all.counts,
-    { pending: 1, upcoming: 1, today: 1, history: 1 },
+    { pending: 1, upcoming: 1, today: 1, history: 1, recorded: 0 },
     "on-leave-today counts absence fact, not request state",
   );
   assert.equal(all.total, 3, "the total counts listed requests");
@@ -222,6 +231,53 @@ test("the queue counts per segment and filters to the active one", async () => {
   assert.equal(row.rangeLabel, "2026-10-20 → 2026-10-21", "the range renders verbatim, never through Date");
   assert.equal(row.statusVariant, "warning", "the loader resolves the badge variant");
   assert.ok(row.requestHref.includes("request=lr-pending"), "each row opens its own request");
+});
+
+test("recorded days list in their own segment and open by absence id", async () => {
+  stubReads(
+    [
+      leaveRow("lr-history", "approved", "2026-09-01", "2026-09-02"),
+      leaveRow("ab-1", "recorded", "2026-08-03", "2026-08-03", {
+        source: "recorded",
+        absenceId: "absence-1",
+        reason: "approved verbally by the owner",
+      }),
+    ],
+    [],
+  );
+  const all = await loadLeaveQueue(HR_READER, {});
+  assert.equal(all.counts["recorded"], 1, "the recorded segment counts recorded days");
+  assert.equal(all.rows.length, 2, "recorded days list beside requests, never a second list");
+  const recorded = await loadLeaveQueue(HR_READER, { segment: "recorded" });
+  assert.deepEqual(
+    recorded.rows.map((row) => row.id),
+    ["ab-1"],
+    "the recorded segment shows recorded days only",
+  );
+  const row = recorded.rows[0]!;
+  assert.equal(row.statusLabel, "Recorded", "the recorded status resolves its catalogued name");
+  assert.equal(row.statusVariant, "success", "a recorded day badges like taken time off");
+  assert.ok(row.requestHref.includes("absence=absence-1"), "a recorded day opens by absence id");
+  assert.ok(!row.requestHref.includes("request="), "a recorded day never opens a request id");
+  const history = await loadLeaveQueue(HR_READER, { segment: "history" });
+  assert.deepEqual(
+    history.rows.map((row) => row.id),
+    ["lr-history"],
+    "recorded days stay out of history — facts and proposals never mix",
+  );
+});
+
+test("a recorded day covering today lists in the today segment", async () => {
+  stubReads(
+    [leaveRow("ab-today", "recorded", "2026-09-22", "2026-09-22", { source: "recorded", absenceId: "absence-today" })],
+    [],
+  );
+  const today = await loadLeaveQueue(HR_READER, { segment: "today" });
+  assert.deepEqual(
+    today.rows.map((row) => row.id),
+    ["ab-today"],
+    "today is absence fact: a recorded today belongs here, not only in recorded",
+  );
 });
 
 test("a subsidiary-scope denial refuses with the remedy, never a partial list", async () => {

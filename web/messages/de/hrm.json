@@ -829,7 +829,8 @@
       "pending": "Zur Genehmigung",
       "upcoming": "Bevorstehend",
       "today": "Heute abwesend",
-      "history": "Verlauf"
+      "history": "Verlauf",
+      "recorded": "Erfasst"
     },
     "columns": {
       "employee": "Mitarbeiter",
@@ -848,6 +849,16 @@
     "fileButton": "Neuer Antrag",
     "recordTitle": "Fehltag erfassen",
     "recordButton": "Fehltag erfassen",
+    "recordReasonLabel": "Grund der Erfassung",
+    "recordReasonHint": "Warum diese Abwesenheit erfasst wird — erforderlich für rückdatierte Tage oder Tage, die für eine andere Person erfasst werden.",
+    "recordSaved": "Abwesenheit für {name} am {date} erfasst.",
+    "recordBalanceRemaining": "{code} Rest: {remaining} Std.",
+    "recordBalanceEffect": "{code} Rest: {remaining} Std. → {remainingAfter} Std. nach der Erfassung",
+    "absenceTitle": "Erfasste Abwesenheit",
+    "balanceEntitlement": "Anspruch",
+    "balanceTaken": "Genommen",
+    "balancePending": "Offen",
+    "balanceRemaining": "Rest",
     "calendarTitle": "Kalender",
     "calendarDepartmentLabel": "Abteilung",
     "calendarAllDepartments": "Alle Abteilungen",
@@ -902,7 +913,8 @@
       "approved": "Genehmigt",
       "rejected": "Abgelehnt",
       "withdrawn": "Zurückgezogen",
-      "cancelled": "Storniert"
+      "cancelled": "Storniert",
+      "recorded": "Erfasst"
     }
   },
   "myLeave": {

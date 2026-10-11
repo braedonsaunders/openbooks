@@ -32,6 +32,7 @@ const VISIBILITY_SPEC = {
     { key: "managerId", name: "Visibility Manager", handle: "visibility_manager", permissions: ["hrm.leave.read", "hrm.leave.manage"], link: true },
     { key: "employeeId", name: "Visibility Employee", handle: "visibility_employee", permissions: ["hrm.leave.request"] },
     { key: "outsiderId", name: "Visibility Outsider", handle: "visibility_outsider", link: true },
+    { key: "manageOnlyId", name: "Manage Only", handle: "visibility_manage_only", permissions: ["hrm.leave.manage"], link: true },
   ],
 } as const;
 
@@ -147,5 +148,9 @@ test("balances reuse the entitlement engine with exact taken, pending and remain
       leaveBalancesForEmployment(db, h.org.orgId, h.managerId, employmentId, "not-a-date"),
       (error: unknown) => error instanceof LeaveError && /asOf/.test(error.message),
     );
+    // A manage-only recorder reads the same balances through the manage
+    // grant, so the record form can always show the effect before saving.
+    const managed = await leaveBalancesForEmployment(db, h.org.orgId, h.manageOnlyId, employmentId, "2026-10-01");
+    assert.equal(managed[0]!.remaining, "96");
   });
 });

@@ -8,6 +8,7 @@ import {
   HrmAuthorizationError,
   loadOwnEmploymentIds,
   requireAggregateLeaveManage,
+  requireHrmLeaveManageOnEmployment,
   requireHrmLeaveRead,
 } from "./authorization.ts";
 import { EmploymentReadError, likeEscape } from "./employment-read.ts";
@@ -292,6 +293,8 @@ export interface LeaveTypeBalance {
   readonly pending: string;
   /** Entitlement minus taken minus pending; null when unbounded. */
   readonly remaining: string | null;
+  /** The time balance (entitlement minus taken), straight from timeBalanceAsOf. */
+  readonly balance: string | null;
   readonly unlimited: boolean;
 }
 
@@ -356,13 +359,19 @@ export async function leaveEmploymentBalances(
       taken: read.taken,
       pending,
       remaining: entitlement === null ? null : subHours(subHours(entitlement, read.taken), pending),
+      balance: read.balance,
       unlimited: read.unlimited,
     });
   }
   return out;
 }
 
-/** One employment's balances, gated on that employment — never by a caller-supplied party. */
+/**
+ * One employment's balances, gated on that employment — never by a
+ * caller-supplied party. Readers come through the read grant; managers
+ * recording through the manage grant on the same employment, so the
+ * record-absence form can always show the effect before saving.
+ */
 export async function leaveBalancesForEmployment(
   exec: SqlExecutor,
   orgId: string,
@@ -370,7 +379,9 @@ export async function leaveBalancesForEmployment(
   employmentId: string,
   asOf: string,
 ): Promise<LeaveTypeBalance[]> {
-  await requireHrmLeaveRead(exec, orgId, actorId, employmentId);
+  const mayRead = await actorHasPermission(exec, orgId, actorId, "hrm.leave.read");
+  if (!mayRead) await requireHrmLeaveManageOnEmployment(exec, orgId, actorId, employmentId);
+  else await requireHrmLeaveRead(exec, orgId, actorId, employmentId);
   return leaveEmploymentBalances(exec, orgId, employmentId, asOf);
 }
 

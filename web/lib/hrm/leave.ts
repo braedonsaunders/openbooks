@@ -5,11 +5,10 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import {
-  listLeaveTypes,
+  leaveEmploymentBalances,
   listOrgLeaveRequests,
   myLeaveRequests,
   payrollBankBalances,
-  timeBalanceAsOf,
   type LeaveRequestSummary,
 } from '@openbooks/engine/src/hrm/leave-read.ts'
 import {
@@ -111,6 +110,8 @@ export interface LeaveQueueData {
       workerName: string
       hours: string
       leaveTypeCode: string
+      /** Null when the day cannot open a record (request-sourced without its request). */
+      absenceHref: string | null
     }[]
   }[]
   calendarEmpty: string
@@ -121,6 +122,7 @@ export interface LeaveQueueData {
   recordHref: string
   dialogOpen: boolean
   dialogRequestId: string | null
+  dialogAbsenceId: string | null
   dialogCloseHref: string
   /** The record-absence action opens its own dialog, never the file-leave one. */
   recordOpen: boolean
@@ -129,7 +131,8 @@ export interface LeaveQueueData {
 function segmentOf(
   row: LeaveRequestSummary,
   today: string,
-): 'pending' | 'upcoming' | 'today' | 'history' {
+): 'pending' | 'upcoming' | 'today' | 'history' | 'recorded' {
+  if (row.status === 'recorded') return 'recorded'
   if (row.status === 'submitted') return 'pending'
   if (row.status === 'approved' && row.endsOn >= today) return 'upcoming'
   return 'history'
@@ -162,7 +165,7 @@ function leaveStatusLabel(t: LeaveCatalog, status: string): string {
 function leaveStatusVariant(status: string): LeaveQueueRow['statusVariant'] {
   if (status === 'draft') return 'secondary'
   if (status === 'submitted') return 'warning'
-  if (status === 'approved') return 'success'
+  if (status === 'approved' || status === 'recorded') return 'success'
   if (status === 'rejected') return 'destructive'
   if (status === 'withdrawn' || status === 'cancelled') return 'outline'
   return 'default'
@@ -251,9 +254,16 @@ export async function loadLeaveQueue(
     }),
     dialogOpen:
       sp.file !== undefined ||
-      (typeof sp.request === 'string' && sp.request !== ''),
+      (typeof sp.request === 'string' && sp.request !== '') ||
+      (typeof sp.absence === 'string' && sp.absence !== ''),
     dialogRequestId:
       typeof sp.request === 'string' && sp.request !== '' ? sp.request : null,
+    dialogAbsenceId:
+      typeof sp.request === 'string' && sp.request !== ''
+        ? null
+        : typeof sp.absence === 'string' && sp.absence !== ''
+          ? sp.absence
+          : null,
     dialogCloseHref: leaveHref('/hrm/leave', sp.segment, keepView),
     // ?record=1 is the manager absence-recording action, not a second
     // spelling of ?file=1: it opens the record dialog below, which posts
@@ -264,7 +274,7 @@ export async function loadLeaveQueue(
   const segmentParam = view === 'requests' ? sp.segment : undefined
   if (
     segmentParam !== undefined &&
-    !['pending', 'upcoming', 'today', 'history'].includes(segmentParam)
+    !['pending', 'upcoming', 'today', 'history', 'recorded'].includes(segmentParam)
   ) {
     return {
       ...base,
@@ -315,22 +325,26 @@ export async function loadLeaveQueue(
   // today-count must not leak org-wide totals to a restricted reader.
   const onLeave = await employmentsOnLeave(db, orgId, today, authz.allowedSubsidiaryIds)
 
-  const counts: Record<string, number> = { pending: 0, upcoming: 0, today: onLeave.length, history: 0 }
+  const counts: Record<string, number> = { pending: 0, upcoming: 0, today: onLeave.length, history: 0, recorded: 0 }
   for (const row of listed) counts[segmentOf(row, today)] = (counts[segmentOf(row, today)] ?? 0) + 1
-  const segments: LeaveSegment[] = (['pending', 'upcoming', 'today', 'history'] as const).map((value) => ({
+  const segments: LeaveSegment[] = (['pending', 'upcoming', 'today', 'history', 'recorded'] as const).map((value) => ({
     value,
     label: t(`leave.segments.${value}`),
     count: counts[value] ?? 0,
   }))
 
   let rows = listed
-  if (segmentParam === 'pending' || segmentParam === 'upcoming' || segmentParam === 'history') {
+  if (segmentParam === 'pending' || segmentParam === 'upcoming' || segmentParam === 'history' || segmentParam === 'recorded') {
     rows = listed.filter((row) => segmentOf(row, today) === segmentParam)
   } else if (segmentParam === 'today') {
     // On leave TODAY is the absence fact, not the request file: an
     // approved future range belongs to Upcoming even when its employment
-    // is also on leave today under another request.
-    rows = listed.filter((row) => row.status === 'approved' && row.startsOn <= today && row.endsOn >= today)
+    // is also on leave today under another request. Recorded days covering
+    // today belong here too — they are absence fact, never proposals.
+    rows = listed.filter((row) =>
+      (row.status === 'approved' && row.startsOn <= today && row.endsOn >= today) ||
+      (row.status === 'recorded' && row.startsOn <= today && row.endsOn >= today),
+    )
   }
 
   const { workerByEmployment } = await loadQueueLabels(
@@ -350,7 +364,10 @@ export async function loadLeaveQueue(
       employeeHref: party ? `/entities/employees?party=${encodeURIComponent(party)}` : null,
       statusLabel: leaveStatusLabel(t, row.status),
       statusVariant: leaveStatusVariant(row.status),
-      requestHref: leaveHref('/hrm/leave', sp.segment, { request: row.id }),
+      requestHref:
+        row.source === 'recorded' && row.absenceId
+          ? leaveHref('/hrm/leave', sp.segment, { absence: row.absenceId })
+          : leaveHref('/hrm/leave', sp.segment, { request: row.id }),
       openLabel: t('leave.openRequest'),
       rangeLabel: `${row.startsOn} → ${row.endsOn}`,
     }
@@ -395,11 +412,20 @@ export async function loadLeaveQueue(
       >()
       for (const day of days) {
         const entries = byDate.get(day.onDate) ?? []
+        // Every calendar entry opens its record in the drawer: recorded
+        // days by absence id, request-written days by their request. The
+        // href keeps the calendar view so closing lands back on it.
         entries.push({
           employmentId: day.employmentId,
           workerName: day.workerName,
           hours: day.hours,
           leaveTypeCode: day.leaveTypeCode,
+          absenceHref:
+            day.source === 'recorded'
+              ? leaveHref('/hrm/leave', undefined, { ...keepView, absence: day.id })
+              : day.leaveRequestId
+                ? leaveHref('/hrm/leave', undefined, { ...keepView, request: day.leaveRequestId })
+                : null,
         })
         byDate.set(day.onDate, entries)
       }
@@ -448,6 +474,11 @@ export interface MyLeaveBalance {
   scopeLabel: string
   balance: string | null
   unlimited: boolean
+  /** Breakdown behind a time balance; null on value rows. */
+  entitlement: string | null
+  taken: string | null
+  pending: string | null
+  remaining: string | null
 }
 
 export interface MyLeaveData {
@@ -465,6 +496,10 @@ export interface MyLeaveData {
   timeKindLabel: string
   valueKindLabel: string
   unlimitedLabel: string
+  entitlementLabel: string
+  takenLabel: string
+  pendingLabel: string
+  remainingLabel: string
   columns: { employee: string; type: string; range: string; hours: string; status: string }
   emptyTitle: string
   emptyDescription: string
@@ -513,6 +548,10 @@ export async function loadMyLeave(
     timeKindLabel: t('myLeave.timeKind'),
     valueKindLabel: t('myLeave.valueKind'),
     unlimitedLabel: t('myLeave.unlimited'),
+    entitlementLabel: t('leave.balanceEntitlement'),
+    takenLabel: t('leave.balanceTaken'),
+    pendingLabel: t('leave.balancePending'),
+    remainingLabel: t('leave.balanceRemaining'),
     queue: { notAvailable: t('queue.notAvailable'), openEmployee: t('queue.openEmployee') },
     openRequest: t('leave.openRequest'),
     fileHref: leaveHref('/hrm/my-leave', undefined, { file: '1' }),
@@ -574,19 +613,24 @@ export async function loadMyLeave(
        where w.org_id = ${orgId}::uuid and w.id in (${sql.join(ids, sql`, `)})
        order by s.name, w.employment_number nulls last, w.id
     `)).rows
-    const types = await listLeaveTypes(db, orgId)
     for (const employment of employments) {
       const employmentReference = employment.employmentNumber?.trim() || employment.employmentId.slice(0, 8)
-      for (const type of types) {
-        if (!type.isActive) continue
-        const read = await timeBalanceAsOf(db, orgId, employment.employmentId, type.id, asOf)
+      // One engine read per employment prices every active type through
+      // the same time balance the filing gate uses — never a second
+      // calculator beside it.
+      const rows = await leaveEmploymentBalances(db, orgId, employment.employmentId, asOf)
+      for (const row of rows) {
         balances.push({
-          leaveTypeCode: type.code,
+          leaveTypeCode: row.code,
           kind: 'time',
           employmentId: employment.employmentId,
           scopeLabel: t('myLeave.balanceEmployment', { employer: employment.employerName, employment: employmentReference }),
-          balance: read.balance,
-          unlimited: read.unlimited,
+          balance: row.balance,
+          unlimited: row.unlimited,
+          entitlement: row.entitlement,
+          taken: row.taken,
+          pending: row.pending,
+          remaining: row.remaining,
         })
       }
     }
@@ -596,7 +640,7 @@ export async function loadMyLeave(
     if (party) {
       const banks = await payrollBankBalances(orgId, party, { asOf })
       for (const bank of banks) {
-        balances.push({ leaveTypeCode: bank.planCode, kind: 'value', employmentId: null, scopeLabel: t('myLeave.balancePerson'), balance: bank.balance, unlimited: false })
+        balances.push({ leaveTypeCode: bank.planCode, kind: 'value', employmentId: null, scopeLabel: t('myLeave.balancePerson'), balance: bank.balance, unlimited: false, entitlement: null, taken: null, pending: null, remaining: null })
       }
     }
   }

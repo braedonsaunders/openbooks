@@ -3,7 +3,9 @@
 /**
  * Self-service balance list: TIME balances per leave type and, where banks
  * exist, VALUE balances per plan — each labelled with its unit so the two
- * are never conflated. Loader-resolved rows; no fetch, no state.
+ * are never conflated. Time rows carry the entitlement breakdown
+ * (entitlement, taken, pending, remaining) priced by the same engine the
+ * filing gate uses. Loader-resolved rows; no fetch, no state.
  */
 
 export function LeaveBalances({
@@ -11,12 +13,31 @@ export function LeaveBalances({
   timeKindLabel,
   valueKindLabel,
   unlimitedLabel,
+  entitlementLabel,
+  takenLabel,
+  pendingLabel,
+  remainingLabel,
   empty,
 }: {
-  balances: { leaveTypeCode: string; kind: 'time' | 'value'; employmentId: string | null; scopeLabel: string; balance: string | null; unlimited: boolean }[]
+  balances: {
+    leaveTypeCode: string
+    kind: 'time' | 'value'
+    employmentId: string | null
+    scopeLabel: string
+    balance: string | null
+    unlimited: boolean
+    entitlement: string | null
+    taken: string | null
+    pending: string | null
+    remaining: string | null
+  }[]
   timeKindLabel: string
   valueKindLabel: string
   unlimitedLabel: string
+  entitlementLabel: string
+  takenLabel: string
+  pendingLabel: string
+  remainingLabel: string
   empty: string
 }) {
   if (balances.length === 0) {
@@ -35,6 +56,12 @@ export function LeaveBalances({
               {row.kind === 'time' ? timeKindLabel : valueKindLabel}
             </span>
             <span className="block text-xs font-normal text-slate-400 dark:text-slate-500">{row.scopeLabel}</span>
+            {row.kind === 'time' ? (
+              <span className="block text-xs font-normal tabular-nums text-slate-400 dark:text-slate-500">
+                {entitlementLabel} {row.entitlement ?? '—'} · {takenLabel} {row.taken ?? '—'} ·{' '}
+                {pendingLabel} {row.pending ?? '—'} · {remainingLabel} {row.remaining ?? '—'}
+              </span>
+            ) : null}
           </span>
           <span className="tabular-nums text-slate-500 dark:text-slate-400">
             {row.unlimited ? unlimitedLabel : (row.balance ?? '—')}

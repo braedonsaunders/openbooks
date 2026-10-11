@@ -17,11 +17,13 @@ import { LeaveDrawer } from './LeaveDrawer'
 
 export function LeaveDialog({
   requestId,
+  absenceId = null,
   closeHref,
   canWithdrawCancel,
   recordOpen = false,
 }: {
   requestId: string | null
+  absenceId?: string | null
   closeHref: string
   canWithdrawCancel: boolean
   recordOpen?: boolean
@@ -29,10 +31,11 @@ export function LeaveDialog({
   const router = useRouter()
   return (
     <LeaveDrawer
-      key={requestId ?? (recordOpen ? 'record' : 'file')}
+      key={requestId ?? absenceId ?? (recordOpen ? 'record' : 'file')}
       requestId={requestId}
+      absenceId={absenceId}
       canWithdrawCancel={canWithdrawCancel}
-      record={recordOpen && requestId === null}
+      record={recordOpen && requestId === null && absenceId === null}
       onClose={() => {
         router.push(closeHref as never)
         router.refresh()

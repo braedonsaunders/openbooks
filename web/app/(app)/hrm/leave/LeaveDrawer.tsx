@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
+import { endOfMonth, startOfMonth } from '@openbooks/engine/platform/civil-date'
 import { Button, Drawer, Input, Label, SearchSelect, Select, Textarea } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { promptDialog } from '../../../../lib/prompt'
@@ -47,13 +48,32 @@ interface Detail {
   asOf: string
 }
 
+interface AbsenceDetail {
+  absence: {
+    id: string
+    employmentId: string
+    onDate: string
+    hours: string
+    leaveTypeCode: string
+    leaveTypeName: string
+    workerName: string
+    source: 'request' | 'recorded'
+    reason: string | null
+    leaveRequestId: string | null
+    recordedAt: string | null
+  }
+}
+
 export function LeaveDrawer({
   requestId,
+  absenceId = null,
   canWithdrawCancel,
   record = false,
   onClose,
 }: {
   requestId: string | null
+  /** A calendar entry's absence day: the drawer shows the fact, never a form. */
+  absenceId?: string | null
   /** Holds hrm.leave.request (mirrors the withdraw/cancel route guard). */
   canWithdrawCancel: boolean
   /**
@@ -68,7 +88,8 @@ export function LeaveDrawer({
   const tCommon = useTranslations('common')
   const router = useRouter()
   const [detail, setDetail] = useState<Detail | null>(null)
-  const [loading, setLoading] = useState(requestId !== null)
+  const [absenceDetail, setAbsenceDetail] = useState<AbsenceDetail | null>(null)
+  const [loading, setLoading] = useState(requestId !== null || (requestId === null && absenceId !== null))
   const [status, setStatus] = useState<string | undefined>(undefined)
   const [filingDirty, setFilingDirty] = useState(false)
   const [filingBusy, setFilingBusy] = useState(false)
@@ -80,7 +101,31 @@ export function LeaveDrawer({
     confirmLabel: tCommon('confirm.discardChanges'),
   })
 
+  // A request id wins over an absence id; the loader never sets both.
   useEffect(() => {
+    if (!requestId && absenceId) {
+      let live = true
+      fetch(`/api/hrm/leave-absences/${absenceId}`, { method: 'GET' })
+        .then(async (res) => {
+          if (!live) return
+          if (!res.ok) {
+            setStatus(await readApiErrorMessage(res, t('leave.detailFailed')))
+            setLoading(false)
+            return
+          }
+          setAbsenceDetail((await res.json().catch(() => null)) as AbsenceDetail | null)
+          setStatus(undefined)
+          setLoading(false)
+        })
+        .catch(() => {
+          if (!live) return
+          setStatus(t('leave.detailFailed'))
+          setLoading(false)
+        })
+      return () => {
+        live = false
+      }
+    }
     if (!requestId) return
     let live = true
     fetch(`/api/hrm/leave-requests/${requestId}`, { method: 'GET' })
@@ -103,7 +148,7 @@ export function LeaveDrawer({
     return () => {
       live = false
     }
-  }, [requestId, t])
+  }, [requestId, absenceId, t])
 
   // A second click while the first action POST is in flight would
   // submit, withdraw or cancel twice: the ref drops re-entrant runs in
@@ -140,7 +185,7 @@ export function LeaveDrawer({
   }
 
   return (
-    <Drawer open onClose={() => void filingClose.close()} size="md" title={requestId ? t('leave.drawerTitle') : record ? t('leave.recordTitle') : t('leave.fileTitle')}>
+    <Drawer open onClose={() => void filingClose.close()} size="md" title={requestId ? t('leave.drawerTitle') : absenceId ? t('leave.absenceTitle') : record ? t('leave.recordTitle') : t('leave.fileTitle')}>
       {loading ? <p className="text-sm text-slate-500">{t('leave.detailLoading')}</p> : null}
       {status ? (
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">
@@ -271,11 +316,47 @@ export function LeaveDrawer({
           </div>
         </div>
       ) : null}
-      {!loading && !requestId ? (
+      {!loading && !requestId && absenceId && absenceDetail ? (
+        <div className="space-y-4">
+          <dl className="grid grid-cols-2 gap-2 text-sm">
+            <dt className="text-slate-500">{t('leave.columns.employee')}</dt>
+            <dd className="font-medium">{absenceDetail.absence.workerName}</dd>
+            <dt className="text-slate-500">{t('leave.columns.type')}</dt>
+            <dd className="font-medium">
+              {absenceDetail.absence.leaveTypeCode} — {absenceDetail.absence.leaveTypeName}
+            </dd>
+            <dt className="text-slate-500">{t('leave.calendarFromLabel')}</dt>
+            <dd className="tabular-nums">{absenceDetail.absence.onDate}</dd>
+            <dt className="text-slate-500">{t('leave.columns.hours')}</dt>
+            <dd className="tabular-nums">{absenceDetail.absence.hours}</dd>
+            <dt className="text-slate-500">{t('leave.columns.status')}</dt>
+            <dd>
+              {t.has(`leave.statusNames.${absenceDetail.absence.source === 'recorded' ? 'recorded' : 'approved'}`)
+                ? t(`leave.statusNames.${absenceDetail.absence.source === 'recorded' ? 'recorded' : 'approved'}`)
+                : absenceDetail.absence.source}
+            </dd>
+          </dl>
+          {absenceDetail.absence.reason ? <p className="text-sm text-slate-600">{absenceDetail.absence.reason}</p> : null}
+          <div className="flex flex-wrap gap-2">
+            {absenceDetail.absence.leaveRequestId ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => router.push(`/hrm/leave?request=${encodeURIComponent(absenceDetail.absence.leaveRequestId ?? '')}` as never)}
+              >
+                {t('leave.openRequest')}
+              </Button>
+            ) : null}
+            <Button size="sm" variant="ghost" onClick={onClose}>
+              {tCommon('actions.close')}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+      {!loading && !requestId && !absenceId ? (
         record ? (
           <LeaveRecordForm
             onCancel={filingClose.close}
-            onSaved={onClose}
             onDirtyChange={setFilingDirty}
             onBusyChange={setFilingBusy}
           />
@@ -699,12 +780,10 @@ function LeaveFileForm({
  */
 function LeaveRecordForm({
   onCancel,
-  onSaved,
   onDirtyChange,
   onBusyChange,
 }: {
   onCancel: () => void | Promise<void>
-  onSaved: () => void
   onDirtyChange: (dirty: boolean) => void
   onBusyChange: (busy: boolean) => void
 }) {
@@ -718,8 +797,17 @@ function LeaveRecordForm({
   const [employmentsLoaded, setEmploymentsLoaded] = useState(false)
   const [onDate, setOnDate] = useState('')
   const [hours, setHours] = useState('')
+  const [reason, setReason] = useState('')
+  const [balances, setBalances] = useState<{
+    rows: { leaveTypeId: string; code: string; remaining: string | null }[]
+    effect: { leaveTypeId: string; remainingAfter: string | null } | null
+  } | null>(null)
   const [status, setStatus] = useState<string | undefined>(undefined)
   const { busy: saving, execute } = useAppAction()
+  // Client-side today only marks the reason required; the engine decides
+  // from the org business day and the actor's employments, never this.
+  const todayText = new Date().toISOString().slice(0, 10)
+  const reasonRequired = onDate !== '' && onDate < todayText
 
   // Leave-type options ride the HRM options route with its refusals; the
   // form submits ids, never labels.
@@ -792,27 +880,94 @@ function LeaveRecordForm({
     }
   }, [t])
 
+  // Remaining-balance effect before saving: the manager sees what the
+  // recording costs while typing. Advisory only — the save still runs
+  // through the engine, which re-prices the balance at write time. A
+  // balances refusal never blocks the form; the engine refusal would.
+  useEffect(() => {
+    if (!employmentId) {
+      setBalances(null)
+      return
+    }
+    const params = new URLSearchParams({ employmentId, asOf: onDate || todayText })
+    if (leaveTypeId && hours.trim() !== '') {
+      params.set('leaveTypeId', leaveTypeId)
+      params.set('hours', hours.trim())
+    }
+    let live = true
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/hrm/leave-balances?${params}`, { method: 'GET' })
+        if (!live) return
+        if (!res.ok) return
+        const payload = (await res.json().catch(() => null)) as {
+          balances?: { leaveTypeId?: unknown; code?: unknown; remaining?: unknown }[]
+          effect?: { leaveTypeId?: unknown; remainingAfter?: unknown } | null
+        } | null
+        if (!live || !payload || !Array.isArray(payload.balances)) return
+        setBalances({
+          rows: payload.balances.flatMap((row) =>
+            typeof row.leaveTypeId === 'string' && typeof row.code === 'string' &&
+            (row.remaining === null || typeof row.remaining === 'string')
+              ? [{ leaveTypeId: row.leaveTypeId, code: row.code, remaining: row.remaining }]
+              : [],
+          ),
+          effect:
+            payload.effect && typeof payload.effect.leaveTypeId === 'string' &&
+            (payload.effect.remainingAfter === null || typeof payload.effect.remainingAfter === 'string')
+              ? { leaveTypeId: payload.effect.leaveTypeId, remainingAfter: payload.effect.remainingAfter }
+              : null,
+        })
+      } catch {
+        if (live) setBalances(null)
+      }
+    }, 300)
+    return () => {
+      live = false
+      clearTimeout(timer)
+    }
+  }, [employmentId, leaveTypeId, hours, onDate, todayText])
+
+  const balanceRow = leaveTypeId ? (balances?.rows.find((row) => row.leaveTypeId === leaveTypeId) ?? null) : null
+
   const save = async (): Promise<void> => {
     if (saving) return
+    // The engine owns the requirement; this only spares a round trip when
+    // the basis is visibly missing for a back-dated day.
+    if (reasonRequired && reason.trim() === '') {
+      setStatus(t('leave.recordReasonHint'))
+      return
+    }
     setStatus(undefined)
     onBusyChange(true)
     try {
-      await execute(
+      await execute<{ id: string; onDate: string } | null>(
         async () => {
           try {
             const res = await fetch('/api/hrm/leave-absences', {
               method: 'POST',
               headers: { 'content-type': 'application/json' },
-              body: JSON.stringify({ employmentId, leaveTypeId, onDate, hours }),
+              body: JSON.stringify({
+                employmentId,
+                leaveTypeId,
+                onDate,
+                hours,
+                reason: reason.trim() === '' ? null : reason.trim(),
+              }),
             })
             if (!res.ok) {
               setStatus(await readApiErrorMessage(res, t('leave.actionFailed')))
               return { ok: true as const, status: res.status, data: null }
             }
-            router.refresh()
+            const payload = (await res.json().catch(() => null)) as {
+              absence?: { id?: unknown; onDate?: unknown }
+            } | null
+            if (typeof payload?.absence?.id !== 'string' || typeof payload?.absence?.onDate !== 'string') {
+              setStatus(t('leave.actionFailed'))
+              return { ok: true as const, status: res.status, data: null }
+            }
             onDirtyChange(false)
-            onSaved()
-            return { ok: true as const, status: 200, data: null }
+            return { ok: true as const, status: 200, data: { id: payload.absence.id, onDate: payload.absence.onDate } }
           } catch {
             return {
               ok: false as const,
@@ -822,6 +977,20 @@ function LeaveRecordForm({
         },
         {
           fallbackMessage: t('leave.actionFailed'),
+          // The save confirms through the native mutation result: a toast
+          // naming the day, then the drawer opens the saved record on the
+          // calendar — visible and selected, never a silent close.
+          successMessage: t('leave.recordSaved', {
+            name: employmentOptions.find((option) => option.value === employmentId)?.label ?? '',
+            date: onDate,
+          }),
+          onOk: (data) => {
+            if (!data) return
+            router.push(
+              `/hrm/leave?view=calendar&from=${startOfMonth(data.onDate)}&to=${endOfMonth(data.onDate)}&absence=${encodeURIComponent(data.id)}` as never,
+            )
+            router.refresh()
+          },
           onRefused: (error) => setStatus(error.displayMessage(t('leave.actionFailed'))),
         },
       )
@@ -874,6 +1043,33 @@ function LeaveRecordForm({
       <div>
         <Label htmlFor="leave-record-hours">{t('leave.fileHoursLabel')}</Label>
         <Input id="leave-record-hours" inputMode="decimal" value={hours} onChange={(event) => markDirty(setHours, event.target.value)} placeholder="8" />
+      </div>
+      {balanceRow ? (
+        <p role="status" className="text-sm tabular-nums text-slate-600 dark:text-slate-300">
+          {balanceRow.remaining === null
+            ? t('leave.unlimitedBalance')
+            : balances?.effect?.leaveTypeId === leaveTypeId && hours.trim() !== '' && balances.effect.remainingAfter !== null
+              ? t('leave.recordBalanceEffect', {
+                  code: balanceRow.code,
+                  remaining: balanceRow.remaining,
+                  remainingAfter: balances.effect.remainingAfter,
+                })
+              : t('leave.recordBalanceRemaining', { code: balanceRow.code, remaining: balanceRow.remaining })}
+        </p>
+      ) : null}
+      <div>
+        <Label htmlFor="leave-record-reason">
+          {t('leave.recordReasonLabel')}
+          {reasonRequired ? <span aria-hidden="true"> *</span> : null}
+        </Label>
+        <Textarea
+          id="leave-record-reason"
+          value={reason}
+          onChange={(event) => markDirty(setReason, event.target.value)}
+          required={reasonRequired}
+          aria-required={reasonRequired}
+        />
+        <p className="mt-1 text-xs text-slate-500">{t('leave.recordReasonHint')}</p>
       </div>
       {status ? (
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">

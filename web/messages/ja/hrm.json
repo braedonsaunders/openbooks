@@ -829,7 +829,8 @@
       "pending": "承認待ち",
       "upcoming": "予定",
       "today": "本日欠勤中",
-      "history": "履歴"
+      "history": "履歴",
+      "recorded": "記録済み"
     },
     "columns": {
       "employee": "氏名",
@@ -848,6 +849,16 @@
     "fileButton": "新規申請",
     "recordTitle": "欠勤を記録する",
     "recordButton": "欠勤を記録",
+    "recordReasonLabel": "記録の理由",
+    "recordReasonHint": "この欠勤を記録する理由 — 遡及日または他の従業員のために記録する場合は必須です。",
+    "recordSaved": "{date}の{name}の欠勤を記録しました。",
+    "recordBalanceRemaining": "{code}残り: {remaining}時間",
+    "recordBalanceEffect": "{code}残り: {remaining}時間 → 記録後は{remainingAfter}時間",
+    "absenceTitle": "記録された欠勤",
+    "balanceEntitlement": "付与",
+    "balanceTaken": "取得済み",
+    "balancePending": "申請中",
+    "balanceRemaining": "残り",
     "calendarTitle": "カレンダー",
     "calendarDepartmentLabel": "部門",
     "calendarAllDepartments": "すべての部門",
@@ -902,7 +913,8 @@
       "approved": "承認済み",
       "rejected": "却下",
       "withdrawn": "取下げ",
-      "cancelled": "取消済み"
+      "cancelled": "取消済み",
+      "recorded": "記録済み"
     }
   },
   "myLeave": {

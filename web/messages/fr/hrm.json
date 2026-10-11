@@ -829,7 +829,8 @@
       "pending": "À approuver",
       "upcoming": "À venir",
       "today": "Absents aujourd'hui",
-      "history": "Historique"
+      "history": "Historique",
+      "recorded": "Enregistrée"
     },
     "columns": {
       "employee": "Employé",
@@ -848,6 +849,16 @@
     "fileButton": "Nouvelle demande",
     "recordTitle": "Saisir une absence",
     "recordButton": "Saisir une absence",
+    "recordReasonLabel": "Motif de la saisie",
+    "recordReasonHint": "Pourquoi cette absence est saisie — obligatoire pour les jours antidatés ou saisis pour un autre employé.",
+    "recordSaved": "Absence enregistrée pour {name} le {date}.",
+    "recordBalanceRemaining": "{code} restant : {remaining} h",
+    "recordBalanceEffect": "{code} restant : {remaining} h → {remainingAfter} h après la saisie",
+    "absenceTitle": "Absence enregistrée",
+    "balanceEntitlement": "Droits",
+    "balanceTaken": "Pris",
+    "balancePending": "En attente",
+    "balanceRemaining": "Solde",
     "calendarTitle": "Calendrier",
     "calendarDepartmentLabel": "Service",
     "calendarAllDepartments": "Tous les services",
@@ -902,7 +913,8 @@
       "approved": "Approuvée",
       "rejected": "Rejetée",
       "withdrawn": "Retirée",
-      "cancelled": "Annulée"
+      "cancelled": "Annulée",
+      "recorded": "Enregistrée"
     }
   },
   "myLeave": {

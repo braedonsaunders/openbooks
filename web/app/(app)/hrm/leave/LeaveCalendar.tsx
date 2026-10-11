@@ -1,6 +1,7 @@
 'use client'
 
 import { useTransition } from 'react'
+import Link from 'next/link'
 import { useLocale, useTranslations } from 'next-intl'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { CalendarDays, ChevronLeft, ChevronRight, Users } from 'lucide-react'
@@ -39,6 +40,7 @@ export function LeaveCalendar({
       workerName: string
       hours: string
       leaveTypeCode: string
+      absenceHref: string | null
     }[]
   }[]
   empty: string
@@ -248,18 +250,41 @@ export function LeaveCalendar({
                                     key={`${entry.employmentId}:${entry.leaveTypeCode}`}
                                     className="rounded-md border border-teal-100 bg-teal-50 px-2 py-1.5 dark:border-teal-900/60 dark:bg-teal-950/40"
                                   >
-                                    <p className="break-words text-xs font-semibold leading-4 text-teal-900 dark:text-teal-200">
-                                      {entry.workerName}
-                                    </p>
-                                    <p className="mt-0.5 flex flex-wrap items-center gap-x-1 text-[10px] leading-4 text-teal-700 dark:text-teal-400">
-                                      <span>{entry.leaveTypeCode}</span>
-                                      <span aria-hidden="true">·</span>
-                                      <span className="tabular-nums">
-                                        {t('calendarHours', {
-                                          hours: entry.hours,
-                                        })}
-                                      </span>
-                                    </p>
+                                    {entry.absenceHref ? (
+                                      <Link
+                                        href={entry.absenceHref as never}
+                                        className="block rounded focus-visible:outline-2 focus-visible:outline-teal-700"
+                                        aria-label={`${entry.workerName} ${entry.leaveTypeCode} ${t('calendarHours', { hours: entry.hours })}`}
+                                      >
+                                        <p className="break-words text-xs font-semibold leading-4 text-teal-900 underline decoration-teal-200 underline-offset-2 dark:text-teal-200 dark:decoration-teal-800">
+                                          {entry.workerName}
+                                        </p>
+                                        <p className="mt-0.5 flex flex-wrap items-center gap-x-1 text-[10px] leading-4 text-teal-700 dark:text-teal-400">
+                                          <span>{entry.leaveTypeCode}</span>
+                                          <span aria-hidden="true">·</span>
+                                          <span className="tabular-nums">
+                                            {t('calendarHours', {
+                                              hours: entry.hours,
+                                            })}
+                                          </span>
+                                        </p>
+                                      </Link>
+                                    ) : (
+                                      <>
+                                        <p className="break-words text-xs font-semibold leading-4 text-teal-900 dark:text-teal-200">
+                                          {entry.workerName}
+                                        </p>
+                                        <p className="mt-0.5 flex flex-wrap items-center gap-x-1 text-[10px] leading-4 text-teal-700 dark:text-teal-400">
+                                          <span>{entry.leaveTypeCode}</span>
+                                          <span aria-hidden="true">·</span>
+                                          <span className="tabular-nums">
+                                            {t('calendarHours', {
+                                              hours: entry.hours,
+                                            })}
+                                          </span>
+                                        </p>
+                                      </>
+                                    )}
                                   </li>
                                 ))}
                               </ul>

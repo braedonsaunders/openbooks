@@ -204,6 +204,7 @@ export function leaveQueueSpec(
                 'hrm-leave-dialog',
                 {
                   requestId: f('dialogRequestId'),
+                  absenceId: f('dialogAbsenceId'),
                   closeHref: f('dialogCloseHref'),
                   canWithdrawCancel: f('canWithdrawCancel'),
                 },

@@ -275,6 +275,7 @@ export const HRM_WIDGETS = {
   'hrm-leave-dialog': (props) => (
     <LeaveDialog
       requestId={str(props, 'requestId') ?? null}
+      absenceId={str(props, 'absenceId') ?? null}
       closeHref={str(props, 'closeHref') ?? '/hrm/leave'}
       canWithdrawCancel={props.canWithdrawCancel === true}
       recordOpen={props.recordOpen === true}
@@ -408,6 +409,10 @@ export const HRM_WIDGETS = {
       timeKindLabel={str(props, 'timeKindLabel') ?? ''}
       valueKindLabel={str(props, 'valueKindLabel') ?? ''}
       unlimitedLabel={str(props, 'unlimitedLabel') ?? ''}
+      entitlementLabel={str(props, 'entitlementLabel') ?? ''}
+      takenLabel={str(props, 'takenLabel') ?? ''}
+      pendingLabel={str(props, 'pendingLabel') ?? ''}
+      remainingLabel={str(props, 'remainingLabel') ?? ''}
       empty={str(props, 'empty') ?? ''}
     />
   ),

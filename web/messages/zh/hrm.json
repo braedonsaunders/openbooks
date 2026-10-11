@@ -829,7 +829,8 @@
       "pending": "待审批",
       "upcoming": "即将到来",
       "today": "今日休假",
-      "history": "历史"
+      "history": "历史",
+      "recorded": "已补记"
     },
     "columns": {
       "employee": "人员",
@@ -848,6 +849,16 @@
     "fileButton": "新建申请",
     "recordTitle": "补记缺勤",
     "recordButton": "补记缺勤",
+    "recordReasonLabel": "补记原因",
+    "recordReasonHint": "补记此缺勤的原因 — 补记过去日期或为其他员工补记时必填。",
+    "recordSaved": "已为{name}补记{date}的缺勤。",
+    "recordBalanceRemaining": "{code}剩余: {remaining}小时",
+    "recordBalanceEffect": "{code}剩余: {remaining}小时 → 补记后{remainingAfter}小时",
+    "absenceTitle": "补记的缺勤",
+    "balanceEntitlement": "额度",
+    "balanceTaken": "已休",
+    "balancePending": "待定",
+    "balanceRemaining": "剩余",
     "calendarTitle": "日历",
     "calendarDepartmentLabel": "部门",
     "calendarAllDepartments": "所有部门",
@@ -902,7 +913,8 @@
       "approved": "已批准",
       "rejected": "已拒绝",
       "withdrawn": "已撤回",
-      "cancelled": "已取消"
+      "cancelled": "已取消",
+      "recorded": "已补记"
     }
   },
   "myLeave": {

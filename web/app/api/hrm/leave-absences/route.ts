@@ -21,6 +21,7 @@ export const POST = defineRoute({
         onDate: body.onDate,
         hours: body.hours,
         leaveTypeId: body.leaveTypeId,
+        reason: body.reason,
       });
       return NextResponse.json({ absence });
     } catch (e) {

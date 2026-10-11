@@ -829,7 +829,8 @@
       "pending": "Aguardando aprovação",
       "upcoming": "Próximas",
       "today": "Ausentes hoje",
-      "history": "Histórico"
+      "history": "Histórico",
+      "recorded": "Registrada"
     },
     "columns": {
       "employee": "Pessoa",
@@ -848,6 +849,16 @@
     "fileButton": "Nova solicitação",
     "recordTitle": "Registrar uma ausência",
     "recordButton": "Registrar ausência",
+    "recordReasonLabel": "Motivo do registro",
+    "recordReasonHint": "Por que esta ausência está sendo registrada — obrigatório para dias retroativos ou registrados para outro funcionário.",
+    "recordSaved": "Ausência registrada para {name} em {date}.",
+    "recordBalanceRemaining": "{code} restante: {remaining} h",
+    "recordBalanceEffect": "{code} restante: {remaining} h → {remainingAfter} h após o registro",
+    "absenceTitle": "Ausência registrada",
+    "balanceEntitlement": "Direito",
+    "balanceTaken": "Utilizado",
+    "balancePending": "Pendente",
+    "balanceRemaining": "Restante",
     "calendarTitle": "Calendário",
     "calendarDepartmentLabel": "Departamento",
     "calendarAllDepartments": "Todos os departamentos",
@@ -902,7 +913,8 @@
       "approved": "Aprovada",
       "rejected": "Rejeitada",
       "withdrawn": "Retirada",
-      "cancelled": "Cancelada"
+      "cancelled": "Cancelada",
+      "recorded": "Registrada"
     }
   },
   "myLeave": {
