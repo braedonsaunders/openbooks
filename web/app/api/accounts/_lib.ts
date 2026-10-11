@@ -2,6 +2,7 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
 import { subsidiaryVisibleFilter } from '@openbooks/engine/organization/scope'
+import { loadCustomFieldAccessDefs, redactHiddenCustomValues, type CustomFieldViewer } from '../../../lib/custom-fields'
 
 export interface AccountPayload {
   account: Record<string, unknown>
@@ -21,7 +22,12 @@ export async function orgBaseCurrency(orgId: string): Promise<string | null> {
   return result.rows[0]?.base_currency ?? null
 }
 
-/** Tenant-scoped account payload used by both the list flyout and API. */
+/**
+ * Tenant-scoped account payload used by both the list flyout and API. The
+ * stored custom bag is returned unredacted: read-modify-write callers merge
+ * against it, so a reader's view is applied by redactAccountCustomFields at
+ * each response boundary.
+ */
 export async function loadAccount(
   id: string,
   orgId: string,
@@ -63,5 +69,21 @@ export async function loadAccount(
     hasTransactions: has_transactions === true,
     childCount: Number(child_count ?? 0),
     activeChildCount: Number(active_child_count ?? 0),
+  }
+}
+
+/** The account payload as the reader may see it: restricted custom values removed. */
+export async function redactAccountCustomFields(
+  payload: AccountPayload,
+  viewer: CustomFieldViewer,
+): Promise<AccountPayload> {
+  if (!('custom' in payload.account)) return payload
+  const defs = await loadCustomFieldAccessDefs('accounts')
+  return {
+    ...payload,
+    account: {
+      ...payload.account,
+      custom: redactHiddenCustomValues(defs, viewer, payload.account.custom as Record<string, unknown> | null),
+    },
   }
 }

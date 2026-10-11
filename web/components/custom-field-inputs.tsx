@@ -1,5 +1,6 @@
 'use client'
 
+import { customFieldVisible, type CustomFieldViewer } from '@openbooks/customization'
 import type { LineGridColumn, LineGridOption } from './line-grid'
 import { CustomFieldInput } from './custom-field-input'
 
@@ -24,24 +25,26 @@ export interface CustomFieldDefClient {
   isRequired: boolean
 }
 
-/** Header-level custom fields: a responsive grid of typed inputs. */
+/**
+ * Header-level custom fields: a responsive grid of typed inputs. With a `viewer`
+ * (the server-derived role viewer), the same visibility rule the API applies
+ * decides which fields render. Without one, every definition the caller passes
+ * renders, so the caller must pass definitions its server already filtered.
+ */
 export function CustomFieldInputs({
   defs,
   values,
   onChange,
   readOnly = false,
-  userRole,
+  viewer,
 }: {
   defs: CustomFieldDefClient[]
   values: Record<string, unknown>
   onChange: (values: Record<string, unknown>) => void
   readOnly?: boolean
-  /** Current user's role key, used to filter by allowedRoles. */
-  userRole?: string
+  viewer?: CustomFieldViewer | null
 }) {
-  const visibleDefs = userRole
-    ? defs.filter((d) => !d.config.allowedRoles || d.config.allowedRoles.length === 0 || d.config.allowedRoles.includes(userRole) || userRole === 'admin')
-    : defs
+  const visibleDefs = viewer ? defs.filter((def) => customFieldVisible(def, viewer)) : defs
   if (visibleDefs.length === 0) return null
   const set = (key: string, v: unknown) => onChange({ ...values, [key]: v })
 
@@ -60,11 +63,18 @@ export function CustomFieldInputs({
   )
 }
 
-/** Line-level custom fields become LineGrid columns. */
+/**
+ * Line-level custom fields become LineGrid columns. With a `viewer`, columns are
+ * limited to the fields it can see. A grid's save replaces each line's custom
+ * bag with the columns it rendered, so callers must not hide a column whose
+ * stored value the grid would then drop; omit the viewer for those grids.
+ */
 export function customFieldColumns<Row extends Record<string, unknown>>(
   defs: CustomFieldDefClient[],
+  viewer?: CustomFieldViewer | null,
 ): LineGridColumn<Row>[] {
   return defs
+    .filter((d) => !viewer || customFieldVisible(d, viewer))
     .filter((d) => d.config.displayMode !== 'hidden')
     .map((def) => {
       const base = { key: `cf_${def.key}`, label: def.label, help: def.config.helpText, required: def.isRequired }

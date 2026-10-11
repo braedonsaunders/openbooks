@@ -8,7 +8,7 @@ import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { guardSubsidiaryScope, subsidiariesInScope } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
-import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
+import { customFieldViewerFor, findUnownedCustomReferences, hiddenCustomFieldRefusal, loadFieldDefs, validateCustomValues, visibleCustomFieldDefs } from '../../../../lib/custom-fields'
 import { isUuid } from '../../../../lib/list-params'
 import { normalizeCountryCode } from '../../../../lib/countries'
 import { isIsoCalendarDate } from '../../../../lib/crm-dates'
@@ -242,7 +242,7 @@ export const GET = defineRoute({
   if (!scope.rows[0]) return notFound("record")
   const denied = guardSubsidiaryScope(gate, scope.rows[0].subsidiaryId, { orgWideNull: true })
   if (denied) return denied
-  const payload = await loadParty(id, gate.user.orgId, gate.allowedSubsidiaryIds)
+  const payload = await loadParty(id, gate.user.orgId, gate.allowedSubsidiaryIds, { customFieldViewer: customFieldViewerFor(gate) })
   if (!payload) return notFound("record")
   return NextResponse.json(payload)
   },
@@ -416,7 +416,13 @@ export const PATCH = defineRoute({
 
   let cleanedCustom: Record<string, unknown> | null = null
   if (body.custom !== undefined) {
-    const defs = await loadFieldDefs('parties')
+    const viewer = customFieldViewerFor(gate)
+    const activeDefs = await loadFieldDefs('parties')
+    // A restricted field the caller cannot see is refused when changed; an
+    // unchanged echo passes and its stored value is kept below.
+    const hidden = hiddenCustomFieldRefusal(activeDefs, viewer, body.custom, existingParty.custom ?? {})
+    if (hidden) return NextResponse.json({ error: hidden.message, fieldErrors: { [hidden.key]: hidden.message } }, { status: 403 })
+    const defs = visibleCustomFieldDefs(activeDefs, viewer)
     // PATCH custom values are partial: validate the effective bag so an
     // omitted required field can be satisfied by its stored value. Preserve
     // unknown/system keys while applying cleaned submitted values, matching
@@ -958,7 +964,7 @@ export const PATCH = defineRoute({
     throw e
   }
 
-  const payload = await loadParty(id, user.orgId, gate.allowedSubsidiaryIds)
+  const payload = await loadParty(id, user.orgId, gate.allowedSubsidiaryIds, { customFieldViewer: customFieldViewerFor(gate) })
   return NextResponse.json(payload)
   },
 })

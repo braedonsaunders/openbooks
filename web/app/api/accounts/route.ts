@@ -17,13 +17,16 @@ import {
   subsidiaryFeatureEnabled,
 } from "../../../lib/features";
 import {
+  customFieldViewerFor,
   findUnownedCustomReferences,
+  hiddenCustomFieldRefusal,
   loadFieldDefs,
   validateCustomValues,
+  visibleCustomFieldDefs,
 } from "../../../lib/custom-fields";
 import { assetBankHygieneWarning } from "../../../lib/accounts-hygiene";
 import { isUuid } from "../../../lib/list-params";
-import { loadAccount, orgBaseCurrency } from "./_lib";
+import { loadAccount, orgBaseCurrency, redactAccountCustomFields } from "./_lib";
 import { accountInputFields } from "./_input";
 
 import {
@@ -182,7 +185,12 @@ export const POST = defineRoute({
     }
     const requiredDimensions = [...new Set(requestedDimensions)];
 
-    const customDefs = await loadFieldDefs("accounts");
+    const viewer = customFieldViewerFor(gate);
+    const activeCustomDefs = await loadFieldDefs("accounts");
+    const hiddenCustom = hiddenCustomFieldRefusal(activeCustomDefs, viewer, body.custom ?? {}, null);
+    if (hiddenCustom)
+      return NextResponse.json({ error: hiddenCustom.message, fieldErrors: { [hiddenCustom.key]: hiddenCustom.message } }, { status: 403 });
+    const customDefs = visibleCustomFieldDefs(activeCustomDefs, viewer);
     const validatedCustom = validateCustomValues(customDefs, body.custom ?? {});
     if (!validatedCustom.ok) return bad("invalid_custom_fields", "custom");
     // Reference custom values are uuid-SHAPED at this point but nothing proves
@@ -362,12 +370,13 @@ export const POST = defineRoute({
     }
     if (created instanceof NextResponse) return created;
 
-    const payload = await loadAccount(
+    const loadedPayload = await loadAccount(
       requestId,
       gate.user.orgId,
       gate.allowedSubsidiaryIds,
     );
-    if (!payload) return bad("save_failed", undefined, 500);
+    if (!loadedPayload) return bad("save_failed", undefined, 500);
+    const payload = await redactAccountCustomFields(loadedPayload, viewer);
     // A fresh account backs no statements yet: corroboration is the request's
     // own name and reconcilable flag. The warning rides alongside success —
     // the account is always created.

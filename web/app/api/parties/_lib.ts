@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
 import { documentRevisionSql } from '@openbooks/engine/records/revision'
 import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
+import { loadCustomFieldAccessDefs, redactHiddenCustomValues, type CustomFieldViewer } from '../../../lib/custom-fields'
 
 /**
  * Full party payload for the directory flyout: the party row plus its role
@@ -52,9 +53,35 @@ export interface LoadPartyOptions {
    * Defaults to the full directory bundle.
    */
   bundle?: 'directory' | 'crm'
+  /**
+   * The reader's custom-field viewer. The party's custom values are redacted
+   * to the fields this viewer may see. Omitted, the payload keeps only fields
+   * open to every role.
+   */
+  customFieldViewer?: CustomFieldViewer
 }
 
+const UNATTRIBUTED_CUSTOM_FIELD_VIEWER: CustomFieldViewer = { roleKeys: [], canManageCustomFields: false }
+
+/**
+ * Party payload with the custom bag redacted for the reader. Every consumer of
+ * the directory payload (drawers, page loaders, the party API) gets the same
+ * role-visibility rule, including deactivated fields.
+ */
 export async function loadParty(id: string, orgId: string, allowedSubsidiaryIds: ReadonlySet<string> | null, opts?: LoadPartyOptions): Promise<PartyPayload | null> {
+  const payload = await loadPartyRecord(id, orgId, allowedSubsidiaryIds, opts)
+  if (!payload || !('custom' in payload.party)) return payload
+  const defs = await loadCustomFieldAccessDefs('parties')
+  return {
+    ...payload,
+    party: {
+      ...payload.party,
+      custom: redactHiddenCustomValues(defs, opts?.customFieldViewer ?? UNATTRIBUTED_CUSTOM_FIELD_VIEWER, payload.party.custom as Record<string, unknown> | null),
+    },
+  }
+}
+
+async function loadPartyRecord(id: string, orgId: string, allowedSubsidiaryIds: ReadonlySet<string> | null, opts?: LoadPartyOptions): Promise<PartyPayload | null> {
   const crmOnly = opts?.bundle === 'crm'
   // One transaction for the scoped party read and every child read, locking
   // the party row first (READ COMMITTED, like loadAsset): a concurrent party

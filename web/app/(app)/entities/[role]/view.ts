@@ -11,7 +11,7 @@ import { withOrgContext } from '@openbooks/engine/platform/database'
 import { customerGroupTabs, hrmGroupTabs } from '../../../../components/module-home/group-tabs'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid, mergeHref, pickString } from '../../../../lib/list-params'
-import { loadFieldDefs } from '../../../../lib/custom-fields'
+import { customFieldViewerFor, loadFieldDefs, visibleCustomFieldDefs } from '../../../../lib/custom-fields'
 import { loadComplianceClasses, loadVendorComplianceClass, vendorTaxIdentityFromRole } from '../../../../lib/compliance'
 import { FORM_TYPES } from '@openbooks/engine/compliance/information-returns'
 import { loadParty } from '../../../api/parties/_lib'
@@ -152,7 +152,7 @@ export async function loadEntityRole(
     ? requestedPartyTab
     : requestedPartyTab === 'wages' ? 'compensation' : 'overview'
   const [openParty, pickers] = await Promise.all([
-    partyId && partyId !== 'new' && isUuid(partyId) ? loadParty(partyId, orgId, authz.allowedSubsidiaryIds) : null,
+    partyId && partyId !== 'new' && isUuid(partyId) ? loadParty(partyId, orgId, authz.allowedSubsidiaryIds, { customFieldViewer: customFieldViewerFor(authz) }) : null,
     (partyId && partyId !== 'new') || creating
       ? Promise.all([
           db.execute<ElementOf<PartyDrawerProps['paymentTerms']>>(sql`select id, name from payment_terms where org_id = ${orgId} and is_active order by name`),
@@ -191,7 +191,7 @@ export async function loadEntityRole(
         userId: authz.user.id,
         recordType: role,
         userRoles: authz.user.roles.map(({ key }) => key),
-        headerDefs: (pickers[3]),
+        headerDefs: visibleCustomFieldDefs(pickers[3], customFieldViewerFor(authz)),
         lineDefs: [],
         explicitLayoutId: pickString(sp.partyForm),
       })
@@ -378,7 +378,8 @@ export async function loadEntityRole(
           departments: pickers[1].rows,
           trades: pickers[2].rows,
           workerCompGroups: pickers[8].rows,
-          fieldDefs: pickers[3] as unknown as PartyDrawerProps['fieldDefs'],
+          fieldDefs: visibleCustomFieldDefs(pickers[3], customFieldViewerFor(authz)) as unknown as PartyDrawerProps['fieldDefs'],
+          customFieldViewer: customFieldViewerFor(authz),
           subsidiaries: pickers[4],
           accounts: pickers[5].rows,
           taxCodes: pickers[6].rows,

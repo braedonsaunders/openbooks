@@ -5,6 +5,17 @@ import { db } from '../platform/db.ts'
 import { normalizeMoney } from '../money/money.ts'
 import { canonicalDecimal, compareDecimal } from '../money/exact-decimal.ts'
 import { isUuid } from '../platform/uuid.ts'
+import { customFieldVisible, type CustomFieldViewer } from '@openbooks/customization'
+
+export {
+  customFieldAudience,
+  customFieldVisible,
+  hiddenCustomFieldKeys,
+  redactHiddenCustomValues,
+  visibleCustomFieldDefs,
+  type CustomFieldViewer,
+  type CustomFieldVisibilityDef,
+} from '@openbooks/customization'
 
 /**
  * Custom fields platform — source platform-style header/line/entity extensions.
@@ -47,14 +58,28 @@ export type CustomFieldDef = {
   sortOrder: number
 };
 
+/** Active definitions: the set that accepts new values and renders in forms. */
 export async function loadFieldDefs(targetTable: string, targetKind?: string): Promise<CustomFieldDef[]> {
+  return selectFieldDefs(targetTable, targetKind, true)
+}
+
+/**
+ * Active and deactivated definitions. Role visibility must cover every stored
+ * key: a deactivated restricted field keeps its value, and the read paths must
+ * keep hiding it from roles outside its audience.
+ */
+export async function loadCustomFieldAccessDefs(targetTable: string, targetKind?: string): Promise<CustomFieldDef[]> {
+  return selectFieldDefs(targetTable, targetKind, false)
+}
+
+async function selectFieldDefs(targetTable: string, targetKind: string | undefined, activeOnly: boolean): Promise<CustomFieldDef[]> {
   const r = (await db.execute<CustomFieldDef>(sql`
     select id, target_table as "targetTable", target_kind as "targetKind", key, label,
            field_type as "fieldType", config, is_required as "isRequired", sort_order as "sortOrder"
       from custom_field_defs
      where target_table = ${targetTable}
        and (target_kind is null or target_kind = ${targetKind ?? null})
-       and is_active
+       ${activeOnly ? sql`and is_active` : sql``}
      order by sort_order, label
   `))
   return r.rows
@@ -223,4 +248,61 @@ export async function findUnownedCustomReferences(
     }
   }
   return unowned
+}
+
+export interface HiddenCustomFieldRefusal {
+  key: string
+  message: string
+}
+
+/**
+ * Refuses a write that touches a field the viewer cannot see. A hidden value
+ * that matches what is already stored is an unchanged echo and passes, so a
+ * form round-trip never fails on a field the viewer could not edit. `stored`
+ * is the persisted bag for an update and null for a create; on create a
+ * required hidden field has no permitted way to be satisfied and refuses.
+ * Callers must pass active definitions, the set the write validates against.
+ */
+export function hiddenCustomFieldRefusal(
+  defs: CustomFieldDef[],
+  viewer: CustomFieldViewer,
+  submitted: Record<string, unknown>,
+  stored: Record<string, unknown> | null,
+): HiddenCustomFieldRefusal | null {
+  for (const def of defs) {
+    if (customFieldVisible(def, viewer)) continue
+    const restricted = (message: string): HiddenCustomFieldRefusal => ({ key: def.key, message: `${def.label} ${message}` })
+    const hasSubmitted = Object.prototype.hasOwnProperty.call(submitted, def.key)
+    if (!hasSubmitted) {
+      if (stored === null && def.isRequired) return restricted('is required and restricted to other roles')
+      continue
+    }
+    const submittedRaw = submitted[def.key]
+    const storedRaw = stored === null ? undefined : stored[def.key]
+    if (stored !== null && JSON.stringify(submittedRaw ?? null) === JSON.stringify(storedRaw ?? null)) continue
+    const next = canonicalCustomValue(def, submittedRaw)
+    if (stored === null) {
+      if (next === undefined) {
+        if (def.isRequired) return restricted('is required and restricted to other roles')
+        continue
+      }
+      return restricted('is restricted to other roles and cannot be set by your role')
+    }
+    const current = canonicalCustomValue(def, storedRaw)
+    if (next !== undefined && current !== undefined && next.ok && current.ok && JSON.stringify(next.value) === JSON.stringify(current.value)) continue
+    if (next === undefined && current === undefined) continue
+    return restricted('is restricted to other roles and cannot be changed by your role')
+  }
+  return null
+}
+
+/** Canonical stored form of one value (`undefined` when empty), or `{ ok: false }` when it is invalid. */
+function canonicalCustomValue(
+  def: CustomFieldDef,
+  raw: unknown,
+): { ok: true; value: unknown } | { ok: false } | undefined {
+  const result = validateCustomValues([{ ...def, isRequired: false }], { [def.key]: raw })
+  if (!result.ok) return { ok: false }
+  const value = result.cleaned[def.key]
+  return value === undefined ? undefined : { ok: true, value }
 }

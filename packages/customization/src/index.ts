@@ -3,4 +3,5 @@ export * from "./registry";
 export * from "./schema";
 export * from "./custom-field-targets";
 export * from "./custom-field-definition";
+export * from "./custom-field-visibility";
 export * from "./seeded-views";

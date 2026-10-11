@@ -18,6 +18,7 @@ import { Badge, Button, Input, Label, SearchSelect } from '@openbooks/ui'
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
 import { TransactionDrawer } from '../../../components/transaction-drawer'
 import { CustomFieldInputs, customFieldColumns, type CustomFieldDefClient } from '../../../components/custom-field-inputs'
+import type { CustomFieldViewer } from '@openbooks/customization'
 import { CustomFieldInput } from '../../../components/custom-field-input'
 import { HeaderFields } from '../../../components/transaction-form/header-fields'
 import { DocTypeBadge, docTypeMeta } from '../../../components/doc-type-badge'
@@ -303,6 +304,7 @@ function JournalDrawerBody({
   segments = EMPTY_SEGMENTS,
   headerDefs,
   lineDefs,
+  customFieldViewer,
   layout,
   createMode = false,
   ledgerSnapshot = false,
@@ -325,6 +327,8 @@ function JournalDrawerBody({
   subsidiaries?: SubsidiaryOpt[]
   segments?: SegmentOpt[]
   headerDefs: CustomFieldDefClient[]
+  /** The viewer's custom-field visibility from the server; omitted shows only open fields. */
+  customFieldViewer?: CustomFieldViewer | null
   lineDefs: CustomFieldDefClient[]
   layout?: FormLayoutConfig
   /** Unsaved-create: no persisted row exists. Cancel/close navigate away
@@ -1238,7 +1242,7 @@ function JournalDrawerBody({
           </div>
         </div>
 
-        <CustomFieldInputs defs={headerDefs} values={customValues} onChange={setCustomValues} readOnly={!editable} /></>}
+        <CustomFieldInputs defs={headerDefs} values={customValues} onChange={setCustomValues} readOnly={!editable} viewer={customFieldViewer} /></>}
 
         {segments.some((segment) => segment.showOnHeader) ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

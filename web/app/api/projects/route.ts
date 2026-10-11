@@ -5,6 +5,7 @@ import { uuidId, nullableExactMoney } from '@/lib/api/json'
 import { unprocessable } from '@/lib/api/responses'
 import { isUuid } from '../../../lib/list-params'
 import { loadProject } from './_lib'
+import { customFieldViewerFor, hiddenCustomFieldRefusal, loadFieldDefs } from '../../../lib/custom-fields'
 import { notFound } from "@/lib/api/responses";
 import {
   createProject,
@@ -75,6 +76,12 @@ export const POST = defineRoute({
     return bad('Work breakdown tasks must be changed through the project task endpoint', 'tasks')
   }
 
+  // A custom field the caller may not set is refused before the engine
+  // command runs, so a restricted value can never be written on create.
+  const viewer = customFieldViewerFor(gate)
+  const hiddenCustom = hiddenCustomFieldRefusal(await loadFieldDefs('projects'), viewer, body.custom ?? {}, null)
+  if (hiddenCustom) return NextResponse.json({ error: hiddenCustom.message, fieldErrors: { [hiddenCustom.key]: hiddenCustom.message } }, { status: 403 })
+
   let created: boolean
   try {
     const result = await createProject(
@@ -91,7 +98,7 @@ export const POST = defineRoute({
     return bad(error.message, error.field, error.status)
   }
 
-  const payload = await loadProject(requestId, user.orgId, gate.allowedSubsidiaryIds)
+  const payload = await loadProject(requestId, user.orgId, gate.allowedSubsidiaryIds, { customFieldViewer: viewer })
   if (!payload) return bad('save_failed', undefined, 500)
   return NextResponse.json(payload, { status: created ? 201 : 200 })
   },

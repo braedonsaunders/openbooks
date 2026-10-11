@@ -27,6 +27,7 @@ import { FieldControlAssociations } from '@/components/field'
 import { currencyDisplayName, currencyOptions } from '../../../lib/iso-currencies'
 import { InvoicingPreferenceFields, type InvoicingPref } from '../../../components/invoicing-preference-fields'
 import { CustomFieldInputs, type CustomFieldDefClient } from '../../../components/custom-field-inputs'
+import type { CustomFieldViewer } from '@openbooks/customization'
 import { CustomFieldInput } from '../../../components/custom-field-input'
 import { HeaderFields } from '../../../components/transaction-form/header-fields'
 import type { LineGridColumn } from '../../../components/line-grid'
@@ -80,6 +81,7 @@ export function PartyDrawer({
   taxCodes = [],
   salesReps = [],
   fieldDefs,
+  customFieldViewer,
   subsidiaries,
   canManage,
   canManageEmployeeBanks = false,
@@ -130,6 +132,8 @@ export function PartyDrawer({
   taxCodes?: Opt[]
   salesReps?: Opt[]
   fieldDefs: CustomFieldDefClient[]
+  /** The viewer's custom-field visibility from the server; omitted shows only open fields. */
+  customFieldViewer?: CustomFieldViewer | null
   subsidiaries: SubsidiaryOpt[]
   canManage: boolean
   /**
@@ -1683,7 +1687,7 @@ export function PartyDrawer({
           ) : null}
         </section>
 
-        <CustomFieldInputs defs={fieldDefs} values={customValues} onChange={setCustomValues} readOnly={ro} />
+        <CustomFieldInputs defs={fieldDefs} values={customValues} onChange={setCustomValues} readOnly={ro} viewer={customFieldViewer} />
 
         {multiSubsidiary ? (
           <section className="space-y-3">

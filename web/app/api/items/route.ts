@@ -6,7 +6,7 @@ import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
 import { defineRoute } from '@/lib/api/route'
 import { conflict, notFound, unprocessable } from '@/lib/api/responses'
 import { isFeatureEnabled } from '../../../lib/features'
-import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from '../../../lib/custom-fields'
+import { customFieldViewerFor, findUnownedCustomReferences, hiddenCustomFieldRefusal, loadFieldDefs, validateCustomValues, visibleCustomFieldDefs } from '../../../lib/custom-fields'
 import { canonicalDecimal, compareDecimal, fixedDecimal } from '../../../lib/exact-decimal'
 import { moneyRefusal } from '../../../lib/payroll-decimal-refusal'
 import { isUuid } from '../../../lib/list-params'
@@ -208,7 +208,11 @@ export const POST = defineRoute({
         throw new CreateNotFound()
       }
 
-      const customDefs = await loadFieldDefs('items')
+      const viewer = customFieldViewerFor(gate)
+      const activeCustomDefs = await loadFieldDefs('items')
+      const hiddenCustom = hiddenCustomFieldRefusal(activeCustomDefs, viewer, body.custom ?? {}, null)
+      if (hiddenCustom) throw new CreateForbidden(hiddenCustom.message)
+      const customDefs = visibleCustomFieldDefs(activeCustomDefs, viewer)
       const validatedCustom = validateCustomValues(customDefs, body.custom ?? {})
       if (!validatedCustom.ok) throw new CreateInvalid(Object.values(validatedCustom.errors)[0] ?? 'Invalid custom fields')
       const unowned = await findUnownedCustomReferences(gate.user.orgId, customDefs, validatedCustom.cleaned)
@@ -325,6 +329,7 @@ export const POST = defineRoute({
   } catch (error) {
     if (error instanceof CreateNotFound) return notFound("record")
     if (error instanceof CreateInvalid) return bad(error.message)
+    if (error instanceof CreateForbidden) return NextResponse.json({ error: error.message }, { status: 403 })
     if (error instanceof CreateConflict) throw error
     const message = error instanceof Error
       ? `${error.message} ${String((error as { cause?: unknown }).cause ?? '')}`
@@ -333,13 +338,16 @@ export const POST = defineRoute({
     throw error
   }
 
-  const payload = await loadItem(requestId, gate.user.orgId)
+  const payload = await loadItem(requestId, gate.user.orgId, { customFieldViewer: customFieldViewerFor(gate) })
   if (!payload) return bad('The item was saved but could not be read back', 500)
   return NextResponse.json(payload, { status: created ? 201 : 200 })
   },
 })
 
 class CreateInvalid extends Error {}
+
+/** A custom field the caller may not set; refused by name. */
+class CreateForbidden extends Error {}
 class CreateNotFound extends Error {}
 class CreateConflict extends Error {
   readonly status = 409 as const

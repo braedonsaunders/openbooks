@@ -31,7 +31,7 @@ import {
   parseListParams,
   pickString,
 } from '../../../lib/list-params'
-import { loadFieldDefs } from '../../../lib/custom-fields'
+import { customFieldViewerFor, loadFieldDefs, visibleCustomFieldDefs } from '../../../lib/custom-fields'
 import { loadParty } from '../../api/parties/_lib'
 import {
   loadComplianceClasses,
@@ -309,7 +309,7 @@ export async function loadParties(
     consolidatedBillingEnabled,
   ] = await Promise.all([
     partyId && partyId !== 'new' && isUuid(partyId)
-      ? loadParty(partyId, orgId, authz.allowedSubsidiaryIds)
+      ? loadParty(partyId, orgId, authz.allowedSubsidiaryIds, { customFieldViewer: customFieldViewerFor(authz) })
       : null,
     (partyId && partyId !== 'new') || creating
       ? Promise.all([
@@ -376,7 +376,7 @@ export async function loadParties(
           userId: authz.user.id,
           recordType: role,
           userRoles: authz.user.roles.map(({ key }) => key),
-          headerDefs: pickers[3],
+          headerDefs: visibleCustomFieldDefs(pickers[3], customFieldViewerFor(authz)),
           lineDefs: [],
           explicitLayoutId: pickString(sp.partyForm),
         })
@@ -464,7 +464,8 @@ export async function loadParties(
           departments: pickers[1].rows,
           trades: pickers[2].rows,
           workerCompGroups: pickers[8].rows,
-          fieldDefs: pickers[3] as unknown as PartyDrawerProps['fieldDefs'],
+          fieldDefs: visibleCustomFieldDefs(pickers[3], customFieldViewerFor(authz)) as unknown as PartyDrawerProps['fieldDefs'],
+          customFieldViewer: customFieldViewerFor(authz),
           subsidiaries: pickers[4],
           accounts: pickers[5].rows,
           taxCodes: pickers[6].rows,

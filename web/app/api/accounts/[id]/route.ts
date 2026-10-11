@@ -18,13 +18,16 @@ import {
   subsidiaryFeatureEnabled,
 } from "../../../../lib/features";
 import {
+  customFieldViewerFor,
   findUnownedCustomReferences,
+  hiddenCustomFieldRefusal,
   loadFieldDefs,
   validateCustomValues,
+  visibleCustomFieldDefs,
 } from "../../../../lib/custom-fields";
 import { assetBankHygieneWarning } from "../../../../lib/accounts-hygiene";
 import { isUuid } from "../../../../lib/list-params";
-import { loadAccount, orgBaseCurrency } from "../_lib";
+import { loadAccount, orgBaseCurrency, redactAccountCustomFields } from "../_lib";
 import { accountInputFields } from "../_input";
 
 import { notFound } from "@/lib/api/responses";
@@ -102,7 +105,7 @@ export const GET = defineRoute({
       { orgWideNull: true },
     );
     if (denied) return denied;
-    return NextResponse.json(payload);
+    return NextResponse.json(await redactAccountCustomFields(payload, customFieldViewerFor(gate)));
   },
 });
 
@@ -301,7 +304,14 @@ export const PATCH = defineRoute({
         existing.custom && typeof existing.custom === "object"
           ? (existing.custom as Record<string, unknown>)
           : {};
-      const patchDefs = await loadFieldDefs("accounts");
+      const viewer = customFieldViewerFor(gate);
+      const activeDefs = await loadFieldDefs("accounts");
+      // A restricted field the caller cannot see is refused when changed; its
+      // stored value is kept, since `custom` is merged over the stored bag.
+      const hidden = hiddenCustomFieldRefusal(activeDefs, viewer, body.custom, existingCustom);
+      if (hidden)
+        return NextResponse.json({ error: hidden.message, fieldErrors: { [hidden.key]: hidden.message } }, { status: 403 });
+      const patchDefs = visibleCustomFieldDefs(activeDefs, viewer);
       const validated = validateCustomValues(patchDefs, {
         ...existingCustom,
         ...body.custom,
@@ -511,11 +521,12 @@ export const PATCH = defineRoute({
       throw error;
     }
 
-    const saved = await loadAccount(
+    const savedPayload = await loadAccount(
       id,
       gate.user.orgId,
       gate.allowedSubsidiaryIds,
     );
+    const saved = savedPayload ? await redactAccountCustomFields(savedPayload, customFieldViewerFor(gate)) : null;
     // Effective values after the edit; a statement behind the account counts as
     // corroboration even when the name says nothing. The warning rides
     // alongside success — the edit is always saved.

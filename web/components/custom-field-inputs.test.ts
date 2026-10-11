@@ -25,3 +25,13 @@ test('hidden line fields remain absent and normal fields remain editable', () =>
     assert.equal(columns[0]!.type, 'text');
   }
 });
+
+test('line columns for restricted fields render only for a viewer in the audience or a manager', () => {
+  const restricted: CustomFieldDefClient = { key: 'cost_basis', label: 'Cost basis', fieldType: 'currency', config: { allowedRoles: ['buyer'] }, isRequired: false };
+  const open: CustomFieldDefClient = { key: 'note', label: 'Note', fieldType: 'text', config: {}, isRequired: false };
+  const keys = (viewer?: Parameters<typeof customFieldColumns>[1]) => customFieldColumns([restricted, open], viewer).map((column) => column.key);
+  assert.deepEqual(keys(), ['cf_cost_basis', 'cf_note'], 'without a viewer every definition keeps its column');
+  assert.deepEqual(keys({ roleKeys: ['clerk'], canManageCustomFields: false }), ['cf_note']);
+  assert.deepEqual(keys({ roleKeys: ['buyer'], canManageCustomFields: false }), ['cf_cost_basis', 'cf_note']);
+  assert.deepEqual(keys({ roleKeys: [], canManageCustomFields: true }), ['cf_cost_basis', 'cf_note']);
+});

@@ -13,7 +13,7 @@ import { subsidiaryUiOptions } from '../../../lib/subsidiaries'
 import { listScopedPartyOptions } from '../../../lib/scoped-options'
 import { listInternalPersonOptions } from '@openbooks/engine/organization/internal-person'
 import { resolveFormLayout } from '../../../lib/customization/resolve'
-import { loadFieldDefs } from '../../../lib/custom-fields'
+import { customFieldViewerFor, loadFieldDefs, visibleCustomFieldDefs } from '../../../lib/custom-fields'
 import { loadProject } from '../../api/projects/_lib'
 import { loadProjectCockpit } from './_cockpit-data'
 import type { ProjectDrawer } from './ProjectDrawer'
@@ -86,7 +86,7 @@ export async function loadProjects(
   const openSnapshot =
     projectId && projectId !== 'new' && isUuid(projectId)
       ? await withOrgTransaction(orgId, async () => {
-          const header = await loadProject(projectId, orgId, authz.allowedSubsidiaryIds)
+          const header = await loadProject(projectId, orgId, authz.allowedSubsidiaryIds, { customFieldViewer: customFieldViewerFor(authz) })
           const cockpit = header
             ? await loadProjectCockpit(orgId, header.project.id as string, {
                 allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
@@ -139,7 +139,9 @@ export async function loadProjects(
   // Custom-field definitions serve both the form layout and the create
   // payload: a required project custom field must render in the create
   // drawer, or creation is impossible and the server refuses unnamed.
-  const projectFieldDefs = openProject || creating ? await loadFieldDefs('projects') : []
+  const projectFieldDefs = openProject || creating
+    ? visibleCustomFieldDefs(await loadFieldDefs('projects'), customFieldViewerFor(authz))
+    : []
   const createFieldDefs = projectFieldDefs.map((d) => ({
     key: d.key,
     label: d.label,

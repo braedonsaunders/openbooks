@@ -30,8 +30,8 @@ import type { ReportDrillTarget } from '../../../lib/report-drill'
 import { isUuid, mergeHref, parseListParams, pickString } from '../../../lib/list-params'
 import { accountsWithBalances, orgInfo } from '../../../lib/data'
 import { can, requirePermission } from '../../../lib/authz'
-import { loadFieldDefs } from '../../../lib/custom-fields'
-import { loadAccount } from '../../api/accounts/_lib'
+import { customFieldViewerFor, loadFieldDefs, visibleCustomFieldDefs } from '../../../lib/custom-fields'
+import { loadAccount, redactAccountCustomFields } from '../../api/accounts/_lib'
 import { segmentRegistry } from '../../../lib/segments'
 import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../lib/features'
 import { accountParentPath, orderAccountHierarchy } from '../../../lib/account-hierarchy'
@@ -209,7 +209,8 @@ export async function loadAccounts(
 
   const [openAccount, subsidiaryUiEnabled, multiCurrencyEnabled, baseCurrency] = await Promise.all([
     accountId && isUuid(accountId)
-      ? loadAccount(accountId, authz.user.orgId, authz.allowedSubsidiaryIds)
+      ? loadAccount(accountId, authz.user.orgId, authz.allowedSubsidiaryIds).then((payload) =>
+          payload ? redactAccountCustomFields(payload, customFieldViewerFor(authz)) : null)
       : null,
     subsidiaryFeatureEnabled(authz.user.orgId),
     isFeatureEnabled(authz.user.orgId, 'multiCurrency'),
@@ -290,7 +291,8 @@ export async function loadAccounts(
             value: option.id,
             label: option.name,
           })),
-          fieldDefs: drawerOptions[3] as AccountDrawerProps['fieldDefs'],
+          fieldDefs: visibleCustomFieldDefs(drawerOptions[3], customFieldViewerFor(authz)) as AccountDrawerProps['fieldDefs'],
+          customFieldViewer: customFieldViewerFor(authz),
           segments: (drawerOptions[4] as Awaited<ReturnType<typeof segmentRegistry>>)
             .filter((segment) => segment.allowAccountRequirement)
             .map((segment) => ({ key: segment.key, name: segment.name })),

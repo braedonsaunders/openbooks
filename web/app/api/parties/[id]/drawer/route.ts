@@ -5,7 +5,7 @@ import { db } from '@openbooks/engine/platform/db'
 import { can, guardSubsidiaryScope } from '../../../../../lib/authz'
 import { defineRoute } from '../../../../../lib/api/route'
 import { isFeatureEnabled } from '../../../../../lib/features'
-import { loadFieldDefs } from '../../../../../lib/custom-fields'
+import { customFieldViewerFor, loadFieldDefs, visibleCustomFieldDefs } from '../../../../../lib/custom-fields'
 import { resolveFormLayout } from '../../../../../lib/customization/resolve'
 import { isUuid } from '../../../../../lib/list-params'
 import { subsidiaryUiOptions, subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
@@ -34,7 +34,7 @@ export const GET = defineRoute({
   if (scopeDenied) return scopeDenied
 
   const [payload, paymentTerms, departments, trades, workerCompGroups, fieldDefs, subsidiaries, accounts, taxCodes, salesReps, payrollEnabled, multiCurrency, complianceEnabled, informationReturnsEnabled] = await Promise.all([
-    loadParty(id, gate.user.orgId, gate.allowedSubsidiaryIds),
+    loadParty(id, gate.user.orgId, gate.allowedSubsidiaryIds, { customFieldViewer: customFieldViewerFor(gate) }),
     (db.execute(sql`select id, name from payment_terms where org_id = ${gate.user.orgId} and is_active order by name`)),
     (db.execute(sql`select id, name from departments where org_id = ${gate.user.orgId} and is_active order by name`)),
     (db.execute(sql`select id, name from trades where org_id = ${gate.user.orgId} and is_active order by name`)),
@@ -85,7 +85,7 @@ export const GET = defineRoute({
         userId: gate.user.id,
         recordType: role,
         userRoles: gate.user.roles.map(({ key }) => key),
-        headerDefs: (fieldDefs),
+        headerDefs: visibleCustomFieldDefs(fieldDefs, customFieldViewerFor(gate)),
         lineDefs: [],
         explicitLayoutId: formId,
       })
@@ -120,7 +120,8 @@ export const GET = defineRoute({
     informationReturnsEnabled,
     taxIdentity,
     taxIdentityFormTypes: [...FORM_TYPES],
-    fieldDefs,
+    fieldDefs: visibleCustomFieldDefs(fieldDefs, customFieldViewerFor(gate)),
+    customFieldViewer: customFieldViewerFor(gate),
     subsidiaries,
     accounts: accounts.rows,
     taxCodes: taxCodes.rows,

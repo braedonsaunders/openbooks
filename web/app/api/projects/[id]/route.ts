@@ -6,7 +6,7 @@ import { z } from 'zod'
 import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
 import { guardSubsidiaryScope, subsidiariesInScope } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
-import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
+import { customFieldViewerFor, findUnownedCustomReferences, hiddenCustomFieldRefusal, loadFieldDefs, validateCustomValues, visibleCustomFieldDefs } from '../../../../lib/custom-fields'
 import { loadProject } from '../_lib'
 import { normalizeMoney } from '@openbooks/engine/money/money'
 import { canonicalDecimal } from '../../../../lib/exact-decimal'
@@ -108,7 +108,7 @@ export const GET = defineRoute({ permission: 'projects.read', feature: 'projects
   // The loader enforces the caller scope on the header and every
   // subordinate read inside one snapshot, so an out-of-scope project answers
   // exactly like a missing one with no post-hoc check to race.
-  const payload = await loadProject(id, gate.user.orgId, gate.allowedSubsidiaryIds)
+  const payload = await loadProject(id, gate.user.orgId, gate.allowedSubsidiaryIds, { customFieldViewer: customFieldViewerFor(gate) })
   if (!payload) return notFound("record")
   return NextResponse.json(payload)
 } })
@@ -396,7 +396,16 @@ export const PATCH = defineRoute({
     let mergedCustom: Record<string, unknown> | undefined
     if (body.custom !== undefined) {
       const base = { ...((before.custom as Record<string, unknown> | null) ?? {}) }
-      const defs = await loadFieldDefs('projects')
+      const viewer = customFieldViewerFor(gate)
+      const activeDefs = await loadFieldDefs('projects')
+      // A restricted field the caller cannot see is refused when changed; an
+      // unchanged echo passes. Hidden stored values stay in `base` below.
+      const hidden = hiddenCustomFieldRefusal(activeDefs, viewer, body.custom, base)
+      if (hidden) {
+        txRefused = NextResponse.json({ error: hidden.message, fieldErrors: { [hidden.key]: hidden.message } }, { status: 403 })
+        return
+      }
+      const defs = visibleCustomFieldDefs(activeDefs, viewer)
       // PATCH custom values are partial: validate the effective bag so an
       // omitted required field can be satisfied by its stored value.
       const result = validateCustomValues(defs, { ...base, ...body.custom })
@@ -481,7 +490,7 @@ export const PATCH = defineRoute({
   if (scopeRefused) return notFound("record")
   if (txRefused) return txRefused
 
-  const payload = await loadProject(id, user.orgId, gate.allowedSubsidiaryIds)
+  const payload = await loadProject(id, user.orgId, gate.allowedSubsidiaryIds, { customFieldViewer: customFieldViewerFor(gate) })
   if (!payload) return notFound("record")
   return NextResponse.json(payload)
   },

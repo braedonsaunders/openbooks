@@ -19,6 +19,7 @@ interface DrawerPayload {
   trades: Parameters<typeof PartyDrawer>[0]['trades']
   workerCompGroups?: Parameters<typeof PartyDrawer>[0]['workerCompGroups']
   fieldDefs: Parameters<typeof PartyDrawer>[0]['fieldDefs']
+  customFieldViewer?: Parameters<typeof PartyDrawer>[0]['customFieldViewer']
   accounts: Parameters<typeof PartyDrawer>[0]['accounts']
   taxCodes: Parameters<typeof PartyDrawer>[0]['taxCodes']
   salesReps: Parameters<typeof PartyDrawer>[0]['salesReps']
@@ -141,6 +142,7 @@ export function GlobalPartyDrawerHost({
         trades={data.trades}
         workerCompGroups={data.workerCompGroups}
         fieldDefs={data.fieldDefs}
+        customFieldViewer={data.customFieldViewer}
         accounts={data.accounts}
         taxCodes={data.taxCodes}
         salesReps={data.salesReps}

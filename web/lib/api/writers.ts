@@ -26,7 +26,16 @@ import { ensurePartyRoleRow } from "../party-roles";
 import { ApprovalRoutingError } from "../approval-routing-error";
 import { nextDocumentNumber } from "../bills.ts";
 import { businessToday } from "@openbooks/engine/platform/business-date/module";
-import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from "../custom-fields";
+import {
+  findUnownedCustomReferences,
+  hiddenCustomFieldRefusal,
+  loadCustomFieldAccessDefs,
+  loadFieldDefs,
+  redactHiddenCustomValues,
+  validateCustomValues,
+  visibleCustomFieldDefs,
+  type CustomFieldViewer,
+} from "../custom-fields";
 import { allowedSubsidiaryIds as loadAllowedSubsidiaryIds } from "../subsidiaries";
 import {
   buildSearchText,
@@ -674,30 +683,28 @@ const ENTITY_SUBSIDIARY_TABLES = new Set([
   "fixed_assets",
 ]);
 
-function visibleCustomFieldDefs(
-  user: SessionUser,
-  defs: Awaited<ReturnType<typeof loadFieldDefs>>,
-) {
-  const roleKeys = user.roles.map(({ key }) => key);
-  const unrestricted = user.isSuperAdmin || roleKeys.includes("admin");
-  if (unrestricted) return defs;
-  return defs.filter((def) => {
-    const roles = def.config?.allowedRoles;
-    return (
-      !Array.isArray(roles) ||
-      roles.length === 0 ||
-      roles.some((role) => roleKeys.includes(role))
-    );
-  });
+/** An entity row as the viewer may read it: restricted custom values are removed. */
+async function viewerEntityRow(
+  table: string,
+  row: Record<string, unknown>,
+  viewer: CustomFieldViewer,
+): Promise<Record<string, unknown>> {
+  if (!("custom" in row)) return row;
+  const defs = await loadCustomFieldAccessDefs(table);
+  return {
+    ...row,
+    custom: redactHiddenCustomValues(defs, viewer, row.custom as Record<string, unknown> | null),
+  };
 }
 
-function forbiddenCustomField(
+/** Keys that name no active definition on this table are refused by name. */
+function undefinedCustomField(
   defs: Awaited<ReturnType<typeof loadFieldDefs>>,
   values: Record<string, unknown>,
 ): WriteResult | null {
-  const visible = new Set(defs.map((def) => def.key));
-  const denied = Object.keys(values).find((key) => !visible.has(key));
-  return denied ? err(403, "forbidden custom field") : null;
+  const known = new Set(defs.map((def) => def.key));
+  const unknown = Object.keys(values).find((key) => !known.has(key));
+  return unknown === undefined ? null : err(403, "forbidden custom field");
 }
 
 async function mutationSubsidiaryScope(
@@ -815,15 +822,19 @@ async function createEntity(
   table: string,
   fields: ApiField[],
   body: Record<string, unknown>,
-  allowedScope?: ReadonlySet<string> | null,
+  allowedScope: ReadonlySet<string> | null | undefined,
+  viewer: CustomFieldViewer,
 ): Promise<WriteResult> {
   const gated = await refuseDisabledItemFeatureColumns(user.orgId, table, body);
   if (gated) return gated;
   const v = validateEntityBody(fields, body, { stage: "create" });
   if (!v.ok) return err(422, v.errors[0]!.message, { fieldErrors: v.errors });
-  const defs = visibleCustomFieldDefs(user, await loadFieldDefs(table));
-  const deniedCustom = forbiddenCustomField(defs, v.customValues);
+  const activeDefs = await loadFieldDefs(table);
+  const deniedCustom = undefinedCustomField(activeDefs, v.customValues);
   if (deniedCustom) return deniedCustom;
+  const hiddenCustom = hiddenCustomFieldRefusal(activeDefs, viewer, v.customValues, null);
+  if (hiddenCustom) return err(403, hiddenCustom.message, { fieldErrors: { [hiddenCustom.key]: hiddenCustom.message } });
+  const defs = visibleCustomFieldDefs(activeDefs, viewer);
   const cv = validateCustomValues(defs, v.customValues);
   if (!cv.ok)
     return err(422, Object.values(cv.errors)[0]!, { fieldErrors: cv.errors });
@@ -898,7 +909,7 @@ async function createEntity(
       changes: { after: created },
       actorId: user.id,
     });
-    return { status: 201, body: created };
+    return { status: 201, body: await viewerEntityRow(table, created, viewer) };
   } catch (e) {
     return err(422, `could not create record: ${(e as Error).message}`);
   }
@@ -910,7 +921,8 @@ async function updateEntity(
   fields: ApiField[],
   id: string,
   body: Record<string, unknown>,
-  allowedScope?: ReadonlySet<string> | null,
+  allowedScope: ReadonlySet<string> | null | undefined,
+  viewer: CustomFieldViewer,
 ): Promise<WriteResult> {
   const subsidiaryColumn = ENTITY_SUBSIDIARY_TABLES.has(table)
     ? sql`, subsidiary_id as "subsidiaryId"`
@@ -982,9 +994,15 @@ async function updateEntity(
     sets.push(sql`${sql.raw(`"${col}"`)} = ${value}`);
   }
   if (Object.keys(v.customValues).length > 0) {
-    const defs = visibleCustomFieldDefs(user, await loadFieldDefs(table));
-    const deniedCustom = forbiddenCustomField(defs, v.customValues);
+    const activeDefs = await loadFieldDefs(table);
+    const deniedCustom = undefinedCustomField(activeDefs, v.customValues);
     if (deniedCustom) return deniedCustom;
+    const storedCustom = (existing.rows[0].custom as Record<string, unknown> | null) ?? {};
+    // A hidden field the caller echoes unchanged passes; any change to it is refused,
+    // and its stored value is never overwritten by this update.
+    const hiddenCustom = hiddenCustomFieldRefusal(activeDefs, viewer, v.customValues, storedCustom);
+    if (hiddenCustom) return err(403, hiddenCustom.message, { fieldErrors: { [hiddenCustom.key]: hiddenCustom.message } });
+    const defs = visibleCustomFieldDefs(activeDefs, viewer);
     // PATCH is partial: validate the effective custom bag so omitted required
     // fields are satisfied by their already-persisted values. The supplied
     // keys still win in the merge below, while unknown/hidden legacy keys are
@@ -1044,7 +1062,7 @@ async function updateEntity(
       changes: { before: existing.rows[0], after: written },
       actorId: user.id,
     });
-    return { status: 200, body: written };
+    return { status: 200, body: await viewerEntityRow(table, written, viewer) };
   } catch (e) {
     return err(422, `could not update record: ${(e as Error).message}`);
   }
@@ -1117,6 +1135,20 @@ export interface RecordWriteOptions {
   source?: "api" | "mcp" | "assistant";
   /** Optional pre-resolved subsidiary scope; omitted callers are resolved from the actor. */
   allowedSubsidiaryIds?: ReadonlySet<string> | null;
+  /**
+   * The actor's custom-field viewer, derived from live grants by the caller.
+   * Omitted callers fail closed to the user's role keys with no manager
+   * override, so restricted fields stay hidden.
+   */
+  customFieldViewer?: CustomFieldViewer;
+}
+
+/** Viewer used when a caller supplies none: role keys only, no manager override. */
+function fallbackCustomFieldViewer(user: SessionUser): CustomFieldViewer {
+  return {
+    roleKeys: user.roles.map(({ key }) => key),
+    canManageCustomFields: false,
+  };
 }
 
 /** Run the submit/post lifecycle after an edit. Only for not-yet-posted docs
@@ -1477,6 +1509,7 @@ export async function createRecord(
           fields,
           body,
           options.allowedSubsidiaryIds,
+          options.customFieldViewer ?? fallbackCustomFieldViewer(user),
         );
       case "document":
         return createDocument(
@@ -1515,6 +1548,7 @@ export async function updateRecord(
           id,
           body,
           options.allowedSubsidiaryIds,
+          options.customFieldViewer ?? fallbackCustomFieldViewer(user),
         );
       case "document":
         return updateDocument(

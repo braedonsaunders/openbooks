@@ -7,6 +7,7 @@ import { listCustomerItemRefs } from "@openbooks/engine/sales/customer-item-refs
 import { isFeatureEnabled } from "../features";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { loadItem } from "../../app/api/items/_lib";
+import { customFieldViewerFor } from "../custom-fields";
 import type { AssistantToolDef, ToolResult } from "./types";
 import { assistantListPage, dateInput, money, uuidInput } from "./tools-shared";
 
@@ -89,7 +90,7 @@ const getItem: AssistantToolDef = {
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { id: string };
-    const payload = await loadItem(a.id, authz.user.orgId);
+    const payload = await loadItem(a.id, authz.user.orgId, { customFieldViewer: customFieldViewerFor(authz) });
     if (!payload) return { ok: false, error: "not_found" };
     const item = payload.item as Record<string, unknown>;
     return {

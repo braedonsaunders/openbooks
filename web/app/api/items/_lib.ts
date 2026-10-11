@@ -1,6 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
+import { loadCustomFieldAccessDefs, redactHiddenCustomValues, type CustomFieldViewer } from '../../../lib/custom-fields'
 
 /**
  * Item payload for the catalog flyout: the item row plus resolved display names
@@ -15,7 +16,30 @@ export interface ItemPayload {
   taxCodeName: string | null
 }
 
-export async function loadItem(id: string, orgId: string): Promise<ItemPayload | null> {
+const UNATTRIBUTED_CUSTOM_FIELD_VIEWER: CustomFieldViewer = { roleKeys: [], canManageCustomFields: false }
+
+/**
+ * Item payload with the custom bag redacted for the reader. Omitted viewer keeps
+ * only fields open to every role.
+ */
+export async function loadItem(
+  id: string,
+  orgId: string,
+  options: { customFieldViewer?: CustomFieldViewer } = {},
+): Promise<ItemPayload | null> {
+  const payload = await loadItemRecord(id, orgId)
+  if (!payload || !('custom' in payload.item)) return payload
+  const defs = await loadCustomFieldAccessDefs('items')
+  return {
+    ...payload,
+    item: {
+      ...payload.item,
+      custom: redactHiddenCustomValues(defs, options.customFieldViewer ?? UNATTRIBUTED_CUSTOM_FIELD_VIEWER, payload.item.custom as Record<string, unknown> | null),
+    },
+  }
+}
+
+async function loadItemRecord(id: string, orgId: string): Promise<ItemPayload | null> {
   const item = (await db.execute<Record<string, unknown>>(sql`
     select * from items where id = ${id} and org_id = ${orgId}
   `))

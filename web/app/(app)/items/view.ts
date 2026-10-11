@@ -7,7 +7,7 @@ import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@brae
 import { can, requirePermission } from '../../../lib/authz'
 import { isFeatureEnabled } from '../../../lib/features'
 import { isUuid, pickString } from '../../../lib/list-params'
-import { loadFieldDefs } from '../../../lib/custom-fields'
+import { customFieldViewerFor, loadFieldDefs, visibleCustomFieldDefs } from '../../../lib/custom-fields'
 import { resolveFormLayout } from '../../../lib/customization/resolve'
 import { SETUP_ENTITY_BY_KEY } from '../../../lib/setup/registry'
 import { loadItem } from '../../api/items/_lib'
@@ -113,7 +113,7 @@ export async function loadItems(
   }
 
   const [openItem, pickers, pricingState] = await Promise.all([
-    itemId && itemId !== 'new' && isUuid(itemId) ? loadItem(itemId, orgId) : null,
+    itemId && itemId !== 'new' && isUuid(itemId) ? loadItem(itemId, orgId, { customFieldViewer: customFieldViewerFor(authz) }) : null,
     itemId
       ? Promise.all([
           db.execute<{ id: string; number: string | null; name: string; type: string }>(
@@ -198,7 +198,7 @@ export async function loadItems(
         userId: authz.user.id,
         recordType: 'item',
         userRoles: authz.user.roles.map(({ key }) => key),
-        headerDefs: pickers[2],
+        headerDefs: visibleCustomFieldDefs(pickers[2], customFieldViewerFor(authz)),
         lineDefs: [],
         explicitLayoutId: pickString(sp.form),
       })
@@ -248,7 +248,7 @@ export async function loadItems(
           }) as unknown as ItemDrawerProps['payload'],
           accounts: pickers[0].rows,
           taxCodes: pickers[1].rows,
-          fieldDefs: pickers[2] as unknown as ItemDrawerProps['fieldDefs'],
+          fieldDefs: visibleCustomFieldDefs(pickers[2], customFieldViewerFor(authz)) as unknown as ItemDrawerProps['fieldDefs'],
           layout: resolvedForm?.layout,
           recognitionRules: pickers[3].rows,
           canManage,

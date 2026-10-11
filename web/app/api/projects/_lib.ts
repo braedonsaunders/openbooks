@@ -2,7 +2,7 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
 import { documentRevisionSql } from '@openbooks/engine/records/revision'
-import { loadFieldDefs, type CustomFieldDef } from '../../../lib/custom-fields'
+import { loadCustomFieldAccessDefs, loadFieldDefs, redactHiddenCustomValues, visibleCustomFieldDefs, type CustomFieldDef, type CustomFieldViewer } from '../../../lib/custom-fields'
 import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
 
 /**
@@ -49,10 +49,17 @@ export interface ProjectPayload {
  * surface built on this loader — pages cannot forget to check. Unrestricted
  * callers (null) see the whole org.
  */
+const UNATTRIBUTED_CUSTOM_FIELD_VIEWER: CustomFieldViewer = { roleKeys: [], canManageCustomFields: false }
+
+/**
+ * Project payload. The custom bag and the custom-field definitions are limited
+ * to what the viewer may see; omitted viewer keeps only fields open to every role.
+ */
 export async function loadProject(
   id: string,
   orgId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null = null,
+  options: { customFieldViewer?: CustomFieldViewer } = {},
 ): Promise<ProjectPayload | null> {
   // One transaction for the whole bundle, locking the header first (READ
   // COMMITTED, like loadAsset): a concurrent project rehome blocks on the
@@ -102,14 +109,16 @@ export async function loadProject(
   const name = (r?: Record<string, unknown>) => (r ? ((r.display_name as string) ?? null) : null)
   const contractValue = row.contract_value == null ? null : String(row.contract_value)
 
+  const viewer = options.customFieldViewer ?? UNATTRIBUTED_CUSTOM_FIELD_VIEWER
+  const accessDefs = await loadCustomFieldAccessDefs('projects')
   return {
-    project: row,
+    project: { ...row, custom: redactHiddenCustomValues(accessDefs, viewer, row.custom as Record<string, unknown> | null) },
     contractValue,
     customerName: name(customer.rows[0]),
     foremanName: name(foreman.rows[0]),
     managerName: name(manager.rows[0]),
     tasks: tasks.rows,
-    customFieldDefs: fieldDefs.map((d) => ({
+    customFieldDefs: visibleCustomFieldDefs(fieldDefs, viewer).map((d) => ({
       key: d.key,
       label: d.label,
       fieldType: d.fieldType,

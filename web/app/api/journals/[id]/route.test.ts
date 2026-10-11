@@ -80,7 +80,8 @@ const mockSources = new Map<string, string>([
       export async function guardPermission(permission) {
         if (permission === 'gl.read' || permission === 'gl.post') {
           return {
-            user: { orgId: 'org-1', id: 'user-1' },
+            user: { orgId: 'org-1', id: 'user-1', roles: [] },
+            permissions: new Set(['gl.read', 'gl.post']),
             allowedSubsidiaryIds: null,
           }
         }
@@ -109,6 +110,9 @@ const mockSources = new Map<string, string>([
       const state = globalThis[Symbol.for('openbooks.journal-route-test')]
       export async function loadJournalDoc(id, orgId) {
         return state.report
+      }
+      export async function redactJournalHeaderCustom(loaded) {
+        return loaded
       }
     `,
   ],

@@ -8,6 +8,7 @@ import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import { allowedSubsidiaryIds as resolveAllowedSubsidiaryIds } from './subsidiaries'
 import { isUuid } from '@openbooks/engine/platform/identifiers'
 import { documentRevisionCounterSql } from '@openbooks/engine/records/revision'
+import { loadCustomFieldAccessDefs, redactHiddenCustomValues, type CustomFieldViewer } from './custom-fields'
 
 export interface CreateDraftJournalOptions {
   /** Explicit legal entity requested by the caller (omitted = choose a default). */
@@ -160,4 +161,20 @@ export async function loadJournalDoc(
     }
     return { doc: doc.rows[0], lines: lines.rows }
   })
+}
+
+/**
+ * Journal header with its custom bag limited to the fields the viewer may read.
+ * Line-level custom values are not role-filtered by this helper.
+ */
+export async function redactJournalHeaderCustom<T extends { doc: Record<string, unknown> }>(
+  loaded: T,
+  viewer: CustomFieldViewer,
+): Promise<T> {
+  if (!('custom' in loaded.doc)) return loaded
+  const headerDefs = await loadCustomFieldAccessDefs('documents', 'journal')
+  return {
+    ...loaded,
+    doc: { ...loaded.doc, custom: redactHiddenCustomValues(headerDefs, viewer, loaded.doc.custom as Record<string, unknown> | null) },
+  }
 }

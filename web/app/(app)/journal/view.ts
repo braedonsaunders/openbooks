@@ -14,9 +14,9 @@ import {
 } from '@braedonsaunders/appkit-viewspec'
 import { mergeHref, pickString } from '../../../lib/list-params'
 import { can, requirePermission } from '../../../lib/authz'
-import { loadFieldDefs } from '../../../lib/custom-fields'
+import { customFieldViewerFor, loadFieldDefs, visibleCustomFieldDefs } from '../../../lib/custom-fields'
 import { isMultiSubsidiary, subsidiaryOptions } from '../../../lib/subsidiaries'
-import { loadJournalDoc } from '../../../lib/journals'
+import { loadJournalDoc, redactJournalHeaderCustom } from '../../../lib/journals'
 import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import { JOURNAL_ENTRY_TABLE, journalScopeWhere, journalDraftScopeWhere } from '../../../lib/customization/entity-list-query/journal-entries'
 import { resolveFormLayout } from '../../../lib/customization/resolve'
@@ -68,9 +68,9 @@ export async function loadJournal(
     db.execute<{ n: string }>(sql`
       select count(*) as n from documents e
        where ${journalDraftScopeWhere(authz.user.orgId, allowedSubsidiaries)}`),
-    entryParam ? loadJournalDoc(entryParam, authz.user.orgId, allowedSubsidiaries).then((journal) => {
-      if (!journal || !allowedSubsidiaries) return journal
-      return allowedSubsidiaries.has(String(journal.doc.subsidiary_id)) ? journal : null
+    entryParam ? loadJournalDoc(entryParam, authz.user.orgId, allowedSubsidiaries).then(async (journal) => {
+      if (!journal || (allowedSubsidiaries && !allowedSubsidiaries.has(String(journal.doc.subsidiary_id)))) return null
+      return redactJournalHeaderCustom(journal, customFieldViewerFor(authz))
     }) : null,
     entryParam || creating
       ? Promise.all([
@@ -179,7 +179,8 @@ export async function loadJournal(
           departments: pickers[2].rows,
           projects: pickers[3].rows,
           subsidiaries: pickers[6] ?? undefined,
-          headerDefs: pickers[4] as unknown as import('../../../components/custom-field-inputs').CustomFieldDefClient[],
+          headerDefs: visibleCustomFieldDefs(pickers[4], customFieldViewerFor(authz)) as unknown as import('../../../components/custom-field-inputs').CustomFieldDefClient[],
+          customFieldViewer: customFieldViewerFor(authz),
           lineDefs: pickers[5] as unknown as import('../../../components/custom-field-inputs').CustomFieldDefClient[],
           layout: resolvedForm?.layout,
           segments: pickers[7],

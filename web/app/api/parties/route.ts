@@ -8,7 +8,7 @@ import { subsidiariesInScope } from '../../../lib/authz'
 import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
 import { isFeatureEnabled } from '../../../lib/features'
 import { resolveIdempotentReplay } from '../../../lib/api/idempotency'
-import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from '../../../lib/custom-fields'
+import { customFieldViewerFor, findUnownedCustomReferences, hiddenCustomFieldRefusal, loadFieldDefs, validateCustomValues, visibleCustomFieldDefs } from '../../../lib/custom-fields'
 import { isUuid } from '../../../lib/list-params'
 import { normalizeCountryCode } from '../../../lib/countries'
 import { isIsoCalendarDate } from '../../../lib/crm-dates'
@@ -251,7 +251,11 @@ export const POST = defineRoute({
     if (!subsidiariesInScope(gate, requestedSubsidiaries)) return bad('Invalid subsidiary', 'subsidiaryId')
   }
 
-  const defs = await loadFieldDefs('parties')
+  const viewer = customFieldViewerFor(gate)
+  const activeDefs = await loadFieldDefs('parties')
+  const hidden = hiddenCustomFieldRefusal(activeDefs, viewer, asRecord(body.custom), null)
+  if (hidden) return NextResponse.json({ error: hidden.message, fieldErrors: { [hidden.key]: hidden.message } }, { status: 403 })
+  const defs = visibleCustomFieldDefs(activeDefs, viewer)
   const customResult = validateCustomValues(defs, asRecord(body.custom))
   if (!customResult.ok) return bad('invalid_custom_fields', 'custom')
   // Reference custom values are uuid-SHAPED at this point but nothing proves
@@ -602,7 +606,7 @@ export const POST = defineRoute({
     throw error
   }
 
-  const payload = await loadParty(requestId, user.orgId, gate.allowedSubsidiaryIds)
+  const payload = await loadParty(requestId, user.orgId, gate.allowedSubsidiaryIds, { customFieldViewer: viewer })
   if (!payload) return bad('save_failed', undefined, 500)
   return NextResponse.json(payload, { status: created ? 201 : 200 })
   },

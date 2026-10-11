@@ -5,7 +5,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
 import { isFeatureEnabled } from '../../../../lib/features'
-import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
+import { customFieldViewerFor, findUnownedCustomReferences, hiddenCustomFieldRefusal, loadFieldDefs, validateCustomValues, visibleCustomFieldDefs } from '../../../../lib/custom-fields'
 import { isUuid } from '../../../../lib/list-params'
 import { loadItem } from '../_lib'
 import { parseItemShippingFields, type ItemShippingValues } from '../shipping-item-fields'
@@ -161,6 +161,9 @@ class PatchInvalid extends Error {}
 /** The item disappeared or a feature gate closed before the locked read. */
 class PatchNotFound extends Error {}
 
+/** A custom field the caller may not change; refused by name. */
+class PatchForbidden extends Error {}
+
 const itemParams = z.object({ id: z.string() })
 
 export const GET = defineRoute({
@@ -169,7 +172,7 @@ export const GET = defineRoute({
   params: itemParams,
   handler: async ({ authz: gate, params: { id } }) => {
   if (!isUuid(id)) return notFound("record")
-  const payload = await loadItem(id, gate.user.orgId)
+  const payload = await loadItem(id, gate.user.orgId, { customFieldViewer: customFieldViewerFor(gate) })
   if (!payload) return notFound("record")
   return NextResponse.json(payload)
   },
@@ -322,7 +325,8 @@ export const PATCH = defineRoute({
       if (!before) throw new PatchNotFound()
 
       if (body.custom !== undefined) {
-        const defs = await loadFieldDefs('items')
+        const viewer = customFieldViewerFor(gate)
+        const activeDefs = await loadFieldDefs('items')
         // PATCH custom values are partial: validate the effective bag so an
         // omitted required field can be satisfied by its stored value. Keep
         // unknown/system keys intact while applying the cleaned submitted
@@ -331,6 +335,9 @@ export const PATCH = defineRoute({
           before.custom && typeof before.custom === 'object'
             ? (before.custom as Record<string, unknown>)
             : {}
+        const hidden = hiddenCustomFieldRefusal(activeDefs, viewer, body.custom, existingCustom)
+        if (hidden) throw new PatchForbidden(hidden.message)
+        const defs = visibleCustomFieldDefs(activeDefs, viewer)
         const v = validateCustomValues(defs, { ...existingCustom, ...body.custom })
         if (!v.ok) throw new PatchInvalid(Object.values(v.errors)[0]!)
         // Reference custom values are uuid-SHAPED at this point but nothing
@@ -507,12 +514,13 @@ export const PATCH = defineRoute({
   } catch (e: unknown) {
     if (e instanceof PatchNotFound) return notFound("record")
     if (e instanceof PatchInvalid) return bad(e.message)
+    if (e instanceof PatchForbidden) return NextResponse.json({ error: e.message }, { status: 403 })
     const msg = e instanceof Error ? `${e.message} ${String((e as { cause?: unknown }).cause ?? '')}` : String(e)
     if (msg.includes('items_org_code')) return bad('Code already in use')
     throw e
   }
 
-  const payload = await loadItem(id, user.orgId)
+  const payload = await loadItem(id, user.orgId, { customFieldViewer: customFieldViewerFor(gate) })
   return NextResponse.json(payload)
   },
 })

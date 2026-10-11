@@ -126,7 +126,10 @@ const mockSources = new Map<string, string>([
     "mock:custom-fields",
     `export async function loadFieldDefs() { return [] }
      export function validateCustomValues(_defs, values) { return { ok: true, cleaned: values } }
-     export async function findUnownedCustomReferences() { return [] }`,
+     export async function findUnownedCustomReferences() { return [] }
+     export async function customFieldViewerFor() { return { roleKeys: [], canManageCustomFields: true } }
+     export function hiddenCustomFieldRefusal() { return null }
+     export function visibleCustomFieldDefs(defs) { return defs }`,
   ],
   [
     "mock:accounts-lib",
@@ -136,7 +139,8 @@ const mockSources = new Map<string, string>([
        if (!state.account || state.account.id !== id || state.account.org_id !== orgId) return null
        return { id: state.account.id, name: state.account.name, type: state.account.type }
      }
-     export async function orgBaseCurrency() { return 'USD' }`,
+     export async function orgBaseCurrency() { return 'USD' }
+     export async function redactAccountCustomFields(payload) { return payload }`,
   ],
   [
     "mock:schema",

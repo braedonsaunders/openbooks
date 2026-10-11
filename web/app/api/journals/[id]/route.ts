@@ -12,9 +12,16 @@ import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbo
 import { guardPermission, guardSubsidiaryScope, subsidiariesInScope } from '../../../../lib/authz'
 import { DocumentEditError, requireDocumentEditRevision, runDocumentVersionedTransaction } from "@openbooks/engine/records/document-edit-policy";
 import { documentRevisionCounterSql } from "@openbooks/engine/records/revision";
-import { loadJournalDoc } from '../../../../lib/journals'
+import { loadJournalDoc, redactJournalHeaderCustom } from '../../../../lib/journals'
 import { isUuid } from '../../../../lib/list-params'
-import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
+import {
+  customFieldViewerFor,
+  findUnownedCustomReferences,
+  hiddenCustomFieldRefusal,
+  loadFieldDefs,
+  validateCustomValues,
+  visibleCustomFieldDefs,
+} from '../../../../lib/custom-fields'
 import { extraDimsSubsidiaryError, segmentRegistry, validateExtraDims } from '../../../../lib/segments'
 import { exactMoney, isoDate, nullableUuidId } from '../../../../lib/api/json'
 import { notFound } from "@/lib/api/responses";
@@ -67,7 +74,7 @@ async function legacyGET(_req: Request, { params }: { params: Promise<{ id: stri
     return withExactDocumentRevision(loaded, id, gate.user.orgId)
   })
   if (!journal) return notFound("record")
-  return NextResponse.json(journal)
+  return NextResponse.json(await redactJournalHeaderCustom(journal, customFieldViewerFor(gate)))
 }
 
 const journalLineInput = z
@@ -202,7 +209,8 @@ export const PATCH = defineRoute({
     }
 
     // custom-field validation (header + line) against the live definitions
-    const [headerDefs, lineDefs, segments] = await Promise.all([
+    const viewer = customFieldViewerFor(gate)
+    const [activeHeaderDefs, lineDefs, segments] = await Promise.all([
       loadFieldDefs('documents', 'journal'),
       loadFieldDefs('document_lines', 'journal'),
       segmentRegistry(user.orgId),
@@ -220,6 +228,12 @@ export const PATCH = defineRoute({
         existing.rows[0].custom && typeof existing.rows[0].custom === 'object'
           ? (existing.rows[0].custom as Record<string, unknown>)
           : {}
+      // A restricted header field the caller cannot see is refused when changed;
+      // an unchanged echo passes, and the stored value is kept by the merge below.
+      const hiddenHeader = hiddenCustomFieldRefusal(activeHeaderDefs, viewer, body.custom, existingCustom)
+      if (hiddenHeader)
+        return NextResponse.json({ error: hiddenHeader.message, fieldErrors: { [hiddenHeader.key]: hiddenHeader.message } }, { status: 403 })
+      const headerDefs = visibleCustomFieldDefs(activeHeaderDefs, viewer)
       const v = validateCustomValues(headerDefs, { ...existingCustom, ...body.custom })
       if (!v.ok) return NextResponse.json({ error: Object.values(v.errors)[0], fieldErrors: v.errors }, { status: 422 })
       // Reference custom values are uuid-SHAPED at this point but nothing
@@ -483,7 +497,7 @@ export const PATCH = defineRoute({
         return loaded ? withExactDocumentRevision(loaded, id, user.orgId) : null
       })
       if (!journal) return notFound("record")
-      return NextResponse.json(journal)
+      return NextResponse.json(await redactJournalHeaderCustom(journal, customFieldViewerFor(gate)))
     } catch (error) {
       if (error instanceof ScopeNotFoundError) return notFound("record")
       throw error

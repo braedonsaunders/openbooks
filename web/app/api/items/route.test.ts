@@ -119,6 +119,9 @@ const mockSources = new Map<string, string>([
     export async function loadFieldDefs() { return [] }
     export function validateCustomValues(_defs, values) { return { ok: true, errors: {}, cleaned: values ?? {} } }
     export async function findUnownedCustomReferences() { return [] }
+      export async function customFieldViewerFor() { return { roleKeys: [], canManageCustomFields: true } }
+      export function hiddenCustomFieldRefusal() { return null }
+      export function visibleCustomFieldDefs(defs) { return defs }
   `],
   ['mock:item-lib', `
     export async function loadItem() {

@@ -20,6 +20,7 @@ import {
 import { ApplicationError, invalidInput, notFound } from "./errors";
 import { executeIdempotent } from "./idempotency";
 import { inTypeAudience, loadRecordTypeByKey } from "../records";
+import { customFieldViewerFor } from "../custom-fields";
 
 export interface RecordListInput {
   typeKey: string;
@@ -287,7 +288,11 @@ export async function createApplicationRecord(
       scope.resolved,
       scope.schema.fields,
       input.body,
-      { source: context.source, allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds },
+      {
+        source: context.source,
+        allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds,
+        customFieldViewer: customFieldViewerFor(context.authz),
+      },
     )),
   });
   return { replayed: outcome.replayed, status: outcome.value.status, result: outcome.value.body };
@@ -319,7 +324,11 @@ export async function updateApplicationRecord(
       scope.schema.fields,
       input.id,
       input.body,
-      { source: context.source, allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds },
+      {
+        source: context.source,
+        allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds,
+        customFieldViewer: customFieldViewerFor(context.authz),
+      },
     )),
   });
   return { replayed: outcome.replayed, status: outcome.value.status, result: outcome.value.body };

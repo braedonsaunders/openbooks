@@ -330,7 +330,13 @@ async function writeRecord(
   // rollback trigger.
   return withOrgTransaction(ctx.orgId, async () => {
     const fields = await writableFields(ctx, resolved)
-    const writeOptions = { allowedSubsidiaryIds: ctx.allowedSubsidiaryIds }
+    const writeOptions = {
+      allowedSubsidiaryIds: ctx.allowedSubsidiaryIds,
+      customFieldViewer: {
+        roleKeys: ctx.user.roles.map(({ key }) => key),
+        canManageCustomFields: ctx.userCan('admin.custom_fields.manage'),
+      },
+    }
     if (operation === 'create') return unwrapWrite(await createRecord(ctx.user, resolved, fields, body, writeOptions))
     if (operation === 'update') return unwrapWrite(await updateRecord(ctx.user, resolved, fields, id!, body, writeOptions))
     return unwrapWrite(await deleteRecord(ctx.user, resolved, id!, writeOptions))

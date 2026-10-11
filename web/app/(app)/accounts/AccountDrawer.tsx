@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Badge, Button, Input, Label, SearchSelect, Select, Textarea, UrlDrawer } from '@openbooks/ui'
 import { CustomFieldInputs, type CustomFieldDefClient } from '../../../components/custom-field-inputs'
+import type { CustomFieldViewer } from '@openbooks/customization'
 import type { AccountPayload } from '../../api/accounts/_lib'
 import { ReadOnlyValue } from '../../../components/read-only-value'
 import { refusalMessageFromBody } from '../../../lib/api-error'
@@ -126,6 +127,7 @@ export function AccountDrawer({
   currencies,
   subsidiaries,
   fieldDefs,
+  customFieldViewer,
   segments,
   canManage,
   closeHref,
@@ -139,6 +141,8 @@ export function AccountDrawer({
   currencies: Option[]
   subsidiaries: Option[]
   fieldDefs: CustomFieldDefClient[]
+  /** The viewer's custom-field visibility from the server; omitted shows only open fields. */
+  customFieldViewer?: CustomFieldViewer | null
   segments: { key: string; name: string }[]
   canManage: boolean
   closeHref: string
@@ -516,7 +520,7 @@ export function AccountDrawer({
           </div> : <ReadOnlyValue value={[...segments, { key: 'party', name: t('drawer.dimensions.party') }].filter((dimension) => form.requiredDimensions.includes(dimension.key)).map((dimension) => dimension.name).join(', ')} />}
         </section>
 
-        <CustomFieldInputs defs={fieldDefs} values={form.custom} onChange={(v) => set('custom', v)} readOnly={!editable} />
+        <CustomFieldInputs defs={fieldDefs} values={form.custom} onChange={(v) => set('custom', v)} readOnly={!editable} viewer={customFieldViewer} />
       </div>
     </UrlDrawer>
   )
