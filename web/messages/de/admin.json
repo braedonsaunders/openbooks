@@ -6962,7 +6962,13 @@
         "limits": "Gruppenobergrenzen",
         "kind": "Begrenzungsentscheidung",
         "amount": "Obergrenzenbetrag",
-        "reason": "Begründung"
+        "reason": "Begründung",
+        "recipientSource": "Empfänger stammt aus",
+        "fallbackSource": "Wenn diese Rolle leer ist, verwenden",
+        "unassignedShare": "Anteil ohne eingeschriebenen Empfänger",
+        "rounding": "Rundung",
+        "capPercent": "Budgetobergrenze (%)",
+        "capProjectTypeId": "Obergrenze gilt für Projekttyp"
       },
       "kinds": {
         "sales_order": "Verkaufsaufträge",
@@ -6973,6 +6979,23 @@
       "limitKinds": {
         "none": "Unbegrenzt",
         "amount": "Geldobergrenze"
+      },
+      "workDate": "Arbeitsdatum",
+      "capPercentHint": "Optional. Begrenzt jedes Projekt auf diesen Prozentsatz der Programmpositionen im vergebenen Budget, abzüglich des Programmsatzes auf alle früheren Quellen.",
+      "sources": {
+        "assignment": "Datierte Zuordnungen",
+        "field_ticket_foreman": "Polier des Arbeitsscheins",
+        "field_ticket_superintendent": "Bauleiter des Arbeitsscheins",
+        "project_foreman": "Projektpolier",
+        "project_manager": "Projektleiter"
+      },
+      "unassigned": {
+        "refuse": "Abrechnung ablehnen",
+        "forfeit": "Anteil verfällt"
+      },
+      "roundings": {
+        "per_group": "Je Gruppe runden",
+        "per_recipient": "Einmal je Empfänger runden"
       }
     },
     "internalBilling": {

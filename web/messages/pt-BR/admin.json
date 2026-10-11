@@ -6962,7 +6962,13 @@
         "limits": "Tetos por grupo",
         "kind": "Decisão do teto",
         "amount": "Valor do teto",
-        "reason": "Motivo"
+        "reason": "Motivo",
+        "recipientSource": "O beneficiário vem de",
+        "fallbackSource": "Quando essa função estiver vazia, usar",
+        "unassignedShare": "Parcela sem beneficiário inscrito",
+        "rounding": "Arredondamento",
+        "capPercent": "Teto do orçamento (%)",
+        "capProjectTypeId": "O teto se aplica ao tipo de projeto"
       },
       "kinds": {
         "sales_order": "Pedidos de venda",
@@ -6973,6 +6979,23 @@
       "limitKinds": {
         "none": "Sem limite",
         "amount": "Teto monetário"
+      },
+      "workDate": "Data do trabalho",
+      "capPercentHint": "Opcional. Limita cada projeto a este percentual dos itens do programa no orçamento adjudicado, menos a taxa do programa sobre todas as fontes anteriores.",
+      "sources": {
+        "assignment": "Atribuições datadas",
+        "field_ticket_foreman": "Encarregado do boletim de campo",
+        "field_ticket_superintendent": "Superintendente do boletim de campo",
+        "project_foreman": "Encarregado do projeto",
+        "project_manager": "Gerente do projeto"
+      },
+      "unassigned": {
+        "refuse": "Recusar a liquidação",
+        "forfeit": "Perder essa parcela"
+      },
+      "roundings": {
+        "per_group": "Arredondar cada grupo",
+        "per_recipient": "Arredondar uma vez por beneficiário"
       }
     },
     "internalBilling": {

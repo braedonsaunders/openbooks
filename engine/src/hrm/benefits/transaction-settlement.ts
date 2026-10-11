@@ -5,7 +5,7 @@ import { fromQuantityUnits, toQuantityUnits } from "../../money/quantity.ts";
 import { BenefitsError } from "./errors.ts";
 import { db, requireCivilDate } from "./shared.ts";
 import { partitionMembers, requirePeriodShape, type IncentiveComputation, type IncentiveMeasured, type IncentivePeriodBasis } from "./incentive-math.ts";
-import { computeTransactionIncentive, type TransactionIncentiveResult } from "./transaction-incentive-math.ts";
+import { computeTransactionIncentive, type TransactionIncentiveLimit, type TransactionIncentiveResult } from "./transaction-incentive-math.ts";
 import { measureTransactionIncentiveSources, type TransactionIncentiveSourceSnapshot } from "./transaction-incentive-sources.ts";
 import { readTransactionPolicy, validateTransactionPolicy, type BenefitTransactionPolicy } from "./transaction-policy.ts";
 import type { BenefitProgram, BenefitProgramMember } from "./program-types.ts";
@@ -63,6 +63,39 @@ async function consumption(orgId: string, programId: string, from: string): Prom
   return {totals,evidence,usedSources};
 }
 
+/**
+ * A budget ceiling: for projects of the policy's type, the ceiling percentage
+ * of the program items on the project's original budget baseline, consumed by
+ * the program rate on every earlier source line of that project whether or
+ * not a share was paid. Other projects carry no ceiling. A capped project
+ * without an original baseline has nothing sold to cap against, so its
+ * ceiling is zero and the measured evidence names it.
+ */
+async function budgetCeilings(orgId:string,program:BenefitProgram,policy:BenefitTransactionPolicy,projectIds:readonly string[],periodFrom:string,rate:string): Promise<Map<string,TransactionIncentiveLimit>> {
+  if (program.valuation!=="percent") throw new BenefitsError("REFUSED","A budget ceiling consumes the program percentage of earlier sources — value the program as a percent of amount.");
+  const projects=(await db.execute<{id:string;project_type_id:string|null;budget:string|null}>(sql`
+    select p.id::text as id, p.project_type_id::text as project_type_id,
+           (select sum(bl.price)::text from project_budget_baselines b join project_budget_baseline_lines bl on bl.org_id=b.org_id and bl.baseline_id=b.id
+             where b.org_id=p.org_id and b.project_id=p.id and b.sequence=1 and bl.item_id=any(${`{${policy.itemIds.join(",")}}`}::uuid[])) as budget
+      from projects p where p.org_id=${orgId} and p.id=any(${`{${projectIds.join(",")}}`}::uuid[]) for share of p`)).rows;
+  if (projects.length!==projectIds.length) throw new BenefitsError("REFUSED","A budget ceiling groups sources by project — group the program by the project dimension so every group is a native project.");
+  const status=policy.documentKind==="customer_invoice" ? "posted" : "approved";
+  const sourceDate=policy.dateBasis==="work_date" ? sql`coalesce(l.work_from,d.document_date)` : sql`d.document_date`;
+  const earlier=new Map((await db.execute<{project_id:string;amount:string}>(sql`
+    select coalesce(l.project_id,d.project_id)::text as project_id, sum(l.amount)::text as amount
+      from documents d join document_lines l on l.org_id=d.org_id and l.document_id=d.id
+     where d.org_id=${orgId} and d.subsidiary_id=${program.legalEntityId} and d.kind=${policy.documentKind} and d.status=${status}
+       and ${sourceDate} < ${periodFrom}::date and l.item_id=any(${`{${policy.itemIds.join(",")}}`}::uuid[])
+       and coalesce(l.project_id,d.project_id)=any(${`{${projectIds.join(",")}}`}::uuid[])
+     group by 1`)).rows.map(r=>[r.project_id,r.amount]));
+  const rateUnits=toUnits(rate);
+  return new Map(projects.map(p=>{
+    if (policy.capProjectTypeId && p.project_type_id!==policy.capProjectTypeId) return [p.id,{kind:"none" as const}];
+    const consumed=fromUnits(toUnits(earlier.get(p.id)??"0")*rateUnits/1_000_000n);
+    return [p.id,{kind:"percent_of_base" as const,base:p.budget??"0",rate:policy.capPercent!,previouslyAwarded:consumed,consumption:"measured" as const}];
+  }));
+}
+
 /** Same measurement and allocation feeds native preview and settlement. */
 export async function measureTransactionSettlement(input: {
   readonly orgId:string;readonly actorId:string;readonly program:BenefitProgram;readonly members:readonly BenefitProgramMember[];
@@ -78,30 +111,60 @@ export async function measureTransactionSettlement(input: {
   const rate=program.valuation==="percent" ? program.percentRate : program.fixedAmount;
   if (rate===null) throw new BenefitsError("REFUSED","The program has no configured valuation rate — record its percent or amount per unit before activation.");
   const status=policy.documentKind==="customer_invoice" ? "posted" : "approved";
-  const selected=(await db.execute<{id:string}>(sql`select l.id from documents d join document_lines l on l.org_id=d.org_id and l.document_id=d.id where d.org_id=${orgId} and d.subsidiary_id=${program.legalEntityId} and d.kind=${policy.documentKind} and d.status=${status} and d.document_date between ${periodFrom}::date and ${periodTo}::date and l.item_id=any(${`{${policy.itemIds.join(",")}}`}::uuid[]) order by d.id,l.id for share of d,l`)).rows;
+  // The work date is the line's recorded work start; lines without one use the document date.
+  const sourceDate=policy.dateBasis==="work_date" ? sql`coalesce(l.work_from,d.document_date)` : sql`d.document_date`;
+  const selected=(await db.execute<{id:string}>(sql`select l.id from documents d join document_lines l on l.org_id=d.org_id and l.document_id=d.id where d.org_id=${orgId} and d.subsidiary_id=${program.legalEntityId} and d.kind=${policy.documentKind} and d.status=${status} and ${sourceDate} between ${periodFrom}::date and ${periodTo}::date and l.item_id=any(${`{${policy.itemIds.join(",")}}`}::uuid[]) order by d.id,l.id for share of d,l`)).rows;
   if (!selected.length) throw new BenefitsError("REFUSED","No approved transactions match this program's items and document-date period — review the native source selection before settlement; no empty award is recorded.");
   const source=await measureTransactionIncentiveSources({orgId,actorId,legalEntityId:program.legalEntityId,currency:program.currency,documentKind:policy.documentKind,itemIds:policy.itemIds,lineIds:selected.map(r=>r.id),groupingSegmentId:policy.groupingSegmentId});
   const prior=await consumption(orgId,program.id,periodFrom);
   const covered=new Set(partitionMembers(input.members,periodFrom,periodTo).covered.map(r=>r.employmentId));
+  // Roles recorded on each source: its field ticket (the document itself, or
+  // the ticket the line references) and its project.
+  const roles=new Map((await db.execute<{id:string;work_date:string;ticket_foreman:string|null;ticket_superintendent:string|null;project_foreman:string|null;project_manager:string|null}>(sql`
+    select l.id::text as id, coalesce(l.work_from,d.document_date)::text as work_date,
+           ft.foreman_party_id::text as ticket_foreman, ft.superintendent_party_id::text as ticket_superintendent,
+           p.foreman_id::text as project_foreman, p.manager_id::text as project_manager
+      from document_lines l join documents d on d.org_id=l.org_id and d.id=l.document_id
+      left join field_tickets ft on ft.org_id=d.org_id and ft.document_id=(case when d.kind='field_ticket' then d.id else l.field_ticket_id end)
+      left join projects p on p.org_id=d.org_id and p.id=coalesce(l.project_id,d.project_id)
+     where l.org_id=${orgId} and l.id=any(${`{${selected.map(r=>r.id).join(",")}}`}::uuid[])`)).rows.map(r=>[r.id,r])));
+  const memberByParty=new Map((await db.execute<{employment_id:string;party:string}>(sql`select id::text as employment_id,worker_party_id::text as party from worker_employments where org_id=${orgId} and id=any(${`{${[...covered].join(",")}}`}::uuid[])`)).rows.map(r=>[r.party,r.employment_id]));
+  const roleColumn={field_ticket_foreman:"ticket_foreman",field_ticket_superintendent:"ticket_superintendent",project_foreman:"project_foreman",project_manager:"project_manager"} as const;
+  const forfeit=policy.unassignedShare==="forfeit";
   const facts=source.lines.map(line=>{
     if (prior.usedSources.has(line.sourceId)) throw new BenefitsError("REFUSED",`Source line ${line.sourceId} already belongs to an earlier award — preserve that obligation and use its native adjusting-award action instead of paying the line again.`);
-    const recipients=policy.positions.map(position=>{
-      const binding=policy.responsibilities.filter(r=>r.groupId===line.groupId && r.positionKey===position.key && r.effectiveFrom<=line.documentDate && (r.effectiveTo===null || r.effectiveTo>=line.documentDate));
-      if (binding.length!==1 || !covered.has(binding[0]!.employmentId)) throw new BenefitsError("REFUSED",`Source ${line.documentNumber} group ${line.groupId} needs one dated ${position.name} assignment and full-period program membership — record the assignment and enroll the employment, or select its covered manual span; missing shares are never redistributed.`);
-      return {shareKey:position.key,employmentId:binding[0]!.employmentId};
+    const role=roles.get(line.sourceId);
+    const occurredOn=policy.dateBasis==="work_date" ? role?.work_date ?? line.documentDate : line.documentDate;
+    const recipients=policy.positions.flatMap(position=>{
+      const source=position.recipientSource ?? "assignment";
+      if (source!=="assignment") {
+        const holder=role?.[roleColumn[source]] ?? (position.fallbackSource ? role?.[roleColumn[position.fallbackSource]] ?? null : null);
+        const employmentId=holder ? memberByParty.get(holder) : undefined;
+        if (employmentId) return [{shareKey:position.key,employmentId}];
+        if (forfeit) return [];
+        throw new BenefitsError("REFUSED",`Source ${line.documentNumber} has no program member recorded as its ${position.name} — record the role on the source or enroll its holder, or set the program to forfeit unassigned shares.`);
+      }
+      const binding=policy.responsibilities.filter(r=>r.groupId===line.groupId && r.positionKey===position.key && r.effectiveFrom<=occurredOn && (r.effectiveTo===null || r.effectiveTo>=occurredOn));
+      if (binding.length===1 && covered.has(binding[0]!.employmentId)) return [{shareKey:position.key,employmentId:binding[0]!.employmentId}];
+      if (forfeit && binding.length<=1) return [];
+      throw new BenefitsError("REFUSED",`Source ${line.documentNumber} group ${line.groupId} needs one dated ${position.name} assignment and full-period program membership — record the assignment and enroll the employment, or select its covered manual span; missing shares are never redistributed.`);
     });
-    return {sourceId:line.sourceId,groupId:line.groupId,occurredOn:line.documentDate,currency:line.currency,amount:line.amount,quantity:line.quantity,recipients};
+    return {sourceId:line.sourceId,groupId:line.groupId,occurredOn,currency:line.currency,amount:line.amount,quantity:line.quantity,recipients};
   });
-  const groups=[...new Set(facts.map(r=>r.groupId))].sort().map(groupId=>{
+  const groupIds=[...new Set(facts.map(r=>r.groupId))].sort();
+  const budgetCaps=policy.capPercent!==null && policy.capPercent!==undefined ? await budgetCeilings(orgId,program,policy,groupIds,periodFrom,rate) : null;
+  const groups=groupIds.map(groupId=>{
+    if (budgetCaps) return {groupId,limit:budgetCaps.get(groupId)!};
     const limit=policy.limits.find(r=>r.groupId===groupId);
     if (!limit) throw new BenefitsError("REFUSED",`Group ${groupId} has no ceiling decision — record an amount or explicitly select no limit in Transaction rules before settlement.`);
     return {groupId,limit:limit.kind==="none" ? {kind:"none" as const} : {kind:"amount" as const,amount:limit.amount!,previouslyAwarded:fromUnits(prior.totals.get(groupId)??0n)}};
   });
-  const result=computeTransactionIncentive({currency:program.currency,minorUnits,periodFrom,periodTo,valuation:program.valuation==="percent" ? "percent_of_amount" : "amount_per_unit",rate,recipientShares:policy.positions.map(r=>({key:r.key,weight:r.weight}))},facts,groups);
-  const uncapped=computeTransactionIncentive({currency:program.currency,minorUnits,periodFrom,periodTo,valuation:program.valuation==="percent" ? "percent_of_amount" : "amount_per_unit",rate,recipientShares:policy.positions.map(r=>({key:r.key,weight:r.weight}))},facts,groups.map(g=>({groupId:g.groupId,limit:{kind:"none" as const}})));
+  const valuationPolicy={currency:program.currency,minorUnits,periodFrom,periodTo,valuation:program.valuation==="percent" ? "percent_of_amount" as const : "amount_per_unit" as const,rate,recipientShares:policy.positions.map(r=>({key:r.key,weight:r.weight})),unassignedShare:policy.unassignedShare ?? "refuse",rounding:policy.rounding ?? "per_group"};
+  const result=computeTransactionIncentive(valuationPolicy,facts,groups);
+  const uncapped=computeTransactionIncentive(valuationPolicy,facts,groups.map(g=>({groupId:g.groupId,limit:{kind:"none" as const}})));
   const measuredValue=program.valuation==="percent" ? fromUnits(facts.reduce((s,r)=>s+toUnits(r.amount),0n)) : fromQuantityUnits(facts.reduce((s,r)=>s+toQuantityUnits(r.quantity),0n));
   const potential=fromUnits(result.groups.reduce((s,g)=>s+toUnits(g.potentialAward),0n));
-  const computation:IncentiveComputation={measuredValue,poolValue:potential,thresholdMet:true,currency:program.currency,totalAwarded:result.totalAwarded,undistributed:fromUnits(toUnits(potential)-toUnits(result.totalAwarded)),excludedZero:[],summaryLines:[`${program.code}: ${rate} ${program.valuation==="percent" ? "% of approved source amount" : `${program.currency} per approved source unit`}; ${source.lines.length} source lines grouped by ${source.grouping?.key??"employer"}.`,`Dates use recorded document date; payment is available ${program.paymentDelayDays} days after the earning period closes.`,`Each group rounds once to ${minorUnits} currency places, then apportions recipient shares; existing obligations consume recorded group ceilings.`],recipients:result.recipients.map(r=>({employmentId:r.employmentId,share:"dated responsibility",grossValue:uncapped.recipients.find(g=>g.employmentId===r.employmentId)?.value??"0.0000",value:r.value,capped:result.groups.some(g=>g.availableLimit!==null && toUnits(g.awarded)<toUnits(g.potentialAward) && g.recipients.some(x=>x.employmentId===r.employmentId)),explanation:`${r.value} ${program.currency} from dated responsibility shares across ${result.groups.filter(g=>g.recipients.some(x=>x.employmentId===r.employmentId)).length} transaction groups.`}))};
+  const computation:IncentiveComputation={measuredValue,poolValue:potential,thresholdMet:true,currency:program.currency,totalAwarded:result.totalAwarded,undistributed:fromUnits(toUnits(potential)-toUnits(result.totalAwarded)),excludedZero:[],summaryLines:[`${program.code}: ${rate} ${program.valuation==="percent" ? "% of approved source amount" : `${program.currency} per approved source unit`}; ${source.lines.length} source lines grouped by ${source.grouping?.key??"employer"}.`,`Dates use the recorded ${policy.dateBasis==="work_date" ? "line work date (document date when none)" : "document date"}; payment is available ${program.paymentDelayDays} days after the earning period closes.`,policy.rounding==="per_recipient" ? `Recipient shares accumulate exactly across groups and round once to ${minorUnits} currency places per recipient.` : `Each group rounds once to ${minorUnits} currency places, then apportions recipient shares.`,policy.unassignedShare==="forfeit" ? "A share without a program member in its role is forfeited, never redistributed." : "Every share needs a program member in its role.",budgetCaps ? `Ceilings: ${policy.capPercent}% of program items on each ${policy.capProjectTypeId ? "capped-type " : ""}project's original budget, less ${rate}% of all earlier sources.` : "Existing obligations consume recorded group ceilings."],recipients:result.recipients.map(r=>({employmentId:r.employmentId,share:"dated responsibility",grossValue:uncapped.recipients.find(g=>g.employmentId===r.employmentId)?.value??"0.0000",value:r.value,capped:result.groups.some(g=>g.availableLimit!==null && toUnits(g.awarded)<toUnits(g.potentialAward) && g.recipients.some(x=>x.employmentId===r.employmentId)),explanation:`${r.value} ${program.currency} from dated responsibility shares across ${result.groups.filter(g=>g.recipients.some(x=>x.employmentId===r.employmentId)).length} transaction groups.`}))};
   const evidence={metric:"transactions" as const,scope:"company" as const,value:measuredValue,currency:program.currency,entryCount:new Set(source.lines.map(r=>r.documentId)).size,lineCount:source.lines.length,policy,source,result,priorAwards:prior.evidence};
   const transactionSnapshot={...evidence,digest:createHash("sha256").update(JSON.stringify(evidence)).digest("hex")};
   return {measured:{metric:"transactions",scope:"company",sourceAccountIds:[],periodFrom,periodTo,value:measuredValue,currency:program.valuation==="percent" ? program.currency:null},computation,excluded:result.excluded.map(r=>`${r.sourceId}: ${r.reason}`),transactionSnapshot};

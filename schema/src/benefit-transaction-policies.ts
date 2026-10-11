@@ -11,9 +11,10 @@ import { benefitPrograms } from "./benefits-programs";
 const ruleColumns = () => ({ id: id(), orgId: orgRef(), programId: uuid("program_id").notNull(), reason: text("reason").notNull(), ...auditColumns, createdBy: uuid("created_by").notNull(), updatedBy: uuid("updated_by").notNull() });
 export const benefitTransactionPolicies = pgTable("hrm_benefit_transaction_policies", {
  ...ruleColumns(), documentKind: text("document_kind").notNull(), groupingSegmentId: uuid("grouping_segment_id"), dateBasis: text("date_basis").notNull(),
+ unassignedShare: text("unassigned_share").notNull().default("refuse"), rounding: text("rounding").notNull().default("per_group"), capPercent: numeric("cap_percent", { precision: 19, scale: 4 }), capProjectTypeId: uuid("cap_project_type_id"),
 }, (t) => [
  uniqueIndex("hrm_benefit_transaction_policies_org_id_unique").on(t.orgId,t.id),
- uniqueIndex("hrm_benefit_transaction_policies_program_unique").on(t.orgId,t.programId), foreignKey({columns:[t.orgId,t.groupingSegmentId],foreignColumns:[segmentDefinitions.orgId,segmentDefinitions.id]}), check("hrm_benefit_transaction_policies_kind",sql`${t.documentKind} IN ('sales_order','customer_invoice','field_ticket','quote')`), check("hrm_benefit_transaction_policies_date_basis",sql`${t.dateBasis}='document_date'`),
+ uniqueIndex("hrm_benefit_transaction_policies_program_unique").on(t.orgId,t.programId), foreignKey({columns:[t.orgId,t.groupingSegmentId],foreignColumns:[segmentDefinitions.orgId,segmentDefinitions.id]}), check("hrm_benefit_transaction_policies_kind",sql`${t.documentKind} IN ('sales_order','customer_invoice','field_ticket','quote')`), check("hrm_benefit_transaction_policies_date_basis",sql`${t.dateBasis} IN ('document_date','work_date')`), check("hrm_benefit_transaction_policies_unassigned_share",sql`${t.unassignedShare} IN ('refuse','forfeit')`), check("hrm_benefit_transaction_policies_rounding",sql`${t.rounding} IN ('per_group','per_recipient')`), check("hrm_benefit_transaction_policies_cap",sql`(${t.capPercent} IS NULL AND ${t.capProjectTypeId} IS NULL) OR (${t.capPercent} IS NOT NULL AND ${t.capPercent} >= 0 AND ${t.capPercent} <= 100)`),
  foreignKey({columns:[t.orgId,t.programId],foreignColumns:[benefitPrograms.orgId,benefitPrograms.id]}),
  foreignKey({columns:[t.orgId],foreignColumns:[orgs.id]}),
  foreignKey({columns:[t.orgId,t.createdBy],foreignColumns:[users.orgId,users.id]}),
@@ -33,7 +34,7 @@ export const benefitTransactionItems = pgTable("hrm_benefit_transaction_items", 
  check("hrm_benefit_transaction_items_reason",sql`length(btrim(${t.reason})) BETWEEN 1 AND 2000`),
 ]);
 export const benefitTransactionPositions = pgTable("hrm_benefit_transaction_positions", {
- ...ruleColumns(), positionKey: text("position_key").notNull(), name: text("name").notNull(), weight: numeric("weight", { precision: 19, scale: 4 }).notNull(),
+ ...ruleColumns(), positionKey: text("position_key").notNull(), name: text("name").notNull(), weight: numeric("weight", { precision: 19, scale: 4 }).notNull(), recipientSource: text("recipient_source").notNull().default("assignment"), fallbackSource: text("fallback_source"),
 }, (t) => [
  uniqueIndex("hrm_benefit_transaction_positions_org_id_unique").on(t.orgId,t.id),
  uniqueIndex("hrm_benefit_transaction_positions_position_unique").on(t.orgId,t.programId,t.positionKey), check("hrm_benefit_transaction_positions_weight",sql`${t.weight}>0`), check("hrm_benefit_transaction_positions_key",sql`length(btrim(${t.positionKey})) BETWEEN 1 AND 120`), check("hrm_benefit_transaction_positions_name",sql`length(btrim(${t.name})) BETWEEN 1 AND 200`),

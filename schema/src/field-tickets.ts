@@ -31,6 +31,8 @@ export const fieldTickets = pgTable(
     periodStart: date("period_start").notNull(),
     periodEnd: date("period_end").notNull(),
     foremanPartyId: uuid("foreman_party_id"),
+    /** Superintendent who supervised the ticketed work. */
+    superintendentPartyId: uuid("superintendent_party_id"),
     chargeDocumentId: uuid("charge_document_id"),
     submittedBy: uuid("submitted_by"),
     submittedAt: timestamp("submitted_at", { withTimezone: true }),
@@ -41,6 +43,7 @@ export const fieldTickets = pgTable(
     uniqueIndex("field_tickets_org_id_document_id_unique").on(t.orgId, t.documentId),
     index("field_tickets_org_period").on(t.orgId, t.periodStart, t.periodEnd),
     index("field_tickets_foreman").on(t.orgId, t.foremanPartyId),
+    index("field_tickets_superintendent").on(t.orgId, t.superintendentPartyId),
     check("field_tickets_period_order", sql`${t.periodEnd} >= ${t.periodStart}`),
   ],
 );

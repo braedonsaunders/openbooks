@@ -6962,7 +6962,13 @@
         "limits": "Group ceilings",
         "kind": "Ceiling decision",
         "amount": "Ceiling amount",
-        "reason": "Reason"
+        "reason": "Reason",
+        "recipientSource": "Recipient comes from",
+        "fallbackSource": "When that role is empty, use",
+        "unassignedShare": "Share without an enrolled recipient",
+        "rounding": "Rounding",
+        "capPercent": "Budget ceiling (%)",
+        "capProjectTypeId": "Ceiling applies to project type"
       },
       "kinds": {
         "sales_order": "Sales orders",
@@ -6973,6 +6979,23 @@
       "limitKinds": {
         "none": "No limit",
         "amount": "Monetary ceiling"
+      },
+      "workDate": "Work date",
+      "capPercentHint": "Optional. Caps each project at this percent of the program items on its awarded budget, less the program rate on all earlier sources.",
+      "sources": {
+        "assignment": "Dated assignments",
+        "field_ticket_foreman": "Field ticket foreman",
+        "field_ticket_superintendent": "Field ticket superintendent",
+        "project_foreman": "Project foreman",
+        "project_manager": "Project manager"
+      },
+      "unassigned": {
+        "refuse": "Refuse settlement",
+        "forfeit": "Forfeit that share"
+      },
+      "roundings": {
+        "per_group": "Round each group",
+        "per_recipient": "Round once per recipient"
       }
     },
     "internalBilling": {

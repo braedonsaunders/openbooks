@@ -6962,7 +6962,13 @@
         "limits": "グループ別上限",
         "kind": "上限の設定",
         "amount": "上限金額",
-        "reason": "理由"
+        "reason": "理由",
+        "recipientSource": "受取人の取得元",
+        "fallbackSource": "その役割が空の場合に使用",
+        "unassignedShare": "登録済み受取人のいない配分",
+        "rounding": "端数処理",
+        "capPercent": "予算上限（%）",
+        "capProjectTypeId": "上限を適用するプロジェクト種別"
       },
       "kinds": {
         "sales_order": "販売注文",
@@ -6973,6 +6979,23 @@
       "limitKinds": {
         "none": "上限なし",
         "amount": "金額上限"
+      },
+      "workDate": "作業日",
+      "capPercentHint": "任意。各プロジェクトを、受注予算のプログラム品目に対するこの割合から、過去のすべてのソースにプログラム率を掛けた額を差し引いた額に制限します。",
+      "sources": {
+        "assignment": "期間指定の割り当て",
+        "field_ticket_foreman": "作業伝票の職長",
+        "field_ticket_superintendent": "作業伝票の現場監督",
+        "project_foreman": "プロジェクトの職長",
+        "project_manager": "プロジェクトマネージャー"
+      },
+      "unassigned": {
+        "refuse": "精算を拒否",
+        "forfeit": "その配分を失効"
+      },
+      "roundings": {
+        "per_group": "グループごとに端数処理",
+        "per_recipient": "受取人ごとに一度だけ端数処理"
       }
     },
     "internalBilling": {

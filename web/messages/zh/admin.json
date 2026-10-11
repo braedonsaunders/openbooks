@@ -6962,7 +6962,13 @@
         "limits": "分组上限",
         "kind": "上限决定",
         "amount": "上限金额",
-        "reason": "原因"
+        "reason": "原因",
+        "recipientSource": "接收人来源",
+        "fallbackSource": "该角色为空时使用",
+        "unassignedShare": "无已登记接收人的份额",
+        "rounding": "舍入",
+        "capPercent": "预算上限（%）",
+        "capProjectTypeId": "上限适用的项目类型"
       },
       "kinds": {
         "sales_order": "销售订单",
@@ -6973,6 +6979,23 @@
       "limitKinds": {
         "none": "不设限",
         "amount": "金额上限"
+      },
+      "workDate": "作业日期",
+      "capPercentHint": "可选。将每个项目限制为其中标预算中计划项目的此百分比，减去计划费率乘以所有先前来源的金额。",
+      "sources": {
+        "assignment": "有日期的分配",
+        "field_ticket_foreman": "现场工单工长",
+        "field_ticket_superintendent": "现场工单主管",
+        "project_foreman": "项目工长",
+        "project_manager": "项目经理"
+      },
+      "unassigned": {
+        "refuse": "拒绝结算",
+        "forfeit": "放弃该份额"
+      },
+      "roundings": {
+        "per_group": "按组舍入",
+        "per_recipient": "按接收人一次舍入"
       }
     },
     "internalBilling": {

@@ -10,12 +10,24 @@ import { assertHrmEnabled, db, requireActorId, requireCivilDate, requireId, requ
 import type { TransactionIncentiveSourceQuery } from "./transaction-incentive-sources.ts";
 
 /** Source configuration is typed; frozen JSON belongs exclusively to award evidence. */
+export type TransactionRecipientSource = "assignment" | "field_ticket_foreman" | "field_ticket_superintendent" | "project_foreman" | "project_manager";
+const ROLE_SOURCES = ["field_ticket_foreman", "field_ticket_superintendent", "project_foreman", "project_manager"] as const;
+
 export interface BenefitTransactionPolicy {
   readonly documentKind: TransactionIncentiveSourceQuery["documentKind"];
-  readonly dateBasis: "document_date";
+  /** document_date measures the document's date; work_date the line's recorded work date (document date when none). */
+  readonly dateBasis: "document_date" | "work_date";
   readonly groupingSegmentId: string | null;
   readonly itemIds: readonly string[];
-  readonly positions: readonly { readonly key: string; readonly name: string; readonly weight: string }[];
+  /** A position whose role holder is missing or not a member: refuse settlement, or forfeit that share. */
+  readonly unassignedShare?: "refuse" | "forfeit";
+  /** per_group rounds each group pool; per_recipient sums exact shares and rounds once per recipient. */
+  readonly rounding?: "per_group" | "per_recipient";
+  /** Ceiling as a percent of program items on each project's original budget; null means none. */
+  readonly capPercent?: string | null;
+  /** Project type the ceiling applies to; null applies it to every project. */
+  readonly capProjectTypeId?: string | null;
+  readonly positions: readonly { readonly key: string; readonly name: string; readonly weight: string; readonly recipientSource?: TransactionRecipientSource; readonly fallbackSource?: Exclude<TransactionRecipientSource, "assignment"> | null }[];
   readonly responsibilities: readonly { readonly groupId: string; readonly positionKey: string; readonly employmentId: string; readonly effectiveFrom: string; readonly effectiveTo: string | null }[];
   readonly limits: readonly { readonly groupId: string; readonly kind: "none" | "amount"; readonly amount: string | null }[];
 }
@@ -32,10 +44,10 @@ export async function requireTransactionPolicyStorage(exec: SqlExecutor): Promis
 
 export async function readTransactionPolicy(exec: SqlExecutor, orgId: string, programId: string): Promise<BenefitTransactionPolicy | null> {
   await requireTransactionPolicyStorage(exec);
-  const row = (await exec.execute<{ documentKind: BenefitTransactionPolicy["documentKind"]; dateBasis: "document_date"; groupingSegmentId: string | null }>(sql`select document_kind as "documentKind",date_basis as "dateBasis",grouping_segment_id as "groupingSegmentId" from hrm_benefit_transaction_policies where org_id=${orgId} and program_id=${programId}`)).rows[0];
+  const row = (await exec.execute<{ documentKind: BenefitTransactionPolicy["documentKind"]; dateBasis: BenefitTransactionPolicy["dateBasis"]; groupingSegmentId: string | null; unassignedShare: "refuse" | "forfeit"; rounding: "per_group" | "per_recipient"; capPercent: string | null; capProjectTypeId: string | null }>(sql`select document_kind as "documentKind",date_basis as "dateBasis",grouping_segment_id as "groupingSegmentId",unassigned_share as "unassignedShare",rounding,cap_percent::text as "capPercent",cap_project_type_id as "capProjectTypeId" from hrm_benefit_transaction_policies where org_id=${orgId} and program_id=${programId}`)).rows[0];
   if (!row) return null;
   const itemIds = (await exec.execute<{ id: string }>(sql`select item_id as id from hrm_benefit_transaction_items where org_id=${orgId} and program_id=${programId} order by item_id`)).rows.map(r=>r.id);
-  const positions = (await exec.execute<BenefitTransactionPolicy["positions"][number] & Record<string,unknown>>(sql`select position_key as key,name,weight::text from hrm_benefit_transaction_positions where org_id=${orgId} and program_id=${programId} order by position_key`)).rows;
+  const positions = (await exec.execute<BenefitTransactionPolicy["positions"][number] & Record<string,unknown>>(sql`select position_key as key,name,weight::text,recipient_source as "recipientSource",fallback_source as "fallbackSource" from hrm_benefit_transaction_positions where org_id=${orgId} and program_id=${programId} order by position_key`)).rows;
   const responsibilities = (await exec.execute<BenefitTransactionPolicy["responsibilities"][number] & Record<string,unknown>>(sql`select group_id as "groupId",position_key as "positionKey",employment_id as "employmentId",effective_from::text as "effectiveFrom",effective_to::text as "effectiveTo" from hrm_benefit_transaction_responsibilities where org_id=${orgId} and program_id=${programId} order by group_id,position_key,effective_from`)).rows;
   const limits = (await exec.execute<BenefitTransactionPolicy["limits"][number] & Record<string,unknown>>(sql`select group_id as "groupId",limit_kind as kind,amount::text from hrm_benefit_transaction_limits where org_id=${orgId} and program_id=${programId} order by group_id`)).rows;
   return { ...row, itemIds, positions, responsibilities, limits };
@@ -98,7 +110,19 @@ export async function validateTransactionPolicy(exec: SqlExecutor, orgId: string
   const precision=(await exec.execute<{minor_units:number}>(sql`select minor_units from currencies where code=${currency}`)).rows[0]?.minor_units;
   if (precision===undefined || !Number.isInteger(precision) || precision<0 || precision>4) throw new BenefitsError("REFUSED","The program currency has no supported payable precision — correct its currency registry before recording ceilings.");
   const quantum=10n**BigInt(4-precision);
-  if (!["sales_order","customer_invoice","field_ticket","quote"].includes(policy.documentKind) || policy.dateBasis!=="document_date") throw new BenefitsError("INVALID_INPUT","Select a supported commercial document kind and explicitly choose document date as the source period basis.");
+  if (!["sales_order","customer_invoice","field_ticket","quote"].includes(policy.documentKind) || !["document_date","work_date"].includes(policy.dateBasis)) throw new BenefitsError("INVALID_INPUT","Select a supported commercial document kind and explicitly choose document date or work date as the source period basis.");
+  if (!["refuse","forfeit"].includes(policy.unassignedShare ?? "refuse") || !["per_group","per_recipient"].includes(policy.rounding ?? "per_group")) throw new BenefitsError("INVALID_INPUT","Choose whether an unassigned share refuses settlement or is forfeited, and whether rounding is per group or per recipient.");
+  const capPercent=policy.capPercent ?? null, capProjectTypeId=policy.capProjectTypeId ?? null;
+  if (capPercent===null && capProjectTypeId!==null) throw new BenefitsError("INVALID_INPUT","Enter the ceiling percentage before choosing which project type it applies to.");
+  if (capPercent!==null) {
+    const percent=amount(capPercent,"Budget ceiling percentage",false);
+    if (toUnits(percent)>1_000_000n) throw new BenefitsError("INVALID_INPUT","The budget ceiling is a percentage from 0 to 100.");
+    if (policy.limits.length) throw new BenefitsError("INVALID_INPUT","A budget ceiling replaces per-group ceilings — clear the group ceilings or the budget ceiling.");
+    if (capProjectTypeId!==null) {
+      requireId(capProjectTypeId,"capProjectTypeId");
+      if (!(await exec.execute(sql`select 1 from project_types where org_id=${orgId} and id=${capProjectTypeId} for share`)).rows.length) throw new BenefitsError("NOT_FOUND","The ceiling's project type belongs to another organization — reselect the project type.");
+    }
+  }
   if (!policy.itemIds.length || new Set(policy.itemIds).size!==policy.itemIds.length) throw new BenefitsError("INVALID_INPUT","Select each eligible native source item once; an empty item selection never means all items.");
   for (const id of policy.itemIds) requireId(id,"itemId");
   const items=(await exec.execute<{id:string}>(sql`select id from items where org_id=${orgId} and id=any(${`{${policy.itemIds.join(",")}}`}::uuid[]) order by id for share`)).rows;
@@ -119,6 +143,10 @@ export async function validateTransactionPolicy(exec: SqlExecutor, orgId: string
   for (const position of policy.positions) {
     if (typeof position.key!=="string" || typeof position.name!=="string" || !position.key.trim() || position.key.length>120 || !position.name.trim() || position.name.length>200 || keys.has(position.key)) throw new BenefitsError("INVALID_INPUT","Give each recipient position a unique key and a readable name before recording assignments.");
     keys.add(position.key); amount(position.weight,`Share weight for ${position.name}`,true);
+    const source=position.recipientSource ?? "assignment", fallback=position.fallbackSource ?? null;
+    if (source!=="assignment" && !(ROLE_SOURCES as readonly string[]).includes(source)) throw new BenefitsError("INVALID_INPUT",`Choose where ${position.name}'s recipient comes from: dated assignments or a role recorded on the source.`);
+    if (fallback!==null && (source==="assignment" || !(ROLE_SOURCES as readonly string[]).includes(fallback) || fallback===source)) throw new BenefitsError("INVALID_INPUT",`${position.name} can fall back only from one recorded role to a different recorded role.`);
+    if (source!=="assignment" && policy.responsibilities.some(r=>r.positionKey===position.key)) throw new BenefitsError("INVALID_INPUT",`${position.name} takes its recipient from the source documents — remove its dated assignments.`);
   }
   if (!keys.size) throw new BenefitsError("INVALID_INPUT","Add at least one recipient position and its share weight before configuring this policy.");
   const groupIds=[...new Set([...policy.responsibilities.map(r=>r.groupId),...policy.limits.map(r=>r.groupId)])];
@@ -166,9 +194,9 @@ export async function saveBenefitTransactionPolicy(query: BenefitTransactionPoli
       await db.execute(sql`delete from ${sql.raw(table)} where org_id=${orgId} and program_id=${programId}`);
     }
     const policy=query.policy;
-    requireOneRow((await db.execute(sql`insert into hrm_benefit_transaction_policies(org_id,program_id,document_kind,date_basis,grouping_segment_id,created_by,updated_by,reason) values(${orgId},${programId},${policy.documentKind},${policy.dateBasis},${policy.groupingSegmentId},${actorId},${actorId},${reason}) returning id`)).rows,"saving the transaction source policy");
+    requireOneRow((await db.execute(sql`insert into hrm_benefit_transaction_policies(org_id,program_id,document_kind,date_basis,grouping_segment_id,unassigned_share,rounding,cap_percent,cap_project_type_id,created_by,updated_by,reason) values(${orgId},${programId},${policy.documentKind},${policy.dateBasis},${policy.groupingSegmentId},${policy.unassignedShare ?? "refuse"},${policy.rounding ?? "per_group"},${policy.capPercent ?? null},${policy.capProjectTypeId ?? null},${actorId},${actorId},${reason}) returning id`)).rows,"saving the transaction source policy");
     for (const id of policy.itemIds) requireOneRow((await db.execute(sql`insert into hrm_benefit_transaction_items(org_id,program_id,item_id,created_by,updated_by,reason) values(${orgId},${programId},${id},${actorId},${actorId},${reason}) returning id`)).rows,"saving the eligible source item");
-    for (const r of policy.positions) requireOneRow((await db.execute(sql`insert into hrm_benefit_transaction_positions(org_id,program_id,position_key,name,weight,created_by,updated_by,reason) values(${orgId},${programId},${r.key},${r.name},${amount(r.weight,"Share weight",true)},${actorId},${actorId},${reason}) returning id`)).rows,"saving the recipient position");
+    for (const r of policy.positions) requireOneRow((await db.execute(sql`insert into hrm_benefit_transaction_positions(org_id,program_id,position_key,name,weight,recipient_source,fallback_source,created_by,updated_by,reason) values(${orgId},${programId},${r.key},${r.name},${amount(r.weight,"Share weight",true)},${r.recipientSource ?? "assignment"},${r.fallbackSource ?? null},${actorId},${actorId},${reason}) returning id`)).rows,"saving the recipient position");
     for (const r of policy.limits) requireOneRow((await db.execute(sql`insert into hrm_benefit_transaction_limits(org_id,program_id,group_id,limit_kind,amount,created_by,updated_by,reason) values(${orgId},${programId},${r.groupId},${r.kind},${r.amount===null ? null : amount(r.amount,"Group ceiling",false)},${actorId},${actorId},${reason}) returning id`)).rows,"saving the group ceiling");
     for (const r of policy.responsibilities) requireOneRow((await db.execute(sql`insert into hrm_benefit_transaction_responsibilities(org_id,program_id,group_id,position_key,employment_id,effective_from,effective_to,created_by,updated_by,reason) values(${orgId},${programId},${r.groupId},${r.positionKey},${r.employmentId},${r.effectiveFrom},${r.effectiveTo},${actorId},${actorId},${reason}) returning id`)).rows,"saving the dated responsibility");
     const saved=await readTransactionPolicy(db,orgId,programId);

@@ -57,3 +57,31 @@ test("missing source decisions and malformed financial inputs refuse by identity
   assert.throws(() => computeTransactionIncentive({ ...policy, minorUnits: Number.NaN }, [], []), /registered.*minor units/);
   assert.throws(() => computeTransactionIncentive(policy, [], [{ groupId: "project-a", limit: { kind: "amount", amount: "0.001", previouslyAwarded: "0" } }]), /ceiling finer than payable precision/);
 });
+
+test("forfeited shares are never redistributed and per-recipient rounding happens once across groups", () => {
+  const halves: TransactionIncentivePolicy = { ...policy, rate: "10", recipientShares: [{ key: "superintendent", weight: "1" }, { key: "foreman", weight: "1" }] };
+  const line = (sourceId: string, groupId: string, amount: string, recipients: IncentiveTransactionFact["recipients"]): IncentiveTransactionFact => ({ sourceId, groupId, occurredOn: "2026-01-15", currency: "CAD", amount, quantity: "1", recipients });
+  const both = [{ shareKey: "superintendent", employmentId: "sup" }, { shareKey: "foreman", employmentId: "fore" }];
+  const facts = [line("l1", "job-1", "33.35", both), line("l2", "job-2", "33.35", both), line("l3", "job-2", "10", [{ shareKey: "foreman", employmentId: "fore" }])];
+  const groups: TransactionIncentiveGroup[] = [{ groupId: "job-1", limit: { kind: "none" } }, { groupId: "job-2", limit: { kind: "none" } }];
+  // Without a forfeit policy an absent role refuses.
+  assert.throws(() => computeTransactionIncentive(halves, facts, groups), /no recipient for superintendent/);
+  // Each 33.35 line pays 1.6675 per role; rounding per group gives 1.67 + 1.67, once per recipient 3.34 (exact 3.335).
+  const perGroup = computeTransactionIncentive({ ...halves, unassignedShare: "forfeit" }, facts, groups);
+  const perRecipient = computeTransactionIncentive({ ...halves, unassignedShare: "forfeit", rounding: "per_recipient" }, facts, groups);
+  const value = (r: typeof perGroup, id: string) => r.recipients.find((x) => x.employmentId === id)?.value;
+  assert.equal(value(perRecipient, "sup"), "3.3400");
+  assert.equal(value(perRecipient, "fore"), "3.8400");
+  // The superintendent's half of the 10.00 line (0.50) is forfeited, not paid to the foreman.
+  assert.equal(perRecipient.totalAwarded, "7.1800");
+  assert.equal(toUnits(value(perGroup, "fore")!) - toUnits(value(perGroup, "sup")!), toUnits("0.50"));
+});
+
+test("a measured ceiling counts every earlier source at the program rate, paid or forfeited", () => {
+  const halves: TransactionIncentivePolicy = { ...policy, rate: "10", recipientShares: [{ key: "superintendent", weight: "1" }, { key: "foreman", weight: "1" }], unassignedShare: "forfeit", rounding: "per_recipient" };
+  const facts: IncentiveTransactionFact[] = [{ sourceId: "l1", groupId: "job", occurredOn: "2026-01-15", currency: "CAD", amount: "500", quantity: "1", recipients: [{ shareKey: "superintendent", employmentId: "sup" }, { shareKey: "foreman", employmentId: "fore" }] }];
+  // Quoted 1000 at 10% caps the job at 100.00; earlier sources of 655.55 consumed 65.555, leaving 34.445.
+  const capped = computeTransactionIncentive(halves, facts, [{ groupId: "job", limit: { kind: "percent_of_base", base: "1000", rate: "10", previouslyAwarded: "65.5550", consumption: "measured" } }]);
+  assert.equal(capped.groups[0]!.availableLimit, "34.4450");
+  assert.deepEqual(capped.recipients, [{ employmentId: "fore", value: "17.2200" }, { employmentId: "sup", value: "17.2200" }]);
+});

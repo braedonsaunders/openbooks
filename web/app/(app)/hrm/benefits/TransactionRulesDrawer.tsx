@@ -19,7 +19,7 @@ export async function TransactionRulesDrawer({ authz, programId }: { authz: Auth
       const program = await getBenefitProgram(db, orgId, authz.user.id, programId)
       if (program.metric !== 'transactions') notFound()
       const record = await getBenefitTransactionPolicy({ orgId, actorId: authz.user.id, programId })
-      const policy = record?.policy ?? { documentKind: 'sales_order', dateBasis: 'document_date', groupingSegmentId: null, itemIds: [], positions: [], responsibilities: [], limits: [] }
+      const policy = record?.policy ?? { documentKind: 'sales_order', dateBasis: 'document_date', groupingSegmentId: null, itemIds: [], positions: [], responsibilities: [], limits: [], unassignedShare: 'refuse', rounding: 'per_group', capPercent: null, capProjectTypeId: null }
       const entity = { ...BENEFIT_TRANSACTION_POLICY_ENTITY, readOnly: !can(authz, 'hrm.benefits.manage') || program.status !== 'draft' }
       const options = await loadRefOptions(entity, orgId, authz.allowedSubsidiaryIds)
       const references = await getBenefitTransactionReferences({ orgId, actorId: authz.user.id, programId })
@@ -29,7 +29,7 @@ export async function TransactionRulesDrawer({ authz, programId }: { authz: Auth
       const employed = (await db.execute<{ id: string }>(sql`select id from worker_employments where org_id=${orgId} and employer_subsidiary_id=${program.legalEntityId}`)).rows
       const employmentIds = new Set(employed.map(row => row.id))
       options['worker-employments'] = (options['worker-employments'] ?? []).filter(option => employmentIds.has(option.value))
-      const row = { id: program.id, revision: record?.programRevision ?? program.revision, document_kind: policy.documentKind, date_basis: policy.dateBasis, grouping_segment_id: policy.groupingSegmentId, positions: policy.positions, responsibilities: policy.responsibilities, limits: policy.limits, reason: '' }
+      const row = { id: program.id, revision: record?.programRevision ?? program.revision, document_kind: policy.documentKind, date_basis: policy.dateBasis, grouping_segment_id: policy.groupingSegmentId, positions: policy.positions, unassigned_share: policy.unassignedShare ?? 'refuse', rounding: policy.rounding ?? 'per_group', cap_percent: policy.capPercent ?? null, cap_project_type_id: policy.capProjectTypeId ?? null, responsibilities: policy.responsibilities, limits: policy.limits, reason: '' }
       return <SetupDrawer entity={entity} row={row} members={[...policy.itemIds]} refOptions={options}
         recordTitle={`${program.name} · ${t('transactionBenefits.title')}`} closeHref={`/hrm/benefits?view=programs&program=${program.id}`} />
     } catch (error) {

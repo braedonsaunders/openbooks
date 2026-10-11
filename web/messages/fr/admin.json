@@ -6962,7 +6962,13 @@
         "limits": "Plafonds par groupe",
         "kind": "Décision de plafond",
         "amount": "Montant du plafond",
-        "reason": "Motif"
+        "reason": "Motif",
+        "recipientSource": "Le bénéficiaire provient de",
+        "fallbackSource": "Si ce rôle est vide, utiliser",
+        "unassignedShare": "Part sans bénéficiaire inscrit",
+        "rounding": "Arrondi",
+        "capPercent": "Plafond budgétaire (%)",
+        "capProjectTypeId": "Le plafond s’applique au type de projet"
       },
       "kinds": {
         "sales_order": "Commandes clients",
@@ -6973,6 +6979,23 @@
       "limitKinds": {
         "none": "Sans plafond",
         "amount": "Plafond monétaire"
+      },
+      "workDate": "Date des travaux",
+      "capPercentHint": "Facultatif. Plafonne chaque projet à ce pourcentage des articles du programme dans son budget attribué, moins le taux du programme sur toutes les sources antérieures.",
+      "sources": {
+        "assignment": "Affectations datées",
+        "field_ticket_foreman": "Contremaître du bon de travail",
+        "field_ticket_superintendent": "Surintendant du bon de travail",
+        "project_foreman": "Contremaître du projet",
+        "project_manager": "Chargé de projet"
+      },
+      "unassigned": {
+        "refuse": "Refuser le règlement",
+        "forfeit": "Renoncer à cette part"
+      },
+      "roundings": {
+        "per_group": "Arrondir chaque groupe",
+        "per_recipient": "Arrondir une fois par bénéficiaire"
       }
     },
     "internalBilling": {

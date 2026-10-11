@@ -56,6 +56,9 @@ export async function loadEntityOptions(
   if (source === 'operating-profiles') {
     return (await db.execute<RefOption>(sql`select id::text as value,name as label,family as "scopeValue" from operating_profiles where org_id=${orgId} and is_active and current_version_id is not null order by name,id`)).rows
   }
+  if (source === 'project-types') {
+    return (await db.execute<RefOption>(sql`select id::text as value,name as label from project_types where org_id=${orgId} order by name,id`)).rows
+  }
   if (source === 'subsidiaries') {
     const employers = await db.execute<RefOption>(sql`select id::text as value,name as label from subsidiaries
       where org_id=${orgId} and is_active and not is_elimination

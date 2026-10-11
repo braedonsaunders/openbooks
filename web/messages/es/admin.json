@@ -6962,7 +6962,13 @@
         "limits": "Límites por grupo",
         "kind": "Decisión de límite",
         "amount": "Importe límite",
-        "reason": "Motivo"
+        "reason": "Motivo",
+        "recipientSource": "El destinatario proviene de",
+        "fallbackSource": "Si ese rol está vacío, usar",
+        "unassignedShare": "Parte sin destinatario inscrito",
+        "rounding": "Redondeo",
+        "capPercent": "Tope de presupuesto (%)",
+        "capProjectTypeId": "El tope se aplica al tipo de proyecto"
       },
       "kinds": {
         "sales_order": "Pedidos de venta",
@@ -6973,6 +6979,23 @@
       "limitKinds": {
         "none": "Sin límite",
         "amount": "Límite monetario"
+      },
+      "workDate": "Fecha de trabajo",
+      "capPercentHint": "Opcional. Limita cada proyecto a este porcentaje de los artículos del programa en su presupuesto adjudicado, menos la tasa del programa sobre todas las fuentes anteriores.",
+      "sources": {
+        "assignment": "Asignaciones fechadas",
+        "field_ticket_foreman": "Capataz del parte de obra",
+        "field_ticket_superintendent": "Superintendente del parte de obra",
+        "project_foreman": "Capataz del proyecto",
+        "project_manager": "Gerente del proyecto"
+      },
+      "unassigned": {
+        "refuse": "Rechazar la liquidación",
+        "forfeit": "Perder esa parte"
+      },
+      "roundings": {
+        "per_group": "Redondear cada grupo",
+        "per_recipient": "Redondear una vez por destinatario"
       }
     },
     "internalBilling": {

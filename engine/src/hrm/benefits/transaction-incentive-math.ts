@@ -16,6 +16,10 @@ export interface TransactionIncentivePolicy {
   readonly rate: string;
   /** Explicit recipient positions, independent of company titles or vendor fields. */
   readonly recipientShares: readonly { readonly key: string; readonly weight: string }[];
+  /** A source without a recipient for a position: refuse (default), or forfeit that share. */
+  readonly unassignedShare?: "refuse" | "forfeit";
+  /** per_group (default) rounds each group pool; per_recipient sums exact shares and rounds once per recipient. */
+  readonly rounding?: "per_group" | "per_recipient";
 }
 
 export interface IncentiveTransactionFact {
@@ -31,10 +35,15 @@ export interface IncentiveTransactionFact {
   readonly recipients: readonly { readonly shareKey: string; readonly employmentId: string }[];
 }
 
+/**
+ * previouslyAwarded is what earlier periods consumed: settled awards (payable
+ * precision), or, for a measured ceiling, the program rate on every earlier
+ * source line whether or not a share was paid.
+ */
 export type TransactionIncentiveLimit =
   | { readonly kind: "none" }
-  | { readonly kind: "amount"; readonly amount: string; readonly previouslyAwarded: string }
-  | { readonly kind: "percent_of_base"; readonly base: string; readonly rate: string; readonly previouslyAwarded: string };
+  | { readonly kind: "amount"; readonly amount: string; readonly previouslyAwarded: string; readonly consumption?: "awarded" | "measured" }
+  | { readonly kind: "percent_of_base"; readonly base: string; readonly rate: string; readonly previouslyAwarded: string; readonly consumption?: "awarded" | "measured" };
 
 export interface TransactionIncentiveGroup {
   readonly groupId: string;
@@ -137,7 +146,7 @@ export function computeTransactionIncentive(
     const prior = units(limit.previouslyAwarded, `prior awards for ${groupId}`);
     const base = units(limit.kind === "amount" ? limit.amount : limit.base, `limit base for ${groupId}`);
     if (prior < 0n || base < 0n) refuse(`group ${groupId} has a negative ceiling or consumption — reconcile its adjusting awards and limit evidence`);
-    if (prior % quantum !== 0n) refuse(`group ${groupId} has prior awards finer than payable precision — reconcile its stored currency evidence`);
+    if (limit.consumption !== "measured" && prior % quantum !== 0n) refuse(`group ${groupId} has prior awards finer than payable precision — reconcile its stored currency evidence`);
     let ceiling: bigint;
     if (limit.kind === "amount") {
       if (base % quantum !== 0n) refuse(`group ${groupId} has a ceiling finer than payable precision — configure a payable monetary ceiling`);
@@ -145,12 +154,13 @@ export function computeTransactionIncentive(
     } else {
       const capRate = units(limit.rate, `limit rate for ${groupId}`);
       if (capRate < 0n) refuse(`group ${groupId} has a negative limit rate — configure a non-negative percentage`);
-      ceiling = base * capRate / (1_000_000n * quantum) * quantum;
+      // A measured ceiling keeps full precision; the payable result rounds once.
+      ceiling = limit.consumption === "measured" ? base * capRate / 1_000_000n : base * capRate / (1_000_000n * quantum) * quantum;
     }
     available.set(groupId, ceiling > prior ? ceiling - prior : 0n);
   }
   const sourceIds = new Set<string>();
-  const byGroup = new Map<string, { base: bigint; sourceIds: string[]; weights: Map<string, bigint> }>();
+  const byGroup = new Map<string, { base: bigint; sourceIds: string[]; weights: Map<string, bigint>; facts: { base: bigint; bindings: Map<string, string> }[] }>();
   const excluded: { sourceId: string; reason: string }[] = [];
   for (const fact of [...facts].sort((a, b) => a.sourceId < b.sourceId ? -1 : a.sourceId > b.sourceId ? 1 : 0)) {
     const sourceId = key(fact.sourceId, "transaction identity"), groupId = key(fact.groupId, "transaction group");
@@ -173,31 +183,65 @@ export function computeTransactionIncentive(
       bindings.set(shareKey, employmentId);
     }
     for (const shareKey of shares.keys()) {
-      if (!bindings.has(shareKey)) refuse(`transaction ${sourceId} has no recipient for ${shareKey} — record its dated responsibility and program membership; an absent share is never silently redistributed`);
+      if (!bindings.has(shareKey) && policy.unassignedShare !== "forfeit") refuse(`transaction ${sourceId} has no recipient for ${shareKey} — record its dated responsibility and program membership; an absent share is never silently redistributed`);
     }
-    const group = byGroup.get(groupId) ?? { base: 0n, sourceIds: [], weights: new Map<string, bigint>() };
+    const group = byGroup.get(groupId) ?? { base: 0n, sourceIds: [], weights: new Map<string, bigint>(), facts: [] };
     group.base += base;
     group.sourceIds.push(sourceId);
     for (const [shareKey, employmentId] of bindings) {
       group.weights.set(employmentId, (group.weights.get(employmentId) ?? 0n) + base * shares.get(shareKey)!);
     }
+    // A forfeited position keeps its weight so the remaining recipients are
+    // never enlarged by it; its share is simply not paid.
+    for (const shareKey of shares.keys()) {
+      if (!bindings.has(shareKey)) group.weights.set(FORFEITED, (group.weights.get(FORFEITED) ?? 0n) + base * shares.get(shareKey)!);
+    }
+    group.facts.push({ base, bindings });
     byGroup.set(groupId, group);
   }
+  const totalShareWeight = [...shares.values()].reduce((sum, weight) => sum + weight, 0n);
   const totals = new Map<string, bigint>();
   const results: TransactionIncentiveResult["groups"][number][] = [];
-  for (const [groupId, group] of [...byGroup].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) {
-    const divisor = policy.valuation === "percent_of_amount" ? 1_000_000n : QUANTITY_SCALE;
-    const potential = roundDiv(group.base * rate, divisor * quantum);
-    const room = available.get(groupId)!;
-    const payable = room === null || potential * quantum <= room ? potential : room / quantum;
-    const weights = [...group.weights].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0);
-    const amounts = apportion(payable, weights.map(([, weight]) => weight));
-    const recipients = weights.map(([employmentId], i) => {
-      const value = amounts[i]! * quantum;
-      totals.set(employmentId, (totals.get(employmentId) ?? 0n) + value);
-      return { employmentId, value: fromUnits(value) };
-    });
-    results.push({ groupId, sourceIds: group.sourceIds, measuredValue: policy.valuation === "percent_of_amount" ? fromUnits(group.base) : fromQuantityUnits(group.base), potentialAward: fromUnits(potential * quantum), availableLimit: room === null ? null : fromUnits(room), awarded: fromUnits(payable * quantum), recipients });
+  const divisor = policy.valuation === "percent_of_amount" ? 1_000_000n : QUANTITY_SCALE;
+  if (policy.rounding === "per_recipient") {
+    // Exact shares in ledger units scaled by EXACT, summed per recipient
+    // across every group, then rounded once to the currency quantum.
+    const exact = new Map<string, bigint>();
+    for (const [groupId, group] of [...byGroup].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) {
+      const potential = group.base * rate * EXACT / divisor;
+      const roomUnits = available.get(groupId)!;
+      const payable = roomUnits === null || potential <= roomUnits * EXACT ? potential : roomUnits * EXACT;
+      const groupShares = new Map<string, bigint>();
+      for (const fact of group.facts) {
+        for (const [shareKey, employmentId] of fact.bindings) {
+          const value = payable * fact.base * shares.get(shareKey)! / (group.base * totalShareWeight);
+          groupShares.set(employmentId, (groupShares.get(employmentId) ?? 0n) + value);
+        }
+      }
+      const recipients = [...groupShares].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([employmentId, value]) => {
+        exact.set(employmentId, (exact.get(employmentId) ?? 0n) + value);
+        return { employmentId, value: fromUnits(roundDiv(value, EXACT)) };
+      });
+      const paid = [...groupShares.values()].reduce((sum, value) => sum + value, 0n);
+      results.push({ groupId, sourceIds: group.sourceIds, measuredValue: policy.valuation === "percent_of_amount" ? fromUnits(group.base) : fromQuantityUnits(group.base), potentialAward: fromUnits(roundDiv(potential, EXACT)), availableLimit: roomUnits === null ? null : fromUnits(roomUnits), awarded: fromUnits(roundDiv(paid, EXACT)), recipients });
+    }
+    for (const [employmentId, value] of exact) totals.set(employmentId, roundDiv(value, EXACT * quantum) * quantum);
+  } else {
+    for (const [groupId, group] of [...byGroup].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) {
+      const potential = roundDiv(group.base * rate, divisor * quantum);
+      const room = available.get(groupId)!;
+      const payable = room === null || potential * quantum <= room ? potential : room / quantum;
+      const weights = [...group.weights].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0);
+      const amounts = apportion(payable, weights.map(([, weight]) => weight));
+      const recipients = weights.flatMap(([employmentId], i) => {
+        if (employmentId === FORFEITED) return [];
+        const value = amounts[i]! * quantum;
+        totals.set(employmentId, (totals.get(employmentId) ?? 0n) + value);
+        return [{ employmentId, value: fromUnits(value) }];
+      });
+      const paid = recipients.reduce((sum, r) => sum + toUnits(r.value), 0n);
+      results.push({ groupId, sourceIds: group.sourceIds, measuredValue: policy.valuation === "percent_of_amount" ? fromUnits(group.base) : fromQuantityUnits(group.base), potentialAward: fromUnits(potential * quantum), availableLimit: room === null ? null : fromUnits(room), awarded: fromUnits(paid), recipients });
+    }
   }
   return {
     currency: policy.currency,
@@ -207,3 +251,8 @@ export function computeTransactionIncentive(
     excluded,
   };
 }
+
+/** Weight key for a forfeited position's share; never an employment identity. */
+const FORFEITED = "\u0000forfeited";
+/** Extra precision for per-recipient accumulation before the single rounding. */
+const EXACT = 10n ** 12n;
