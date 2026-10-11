@@ -226,6 +226,19 @@ export async function decidePeriodReopen(args: {
       }
     }
   }
+  // The decision audit commits after the decision transaction: a refused
+  // decision rolls its transaction back, which would take the audit of a
+  // real decision with it — and a decision that never commits must never
+  // leave an audit row claiming it did.
+  let decided: {
+    status: "approved" | "rejected";
+    periodId: string;
+    bookId: string;
+    subsidiaryId: string | null;
+    modules: CloseModule[];
+    reason: string;
+    requestedBy: string;
+  } | null = null;
   await db.transaction(async (tx) => {
     const request = (await tx.execute<CloseReopenRequestRow>(sql`
       select * from close_reopen_requests
@@ -240,6 +253,15 @@ export async function decidePeriodReopen(args: {
         update close_reopen_requests set status = 'rejected', approved_by = ${args.actorId},
                approved_at = now(), updated_at = now(), updated_by = ${args.actorId}
          where id = ${args.requestId} and org_id = ${args.orgId}`);
+      decided = {
+        status: "rejected",
+        periodId: row.period_id,
+        bookId: row.book_id,
+        subsidiaryId: row.subsidiary_id,
+        modules: row.modules,
+        reason: row.reason,
+        requestedBy: row.requested_by,
+      };
       return;
     }
     await periodScopeAdvisoryLock(tx, args.orgId, row.period_id, row.book_id);
@@ -395,7 +417,47 @@ export async function decidePeriodReopen(args: {
        from close_runs r where r.id = t.run_id and r.org_id = ${args.orgId}
          and r.period_id = ${row.period_id} and r.book_id = ${row.book_id}
          and t.status in ('complete','waived')`);
+    decided = {
+      status: "approved",
+      periodId: row.period_id,
+      bookId: row.book_id,
+      subsidiaryId: row.subsidiary_id,
+      modules: row.modules,
+      reason: row.reason,
+      requestedBy: row.requested_by,
+    };
   });
+  // The decision committed: the approver owns an audit row (searchable in
+  // the audit trail by actor and action) and a close-history event naming
+  // the scope, the decision and the requester's reason. Nothing is written
+  // when the transaction threw — a refusal leaves no decision to attest.
+  if (decided) {
+    const scope = {
+      periodId: decided.periodId,
+      bookId: decided.bookId,
+      subsidiaryId: decided.subsidiaryId,
+      modules: decided.modules,
+    };
+    await db.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${args.orgId}, 'close_reopen_requests', ${args.requestId}, ${decided.status === "approved" ? "approve" : "reject"},
+              ${JSON.stringify({
+                before: { status: "requested" },
+                after: { status: decided.status, reason: decided.reason },
+                scope,
+                requestedBy: decided.requestedBy,
+              })}::jsonb, ${args.actorId})`);
+    await db.execute(sql`
+      insert into close_events (org_id, event_type, actor_id, payload)
+      values (${args.orgId}, 'period.reopen_decision', ${args.actorId},
+              ${JSON.stringify({
+                requestId: args.requestId,
+                decision: decided.status,
+                reason: decided.reason,
+                scope,
+                requestedBy: decided.requestedBy,
+              })}::jsonb)`);
+  }
 }
 
 async function recloseApprovedReopenRow(args: {

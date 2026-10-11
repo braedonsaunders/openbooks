@@ -1014,3 +1014,124 @@ test(
  * exactly once with no missing or duplicate send", and "a post-effect
  * pre-terminal crash finishes without duplicating the committed effect").
  * The execution row shape those tests run against is the lease contract. */
+
+test(
+  "a reopen decision writes the approver's audit row and history event",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actors = await seedFlowActors(org.orgId);
+      await closeAllGlobally(org, actors.adminId);
+      const requestId = await requestPeriodReopen({
+        orgId: org.orgId,
+        periodId: org.periodId,
+        bookId: org.bookId,
+        subsidiaryId: org.subsidiaryId,
+        modules: ["gl"],
+        reason: "auditor requested corrections",
+        actorId: actors.adminId,
+      });
+      await decidePeriodReopen({
+        orgId: org.orgId,
+        requestId,
+        actorId: actors.approver1Id,
+        approve: true,
+      });
+      // The approver owns an audit row: actor, action, scope and decision.
+      const audits = (await db.execute<{ action: string; actor_id: string; changes: unknown }>(sql`
+        select action, actor_id, changes from audit_log
+         where org_id = ${org.orgId} and table_name = 'close_reopen_requests'
+           and row_id = ${requestId}`)).rows;
+      assert.equal(audits.length, 1);
+      assert.equal(audits[0]!.action, "approve");
+      assert.equal(audits[0]!.actor_id, actors.approver1Id);
+      const changes = audits[0]!.changes as {
+        before: { status: string };
+        after: { status: string; reason: string };
+        scope: { periodId: string; bookId: string; modules: string[] };
+        requestedBy: string;
+      };
+      assert.equal(changes.before.status, "requested");
+      assert.equal(changes.after.status, "approved");
+      assert.equal(changes.after.reason, "auditor requested corrections");
+      assert.equal(changes.scope.periodId, org.periodId);
+      assert.equal(changes.scope.bookId, org.bookId);
+      assert.deepEqual(changes.scope.modules, ["gl"]);
+      assert.equal(changes.requestedBy, actors.adminId);
+      // ...and the close history names the approver with the same scope.
+      const events = (await db.execute<{ event_type: string; actor_id: string; payload: unknown }>(sql`
+        select event_type, actor_id, payload from close_events
+         where org_id = ${org.orgId} and event_type = 'period.reopen_decision'`)).rows;
+      assert.equal(events.length, 1);
+      assert.equal(events[0]!.actor_id, actors.approver1Id);
+      const payload = events[0]!.payload as { decision: string; reason: string; scope: { modules: string[] }; requestedBy: string };
+      assert.equal(payload.decision, "approved");
+      assert.equal(payload.requestedBy, actors.adminId);
+      assert.deepEqual(payload.scope.modules, ["gl"]);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "a reopen rejection is audited but a refused decision leaves no audit",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actors = await seedFlowActors(org.orgId);
+      await closeAllGlobally(org, actors.adminId);
+      const rejectedId = await requestPeriodReopen({
+        orgId: org.orgId,
+        periodId: org.periodId,
+        bookId: org.bookId,
+        subsidiaryId: org.subsidiaryId,
+        modules: ["gl"],
+        reason: "too broad a window",
+        actorId: actors.adminId,
+      });
+      await decidePeriodReopen({
+        orgId: org.orgId,
+        requestId: rejectedId,
+        actorId: actors.approver1Id,
+        approve: false,
+      });
+      const rejection = (await db.execute<{ action: string; actor_id: string }>(sql`
+        select action, actor_id from audit_log
+         where org_id = ${org.orgId} and table_name = 'close_reopen_requests'
+           and row_id = ${rejectedId}`)).rows;
+      assert.equal(rejection.length, 1);
+      assert.equal(rejection[0]!.action, "reject");
+      assert.equal(rejection[0]!.actor_id, actors.approver1Id);
+      // A decision that never commits (self-approval) must never leave an
+      // audit row claiming it did.
+      const ownId = await requestPeriodReopen({
+        orgId: org.orgId,
+        periodId: org.periodId,
+        bookId: org.bookId,
+        subsidiaryId: org.subsidiaryId,
+        modules: ["gl"],
+        reason: "self dealt window",
+        actorId: actors.adminId,
+      });
+      await assert.rejects(
+        decidePeriodReopen({ orgId: org.orgId, requestId: ownId, actorId: actors.adminId, approve: true }),
+        (error: unknown) => errorChainMatches(error, /independent approval/),
+      );
+      const none = (await db.execute<{ count: number }>(sql`
+        select count(*)::int as count from audit_log
+         where org_id = ${org.orgId} and table_name = 'close_reopen_requests'
+           and row_id = ${ownId}`));
+      assert.equal(none.rows[0]?.count, 0);
+      const noEvents = (await db.execute<{ count: number }>(sql`
+        select count(*)::int as count from close_events
+         where org_id = ${org.orgId} and event_type = 'period.reopen_decision'
+           and payload->>'requestId' = ${ownId}`));
+      assert.equal(noEvents.rows[0]?.count, 0);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
