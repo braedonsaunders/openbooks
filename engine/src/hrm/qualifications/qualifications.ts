@@ -659,9 +659,21 @@ export async function listQualifications(
   if (input.employmentId) {
     const wanted = requireId(input.employmentId, "employmentId");
     if (employmentIds !== null && !employmentIds.includes(wanted)) {
-      // Prove the subject through the structural gate so a manager's
-      // report resolves and a stranger keeps the employment refusal.
-      await requireEmploymentOrTeamSubject(exec, orgId, actorId, wanted);
+      try {
+        // Prove the subject through the structural gate so a manager's
+        // report resolves and a stranger keeps the employment refusal.
+        await requireEmploymentOrTeamSubject(exec, orgId, actorId, wanted);
+      } catch (error) {
+        if (!(error instanceof HrmAuthorizationError)) throw error;
+        // A named employment the caller cannot see answers as if it held
+        // nothing — the list stays 200 with []. Only a genuinely missing
+        // employment keeps the not-found refusal.
+        const exists = (await exec.execute<{ id: string }>(sql`
+          select id from worker_employments where org_id = ${orgId} and id = ${wanted}
+        `)).rows[0];
+        if (!exists) throw error;
+        employmentIds = [];
+      }
     }
     if (hrScope !== undefined) {
       // The HR audience names its employment explicitly, so prove that
@@ -672,7 +684,9 @@ export async function listQualifications(
         return [];
       }
     }
-    employmentIds = [wanted];
+    // An unproven subject keeps the empty set above: narrowing to it here
+    // would read rows the caller must not see.
+    if (employmentIds === null || employmentIds.length > 0) employmentIds = [wanted];
   }
   // The HR audience's unfiltered read carries the employer predicate on
   // the employment join; every other path already names its employments.

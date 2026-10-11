@@ -622,7 +622,29 @@ export async function competencyProfileForEmployment(args: {
     if (scope === undefined) {
       await requireProfileRelation(db, orgId, actorId, employmentId);
     } else {
-      await requireHrmPerformanceOnEmployment(db, orgId, actorId, employmentId, "hrm.performance.read");
+      try {
+        await requireHrmPerformanceOnEmployment(db, orgId, actorId, employmentId, "hrm.performance.read");
+      } catch (error) {
+        if (!(error instanceof HrmAuthorizationError)) throw error;
+        // A named employment outside the HR reader's allowed subsidiaries
+        // answers as if it held nothing — but only when it holds nothing
+        // visible. A missing employment keeps the not-found refusal, and an
+        // employment with readable review content keeps the scope denial
+        // (the subsidiary fence never confirms content through a 200).
+        const exists = (await db.execute<{ id: string }>(sql`
+          select id from worker_employments where org_id = ${orgId} and id = ${employmentId}
+        `)).rows[0];
+        if (!exists) throw error;
+        const readable = (await db.execute<{ id: string }>(sql`
+          select r.id from hrm_reviews r
+            join hrm_review_cycles c on c.org_id = r.org_id and c.id = r.cycle_id
+           where r.org_id = ${orgId} and r.employment_id = ${employmentId}
+             and r.kind = 'manager' and r.status in ('calibrated', 'shared', 'acknowledged')
+           limit 1
+        `)).rows[0];
+        if (!readable) return [];
+        throw error;
+      }
     }
     const employment = (await db.execute<{ employerSubsidiaryId: string }>(sql`
       select employer_subsidiary_id as "employerSubsidiaryId"
