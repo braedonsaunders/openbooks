@@ -3393,6 +3393,25 @@ async function closeLineManagerChange(
   }
 }
 
+/**
+ * Every change kind the engine writes into employment_changes. All writes
+ * flow through insertEmploymentChange below, so this union is the complete
+ * list the employment_changes_kind CHECK must admit. The kind guard
+ * integration test inserts one row per entry, so a vocabulary that drops
+ * a written kind fails loudly instead of inside a live application.
+ */
+export const EMPLOYMENT_CHANGE_KINDS = [
+  "created",
+  "status_changed",
+  "assignment_issued",
+  "assignment_superseded",
+  "terminated",
+  "bank_details_changed",
+  "profile_changed",
+] as const;
+
+export type EmploymentChangeKind = (typeof EMPLOYMENT_CHANGE_KINDS)[number];
+
 async function insertEmploymentChange(
   exec: SqlExecutor,
   args: {
@@ -3400,7 +3419,7 @@ async function insertEmploymentChange(
     employmentId: string;
     assignmentId: string | null;
     revision: number;
-    changeKind: string;
+    changeKind: EmploymentChangeKind;
     priorSnapshot: Record<string, unknown>;
     closedVersions: ClosureElement[];
     reason: string;

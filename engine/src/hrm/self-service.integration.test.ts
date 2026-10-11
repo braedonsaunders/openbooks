@@ -354,6 +354,35 @@ test("profile_change files, approves, and applies onto the party with evidence",
   });
 });
 
+test("a profile change with no flow applies directly and the address persists", { skip: !DB }, async () => {
+  await withHarness(() => setupSelfServiceHarness(), async (h) => {
+    const filed = await fileProfileChangeRequest({
+      orgId: h.org.orgId, actorId: h.personAId, employmentId: h.employmentA,
+      changes: {
+        kind: "profile_change",
+        address: { line1: "4821 19 Street NW", city: "Calgary", region: "AB", postalCode: "T2L 2B7", country: "CA" },
+      },
+      reason: "moved across town",
+    });
+    assert.equal(filed.request.status, "applied", "no flow means direct application");
+    // The typed address reaches the stored draft payload verbatim — the
+    // proposal, not just the event's before-image, carries it.
+    const stored = (await db.execute<{ payload: unknown }>(sql`
+      select payload from hrm_employment_change_requests where id = ${filed.request.id}
+    `)).rows[0]!.payload as { address?: { line1?: unknown } };
+    assert.equal(stored.address?.line1, "4821 19 Street NW", "the draft payload carries the typed address");
+    const address = (await db.execute<{ line1: string | null; city: string | null }>(sql`
+      select line1, city from addresses where org_id = ${h.org.orgId} and party_id = ${h.partyA}
+    `)).rows;
+    assert.equal(address.length, 1);
+    assert.deepEqual([address[0]!.line1, address[0]!.city], ["4821 19 Street NW", "Calgary"]);
+    const kinds = (await db.execute<{ kind: string }>(sql`
+      select change_kind as kind from employment_changes where employment_id = ${h.employmentA}
+    `)).rows.map((row) => row.kind);
+    assert.ok(kinds.includes("profile_changed"), "a profile_changed event evidences the application");
+  });
+});
+
 test("a stale profile approval refuses with the party untouched", { skip: !DB }, async () => {
   await withHarness(() => setupSelfServiceHarness(), async (h) => {
     await seedFlow(h.org.orgId, [h.hrId, h.hr2Id]);

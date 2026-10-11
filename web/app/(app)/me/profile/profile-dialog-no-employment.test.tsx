@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import React from 'react'
-import { bootJsdomEnvironment } from '../../../testing/jsdom-env'
-import { stubModules } from '../../../testing/stub-modules'
+import { bootJsdomEnvironment } from '../../../../testing/jsdom-env'
+import { stubModules } from '../../../../testing/stub-modules'
 
 await bootJsdomEnvironment({ url: 'http://localhost/me/profile?edit=1', matchMediaMatches: false, event: 'jsdom' })
 
@@ -39,9 +39,9 @@ const { ProfileDialog } = await import('../islands')
 Object.assign(globalThis, { React })
 
 const messages = {
-  hrm: JSON.parse(readFileSync(new URL('../../../messages/en/hrm.json', import.meta.url), 'utf8')),
-  common: JSON.parse(readFileSync(new URL('../../../messages/en/common.json', import.meta.url), 'utf8')),
-  ui: JSON.parse(readFileSync(new URL('../../../messages/en/ui.json', import.meta.url), 'utf8')),
+  hrm: JSON.parse(readFileSync(new URL('../../../../messages/en/hrm.json', import.meta.url), 'utf8')),
+  common: JSON.parse(readFileSync(new URL('../../../../messages/en/common.json', import.meta.url), 'utf8')),
+  ui: JSON.parse(readFileSync(new URL('../../../../messages/en/ui.json', import.meta.url), 'utf8')),
 }
 
 type Dialog = Parameters<typeof ProfileDialog>[0]['dialog']
@@ -197,13 +197,92 @@ async function renderBankDialog(selected: BankDialog): Promise<{ unmount: () => 
 function setValue(id: string, value: string): void {
   const input = document.getElementById(id) as HTMLInputElement | HTMLTextAreaElement | null
   assert.ok(input, `the ${id} field must render`)
-  const setter = Object.getOwnPropertyDescriptor(
-    input instanceof HTMLTextAreaElement ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype,
-    'value',
-  )?.set as ((this: Element, value: string) => void) | undefined
+  const proto =
+    input.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype
+  const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set as
+    | ((this: Element, value: string) => void)
+    | undefined
   setter?.call(input, value)
   input.dispatchEvent(new window.Event('input', { bubbles: true }))
 }
+
+function setFieldByLabel(label: string, value: string): void {
+  const input = document.querySelector(
+    `input[aria-label="${label}"], textarea[aria-label="${label}"]`,
+  ) as HTMLInputElement | HTMLTextAreaElement | null
+  assert.ok(input, `the ${label} field must render`)
+  const proto =
+    input.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype
+  const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set as
+    | ((this: Element, value: string) => void)
+    | undefined
+  setter?.call(input, value)
+  input.dispatchEvent(new window.Event('input', { bubbles: true }))
+}
+
+test('profile dialog files the typed address on the wire, not a null', async (t) => {
+  const prior = globalThis.fetch
+  const posts: { url: string; init?: RequestInit }[] = []
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url)
+    if (init?.method === 'POST') posts.push({ url, init })
+    if (url === '/api/hrm/me/profile-changes') return Response.json({ request: { id: 'req-9' } })
+    return Response.json({ profile: { phone: null, email: null, emergencyContact: null, address: null } })
+  }) as typeof fetch
+  const { unmount } = await renderDialog(dialogWith([{ value: 'employment-1', label: 'Main Co — Active' }]))
+  t.after(async () => {
+    await unmount()
+    globalThis.fetch = prior
+  })
+  // The dialog prefills from its own GET stub during render; install the
+  // capture stub after, so the submit POST is what gets recorded.
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url)
+    if (init?.method === 'POST') posts.push({ url, init })
+    if (url === '/api/hrm/me/profile-changes') return Response.json({ request: { id: 'req-9' } })
+    return Response.json({ profile: { phone: null, email: null, emergencyContact: null, address: null } })
+  }) as typeof fetch
+  const { act } = await import('react')
+  await act(async () => {
+    setFieldByLabel('Street', '4821 19 Street NW')
+    setFieldByLabel('City', 'Calgary')
+    setFieldByLabel('Region', 'AB')
+    setFieldByLabel('Postal code', 'T2L 2B7')
+    setFieldByLabel('Country', 'CA')
+    setValue('me-contact-reason', 'moved across town')
+    await tick()
+  })
+  const submit = submitButton()
+  assert.ok(submit, 'submit renders')
+  await act(async () => {
+    submit.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await tick()
+  })
+  await tick()
+  await tick()
+  const post = posts.find((entry) => entry.url === '/api/hrm/me/profile-changes')
+  assert.ok(post, 'submit posts the profile change')
+  const body = JSON.parse(String(post?.init?.body)) as {
+    employmentId?: string
+    changes?: { kind?: string; address?: Record<string, unknown> | null }
+    reason?: string
+  }
+  assert.equal(body.employmentId, 'employment-1', 'the single employment binds silently')
+  assert.equal(body.changes?.kind, 'profile_change')
+  assert.deepEqual(
+    body.changes?.address,
+    {
+      line1: '4821 19 Street NW',
+      line2: null,
+      city: 'Calgary',
+      region: 'AB',
+      postalCode: 'T2L 2B7',
+      country: 'CA',
+    },
+    'the typed address travels as a full replacement object, never a null',
+  )
+  assert.equal(body.reason, 'moved across town')
+})
 
 test('bank dialog with no employment names the hire remedy and refuses submit', async (t) => {
   const { unmount } = await renderBankDialog(bankDialogWith([]))

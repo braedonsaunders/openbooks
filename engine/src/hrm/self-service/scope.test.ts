@@ -12,7 +12,7 @@ process.env.OPENBOOKS_MIGRATION_DB_URL = "";
 
 const { actorPartyOf, SelfServiceError } = await import("./actor.ts");
 const { resolveTeamEmploymentIds } = await import("./team-read.ts");
-const { validateProfileChange } = await import("./profile-changes.ts");
+const { profileSubmitRefusal, validateProfileChange } = await import("./profile-changes.ts");
 const { HrmChangeRequestError, validateChangePayload } = await import("../change-requests.ts");
 
 const ORG = "org-self-service-unit";
@@ -207,6 +207,35 @@ test("profile proposals validate field by field", () => {
   const cleared = validateProfileChange({ kind: "profile_change", phone: null, emergencyContact: null });
   assert.equal(cleared.phone, null);
   assert.equal(cleared.emergencyContact, null);
+});
+
+test("a submit refusal keeps curated remedies and sanitizes driver failures", () => {
+  const draft = "draft-id-1";
+  const curated = profileSubmitRefusal(
+    draft,
+    new HrmChangeRequestError("REFUSED", "the employment changed while the approval was applying — file again"),
+  );
+  assert.ok(curated instanceof SelfServiceError);
+  assert.equal(curated.code, "REFUSED");
+  assert.match(curated.message, new RegExp(`the profile draft ${draft} is saved but submission was refused`));
+  assert.match(curated.message, /file again/, "the curated remedy travels intact");
+
+  const raw = profileSubmitRefusal(
+    draft,
+    Object.assign(
+      new Error(
+        "Failed query: insert into employment_changes (org_id, employment_id, assignment_id, revision, change_kind, prior_snapshot, reason) values ($1, $2, $3, $4, $5, $6, $7) params: org-1,emp-1,,4,profile_changed",
+      ),
+      { query: "insert into employment_changes", params: ["org-1"] },
+    ),
+  );
+  assert.ok(raw instanceof SelfServiceError);
+  assert.equal(raw.code, "REFUSED");
+  assert.match(raw.message, new RegExp(`the profile draft ${draft} is saved`));
+  assert.match(raw.message, /could not be filed/);
+  for (const leaked of ["insert into", "params:", "employment_changes", "profile_changed", "org-1"]) {
+    assert.ok(!raw.message.includes(leaked), `the sanitized refusal must not leak ${leaked}`);
+  }
 });
 
 test("the change-request kind vocabulary admits profile_change and lists it in refusals", () => {

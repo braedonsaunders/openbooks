@@ -26,3 +26,21 @@ test('native inventory option validation is compatible with the guard', () => {
   const path = 'web/app/api/inventory/movement-options/route.ts'
   assert.deepEqual(scanText(path, readFileSync(path, 'utf8')), [])
 })
+
+test('error constructions embedding a caught message are refused at their line', () => {
+  assert.deepEqual(scan('try { work() } catch (error) { throw new SelfServiceError("REFUSED", `saved but refused: ${error.message}`) }'), [1])
+  assert.deepEqual(scan('try { work() } catch (e) { throw new ReleaseError(decision, e instanceof Error ? e.message : String(e)) }'), [1])
+})
+
+test('sanitizer-wrapped and domain-narrowed constructions remain permitted', () => {
+  assert.deepEqual(scan('try { work() } catch (e) { throw new ReleaseError(decision, sanitizeDecisionCause(e)) }'), [])
+  assert.deepEqual(scan('function refuse(error) { if (error instanceof HrmChangeRequestError) return new SelfServiceError("REFUSED", error.message) }'), [])
+  assert.deepEqual(scan('try { work() } catch (error) { const detail = sanitize(error); throw new SelfServiceError("REFUSED", detail) }'), [])
+  assert.deepEqual(scan('try { work() } catch (error) { if (error instanceof HrmPositionError) { throw new HrmChangeRequestError("REFUSED", error.message) } throw error }'), [])
+  assert.deepEqual(scan('try { work() } catch (error) { discardClient = error instanceof Error ? error : new Error(String(error)) }'), [])
+})
+
+test('base-Error narrowing and mixed guarded unguarded reads stay refused', () => {
+  assert.deepEqual(scan('try { work() } catch (error) { if (error instanceof Error) { throw new HrmChangeRequestError("REFUSED", error.message) } throw error }'), [1])
+  assert.deepEqual(scan('try { work() } catch (a) { try { work() } catch (b) { if (a instanceof HrmError) { throw new HrmChangeRequestError("REFUSED", a.message + b.message) } } }'), [1])
+})

@@ -24,6 +24,7 @@ import { activeDelegationPrincipal, activeDelegationPrincipals } from "./delegat
 import { emailActionUrls } from "./email-tokens.ts";
 import { lockFlowSubjectDecision } from "./decision-lock.ts";
 import { resolveApprovalRequestNotices } from "./approval-notices.ts";
+import { sanitizeDecisionCause } from "./decision-cause.ts";
 
 /**
  * Gate lifecycle — decide / worklist / delegate / timers. OpenBooks resumes
@@ -690,7 +691,7 @@ async function decideGateCore(args: Parameters<typeof decideGate>[0] & {
         } catch (e) {
           throw new ReleaseError(
             decision,
-            e instanceof Error ? e.message : String(e),
+            sanitizeDecisionCause(e),
             !isProgrammingError(e),
             causeKindOf(e),
           );
@@ -764,7 +765,7 @@ async function decideGateCore(args: Parameters<typeof decideGate>[0] & {
         } catch (e) {
           throw new ReleaseError(
             decision,
-            e instanceof Error ? e.message : String(e),
+            sanitizeDecisionCause(e),
             !isProgrammingError(e),
             causeKindOf(e),
           );
@@ -1490,9 +1491,13 @@ export async function delegateGate(
       }
     } catch (e) {
       if (e instanceof GateError) throw e;
-      // unique (run_id, node_id, assignee_user_id): the target already holds a
-      // sibling row of this gate.
-      throw new GateError(`could not delegate: ${(e as Error).message}`);
+      // Unique (run_id, node_id, assignee_user_id): the target already
+      // holds a sibling row of this gate — a data condition, not a
+      // defect, so it keeps its own curated refusal.
+      if (typeof e === "object" && e !== null && (e as { code?: unknown }).code === "23505") {
+        throw new GateError("the target already holds this approval — it cannot be delegated twice");
+      }
+      throw new GateError(`could not delegate: ${sanitizeDecisionCause(e)}`);
     }
 
     const handoverNote = note?.trim() ? note.trim() : null;

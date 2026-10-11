@@ -1,8 +1,9 @@
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
-import { requireHrmSelfRead, requireHrmSelfRequest } from "../authorization.ts";
+import { HrmAuthorizationError, requireHrmSelfRead, requireHrmSelfRequest } from "../authorization.ts";
 import {
   createChangeRequestDraft,
+  HrmChangeRequestError,
   submitChangeRequest,
   type ChangeRequestDTO,
 } from "../change-requests.ts";
@@ -84,13 +85,40 @@ export interface FileProfileChangeResult {
 }
 
 /**
+ * The submit-step refusal for a stored profile draft. Curated domain
+ * refusals (self-service, authorization, change-request) carry their
+ * remedy, so they keep it beside the saved-draft framing. Anything else —
+ * a driver or constraint failure — must never render table names,
+ * parameters, or snapshots to the employee: it is logged server-side and
+ * refused with one stable message naming the draft to retry.
+ */
+export function profileSubmitRefusal(requestId: string, error: unknown): SelfServiceError {
+  if (
+    error instanceof SelfServiceError ||
+    error instanceof HrmAuthorizationError ||
+    error instanceof HrmChangeRequestError
+  ) {
+    return new SelfServiceError(
+      "REFUSED",
+      `the profile draft ${requestId} is saved but submission was refused: ${error.message}`,
+    );
+  }
+  console.error("[hrm] profile change submission failed:", error);
+  return new SelfServiceError(
+    "REFUSED",
+    `the profile draft ${requestId} is saved but the change could not be filed — retry the submission, and ask HR if it keeps failing`,
+  );
+}
+
+/**
  * File a profile proposal and submit it for HR approval in one user
- * action. Two governed steps inside: the draft stores first, then the
- * submit binds the approval run. A submit refusal (no approval flow
- * configured, a race on the employment) does NOT hide the stored draft:
- * the throw names the remedy and carries the draft id, so the caller
- * renders the refusal beside the saved draft instead of losing the
- * person's work — one user action, no silent partial effect.
+ * action. Two governed steps in two transactions: the draft commits
+ * first, then the submit binds the approval run in its own transaction.
+ * A submit refusal (no approval flow configured, a race on the
+ * employment) does NOT roll the stored draft back with it: the throw
+ * names the remedy and carries the draft id, so the caller renders the
+ * refusal beside the saved draft instead of losing the person's work —
+ * one user action, no silent partial effect.
  */
 export async function fileProfileChangeRequest(
   query: FileProfileChangeQuery,
@@ -100,7 +128,10 @@ export async function fileProfileChangeRequest(
   const employmentId = requireId(query.employmentId, "employmentId");
   const changes = validateProfileChange(query.changes);
   const reason = requireReason(query.reason);
-  return withOrgTransaction(orgId, async () => {
+  // The draft commits on its own so a later submit refusal keeps the
+  // person's work: the submit below runs outside this transaction, in
+  // the transaction submitChangeRequest opens itself.
+  const request = await withOrgTransaction(orgId, async () => {
     if (!(await lockAndCheckOrgFeature(db, orgId, "hrm"))) {
       throw new SelfServiceError(
         "FORBIDDEN",
@@ -113,23 +144,19 @@ export async function fileProfileChangeRequest(
     // binding kind-aware at create and at submit; this pre-check fails
     // fast with the self-service remedy before any draft exists.
     await ownEmploymentOrHireRemedy(db, { orgId, actorId, employmentId });
-    const request = await createChangeRequestDraft({
+    return createChangeRequestDraft({
       orgId,
       actorId,
       employmentId,
       payload: { ...changes },
     });
-    try {
-      const submitted = await submitChangeRequest({ orgId, actorId, requestId: request.id, reason });
-      return { request: submitted };
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
-      throw new SelfServiceError(
-        "REFUSED",
-        `the profile draft ${request.id} is saved but submission was refused: ${detail}`,
-      );
-    }
   });
+  try {
+    const submitted = await submitChangeRequest({ orgId, actorId, requestId: request.id, reason });
+    return { request: submitted };
+  } catch (error) {
+    throw profileSubmitRefusal(request.id, error);
+  }
 }
 
 // --- Application contract (implemented in change-requests.ts) --------------
