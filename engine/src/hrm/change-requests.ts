@@ -3421,7 +3421,7 @@ export const EMPLOYMENT_CHANGE_KINDS = [
 
 export type EmploymentChangeKind = (typeof EMPLOYMENT_CHANGE_KINDS)[number];
 
-async function insertEmploymentChange(
+export async function insertEmploymentChange(
   exec: SqlExecutor,
   args: {
     orgId: string;

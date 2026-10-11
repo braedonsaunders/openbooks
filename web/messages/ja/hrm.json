@@ -225,7 +225,14 @@
       "effective": "有効",
       "recorded": "記録",
       "present": "現在",
-      "empty": "雇用バージョンは記録されていません。"
+      "empty": "雇用バージョンは記録されていません。",
+      "correctStart": "開始日を訂正",
+      "correctStartTitle": "雇用開始日の訂正",
+      "correctStartMessage": "この雇用は {start} 開始として記録されています。この日付が誤って入力された場合にのみ使用してください。最初の期間、それと同時に始まった配置、入社日、および同じ日付の勤続起算日が訂正後の日付に移ります。訂正後の日付より前の確定済み給与計算は先に取り消す必要があります。",
+      "correctStartDate": "訂正後の開始日（YYYY-MM-DD）",
+      "correctStartReason": "記録された開始日が誤っている理由（10〜500文字）",
+      "correctStartFailed": "開始日を訂正できませんでした。",
+      "correctedToast": "雇用開始日を {start} に訂正しました"
     },
     "status": {
       "offered": "内定",

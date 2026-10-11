@@ -225,7 +225,14 @@
       "effective": "Effective",
       "recorded": "Recorded",
       "present": "Present",
-      "empty": "No employment versions are recorded."
+      "empty": "No employment versions are recorded.",
+      "correctStart": "Correct start date",
+      "correctStartTitle": "Correct the employment start date",
+      "correctStartMessage": "The employment is recorded as starting on {start}. Use this only when that date was entered wrongly; the first interval, the assignments that began with it, the hire date and a matching service date move to the corrected day. Committed pay runs before the corrected day must be voided first.",
+      "correctStartDate": "Corrected start date (YYYY-MM-DD)",
+      "correctStartReason": "Why the recorded start is wrong (10–500 characters)",
+      "correctStartFailed": "The start date could not be corrected.",
+      "correctedToast": "Employment start corrected to {start}"
     },
     "status": {
       "offered": "Offered",

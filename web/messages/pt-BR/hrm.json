@@ -225,7 +225,14 @@
       "effective": "Vigência",
       "recorded": "Registrado",
       "present": "Atual",
-      "empty": "Nenhuma versão de emprego está registrada."
+      "empty": "Nenhuma versão de emprego está registrada.",
+      "correctStart": "Corrigir data de início",
+      "correctStartTitle": "Corrigir a data de início do vínculo",
+      "correctStartMessage": "O vínculo está registrado com início em {start}. Use isto apenas se essa data foi registrada incorretamente; o primeiro intervalo, as atribuições iniciadas com ele, a data de admissão e uma data de tempo de serviço igual passam para o dia corrigido. Folhas confirmadas antes do dia corrigido devem ser anuladas primeiro.",
+      "correctStartDate": "Data de início corrigida (AAAA-MM-DD)",
+      "correctStartReason": "Por que o início registrado está errado (10–500 caracteres)",
+      "correctStartFailed": "Não foi possível corrigir a data de início.",
+      "correctedToast": "Início do vínculo corrigido para {start}"
     },
     "status": {
       "offered": "Ofertado",

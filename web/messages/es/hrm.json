@@ -225,7 +225,14 @@
       "effective": "Vigencia",
       "recorded": "Registrado",
       "present": "Actual",
-      "empty": "No hay versiones de empleo registradas."
+      "empty": "No hay versiones de empleo registradas.",
+      "correctStart": "Corregir fecha de inicio",
+      "correctStartTitle": "Corregir la fecha de inicio del empleo",
+      "correctStartMessage": "El empleo consta con inicio el {start}. Úselo solo si esa fecha se registró mal; el primer intervalo, las asignaciones que comenzaron con él, la fecha de contratación y una fecha de antigüedad coincidente pasan al día corregido. Las nóminas confirmadas anteriores al día corregido deben anularse primero.",
+      "correctStartDate": "Fecha de inicio corregida (AAAA-MM-DD)",
+      "correctStartReason": "Por qué el inicio registrado es incorrecto (10–500 caracteres)",
+      "correctStartFailed": "No se pudo corregir la fecha de inicio.",
+      "correctedToast": "Inicio del empleo corregido al {start}"
     },
     "status": {
       "offered": "Ofrecido",

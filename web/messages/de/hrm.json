@@ -225,7 +225,14 @@
       "effective": "Gültig",
       "recorded": "Erfasst",
       "present": "Heute",
-      "empty": "Es sind keine Beschäftigungsversionen erfasst."
+      "empty": "Es sind keine Beschäftigungsversionen erfasst.",
+      "correctStart": "Eintrittsdatum korrigieren",
+      "correctStartTitle": "Eintrittsdatum der Beschäftigung korrigieren",
+      "correctStartMessage": "Die Beschäftigung ist mit Beginn am {start} erfasst. Verwenden Sie dies nur, wenn dieses Datum falsch erfasst wurde; das erste Intervall, die damit begonnenen Zuordnungen, das Einstellungsdatum und ein übereinstimmendes Dienstbeginndatum werden auf den korrigierten Tag verschoben. Gebuchte Lohnläufe vor dem korrigierten Tag müssen zuerst storniert werden.",
+      "correctStartDate": "Korrigiertes Eintrittsdatum (JJJJ-MM-TT)",
+      "correctStartReason": "Warum der erfasste Beginn falsch ist (10–500 Zeichen)",
+      "correctStartFailed": "Das Eintrittsdatum konnte nicht korrigiert werden.",
+      "correctedToast": "Beschäftigungsbeginn auf {start} korrigiert"
     },
     "status": {
       "offered": "Angeboten",

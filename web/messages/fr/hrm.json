@@ -225,7 +225,14 @@
       "effective": "Effet",
       "recorded": "Enregistré",
       "present": "En cours",
-      "empty": "Aucune version d'emploi n'est enregistrée."
+      "empty": "Aucune version d'emploi n'est enregistrée.",
+      "correctStart": "Corriger la date d’entrée",
+      "correctStartTitle": "Corriger la date de début d’emploi",
+      "correctStartMessage": "L’emploi est enregistré comme débutant le {start}. N’utilisez ceci que si cette date a été saisie par erreur ; le premier intervalle, les affectations qui ont commencé avec lui, la date d’embauche et une date d’ancienneté identique passent au jour corrigé. Les paies validées antérieures au jour corrigé doivent d’abord être annulées.",
+      "correctStartDate": "Date de début corrigée (AAAA-MM-JJ)",
+      "correctStartReason": "Pourquoi le début enregistré est erroné (10 à 500 caractères)",
+      "correctStartFailed": "La date de début n’a pas pu être corrigée.",
+      "correctedToast": "Début d’emploi corrigé au {start}"
     },
     "status": {
       "offered": "Proposé",

@@ -11,6 +11,7 @@ import { useBusinessToday } from '../../../components/business-date-provider'
 import { ChangeRequestActions } from './ChangeRequestActions'
 import { ChangeRequestDrawer } from './ChangeRequestDrawer'
 import { ExitRecordForm } from './performance/ExitRecordForm'
+import { promptDialog } from '../../../lib/prompt'
 
 /**
  * The employee drawer's Employment tab — the ONE place the native
@@ -394,6 +395,39 @@ export function EmploymentTab({
   const requestStatus = (status: string): string =>
     t.has(`employment.changeRequests.statusNames.${status}`) ? t(`employment.changeRequests.statusNames.${status}`) : status
   const window = (from: string, to: string | null): string => `${from} → ${to ?? t('employment.episodes.present')}`
+  const recordedStart = state.episodes
+    .filter((episode) => episode.recordedUntil === null)
+    .map((episode) => episode.effectiveFrom)
+    .sort()[0] ?? null
+  async function correctStart(): Promise<void> {
+    if (!recordedStart) return
+    const correctedStart = await promptDialog({
+      title: t('employment.episodes.correctStartTitle'),
+      message: t('employment.episodes.correctStartMessage', { start: recordedStart }),
+      label: t('employment.episodes.correctStartDate'),
+      initialValue: recordedStart,
+      placeholder: 'YYYY-MM-DD',
+    })
+    if (!correctedStart || correctedStart === recordedStart) return
+    const reason = await promptDialog({
+      title: t('employment.episodes.correctStartTitle'),
+      label: t('employment.episodes.correctStartReason'),
+      multiline: true,
+      confirmLabel: t('employment.episodes.correctStart'),
+    })
+    if (!reason) return
+    const res = await fetch(`/api/hrm/employments/${employmentId}/start-correction`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ correctedStart, reason }),
+    })
+    if (!res.ok) {
+      toast.error(await readApiErrorMessage(res, t('employment.episodes.correctStartFailed')))
+      return
+    }
+    toast.success(t('employment.episodes.correctedToast', { start: correctedStart }))
+    reload()
+  }
 
   if (state.status === 'loading') {
     return (
@@ -417,9 +451,16 @@ export function EmploymentTab({
   return (
     <div className="space-y-7 p-1">
       <section aria-label={t('employment.episodes.title')}>
-        <h3 className="mb-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
-          {t('employment.episodes.title')}
-        </h3>
+        <div className="mb-2 flex items-center gap-2">
+          <h3 className="flex-1 text-sm font-semibold text-slate-900 dark:text-slate-100">
+            {t('employment.episodes.title')}
+          </h3>
+          {canManageHrm && recordedStart ? (
+            <Button variant="outline" size="sm" onClick={() => void correctStart()}>
+              {t('employment.episodes.correctStart')}
+            </Button>
+          ) : null}
+        </div>
         {state.episodes.length === 0 ? (
           <p className="text-sm text-slate-500 dark:text-slate-400">{t('employment.episodes.empty')}</p>
         ) : (

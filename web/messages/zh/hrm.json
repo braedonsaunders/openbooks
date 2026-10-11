@@ -225,7 +225,14 @@
       "effective": "生效",
       "recorded": "记录",
       "present": "至今",
-      "empty": "尚未记录任何雇用版本。"
+      "empty": "尚未记录任何雇用版本。",
+      "correctStart": "更正入职日期",
+      "correctStartTitle": "更正雇佣开始日期",
+      "correctStartMessage": "该雇佣记录的开始日期为 {start}。仅在该日期录入错误时使用；第一个区间、随之开始的任职、入职日期以及相同的服务起始日期将移至更正后的日期。更正日期之前已提交的薪资运行须先作废。",
+      "correctStartDate": "更正后的开始日期（YYYY-MM-DD）",
+      "correctStartReason": "记录的开始日期错误的原因（10–500 个字符）",
+      "correctStartFailed": "无法更正开始日期。",
+      "correctedToast": "雇佣开始日期已更正为 {start}"
     },
     "status": {
       "offered": "已录用",
