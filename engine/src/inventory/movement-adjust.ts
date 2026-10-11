@@ -6,7 +6,7 @@ import { assertInventoryFeature, resolveProfile } from "./profile-policy.ts";
 import { lockSubcontractCustodyAuthority } from "./subcontract-custody.ts";
 import { assertOwnedLocation } from "./stock-eligibility.ts";
 import { assertNotKitItem } from "./kits.ts";
-import { receiveInventory } from "./movement-receive.ts";
+import { receiveInventory, type MovementResult } from "./movement-receive.ts";
 import { issueInventory } from "./movement-issue.ts";
 export interface AdjustInput {
   stockCountLineId?: string;
