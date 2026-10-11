@@ -10,8 +10,10 @@ import {
   DEFAULT_FEED_SYNC_OVERLAP_DAYS,
   getBankFeedAdapter,
   plaidApiBase,
+  BANK_FEED_PASS_BUDGET_MS,
   resolveFeedSyncOverlapDays,
   runDueBankFeeds,
+  runDueFeedPass,
   sealCredentials,
   sinceFor,
 } from "./bank-feed-providers.ts";
@@ -632,6 +634,142 @@ test("bank-feed adapters refuse every redirect class without forwarding credenti
     await close(redirector);
     await close(attacker);
   }
+});
+
+test("bank-feed requests abort at their deadline even when the provider ignores the abort signal", async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+  let requests = 0;
+  globalThis.fetch = (() => {
+    requests += 1;
+    return new Promise<Response>(() => {});
+  }) as typeof fetch;
+
+  const gocardless = getBankFeedAdapter("gocardless");
+  assert.ok(gocardless);
+  await assert.rejects(
+    gocardless.fetch(
+      { secretId: "secret-id", secretKey: "secret-key" },
+      "account-id",
+      "2026-01-01",
+      "2026-01-31",
+      { requestTimeoutMs: 20 },
+    ),
+    /GoCardless did not respond before the bank feed deadline/,
+  );
+  assert.equal(requests, 1, "the token exchange is the only request before the deadline refuses");
+});
+
+test("bank-feed sync deadline bounds a provider that stalls mid-body", async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+  globalThis.fetch = (async () => {
+    const stalled = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"transactions": '));
+      },
+    });
+    return new Response(stalled, { status: 200, headers: { "content-type": "application/json" } });
+  }) as typeof fetch;
+
+  const plaid = getBankFeedAdapter("plaid");
+  assert.ok(plaid);
+  await assert.rejects(
+    plaid.fetch(plaidCredentials, "account-id", "2026-01-01", "2026-01-31", {
+      signal: AbortSignal.timeout(25),
+    }),
+    /Plaid did not respond before the bank feed deadline; retry the sync/,
+  );
+});
+
+test("bank-feed refuses a provider body beyond the byte cap without buffering it", async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+  const chunkBytes = 1024 * 1024;
+  const totalChunks = 50;
+  let pulled = 0;
+  globalThis.fetch = (async () => {
+    const oversized = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (pulled >= totalChunks) {
+          controller.close();
+          return;
+        }
+        pulled += 1;
+        controller.enqueue(new Uint8Array(chunkBytes));
+      },
+    });
+    return new Response(oversized, { status: 200, headers: { "content-type": "application/json" } });
+  }) as typeof fetch;
+
+  const truelayer = getBankFeedAdapter("truelayer");
+  assert.ok(truelayer);
+  await assert.rejects(
+    truelayer.fetch({ accessToken: "access-token" }, "account-id", "2026-01-01", "2026-01-31"),
+    /TrueLayer response exceeded the 10 MB limit; set this connection to sync hourly/,
+  );
+  assert.ok(pulled <= 12, `the reader must stop at the cap, not drain the provider body (pulled ${pulled} chunks)`);
+});
+
+test("a due-feed pass stops starting feeds once its budget is spent and leaves the rest due", async () => {
+  assert.equal(BANK_FEED_PASS_BUDGET_MS, 5 * 60_000);
+  let now = 0;
+  const started: string[] = [];
+  const { outcomes, deferred } = await runDueFeedPass(
+    [{ id: "a" }, { id: "b" }, { id: "c" }],
+    async (row) => {
+      started.push(row.id);
+      now += 100; // the first feed uses up the whole budget
+      return { connectionId: row.id, imported: 1, duplicates: 0 };
+    },
+    { budgetMs: 100, clock: () => now },
+  );
+  assert.deepEqual(started, ["a"], "feeds past the budget must never be claimed or fetched");
+  assert.equal(deferred, 2);
+  assert.deepEqual(outcomes.map((outcome) => outcome.connectionId), ["a"], "deferred feeds record no failure");
+  assert.ok(outcomes.every((outcome) => outcome.error === undefined));
+});
+
+test("a zero budget defers every due feed without claiming any of them", async () => {
+  let claims = 0;
+  const { outcomes, deferred } = await runDueFeedPass(
+    [{ id: "a" }, { id: "b" }],
+    async () => {
+      claims += 1;
+      return null;
+    },
+    { budgetMs: 0, clock: () => 0 },
+  );
+  assert.equal(claims, 0);
+  assert.equal(deferred, 2);
+  assert.deepEqual(outcomes, []);
+});
+
+test("a claim or record failure on one feed is recorded for that feed and the pass continues", async (t) => {
+  t.mock.method(console, "error", () => {});
+  const { outcomes, deferred } = await runDueFeedPass(
+    [{ id: "a" }, { id: "b" }, { id: "c" }],
+    async (row) => {
+      if (row.id === "a") throw new Error("connection reset while claiming");
+      if (row.id === "b") return null; // another replica holds this claim
+      return { connectionId: row.id, imported: 2, duplicates: 0 };
+    },
+    { budgetMs: 60_000, clock: () => 0 },
+  );
+  assert.equal(deferred, 0);
+  assert.deepEqual(
+    outcomes.map((outcome) => [outcome.connectionId, outcome.error ?? null]),
+    [
+      ["a", "bank feed could not be claimed or recorded: connection reset while claiming"],
+      ["c", null],
+    ],
+  );
 });
 
 test("sync overlap resolves null to the default and refuses out-of-range values", () => {

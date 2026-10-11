@@ -43,6 +43,7 @@ export interface BankFeedAdapter {
     externalAccountId: string,
     sinceIso: string,
     untilIso: string,
+    options?: BankFeedFetchOptions,
   ): Promise<FeedFetchResult>;
 }
 
@@ -63,13 +64,68 @@ function exactFeedAmount(value: unknown): string {
   }
 }
 
-async function jsonResponse(res: Response): Promise<{ body: unknown; raw: Uint8Array }> {
-  const raw = new Uint8Array(await res.arrayBuffer());
-  const text = Buffer.from(raw).toString("utf8");
-  if (!res.ok) {
-    throw new FeedError(`provider responded ${res.status}: ${text.slice(0, 300)}`);
+/** One provider HTTP exchange, headers and body included, may take at most this long. */
+const BANK_FEED_REQUEST_TIMEOUT_MS = 30_000;
+/** A whole feed sync (Plaid paginates) may spend at most this long on provider I/O. */
+const BANK_FEED_SYNC_DEADLINE_MS = 120_000;
+/** Largest provider response body accepted. Larger bodies are refused, never truncated. */
+const BANK_FEED_RESPONSE_MAX_BYTES = 10 * 1024 * 1024;
+
+export interface BankFeedFetchOptions {
+  /** Caller deadline or cancellation, combined with the per-request deadline. */
+  signal?: AbortSignal;
+  /** Per-request deadline override; defaults to the provider request timeout. */
+  requestTimeoutMs?: number;
+}
+
+function providerDeadlineError(provider: string): FeedError {
+  return new FeedError(`${provider} did not respond before the bank feed deadline; retry the sync`);
+}
+
+function providerResponseTooLargeError(provider: string): FeedError {
+  return new FeedError(
+    `${provider} response exceeded the ${BANK_FEED_RESPONSE_MAX_BYTES / (1024 * 1024)} MB limit; ` +
+      "set this connection to sync hourly so each pull covers less history, then retry",
+  );
+}
+
+/** Settle with `work`, or with the signal's reason as soon as it aborts. A
+ *  provider that ignores the abort signal still cannot hold the sync open. */
+function untilAborted<T>(signal: AbortSignal, work: Promise<T>): Promise<T> {
+  let onAbort: () => void = () => {};
+  const aborted = new Promise<never>((_, reject) => {
+    onAbort = () => reject(signal.reason);
+    if (signal.aborted) onAbort();
+    else signal.addEventListener("abort", onAbort, { once: true });
+  });
+  return Promise.race([work, aborted]).finally(() => signal.removeEventListener("abort", onAbort));
+}
+
+/** Read the whole body under the deadline, refusing as soon as it exceeds the byte cap. */
+async function readCappedBody(provider: string, res: Response, signal: AbortSignal): Promise<Uint8Array> {
+  if (!res.body) return new Uint8Array(0);
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  try {
+    for (;;) {
+      const next = await untilAborted(signal, reader.read());
+      if (next.done) break;
+      received += next.value.byteLength;
+      if (received > BANK_FEED_RESPONSE_MAX_BYTES) throw providerResponseTooLargeError(provider);
+      chunks.push(next.value);
+    }
+  } catch (error) {
+    void reader.cancel().catch(() => undefined);
+    throw error;
   }
-  return { body: text ? (parseProviderJson(text) as unknown) : {}, raw };
+  const raw = new Uint8Array(received);
+  let offset = 0;
+  for (const chunk of chunks) {
+    raw.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return raw;
 }
 
 /** Keep provider JSON number tokens on amount fields exact before JSON.parse
@@ -111,10 +167,6 @@ function parseProviderJson(text: string): unknown {
     exactText = `${exactText.slice(0, replacement.start)}${replacement.value}${exactText.slice(replacement.end)}`;
   }
   return JSON.parse(exactText) as unknown;
-}
-
-async function asJson(res: Response): Promise<unknown> {
-  return (await jsonResponse(res)).body;
 }
 
 /** Narrow an untrusted provider payload to a field bag. Anything that is
@@ -195,11 +247,32 @@ export interface TrueLayerTransaction {
   normalised_provider_transaction_id?: string;
 }
 
-/** Provider credentials must never cross an HTTP redirect boundary. Even a
+/** One provider JSON exchange under a deadline. The deadline covers the
+ *  headers and the body, so a trickling response cannot hold a sync open.
+ *
+ *  Provider credentials must never cross an HTTP redirect boundary. Even a
  *  trusted API origin can otherwise redirect a POST (including its body and
  *  authorization headers) to a host that was never allowlisted. */
-function providerFetch(url: string, init: RequestInit = {}): Promise<Response> {
-  return fetch(url, { ...init, redirect: "error" });
+async function providerJson(
+  provider: string,
+  url: string,
+  init: RequestInit,
+  options: BankFeedFetchOptions = {},
+): Promise<{ body: unknown; raw: Uint8Array }> {
+  const requestDeadline = AbortSignal.timeout(options.requestTimeoutMs ?? BANK_FEED_REQUEST_TIMEOUT_MS);
+  const signal = options.signal ? AbortSignal.any([options.signal, requestDeadline]) : requestDeadline;
+  try {
+    const res = await untilAborted(signal, fetch(url, { ...init, redirect: "error", signal }));
+    const raw = await readCappedBody(provider, res, signal);
+    const text = Buffer.from(raw).toString("utf8");
+    if (!res.ok) {
+      throw new FeedError(`provider responded ${res.status}: ${text.slice(0, 300)}`);
+    }
+    return { body: text ? (parseProviderJson(text) as unknown) : {}, raw };
+  } catch (error) {
+    if (signal.aborted) throw providerDeadlineError(provider);
+    throw error;
+  }
 }
 
 /**
@@ -234,14 +307,19 @@ export function bankFeedSourceEvidence(
 // --------------------------------------------------------------------------
 const GOCARDLESS_BASE = "https://bankaccountdata.gocardless.com/api/v2";
 
-async function gocardlessToken(creds: Record<string, string>): Promise<string> {
+async function gocardlessToken(creds: Record<string, string>, options?: BankFeedFetchOptions): Promise<string> {
   if (!creds.secretId || !creds.secretKey) throw new FeedError("GoCardless secret_id / secret_key required");
-  const res = await providerFetch(`${GOCARDLESS_BASE}/token/new/`, {
-    method: "POST",
-    headers: { "content-type": "application/json", accept: "application/json" },
-    body: JSON.stringify({ secret_id: creds.secretId, secret_key: creds.secretKey }),
-  });
-  return gocardlessAccessToken(await asJson(res));
+  const { body } = await providerJson(
+    "GoCardless",
+    `${GOCARDLESS_BASE}/token/new/`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json" },
+      body: JSON.stringify({ secret_id: creds.secretId, secret_key: creds.secretKey }),
+    },
+    options,
+  );
+  return gocardlessAccessToken(body);
 }
 
 const gocardless: BankFeedAdapter = {
@@ -254,14 +332,15 @@ const gocardless: BankFeedAdapter = {
       return { ok: false, detail: e instanceof Error ? e.message : String(e) };
     }
   },
-  async fetch(creds, externalAccountId, sinceIso, untilIso) {
+  async fetch(creds, externalAccountId, sinceIso, untilIso, options) {
     if (!externalAccountId) throw new FeedError("GoCardless account id required");
-    const token = await gocardlessToken(creds);
-    const res = await providerFetch(
+    const token = await gocardlessToken(creds, options);
+    const { body, raw } = await providerJson(
+      "GoCardless",
       `${GOCARDLESS_BASE}/accounts/${encodeURIComponent(externalAccountId)}/transactions/?date_from=${sinceIso}&date_to=${untilIso}`,
       { headers: { Authorization: `Bearer ${token}`, accept: "application/json" } },
+      options,
     );
-    const { body, raw } = await jsonResponse(res);
     // Booked only: pendings change or vanish, so importing them would leave
     // statement evidence that can never reconcile at sign-off.
     const payload = isJsonRecord(body) ? body : {};
@@ -381,25 +460,24 @@ const plaid: BankFeedAdapter = {
     }
     try {
       const base = plaidApiBase(creds.env);
-      const res = await providerFetch(`${base}/accounts/get`, {
+      await providerJson("Plaid", `${base}/accounts/get`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ client_id: creds.clientId, secret: creds.secret, access_token: creds.accessToken }),
       });
-      await asJson(res);
       return { ok: true };
     } catch (e) {
       return { ok: false, detail: e instanceof Error ? e.message : String(e) };
     }
   },
-  async fetch(creds, externalAccountId, sinceIso, untilIso) {
+  async fetch(creds, externalAccountId, sinceIso, untilIso, options) {
     const accountId = externalAccountId.trim();
     if (!accountId) throw new FeedError("Plaid account id required");
     const base = plaidApiBase(creds.env);
     const today = untilIso;
     const rawResponses: Uint8Array[] = [];
     const transactions = await plaidFetchAllTransactions(async (offset) => {
-      const res = await providerFetch(`${base}/transactions/get`, {
+      const { body, raw } = await providerJson("Plaid", `${base}/transactions/get`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -410,8 +488,7 @@ const plaid: BankFeedAdapter = {
           end_date: today,
           options: { account_ids: [accountId], count: PLAID_PAGE_SIZE, offset },
         }),
-      });
-      const { body, raw } = await jsonResponse(res);
+      }, options);
       rawResponses.push(raw);
       const payload = isJsonRecord(body) ? body : {};
       return {
@@ -449,23 +526,23 @@ const truelayer: BankFeedAdapter = {
   async test(creds) {
     if (!creds.accessToken) return { ok: false, detail: "TrueLayer access_token required" };
     try {
-      const res = await providerFetch("https://api.truelayer.com/data/v1/accounts", {
+      await providerJson("TrueLayer", "https://api.truelayer.com/data/v1/accounts", {
         headers: { Authorization: `Bearer ${creds.accessToken}` },
       });
-      await asJson(res);
       return { ok: true };
     } catch (e) {
       return { ok: false, detail: e instanceof Error ? e.message : String(e) };
     }
   },
-  async fetch(creds, externalAccountId, sinceIso, untilIso) {
+  async fetch(creds, externalAccountId, sinceIso, untilIso, options) {
     if (!externalAccountId) throw new FeedError("TrueLayer account id required");
     const today = untilIso;
-    const res = await providerFetch(
+    const { body, raw } = await providerJson(
+      "TrueLayer",
       `https://api.truelayer.com/data/v1/accounts/${encodeURIComponent(externalAccountId)}/transactions?from=${sinceIso}T00:00:00Z&to=${today}T23:59:59Z`,
       { headers: { Authorization: `Bearer ${creds.accessToken}` } },
+      options,
     );
-    const { body, raw } = await jsonResponse(res);
     let currency: string | null = null;
     const txns = providerTransactionList<TrueLayerTransaction>(
       isJsonRecord(body) ? body.results : undefined,
@@ -621,11 +698,15 @@ async function syncOne(
   // A misconfigured overlap refuses here and surfaces as the outcome's
   // error (callers catch into it) — never a silently narrowed window.
   const since = sinceFor(row.lastSyncAt, until, resolveFeedSyncOverlapDays(row.syncOverlapDays));
+  // One deadline bounds every provider request this feed makes (Plaid pages
+  // included), so a stalled feed fails its own outcome instead of holding the
+  // scheduler tick for the other connections.
   const { lines, currency, sourceEvidence } = await adapter.fetch(
     creds,
     row.externalAccountId ?? "",
     since,
     until,
+    { signal: AbortSignal.timeout(BANK_FEED_SYNC_DEADLINE_MS) },
   );
 
   let imported = 0;
@@ -719,12 +800,61 @@ async function recordSyncOutcome(
   });
 }
 
+/** Wall-clock budget for one scheduler pass over due bank feeds. Feeds the pass
+ *  has not started when the budget is spent stay due for the next tick. */
+export const BANK_FEED_PASS_BUDGET_MS = 5 * 60_000;
+
+export interface RunDueBankFeedsOptions {
+  /** Time a pass may spend starting feeds. Defaults to BANK_FEED_PASS_BUDGET_MS. */
+  budgetMs?: number;
+  /** Monotonic millisecond clock. Defaults to performance.now(). */
+  clock?: () => number;
+}
+
+/**
+ * Run one pass over feeds that are already due. A feed is started only while
+ * the budget has time left. Feeds the pass does not reach are counted as
+ * deferred and are never handed to syncFeed, so their next_sync_at is
+ * untouched and they stay due. A failure while claiming or recording one feed
+ * becomes that feed's outcome error and never stops the pass.
+ */
+export async function runDueFeedPass<Row extends { id: string }>(
+  rows: readonly Row[],
+  syncFeed: (row: Row) => Promise<FeedSyncOutcome | null>,
+  limits: { budgetMs: number; clock: () => number },
+): Promise<{ outcomes: FeedSyncOutcome[]; deferred: number }> {
+  const startedAt = limits.clock();
+  const outcomes: FeedSyncOutcome[] = [];
+  for (const [index, row] of rows.entries()) {
+    if (limits.clock() - startedAt >= limits.budgetMs) {
+      return { outcomes, deferred: rows.length - index };
+    }
+    try {
+      const outcome = await syncFeed(row);
+      if (outcome) outcomes.push(outcome);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      console.error(`[bank-feeds] connection ${row.id} could not be claimed or recorded: ${message}`);
+      outcomes.push({
+        connectionId: row.id,
+        imported: 0,
+        duplicates: 0,
+        error: `bank feed could not be claimed or recorded: ${message}`,
+      });
+    }
+  }
+  return { outcomes, deferred: 0 };
+}
+
 /**
  * Scan every active API bank-feed connection that is due, claim it with a
  * compare-and-swap on next_sync_at (so multiple app servers never double-pull),
  * fetch and import. Run from the scheduler every tick — self-throttling.
+ *
+ * A pass starts feeds only while its budget has time left. Feeds it does not
+ * reach are never claimed, so they stay due and the next tick picks them up.
  */
-export async function runDueBankFeeds(): Promise<FeedSyncOutcome[]> {
+export async function runDueBankFeeds(options: RunDueBankFeedsOptions = {}): Promise<FeedSyncOutcome[]> {
   const now = Date.now();
   // bypass: scheduler-tick — the scan finds due feed connections across every organization.
   const due = await withBypass(async () =>
@@ -756,56 +886,90 @@ export async function runDueBankFeeds(): Promise<FeedSyncOutcome[]> {
     `)),
   );
 
-  const outcomes: FeedSyncOutcome[] = [];
-  for (const row of due.rows) {
-    const nextSync = new Date(now + cadenceIntervalMs(row.syncCadence));
-    // The scan is only a candidate list. Claim the row only if its complete
-    // configuration revision and eligibility are still current, and sync
-    // exclusively from the values returned by that successful claim.
-    const claimed = await withOrgTransaction(row.orgId, async () =>
-      (await db.execute<{
-        id: string;
-        orgId: string;
-        provider: string;
-        accountId: string;
-        credentials: string | null;
-        externalAccountId: string | null;
-        syncCadence: string;
-        nextSyncAt: Date | null;
-        lastSyncAt: Date | string | null;
-        syncOverlapDays: number | null;
-        configurationRevision: string;
-      }>(sql`
-        update bank_feed_connections c set next_sync_at = ${nextSync}
-          from orgs o
-         where c.id = ${row.id} and c.org_id = ${row.orgId} and o.id = c.org_id
-           and c.updated_at::text = ${row.configurationRevision}
-           and c.is_active and c.provider in ('plaid', 'gocardless', 'truelayer')
-           and o.env_kind = 'production'
-           and case (o.settings->'features'->>'bankFeeds') when 'true' then true when 'false' then false else false end
-           and c.sync_cadence <> 'manual'
-           and (c.next_sync_at is null and ${row.nextSyncAt === null} or c.next_sync_at = ${row.nextSyncAt})
-        returning c.id, c.org_id as "orgId", c.provider,
-                  c.account_id as "accountId", c.credentials,
-                  c.external_account_id as "externalAccountId",
-                  c.sync_cadence as "syncCadence", c.next_sync_at as "nextSyncAt",
-                  c.last_sync_at as "lastSyncAt", c.sync_overlap_days as "syncOverlapDays",
-                  c.updated_at::text as "configurationRevision"
-      `)),
+  const { outcomes, deferred } = await runDueFeedPass(
+    due.rows,
+    (row) => claimAndSyncDueFeed(row, now),
+    {
+      budgetMs: options.budgetMs ?? BANK_FEED_PASS_BUDGET_MS,
+      clock: options.clock ?? (() => performance.now()),
+    },
+  );
+  if (deferred > 0) {
+    console.warn(
+      `[bank-feeds] pass budget of ${options.budgetMs ?? BANK_FEED_PASS_BUDGET_MS} ms spent; ` +
+        `deferred ${deferred} due feed(s) to the next tick`,
     );
-    const claim = claimed.rows[0];
-    if (!claim) continue;
-
-    let outcome: FeedSyncOutcome;
-    try {
-      outcome = await syncOne(claim, SYSTEM_ACTOR_ID, null);
-    } catch (e) {
-      outcome = { connectionId: row.id, imported: 0, duplicates: 0, error: e instanceof Error ? e.message : String(e) };
-    }
-    if (!(await recordSyncOutcome(claim, outcome))) outcome.error = "Bank feed configuration changed during sync; run the sync again";
-    outcomes.push(outcome);
   }
   return outcomes;
+}
+
+/**
+ * Claim one due connection and sync it. Returns null when another replica won
+ * the claim first. Failures of the sync are recorded on the returned outcome;
+ * a failure to record that outcome is logged and recorded on it too.
+ */
+async function claimAndSyncDueFeed(
+  row: {
+    id: string;
+    orgId: string;
+    syncCadence: string;
+    nextSyncAt: Date | null;
+    configurationRevision: string;
+  },
+  now: number,
+): Promise<FeedSyncOutcome | null> {
+  const nextSync = new Date(now + cadenceIntervalMs(row.syncCadence));
+  // The scan is only a candidate list. Claim the row only if its complete
+  // configuration revision and eligibility are still current, and sync
+  // exclusively from the values returned by that successful claim.
+  const claimed = await withOrgTransaction(row.orgId, async () =>
+    (await db.execute<{
+      id: string;
+      orgId: string;
+      provider: string;
+      accountId: string;
+      credentials: string | null;
+      externalAccountId: string | null;
+      syncCadence: string;
+      nextSyncAt: Date | null;
+      lastSyncAt: Date | string | null;
+      syncOverlapDays: number | null;
+      configurationRevision: string;
+    }>(sql`
+      update bank_feed_connections c set next_sync_at = ${nextSync}
+        from orgs o
+       where c.id = ${row.id} and c.org_id = ${row.orgId} and o.id = c.org_id
+         and c.updated_at::text = ${row.configurationRevision}
+         and c.is_active and c.provider in ('plaid', 'gocardless', 'truelayer')
+         and o.env_kind = 'production'
+         and case (o.settings->'features'->>'bankFeeds') when 'true' then true when 'false' then false else false end
+         and c.sync_cadence <> 'manual'
+         and (c.next_sync_at is null and ${row.nextSyncAt === null} or c.next_sync_at = ${row.nextSyncAt})
+      returning c.id, c.org_id as "orgId", c.provider,
+                c.account_id as "accountId", c.credentials,
+                c.external_account_id as "externalAccountId",
+                c.sync_cadence as "syncCadence", c.next_sync_at as "nextSyncAt",
+                c.last_sync_at as "lastSyncAt", c.sync_overlap_days as "syncOverlapDays",
+                c.updated_at::text as "configurationRevision"
+    `)),
+  );
+  const claim = claimed.rows[0];
+  if (!claim) return null;
+
+  let outcome: FeedSyncOutcome;
+  try {
+    outcome = await syncOne(claim, SYSTEM_ACTOR_ID, null);
+  } catch (e) {
+    outcome = { connectionId: row.id, imported: 0, duplicates: 0, error: e instanceof Error ? e.message : String(e) };
+  }
+  try {
+    if (!(await recordSyncOutcome(claim, outcome))) outcome.error = "Bank feed configuration changed during sync; run the sync again";
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    console.error(`[bank-feeds] connection ${row.id} sync outcome could not be recorded: ${message}`);
+    outcome.error = `sync outcome could not be recorded: ${message}`;
+  }
+  return outcome;
 }
 
 /**
