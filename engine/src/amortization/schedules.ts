@@ -102,7 +102,7 @@ function assertChangePeriod(schedule: StoredSchedule, lines: readonly PlanLine[]
       `Schedule ${schedule.scheduleNumber} has posted amortization through ${lastPosted.periodStart.slice(0, 7)}; a change can take effect only in a later period.`,
       {
         code: "amortization_change_period_posted",
-        remedy: `Choose ${lastPosted.periodStart.slice(0, 7)} + 1 or later as the period the change takes effect.`,
+        remedy: `Choose ${addMonthsStart(lastPosted.periodStart, 1).slice(0, 7)} or later as the period the change takes effect.`,
       },
     );
   }
