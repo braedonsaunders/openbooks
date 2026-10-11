@@ -23,6 +23,7 @@ import {
 } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../lib/authz'
 import { isFeatureEnabled } from '../../../lib/features'
+import { FORM_TYPES } from '@openbooks/engine/src/compliance/information-returns.ts'
 import {
   buildListDrawerHref,
   isUuid,
@@ -35,6 +36,7 @@ import { loadParty } from '../../api/parties/_lib'
 import {
   loadComplianceClasses,
   loadVendorComplianceClass,
+  vendorTaxIdentityFromRole,
 } from '../../../lib/compliance'
 import {
   subsidiaryUiOptions,
@@ -299,6 +301,7 @@ export async function loadParties(
     multiCurrency,
     crmEnabled,
     complianceEnabled,
+    informationReturnsEnabled,
     autopayEnabled,
     crossBorderTaxOn,
     storedValueEnabled,
@@ -352,6 +355,7 @@ export async function loadParties(
     isFeatureEnabled(orgId, 'multiCurrency'),
     isFeatureEnabled(orgId, 'crm'),
     isFeatureEnabled(orgId, 'subcontractorCompliance'),
+    isFeatureEnabled(orgId, 'informationReturns'),
     isFeatureEnabled(orgId, 'autopay'),
     isFeatureEnabled(orgId, 'crossBorderTax'),
     isFeatureEnabled(orgId, 'storedValue'),
@@ -390,6 +394,15 @@ export async function loadParties(
           classId: await loadVendorComplianceClass(orgId, partyId),
           classes: await loadComplianceClasses(orgId),
         }
+      : null
+
+  // The vendor tax identity rides the informationReturns switch, not the
+  // compliance switch: the masked row already travels on the party payload
+  // (ciphertext stripped), so this projects it without a second query.
+  // OM-16: vendors only — the vendor ROLE row, like the class above.
+  const taxIdentity =
+    informationReturnsEnabled && openParty?.vendor != null
+      ? vendorTaxIdentityFromRole(openParty.vendor as Record<string, unknown> | null)
       : null
 
   // The unsaved-create payload: no row exists, so the drawer edits blanks
@@ -508,6 +521,9 @@ export async function loadParties(
           complianceEnabled,
           canManageCompliance: can(authz, 'compliance.manage'),
           compliance,
+          informationReturnsEnabled,
+          taxIdentity,
+          taxIdentityFormTypes: [...FORM_TYPES],
           storedValue: storedValueEnabled && can(authz, 'stored_value.read') && openParty?.customer != null
             ? {
               balances: storeCreditBalances.rows.map((row) => ({

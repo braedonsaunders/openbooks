@@ -42,6 +42,17 @@ interface DrawerPayload {
   complianceEnabled?: boolean
   canManageCompliance?: boolean
   compliance?: { classId: string | null; classes: Array<{ id: string; code: string; name: string }> } | null
+  informationReturnsEnabled?: boolean
+  taxIdentity?: {
+    tinLast4: string | null
+    tinType: string | null
+    taxClassification: string | null
+    informationReturnForm: string | null
+    informationReturnBox: string | null
+    backupWithholding: boolean
+    reportable: boolean
+  } | null
+  taxIdentityFormTypes?: string[]
   consolidatedBilling?: { canManage: boolean } | null
   debitMandates?: { partyId: string } | null
 }
@@ -143,6 +154,9 @@ export function GlobalPartyDrawerHost({
         complianceEnabled={data.complianceEnabled === true}
         canManageCompliance={data.canManageCompliance === true}
         compliance={data.compliance ?? null}
+        informationReturnsEnabled={data.informationReturnsEnabled === true}
+        taxIdentity={data.taxIdentity ?? null}
+        taxIdentityFormTypes={data.taxIdentityFormTypes ?? []}
         consolidatedBilling={data.consolidatedBilling ?? null}
         debitMandates={data.debitMandates ?? null}
         role={role}

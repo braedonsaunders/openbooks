@@ -12,7 +12,8 @@ import { customerGroupTabs, hrmGroupTabs } from '../../../../components/module-h
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid, mergeHref, pickString } from '../../../../lib/list-params'
 import { loadFieldDefs } from '../../../../lib/custom-fields'
-import { loadComplianceClasses, loadVendorComplianceClass } from '../../../../lib/compliance'
+import { loadComplianceClasses, loadVendorComplianceClass, vendorTaxIdentityFromRole } from '../../../../lib/compliance'
+import { FORM_TYPES } from '@openbooks/engine/src/compliance/information-returns.ts'
 import { loadParty } from '../../../api/parties/_lib'
 import { findEmploymentsByParty } from '@openbooks/engine/src/hrm/employment-read.ts'
 import { loadTeamEmploymentPayload } from '../../../../lib/hrm/self-service'
@@ -104,6 +105,7 @@ export async function loadEntityRole(
   const crmEnabled = await isFeatureEnabled(authz.user.orgId, 'crm')
   const crossBorderTaxOn = await isFeatureEnabled(authz.user.orgId, 'crossBorderTax')
   const complianceEnabled = await isFeatureEnabled(authz.user.orgId, 'subcontractorCompliance')
+  const informationReturnsEnabled = await isFeatureEnabled(authz.user.orgId, 'informationReturns')
   // The Employment tab's double gate: the HRM feature switch plus the
   // employment read grant. The drawer shows the tab only when both hold.
   const hrmEnabled = await isFeatureEnabled(authz.user.orgId, 'hrm')
@@ -276,6 +278,13 @@ export async function loadEntityRole(
                 classes: await loadComplianceClasses(orgId),
               }
             : null,
+          informationReturnsEnabled,
+          // Masked tax identity from the already-loaded party payload
+          // (ciphertext stripped) — drawer-open vendors only, tax switch on.
+          taxIdentity: informationReturnsEnabled && role === 'vendor' && openParty?.vendor != null
+            ? vendorTaxIdentityFromRole(openParty.vendor as Record<string, unknown> | null)
+            : null,
+          taxIdentityFormTypes: [...FORM_TYPES],
           canReadActivities: crmEnabled && can(authz, 'crm.activities.read'),
           canManageActivities: crmEnabled && can(authz, 'crm.activities.manage'),
           // The party's scoped employments for the Employment tab (null =

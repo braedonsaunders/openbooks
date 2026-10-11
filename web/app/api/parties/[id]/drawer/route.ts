@@ -10,7 +10,8 @@ import { resolveFormLayout } from '../../../../../lib/customization/resolve'
 import { isUuid } from '../../../../../lib/list-params'
 import { subsidiaryUiOptions, subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
 import { loadParty } from '../../_lib'
-import { loadComplianceClasses, loadVendorComplianceClass } from '../../../../../lib/compliance'
+import { loadComplianceClasses, loadVendorComplianceClass, vendorTaxIdentityFromRole } from '../../../../../lib/compliance'
+import { FORM_TYPES } from '@openbooks/engine/src/compliance/information-returns.ts'
 import { notFound } from "@/lib/api/responses";
 
 
@@ -32,7 +33,7 @@ export const GET = defineRoute({
   const scopeDenied = guardSubsidiaryScope(gate, scope.rows[0].subsidiaryId, { orgWideNull: true })
   if (scopeDenied) return scopeDenied
 
-  const [payload, paymentTerms, departments, trades, workerCompGroups, fieldDefs, subsidiaries, accounts, taxCodes, salesReps, payrollEnabled, multiCurrency, complianceEnabled] = await Promise.all([
+  const [payload, paymentTerms, departments, trades, workerCompGroups, fieldDefs, subsidiaries, accounts, taxCodes, salesReps, payrollEnabled, multiCurrency, complianceEnabled, informationReturnsEnabled] = await Promise.all([
     loadParty(id, gate.user.orgId, gate.allowedSubsidiaryIds),
     (db.execute(sql`select id, name from payment_terms where org_id = ${gate.user.orgId} and is_active order by name`)),
     (db.execute(sql`select id, name from departments where org_id = ${gate.user.orgId} and is_active order by name`)),
@@ -50,6 +51,7 @@ export const GET = defineRoute({
     isFeatureEnabled(gate.user.orgId, 'payroll'),
     isFeatureEnabled(gate.user.orgId, 'multiCurrency'),
     isFeatureEnabled(gate.user.orgId, 'subcontractorCompliance'),
+    isFeatureEnabled(gate.user.orgId, 'informationReturns'),
   ])
   if (!payload) return notFound("record")
   const requestedRole = new URL(request.url).searchParams.get('role')
@@ -70,6 +72,11 @@ export const GET = defineRoute({
         classId: await loadVendorComplianceClass(gate.user.orgId, id),
         classes: await loadComplianceClasses(gate.user.orgId),
       }
+    : null
+  // Masked tax identity from the already-loaded party payload (ciphertext
+  // stripped) — drawer-open vendors only, behind the tax switch.
+  const taxIdentity = informationReturnsEnabled && role === 'vendor' && payload.vendor != null
+    ? vendorTaxIdentityFromRole(payload.vendor as Record<string, unknown> | null)
     : null
   const formId = new URL(request.url).searchParams.get('form')
   const resolvedForm = role
@@ -110,6 +117,9 @@ export const GET = defineRoute({
     complianceEnabled,
     canManageCompliance: can(gate, 'compliance.manage'),
     compliance,
+    informationReturnsEnabled,
+    taxIdentity,
+    taxIdentityFormTypes: [...FORM_TYPES],
     fieldDefs,
     subsidiaries,
     accounts: accounts.rows,

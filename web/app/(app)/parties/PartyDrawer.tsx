@@ -43,6 +43,7 @@ import { RateBookAssignmentSection } from './RateBookAssignmentSection'
 import { PartyTaxIdSection } from './PartyTaxIdSection'
 import { BillingRelationshipsSection } from './BillingRelationshipsSection'
 import { VendorCompliancePanel, type ComplianceClassOption } from './VendorCompliancePanel'
+import { VendorTaxIdentityPanel, type VendorTaxIdentity } from './VendorTaxIdentityPanel'
 import { countryOptions } from '../../../lib/countries'
 import { ReadOnlyValue } from '../../../components/read-only-value'
 import { confirmDialog } from '../../../lib/confirm'
@@ -80,6 +81,9 @@ export function PartyDrawer({
   complianceEnabled = false,
   canManageCompliance = false,
   compliance = null,
+  informationReturnsEnabled = false,
+  taxIdentity = null,
+  taxIdentityFormTypes = [],
   taxIds = null,
   storedValue = null,
   hrm = null,
@@ -163,6 +167,14 @@ export function PartyDrawer({
   canManageCompliance?: boolean
   /** The vendor's assigned class + the active classes, for the Compliance tab. */
   compliance?: { classId: string | null; classes: ComplianceClassOption[] } | null
+  /** Company Settings → Features. The Information-returns tax switch gates
+   *  the vendor tax-identity section. */
+  informationReturnsEnabled?: boolean
+  /** The vendor's masked tax identity (last four only — never ciphertext),
+   *  for the Compliance tab. Null hides the section. */
+  taxIdentity?: VendorTaxIdentity | null
+  /** Information-return form options for the tax-identity section. */
+  taxIdentityFormTypes?: string[]
   /** Customer tax IDs: identity plus the manage grant; rows load in the section. Null hides the section. */
   taxIds?: { partyId: string; canManage: boolean } | null
   /** stored_value.read + the Stored value feature — shows the Store credit
@@ -231,13 +243,15 @@ export function PartyDrawer({
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  // The Compliance tab needs a vendor in a compliance-enabled org — the same
-  // predicate gates the tab button and the deep-link, so a stale
-  // ?partyTab=compliance can never strand the drawer on a missing panel.
+  // The Compliance tab needs a vendor in an org with either switch on: the
+  // class section rides subcontractor compliance, the tax-identity section
+  // rides the informationReturns tax switch. The same predicate gates the tab
+  // button and the deep-link, so a stale ?partyTab=compliance can never
+  // strand the drawer on a missing panel.
   // OM-16: "a vendor" means the vendor ROLE row, never the role filter or
   // the kind column — ?role=vendor on a role-less party must not fake the
   // tab into existence. Employment, wages, and payroll read the same way.
-  const showComplianceTab = complianceEnabled && payload.vendor != null
+  const showComplianceTab = (complianceEnabled || informationReturnsEnabled) && payload.vendor != null
   // The Employment tab needs an employee in an HRM-enabled org whose viewer
   // holds the read grant — the loader passes null unless both hold, so the
   // same predicate gates the tab button and the deep-link like Compliance.
@@ -2306,14 +2320,24 @@ export function PartyDrawer({
           <BankAccountsPanel partyId={String(p.id)} initialAccounts={payload.bankAccounts} canManage={canManage} multiCurrency={multiCurrency} />
         </div>
       ) : null}
-      {showComplianceTab && compliance && keptTabs.has('compliance') ? (
+      {showComplianceTab && keptTabs.has('compliance') ? (
         <div hidden={tab !== 'compliance'} className="space-y-7 p-1">
-          <VendorCompliancePanel
-            partyId={String(p.id)}
-            initialClassId={compliance.classId}
-            classes={compliance.classes}
-            editable={mode === 'edit' && canManageCompliance}
-          />
+          {compliance ? (
+            <VendorCompliancePanel
+              partyId={String(p.id)}
+              initialClassId={compliance.classId}
+              classes={compliance.classes}
+              editable={mode === 'edit' && canManageCompliance}
+            />
+          ) : null}
+          {taxIdentity ? (
+            <VendorTaxIdentityPanel
+              partyId={String(p.id)}
+              initial={taxIdentity}
+              formTypes={taxIdentityFormTypes ?? []}
+              editable={mode === 'edit' && canManageCompliance}
+            />
+          ) : null}
         </div>
       ) : null}
       {/* Employee compensation tabs stay mounted once visited (hidden, outside
