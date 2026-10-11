@@ -243,6 +243,10 @@ export function CashTendersSection({
         ) : null}
       </div>
       {editable ? <p className="text-xs text-slate-500 dark:text-slate-400">{t('tenders.help')}</p> : null}
+      {/* Tax is figured on each sale line and added up — the drawer states
+          the policy where the cashier cross-foots, so a one-cent gap to tax
+          figured on the day's total reads as policy, not error. */}
+      <p className="text-xs text-slate-500 dark:text-slate-400">{t('tenders.taxHint')}</p>
       {tenders.map((tender, index) => {
         const isStoredValue = tender.kind === 'stored_value'
         const isCardFamily = (CARD_FAMILY_KINDS as readonly string[]).includes(tender.kind)

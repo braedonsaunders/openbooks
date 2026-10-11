@@ -812,6 +812,10 @@
         "defaultBankAccountId": {
           "label": "Compte bancaire par défaut",
           "hint": "Pré-remplit le virement des ventes."
+        },
+        "depositAccountIds": {
+          "label": "Comptes bancaires pour dépôts de caisse",
+          "hint": "Comptes bancaires vers lesquels le caissier peut transférer les espèces via « Déposer les espèces à la banque ». Aucun compte coché désactive les dépôts."
         }
       }
     },

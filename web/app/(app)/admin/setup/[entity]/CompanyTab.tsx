@@ -128,6 +128,7 @@ export async function CompanyTab({ orgId }: { orgId: string }) {
               defaultCashAccountId: stored.defaultCashAccountId ?? '',
               defaultCardAccountId: stored.defaultCardAccountId ?? '',
               defaultBankAccountId: stored.defaultBankAccountId ?? '',
+              depositAccountIds: stored.depositAccountIds ?? [],
             }
           })(),
         }}

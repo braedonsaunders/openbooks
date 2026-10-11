@@ -812,6 +812,10 @@
         "defaultBankAccountId": {
           "label": "Conta bancária padrão",
           "hint": "Pré-preenche a transferência em vendas novas."
+        },
+        "depositAccountIds": {
+          "label": "Contas bancárias para depósitos de caixa",
+          "hint": "Contas bancárias para as quais o caixa pode mover dinheiro com «Depositar dinheiro no banco». Sem nenhuma marcada, os depósitos ficam desativados."
         }
       }
     },

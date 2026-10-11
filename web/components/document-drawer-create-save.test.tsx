@@ -441,6 +441,119 @@ test("edit-save of a draft lands in view mode with Submit and a saved toast", as
   );
 });
 
+// A cash-sale edit-save dropped its tenders on landing: resetForm reseeded
+// custom.tenders from the returned document, but the writer consumes that
+// key into document_tenders and never persists it — so the Tenders tab
+// read back empty after every save, and a second save submitted no tenders.
+// The seed now comes from the payload's tender table, and the save lands
+// in view mode with the saved toast like every other kind.
+test("edit-save of a cash sale lands in view mode with tenders intact and a saved toast", async (t) => {
+  const docId = randomUUID();
+  const tenderTable = [
+    { position: 1, kind: "cash", methodLabel: null, accountId: "till-1", amount: "10.00", currency: "USD", reference: null, externalRef: null },
+  ];
+  const restore = scriptFetch((url, init) => {
+    if (url === `/api/documents/${docId}` && init?.method === "PATCH") {
+      return Response.json({
+        doc: {
+          id: docId, kind: "cash_sale", status: "draft", document_number: "CS-00007",
+          currency: "USD", party_id: null, updated_at: "2026-10-05T12:00:01.000000Z",
+          document_date: "2026-10-05", subtotal: "10.00", tax_total: "0.00", total: "10.00",
+          custom: {},
+        },
+        lines: [],
+        tenders: tenderTable,
+      });
+    }
+    return null;
+  }).restore;
+  t.after(restore);
+  globalThis.__drawerRouter = { push() {}, refresh() {} };
+  globalThis.__drawerToasts = [];
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  await act(async () => {
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <MoneyProvider currency="USD">
+          <DocumentDrawer
+            payload={{
+              doc: {
+                id: docId, kind: "cash_sale", status: "draft", document_number: null,
+                currency: "USD", party_id: null, updated_at: "2026-10-05T12:00:00.000000Z",
+                document_date: "2026-10-05", subtotal: "10.00", tax_total: "0.00", total: "10.00",
+                custom: {},
+              },
+              lines: [],
+              tenders: tenderTable,
+            }}
+            config={DOC_KINDS["cash_sale"]!}
+            basePath="/cash-sales"
+            parties={[]}
+            accounts={[]}
+            taxCodes={[]}
+            taxGroups={[]}
+            cards={[]}
+            bankAccounts={[]}
+            departments={[]}
+            projects={[]}
+            locations={[]}
+            classes={[]}
+            items={[]}
+            subsidiaries={[]}
+            headerDefs={[]}
+            lineDefs={[]}
+            canCreate
+            canPost
+            initialMode="edit"
+            layout={{ header: { groups: [] }, lines: { columns: [] }, actions: [{ key: "post", visible: true }] } as never}
+            tenderAccounts={[{ id: "till-1", number: "1000", name: "Till" }]}
+          />
+        </MoneyProvider>
+      </NextIntlClientProvider>,
+    );
+    await tick();
+  });
+  await tick();
+  await tick();
+  t.after(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  });
+  await act(async () => {
+    saveButton().dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    await tick();
+  });
+  await tick();
+  await tick();
+  const body = document.body.textContent ?? "";
+  assert.ok(
+    !body.includes("Editing — Save to apply changes."),
+    "a saved cash sale must leave edit mode",
+  );
+  assert.ok(
+    (globalThis.__drawerToasts ?? []).some(
+      (toast) => toast.kind === "success" && toast.message.includes("CS-00007"),
+    ),
+    "cash-sale save must toast the document number",
+  );
+  const dialog = document.querySelector('[role="dialog"]');
+  assert.ok(dialog, "the cash-sale record must own one dialog");
+  const tab = [...dialog.querySelectorAll("button")].find(
+    (node) => node.hasAttribute("aria-pressed") && node.textContent?.trim() === messages.ar.tenders.title,
+  );
+  assert.ok(tab, "the Tenders tab must stay reachable after save");
+  await act(async () => { tab.dispatchEvent(new window.MouseEvent("click", { bubbles: true })); await tick(); });
+  await tick();
+  assert.ok(
+    (dialog.textContent ?? "").includes(messages.ar.tenders.balanced),
+    "the tender table must reseed the editor after save — an emptied editor shows no Balanced badge",
+  );
+});
+
 test("confirming the duplicate warning saves anyway", async (t) => {
   const savedId = randomUUID();
   const { restore, calls } = (() => {

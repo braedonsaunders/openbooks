@@ -812,6 +812,10 @@
         "defaultBankAccountId": {
           "label": "Default bank account",
           "hint": "Prefills bank-transfer tenders on new sales."
+        },
+        "depositAccountIds": {
+          "label": "Till-drop bank accounts",
+          "hint": "Bank accounts a cashier’s “Deposit cash to bank” may move till cash into. None checked disables drops."
         }
       }
     },

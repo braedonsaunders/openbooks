@@ -812,6 +812,10 @@
         "defaultBankAccountId": {
           "label": "Cuenta bancaria por defecto",
           "hint": "Pre-rellena la transferencia en ventas nuevas."
+        },
+        "depositAccountIds": {
+          "label": "Cuentas bancarias para depósitos de caja",
+          "hint": "Cuentas bancarias a las que el cajero puede mover efectivo con «Depositar efectivo en el banco». Sin ninguna marcada, los depósitos quedan desactivados."
         }
       }
     },

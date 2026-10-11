@@ -274,6 +274,10 @@ const COGNATES = new Set<string>([
   // French spells section/question and their plurals exactly like English.
   'fr:admin.setup.reviewBuilder.cardSummary|{sections, plural, one {# section} other {# sections}} · {questions, plural, one {# question} other {# questions}}',
   'fr:admin.setup.reviewBuilder.questionCount|{count, plural, one {# question} other {# questions}}',
+  // French spells the daily-summary field labels “Date” and “Description”
+  // exactly like English.
+  'fr:ar.dailySummary.date|Date',
+  'fr:ar.dailySummary.description|Description',
   // French spells the financial term “ratio” identically.
   'fr:reports.formats.ratio|Ratio',
   // French spells the Features-page tab “Finance” identically.

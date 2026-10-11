@@ -62,8 +62,9 @@ export const SETTINGS_WRITE_PERMISSION = "admin.setup.manage";
 /**
  * Cash-sale till defaults stored under `orgs.settings.cashSales`: the
  * customer unattributed counter sales post against, and the clearing/bank
- * accounts new tenders prefill per channel. All four are optional; unknown
- * keys refuse so a typo cannot silently park.
+ * accounts new tenders prefill per channel, plus the bank accounts till
+ * drops may move cash into. All five are optional; unknown keys refuse so
+ * a typo cannot silently park.
  */
 export const CASH_SALES_SETTING_KEYS = [
   "walkInCustomerId",

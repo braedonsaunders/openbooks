@@ -812,6 +812,10 @@
         "defaultBankAccountId": {
           "label": "Standard-Bankkonto",
           "hint": "Belegt Bankzahlungen neuer Verkäufe vor."
+        },
+        "depositAccountIds": {
+          "label": "Bankkonten für Bareinzahlungen",
+          "hint": "Bankkonten, auf die die Kassenkraft Bargeld per „Bargeld einzahlen“ übertragen darf. Nichts gewählt deaktiviert Einzahlungen."
         }
       }
     },

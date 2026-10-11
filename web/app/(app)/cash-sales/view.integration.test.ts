@@ -52,7 +52,7 @@ test('a cash sale draft is editable for its create grant and postable only with 
         coalesce(settings->'features', '{}'::jsonb) || '{"cashSales":true}'::jsonb, true)
        where id = ${org.orgId}`))
     const cashier = await role(org.orgId, 'cashier', ['cash_sales.read', 'cash_sales.create'])
-    const supervisor = await role(org.orgId, 'till_supervisor', ['cash_sales.read', 'cash_sales.create', 'cash_sales.post'])
+    const supervisor = await role(org.orgId, 'till_supervisor', ['cash_sales.read', 'cash_sales.create', 'cash_sales.post', 'cash_sales.deposit'])
     const viewer = await role(org.orgId, 'till_viewer', ['cash_sales.read'])
     const draftId = crypto.randomUUID()
     await withBypassContext(() => db.execute(sql`
@@ -68,6 +68,9 @@ test('a cash sale draft is editable for its create grant and postable only with 
     assert.ok(asCashier.drawer, 'the draft opens')
     assert.equal(asCashier.drawer.canCreate, true, 'cash_sales.create edits, saves and deletes the draft')
     assert.equal(asCashier.drawer.canPost, false, 'posting stays behind cash_sales.post')
+    assert.equal(asCashier.drawer.canDeposit, false, 'till drops stay behind cash_sales.deposit')
+    assert.deepEqual(asCashier.drawer.depositAccounts, [], 'no configured destinations means no drop form')
+    assert.equal(asCashier.drawer.depositDefaultDate, '', 'no deposit grant means no drop date')
     assert.deepEqual(
       asCashier.newButton.items.map((item) => item.kind),
       ['cash_sale', 'cash_refund', 'cash_sale', 'cash_sale'],
@@ -87,6 +90,13 @@ test('a cash sale draft is editable for its create grant and postable only with 
     const asSupervisor = await load(supervisor, { doc: draftId })
     assert.equal(asSupervisor.drawer?.canCreate, true)
     assert.equal(asSupervisor.drawer?.canPost, true)
+    assert.equal(asSupervisor.drawer?.canDeposit, true, 'cash_sales.deposit opens the till drop')
+    assert.match(
+      String(asSupervisor.drawer?.depositDefaultDate ?? ''),
+      /^\d{4}-\d{2}-\d{2}$/,
+      'the deposit grant resolves the org-today drop date',
+    )
+    assert.deepEqual(asSupervisor.drawer?.serverOptions, [], 'no employees means pooled tips, never a refusal')
 
     const asViewer = await load(viewer, { doc: draftId })
     assert.equal(asViewer.drawer?.canCreate, false, 'a read-only role sees the draft read-only')

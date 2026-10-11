@@ -66,6 +66,7 @@ type Initial = {
     defaultCashAccountId: string
     defaultCardAccountId: string
     defaultBankAccountId: string
+    depositAccountIds: string[]
   }
   /** Registered address, legal form, tax classification and identifiers. */
   legalIdentity?: LegalIdentityValue
@@ -78,12 +79,13 @@ const EMPTY_LEGAL_IDENTITY: LegalIdentityValue = {
   taxIds: {},
 }
 
-/** Blank till defaults: no walk-in customer and no account prefills. */
+/** Blank till defaults: no walk-in customer, no account prefills, no drop destinations. */
 const EMPTY_CASH_SALES = {
   walkInCustomerId: '',
   defaultCashAccountId: '',
   defaultCardAccountId: '',
   defaultBankAccountId: '',
+  depositAccountIds: [] as string[],
 }
 
 // Month message keys under admin.settings.months, indexed 0–11.
@@ -151,7 +153,7 @@ export function SettingsForm({
       billingsUsePreTaxSubtotal: true,
       customerCreditsReduceBillings: true,
     },
-    cashSales: initial.cashSales ?? { ...EMPTY_CASH_SALES },
+    cashSales: { ...EMPTY_CASH_SALES, ...(initial.cashSales ?? {}) },
     legalIdentity: initial.legalIdentity ?? EMPTY_LEGAL_IDENTITY,
   })
   // Identifiers already on file: one recorded under another jurisdiction
@@ -664,6 +666,33 @@ export function SettingsForm({
               </div>
             )
           })}
+          {/* Till-drop destinations: the bank accounts a cashier's "Deposit
+              cash to bank" may move till cash into. None checked disables
+              drops — the drawer then names this screen as the remedy. */}
+          <div className="space-y-1.5 sm:col-span-2">
+            <FieldLabel help={t('cashSales.fields.depositAccountIds.hint')}>{t('cashSales.fields.depositAccountIds.label')}</FieldLabel>
+            <div className="grid gap-1.5 sm:grid-cols-2">
+              {/* Same fence as the till settlement pickers above and the
+                  deposit endpoint: bank and asset-clearing only. */}
+              {accounts.filter((a) => a.type === 'asset_bank' || a.type === 'asset_current_other').map((account) => (
+                <label key={account.id} className="flex items-center gap-2.5 text-sm text-slate-700 dark:text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={(form.cashSales.depositAccountIds ?? []).includes(account.id)}
+                    onChange={(e) => setForm((f) => {
+                      const current = f.cashSales.depositAccountIds ?? []
+                      const next = e.target.checked
+                        ? [...current, account.id]
+                        : current.filter((id) => id !== account.id)
+                      return { ...f, cashSales: { ...EMPTY_CASH_SALES, ...f.cashSales, depositAccountIds: next } }
+                    })}
+                    className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                  />
+                  <span>{account.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
         </CardContent>
       </Card> : null}
 
@@ -745,7 +774,7 @@ export function SettingsForm({
             billingsUsePreTaxSubtotal: true,
             customerCreditsReduceBillings: true,
           },
-          cashSales: initial.cashSales ?? { ...EMPTY_CASH_SALES },
+          cashSales: { ...EMPTY_CASH_SALES, ...(initial.cashSales ?? {}) },
           legalIdentity: initial.legalIdentity ?? EMPTY_LEGAL_IDENTITY,
         })}>
           {tCommon('actions.reset')}

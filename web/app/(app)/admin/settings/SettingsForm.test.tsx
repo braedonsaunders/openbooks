@@ -1015,3 +1015,68 @@ test('a ready month renders its recorded denomination and currency', async () =>
     await unmount()
   }
 })
+
+// Till-drop destinations: the bank and clearing accounts a cashier's
+// "Deposit cash to bank" may move till cash into. A stored destination
+// arrives checked, toggling updates the set, and the save carries the ids
+// the deposit endpoint fences against — receivables never offer.
+test('till-drop bank accounts check on and travel with the save', async () => {
+  const bankA = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+  const bankB = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+  const { seen, unmount } = await mountForm(
+    {
+      ...INITIAL,
+      cashSales: {
+        walkInCustomerId: '',
+        defaultCashAccountId: '',
+        defaultCardAccountId: '',
+        defaultBankAccountId: '',
+        depositAccountIds: [bankA],
+      },
+    },
+    {
+      cashSalesEnabled: true,
+      accounts: [
+        { id: bankA, label: '1100 · Operating', type: 'asset_bank' },
+        { id: bankB, label: '1110 · Savings', type: 'asset_bank' },
+        { id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', label: '1120 · Clearing', type: 'asset_current_other' },
+        { id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', label: '1200 · Receivables', type: 'asset_receivable' },
+      ],
+    },
+  )
+  try {
+    const box = (label: string): HTMLInputElement => {
+      const span = [...document.querySelectorAll('span')].find((node) => node.textContent === label)
+      assert.ok(span, `expected a ${label} option`)
+      const input = span.closest('label')?.querySelector('input[type="checkbox"]') as HTMLInputElement | null
+      assert.ok(input, `expected a checkbox for ${label}`)
+      return input
+    }
+    assert.equal(box('1100 · Operating').checked, true, 'a stored destination arrives checked')
+    assert.equal(box('1110 · Savings').checked, false, 'an unstored bank arrives unchecked')
+    assert.ok(box('1120 · Clearing'), 'clearing accounts are valid drop destinations too')
+    assert.equal(
+      [...document.querySelectorAll('span')].some((node) => node.textContent === '1200 · Receivables'),
+      false,
+      'receivables never offer drops',
+    )
+    await act(async () => {
+      box('1110 · Savings').click()
+      await tick()
+    })
+    await act(async () => {
+      saveButton().click()
+      await tick()
+    })
+    await tick()
+    const put = seen.find((request) => request.url === '/api/admin/settings' && request.method === 'PUT')
+    assert.ok(put, 'saving must PUT the settings')
+    assert.deepEqual(
+      (put.body as { cashSales?: { depositAccountIds?: unknown } }).cashSales?.depositAccountIds,
+      [bankA, bankB],
+      'the checked destinations must travel with the save',
+    )
+  } finally {
+    await unmount()
+  }
+})

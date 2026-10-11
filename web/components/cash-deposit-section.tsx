@@ -1,0 +1,154 @@
+'use client'
+
+import { useState } from 'react'
+import { useTranslations } from 'next-intl'
+import { toast } from 'sonner'
+import { Button, FieldLabel, Input, Select } from '@openbooks/ui'
+
+export interface CashDepositAccountOption {
+  value: string
+  label: string
+}
+
+/**
+ * Till drop ("Deposit cash to bank") for a posted cash sale. Records the
+ * cashier's bank drop as a native till-cash → bank transfer carrying the
+ * sale link and the bank slip number; the bookkeeper confirms and matches
+ * it in Banking. The server fences the destination to the configured
+ * deposit accounts and the amount to the sale's undropped till cash, so a
+ * cashier needs no banking or GL grant — only `cash_sales.deposit`.
+ *
+ * Renders inside the Tenders tab beside the settled cash: that is where
+ * the counted till balance lives, and an inline section avoids a nested
+ * modal inside the drawer's focus and scroll locks.
+ */
+export function CashDepositSection({
+  saleId,
+  currency,
+  defaultDate,
+  bankOptions,
+  sourceOptions,
+}: {
+  saleId: string
+  currency: string
+  defaultDate: string
+  bankOptions: CashDepositAccountOption[]
+  sourceOptions: CashDepositAccountOption[]
+}) {
+  const t = useTranslations('ar')
+  const [amount, setAmount] = useState('')
+  const [date, setDate] = useState(defaultDate)
+  const [bankAccountId, setBankAccountId] = useState(bankOptions[0]?.value ?? '')
+  const [slipNumber, setSlipNumber] = useState('')
+  const [sourceAccountId, setSourceAccountId] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [refusal, setRefusal] = useState<string | null>(null)
+  const [savedNumber, setSavedNumber] = useState<string | null>(null)
+
+  const selectedBank = bankOptions.some((o) => o.value === bankAccountId)
+    ? bankAccountId
+    : (bankOptions[0]?.value ?? '')
+
+  async function record() {
+    setBusy(true)
+    setRefusal(null)
+    setSavedNumber(null)
+    try {
+      const response = await fetch(`/api/cash-sales/${saleId}/deposit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: amount.trim(),
+          date,
+          bankAccountId: selectedBank,
+          slipNumber: slipNumber.trim(),
+          ...(sourceOptions.length > 1 && sourceAccountId ? { sourceAccountId } : {}),
+        }),
+      })
+      const body = (await response.json().catch(() => ({}))) as Record<string, unknown>
+      if (!response.ok) {
+        const message = typeof body.error === 'string' && body.error ? body.error : t('tenders.depositFailed')
+        const remedy = typeof body.remedy === 'string' && body.remedy ? ` ${body.remedy}` : ''
+        setRefusal(`${message}${remedy}`)
+        return
+      }
+      const documentNumber = typeof body.documentNumber === 'string' ? body.documentNumber : ''
+      setSavedNumber(documentNumber)
+      setAmount('')
+      setSlipNumber('')
+      toast.success(t('tenders.depositSaved', { documentNumber }))
+    } catch {
+      setRefusal(t('tenders.depositFailed'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="space-y-2 border-t border-slate-200 pt-3 dark:border-slate-700">
+      <FieldLabel fieldName={t('tenders.depositTitle')}>{t('tenders.depositTitle')}</FieldLabel>
+      {bankOptions.length === 0 ? (
+        <p className="text-xs text-slate-500 dark:text-slate-400">{t('tenders.depositNeedsSetup')}</p>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div>
+              <FieldLabel fieldName={t('tenders.depositAmount')}>{t('tenders.depositAmount')}</FieldLabel>
+              <Input
+                inputMode="decimal"
+                placeholder="0.00"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                aria-label={`${t('tenders.depositAmount')} (${currency})`}
+              />
+            </div>
+            <div>
+              <FieldLabel fieldName={t('tenders.depositDate')}>{t('tenders.depositDate')}</FieldLabel>
+              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            </div>
+            <div>
+              <FieldLabel fieldName={t('tenders.depositBank')}>{t('tenders.depositBank')}</FieldLabel>
+              <Select value={selectedBank} onChange={(e) => setBankAccountId(e.target.value)}>
+                {bankOptions.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </Select>
+            </div>
+            <div>
+              <FieldLabel fieldName={t('tenders.depositSlip')}>{t('tenders.depositSlip')}</FieldLabel>
+              <Input
+                value={slipNumber}
+                onChange={(e) => setSlipNumber(e.target.value)}
+                placeholder={t('tenders.depositSlipPlaceholder')}
+              />
+            </div>
+          </div>
+          {sourceOptions.length > 1 ? (
+            <div className="max-w-xs">
+              <FieldLabel fieldName={t('tenders.depositSource')}>{t('tenders.depositSource')}</FieldLabel>
+              <Select value={sourceAccountId} onChange={(e) => setSourceAccountId(e.target.value)}>
+                <option value="">{t('tenders.depositSourceDefault')}</option>
+                {sourceOptions.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </Select>
+            </div>
+          ) : null}
+          {refusal ? (
+            <p role="alert" className="text-xs text-red-600 dark:text-red-400">{refusal}</p>
+          ) : null}
+          {savedNumber ? (
+            <p className="text-xs text-emerald-700 dark:text-emerald-300">
+              {t('tenders.depositSaved', { documentNumber: savedNumber })}
+            </p>
+          ) : null}
+          <div>
+            <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => void record()}>
+              {busy ? t('tenders.depositRecording') : t('tenders.depositAction')}
+            </Button>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}

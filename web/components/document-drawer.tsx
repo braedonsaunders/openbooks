@@ -46,6 +46,7 @@ import {
 import { useEntryCandidates } from './allocations/use-entry-candidates'
 import { DistributionDialog, type DistributionDialogChild } from './allocations/DistributionDialog'
 import { CashTendersSection, parseTenderDrafts } from './cash-tenders-section'
+import { CashDepositSection } from './cash-deposit-section'
 import { CustomFieldInputs, customFieldColumns, type CustomFieldDefClient } from './custom-field-inputs'
 import { CustomFieldInput } from './custom-field-input'
 import { HeaderFields } from './transaction-form/header-fields'
@@ -1170,6 +1171,16 @@ export interface DocumentDrawerProps {
   creditHref?: string | null
   /** Org default tender account (till defaults) prefill for new tenders. */
   defaultTenderAccountId?: string | null
+  /** Active employees for the close-out server picker on cash sales.
+   *  Absent renders no server choice: tips pool for the house split. */
+  serverOptions?: { value: string; label: string }[]
+  /** cash_sales.deposit: record till drops from a posted cash sale. */
+  canDeposit?: boolean
+  /** Till-drop destinations (configured deposit accounts). Empty renders
+   *  the section with Company Settings as the remedy instead of a form. */
+  depositAccounts?: { id: string; number: string | null; name: string | null }[] | null
+  /** Org-today default for the drop date, resolved by the loader. */
+  depositDefaultDate?: string
   /** Active marketplace facilitators for the "tax collected by" line column.
    *  Empty or absent hides the column: with no facilitator there is nothing
    *  to choose. Only sales kinds offer it (see marketplaceColumn). */
@@ -1228,6 +1239,10 @@ export function DocumentDrawer({
   refundHref,
   creditHref,
   defaultTenderAccountId,
+  serverOptions,
+  canDeposit,
+  depositAccounts,
+  depositDefaultDate,
   marketplaceFacilitators = EMPTY_FACILITATORS,
   withholdingSchemes,
   storedValueEnabled,
@@ -1252,6 +1267,11 @@ export function DocumentDrawer({
   const isTransfer = config.kind === 'transfer'
   const isCashKind = config.kind === 'cash_sale' || config.kind === 'cash_refund'
   const tenderAccountOptions = (tenderAccounts ?? []).map((a) => ({
+    value: a.id,
+    label: `${a.number ?? ''} ${a.name ?? ''}`.trim(),
+  }))
+  // Till-drop destinations mirror the tender account labels.
+  const depositAccountOptions = (depositAccounts ?? []).map((a) => ({
     value: a.id,
     label: `${a.number ?? ''} ${a.name ?? ''}`.trim(),
   }))
@@ -1308,14 +1328,37 @@ export function DocumentDrawer({
   // Tenders arrive from the table (payload.tenders), never from custom:
   // the server consumes submitted custom.tenders into document_tenders and
   // never persists the key, so the editor seeds from the table rows first
-  // (refund prefill and in-progress drafts still ride custom).
-  const [customValues, setCustomValues] = useState<Record<string, unknown>>(() => ({
-    ...(doc.custom ?? {}),
+  // (refund prefill and in-progress drafts still ride custom). The seed
+  // helper is shared with resetForm below: after a save the returned
+  // document carries no custom.tenders, so both entry points must reseed
+  // from the payload table, or edited-then-saved tenders read back empty.
+  const initialCustomValues = (
+    docCustom: Record<string, unknown> | null,
+    payloadTenders: unknown,
+  ): Record<string, unknown> => ({
+    ...(docCustom ?? {}),
     tenders:
-      (payload as { tenders?: unknown }).tenders
-      ?? (doc.custom as Record<string, unknown> | null)?.tenders
+      payloadTenders
+      ?? (docCustom as Record<string, unknown> | null)?.tenders
       ?? [],
-  }))
+  })
+  const [customValues, setCustomValues] = useState<Record<string, unknown>>(() =>
+    initialCustomValues(doc.custom, (payload as { tenders?: unknown }).tenders),
+  )
+  // The drop source offers only this sale's cash tender accounts
+  // (distinct); a single till account needs no choice — the endpoint
+  // defaults to it.
+  const cashSourceOptions = (() => {
+    const seen = new Map<string, string>()
+    for (const draft of parseTenderDrafts(customValues.tenders)) {
+      if (draft.kind !== 'cash' || !draft.accountId || seen.has(draft.accountId)) continue
+      seen.set(
+        draft.accountId,
+        tenderAccountOptions.find((o) => o.value === draft.accountId)?.label ?? draft.accountId,
+      )
+    }
+    return [...seen].map(([value, label]) => ({ value, label }))
+  })()
 
   const resolveStoredValueCode = useCallback(async (code: string) => {
     const response = await fetch(`/api/stored-value/lookup?code=${encodeURIComponent(code)}`, {
@@ -2203,7 +2246,7 @@ export function DocumentDrawer({
     setInternalNotes(sourceDoc.internal_notes ?? '')
     setBillingMethod(sourceDoc.billing_method ?? '')
     setIsFinalInvoice(sourceDoc.is_final_invoice === true)
-    setCustomValues(sourceDoc.custom ?? {})
+    setCustomValues(initialCustomValues(sourceDoc.custom, (source as { tenders?: unknown }).tenders))
     setExtraDims(sourceDoc.extra_dims ?? {})
     setTransfer(transferFromPayload(source))
     setRows(source.lines.length > 0 ? source.lines.map((l) => toRow(l, lineDefs, segments)) : [emptyLine()])
@@ -3395,17 +3438,35 @@ export function DocumentDrawer({
         key: 'tenders',
         label: t('tenders.title'),
         content: (
-          <CashTendersSection
-            value={customValues.tenders}
-            onChange={(next) => setCustomValues((c) => ({ ...c, tenders: next }))}
-            editable={editable}
-            total={effectiveTotals.total}
-            currency={doc.currency}
-            accountOptions={tenderAccountOptions}
-            defaultAccountId={defaultTenderAccountId}
-            storedValueEnabled={storedValueEnabled}
-            resolveStoredValueCode={resolveStoredValueCode}
-          />
+          <>
+            <CashTendersSection
+              value={customValues.tenders}
+              onChange={(next) => setCustomValues((c) => ({ ...c, tenders: next }))}
+              editable={editable}
+              total={effectiveTotals.total}
+              currency={doc.currency}
+              accountOptions={tenderAccountOptions}
+              defaultAccountId={defaultTenderAccountId}
+              storedValueEnabled={storedValueEnabled}
+              resolveStoredValueCode={resolveStoredValueCode}
+              closeoutValue={customValues.closeout}
+              onCloseoutChange={editable
+                ? (next) => setCustomValues((c) => ({ ...c, closeout: next }))
+                : undefined}
+              serverOptions={serverOptions}
+            />
+            {/* Till drop beside the settled cash: a posted sale's cashier
+                records the bank drop here; drafts hold no till cash yet. */}
+            {config.kind === 'cash_sale' && isPosted && canDeposit ? (
+              <CashDepositSection
+                saleId={String(doc.id)}
+                currency={doc.currency}
+                defaultDate={depositDefaultDate || documentDate || ''}
+                bankOptions={depositAccountOptions}
+                sourceOptions={cashSourceOptions}
+              />
+            ) : null}
+          </>
         ),
       }] : []}
       showEvidenceTabs={!isCreate}

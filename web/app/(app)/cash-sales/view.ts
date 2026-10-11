@@ -9,7 +9,7 @@ import { can, requirePermission } from '../../../lib/authz'
 import { requireFeatureEnabled } from '../../../lib/feature-gates'
 import { CASH_SALE_KINDS, DOC_KINDS, isDocumentCreateKind } from "../../../lib/document-kinds.ts";
 import { accountOptions, createDocumentSeed, dimensionOptions, taxCodeOptions, taxGroupOptions } from "../../../lib/documents.ts";
-import { listScopedPartyOptionsWithCurrent } from "../../../lib/scoped-options";
+import { listScopedPartyOptions, listScopedPartyOptionsWithCurrent } from "../../../lib/scoped-options";
 import { loadDocument } from "@openbooks/engine/documents";
 import type { DocKindConfig } from '../../../lib/document-kinds'
 import { loadFieldDefs } from '../../../lib/custom-fields'
@@ -67,6 +67,14 @@ export interface CashSalesDrawer {
   tenderAccounts: DocumentDrawerProps['tenderAccounts']
   refundHref: DocumentDrawerProps['refundHref']
   defaultTenderAccountId: DocumentDrawerProps['defaultTenderAccountId']
+  /** Active employees for the close-out server picker; empty pools tips. */
+  serverOptions: DocumentDrawerProps['serverOptions']
+  /** cash_sales.deposit: record till drops from a posted cash sale. */
+  canDeposit: DocumentDrawerProps['canDeposit']
+  /** Till-drop destinations; empty names Company Settings as the remedy. */
+  depositAccounts: DocumentDrawerProps['depositAccounts']
+  /** Org-today default for the drop date. */
+  depositDefaultDate: DocumentDrawerProps['depositDefaultDate']
   /** Provider commit rows for a posted cash document; null while the
    *  document is a draft or has nothing to commit to. */
   taxProvider: { documentNumber: string; provider: string; rows: TaxProviderChipRow[]; canRetry: boolean } | null
@@ -155,6 +163,7 @@ export async function loadCashSales(
   const tAr = await getTranslations('ar')
   const canCreate = can(authz, 'cash_sales.create')
   const canPost = can(authz, 'cash_sales.post')
+  const canDeposit = can(authz, 'cash_sales.deposit')
   const inventoryEnabled = await isFeatureEnabled(authz.user.orgId, 'inventory')
   const equipmentEnabled = await isFeatureEnabled(authz.user.orgId, 'fixedAssets')
   const featureState = await resolvedFeatureState(authz.user.orgId)
@@ -364,6 +373,12 @@ export async function loadCashSales(
              where org_id = ${authz.user.orgId} and is_active and not is_summary
                and type in ('asset_bank', 'asset_current_other')
              order by number nulls last, name`).then((r) => r.rows),
+          // Close-out server picker: active employees the tips belong to.
+          // Cash kinds only — other drawers have no close-out, and an empty
+          // list pools tips for the house split instead of refusing.
+          (drawerKind === 'cash_sale' || drawerKind === 'cash_refund')
+            ? listScopedPartyOptions(authz.user.orgId, documentOptionScope, { role: 'employee', activeOnly: true })
+            : Promise.resolve([]),
         ])
       : null,
     drawerOpen
@@ -473,6 +488,16 @@ export async function loadCashSales(
   const tenderAccountOptions = (pickers?.[8] ?? []) as { id: string; number: string | null; name: string | null }[]
   const defaultTenderAccountId = tillDefaults?.defaultCashAccountId
     ?? tenderAccountOptions[0]?.id ?? null
+  // Till-drop destinations: the configured deposit accounts among the
+  // tender settlement accounts. Empty disables drops in the drawer — the
+  // deposit endpoint refuses with this screen as the remedy either way.
+  const depositAccountIds = new Set(tillDefaults?.depositAccountIds ?? [])
+  const depositAccounts = drawerKind === 'cash_sale'
+    ? tenderAccountOptions.filter((a) => depositAccountIds.has(a.id))
+    : []
+  const depositDefaultDate = drawerKind === 'cash_sale' && canDeposit
+    ? await businessToday(authz.user.orgId)
+    : ''
   const drawer =
     drawerPayload && pickers && resolvedForm && drawerKind
       ? {
@@ -508,6 +533,13 @@ export async function loadCashSales(
               ? `${BASE_PATH}?doc=new&kind=cash_refund&refundFrom=${openDoc.doc.id}`
               : null,
           defaultTenderAccountId,
+          canDeposit,
+          depositAccounts,
+          depositDefaultDate,
+          serverOptions: ((pickers?.[9] ?? []) as { id: string; display_name: string }[]).map((s) => ({
+            value: s.id,
+            label: s.display_name ?? '',
+          })),
           taxProvider,
           marketplaceFacilitators: facilitatorRows,
           storedValueEnabled: featureEnabled(featureState, 'storedValue'),

@@ -812,6 +812,10 @@
         "defaultBankAccountId": {
           "label": "默认银行科目",
           "hint": "新建销售预填银行结算。"
+        },
+        "depositAccountIds": {
+          "label": "收银存款银行账户",
+          "hint": "收银员可通过“将现金存入银行”转入现金的银行账户。未勾选任何账户将停用存款功能。"
         }
       }
     },
