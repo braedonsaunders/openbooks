@@ -692,9 +692,9 @@ export async function requestReceiptVoidWithDependents(
  * The closed-period fence the posted-document path runs for an order
  * shipment's reversal journals. Receipts and fulfillments post the same
  * inventory journals a bill void reverses, but carry no posted entry of
- * their own — so the kernel's GL-only check would wave a module-closed
- * period through. One shared predicate judges the reversal date's
- * covering period the way the posted path does (payables for a receipt,
+ * their own — so the GL-only check would wave a module-closed period through.
+ * One shared predicate judges the reversal date's covering period the way
+ * the posted path does (payables for a receipt,
  * receivables for a shipment): a missing period names its remedy, a
  * closed one refuses typed with the route out. No journals behind the
  * document means nothing to fence.

@@ -32,7 +32,12 @@
  *   (--test-shard, shardFiles, matrix.shard); only the workstream shapes
  *   (shard A2, cross-shard, -owned, -labeled migrations) are refused.
  * - "wave" is refused except as the ordinary verb (wave a requirement
- *   through), which the negative lookahead preserves.
+ *   through, on one line) and as the warehouse pick-wave product domain
+ *   (pick_wave identifiers, the wave_id key, wave.* table aliases, the
+ *   dispatcher's own wave nouns, quoted wave keys), which the bare pattern's
+ *   lookarounds preserve. The work-organization markers (wave-N, ordinals,
+ *   per-/own-/its-/this-wave) are independent patterns and still fire
+ *   anywhere, including on warehouse lines.
  * - HR-NN (HR-12, ...) and AUDIT-CONTROLS ids are durable product
  *   requirements traceability, not work tracking, and are not refused.
  * - SEC-NN collides with secondary-book/section fixture shorthand
@@ -102,7 +107,7 @@ const FLEET_PATTERNS = [
   /per-wave/i,
   /own\s+wave/i,
   /its\s+wave/i,
-  /\bwave\b(?!(?:\s+\S+){0,6}\s+through)/i,
+  /(?<!pick[-_\s])(?<!pick_waves?\s)(?<!warehouse\s)(?<!release\s)(?<!explicit\s)(?<!\bconst\s)(?<!\blet\s)(?<!\bvar\s)(?<![!"'`])\bwave\b(?![!"'`])(?!\s*[-_.])(?!\s*ids?\b)(?!\s+(releases?|keys?|candidates?|membership|sequence|requires)\b)(?!(?:\s+\S+){0,6}\s+through)/i,
   /\b(first|second|third|fourth|fifth)[-\s]wave\b/i,
   /\bwave\s*-?\s*\d/i,
   /wave-[a-z0-9]/i,
