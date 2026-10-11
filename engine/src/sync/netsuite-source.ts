@@ -674,7 +674,7 @@ export class NetSuiteSource implements MigrationSource {
   }
 
   async ping(): Promise<{ ok: boolean; detail?: string }> {
-    const health = await this.bridge.health();
+    const health = await this.bridge.requireCompatible();
     if (String(health.accountId).replaceAll("_", "-").toLowerCase()
       !== this.expectedAccount.replaceAll("_", "-").toLowerCase()) {
       throw new Error(

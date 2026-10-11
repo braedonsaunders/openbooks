@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { runInNewContext } from "node:vm";
-import { NetSuiteBridgeClient } from "./netsuite-bridge.ts";
+import { bridgeVersionSatisfies, NETSUITE_BRIDGE_MIN_VERSION, NetSuiteBridgeClient } from "./netsuite-bridge.ts";
 import {
   parseSoapTransactionSearchPage,
   type NetSuiteCreds,
@@ -18,6 +18,11 @@ const creds: NetSuiteCreds = {
   tokenKey: "token",
   tokenSecret: "secret",
 };
+
+const compatibleHealth = (version = "1.4.0") => ({
+  ok: true, schemaVersion: 1, bridgeVersion: version, accountId: "TEST", environment: "SANDBOX",
+  role: { id: "3", name: "Administrator" }, serverTime: "2026-10-10 12:00:00", features: {}, remainingUsage: 5000,
+});
 
 function readSuiteScript(path: string): string {
   return readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", path), "utf8");
@@ -182,6 +187,7 @@ test("NetSuite bulk export assembles partition chunks and always cleans up", asy
   let cleanupCalls = 0;
   const client = new NetSuiteBridgeClient(creds, {}, async <T>(params: Record<string, unknown>) => {
     const action = String(params.action);
+    if (action === "health") return compatibleHealth() as T;
     actions.push(action);
     if (action === "startExport") {
       jobId = String(params.jobId);
@@ -248,6 +254,7 @@ test("NetSuite bulk export fails closed on conflicting duplicate chunks", async 
   let jobId = "";
   const client = new NetSuiteBridgeClient(creds, {}, async <T>(params: Record<string, unknown>) => {
     const action = String(params.action);
+    if (action === "health") return compatibleHealth() as T;
     if (action === "startExport") {
       jobId = String(params.jobId);
       return { schemaVersion: 1, jobId, taskId: "task-1", partitions: 1 } as T;
@@ -306,6 +313,7 @@ test("NetSuite bulk export fails closed when the summary names a missing chunk",
   let cleanupCalls = 0;
   const client = new NetSuiteBridgeClient(creds, {}, async <T>(params: Record<string, unknown>) => {
     const action = String(params.action);
+    if (action === "health") return compatibleHealth() as T;
     if (action === "startExport") {
       jobId = String(params.jobId);
       return { schemaVersion: 1, jobId, taskId: "task-1", partitions: 1 } as T;
@@ -477,4 +485,33 @@ test('vendor bill PDFs and expense-line receipts share one deduplicated transact
   assert.deepEqual(JSON.parse(JSON.stringify(restlet!.post({ action: 'attachmentInventory', records: [{ recordType: 'vendorBill', internalId: '10' }, { recordType: 'expenseReport', internalId: '20' }] }))), {
     ok: true, schemaVersion: 1, records: { '10': ['100'], '20': ['200', '201', '202'] },
   });
+});
+
+test("an outdated installed bridge refuses before any export starts, naming its version and the upgrade", async () => {
+  const actions: string[] = [];
+  const client = new NetSuiteBridgeClient(creds, {}, async <T>(params: Record<string, unknown>) => {
+    actions.push(String(params.action));
+    return compatibleHealth("1.3.0") as T;
+  });
+  await assert.rejects(
+    () => client.bulkQuery([{ id: "a", sql: "SELECT 1 AS id FROM DUAL" }]),
+    /version 1\.3\.0; this release requires 1\.4\.0 or later\. Deploy the SuiteCloud project in integrations\/netsuite-bridge/,
+  );
+  assert.deepEqual(actions, ["health"]);
+});
+
+test("bridge version comparison is numeric and refuses malformed versions", () => {
+  assert.equal(bridgeVersionSatisfies("1.4.0", "1.4.0"), true);
+  assert.equal(bridgeVersionSatisfies("1.10.0", "1.4.0"), true);
+  assert.equal(bridgeVersionSatisfies("2", "1.4.0"), true);
+  assert.equal(bridgeVersionSatisfies("1.3.9", "1.4.0"), false);
+  assert.equal(bridgeVersionSatisfies("", "1.4.0"), false);
+  assert.equal(bridgeVersionSatisfies("1.4.0-beta", "1.4.0"), false);
+});
+
+test("the bridge shipped in this repository satisfies the engine's minimum version", () => {
+  const source = readSuiteScript("integrations/netsuite-bridge/src/FileCabinet/SuiteScripts/OpenBooks/openbooks_bridge_restlet.js");
+  const shipped = /const BRIDGE_VERSION = '([^']+)'/.exec(source)?.[1];
+  assert.ok(shipped, "bridge source declares BRIDGE_VERSION");
+  assert.equal(bridgeVersionSatisfies(shipped, NETSUITE_BRIDGE_MIN_VERSION), true);
 });

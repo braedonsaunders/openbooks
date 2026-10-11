@@ -15,6 +15,7 @@ import {
 import {
   DEFAULT_NETSUITE_BRIDGE_DEPLOYMENT_ID,
   DEFAULT_NETSUITE_BRIDGE_SCRIPT_ID,
+  NetSuiteBridgeClient,
 } from "../connectors/netsuite-bridge.ts";
 import { unsealJson } from "../platform/secrets.ts";
 import { isUuid } from "../platform/uuid.ts";
@@ -429,6 +430,9 @@ export async function importNetSuiteAttachments(options: ImportOptions): Promise
   if (options.execute && !s3Enabled) {
     throw new Error("S3/MinIO is not configured; refusing to fall back to database blobs");
   }
+  // Inventory asks for every transaction type; older bridges accept only
+  // bills and expense reports and would refuse mid-run.
+  await new NetSuiteBridgeClient(creds, { scriptId: bridge.script, deploymentId: bridge.deploy }).requireCompatible();
   let documents: SourceDocument[];
   let withoutSourceId: number;
   let fileToDocuments: Map<string, Set<string>>;

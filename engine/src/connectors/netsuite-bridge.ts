@@ -2,6 +2,12 @@ import { netsuiteRestlet, type NetSuiteCreds } from "./netsuite.ts";
 import { randomUUID } from "node:crypto";
 
 export const NETSUITE_BRIDGE_SCHEMA_VERSION = 1;
+/**
+ * Oldest installed bridge that implements every action this engine calls:
+ * isolated export tasks (full pulls) and all-transaction attachment inventory.
+ * Keep in step with BRIDGE_VERSION in integrations/netsuite-bridge.
+ */
+export const NETSUITE_BRIDGE_MIN_VERSION = "1.4.0";
 export const DEFAULT_NETSUITE_BRIDGE_SCRIPT_ID = "customscript_openbooks_bridge_rl";
 export const DEFAULT_NETSUITE_BRIDGE_DEPLOYMENT_ID = "customdeploy_openbooks_bridge_rl";
 
@@ -121,6 +127,30 @@ function assertNoForeignExportFiles(files: NetSuiteExportFile[], jobId: string):
 
 type BridgeRequest = <T>(params: Record<string, unknown>) => Promise<T>;
 
+/** Numeric dotted-version comparison; a malformed installed version never satisfies. */
+export function bridgeVersionSatisfies(installed: string, required: string): boolean {
+  const parse = (value: string) => (/^\d+(\.\d+)*$/.test(value) ? value.split(".").map(Number) : null);
+  const have = parse(String(installed).trim());
+  const need = parse(required);
+  if (!have || !need) return false;
+  for (let index = 0; index < Math.max(have.length, need.length); index += 1) {
+    const diff = (have[index] ?? 0) - (need[index] ?? 0);
+    if (diff !== 0) return diff > 0;
+  }
+  return true;
+}
+
+export function assertBridgeVersion(health: NetSuiteBridgeHealth): NetSuiteBridgeHealth {
+  if (!bridgeVersionSatisfies(health.bridgeVersion, NETSUITE_BRIDGE_MIN_VERSION)) {
+    throw new Error(
+      `The OpenBooks bridge installed in NetSuite account ${health.accountId} is version ${String(health.bridgeVersion)}; ` +
+        `this release requires ${NETSUITE_BRIDGE_MIN_VERSION} or later. Deploy the SuiteCloud project in ` +
+        `integrations/netsuite-bridge to that account (suitecloud project:deploy), then retry.`,
+    );
+  }
+  return health;
+}
+
 function assertBridgeResponse<T extends { schemaVersion?: number }>(value: T | BridgeError): T {
   if ((value as BridgeError).ok === false) {
     const error = value as BridgeError;
@@ -141,6 +171,7 @@ function assertBridgeResponse<T extends { schemaVersion?: number }>(value: T | B
  */
 export class NetSuiteBridgeClient {
   private readonly request: BridgeRequest;
+  private compatibility?: Promise<NetSuiteBridgeHealth>;
 
   constructor(
     creds: NetSuiteCreds,
@@ -155,6 +186,20 @@ export class NetSuiteBridgeClient {
 
   async health(): Promise<NetSuiteBridgeHealth> {
     return assertBridgeResponse(await this.request<NetSuiteBridgeHealth | BridgeError>({ action: "health" }));
+  }
+
+  /**
+   * Health plus the minimum-version contract. Callers that depend on actions
+   * newer than the bridge's first release check this before any work, so an
+   * outdated installation refuses with its version and the upgrade remedy
+   * instead of an unsupported-action error mid-run.
+   */
+  async requireCompatible(): Promise<NetSuiteBridgeHealth> {
+    this.compatibility ??= this.health().then(assertBridgeVersion).catch((error: unknown) => {
+      this.compatibility = undefined;
+      throw error;
+    });
+    return this.compatibility;
   }
 
   async query<T = Record<string, unknown>>(
@@ -311,6 +356,7 @@ export class NetSuiteBridgeClient {
     if (partitions.length === 0) return new Map();
     const duplicate = partitions.find((part, index) => partitions.findIndex((candidate) => candidate.id === part.id) !== index);
     if (duplicate) throw new Error(`NetSuite bulk export partition ${duplicate.id} is duplicated`);
+    await this.requireCompatible();
     const out = new Map(partitions.map((partition) => [partition.id, [] as T[]]));
     const pollMs = opts.pollMs ?? 2_000;
     const timeoutMs = opts.timeoutMs ?? 30 * 60_000;
