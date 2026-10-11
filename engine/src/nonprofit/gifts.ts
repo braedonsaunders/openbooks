@@ -131,7 +131,7 @@ async function postGiftEntry(input: {
   gift: GiftRow; postingDate: string; debitAccountId: string; contributionsAccountId: string;
   actorId?: string | null; reason: string; reversalOf?: string;
 }) {
-  const period = await resolveCoveringPeriod(db, input.gift.org_id, input.postingDate);
+  const period = await resolveCoveringPeriod(db, input.gift.org_id, input.postingDate, input.gift.subsidiary_id);
   if (!period) throw fail({
     message: "No open accounting period covers " + input.postingDate + ".",
     status: 409, code: "gift_period_unavailable", remedy: "Open the GL period covering the gift posting date.",
@@ -380,7 +380,7 @@ export async function voidGift(input: {
         message: "The gift's journal entry is not posted and cannot be reversed.",
         status: 409, code: "gift_posting_not_reversible", remedy: "Use the journal correction workflow.",
       });
-      const period = await resolveCoveringPeriod(db, input.orgId, input.reversalDate);
+      const period = await resolveCoveringPeriod(db, input.orgId, input.reversalDate, source.subsidiary_id);
       if (!period) throw fail({
         message: "No open accounting period covers " + input.reversalDate + ".",
         status: 409, code: "gift_period_unavailable", remedy: "Open the GL period covering the gift reversal date.",

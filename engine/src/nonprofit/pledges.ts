@@ -506,7 +506,7 @@ async function postPledge(input: {
   lines: { accountId: string; amount: string }[]; actorId?: string | null;
   custom?: Record<string, unknown>; idempotencyKey?: string; auditChanges?: Record<string, unknown>;
 }) {
-  const period = await resolveCoveringPeriod(db, input.orgId, input.postingDate);
+  const period = await resolveCoveringPeriod(db, input.orgId, input.postingDate, input.pledge.subsidiary_id);
   if (!period) throw fail({
     message: "No open accounting period covers " + input.postingDate + ".",
     status: 409, code: "pledge_period_unavailable", remedy: "Open the GL period covering the posting date.",
@@ -1026,7 +1026,7 @@ async function reverseBooking(input: {
     message: "Pledge " + input.pledge.pledge_number + "'s booking entry is not posted.",
     status: 409, code: "pledge_booking_not_reversible", remedy: "Use the journal correction workflow.",
   });
-  const period = await resolveCoveringPeriod(db, input.orgId, input.reversalDate);
+  const period = await resolveCoveringPeriod(db, input.orgId, input.reversalDate, source.subsidiary_id);
   if (!period) throw fail({
     message: "No open accounting period covers " + input.reversalDate + ".",
     status: 409, code: "pledge_period_unavailable", remedy: "Open the GL period covering the cancellation date.",

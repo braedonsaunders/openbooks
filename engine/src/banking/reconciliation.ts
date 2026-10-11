@@ -855,7 +855,7 @@ export async function withdrawReconciliationSignOff(
         `Discard the open reconciliation through ${open.through_date} first — it continues from this sign-off`,
       );
     }
-    const period = await resolveCoveringPeriod(tx, ctx.orgId, recon.through_date);
+    const period = await resolveCoveringPeriod(tx, ctx.orgId, recon.through_date, recon.subsidiary_id);
     if (period) {
       const bookId = await reconciliationBookId(tx, ctx.orgId);
       const blocked = (await tx.execute<{ blocked: boolean }>(sql`

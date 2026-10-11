@@ -198,9 +198,8 @@ export async function recordPayRunPayment(input: {
     const rail = new Map(railRows.rows.map((row) => [row.employee_party_id, row]));
 
     const paidOn = input.paidOn ?? run.pay_date!;
-    // Ordinary posting: shared covering-period resolver (default calendar,
-    // regular periods, deterministic).
-    const period = await resolveCoveringPeriod(tx, orgId, paidOn);
+    // Ordinary posting uses the pay run entity's effective regular-period calendar.
+    const period = await resolveCoveringPeriod(tx, orgId, paidOn, run.subsidiary_id);
     if (!period) throw new PayrollError(`no accounting period covers ${paidOn}`);
 
     const originSubId = run.subsidiary_id;

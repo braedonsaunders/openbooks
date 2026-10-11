@@ -262,8 +262,6 @@ async function postOpeningBalances(
     having sum(l.amount) <> 0 or sum(l.txn_amount) <> 0
      order by l.subsidiary_id, l.account_id, l.currency`)).rows;
   if (balances.length === 0) return [];
-  const period = await resolveCoveringPeriod(runner, args.orgId, args.from);
-  if (!period) throw new MultiBookError(`no accounting period covers ${args.from}; generate periods through that date first`);
   const subsidiaryIds = [...new Set(balances.map((row) => row.subsidiary_id))];
   const bookBases = await resolveBookBases(runner, { orgId: args.orgId, book: args.book, subsidiaryIds, postingDate: args.from });
   // Foreign balances restate at the rate the book uses on the start date:
@@ -281,6 +279,8 @@ async function postOpeningBalances(
   });
   const entryIds: string[] = [];
   for (const subsidiaryId of subsidiaryIds) {
+    const period = await resolveCoveringPeriod(runner, args.orgId, args.from, subsidiaryId);
+    if (!period) throw new Error(`No entity accounting period covers the book opening date ${args.from}`);
     const basis = bookBases.get(subsidiaryId)!;
     const lines: PostEntryLineInput[] = [];
     let total = 0n;

@@ -719,14 +719,6 @@ async function assertOrderShipmentReversalPeriodOpen(
     reversalDate: string;
   },
 ): Promise<void> {
-  const period = await resolveCoveringPeriod(tx, input.orgId, input.reversalDate);
-  if (!period) {
-    throw new DocumentVoidError(
-      `no accounting period covers ${input.reversalDate} — generate the period covering that date, then void again`,
-      422,
-      "reversal-period-uncovered",
-    );
-  }
   const movementKind = input.voidKind === "sales_fulfillment" ? "issue" : "receipt";
   const books = (await tx.execute<{ book_id: string }>(sql`
     select distinct e.book_id
@@ -744,13 +736,18 @@ async function assertOrderShipmentReversalPeriodOpen(
       join document_lines line on line.id = movement.document_line_id and line.org_id = movement.org_id
      where movement.org_id = ${input.orgId} and line.document_id = ${input.voidDocumentId}
        and movement.kind = ${movementKind} and movement.status = 'posted'`)).rows;
-  for (const bookId of bookIds) {
+  for (const bookId of bookIds) for (const subsidiary of subsidiaries) {
+    const period = await resolveCoveringPeriod(tx, input.orgId, input.reversalDate, subsidiary.subsidiary_id);
+    if (!period) throw new DocumentVoidError(
+      `no entity accounting period covers ${input.reversalDate} — generate the period covering that date, then void again`,
+      422, "reversal-period-uncovered",
+    );
     try {
       await assertPeriodModulesOpen(tx, {
         orgId: input.orgId,
         periodId: period.id,
         bookId,
-        subsidiaryIds: subsidiaries.map((row) => row.subsidiary_id),
+        subsidiaryIds: [subsidiary.subsidiary_id],
         modules: [voidCloseModule(input.voidKind)],
       });
     } catch (error) {

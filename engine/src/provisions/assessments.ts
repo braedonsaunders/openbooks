@@ -132,7 +132,7 @@ async function lockIdentity(tx: SqlExecutor, orgId: string, actorId: string, ide
 
 async function basis(tx: SqlExecutor, orgId: string, actorId: string, identity: ProvisionIdentity, effectiveOn: string) {
   const reportingFramework = await framework(tx, orgId)
-  const period = await resolveCoveringPeriod(tx, orgId, effectiveOn)
+  const period = await resolveCoveringPeriod(tx, orgId, effectiveOn, identity.subsidiaryId)
   if (!period) throw new ProvisionError('Create the regular accounting period covering the assessment date in the active posting calendar')
   const events = (await tx.execute<{ id: string; effective_on: string; status: string; result: Record<string, unknown> }>(sql`
     select id,effective_on::text,status,result from financial_changes where org_id=${orgId}
