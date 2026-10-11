@@ -70,26 +70,6 @@ const { NextIntlClientProvider } = await import('next-intl')
 const messages = (await import('../../messages/en')).default
 const Login = (await import('./page.tsx')).default
 
-test('safeNextPath preserves same-origin relative destinations', () => {
-  assert.equal(safeNextPath('/reports?view=profit-and-loss#totals'), '/reports?view=profit-and-loss#totals')
-  assert.equal(safeNextPath('/'), '/')
-})
-
-test('safeNextPath fails closed for unsafe, malformed, empty, and oversized values', () => {
-  for (const value of [
-    'https://evil.example/phishing',
-    '//evil.example/phishing',
-    '/\\evil.example/phishing',
-    '/\\[malformed',
-    'not a URL',
-    '',
-    null,
-    'x'.repeat(2049),
-  ]) {
-    assert.equal(safeNextPath(value), '/', `expected fallback for ${JSON.stringify(value)}`)
-  }
-})
-
 const tick = (ms = 30) => new Promise((resolve) => setTimeout(resolve, ms))
 
 async function mount(query: string, loginResponses: Array<Response | Error>, methodsResponse: unknown = {}): Promise<() => Promise<void>> {

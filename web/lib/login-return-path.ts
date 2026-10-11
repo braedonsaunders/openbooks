@@ -13,3 +13,15 @@ export function safeNextPath(value: string | null): string {
     return '/'
   }
 }
+
+/**
+ * The `next` value for a sign-in redirect, built from the request's path and
+ * raw query string. The query stays inside `next` so filters, date ranges and
+ * drawer state survive sign-in. When the combined value is refused (for
+ * example, an oversized query), the bare path is kept as the destination.
+ */
+export function loginReturnPath(pathname: string, search: string): string {
+  const withQuery = safeNextPath(`${pathname}${search}`)
+  if (withQuery !== '/') return withQuery
+  return safeNextPath(pathname)
+}

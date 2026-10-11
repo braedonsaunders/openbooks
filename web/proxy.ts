@@ -9,6 +9,7 @@ import {
 import { APP_DOCUMENT_CSP, isAppDocumentRequest } from './lib/apps/document-policy';
 import { isFramableContentRequest } from './lib/framable-content';
 import { isPublicPath, isCsrfExemptPath } from "./lib/proxy-policy";
+import { loginReturnPath } from "./lib/login-return-path";
 import { hasTrustedOrigin, isUnsafeMethod } from "./lib/csrf";
 
 /**
@@ -115,9 +116,12 @@ export async function proxy(req: NextRequest) {
   if (pathname.startsWith("/api/")) {
     return secured(NextResponse.json({ error: "unauthorized", requestId }, { status: 401 }));
   }
+  // The original query travels inside `next`; the login URL carries no other
+  // parameters, so the destination's own keys cannot collide with login state.
   const url = req.nextUrl.clone();
   url.pathname = "/login";
-  url.searchParams.set("next", pathname);
+  url.search = "";
+  url.searchParams.set("next", loginReturnPath(pathname, req.nextUrl.search));
   return secured(NextResponse.redirect(url));
 }
 
