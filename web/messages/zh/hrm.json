@@ -3090,7 +3090,10 @@
         "measuredAccountIds": "计量科目",
         "deliveryMethod": "发放方式",
         "payComponent": "工资项目",
-        "reason": "更改原因"
+        "reason": "更改原因",
+        "customers": "客户",
+        "workDepartments": "工作部门",
+        "unassignedTime": "不属于限定项目的工时"
       },
       "allEntities": "选择法人实体",
       "entityHint": "由一个法人实体负责此计划和工资义务。创建草稿后添加符合资格的员工。",
@@ -3165,7 +3168,9 @@
           "delivery": "履行",
           "review": "复核"
         }
-      }
+      },
+      "searchCustomers": "搜索客户…",
+      "noCustomers": "没有带项目的客户"
     },
     "awardBuilderTitle": "新增奖励",
     "awardFields": {
@@ -3293,7 +3298,11 @@
       "delivery": "查看可发放的授予、福利缴款和权益变动。薪资处理与外部履约分别保留凭证。"
     },
     "configureApprovals": "配置审批",
-    "transactionRules": "交易规则"
+    "transactionRules": "交易规则",
+    "unassignedTime": {
+      "refuse": "在分配之前拒绝计量",
+      "exclude": "不计入该计量"
+    }
   },
   "talentWorkspace": {
     "applications": "应聘",
