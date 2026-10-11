@@ -32,7 +32,7 @@ import { assertEarningsAssessedStable, dropIncomeAssessedLines, type EarningsAss
 import { reduceTaxBases } from "./treatment-bases.ts";
 import { assertVacationPlanResolved } from "./run-setup.ts";
 import { type StubComputation, storedTaxCertificates, resolvePayRate, resolveStubStatutoryHours } from "./run-calculation-support.ts";
-import { type Line, installablePackOrThrow, insertPayStubRow, insertPayStubLineRows, persistEntitlementMovements, earningsAssessedSnapshot, resolveEmployeeJurisdiction, stampDepartmentExpenseAccounts } from "./run-stub-records.ts";
+import { type Line, installablePackOrThrow, insertPayStubRow, insertPayStubLineRows, persistEntitlementMovements, earningsAssessedSnapshot, resolveEmployeeJurisdiction, stampDepartmentExpenseAccounts, employeeHomeDepartment } from "./run-stub-records.ts";
 import { appendPeriodicEarnings, appendRetroSettlementLines, appendDerivedEarningLines, appendStatutoryHolidayEarningLines, applyAssignedComponentLines, applyRunLineAdjustments, appendUnionFringeLines, applyEntitlementPlanMovements } from "./run-earning-lines.ts";
 import { applyBankDrawdown } from "./run-bank-drawdown.ts";
 import { settleTerminationBankPayouts, appendCashVacationPay } from "./run-final-payouts.ts";
@@ -783,6 +783,16 @@ export async function calculateStub(
   // lines (earnings, statutory burdens, union fringes, vacation): the
   // mapping is per component and department, so it can only resolve once
   // the lines carry both. Item-routed lines keep their item account.
+  const homeDepartment = await employeeHomeDepartment(tx, {
+    orgId, employeePartyId, employmentId: employmentId ?? null, onDate: run.period_end!,
+  });
+  if (homeDepartment) {
+    for (const line of lines) {
+      if (line.departmentId == null && (line.kind === "earning" || line.kind === "employer_contribution")) {
+        line.departmentId = homeDepartment;
+      }
+    }
+  }
   await stampDepartmentExpenseAccounts({ tx, orgId, lines, payDate: run.pay_date! });
 
   const stubId = await insertPayStubRow(tx, {

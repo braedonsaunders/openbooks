@@ -569,6 +569,38 @@ export function resolveEarningExpenseAccount(args: {
 }
 
 /**
+ * The employee's home department on a date: the primary HRM assignment's
+ * department when the payroll profile names an employment, else the
+ * employee record's department. Wages and employer burdens that carry no
+ * department of their own (a salary, the statutory contributions on it)
+ * are that department's cost, so department expense mappings and the GL
+ * department dimension reach them like time-driven lines.
+ */
+export async function employeeHomeDepartment(
+  tx: Pick<typeof db, "execute">,
+  args: { orgId: string; employeePartyId: string; employmentId: string | null; onDate: string },
+): Promise<string | null> {
+  if (args.employmentId) {
+    const assigned = (await tx.execute<{ department_id: string | null }>(sql`
+      select department_id::text as department_id
+        from employment_assignment_versions
+       where org_id = ${args.orgId} and employment_id = ${args.employmentId}
+         and is_primary and recorded_until is null
+         and effective_from <= ${args.onDate}::date
+         and (effective_to is null or effective_to > ${args.onDate}::date)
+       order by version_no desc
+       limit 1
+    `)).rows[0];
+    if (assigned?.department_id) return assigned.department_id;
+  }
+  const role = (await tx.execute<{ department_id: string | null }>(sql`
+    select department_id::text as department_id from employee_roles
+     where org_id = ${args.orgId} and party_id = ${args.employeePartyId}
+  `)).rows[0];
+  return role?.department_id ?? null;
+}
+
+/**
  * Department expense mapping (one pass over the finished stub, before
  * persistence): for every line carrying a department, the component's
  * mapping for that department effective on the pay date answers first —

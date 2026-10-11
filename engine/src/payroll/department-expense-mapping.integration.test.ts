@@ -215,3 +215,99 @@ test(
     }
   },
 );
+
+/**
+ * A salary carries no time entry, so it once posted to the component or
+ * org default whatever the employee's department. It now carries the
+ * employee's home department, so the department mapping routes it — an
+ * office salary lands in office wages, not job-cost labour — and the
+ * employer burdens on it carry the same department.
+ */
+test(
+  "a salaried employee's wages and burdens follow the home department mapping",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    try {
+      const account = async (number: string, name: string, type: string) => {
+        const id = randomUUID();
+        await db.execute(sql`
+          insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
+                                reconcilable, required_dimensions, custom, subsidiary_include_children)
+          values (${id}, ${org.orgId}, ${number}, ${name}, ${type}, false, true, false, false,
+                  '[]'::jsonb, '{}'::jsonb, true)`);
+        return id;
+      };
+      const directLabour = await account("5300", "Direct labour", "expense");
+      const officeWages = await account("6100", "Office wages", "expense");
+      const burdenExpense = await account("6010", "Payroll burden", "expense");
+      const netPayable = await account("2300", "Wages payable", "liability_current");
+      const craPayable = await account("2310", "CRA remittances payable", "liability_current");
+      const ehtPayable = await account("2340", "EHT payable", "liability_current");
+      await db.execute(sql`
+        update orgs set settings = settings || ${JSON.stringify({
+          payroll: {
+            wageExpenseAccountId: directLabour, burdenExpenseAccountId: burdenExpense, netPayAccountId: netPayable,
+            cppPayableAccountId: craPayable, eiPayableAccountId: craPayable, taxPayableAccountId: craPayable,
+            wagesTo: "expense",
+          },
+        })}::jsonb where id = ${org.orgId}`);
+      await seedPayrollComponents(org.orgId, actorId, "CA");
+      await seedOntarioEhtFixture(org.orgId, actorId, "0");
+      await setPackSlotAccount(org.orgId, actorId, "CA", "eht", ehtPayable);
+      const baseId = (await db.execute<{ id: string }>(sql`
+        select id from pay_components where org_id = ${org.orgId} and code = 'BASE' and country is null`)).rows[0]!.id;
+      const officeId = randomUUID();
+      await db.execute(sql`insert into departments (id, org_id, code, name, is_active) values (${officeId}, ${org.orgId}, 'OFFICE', 'Office', true)`);
+      await db.execute(sql`
+        insert into pay_component_department_expenses
+               (org_id, pay_component_id, department_id, expense_account_id, effective_from, is_active, created_by, updated_by)
+        values (${org.orgId}, ${baseId}, ${officeId}, ${officeWages}, '2026-01-01', true, ${actorId}, ${actorId})`);
+
+      const scheduleId = randomUUID();
+      await db.execute(sql`
+        insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
+                                   pay_date_offset_days, is_active, created_by, updated_by)
+        values (${scheduleId}, ${org.orgId}, 'Weekly', 'weekly', 52, '2026-07-18', 3, true, ${actorId}, ${actorId})`);
+      const employeeId = randomUUID();
+      await db.execute(sql`
+        insert into parties (id, org_id, kind, display_name, is_active, custom)
+        values (${employeeId}, ${org.orgId}, 'person', 'Olive Office', true, '{}'::jsonb)`);
+      await db.execute(sql`
+        insert into employee_roles (id, org_id, party_id, department_id)
+        values (${randomUUID()}, ${org.orgId}, ${employeeId}, ${officeId})`);
+      await db.execute(sql`
+        insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, effective_from,
+                                      is_active, created_by, updated_by)
+        values (${org.orgId}, ${employeeId}, 'CAD', '52000', 'year', '2026-01-01', true, ${actorId}, ${actorId})`);
+      const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
+      await db.execute(sql`
+        insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
+                                               country, province, pay_basis, federal_claim_code,
+                                               provincial_claim_code, wcb_exempt, wcb_exempt_reason,
+                                               is_active, created_by, updated_by)
+        values (${org.orgId}, ${employeeId}, ${employmentId}, ${scheduleId}, 'CA', 'ON', 'salary', 1, 1,
+                true, 'department fixture: workers-compensation coverage out of scope', true, ${actorId}, ${actorId})`);
+      const { seedVacationTerms } = await import("./filing-test-fixtures.ts");
+      await seedVacationTerms(org.orgId, employmentId, actorId, "0", "accrue");
+
+      const run = await createPayRun({ orgId: org.orgId, actorId, payScheduleId: scheduleId, periodStart: "2026-07-12", periodEnd: "2026-07-18" });
+      const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+      assert.deepEqual(result.errors, []);
+      const lines = (await db.execute<{ kind: string; department_id: string | null; expense_account_id: string | null; expense_account_source: string | null }>(sql`
+        select l.kind, l.department_id, l.expense_account_id, l.expense_account_source
+          from pay_stub_lines l join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
+         where s.org_id = ${org.orgId} and s.pay_run_document_id = ${run.documentId}
+           and l.kind in ('earning', 'employer_contribution')`)).rows;
+      const salary = lines.filter((line) => line.kind === "earning");
+      assert.equal(salary.length, 1);
+      assert.deepEqual(salary[0], { kind: "earning", department_id: officeId, expense_account_id: officeWages, expense_account_source: "department" });
+      const burdens = lines.filter((line) => line.kind === "employer_contribution");
+      assert.ok(burdens.length > 0, "the salary carries employer contributions");
+      assert.ok(burdens.every((line) => line.department_id === officeId), "employer burdens carry the home department");
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
