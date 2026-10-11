@@ -14,4 +14,4 @@ WITH findings AS (
   'Preserve the function and compare its complete definition with the database owner; do not replace an unregistered object.'
  WHERE EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname='warehouse_execution_mask_json')
 )
-SELECT code,subject,detail,remedy FROM findings ORDER BY code,subject;
+SELECT code,'refuse'::text AS severity,subject,detail,remedy FROM findings ORDER BY code,subject;
