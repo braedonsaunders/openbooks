@@ -30,7 +30,7 @@ import {
 } from './benefits-portfolio'
 
 export type { AttentionItem, CurrencyTotal }
-import { listScopedAccountOptions, listScopedDepartmentOptions, listScopedProjectOptions } from '../scoped-options'
+import { listScopedAccountOptions, listScopedDepartmentOptions, listScopedProjectOptions, listScopedProjectCustomerOptions } from '../scoped-options'
 import { subsidiaryVisibleFilter } from '../subsidiaries'
 import { loadQueueLabels } from './change-requests'
 import { loadBenefitsReportLinks, type BenefitsReportLink } from './benefits-reports'
@@ -198,6 +198,7 @@ export interface PortfolioData {
   payComponentOptions: BenefitPayComponentOption[]
   departmentOptions: BuilderOption[]
   projectOptions: BuilderOption[]
+  customerOptions: BuilderOption[]
   employmentOptions: BuilderOption[]
   employmentsTruncated: boolean
   subsidiaryOptions: BuilderOption[]
@@ -424,11 +425,14 @@ export async function loadBenefitsPortfolio(
       message: error instanceof Error ? error.message : t('portfolio.loadFailed'),
     }
   }
-  const [accounts, departments, projects, payComponents, employments, subsidiaries, currencies] = await Promise.all([
+  const [accounts, departments, projects, customers, payComponents, employments, subsidiaries, currencies] = await Promise.all([
     lookup(programOptions, () => listScopedAccountOptions(orgId, authz.allowedSubsidiaryIds, { activeOnly: true, postingOnly: true })),
     lookup(programOptions, () => listScopedDepartmentOptions(orgId, authz.allowedSubsidiaryIds)),
     projectsEnabled
       ? lookup(programOptions, () => listScopedProjectOptions(orgId, authz.allowedSubsidiaryIds))
+      : Promise.resolve({ rows: [], failure: null }),
+    projectsEnabled
+      ? lookup(programOptions, () => listScopedProjectCustomerOptions(orgId, authz.allowedSubsidiaryIds))
       : Promise.resolve({ rows: [], failure: null }),
     lookup(programOptions, () =>
       db
@@ -467,6 +471,7 @@ export async function loadBenefitsPortfolio(
     accounts.failure,
     departments.failure,
     projects.failure,
+    customers.failure,
     payComponents.failure,
     employments.failure,
     subsidiaries.failure,
@@ -600,6 +605,11 @@ export async function loadBenefitsPortfolio(
         if (found.metricScope) policy('metricScope', t(`portfolio.scopes.${found.metricScope}`))
         const scopeOptions = found.metricScope === 'department' ? departments.rows : projects.rows
         for (const option of scopeOptions.filter((option) => found.scopeIds.includes(option.id))) policy('metricScope', option.name)
+        if (found.metricScope === 'project') {
+          for (const option of customers.rows.filter((option) => found.scopeCustomerIds.includes(option.id))) policy('customers', option.name)
+          for (const option of departments.rows.filter((option) => found.scopeDepartmentIds.includes(option.id))) policy('workDepartments', option.name)
+        }
+        if (found.metricScope && found.metricScope !== 'company') policy('unassignedTime', t(`portfolio.unassignedTime.${found.unassignedTime}`))
         policy('allocation', t(`portfolio.allocations.${found.allocation}`))
       }
       policy('frequency', t(`portfolio.frequencies.${found.frequency}`))
@@ -696,6 +706,7 @@ export async function loadBenefitsPortfolio(
     })),
     departmentOptions: departments.rows.map((d) => ({ value: d.id, label: d.name })),
     projectOptions: projects.rows.map((p) => ({ value: p.id, label: p.name })),
+    customerOptions: customers.rows.map((c) => ({ value: c.id, label: c.name })),
     employmentOptions: employments.rows.map((e) => ({
       value: e.id,
       label: e.name ?? e.id,

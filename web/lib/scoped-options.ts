@@ -154,6 +154,26 @@ export async function listScopedDepartmentOptions(
   return result.rows
 }
 
+/** Customers that own at least one project the actor can see, for project-scoped selections. */
+export async function listScopedProjectCustomerOptions(
+  orgId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+): Promise<Array<{ id: string; name: string }>> {
+  const result = await db.execute<{ id: string; name: string }>(sql`
+    select c.id::text as id, c.display_name as name
+      from parties c
+     where c.org_id = ${orgId}
+       and exists (
+         select 1 from projects p
+          where p.org_id = c.org_id and p.customer_id = c.id
+            ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
+       )
+     order by c.display_name, c.id
+     limit 2000
+  `)
+  return result.rows
+}
+
 export async function listScopedProjectOptions(
   orgId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,

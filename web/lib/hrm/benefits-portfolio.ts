@@ -132,6 +132,9 @@ export interface ProgramDraft {
   metric: '' | BenefitMetric
   metricScope: MetricScope
   scopeIds: string[]
+  scopeCustomerIds: string[]
+  scopeDepartmentIds: string[]
+  unassignedTime: 'refuse' | 'exclude'
   allocation: Allocation
   percentRate: string
   fixedAmount: string
@@ -161,6 +164,9 @@ export function emptyProgramDraft(family: ProgramFamily): ProgramDraft {
     metric: family === 'incentive' ? 'revenue' : '',
     metricScope: 'company',
     scopeIds: [],
+    scopeCustomerIds: [],
+    scopeDepartmentIds: [],
+    unassignedTime: 'refuse',
     allocation: 'equal',
     percentRate: '',
     fixedAmount: '',
@@ -219,7 +225,7 @@ export function validateProgramDraft(draft: ProgramDraft): FieldErrors {
   if (draft.family === 'incentive' && draft.metric === '') {
     errors.metric = 'portfolio.validation.metric'
   }
-  if (draft.family === 'incentive' && draft.metricScope !== 'company' && draft.scopeIds.length === 0) {
+  if (draft.family === 'incentive' && draft.metricScope !== 'company' && draft.scopeIds.length === 0 && (draft.metricScope !== 'project' || draft.scopeCustomerIds.length === 0)) {
     errors.scopeIds = 'portfolio.validation.scopeIds'
   }
   if (
@@ -265,6 +271,9 @@ export interface ProgramEditSeed {
   metric: ProgramDraft['metric']
   metricScope: ProgramDraft['metricScope']
   scopeIds: readonly string[]
+  scopeCustomerIds: readonly string[]
+  scopeDepartmentIds: readonly string[]
+  unassignedTime: ProgramDraft['unassignedTime']
   allocation: ProgramDraft['allocation']
   percentRate: string | null
   fixedAmount: string | null

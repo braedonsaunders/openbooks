@@ -22,8 +22,9 @@ const metricScope = z.enum(["company", "department", "project"]).nullish();
 const allocation = z.enum(["equal", "hours", "role", "responsibility"]);
 const frequency = z.enum(["monthly", "quarterly", "annual", "project_complete", "manual"]);
 const periodBasis = z.enum(["calendar", "fiscal"]).nullish();
+const unassignedTime = z.enum(["refuse", "exclude"]).optional();
 
-const createProgramBody = z.object({
+export const createProgramBody = z.object({
   action: z.literal("create"),
   code: z.string().trim().min(1).max(60),
   name: z.string().trim().min(1).max(200),
@@ -40,6 +41,9 @@ const createProgramBody = z.object({
   metric,
   metricScope,
   scopeIds: uuidList,
+  scopeCustomerIds: uuidList,
+  scopeDepartmentIds: uuidList,
+  unassignedTime,
   allocation: allocation.optional(),
   percentRate: decimal,
   fixedAmount: decimal,
@@ -67,6 +71,9 @@ const updateProgramBody = z.object({
   metric,
   metricScope,
   scopeIds: uuidList,
+  scopeCustomerIds: uuidList,
+  scopeDepartmentIds: uuidList,
+  unassignedTime,
   allocation: allocation.optional(),
   percentRate: decimal,
   fixedAmount: decimal,

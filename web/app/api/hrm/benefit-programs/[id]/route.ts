@@ -60,6 +60,8 @@ export const PATCH = defineRoute({
             ...base,
             ...body,
             scopeIds: body.scopeIds ?? undefined,
+            scopeCustomerIds: body.scopeCustomerIds ?? undefined,
+            scopeDepartmentIds: body.scopeDepartmentIds ?? undefined,
             sourceAccountIds: body.sourceAccountIds ?? undefined,
             reason: body.reason,
           });

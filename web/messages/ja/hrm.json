@@ -3090,7 +3090,10 @@
         "measuredAccountIds": "測定勘定",
         "deliveryMethod": "支払い方法",
         "payComponent": "給与項目",
-        "reason": "変更理由"
+        "reason": "変更理由",
+        "customers": "顧客",
+        "workDepartments": "作業部門",
+        "unassignedTime": "対象プロジェクトのない時間"
       },
       "allEntities": "責任法人を選択",
       "entityHint": "1つの法人がプログラムと給与義務を担います。下書き作成後に対象従業員を追加してください。",
@@ -3165,7 +3168,9 @@
           "delivery": "履行",
           "review": "確認"
         }
-      }
+      },
+      "searchCustomers": "顧客を検索…",
+      "noCustomers": "プロジェクトのある顧客はありません"
     },
     "awardBuilderTitle": "新規報酬",
     "awardFields": {
@@ -3293,7 +3298,11 @@
       "delivery": "支給可能な付与、福利厚生の拠出、権利残高の変動を確認します。給与処理と外部提供はそれぞれの証拠を保持します。"
     },
     "configureApprovals": "承認を設定",
-    "transactionRules": "取引ルール"
+    "transactionRules": "取引ルール",
+    "unassignedTime": {
+      "refuse": "割り当てられるまで測定を拒否",
+      "exclude": "測定から除外"
+    }
   },
   "talentWorkspace": {
     "applications": "応募",

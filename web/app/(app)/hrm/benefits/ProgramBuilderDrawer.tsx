@@ -69,6 +69,9 @@ function seedDraft(family: ProgramFamily, seed: ProgramEditSeed | null): Program
     metric: seed.metric,
     metricScope: seed.metricScope,
     scopeIds: [...seed.scopeIds],
+    scopeCustomerIds: [...seed.scopeCustomerIds],
+    scopeDepartmentIds: [...seed.scopeDepartmentIds],
+    unassignedTime: seed.unassignedTime,
     allocation: seed.allocation,
     percentRate: text(seed.percentRate),
     fixedAmount: text(seed.fixedAmount),
@@ -189,6 +192,9 @@ function buildPayload(draft: ProgramDraft, mode: 'create' | 'edit', reason: stri
     metric: draft.family === 'incentive' && draft.metric !== '' ? draft.metric : null,
     metricScope: draft.family === 'incentive' ? draft.metricScope : null,
     scopeIds: draft.family === 'incentive' ? draft.scopeIds : [],
+    scopeCustomerIds: draft.family === 'incentive' && draft.metricScope === 'project' ? draft.scopeCustomerIds : [],
+    scopeDepartmentIds: draft.family === 'incentive' && draft.metricScope === 'project' ? draft.scopeDepartmentIds : [],
+    unassignedTime: draft.family === 'incentive' && draft.metricScope !== 'company' ? draft.unassignedTime : 'refuse',
     allocation: draft.allocation,
     percentRate: optional(draft.percentRate),
     fixedAmount: optional(draft.fixedAmount),
@@ -230,6 +236,7 @@ export function ProgramBuilderDrawer({
   currencyOptions,
   departmentOptions,
   projectOptions,
+  customerOptions = [],
   payComponentOptions,
   accountOptions,
   employmentsTruncated,
@@ -245,6 +252,7 @@ export function ProgramBuilderDrawer({
   subsidiaryOptions: PortfolioOption[]
   departmentOptions: PortfolioOption[]
   projectOptions: PortfolioOption[]
+  customerOptions?: PortfolioOption[]
   payComponentOptions: BenefitPayComponentOption[]
   accountOptions: PortfolioOption[]
   employmentsTruncated: boolean
@@ -403,6 +411,11 @@ export function ProgramBuilderDrawer({
     addSummary(t('portfolio.builder.fields.metricScope'), t(`portfolio.scopes.${draft.metricScope}`))
     const scopeOptions = draft.metricScope === 'department' ? departmentOptions : projectOptions
     for (const option of scopeOptions.filter((option) => draft.scopeIds.includes(option.value))) addSummary(t('portfolio.builder.fields.metricScope'), option.label)
+    if (draft.metricScope === 'project') {
+      for (const option of customerOptions.filter((option) => draft.scopeCustomerIds.includes(option.value))) addSummary(t('portfolio.builder.fields.customers'), option.label)
+      for (const option of departmentOptions.filter((option) => draft.scopeDepartmentIds.includes(option.value))) addSummary(t('portfolio.builder.fields.workDepartments'), option.label)
+    }
+    if (draft.metricScope !== 'company') addSummary(t('portfolio.builder.fields.unassignedTime'), t(`portfolio.unassignedTime.${draft.unassignedTime}`))
     addSummary(t('portfolio.builder.fields.allocation'), t(`portfolio.allocations.${draft.allocation}`))
     for (const option of accountOptions.filter((option) => draft.sourceAccountIds.includes(option.value))) addSummary(t('portfolio.builder.fields.measuredAccountIds'), option.label)
   }
@@ -582,7 +595,7 @@ export function ProgramBuilderDrawer({
                     id="program-builder-scope"
                     disabled={draft.metric === 'transactions'}
                     value={draft.metricScope}
-                    onChange={(e) => { set('metricScope', e.target.value as ProgramDraft['metricScope']); set('scopeIds', []) }}
+                    onChange={(e) => { set('metricScope', e.target.value as ProgramDraft['metricScope']); set('scopeIds', []); set('scopeCustomerIds', []); set('scopeDepartmentIds', []); if (e.target.value === 'company') set('unassignedTime', 'refuse') }}
                   >
                     <option value="company">{t('portfolio.scopes.company')}</option>
                     <option value="department">{t('portfolio.scopes.department')}</option>
@@ -614,6 +627,43 @@ export function ProgramBuilderDrawer({
                     errorId="program-builder-scopeIds-error"
                     error={errors.scopeIds}
                   />
+                ) : null}
+                {draft.metricScope === 'project' ? (
+                  <>
+                    <OptionMultiPicker
+                      id="program-builder-customers"
+                      label={t('portfolio.builder.fields.customers')}
+                      options={customerOptions}
+                      selected={draft.scopeCustomerIds}
+                      onChange={(ids) => set('scopeCustomerIds', ids)}
+                      searchPlaceholder={t('portfolio.builder.searchCustomers')}
+                      emptyLabel={t('portfolio.builder.noCustomers')}
+                    />
+                    {draft.metric === 'approved_hours' || draft.allocation === 'hours' ? (
+                      <OptionMultiPicker
+                        id="program-builder-work-departments"
+                        label={t('portfolio.builder.fields.workDepartments')}
+                        options={departmentOptions}
+                        selected={draft.scopeDepartmentIds}
+                        onChange={(ids) => set('scopeDepartmentIds', ids)}
+                        searchPlaceholder={t('portfolio.builder.searchDepartments')}
+                        emptyLabel={t('portfolio.builder.noDepartments')}
+                      />
+                    ) : null}
+                  </>
+                ) : null}
+                {draft.metricScope !== 'company' ? (
+                  <div>
+                    <Label htmlFor="program-builder-unassigned-time">{t('portfolio.builder.fields.unassignedTime')}</Label>
+                    <Select
+                      id="program-builder-unassigned-time"
+                      value={draft.unassignedTime}
+                      onChange={(e) => set('unassignedTime', e.target.value as ProgramDraft['unassignedTime'])}
+                    >
+                      <option value="refuse">{t('portfolio.unassignedTime.refuse')}</option>
+                      <option value="exclude">{t('portfolio.unassignedTime.exclude')}</option>
+                    </Select>
+                  </div>
                 ) : null}
               </>
             ) : null}

@@ -19,6 +19,7 @@ import {
   BENEFIT_PROGRAM_FREQUENCIES as SCHEMA_FREQUENCIES,
   BENEFIT_PROGRAM_METRICS as SCHEMA_METRICS,
   BENEFIT_PROGRAM_PERIOD_BASES as SCHEMA_PERIOD_BASES,
+  BENEFIT_PROGRAM_UNASSIGNED_TIME as SCHEMA_UNASSIGNED_TIME,
   BENEFIT_PROGRAM_SCOPES as SCHEMA_SCOPES,
   BENEFIT_PROGRAM_STATUSES as SCHEMA_STATUSES,
   BENEFIT_PROGRAM_VALUATION as SCHEMA_VALUATION,
@@ -54,6 +55,9 @@ export type BenefitFrequency = (typeof BENEFIT_FREQUENCIES)[number];
 export const BENEFIT_PERIOD_BASES = SCHEMA_PERIOD_BASES;
 export type BenefitPeriodBasis = (typeof BENEFIT_PERIOD_BASES)[number];
 
+export const BENEFIT_UNASSIGNED_TIME = SCHEMA_UNASSIGNED_TIME;
+export type BenefitUnassignedTime = (typeof BENEFIT_UNASSIGNED_TIME)[number];
+
 export const BENEFIT_AWARD_STATUSES = SCHEMA_AWARD_STATUSES;
 export type BenefitAwardStatus = (typeof BENEFIT_AWARD_STATUSES)[number];
 
@@ -85,6 +89,12 @@ export interface BenefitProgram {
   readonly metric: BenefitMetric | null;
   readonly metricScope: BenefitMetricScope | null;
   readonly scopeIds: readonly string[];
+  /** Project scope: customers whose projects are measured, beside named projects. */
+  readonly scopeCustomerIds: readonly string[];
+  /** Project scope: departments the measured work must be performed in (none = any). */
+  readonly scopeDepartmentIds: readonly string[];
+  /** Approved time without the scoped project or department: refuse the measure or exclude it. */
+  readonly unassignedTime: BenefitUnassignedTime;
   readonly allocation: BenefitAllocation;
   readonly percentRate: string | null;
   readonly fixedAmount: string | null;

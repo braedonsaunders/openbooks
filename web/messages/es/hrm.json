@@ -3090,7 +3090,10 @@
         "measuredAccountIds": "Cuentas medidas",
         "deliveryMethod": "Entrega",
         "payComponent": "Concepto",
-        "reason": "Motivo del cambio"
+        "reason": "Motivo del cambio",
+        "customers": "Clientes",
+        "workDepartments": "Departamentos de trabajo",
+        "unassignedTime": "Tiempo sin el proyecto del alcance"
       },
       "allEntities": "Elegir entidad jurídica",
       "entityHint": "Una entidad jurídica es responsable del programa y sus obligaciones de nómina. Añada empleados elegibles tras crear el borrador.",
@@ -3165,7 +3168,9 @@
           "delivery": "Entrega",
           "review": "Revisión"
         }
-      }
+      },
+      "searchCustomers": "Buscar clientes…",
+      "noCustomers": "No hay clientes con proyectos"
     },
     "awardBuilderTitle": "Nueva recompensa",
     "awardFields": {
@@ -3293,7 +3298,11 @@
       "delivery": "Revise concesiones listas, aportaciones a beneficios y movimientos de derechos. La nómina y el cumplimiento externo conservan evidencia separada."
     },
     "configureApprovals": "Configurar aprobaciones",
-    "transactionRules": "Reglas de transacciones"
+    "transactionRules": "Reglas de transacciones",
+    "unassignedTime": {
+      "refuse": "Rechazar la medición hasta que se asigne",
+      "exclude": "Excluirlo de la medición"
+    }
   },
   "talentWorkspace": {
     "applications": "Candidaturas",

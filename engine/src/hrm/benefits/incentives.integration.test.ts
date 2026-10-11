@@ -349,6 +349,26 @@ test("approved hours total the scope and attribute per member employment", { ski
   });
 });
 
+test("project hours narrow to work departments and follow the unassigned-time policy", { skip: !DB }, async () => {
+  await withHarness(() => setupHarness(INCENTIVES_SPEC), async (h) => {
+    const projectId = randomUUID(), field = randomUUID(), shop = randomUUID();
+    await db.execute(sql`insert into projects (id, org_id, name, status) values (${projectId}, ${h.org.orgId}, 'Kiln line', 'active')`);
+    await db.execute(sql`insert into departments (id, org_id, name) values (${field}, ${h.org.orgId}, 'Field'), (${shop}, ${h.org.orgId}, 'Shop')`);
+    const crew = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { displayName: "Crew F" });
+    await seedTime(h, crew.workerPartyId, { hours: "10.0000", project: projectId, department: field });
+    await seedTime(h, crew.workerPartyId, { hours: "4.0000", project: projectId, department: shop });
+    await seedTime(h, crew.workerPartyId, { hours: "6.0000", project: null, department: shop });
+    const cfg = hoursConfig(h, [crew.employmentId], { scope: "project", projectIds: [projectId], workDepartmentIds: [field] });
+    // Time with no project might be project work: the default policy refuses.
+    await refuses(() => measureApprovedHours(db, h.org.orgId, h.hrId, cfg), /no project or work department/);
+    // A program that declares unassigned time out of scope measures only the
+    // scoped project worked in the named department.
+    const excluded = await measureApprovedHours(db, h.org.orgId, h.hrId, { ...cfg, unassignedTime: "exclude" });
+    assert.equal(excluded.totalHours, "10.0000");
+    assert.equal(excluded.entryCount, 1);
+  });
+});
+
 test("hours attribution refuses a worker with two member employments", { skip: !DB }, async () => {
   await withHarness(() => setupHarness(INCENTIVES_SPEC), async (h) => {
     const party = randomUUID();

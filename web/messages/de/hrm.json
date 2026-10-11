@@ -3090,7 +3090,10 @@
         "measuredAccountIds": "Bemessungskonten",
         "deliveryMethod": "Auszahlung",
         "payComponent": "Lohnart",
-        "reason": "Änderungsgrund"
+        "reason": "Änderungsgrund",
+        "customers": "Kunden",
+        "workDepartments": "Arbeitsabteilungen",
+        "unassignedTime": "Zeit ohne zugeordnetes Projekt"
       },
       "allEntities": "Rechtsträger wählen",
       "entityHint": "Ein Rechtsträger trägt das Programm und seine Abrechnungsverpflichtungen. Fügen Sie berechtigte Beschäftigte nach dem Erstellen des Entwurfs hinzu.",
@@ -3165,7 +3168,9 @@
           "delivery": "Abwicklung",
           "review": "Prüfung"
         }
-      }
+      },
+      "searchCustomers": "Kunden suchen…",
+      "noCustomers": "Keine Kunden mit Projekten"
     },
     "awardBuilderTitle": "Neue Anerkennung",
     "awardFields": {
@@ -3293,7 +3298,11 @@
       "delivery": "Prüfen Sie bereite Zuwendungen, Leistungsbeiträge und Anspruchsbewegungen. Lohnabrechnung und externe Erfüllung behalten getrennte Nachweise."
     },
     "configureApprovals": "Genehmigungen konfigurieren",
-    "transactionRules": "Transaktionsregeln"
+    "transactionRules": "Transaktionsregeln",
+    "unassignedTime": {
+      "refuse": "Messung ablehnen, bis die Zeit zugeordnet ist",
+      "exclude": "Aus der Messung ausschließen"
+    }
   },
   "talentWorkspace": {
     "applications": "Bewerbungen",

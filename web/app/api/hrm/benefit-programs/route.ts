@@ -1,4 +1,3 @@
-import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import {
@@ -6,38 +5,13 @@ import {
   listBenefitPrograms,
 } from "@openbooks/engine/hrm/benefits";
 import { benefitsErrorResponse } from "../benefits/_lib";
+import { createProgramBody } from "./bodies";
 
 export const runtime = "nodejs";
 
 const PROGRAM_STATUSES = ["draft", "active", "closed"] as const;
 const PROGRAM_FAMILIES = ["reward", "allowance", "incentive", "custom"] as const;
 
-const createBody = z.object({
-  code: z.string().trim().min(1).max(60),
-  name: z.string().trim().min(1).max(200),
-  family: z.enum(["reward", "allowance", "incentive", "custom"]),
-  description: z.string().trim().max(2000).nullish(),
-  legalEntityId: z.string().min(1).nullish(),
-  currency: z.string().trim().regex(/^[A-Z]{3}$/, "currency is a 3-letter ISO code in capitals"),
-  effectiveFrom: z.string().min(1),
-  effectiveTo: z.string().min(1).nullish(),
-  payComponentId: z.string().min(1).nullish(),
-  deliveryMethod: z.enum(["payroll", "external"]).optional(),
-  valuation: z.enum(["fixed", "percent", "pool"]).optional(),
-  metric: z.enum(["revenue", "gross_profit", "net_profit", "approved_hours"]).nullish(),
-  metricScope: z.enum(["company", "department", "project"]).nullish(),
-  scopeIds: z.array(z.string().min(1)).max(100).nullish(),
-  allocation: z.enum(["equal", "hours", "role"]).optional(),
-  percentRate: z.string().trim().min(1).max(64).nullish(),
-  fixedAmount: z.string().trim().min(1).max(64).nullish(),
-  capAmount: z.string().trim().min(1).max(64).nullish(),
-  budgetAmount: z.string().trim().min(1).max(64).nullish(),
-  thresholdAmount: z.string().trim().min(1).max(64).nullish(),
-  frequency: z.enum(["monthly", "quarterly", "annual", "project_complete", "manual"]).optional(),
-  periodBasis: z.enum(["calendar", "fiscal"]).nullish(),
-  paymentDelayDays: z.number().int().min(0).max(3650).optional(),
-  sourceAccountIds: z.array(z.string().min(1)).max(100).nullish(),
-});
 
 /**
  * Employer-defined benefit programs: GET lists (optional status/family
@@ -79,7 +53,7 @@ export const GET = defineRoute({
 export const POST = defineRoute({
   permission: "hrm.benefits.manage",
   feature: "hrm",
-  body: createBody,
+  body: createProgramBody,
   handler: async ({ authz: gate, body }) => {
     try {
       const program = await createBenefitProgram({
@@ -94,11 +68,15 @@ export const POST = defineRoute({
         effectiveFrom: body.effectiveFrom,
         effectiveTo: body.effectiveTo ?? null,
         payComponentId: body.payComponentId ?? null,
+        approvalMode: body.approvalMode ?? "none",
         deliveryMethod: body.deliveryMethod ?? "payroll",
         valuation: body.valuation ?? "fixed",
         metric: body.metric ?? null,
         metricScope: body.metricScope ?? null,
         scopeIds: body.scopeIds ?? [],
+        scopeCustomerIds: body.scopeCustomerIds ?? [],
+        scopeDepartmentIds: body.scopeDepartmentIds ?? [],
+        unassignedTime: body.unassignedTime ?? "refuse",
         allocation: body.allocation ?? "equal",
         percentRate: body.percentRate ?? null,
         fixedAmount: body.fixedAmount ?? null,

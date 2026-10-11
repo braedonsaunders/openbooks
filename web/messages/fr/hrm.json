@@ -3090,7 +3090,10 @@
         "measuredAccountIds": "Comptes mesurés",
         "deliveryMethod": "Versement",
         "payComponent": "Rubrique",
-        "reason": "Motif de modification"
+        "reason": "Motif de modification",
+        "customers": "Clients",
+        "workDepartments": "Services de travail",
+        "unassignedTime": "Temps sans le projet du périmètre"
       },
       "allEntities": "Choisir l’entité juridique",
       "entityHint": "Une entité juridique porte le programme et ses obligations de paie. Ajoutez les employés admissibles après la création du brouillon.",
@@ -3165,7 +3168,9 @@
           "delivery": "Exécution",
           "review": "Contrôle"
         }
-      }
+      },
+      "searchCustomers": "Rechercher des clients…",
+      "noCustomers": "Aucun client avec des projets"
     },
     "awardBuilderTitle": "Nouvelle récompense",
     "awardFields": {
@@ -3293,7 +3298,11 @@
       "delivery": "Consultez les attributions prêtes, cotisations et mouvements de droits. La paie et la réalisation externe conservent des preuves distinctes."
     },
     "configureApprovals": "Configurer les approbations",
-    "transactionRules": "Règles de transactions"
+    "transactionRules": "Règles de transactions",
+    "unassignedTime": {
+      "refuse": "Refuser la mesure jusqu’à son affectation",
+      "exclude": "L’exclure de la mesure"
+    }
   },
   "talentWorkspace": {
     "applications": "Candidatures",

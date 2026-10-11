@@ -210,6 +210,7 @@ export interface BenefitsData {
   optionsRefusal: { title: string; message: string } | null
   scopeDepartments: BuilderOption[]
   scopeProjects: BuilderOption[]
+  scopeCustomers: BuilderOption[]
   programEditOpen: boolean
   programEditSeed: ProgramEditSeed | null
 
@@ -603,6 +604,7 @@ function emptyPortfolioFields(
   | 'optionsRefusal'
   | 'scopeDepartments'
   | 'scopeProjects'
+  | 'scopeCustomers'
   | 'programEditOpen'
   | 'programEditSeed'
 > {
@@ -693,6 +695,7 @@ function emptyPortfolioFields(
     optionsRefusal: null,
     scopeDepartments: [],
     scopeProjects: [],
+    scopeCustomers: [],
     programEditOpen: false,
     programEditSeed: null,
   }
@@ -926,6 +929,7 @@ function toPortfolioFields(
     optionsRefusal: portfolio.optionsRefusal,
     scopeDepartments: portfolio.departmentOptions,
     scopeProjects: portfolio.projectOptions,
+    scopeCustomers: portfolio.customerOptions,
     programEditOpen: sp.edit === '1' && portfolio.programs.some((program) => program.id === sp.program && program.status === 'draft') && canManage && portfolio.optionsRefusal === null,
     // The edit seed resolves from the authoritative program row the service
     // just listed — the builder edits server state, never a client echo.
@@ -952,6 +956,9 @@ function toPortfolioFields(
         metric: seed.metric ?? '',
         metricScope: seed.metricScope ?? 'company',
         scopeIds: [...seed.scopeIds],
+        scopeCustomerIds: [...seed.scopeCustomerIds],
+        scopeDepartmentIds: [...seed.scopeDepartmentIds],
+        unassignedTime: seed.unassignedTime,
         allocation: seed.allocation,
         percentRate: seed.percentRate,
         fixedAmount: seed.fixedAmount,

@@ -228,7 +228,26 @@ async function loadSettlementContext(
     if (program.metricScope === "department") departmentIds.push(id);
     else if (program.metricScope === "project") projectIds.push(id);
   }
-  if (program.metricScope !== "company" && program.scopeIds.length === 0) {
+  if (program.metricScope === "project" && program.scopeCustomerIds.length > 0) {
+    // A customer scope measures every project of that customer in the
+    // program's entity as of this measurement; the expanded list is part of
+    // the measured evidence.
+    const customerProjects = (await db.execute<{ id: string }>(sql`
+      select id::text as id from projects
+       where org_id = ${orgId}
+         and customer_id = any (${`{${program.scopeCustomerIds.join(",")}}`}::uuid[])
+         and (subsidiary_id is null or subsidiary_id = ${program.legalEntityId}::uuid)
+       order by id
+    `)).rows.map((r) => r.id);
+    for (const id of customerProjects) if (!projectIds.includes(id)) projectIds.push(id);
+    if (projectIds.length === 0) {
+      throw new BenefitsError(
+        "REFUSED",
+        `program ${program.code} measures the projects of its customers, but they have no projects in the program's legal entity — add projects or reselect the customers`,
+      );
+    }
+  }
+  if (program.metricScope !== "company" && program.scopeIds.length === 0 && program.scopeCustomerIds.length === 0) {
     throw new BenefitsError(
       "REFUSED",
       `program ${program.code} measures ${program.metricScope} scope with no scoped rows — name the ${program.metricScope === "department" ? "departments" : "projects"} before measuring; the base is never the whole company by fallback`,
@@ -423,6 +442,8 @@ async function measureAndCompute(
       scope: program.metricScope!,
       departmentIds: ctx.departmentIds,
       projectIds: ctx.projectIds,
+      workDepartmentIds: program.scopeDepartmentIds,
+      unassignedTime: program.unassignedTime,
       legalEntityId: program.legalEntityId!,
       periodFrom,
       periodTo,
@@ -449,6 +470,7 @@ async function measureAndCompute(
       periodFrom,
       periodTo,
       incentiveExpenseAccountId: ctx.incentiveExpenseAccountId,
+      unassignedTime: program.unassignedTime,
       allowedSubsidiaryIds: ctx.scope,
     });
     measured = {
@@ -461,6 +483,8 @@ async function measureAndCompute(
         scope: program.metricScope!,
         departmentIds: ctx.departmentIds,
         projectIds: ctx.projectIds,
+        workDepartmentIds: program.scopeDepartmentIds,
+        unassignedTime: program.unassignedTime,
         legalEntityId: program.legalEntityId!,
         periodFrom,
         periodTo,

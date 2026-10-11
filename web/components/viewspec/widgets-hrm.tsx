@@ -501,6 +501,7 @@ export const HRM_WIDGETS = {
       subsidiaryOptions={(props.subsidiaryOptions as ComponentProps<typeof ProgramBuilderDrawer>['subsidiaryOptions']) ?? []}
       departmentOptions={(props.departmentOptions as ComponentProps<typeof ProgramBuilderDrawer>['departmentOptions']) ?? []}
       projectOptions={(props.projectOptions as ComponentProps<typeof ProgramBuilderDrawer>['projectOptions']) ?? []}
+      customerOptions={(props.customerOptions as ComponentProps<typeof ProgramBuilderDrawer>['customerOptions']) ?? []}
       payComponentOptions={(props.payComponentOptions as ComponentProps<typeof ProgramBuilderDrawer>['payComponentOptions']) ?? []}
       accountOptions={(props.accountOptions as ComponentProps<typeof ProgramBuilderDrawer>['accountOptions']) ?? []}
       employmentsTruncated={props.employmentsTruncated === true}
@@ -525,6 +526,7 @@ export const HRM_WIDGETS = {
         subsidiaryOptions={(props.subsidiaryOptions as ComponentProps<typeof ProgramBuilderDrawer>['subsidiaryOptions']) ?? []}
         departmentOptions={(props.departmentOptions as ComponentProps<typeof ProgramBuilderDrawer>['departmentOptions']) ?? []}
         projectOptions={(props.projectOptions as ComponentProps<typeof ProgramBuilderDrawer>['projectOptions']) ?? []}
+      customerOptions={(props.customerOptions as ComponentProps<typeof ProgramBuilderDrawer>['customerOptions']) ?? []}
         payComponentOptions={(props.payComponentOptions as ComponentProps<typeof ProgramBuilderDrawer>['payComponentOptions']) ?? []}
         accountOptions={(props.accountOptions as ComponentProps<typeof ProgramBuilderDrawer>['accountOptions']) ?? []}
         employmentsTruncated={props.employmentsTruncated === true}

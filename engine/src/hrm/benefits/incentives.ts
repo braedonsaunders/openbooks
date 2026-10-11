@@ -96,6 +96,8 @@ export interface MoneySourceConfig {
    * the next base) and the read refuses — the remedy names the fix.
    */
   readonly incentiveExpenseAccountId: string | null;
+  /** Postings without the scoped dimension: refuse the measure (default) or leave them out of the base. */
+  readonly unassignedTime?: "refuse" | "exclude";
   /**
    * An optional narrowing lens (null leaves the actor's live scope intact).
    * The read independently resolves native role scope, so this caller-supplied
@@ -172,6 +174,10 @@ export interface HoursSourceConfig {
   readonly scope: BenefitMetricScope;
   readonly departmentIds: readonly string[];
   readonly projectIds: readonly string[];
+  /** Project scope: only work recorded in these departments counts (empty = any department). */
+  readonly workDepartmentIds?: readonly string[];
+  /** Approved time without the scoped dimension: refuse the measure (default) or leave it out of the base. */
+  readonly unassignedTime?: "refuse" | "exclude";
   readonly legalEntityId: string;
   readonly periodFrom: string;
   readonly periodTo: string;
@@ -506,7 +512,8 @@ export async function measureMoneySource(
     if (config.scope === "company") return true;
     const dimension = config.scope === "department" ? r.department_id : r.project_id;
     if (dimension === null) {
-      throw new BenefitsError("REFUSED", `measured posting ${r.line_id} carries no ${config.scope} — stamp that dimension on every posting in the measured accounts, or narrow the accounts; un-shaped postings never silently leave the base`);
+      if (config.unassignedTime === "exclude") return false;
+      throw new BenefitsError("REFUSED", `measured posting ${r.line_id} carries no ${config.scope} — stamp that dimension on every posting in the measured accounts, narrow the accounts, or set the program to exclude unassigned time; un-shaped postings never silently leave the base`);
     }
     return dimensionIds.has(dimension);
   });
@@ -649,19 +656,36 @@ export async function measureApprovedHours(
     employmentByParty.set(row.worker_party_id, row.id);
   }
 
+  const workDepartmentIds = config.scope === "project" ? [...new Set(config.workDepartmentIds ?? [])] : [];
+  if (workDepartmentIds.length > 0) {
+    const found = (await exec.execute<{ id: string }>(sql`
+      select id::text as id from departments
+       where org_id = ${org} and id = any (${uuidList(workDepartmentIds, "department id")}::uuid[])
+    `)).rows.length;
+    if (found !== workDepartmentIds.length) {
+      throw new BenefitsError("REFUSED", "the measure narrows work to a department outside this organization — reselect the work departments; measures never cross tenants");
+    }
+  }
+  const workDepartmentFilter = workDepartmentIds.length > 0
+    ? sql`and t.department_id = any (${uuidList(workDepartmentIds, "department id")}::uuid[])`
+    : sql``;
   const dimFilter = config.scope === "company"
     ? sql`true`
     : config.scope === "department"
       ? sql`t.department_id = any (${uuidList(config.departmentIds, "department id")}::uuid[])`
-      : sql`t.project_id = any (${uuidList(config.projectIds, "project id")}::uuid[])`;
+      : sql`t.project_id = any (${uuidList(config.projectIds, "project id")}::uuid[]) ${workDepartmentFilter}`;
 
-  if (config.scope !== "company") {
+  if (config.scope !== "company" && config.unassignedTime !== "exclude") {
     const dimColumn = config.scope === "department" ? sql`t.department_id` : sql`t.project_id`;
+    // Project work narrowed by department also needs the department on scoped entries.
+    const unassigned = workDepartmentIds.length > 0
+      ? sql`(${dimColumn} is null or (t.project_id = any (${uuidList(config.projectIds, "project id")}::uuid[]) and t.department_id is null))`
+      : sql`${dimColumn} is null`;
     const unshaped = (await exec.execute<{ n: number }>(sql`
       select count(*)::int as n from time_entries t
      where t.org_id = ${org} and t.status = 'approved'
        and t.worked_on >= ${periodFrom}::date and t.worked_on <= ${periodTo}::date
-       and ${dimColumn} is null
+       and ${unassigned}
        and exists (
          select 1 from worker_employments emp
           join worker_employment_versions v on v.org_id=emp.org_id and v.employment_id=emp.id
@@ -675,7 +699,7 @@ export async function measureApprovedHours(
       const dim = config.scope === "department" ? "department" : "project";
       throw new BenefitsError(
         "REFUSED",
-        `${unshaped} approved time entr${unshaped === 1 ? "y carries" : "ies carry"} no ${dim} — stamp the ${dim} on every entry in the period, or narrow the scope; un-shaped time never silently leaves the base`,
+        `${unshaped} approved time entr${unshaped === 1 ? "y carries" : "ies carry"} no ${workDepartmentIds.length > 0 ? "project or work department" : dim} — stamp it on every entry in the period, narrow the scope, or set the program to exclude unassigned time; un-shaped time never silently leaves the base`,
       );
     }
   }
