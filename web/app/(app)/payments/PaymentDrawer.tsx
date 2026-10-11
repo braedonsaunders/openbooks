@@ -735,6 +735,22 @@ export function PaymentDrawer({
     }))
   }
 
+  /**
+   * Edit the applied (target) amount on a row. Same-currency lines settle
+   * 1:1 — the cash frame (source) always equals the applied amount — so
+   * typing a partial apply moves both and the row stays valid. Cross-currency
+   * lines keep their own source, rate and evidence: only the operator's
+   * cross-foot edit can change those, and rowValid governs the result.
+   */
+  function updateTargetAmount(item: OpenItemClient, value: string) {
+    updateAllocation(
+      item.lineId,
+      item.currency === doc.currency
+        ? { targetTransactionAmount: value, sourceTransactionAmount: value }
+        : { targetTransactionAmount: value },
+    )
+  }
+
   function toggle(item: OpenItemClient) {
     setAllocs((prev) => {
       const next = { ...prev }
@@ -1180,7 +1196,7 @@ export function PaymentDrawer({
                                     inputMode="decimal"
                                     className={'h-8 text-right tabular-nums ' + (invalid ? 'border-red-400 focus-visible:ring-red-400 dark:border-red-600' : '')}
                                     value={allocs[item.lineId]!.targetTransactionAmount}
-                                    onChange={(event) => updateAllocation(item.lineId, { targetTransactionAmount: event.target.value })}
+                                    onChange={(event) => updateTargetAmount(item, event.target.value)}
                                     aria-invalid={invalid}
                                   />
                                 </div>
