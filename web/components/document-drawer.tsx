@@ -3434,10 +3434,14 @@ export function DocumentDrawer({
         </div>
       ) : null}
       actions={
+        // Editing keeps lifecycle actions out of reach until the record
+        // saves; the only menu entry is the form-designer shortcut. Without
+        // it there is no menu at all — the shell hides the button instead
+        // of expanding an empty popover.
         mode === 'edit' ? (
-          <>
-            {actionLayout.find((action) => action.key === 'customize')?.visible ? renderFormAction('customize') : null}
-          </>
+          actionLayout.find((action) => action.key === 'customize')?.visible
+            ? renderFormAction('customize')
+            : null
         ) : (
           <>
             {actionLayout.filter((action) => action.visible && action.key !== 'edit').map((action) => (

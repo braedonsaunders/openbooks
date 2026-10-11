@@ -303,3 +303,127 @@ test("posted documents offer a posting-effect retry only for authorized terminal
     }
   } finally { restore(); }
 });
+
+async function mountEditingBill(options: { canCustomize?: boolean } = {}) {
+  globalThis.__drawerRouter = { push() {}, refresh() {} };
+  globalThis.__drawerToasts = [];
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  const doc = {
+    id: randomUUID(),
+    kind: "vendor_bill",
+    status: "posted",
+    document_number: "BILL-00005",
+    currency: "USD",
+    updated_at: "2026-09-17T12:00:00.000000Z",
+    document_date: "2026-09-17",
+    subtotal: "100.00",
+    tax_total: "0.00",
+    total: "100.00",
+  };
+  await act(async () => {
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <MoneyProvider currency="USD">
+          <DocumentDrawer
+            payload={{ doc, lines: [] }}
+            config={DOC_KINDS["vendor_bill"]!}
+            basePath="/ap/bills"
+            parties={[]}
+            accounts={[]}
+            taxCodes={[]}
+            taxGroups={[]}
+            cards={[]}
+            bankAccounts={[]}
+            departments={[]}
+            projects={[]}
+            locations={[]}
+            classes={[]}
+            items={[]}
+            subsidiaries={[]}
+            headerDefs={[]}
+            lineDefs={[]}
+            canCreate
+            canPost
+            recordType="vendor_bill"
+            canCustomize={options.canCustomize}
+            initialMode="edit"
+          />
+        </MoneyProvider>
+      </NextIntlClientProvider>,
+    );
+    await tick();
+  });
+  await tick();
+  await tick();
+  return { host, root };
+}
+
+function actionsButton(): HTMLButtonElement | undefined {
+  return [...document.querySelectorAll("button")].find((b) =>
+    b.textContent?.includes("Actions"),
+  ) as HTMLButtonElement | undefined;
+}
+
+/** Editing hides lifecycle actions until save; without the designer grant
+ * the menu would open onto nothing, so no Actions button renders at all. */
+test("editing a bill without the designer grant offers no Actions button", async (t) => {
+  const restore = scriptFetch(() => null);
+  t.after(restore);
+  const { host, root } = await mountEditingBill();
+  t.after(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  });
+  assert.ok(
+    [...document.querySelectorAll("button")].some((b) => b.textContent?.trim() === "Save"),
+    "the bill is really being edited (Save is primary)",
+  );
+  assert.equal(actionsButton(), undefined, "no empty Actions popover is offered while editing");
+});
+
+/** With the designer grant, editing still offers the form-designer shortcut. */
+test("editing a bill with the designer grant keeps the Customize entry", async (t) => {
+  const restore = scriptFetch(() => null);
+  t.after(restore);
+  const { host, root } = await mountEditingBill({ canCustomize: true });
+  t.after(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  });
+  const actions = actionsButton();
+  assert.ok(actions, "Actions menu must render for a designer");
+  await act(async () => {
+    actions.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    await tick();
+  });
+  await tick();
+  assert.match(
+    document.body.textContent ?? "",
+    /Customize/,
+    "editing designers keep the form-designer shortcut",
+  );
+});
+
+/** The reported view-mode case keeps working: an approved bill offers Post. */
+test("an approved bill offers Post from its Actions menu", async (t) => {
+  const restore = scriptFetch(() => null);
+  t.after(restore);
+  const { host, root } = await mountApprovedBill();
+  t.after(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  });
+  await openActionsMenu();
+  assert.ok(
+    [...document.querySelectorAll("button")].some((b) => b.textContent?.trim() === "Post"),
+    "an approved bill must offer Post",
+  );
+});
