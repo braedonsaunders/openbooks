@@ -12,6 +12,7 @@ import { loadRequiredControlAccounts } from "../records/control-accounts.ts";
 import { inventoryFeatureEnabled } from "../inventory/profile-policy.ts";
 import { add, cmp, neg, sum } from "../money/money.ts";
 import { postDocument } from "../ledger/posting-document.ts";
+import { resolveTermsDueDate } from "../ledger/document-defaults.ts";
 import { type PostingDeps } from "../journal/posting-contracts.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import { advanceAnchoredMonth } from "./cadence.ts";
@@ -1174,7 +1175,13 @@ async function generateFromTemplate(
 
   const termDays =
     tpl.document_date && tpl.due_date ? calendarDaysBetween(tpl.document_date, tpl.due_date) : null;
-  const dueDate = termDays != null ? addCalendarDays(documentDate, termDays) : null;
+  // A template without its own term spread falls back to the party's payment
+  // terms — the same default a hand-entered invoice receives. An explicit
+  // template spread stays authoritative for the schedule.
+  const termsDue = termDays == null
+    ? await resolveTermsDueDate(db, orgId, { kind: tpl.kind, partyId: tpl.party_id, documentDate })
+    : null;
+  const dueDate = termDays != null ? addCalendarDays(documentDate, termDays) : (termsDue?.dueDate ?? null);
 
   const documentNumber = await nextNumber(orgId, tpl.kind);
   const provenance = {
