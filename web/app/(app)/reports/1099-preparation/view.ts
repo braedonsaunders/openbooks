@@ -220,7 +220,10 @@ export async function loadNecPreparation(
       thresholdReportable: t('thresholdReportable'),
       cardExcludedText: (amount) => t('cardExcluded', { amount }),
       vendorHref: buildHref(ROUTE, { year: String(year), vendor: row.partyId, q: pickString(sp.q) }),
-      vendorDrawerHref: `/compliance/vendors?vendor=${row.partyId}`,
+      // The vendor (payee) record carries TIN capture behind the
+      // informationReturns switch itself — never the compliance-gated
+      // drawer, which an information-returns-only org cannot open.
+      vendorDrawerHref: `/parties?party=${row.partyId}&partyTab=compliance`,
       boxRulesHref: '/admin/setup/information-return-box-rules',
     }),
   )
@@ -256,7 +259,7 @@ export async function loadNecPreparation(
           vendors: cause.vendors.map((vendor) => `${vendor.name} (${m(vendor.total)})`).join('; '),
           year: String(year),
         }),
-        action: { href: `/compliance/vendors?vendor=${first!.partyId}`, label: t('emptyVendorAction') },
+        action: { href: `/parties?party=${first!.partyId}&partyTab=compliance`, label: t('emptyVendorAction') },
       }
     } else if (cause?.kind === 'unposted') {
       emptyCause = {

@@ -42,7 +42,7 @@ const baseOpts = {
   thresholdReportable: 'Reportable',
   cardExcludedText: (amount: string) => `card excluded ${amount}`,
   vendorHref: '/reports/1099-preparation?vendor=019f0000-0000-4000-8000-000000000021',
-  vendorDrawerHref: '/compliance/vendors?vendor=019f0000-0000-4000-8000-000000000021',
+  vendorDrawerHref: '/parties?party=019f0000-0000-4000-8000-000000000021&partyTab=compliance',
   boxRulesHref: '/admin/setup/information-return-box-rules',
 }
 
@@ -85,10 +85,10 @@ test('payment numbers link to the payment drawer target', () => {
   assert.equal(numbers.href.$, 'paymentHref')
 })
 
-test('missing TIN links to the vendor compliance record', () => {
+test('missing TIN links to the vendor record behind the tax switch', () => {
   const missing = mapNecVendorRow(baseSource, baseOpts)
   assert.equal(missing.tinText, 'No TIN on file')
-  assert.equal(missing.tinHref, '/compliance/vendors?vendor=019f0000-0000-4000-8000-000000000021')
+  assert.equal(missing.tinHref, '/parties?party=019f0000-0000-4000-8000-000000000021&partyTab=compliance')
   const present = mapNecVendorRow({ ...baseSource, tinLast4: '1234' }, baseOpts)
   assert.equal(present.tinText, '•••1234')
   assert.equal(present.tinHref, '')
