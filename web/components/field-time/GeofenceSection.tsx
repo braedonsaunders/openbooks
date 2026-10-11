@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import { MapPin } from 'lucide-react'
 import { Badge, Button, Drawer, Input, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { Field } from '@/components/field'
+import { readApiErrorMessage } from '@/lib/api-error'
 import { DrawerSublist, SublistAddButton, SublistEmpty, SublistLoadError } from '@/components/drawer-sublist'
 
 export interface GeofenceRow {
@@ -122,9 +123,10 @@ export function GeofenceSection({
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body),
       })
-      const payload = (await res.json().catch(() => null)) as { error?: string } | null
+      // The refusal reads through the shared helper so message, remedy and
+      // code render instead of a bare fallback.
       if (!res.ok) {
-        setError(payload?.error ?? t('field.sendFailed'))
+        setError(await readApiErrorMessage(res, t('field.sendFailed')))
         return
       }
       setAdding(false)
@@ -150,9 +152,10 @@ export function GeofenceSection({
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ action: 'delete', id }),
         })
-        const payload = (await res.json().catch(() => null)) as { error?: string } | null
+        // The refusal reads through the shared helper so message, remedy and
+        // code render instead of a bare fallback.
         if (!res.ok) {
-          setError(payload?.error ?? t('field.sendFailed'))
+          setError(await readApiErrorMessage(res, t('field.sendFailed')))
           return
         }
         await reload()

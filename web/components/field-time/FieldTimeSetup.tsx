@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { Button, Input, Select } from '@openbooks/ui'
 import { Field } from '@/components/field'
+import { readApiErrorMessage } from '@/lib/api-error'
 
 export interface FieldTimeRuleSettings {
   roundingIncrement: number | null
@@ -90,9 +91,10 @@ export function FieldTimeSetup({
           photoRequired: settings.photoRequired,
         }),
       })
-      const payload = (await res.json().catch(() => null)) as { error?: string } | null
+      // The refusal reads through the shared helper so message, remedy and
+      // code render instead of a bare fallback.
       if (!res.ok) {
-        setError(payload?.error ?? t('field.sendFailed'))
+        setError(await readApiErrorMessage(res, t('field.sendFailed')))
         return
       }
       setSaved(true)
@@ -113,9 +115,16 @@ export function FieldTimeSetup({
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ name: kioskName.trim() }),
       })
-      const payload = (await res.json().catch(() => null)) as { error?: string; kiosk?: KioskRow; token?: string } | null
-      if (!res.ok || !payload?.token) {
-        setError(payload?.error ?? t('field.sendFailed'))
+      // The refusal reads through the shared helper so message, remedy and
+      // code render instead of a bare fallback; the success body parses
+      // after the ok check.
+      if (!res.ok) {
+        setError(await readApiErrorMessage(res, t('field.sendFailed')))
+        return
+      }
+      const payload = (await res.json().catch(() => null)) as { kiosk?: KioskRow; token?: string } | null
+      if (!payload?.token) {
+        setError(t('field.sendFailed'))
         return
       }
       setIssued({ name: payload.kiosk?.name ?? kioskName.trim(), token: payload.token })
@@ -138,9 +147,10 @@ export function FieldTimeSetup({
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ action: 'set-pin', employeePartyId: pinWorker.trim(), pin: pin.trim() }),
       })
-      const payload = (await res.json().catch(() => null)) as { error?: string } | null
+      // The refusal reads through the shared helper so message, remedy and
+      // code render instead of a bare fallback.
       if (!res.ok) {
-        setError(payload?.error ?? t('field.sendFailed'))
+        setError(await readApiErrorMessage(res, t('field.sendFailed')))
         return
       }
       setPinWorker('')

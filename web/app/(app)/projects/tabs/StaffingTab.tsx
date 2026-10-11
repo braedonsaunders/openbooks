@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { TieOutTable } from '../../resourcing/TieOutTable'
 import type { PlanVsActualRow } from '@/lib/resourcing/tie-out'
+import { readApiErrorMessage } from '@/lib/api-error'
 
 /**
  * The project Staffing tab.
@@ -23,9 +24,10 @@ export function StaffingTab({ projectId }: { projectId: string }) {
   const refresh = useCallback(() => {
     return fetch(`/api/resourcing/projects/${encodeURIComponent(projectId)}/staffing`, { cache: 'no-store' })
       .then(async (res) => {
+        // The refusal reads through the shared helper, which joins message
+        // and remedy the same way with wider sources and a status fallback.
         if (!res.ok) {
-          const body = (await res.json().catch(() => null)) as { message?: string; error?: string; remedy?: string } | null
-          setError([body?.message ?? body?.error, body?.remedy].filter(Boolean).join(' — ') || tCommon('feedback.loadFailed'))
+          setError(await readApiErrorMessage(res, tCommon('feedback.loadFailed')))
           setRows([])
           return
         }

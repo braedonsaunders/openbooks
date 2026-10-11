@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Button, Input, Label, Select } from '@openbooks/ui';
-import { chunkArray, readApiErrorMessage } from "../../lib/api-error";
+import { chunkArray, readApiErrorMessage, refusalMessageFromBody } from "../../lib/api-error";
 import { isUuid } from "../../lib/list-params";
 
 export interface ClockProject {
@@ -311,11 +311,13 @@ export function ClockControls({
         commitQueue(
           queueRef.current.filter((entry) => !acknowledged.has(entry.key)),
         )
+        // The first per-entry refusal reads through the shared helper so
+        // message, remedy and code render instead of the bare `error` field.
         if (acknowledged.size !== batch.length) {
-          setError(
-            results.find((result) => result?.error)?.error ??
-              t('field.sendFailed'),
-          )
+          const refusal = results
+            .map((result) => refusalMessageFromBody(result, { fallback: '' }))
+            .find((text) => text != null)
+          setError(refusal ?? t('field.sendFailed'))
           return
         }
       }

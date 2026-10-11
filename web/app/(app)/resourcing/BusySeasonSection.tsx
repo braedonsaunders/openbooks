@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Badge, Button } from '@openbooks/ui'
 import { promptDialog } from '../../../lib/prompt'
 import { formatTicketHours } from '../../../lib/format'
+import { refusalMessageFromBody } from '../../../lib/api-error'
 import type { BusySeasonGap, BusySeasonProject } from '../../../lib/resourcing/busy-season'
 
 /**
@@ -50,8 +51,10 @@ async function readRefusal(response: Response, fallback: string): Promise<Refusa
     remedy?: string
     error?: string
   } | null
+  // The message reads through the shared helper so message and code render;
+  // the remedy stays separate because the caller renders it alone.
   return {
-    message: body?.message ?? body?.error ?? fallback,
+    message: refusalMessageFromBody({ ...body, remedy: undefined }, { fallback }) ?? fallback,
     remedy: body?.remedy,
   }
 }

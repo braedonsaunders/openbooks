@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { MoreHorizontal } from 'lucide-react'
 import { Badge, Button, ContextMenu, useContextMenu } from '@openbooks/ui'
 import { formatTicketHours } from '../../../../lib/format'
+import { refusalMessageFromBody } from '../../../../lib/api-error'
 import { sum } from '@openbooks/engine/src/money/money.ts'
 import type { GenericDemandWeek } from '@openbooks/engine/src/resourcing/forecast.ts'
 import type { DemandWeek } from '../../../../lib/resourcing/demand'
@@ -75,9 +76,14 @@ export function DemandRail({
     setRefusal(null)
     try {
       const response = await fetch(`/api/resourcing/assignments/${assignment.id}/release`, { method: 'POST' })
+      // The message reads through the shared helper so message and code
+      // render; the remedy stays separate because the pin renders it alone.
       if (!response.ok) {
         const body = await response.json().catch(() => null) as { message?: string; remedy?: string; error?: string } | null
-        setRefusal({ message: body?.message ?? body?.error ?? t('assignments.actionFailed'), remedy: body?.remedy })
+        setRefusal({
+          message: refusalMessageFromBody({ ...body, remedy: undefined }, { fallback: t('assignments.actionFailed') }) ?? t('assignments.actionFailed'),
+          remedy: body?.remedy,
+        })
         return
       }
       router.refresh()

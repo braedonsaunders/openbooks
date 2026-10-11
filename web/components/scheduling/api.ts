@@ -1,6 +1,7 @@
 'use client'
 
 import type { BoardChange, BoardTarget, BoardWindow, ChangeResult } from './model'
+import { refusalMessageFromBody } from '../../lib/api-error'
 import type { ProjectProgress } from '@openbooks/engine/src/schedule-boards/progress.ts'
 import type { ProjectTaskOption } from '@openbooks/engine/src/schedule-boards/targets.ts'
 
@@ -24,7 +25,12 @@ async function request<T>(url: string, init: RequestInit | undefined, fallback: 
     } catch {
       // A body that is not JSON keeps the status-derived message below.
     }
-    const message = typeof body.error === 'string' && body.error !== 'not_found' ? body.error : fallback
+    // The message reads through the shared helper with the remedy stripped
+    // (it rides separately below); the opaque probe code keeps the fallback.
+    const raw = typeof body.error === 'string' ? body.error : null
+    const message = raw === 'not_found'
+      ? fallback
+      : (refusalMessageFromBody({ ...body, remedy: undefined }, { fallback }) ?? fallback)
     throw new SchedulingRequestError(message, typeof body.remedy === 'string' ? body.remedy : null, typeof body.code === 'string' ? body.code : null)
   }
   return (await response.json()) as T

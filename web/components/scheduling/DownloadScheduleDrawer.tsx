@@ -4,6 +4,7 @@ import { useTranslations } from 'next-intl'
 import { Button, Drawer } from '@openbooks/ui'
 import { configuredSchedulePdfLayout, type SchedulePdfLayout } from '@openbooks/forms-core'
 import type { BoardWindow } from './model'
+import { refusalMessageFromBody } from '../../lib/api-error'
 import type { ScheduleBoardReportPreview } from '@openbooks/engine/src/schedule-boards/board-report.ts'
 import { SchedulePdfFields } from './SchedulePdfFields'
 import { SchedulingAlert } from './SchedulingAlert'
@@ -20,7 +21,9 @@ export function DownloadScheduleDrawer({window: initialWindow, onClose}: {window
     setBusy(true); setError(null)
     try {
       const response = await fetch(`/api/scheduling/boards/${board.board.id}/report`, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({command, from: board.from, through: board.through, layout: pdfLayout, ...(command === 'pdf' ? {version: preview?.version} : {})})})
-      if (!response.ok) {const body = await response.json().catch(() => ({})); throw new SchedulingRequestError(body.error ?? t('refused'), body.remedy ?? null, body.code ?? null)}
+      // The message reads through the shared helper with the remedy stripped
+      // (it rides separately in the error below).
+      if (!response.ok) {const body = await response.json().catch(() => ({})); throw new SchedulingRequestError(refusalMessageFromBody({ ...body, remedy: undefined }, { fallback: t('refused') }) ?? t('refused'), body.remedy ?? null, body.code ?? null)}
       if (command === 'preview') setPreview(await response.json())
       else {const url = URL.createObjectURL(await response.blob()); const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'Schedule.pdf'; anchor.click(); URL.revokeObjectURL(url)}
     } catch (cause) {setError({message: cause instanceof Error ? cause.message : t('refused'), remedy: cause instanceof SchedulingRequestError ? cause.remedy : null})}

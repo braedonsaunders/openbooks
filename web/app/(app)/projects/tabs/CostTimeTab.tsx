@@ -19,6 +19,7 @@ import {
 } from '@openbooks/ui'
 import { KpiStrip, type Kpi } from '../../../../components/kpi-strip'
 import { PagedTable } from '../../../../components/paged-table'
+import { refusalMessageFromBody } from '@/lib/api-error'
 // HR-20 begin: crew-today section.
 import { CrewTodaySection } from '../../../../components/field-time/CrewTodaySection'
 // HR-20 end
@@ -243,8 +244,10 @@ function TimeEntriesDrawer({
     })
       .then(async (response) => {
         if (response.ok) return response.json()
+        // The refusal reads through the shared helper so message, remedy and
+        // code render instead of the bare `error` field.
         const body = await response.json().catch(() => null)
-        throw new Error(body?.error || t('cockpit.timeEntriesLoadFailed'))
+        throw new Error(refusalMessageFromBody(body, { fallback: t('cockpit.timeEntriesLoadFailed') }) ?? t('cockpit.timeEntriesLoadFailed'))
       })
       .then((body: TimeEntryPage) => setData(body))
       .catch((reason: unknown) => {

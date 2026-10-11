@@ -15,6 +15,7 @@ import { DrawerTabStrip } from '../../../../components/drawer-tab-strip'
 import { DirtyUrlDrawer, useDirtyUrlDrawer } from '../../../../components/dirty-url-drawer'
 import { confirmDialog } from '../../../../lib/confirm'
 import { promptDialog } from '../../../../lib/prompt'
+import { refusalMessageFromBody } from '../../../../lib/api-error'
 import type { RequestDrawerData, RequestWeekPreview } from './view'
 
 type RequestFields = {
@@ -115,8 +116,10 @@ export function RequestDrawer({ drawer }: { drawer: RequestDrawerData }) {
     const fields = fieldErrors && typeof fieldErrors === 'object'
       ? fieldErrors as Record<string, string[]>
       : undefined
+    // The message reads through the shared helper so message and code
+    // render; the remedy stays separate because the drawer renders it alone.
     return {
-      message: body?.message ?? body?.error ?? t('drawer.requestFailed'),
+      message: refusalMessageFromBody({ ...body, remedy: undefined }, { fallback: t('drawer.requestFailed') }) ?? t('drawer.requestFailed'),
       remedy: body?.remedy,
       fields,
     }

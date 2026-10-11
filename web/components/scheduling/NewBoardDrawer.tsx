@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { CalendarDays, Clock3, Factory, ChartGantt, Boxes } from 'lucide-react'
 import { Button, Drawer, Input, Select, cn } from '@openbooks/ui'
+import { refusalMessageFromBody } from '../../lib/api-error'
 
 export interface ScopeOptions {
   readonly subsidiaries: readonly { id: string; name: string }[]
@@ -83,9 +84,11 @@ export function NewBoardDrawer({ open, onClose, timeZone, scope, peopleEnabled, 
           isActive: true,
         }),
       })
+      // The refusal reads through the shared helper so message, remedy and
+      // code render instead of the bare `error` field.
       if (!response.ok) {
         const body = (await response.json().catch(() => ({}))) as { error?: string }
-        setError(body.error ?? t('errors.save'))
+        setError(refusalMessageFromBody(body, { fallback: t('errors.save') }) ?? t('errors.save'))
         return
       }
       onClose()

@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { Button, Input, Select, Popover, cn } from '@openbooks/ui'
 import { SchedulingAlert } from './SchedulingAlert'
+import { refusalMessageFromBody } from '../../lib/api-error'
 import { EmailScheduleDrawer } from './EmailScheduleDrawer'
 import { DownloadScheduleDrawer } from './DownloadScheduleDrawer'
 import { BookingDrawer } from './BookingDrawer'
@@ -192,7 +193,7 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
     setSavingDisplay(true)
     try {
       const response=await fetch(`/api/scheduling/boards/${board.id}/display`,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({showHoursColumn:value})})
-      if(!response.ok) {const refusal=await response.json().catch(()=>({})); throw new SchedulingRequestError(refusal.error ?? t('errors.save'),refusal.remedy ?? null,refusal.code ?? null)}
+      if(!response.ok) {const refusal=await response.json().catch(()=>({})); throw new SchedulingRequestError(refusalMessageFromBody({ ...refusal, remedy: undefined }, { fallback: t('errors.save') }) ?? t('errors.save'),refusal.remedy ?? null,refusal.code ?? null)}
       setShowHoursColumn(value); await controller.reload()
     } catch(error) {controller.notify('error',error instanceof Error?error.message:t('errors.save'),error instanceof SchedulingRequestError?error.remedy:null)}
     finally {setSavingDisplay(false)}

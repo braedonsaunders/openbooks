@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { SchedulingAlert } from './SchedulingAlert'
+import { refusalMessageFromBody } from '../../lib/api-error'
 import { Search } from 'lucide-react'
 import { Input, cn } from '@openbooks/ui'
 import { ScheduleTab } from '../../app/(app)/projects/tabs/ScheduleTab'
@@ -119,9 +120,11 @@ function ProgressView({ boardId, projectId, canManage }: { boardId: string; proj
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ projectId, action: 'updateTask', taskId: task.id, patch: { progress: parsed } }),
     })
+    // The message reads through the shared helper so message and code render;
+    // the remedy stays separate because the alert renders it alone.
     if (!response.ok) {
       const body = (await response.json().catch(() => ({}))) as { error?: string; remedy?: string }
-      setError({ message: body.error ?? t('errors.save'), remedy: body.remedy ?? null })
+      setError({ message: refusalMessageFromBody({ ...body, remedy: undefined }, { fallback: t('errors.save') }) ?? t('errors.save'), remedy: body.remedy ?? null })
     }
     if (response.ok) await load()
     setSaving(null)

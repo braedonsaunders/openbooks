@@ -22,6 +22,7 @@ import { decimalLabel, viewerDate } from '../../../lib/format'
 import { toast } from 'sonner'
 import { useBusinessToday } from '../../../components/business-date-provider'
 import { confirmDialog } from '../../../lib/confirm'
+import { refusalMessageFromBody } from '../../../lib/api-error'
 import { promptDialog } from '../../../lib/prompt'
 import { CalendarCheck, Check, ChevronLeft, ChevronRight, FilePenLine, Loader2, Lock, Plus, RotateCcw, Trash2, Undo2 } from 'lucide-react'
 import { fillFromSchedule } from '../../../lib/scheduling/timesheet-fill'
@@ -438,12 +439,13 @@ export function WeeklyGrid({
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body),
       })
+      // The refusal reads through the shared helper so message and code
+      // render instead of only the bare `error` field.
       if (res.status === 409 && onConflict) {
         const data = (await res.json().catch(() => ({}))) as { error?: unknown }
         onConflict(
-          typeof data.error === 'string' && data.error
-            ? data.error
-            : tCommon('feedback.somethingWentWrong'),
+          refusalMessageFromBody(data, { fallback: tCommon('feedback.somethingWentWrong') })
+            ?? tCommon('feedback.somethingWentWrong'),
         )
         return null
       }
@@ -458,10 +460,12 @@ export function WeeklyGrid({
         // setup page. Anything else falls back to the generic failure. The
         // refusal pins beside the actions until the next action — a toast
         // alone vanishes, and the operator reads silence as success.
+        // The message reads through the shared helper so message and code
+        // render; the remedy stays separate because it pins and toasts on
+        // its own line below.
         const message =
-          typeof data?.error === 'string' && data.error
-            ? data.error
-            : tCommon('feedback.somethingWentWrong')
+          refusalMessageFromBody({ ...data, remedy: undefined }, { fallback: tCommon('feedback.somethingWentWrong') })
+            ?? tCommon('feedback.somethingWentWrong')
         const remedy = typeof data?.remedy === 'string' && data.remedy ? data.remedy : null
         const setupHref = data?.details && typeof data.details.setupHref === 'string' && data.details.setupHref.startsWith('/')
           ? data.details.setupHref

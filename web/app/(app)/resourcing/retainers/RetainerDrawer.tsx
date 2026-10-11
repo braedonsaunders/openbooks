@@ -10,6 +10,7 @@ import type { CustomFieldDefClient } from '../../../../components/custom-field-i
 import { HeaderFields } from '../../../../components/transaction-form/header-fields'
 import { PagedTable, type PagedColumn } from '../../../../components/paged-table'
 import { DrawerTabStrip } from '../../../../components/drawer-tab-strip'
+import { refusalMessageFromBody } from '../../../../lib/api-error'
 import { DirtyUrlDrawer, useDirtyUrlDrawer } from '../../../../components/dirty-url-drawer'
 import { confirmDialog } from '../../../../lib/confirm'
 import { promptDialog } from '../../../../lib/prompt'
@@ -117,8 +118,10 @@ export function RetainerDrawer({ drawer }: { drawer: RetainerDrawerData }) {
     const fieldMap = fieldErrors && typeof fieldErrors === 'object'
       ? fieldErrors as Record<string, string[]>
       : undefined
+    // The message reads through the shared helper so message and code
+    // render; the remedy stays separate because the drawer renders it alone.
     return {
-      message: body?.message ?? body?.error ?? t('drawer.saveFailed'),
+      message: refusalMessageFromBody({ ...body, remedy: undefined }, { fallback: t('drawer.saveFailed') }) ?? t('drawer.saveFailed'),
       remedy: body?.remedy,
       fields: fieldMap,
     }

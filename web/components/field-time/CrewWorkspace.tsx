@@ -6,7 +6,7 @@ import { useTranslations } from 'next-intl'
 import { useViewerFormat } from '@/lib/viewer-format'
 import { Button, Input, Label, Select } from '@openbooks/ui'
 import { Field } from '@/components/field'
-import { readApiErrorMessage } from '../../lib/api-error'
+import { readApiErrorMessage, refusalMessageFromBody } from '../../lib/api-error'
 
 export interface CrewLine {
   id?: string
@@ -128,8 +128,10 @@ export function CrewWorkspace({
           body: JSON.stringify({ action, ...extra }),
         })
         const payload = (await res.json().catch(() => null)) as { error?: string } | null
+        // The refusal reads through the shared helper so message, remedy and
+        // code render instead of the bare `error` field.
         if (!res.ok) {
-          setError(payload?.error ?? t('field.sendFailed'))
+          setError(refusalMessageFromBody(payload, { fallback: t('field.sendFailed') }) ?? t('field.sendFailed'))
           return false
         }
         setSavedAt(dateTime(new Date(), { hour: 'numeric', minute: '2-digit' }))

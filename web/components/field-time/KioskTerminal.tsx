@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Button, Input, Label } from '@openbooks/ui'
+import { readApiErrorMessage } from '@/lib/api-error'
 
 interface KioskWorker {
   id: string
@@ -107,9 +108,10 @@ export function KioskTerminal({
                 },
           ),
         })
-        const payload = (await res.json().catch(() => null)) as { error?: string } | null
+        // The refusal reads through the shared helper so message, remedy and
+        // code render instead of a bare fallback.
         if (!res.ok) {
-          setError(payload?.error ?? t('field.sendFailed'))
+          setError(await readApiErrorMessage(res, t('field.sendFailed')))
           return
         }
         if (action === 'identify') {
@@ -247,9 +249,16 @@ export function KioskTerminal({
                   method: 'PUT',
                   body: form,
                 })
-                const payload = (await res.json().catch(() => null)) as { error?: string; fileId?: string } | null
-                if (!res.ok || !payload?.fileId) {
-                  setError(payload?.error ?? t('field.photoUploadFailed'))
+                // The refusal reads through the shared helper so message, remedy
+                // and code render; the success body parses after the ok check.
+                if (!res.ok) {
+                  setError(await readApiErrorMessage(res, t('field.photoUploadFailed')))
+                  setPhotoId(null)
+                  return
+                }
+                const payload = (await res.json().catch(() => null)) as { fileId?: string } | null
+                if (!payload?.fileId) {
+                  setError(t('field.photoUploadFailed'))
                   setPhotoId(null)
                   return
                 }

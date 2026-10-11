@@ -21,6 +21,7 @@ import {
 import { Field } from "@/components/field";
 import { useDirtyClose } from "@/lib/use-dirty-close";
 import { confirmDialog } from "@/lib/confirm";
+import { refusalMessageFromBody } from "@/lib/api-error";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
@@ -172,10 +173,18 @@ export function ApplicationsBillingWorkspace({
       cache: "no-store",
     })
       .then(async (response) => {
+        // The sentence mapper below matches exact server text, so the refusal
+        // reads through the shared helper with the remedy stripped: `message`
+        // bodies map like `error` ones instead of falling to the generic load
+        // failure.
         if (!response.ok) {
           const body = (await response.json().catch(() => ({}))) as { error?: unknown };
           setData(null);
-          setError(constructionRefusal(t, body.error, t("errors.load")));
+          setError(constructionRefusal(
+            t,
+            refusalMessageFromBody({ ...body, remedy: undefined }, { fallback: "" }) || body.error,
+            t("errors.load"),
+          ));
           return;
         }
         setData(await response.json());

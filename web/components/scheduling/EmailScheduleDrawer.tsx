@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import { Button, Drawer, Input, Select, RichTextEditor } from "@openbooks/ui";
 import { configuredSchedulePdfLayout, plainTextDocument, richTextPlainText, type RichTextDocument, type SchedulePdfLayout } from "@openbooks/forms-core";
 import type { BoardWindow } from './model'
+import { refusalMessageFromBody } from '../../lib/api-error'
 import type { ScheduleDistributionPreview } from '@openbooks/engine/src/schedule-boards/distribution.ts'
 import { SchedulePdfFields } from './SchedulePdfFields'
 import { SchedulingAlert } from './SchedulingAlert'
@@ -68,9 +69,11 @@ export function EmailScheduleDrawer({
       { signal: abort.signal, cache: "no-store" },
     )
       .then(async (response) => {
+        // The refusal reads through the shared helper so message, remedy and
+        // code render instead of the bare `error` field.
         if (!response.ok) {
           const refusal = await response.json().catch(() => ({}));
-          throw new Error(refusal.error ?? t("refused"));
+          throw new Error(refusalMessageFromBody(refusal, { fallback: t("refused") }) ?? t("refused"));
         }
         return response.json();
       })
@@ -132,10 +135,12 @@ export function EmailScheduleDrawer({
           }),
         },
       )
+      // The message reads through the shared helper with the remedy stripped
+      // (it rides separately in the error below).
       if (!response.ok) {
         const body = await response.json().catch(() => ({}))
         throw new SchedulingRequestError(
-          body.error ?? t('refused'),
+          refusalMessageFromBody({ ...body, remedy: undefined }, { fallback: t('refused') }) ?? t('refused'),
           body.remedy ?? null,
           body.code ?? null,
         )

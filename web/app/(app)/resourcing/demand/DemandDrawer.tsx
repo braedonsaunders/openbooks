@@ -10,6 +10,7 @@ import { DrawerTabStrip } from '@/components/drawer-tab-strip'
 import { PagedTable, type PagedColumn } from '@/components/paged-table'
 import { DirtyUrlDrawer, useDirtyUrlDrawer } from '@/components/dirty-url-drawer'
 import { confirmDialog } from '@/lib/confirm'
+import { refusalMessageFromBody } from '@/lib/api-error'
 
 type DemandForm = {
   departmentId: string
@@ -56,8 +57,10 @@ function errorParts(value: unknown): { message: string; remedy: string | null; f
   const fieldErrors = body.errors && typeof body.errors === 'object' && !Array.isArray(body.errors)
     ? Object.fromEntries(Object.entries(body.errors).filter((entry): entry is [string, string] => typeof entry[1] === 'string'))
     : {}
+  // The message reads through the shared helper so message and code render;
+  // the remedy stays separate because the drawer renders it alone.
   return {
-    message: typeof body.error === 'string' ? body.error : '',
+    message: refusalMessageFromBody({ ...body, remedy: undefined }, { fallback: '' }) ?? '',
     remedy: typeof body.remedy === 'string' ? body.remedy : null,
     fieldErrors,
   }
@@ -94,9 +97,11 @@ export function DemandDrawer({ drawer }: { drawer: DemandDrawerData }) {
   async function readFailure(response: Response, fallback: string): Promise<void> {
     const body = await response.json().catch(() => null) as { message?: string; remedy?: string; error?: string } | null
     const details = errorParts(body)
+    // The refusal reads through the shared helper so message, remedy and
+    // code render instead of only the message-or-error field.
     setError(Object.keys(details.fieldErrors).length
       ? t('demandLines.errors.customFields')
-      : [body?.message ?? body?.error ?? fallback, body?.remedy].filter(Boolean).join(' '))
+      : (refusalMessageFromBody(body, { fallback }) ?? fallback))
     setFieldErrors(details.fieldErrors)
   }
 

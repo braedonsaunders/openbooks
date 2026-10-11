@@ -8,6 +8,7 @@ import { CustomFieldInputs } from '../../../components/custom-field-inputs'
 import { DirtyUrlDrawer, useDirtyUrlDrawer } from '../../../components/dirty-url-drawer'
 import { DrawerTabStrip } from '../../../components/drawer-tab-strip'
 import { confirmDialog } from '../../../lib/confirm'
+import { refusalMessageFromBody } from '../../../lib/api-error'
 import { formatTicketHours } from '../../../lib/format'
 import type { AssignmentDrawerData } from '../../../lib/resourcing/assignment-drawer'
 
@@ -126,8 +127,10 @@ function AssignmentDrawerContent({
       fields?: Record<string, string>
     }
     const fields = body.fields
+    // The message reads through the shared helper so message and code
+    // render; the remedy stays separate because the drawer renders it alone.
     setRefusal({
-      message: body.message ?? body.error ?? t('assignments.saveFailed'),
+      message: refusalMessageFromBody({ ...body, remedy: undefined }, { fallback: t('assignments.saveFailed') }) ?? t('assignments.saveFailed'),
       remedy: body.remedy,
       fields,
     })
