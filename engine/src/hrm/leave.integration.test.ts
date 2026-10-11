@@ -794,17 +794,29 @@ test("after-the-fact recording writes the absence record and never a pay input",
     const recorded = await recordAbsence({
       orgId: h.org.orgId, actorId: h.managerId, employmentId,
       onDate: "2026-08-15", hours: "8", leaveTypeId: type.id,
+      reason: "approved verbally by the owner",
     });
     assert.equal(recorded.source, "recorded");
-    const rows = (await db.execute<{ source: string }>(sql`
-      select source from hrm_absences where id = ${recorded.id}
+    assert.equal(recorded.reason, "approved verbally by the owner");
+    const rows = (await db.execute<{ source: string; reason: string | null }>(sql`
+      select source, reason from hrm_absences where id = ${recorded.id}
     `)).rows;
     assert.equal(rows[0]!.source, "recorded");
+    assert.equal(rows[0]!.reason, "approved verbally by the owner", "the basis is persisted on the record");
+    const audit = (await db.execute<{ action: string; reason: string | null; actor: string }>(sql`
+      select action, changes->'after'->>'reason' as reason, actor_id::text as actor from audit_log
+       where org_id = ${h.org.orgId} and table_name = 'hrm_absences' and row_id = ${recorded.id}
+    `)).rows;
+    assert.equal(audit.length, 1, "the recording writes its audit entry");
+    assert.equal(audit[0]!.action, "absence_recorded");
+    assert.equal(audit[0]!.reason, "approved verbally by the owner", "the audit entry carries the same basis");
+    assert.equal(audit[0]!.actor, h.managerId);
     assert.equal((await inputsOf(recorded.id)).length, 0, "recorded rows raise no pay-run input: value crosses only through approval");
     try {
       await recordAbsence({
         orgId: h.org.orgId, actorId: h.managerId, employmentId,
         onDate: "2026-08-15", hours: "4", leaveTypeId: type.id,
+        reason: "second attempt",
       });
       assert.fail("double-recording a day must refuse");
     } catch (error) {
@@ -1301,6 +1313,7 @@ test("eight concurrent recordings of one day produce one row and seven named ref
         recordAbsence({
           orgId: h.org.orgId, actorId: h.managerId, employmentId,
           onDate: "2026-08-15", hours: "8", leaveTypeId: type.id,
+          reason: "race-day basis",
         })),
     );
     const fulfilled = attempts.filter((outcome) => outcome.status === "fulfilled");

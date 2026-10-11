@@ -1,0 +1,1 @@
+No backfill and no data-validated constraint: one nullable column defaults NULL, the new CHECK admits NULL, and the engine refuses new basis-required recordings without a reason.

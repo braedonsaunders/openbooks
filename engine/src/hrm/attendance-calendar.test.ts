@@ -28,6 +28,7 @@ registerHooks({
             if(globalThis.__calendarRefusal) throw globalThis.__calendarRefusal;
           }
           export async function requireHrmLeaveManageOnEmployment(){throw new Error('unexpected write')}
+          export async function loadOwnEmploymentIds(){return []}
         `),
         }
     }

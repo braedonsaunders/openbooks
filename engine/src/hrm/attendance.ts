@@ -1,7 +1,9 @@
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
+import { businessToday } from "../platform/business-date.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import {
+  loadOwnEmploymentIds,
   requireHrmLeaveManageOnEmployment,
   requireHrmLeaveRead,
 } from "./authorization.ts";
@@ -33,6 +35,8 @@ export interface RecordAbsenceQuery {
   readonly onDate: unknown;
   readonly hours: unknown;
   readonly leaveTypeId: string;
+  /** Basis for the filing (for example the verbal approval of a back-dated day). */
+  readonly reason?: unknown;
 }
 
 export interface AbsenceDay {
@@ -43,6 +47,8 @@ export interface AbsenceDay {
   readonly hours: string;
   readonly leaveTypeCode: string;
   readonly source: "request" | "recorded";
+  /** Basis recorded at filing; null for approval-written and legacy rows. */
+  readonly reason: string | null;
 }
 
 function requireCivilDate(value: unknown, field = "on_date"): string {
@@ -71,7 +77,20 @@ function requirePositiveHours(value: unknown): string {
   }
 }
 
-/** Record an absence after the fact (manager-held, reasoned elsewhere). */
+function requireRecordReason(reason: unknown): string {
+  if (typeof reason !== "string" || reason.trim().length === 0) {
+    throw new LeaveError("INVALID_INPUT", "a recorded absence carries its basis — record why (for example the verbal approval)");
+  }
+  return reason.trim();
+}
+
+/**
+ * Record an absence after the fact (manager-held). The basis rides on the
+ * row and in the audit entry: a back-dated day or a day recorded for
+ * another worker is refused without a non-blank reason. The requirement is
+ * decided here from the date and the actor's own employments — never only
+ * in the UI.
+ */
 export async function recordAbsence(query: RecordAbsenceQuery): Promise<AbsenceDay> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
@@ -81,6 +100,27 @@ export async function recordAbsence(query: RecordAbsenceQuery): Promise<AbsenceD
   const hours = requirePositiveHours(query.hours);
   return withOrgTransaction(orgId, async () => {
     await requireHrmLeaveManageOnEmployment(db, orgId, actorId, query.employmentId);
+    // The basis requirement is engine-decided: back-dated against the
+    // org's business day, on-behalf against the employments behind the
+    // login (created_by never decides — it is the audit trail, not the
+    // path). A supplied reason is always validated; a missing one refuses
+    // only when the recording needs its basis recorded.
+    const today = await businessToday(orgId);
+    const own = await loadOwnEmploymentIds(db, orgId, actorId);
+    const reason =
+      query.reason === undefined || query.reason === null ? null : requireRecordReason(query.reason);
+    if (reason === null && onDate < today) {
+      throw new LeaveError(
+        "INVALID_INPUT",
+        `absence ${onDate} is back-dated before today ${today} — record the basis (for example the verbal approval) in the reason`,
+      );
+    }
+    if (reason === null && !own.includes(query.employmentId)) {
+      throw new LeaveError(
+        "INVALID_INPUT",
+        "recording for another worker carries the basis — record why (for example the verbal approval) in the reason",
+      );
+    }
     const type = (await db.execute<{ id: string; code: string; is_active: boolean; value_crossing: string }>(sql`
       select id, code, is_active, value_crossing from hrm_leave_types
        where org_id = ${orgId} and id = ${query.leaveTypeId}
@@ -112,9 +152,9 @@ export async function recordAbsence(query: RecordAbsenceQuery): Promise<AbsenceD
     try {
       inserted = (await db.execute<{ id: string }>(sql`
         insert into hrm_absences (org_id, leave_request_id, employment_id, on_date, hours,
-          leave_type_id, source, created_by, updated_by)
+          leave_type_id, source, reason, created_by, updated_by)
         values (${orgId}, null, ${query.employmentId}, ${onDate}, ${hours},
-          ${query.leaveTypeId}, 'recorded', ${actorId}, ${actorId})
+          ${query.leaveTypeId}, 'recorded', ${reason}, ${actorId}, ${actorId})
         returning id
       `)).rows[0];
     } catch (error) {
@@ -127,12 +167,24 @@ export async function recordAbsence(query: RecordAbsenceQuery): Promise<AbsenceD
       throw error;
     }
     if (!inserted) throw new LeaveError("REFUSED", "the absence was not stored — no row was written; retry the request");
-    return { id: inserted.id, employmentId: query.employmentId, onDate, hours, leaveTypeCode: type.code, source: "recorded" as const };
+    // The recording's audit entry carries the same basis the row does, in
+    // the same transaction — the row without its event rolls back together.
+    const audited = (await db.execute<{ id: string }>(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'hrm_absences', ${inserted.id}, 'absence_recorded',
+        ${JSON.stringify({ event: "absence_recorded", before: null, after: { employmentId: query.employmentId, onDate, hours, leaveTypeCode: type.code, source: "recorded", reason } })}::jsonb,
+        ${actorId})
+      returning id
+    `)).rows[0];
+    if (!audited) throw new LeaveError("REFUSED", "the absence was stored without its audit event — no event was written; retry the request");
+    return { id: inserted.id, employmentId: query.employmentId, onDate, hours, leaveTypeCode: type.code, source: "recorded" as const, reason };
   });
 }
 
 export interface DepartmentAbsenceDay extends AbsenceDay {
   readonly workerName: string;
+  /** The approved request behind a request-sourced day; null for recorded days. */
+  readonly leaveRequestId: string | null;
 }
 
 /**
@@ -190,8 +242,10 @@ export async function absenceCalendarForDepartment(
     )`;
     const rows = (await exec.execute<{
       id: string; on_date: string; hours: string; code: string; source: "request" | "recorded";
+      leave_request_id: string | null; reason: string | null;
     }>(sql`
-      select a.id, a.on_date::text as on_date, a.hours::text as hours, t.code, a.source
+      select a.id, a.on_date::text as on_date, a.hours::text as hours, t.code, a.source,
+             a.leave_request_id, a.reason
         from hrm_absences a join hrm_leave_types t on t.id = a.leave_type_id and t.org_id = a.org_id
        where a.org_id = ${orgId} and a.employment_id = ${member.employment_id}
          and a.on_date >= ${from} and a.on_date <= ${to} ${department}
@@ -199,7 +253,7 @@ export async function absenceCalendarForDepartment(
     `)).rows;
     // Net each leave type independently: a cancelled vacation and a new
     // sick day on the same date must not inherit each other's type or hours.
-    const net = new Map<string, { onDate: string; hours: string; code: string; source: "request" | "recorded"; id: string }>();
+    const net = new Map<string, { onDate: string; hours: string; code: string; source: "request" | "recorded"; id: string; leaveRequestId: string | null; reason: string | null }>();
     for (const row of rows) {
       const onDate = String(row.on_date).slice(0, 10);
       const key = `${onDate}:${row.code}`;
@@ -210,6 +264,8 @@ export async function absenceCalendarForDepartment(
         hours: current ? addHours(current.hours, String(row.hours)) : String(row.hours),
         code: row.code,
         source: row.source,
+        leaveRequestId: row.leave_request_id != null ? String(row.leave_request_id) : null,
+        reason: row.reason != null ? String(row.reason) : null,
       });
     }
     for (const entry of net.values()) {
@@ -221,6 +277,8 @@ export async function absenceCalendarForDepartment(
         hours: entry.hours,
         leaveTypeCode: entry.code,
         source: entry.source,
+        reason: entry.reason,
+        leaveRequestId: entry.leaveRequestId,
         workerName: member.worker_name,
       });
     }
