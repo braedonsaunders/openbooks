@@ -81,11 +81,11 @@ function stateFor(approvalState: Record<string, unknown>) {
   };
 }
 
-async function mount(approvalState: Record<string, unknown>) {
+async function mount(approvalState: Record<string, unknown>, extra: Record<string, unknown> = {}) {
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
-    if (url.includes("/api/flows/record-state")) return Response.json(stateFor(approvalState));
+    if (url.includes("/api/flows/record-state")) return Response.json({ ...stateFor(approvalState), ...extra });
     return Response.json({});
   }) as typeof fetch;
   const host = document.createElement("div");
@@ -161,6 +161,19 @@ test("PO drawer offers Approve to a read-only gate assignee", async () => {
   try {
     assert.ok(view.buttons.includes("Approve"), "the gate decision must render outside the edit grant");
     assert.ok(view.buttons.includes("Reject"), "reject renders with its reason field");
+  } finally {
+    await view.cleanup();
+  }
+});
+
+test("PO drawer offers Withdraw submission to a viewer who may recall it", async () => {
+  const view = await mount({
+    status: "pending",
+    pendingWith: [{ name: "Casey Controller", gateId: "gate-1", since: "2026-09-01T10:00:00.000Z" }],
+    myActions: null,
+  }, { canWithdraw: true });
+  try {
+    assert.ok(view.buttons.includes("Withdraw submission"), "the native document withdraw must render for a pending purchase order");
   } finally {
     await view.cleanup();
   }

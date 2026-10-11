@@ -2207,7 +2207,15 @@ export function OrderDrawer({
                 gate decision path the Inbox uses. Renders nothing when no
                 gate awaits this viewer — including "Awaiting another
                 approver" for SoD-blocked viewers. */}
-            <ApprovalActions subjectKind={kind} subjectId={String(doc.id)} />
+            <ApprovalActions
+              subjectKind={kind}
+              subjectId={String(doc.id)}
+              // A pending-approval purchase order withdraws through the same
+              // native document withdraw the bill drawer uses; the button
+              // additionally requires record-state canWithdraw, so only the
+              // submitter or a live approver sees it.
+              withdrawDocumentId={kind === 'purchase_order' && doc.status === 'pending_approval' ? String(doc.id) : undefined}
+            />
           </>
         ) : null
       }
