@@ -105,3 +105,50 @@ test(
     }
   },
 );
+
+/**
+ * A refused employee has no stub on the run. Correcting the carry-in the
+ * refusal names must still make the run stale, or Recalculate never appears
+ * and the remedy is unreachable.
+ */
+test(
+  "a carry-in saved for an employee the calculation refused makes the run stale",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const fx = await seedAdoption();
+    try {
+      const { input } = await calculatedRun(fx);
+      // The stored outcome of a refused employee: a recorded refusal, no stub.
+      await db.execute(sql`
+        delete from pay_stub_lines where org_id = ${fx.orgId} and stub_id in (
+          select id from pay_stubs where org_id = ${fx.orgId} and pay_run_document_id = ${input.documentId})`);
+      const removed = await db.execute(sql`
+        delete from pay_stubs where org_id = ${fx.orgId} and pay_run_document_id = ${input.documentId} returning id`);
+      assert.equal(removed.rows.length, 1);
+      await db.execute(sql`
+        update pay_runs set calculation_errors = ${JSON.stringify([{
+          employeePartyId: fx.employeeId, employee: "Refused employee", kind: "refusal",
+          message: "prior insurable wages need a state allocation",
+        }])}::jsonb
+         where org_id = ${fx.orgId} and document_id = ${input.documentId}`);
+      assert.deepEqual((await payRunStaleness(fx.orgId, input.documentId)).reasons, []);
+
+      const saved = await saveOpeningBalances({
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        taxYear: 2026,
+        rows: [{
+          employeePartyId: fx.employeeId,
+          amounts: { pensionableYtd: "60000.00", insurableYtd: "60000.00", cppYtd: "3500.00" },
+          components: {},
+        }],
+      });
+      assert.deepEqual(saved.errors, []);
+      const stale = await payRunStaleness(fx.orgId, input.documentId);
+      assert.ok(stale.stale, "the corrected refusal is recalculable");
+      assert.ok(stale.reasons.includes("openingBalances"));
+    } finally {
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  },
+);

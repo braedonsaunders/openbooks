@@ -1,5 +1,5 @@
 import { payrollEmploymentOverlapsPeriod, payrollEpisodeDate } from "./employment-roster.ts";
-import { getTableColumns, sql } from "drizzle-orm";
+import { getTableColumns, sql, type SQL } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { PayrollError } from "./error.ts";
@@ -1476,6 +1476,23 @@ export const STALENESS_INPUT_CLASSES = [
  * route to have asked it first; defaulting to the module connection keeps
  * every existing caller unchanged.
  */
+/**
+ * Whether an employee (a uuid text expression) is on pay run `r`: they have a
+ * stub, or the last calculation recorded a refusal or warning for them. A
+ * refused employee has no stub, and the remedy a refusal names — correcting
+ * that employee's carry-ins — must still make the run stale so it can be
+ * recalculated.
+ */
+function employeeOnRun(employeePartyId: SQL): SQL {
+  return sql`(exists (select 1 from pay_stubs mine
+                       where mine.org_id = r.org_id and mine.pay_run_document_id = r.document_id
+                         and mine.employee_party_id::text = ${employeePartyId})
+              or exists (select 1 from jsonb_array_elements(
+                           case when jsonb_typeof(r.calculation_errors) = 'array'
+                                then r.calculation_errors else '[]'::jsonb end) recorded
+                          where recorded->>'employeePartyId' = ${employeePartyId}))`;
+}
+
 export async function payRunStaleness(
   orgId: string,
   documentId: string,
@@ -1684,12 +1701,9 @@ export async function payRunStaleness(
                 and other.updated_at > r.calculated_at
                 and exists (
                   select 1 from pay_stubs os
-                    join pay_stubs mine
-                      on mine.employee_party_id = os.employee_party_id
-                     and mine.org_id = os.org_id
-                     and mine.pay_run_document_id = r.document_id
                    where os.org_id = r.org_id
-                     and os.pay_run_document_id = other.document_id)) as ytd_changed,
+                     and os.pay_run_document_id = other.document_id
+                     and ${employeeOnRun(sql`os.employee_party_id::text`)})) as ytd_changed,
            -- Employer-scope carry-ins (payroll_employer_levy_opening, 0174) are
            -- the same fact at employer scope: pre-adoption base a declared
            -- aggregate levy prices its room against. Scoped to the countries
@@ -1725,15 +1739,11 @@ export async function payRunStaleness(
              select 1 from audit_log prior_evidence
               where prior_evidence.org_id=r.org_id and prior_evidence.table_name='payroll_prior_earnings'
                 and prior_evidence.at>r.calculated_at
-                and exists(select 1 from pay_stubs mine where mine.org_id=r.org_id
-                  and mine.pay_run_document_id=r.document_id
-                  and mine.employee_party_id::text=prior_evidence.changes->>'employeePartyId'))
+                and ${employeeOnRun(sql`prior_evidence.changes->>'employeePartyId'`)})
             or exists (
              select 1 from payroll_opening_balances b
-               join pay_stubs mine
-                 on mine.employee_party_id = b.employee_party_id and mine.org_id = b.org_id
-                and mine.pay_run_document_id = r.document_id
               where b.org_id = r.org_id and b.tax_year = r.tax_year
+                and ${employeeOnRun(sql`b.employee_party_id::text`)}
                 and (b.updated_at > r.calculated_at
                      or exists (select 1 from payroll_opening_balance_components oc
                                  where oc.org_id = b.org_id and oc.opening_balance_id = b.id
@@ -1743,9 +1753,7 @@ export async function payRunStaleness(
               where al.org_id = r.org_id and al.table_name = 'payroll_opening_balances'
                 and al.at > r.calculated_at
                 and (al.changes->>'taxYear')::int = r.tax_year
-                and exists (select 1 from pay_stubs mine
-                             where mine.org_id = r.org_id and mine.pay_run_document_id = r.document_id
-                               and mine.employee_party_id::text = al.changes->>'employeePartyId')))
+                and ${employeeOnRun(sql`al.changes->>'employeePartyId'`)}))
              as opening_balances_changed
       from pay_runs r
       join documents d on d.id = r.document_id and d.org_id = r.org_id
