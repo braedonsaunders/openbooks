@@ -53,7 +53,7 @@ export function ProgramDrawer({
   const [simulateTo, setSimulateTo] = useState(drawer.simulation?.periodTo ?? '')
   const [member, setMember] = useState<MembershipDraft>({
     employmentId: '',
-    effectiveFrom: '',
+    effectiveFrom: drawer.program.effectiveFrom,
     effectiveTo: '',
     weight: '',
     role: '',
@@ -128,7 +128,7 @@ export function ProgramDrawer({
         return
       }
       setAdding(false)
-      setMember({ employmentId: '', effectiveFrom: '', effectiveTo: '', weight: '', role: '' })
+      setMember({ employmentId: '', effectiveFrom: program.effectiveFrom, effectiveTo: '', weight: '', role: '' })
       router.refresh()
     } catch {
       toast.error(t('portfolio.programActionFailed'))
@@ -347,6 +347,7 @@ export function ProgramDrawer({
     <div className="p-4">
       {!drawer.drawerRefusal ? (
         <>
+          {program.eligibility === 'all_employees' ? <p className="mb-3 text-sm text-slate-600 dark:text-slate-300">{t('portfolio.members.employerWide')}</p> : null}
           <PreparedPagedTable
             source="hrm_benefit_program_participants"
             rows={drawer.members.map((m) => ({

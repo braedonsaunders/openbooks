@@ -84,6 +84,7 @@ export const POST = defineRoute({
         poolRounding: body.poolRounding ?? "share",
         includeOpenCommitments: body.includeOpenCommitments ?? false,
         hourClassifications: body.hourClassifications ?? [],
+        eligibility: body.eligibility ?? "members",
         allocation: body.allocation ?? "equal",
         percentRate: body.percentRate ?? null,
         fixedAmount: body.fixedAmount ?? null,

@@ -3037,7 +3037,8 @@
       "weightHint": "Un poids positif est requis pour une répartition pondérée par rôle. Les répartitions égales ou par heures approuvées n’utilisent pas ce champ.",
       "role": "Rôle",
       "rolePlaceholder": "Contributeur",
-      "roleHint": "Rôle enregistré pour cette adhésion ; les poids de répartition sont configurés séparément."
+      "roleHint": "Rôle enregistré pour cette adhésion ; les poids de répartition sont configurés séparément.",
+      "employerWide": "Tous les employés de l’employeur en service actif pendant la période sont admissibles ; les règles du programme déterminent qui est payé."
     },
     "addMember": "Ajouter un membre",
     "removeMember": "Mettre fin à l'adhésion",
@@ -3124,7 +3125,8 @@
         "poolRounding": "Arrondi",
         "includeOpenCommitments": "Compter les engagements d’achat ouverts comme coûts",
         "excludedProjects": "Projets exclus",
-        "hourClassifications": "Catégories de temps comptées"
+        "hourClassifications": "Catégories de temps comptées",
+        "eligibility": "Qui est admissible"
       },
       "allEntities": "Choisir l’entité juridique",
       "entityHint": "Une entité juridique porte le programme et ses obligations de paie. Ajoutez les employés admissibles après la création du brouillon.",
@@ -3349,6 +3351,10 @@
       "overtime": "Heures supplémentaires",
       "double_time": "Temps double",
       "other": "Autre"
+    },
+    "eligibility": {
+      "all_employees": "Tous les employés de l’employeur",
+      "members": "Membres sélectionnés"
     }
   },
   "talentWorkspace": {

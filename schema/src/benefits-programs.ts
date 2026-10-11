@@ -118,6 +118,8 @@ export const benefitPrograms = pgTable(
     includeOpenCommitments: boolean("include_open_commitments").notNull().default(false),
     /** Approved-hour measures count only these time classifications; null counts all. */
     hourClassifications: text("hour_classifications").array(),
+    /** members: named memberships; all_employees: every employee of the employer in active service during the period. */
+    eligibility: text("eligibility").notNull().default("members"),
     revision: integer("revision").notNull().default(1),
     ...auditColumns,
   },

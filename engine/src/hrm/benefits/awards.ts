@@ -440,7 +440,9 @@ async function recordAward(
          limit 1
       `)
     ).rows;
-    if (adjustsAwardId === null && covering.length === 0) {
+    // Employer-wide programs need no named membership; active service in
+    // the period (checked below) is the eligibility.
+    if (adjustsAwardId === null && covering.length === 0 && program.eligibility !== "all_employees") {
       throw new BenefitsError(
         "REFUSED",
         `no program ${program.code} membership covers this employment over ${periodFrom}..${periodTo ?? periodFrom} — enroll the employment first; awards never issue outside membership`,

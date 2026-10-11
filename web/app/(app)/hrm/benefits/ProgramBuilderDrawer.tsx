@@ -81,6 +81,7 @@ function seedDraft(family: ProgramFamily, seed: ProgramEditSeed | null): Program
     poolRounding: seed.poolRounding,
     includeOpenCommitments: seed.includeOpenCommitments,
     hourClassifications: [...seed.hourClassifications],
+    eligibility: seed.eligibility,
     allocation: seed.allocation,
     percentRate: text(seed.percentRate),
     fixedAmount: text(seed.fixedAmount),
@@ -205,6 +206,7 @@ function buildPayload(draft: ProgramDraft, mode: 'create' | 'edit', reason: stri
     scopeDepartmentIds: draft.family === 'incentive' && draft.metricScope === 'project' ? draft.scopeDepartmentIds : [],
     unassignedTime: draft.family === 'incentive' && draft.metricScope !== 'company' ? draft.unassignedTime : 'refuse',
     hourClassifications: draft.family === 'incentive' && (draft.metric === 'approved_hours' || draft.allocation === 'hours') ? draft.hourClassifications : [],
+    eligibility: draft.eligibility,
     ...(draft.metric === 'project_margin' ? {
       scopeExcludedProjectIds: draft.scopeExcludedProjectIds,
       lossPercentRate: optional(draft.lossPercentRate),
@@ -470,6 +472,7 @@ export function ProgramBuilderDrawer({
       for (const option of projectOptions.filter((option) => draft.scopeExcludedProjectIds.includes(option.value))) addSummary(t('portfolio.builder.fields.excludedProjects'), option.label)
     }
     addSummary(t('portfolio.builder.fields.allocation'), t(`portfolio.allocations.${draft.allocation}`))
+    if (draft.family === 'incentive') addSummary(t('portfolio.builder.fields.eligibility'), t(`portfolio.eligibility.${draft.eligibility}`))
     for (const option of accountOptions.filter((option) => draft.sourceAccountIds.includes(option.value))) addSummary(t('portfolio.builder.fields.measuredAccountIds'), option.label)
   }
   addSummary(t('portfolio.builder.fields.effectiveFrom'), draft.effectiveFrom)
@@ -853,6 +856,15 @@ export function ProgramBuilderDrawer({
                 <FieldError id="program-builder-paymentDelayDays-error" message={errors.paymentDelayDays} />
               </div>
             </div> : <p className="text-sm text-slate-500 dark:text-slate-400">{t('portfolio.builder.manualGrantHint')}</p>}
+            {draft.family === 'incentive' ? (
+              <div>
+                <Label htmlFor="program-builder-eligibility">{t('portfolio.builder.fields.eligibility')}</Label>
+                <Select id="program-builder-eligibility" value={draft.eligibility} onChange={(e) => set('eligibility', e.target.value as ProgramDraft['eligibility'])}>
+                  <option value="all_employees">{t('portfolio.eligibility.all_employees')}</option>
+                  <option value="members">{t('portfolio.eligibility.members')}</option>
+                </Select>
+              </div>
+            ) : null}
             {draft.family === 'incentive' && (draft.frequency === 'quarterly' || draft.frequency === 'annual') ? (
               <div>
                 <Label htmlFor="program-builder-basis">{t('portfolio.builder.fields.periodBasis')}</Label>

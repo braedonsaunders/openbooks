@@ -3037,7 +3037,8 @@
       "weightHint": "A positive weight is required for role-weighted allocation. Equal and approved-hours allocation do not use this field.",
       "role": "Role",
       "rolePlaceholder": "Contributor",
-      "roleHint": "Role recorded with this membership; allocation weights are configured separately."
+      "roleHint": "Role recorded with this membership; allocation weights are configured separately.",
+      "employerWide": "Everyone at the employer in active service during a period is eligible; the program rules decide who is paid."
     },
     "addMember": "Add member",
     "removeMember": "End membership",
@@ -3124,7 +3125,8 @@
         "poolRounding": "Rounding",
         "includeOpenCommitments": "Count open purchase commitments as cost",
         "excludedProjects": "Excluded projects",
-        "hourClassifications": "Time classifications counted"
+        "hourClassifications": "Time classifications counted",
+        "eligibility": "Who is eligible"
       },
       "allEntities": "Choose legal entity",
       "entityHint": "One legal entity owns the program and its payroll obligations. Add eligible employees after creating the draft.",
@@ -3349,6 +3351,10 @@
       "overtime": "Overtime",
       "double_time": "Double time",
       "other": "Other"
+    },
+    "eligibility": {
+      "all_employees": "Everyone at the employer",
+      "members": "Selected members"
     }
   },
   "talentWorkspace": {

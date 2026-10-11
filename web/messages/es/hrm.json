@@ -3037,7 +3037,8 @@
       "weightHint": "La asignación ponderada por rol requiere un peso positivo. La asignación igualitaria o por horas aprobadas no utiliza este campo.",
       "role": "Rol",
       "rolePlaceholder": "Colaborador",
-      "roleHint": "Rol registrado en esta afiliación; los pesos de asignación se configuran por separado."
+      "roleHint": "Rol registrado en esta afiliación; los pesos de asignación se configuran por separado.",
+      "employerWide": "Todos los empleados del empleador en servicio activo durante el período son elegibles; las reglas del programa deciden a quién se paga."
     },
     "addMember": "Agregar miembro",
     "removeMember": "Terminar membresía",
@@ -3124,7 +3125,8 @@
         "poolRounding": "Redondeo",
         "includeOpenCommitments": "Contar compromisos de compra abiertos como costo",
         "excludedProjects": "Proyectos excluidos",
-        "hourClassifications": "Clasificaciones de tiempo contadas"
+        "hourClassifications": "Clasificaciones de tiempo contadas",
+        "eligibility": "Quién es elegible"
       },
       "allEntities": "Elegir entidad jurídica",
       "entityHint": "Una entidad jurídica es responsable del programa y sus obligaciones de nómina. Añada empleados elegibles tras crear el borrador.",
@@ -3349,6 +3351,10 @@
       "overtime": "Horas extra",
       "double_time": "Tiempo doble",
       "other": "Otra"
+    },
+    "eligibility": {
+      "all_employees": "Todos los empleados del empleador",
+      "members": "Miembros seleccionados"
     }
   },
   "talentWorkspace": {

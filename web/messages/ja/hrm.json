@@ -3037,7 +3037,8 @@
       "weightHint": "役割の重みによる配分には正の重みが必要です。均等配分と承認済み時間による配分ではこの項目を使いません。",
       "role": "役割",
       "rolePlaceholder": "担当",
-      "roleHint": "この加入記録に保存する役割。配分の重みは別途設定します。"
+      "roleHint": "この加入記録に保存する役割。配分の重みは別途設定します。",
+      "employerWide": "期間中に在職している雇用主の全従業員が対象です。支払対象はプログラムのルールで決まります。"
     },
     "addMember": "メンバーを追加",
     "removeMember": "メンバーシップを終了",
@@ -3124,7 +3125,8 @@
         "poolRounding": "端数処理",
         "includeOpenCommitments": "未決済の購買コミットメントを原価に含める",
         "excludedProjects": "除外するプロジェクト",
-        "hourClassifications": "対象の時間区分"
+        "hourClassifications": "対象の時間区分",
+        "eligibility": "対象者"
       },
       "allEntities": "責任法人を選択",
       "entityHint": "1つの法人がプログラムと給与義務を担います。下書き作成後に対象従業員を追加してください。",
@@ -3349,6 +3351,10 @@
       "overtime": "残業",
       "double_time": "2倍時間",
       "other": "その他"
+    },
+    "eligibility": {
+      "all_employees": "雇用主の全従業員",
+      "members": "選択したメンバー"
     }
   },
   "talentWorkspace": {

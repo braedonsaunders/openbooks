@@ -90,7 +90,7 @@ const PROGRAM_COLUMNS = sql`id, code, name, family,
   frequency, payment_delay_days as "paymentDelayDays", unassigned_time as "unassignedTime",
   loss_percent_rate::text as "lossPercentRate", project_profit_cap::text as "projectProfitCap",
   project_loss_cap::text as "projectLossCap", pool_rounding as "poolRounding",
-  include_open_commitments as "includeOpenCommitments", hour_classifications as "hourClassifications",
+  include_open_commitments as "includeOpenCommitments", hour_classifications as "hourClassifications", eligibility,
   revision, created_by as "createdBy", updated_by as "updatedBy"`;
 
 function asFamily(value: unknown, field: string): BenefitProgramFamily {
@@ -231,6 +231,11 @@ function scopeRowsToScopes(rows: readonly ScopeRow[]): ProgramScopeRows {
   return { departmentIds: pick("department_id"), projectIds: pick("project_id"), customerIds: pick("customer_id"), excludedProjectIds: pick("project_id", true) };
 }
 
+function asEligibility(value: unknown): "members" | "all_employees" {
+  if (value === "members" || value === "all_employees") return value;
+  throw new BenefitsError("INVALID_INPUT", "eligibility is members or all_employees");
+}
+
 const NO_SCOPES: ProgramScopeRows = { departmentIds: [], projectIds: [], customerIds: [], excludedProjectIds: [] };
 
 function toProgram(row: Record<string, unknown>, scopes: ProgramScopeRows = NO_SCOPES): BenefitProgram {
@@ -263,6 +268,7 @@ function toProgram(row: Record<string, unknown>, scopes: ProgramScopeRows = NO_S
     poolRounding: row.poolRounding === "pool" ? "pool" : "share",
     includeOpenCommitments: row.includeOpenCommitments === true,
     hourClassifications: Array.isArray(row.hourClassifications) ? row.hourClassifications.map(String) as BenefitProgram["hourClassifications"][number][] : [],
+    eligibility: row.eligibility === "all_employees" ? "all_employees" : "members",
     allocation: asAllocation(row.allocation),
     percentRate: row.percentRate != null ? String(row.percentRate) : null,
     fixedAmount: row.fixedAmount != null ? String(row.fixedAmount) : null,
@@ -921,6 +927,7 @@ export interface CreateBenefitProgramQuery {
   readonly poolRounding?: "share" | "pool";
   readonly includeOpenCommitments?: boolean;
   readonly hourClassifications?: readonly ("regular" | "overtime" | "double_time" | "other")[];
+  readonly eligibility?: "members" | "all_employees";
   readonly allocation?: BenefitAllocation;
   readonly percentRate?: string | number | null;
   readonly fixedAmount?: string | number | null;
@@ -1026,7 +1033,7 @@ export async function createBenefitProgram(query: CreateBenefitProgramQuery): Pr
              valuation, metric, metric_scope, allocation,
              percent_rate, fixed_amount, cap_amount, budget_amount,
              threshold_amount, frequency, period_basis, payment_delay_days, unassigned_time,
-             loss_percent_rate, project_profit_cap, project_loss_cap, pool_rounding, include_open_commitments, hour_classifications,
+             loss_percent_rate, project_profit_cap, project_loss_cap, pool_rounding, include_open_commitments, hour_classifications, eligibility,
              created_by, updated_by)
           values (${orgId}, ${code}, ${name}, ${family}, ${description}, ${legalEntityId},
                   ${currency}, ${effectiveFrom}::date, ${effectiveTo}::date,
@@ -1037,6 +1044,7 @@ export async function createBenefitProgram(query: CreateBenefitProgramQuery): Pr
                   ${periodBasis}, ${paymentDelayDays}, ${rules.unassignedTime},
                   ${rules.lossPercentRate}, ${rules.projectProfitCap}, ${rules.projectLossCap}, ${rules.poolRounding}, ${rules.includeOpenCommitments},
                   ${rules.hourClassifications.length ? `{${rules.hourClassifications.join(",")}}` : null}::text[],
+                  ${asEligibility(query.eligibility ?? "members")},
                   ${actorId}, ${actorId})
           returning ${PROGRAM_COLUMNS}
         `)
@@ -1099,6 +1107,7 @@ export interface UpdateBenefitProgramQuery {
   readonly poolRounding?: "share" | "pool";
   readonly includeOpenCommitments?: boolean;
   readonly hourClassifications?: readonly ("regular" | "overtime" | "double_time" | "other")[];
+  readonly eligibility?: "members" | "all_employees";
   readonly allocation?: BenefitAllocation;
   readonly percentRate?: string | number | null;
   readonly fixedAmount?: string | number | null;
@@ -1186,6 +1195,7 @@ export async function updateBenefitProgram(query: UpdateBenefitProgramQuery): Pr
       poolRounding: query.poolRounding === undefined ? before.poolRounding : query.poolRounding === "pool" ? "pool" as const : "share" as const,
       includeOpenCommitments: query.includeOpenCommitments === undefined ? before.includeOpenCommitments : query.includeOpenCommitments === true,
       hourClassifications: query.hourClassifications === undefined ? before.hourClassifications : [...query.hourClassifications],
+      eligibility: query.eligibility === undefined ? before.eligibility : asEligibility(query.eligibility),
       allocation: query.allocation === undefined ? before.allocation : asAllocation(query.allocation),
       percentRate:
         query.percentRate === undefined ? before.percentRate : canonicalAmount(query.percentRate, "percentRate"),
@@ -1288,6 +1298,7 @@ export async function updateBenefitProgram(query: UpdateBenefitProgramQuery): Pr
                  project_loss_cap = ${next.projectLossCap}, pool_rounding = ${next.poolRounding},
                  include_open_commitments = ${next.includeOpenCommitments},
                  hour_classifications = ${next.hourClassifications.length ? `{${next.hourClassifications.join(",")}}` : null}::text[],
+                 eligibility = ${next.eligibility},
                  revision = revision + 1, updated_by = ${actorId}, updated_at = now()
            where org_id = ${orgId} and id = ${programId}
           returning ${PROGRAM_COLUMNS}

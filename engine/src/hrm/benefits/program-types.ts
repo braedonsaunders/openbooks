@@ -108,6 +108,8 @@ export interface BenefitProgram {
   readonly includeOpenCommitments: boolean;
   /** Approved-hour measures count only these time classifications (empty counts all). */
   readonly hourClassifications: readonly ("regular" | "overtime" | "double_time" | "other")[];
+  /** Named members only, or every employee of the employer in active service during the period. */
+  readonly eligibility: "members" | "all_employees";
   readonly allocation: BenefitAllocation;
   readonly percentRate: string | null;
   readonly fixedAmount: string | null;

@@ -3037,7 +3037,8 @@
       "weightHint": "Für die Rollengewichtung ist ein positives Gewicht erforderlich. Gleichmäßige und stundenbasierte Verteilungen verwenden dieses Feld nicht.",
       "role": "Rolle",
       "rolePlaceholder": "Mitwirkender",
-      "roleHint": "Für diese Mitgliedschaft dokumentierte Rolle; Verteilungsgewichte werden separat konfiguriert."
+      "roleHint": "Für diese Mitgliedschaft dokumentierte Rolle; Verteilungsgewichte werden separat konfiguriert.",
+      "employerWide": "Alle Beschäftigten des Arbeitgebers, die im Zeitraum aktiv beschäftigt sind, sind berechtigt; die Programmregeln bestimmen, wer bezahlt wird."
     },
     "addMember": "Mitglied hinzufügen",
     "removeMember": "Mitgliedschaft beenden",
@@ -3124,7 +3125,8 @@
         "poolRounding": "Rundung",
         "includeOpenCommitments": "Offene Bestellverpflichtungen als Kosten zählen",
         "excludedProjects": "Ausgeschlossene Projekte",
-        "hourClassifications": "Gezählte Zeitklassen"
+        "hourClassifications": "Gezählte Zeitklassen",
+        "eligibility": "Wer ist berechtigt"
       },
       "allEntities": "Rechtsträger wählen",
       "entityHint": "Ein Rechtsträger trägt das Programm und seine Abrechnungsverpflichtungen. Fügen Sie berechtigte Beschäftigte nach dem Erstellen des Entwurfs hinzu.",
@@ -3349,6 +3351,10 @@
       "overtime": "Überstunden",
       "double_time": "Doppelte Zeit",
       "other": "Sonstige"
+    },
+    "eligibility": {
+      "all_employees": "Alle Beschäftigten des Arbeitgebers",
+      "members": "Ausgewählte Mitglieder"
     }
   },
   "talentWorkspace": {

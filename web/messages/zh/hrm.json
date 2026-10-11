@@ -3037,7 +3037,8 @@
       "weightHint": "按角色权重分配时必须填写正权重。平均分配和按已批准工时分配不使用此字段。",
       "role": "角色",
       "rolePlaceholder": "成员",
-      "roleHint": "此成员记录的角色；分配权重单独配置。"
+      "roleHint": "此成员记录的角色；分配权重单独配置。",
+      "employerWide": "期间内在职的雇主全体员工均有资格；由计划规则决定向谁支付。"
     },
     "addMember": "添加成员",
     "removeMember": "结束成员资格",
@@ -3124,7 +3125,8 @@
         "poolRounding": "舍入",
         "includeOpenCommitments": "将未结采购承诺计为成本",
         "excludedProjects": "排除的项目",
-        "hourClassifications": "计入的工时类别"
+        "hourClassifications": "计入的工时类别",
+        "eligibility": "参与资格"
       },
       "allEntities": "选择法人实体",
       "entityHint": "由一个法人实体负责此计划和工资义务。创建草稿后添加符合资格的员工。",
@@ -3349,6 +3351,10 @@
       "overtime": "加班",
       "double_time": "双倍工时",
       "other": "其他"
+    },
+    "eligibility": {
+      "all_employees": "雇主的全体员工",
+      "members": "选定成员"
     }
   },
   "talentWorkspace": {

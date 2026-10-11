@@ -972,6 +972,7 @@ function toPortfolioFields(
         poolRounding: seed.poolRounding,
         includeOpenCommitments: seed.includeOpenCommitments,
         hourClassifications: [...seed.hourClassifications],
+        eligibility: seed.eligibility,
         allocation: seed.allocation,
         percentRate: seed.percentRate,
         fixedAmount: seed.fixedAmount,

@@ -389,12 +389,45 @@ async function loadSettlementContext(
     basis = { kind: "calendar" };
   }
 
-  const members = await listProgramMemberships({ orgId, actorId, programId });
+  const named = await listProgramMemberships({ orgId, actorId, programId });
+  const members = program.eligibility === "all_employees"
+    ? [...named, ...(await employerWideMembers(orgId, program, named, periodFrom, periodTo))]
+    : named;
   const minorUnits = await currencyMinorUnits(orgId, program.currency);
   return {
     program, transactionPolicy: inForce.transactionPolicy, scope, basis, fiscalCalendarId, departmentIds, projectIds,
     revenueAccountIds, expenseAccountIds, incentiveExpenseAccountId, minorUnits, members, projectCompletion,
   };
+}
+
+/**
+ * Employer-wide eligibility: every employment of the program's employer in
+ * active service during the period is a member for the whole period, with
+ * equal weight. Named memberships still carry roles and weights and take
+ * precedence for their employments.
+ */
+async function employerWideMembers(
+  orgId: string,
+  program: BenefitProgram,
+  named: readonly BenefitProgramMember[],
+  periodFrom: string,
+  periodTo: string,
+): Promise<BenefitProgramMember[]> {
+  const namedIds = new Set(named.filter((m) => m.effectiveFrom <= periodTo && (m.effectiveTo === null || m.effectiveTo >= periodFrom)).map((m) => m.employmentId));
+  const rows = (await db.execute<{ id: string }>(sql`
+    select w.id::text as id from worker_employments w
+     where w.org_id = ${orgId} and w.employer_subsidiary_id = ${program.legalEntityId}
+       and exists (select 1 from worker_employment_versions v
+                    where v.org_id = w.org_id and v.employment_id = w.id
+                      and v.status = 'active' and v.recorded_until is null
+                      and v.effective_from <= ${periodTo}::date
+                      and (v.effective_to is null or v.effective_to > ${periodFrom}::date))
+     order by w.id
+  `)).rows;
+  return rows.filter((r) => !namedIds.has(r.id)).map((r) => ({
+    id: `employer:${r.id}`, programId: program.id, employmentId: r.id,
+    effectiveFrom: periodFrom, effectiveTo: periodTo, weight: "1", role: null,
+  }));
 }
 
 async function measureAndCompute(

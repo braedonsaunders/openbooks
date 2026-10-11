@@ -3037,7 +3037,8 @@
       "weightHint": "A alocação ponderada por função exige peso positivo. A alocação igual ou por horas aprovadas não usa este campo.",
       "role": "Papel",
       "rolePlaceholder": "Colaborador",
-      "roleHint": "Função registrada nesta participação; os pesos de alocação são configurados separadamente."
+      "roleHint": "Função registrada nesta participação; os pesos de alocação são configurados separadamente.",
+      "employerWide": "Todos os funcionários do empregador em serviço ativo no período são elegíveis; as regras do programa definem quem é pago."
     },
     "addMember": "Adicionar membro",
     "removeMember": "Encerrar participação",
@@ -3124,7 +3125,8 @@
         "poolRounding": "Arredondamento",
         "includeOpenCommitments": "Contar compromissos de compra em aberto como custo",
         "excludedProjects": "Projetos excluídos",
-        "hourClassifications": "Classificações de horas contadas"
+        "hourClassifications": "Classificações de horas contadas",
+        "eligibility": "Quem é elegível"
       },
       "allEntities": "Escolher entidade jurídica",
       "entityHint": "Uma entidade jurídica é responsável pelo programa e suas obrigações de folha. Adicione funcionários elegíveis após criar o rascunho.",
@@ -3349,6 +3351,10 @@
       "overtime": "Hora extra",
       "double_time": "Hora dobrada",
       "other": "Outra"
+    },
+    "eligibility": {
+      "all_employees": "Todos os funcionários do empregador",
+      "members": "Membros selecionados"
     }
   },
   "talentWorkspace": {
