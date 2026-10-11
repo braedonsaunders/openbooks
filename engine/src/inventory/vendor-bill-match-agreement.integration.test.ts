@@ -146,10 +146,13 @@ function candidateNumbers(lines: { lineNumber: number; candidates: { purchaseOrd
 }
 
 /**
- * Partial and full receipts agree: the posting guard names exactly the
- * purchase-order lines the Match dialog offers — same order, same vendor,
- * same item with unit spellings folded, received cover outstanding — and
- * matching both lines lets the bill post clearing received-not-billed.
+ * Partial and full receipts agree: posting matches a line automatically
+ * exactly when the Match dialog offers it one covering order line, and
+ * the guard refuses naming exactly what the dialog offers when a line is
+ * ambiguous. The automatic match and the refusal share the posting
+ * transaction: a refused post stamps nothing and advances nothing. An
+ * explicit match of the ambiguous line then lets the same bill post
+ * clearing received-not-billed.
  */
 test("guard and match dialog agree across partial and full receipts, then the bill clears GRNB", { skip: !DB }, async () => {
   const seed = await seedOrg();
@@ -163,12 +166,17 @@ test("guard and match dialog agree across partial and full receipts, then the bi
         { sourceLineId: po.lineB, quantity: "500" },
       ],
     });
+    // A second order covers the same second item, so the bill's second
+    // line is ambiguous while its first line has exactly one cover.
+    const po2 = await seedApprovedPo(seed, "PO-M38-02", seed.vendorId);
+    await receivePurchaseOrder(seed.orgId, seed.actorId, po2.orderId, {
+      receiptDate: seed.date,
+      idempotencyKey: randomUUID(),
+      lines: [{ sourceLineId: po2.lineB, quantity: "500" }],
+    });
     const billId = await seedHandBill(seed, "BILL-M38-1", seed.vendorId);
 
-    const first = await guardRefusal(seed, billId);
-    assert.equal(first.lineNumber, 1);
     const dialog = await withOrg(seed.orgId, () => billMatchCandidates(seed.orgId, billId));
-    assert.deepEqual(first.numbers, candidateNumbers(dialog.lines, 1), "the guard lists exactly what the dialog offers");
     assert.deepEqual(dialog.lines.length, 3);
     const line1 = dialog.lines.find((entry) => entry.lineNumber === 1)!;
     assert.equal(line1.candidates.length, 1, "the partly received line offers its order line");
@@ -176,30 +184,36 @@ test("guard and match dialog agree across partial and full receipts, then the bi
     assert.equal(toUnits(line1.candidates[0].billableQuantity), toUnits("2128"), "only received-and-unbilled cover is billable");
     assert.equal(line1.candidates[0].receipts.length, 1, "the candidate names its goods receipt");
     const line2 = dialog.lines.find((entry) => entry.lineNumber === 2)!;
-    assert.equal(line2.candidates.length, 1, "the fully received line offers its order line");
-    assert.equal(toUnits(line2.candidates[0].billableQuantity), toUnits("500"));
+    assert.equal(line2.candidates.length, 2, "the twice-covered line offers both order lines");
     assert.deepEqual(candidateNumbers(dialog.lines, 3), [], "the freight line has nothing to match");
 
+    // The ambiguous line refuses with exactly what the dialog offers —
+    // and the automatic match of the first line rolls back with it.
+    const refused = await guardRefusal(seed, billId);
+    assert.equal(refused.lineNumber, 2);
+    assert.deepEqual(refused.numbers, candidateNumbers(dialog.lines, 2), "the guard lists exactly what the dialog offers");
+    const leaked = (await db.execute<{ stamps: number; billed: string }>(sql`
+      select (select count(*)::int from document_lines
+               where org_id = ${seed.orgId} and document_id = ${billId}
+                 and custom ? 'purchaseOrderLineId') as stamps,
+             (select coalesce(sum(quantity_billed), 0)::text from document_lines
+               where org_id = ${seed.orgId} and id in (${po.lineA}, ${po.lineB}, ${po2.lineA}, ${po2.lineB})) as billed
+    `)).rows[0]!;
+    assert.equal(leaked.stamps, 0, "a refused post stamps no match");
+    assert.equal(toUnits(leaked.billed), toUnits("0"), "a refused post advances no billed cover");
+
+    // Matching the ambiguous line explicitly lets the same bill post.
     const billLineIds = (await db.execute<{ id: string }>(sql`
       select id from document_lines
        where org_id = ${seed.orgId} and document_id = ${billId} and line_number in (1, 2) order by line_number
     `)).rows;
     await withOrg(seed.orgId, () => matchVendorBillLines({
       orgId: seed.orgId, billId, actorId: seed.actorId,
-      matches: [{ billLineId: billLineIds[0].id, purchaseOrderLineId: po.lineA }],
-    }));
-
-    const second = await guardRefusal(seed, billId);
-    assert.equal(second.lineNumber, 2);
-    const again = await withOrg(seed.orgId, () => billMatchCandidates(seed.orgId, billId));
-    assert.deepEqual(second.numbers, candidateNumbers(again.lines, 2), "the guard still lists what the dialog offers");
-    await withOrg(seed.orgId, () => matchVendorBillLines({
-      orgId: seed.orgId, billId, actorId: seed.actorId,
       matches: [{ billLineId: billLineIds[1].id, purchaseOrderLineId: po.lineB }],
     }));
 
     await postBill(seed, billId);
-    const facts = (await db.execute<{ status: string; clearing: string; onHand: string; billReceipts: number; billedA: string; billedB: string }>(sql`
+    const facts = (await db.execute<{ status: string; clearing: string; onHand: string; billReceipts: number; billedA: string; billedB: string; billedC: string }>(sql`
       select (select status from documents where id = ${billId}) as status,
              (select coalesce(sum(l.amount), 0)::text from journal_lines l
                join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
@@ -211,14 +225,16 @@ test("guard and match dialog agree across partial and full receipts, then the bi
                join document_lines l on l.id = m.document_line_id and l.org_id = m.org_id
               where m.org_id = ${seed.orgId} and l.document_id = ${billId} and m.kind = 'receipt') as "billReceipts",
              (select quantity_billed::text from document_lines where id = ${po.lineA}) as "billedA",
-             (select quantity_billed::text from document_lines where id = ${po.lineB}) as "billedB"
+             (select quantity_billed::text from document_lines where id = ${po.lineB}) as "billedB",
+             (select quantity_billed::text from document_lines where id = ${po2.lineB}) as "billedC"
     `)).rows[0]!;
     assert.equal(facts.status, "posted");
-    assert.equal(toUnits(facts.clearing), toUnits("0"), "the matched bill clears received-not-billed");
-    assert.equal(toUnits(facts.onHand), toUnits("2628"), "the matched bill receives nothing again");
+    assert.equal(toUnits(facts.clearing), toUnits("-2500"), "only the unmatched second receipt's cover stands");
+    assert.equal(toUnits(facts.onHand), toUnits("3128"), "the matched bill receives nothing again");
     assert.equal(facts.billReceipts, 0);
-    assert.equal(toUnits(facts.billedA), toUnits("2128"));
-    assert.equal(toUnits(facts.billedB), toUnits("500"));
+    assert.equal(toUnits(facts.billedA), toUnits("2128"), "the first line matched automatically on post");
+    assert.equal(toUnits(facts.billedB), toUnits("500"), "the second line matched explicitly");
+    assert.equal(toUnits(facts.billedC), toUnits("0"), "the unchosen cover is untouched");
   } finally {
     await dropScratchOrg(seed.orgId);
   }
