@@ -26,6 +26,10 @@ const GROUPS: { key: string; labelKey: string; accent: Accent; cards: Card[] }[]
     labelKey: 'hub.groups.workspace',
     accent: 'amber',
     cards: [
+      // Setup and company settings are the configuration home; the hub links
+      // to them so they are reachable without global search.
+      { href: '/admin/setup', iconKey: 'sliders-horizontal', cardKey: 'setup', permission: 'admin.setup.manage' },
+      { href: '/admin/setup/company', iconKey: 'settings-2', cardKey: 'settings', permission: 'admin.setup.manage' },
       { href: '/admin/ai', iconKey: 'sparkles', cardKey: 'ai', permission: 'admin.ai.manage' },
       { href: '/admin/setup/agents', iconKey: 'bot', cardKey: 'agentsSetup', permission: 'admin.setup.manage' },
       {

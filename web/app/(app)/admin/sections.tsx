@@ -12,6 +12,8 @@ import {
   Mail,
   PanelLeft,
   ScrollText,
+  Settings2,
+  SlidersHorizontal,
   ShieldCheck,
   Sparkles,
   Users,
@@ -65,6 +67,8 @@ const ICONS: Record<string, LucideIcon> = {
   'database-backup': DatabaseBackup,
   link: LinkIcon,
   webhook: Webhook,
+  'settings-2': Settings2,
+  'sliders-horizontal': SlidersHorizontal,
 }
 
 /**
